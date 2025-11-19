@@ -1,4 +1,37 @@
 
+# About this fork
+
+This fork is a version of the IMM code base with the dependencies vendored in and committed. This is to have a reference snapshot of a reproducible build for the Windows IMM player, as some of the dependencies may become hard to find in the future. 
+
+The dependencies are under the `thirdparty` directory. The table below details where each dependency was sourced from and which version is committed. I moved all the dependencies of libImmCore into a single .props file. For the 3 SDK a full copy of the original .zip will be included in a github "release".
+
+Summary of the dependencies
+
+| Name                      | Version             | Source |
+|---------------------------|---------------------|--------|
+| Facebook Audio360 SDK¹    | 1.7.12 (2019-12-18) | https://www.angelofarina.it/Public/Facebook-Spatial-Workstation/Download/SDK/ |
+| Oculus SDK for Windows    | 32.0 (2021-08-30)   | https://developers.meta.com/horizon/downloads/package/oculus-sdk-for-windows/ |
+| Oculus Platform SDK       | 81.0 (2025-10-30)   | https://developers.meta.com/horizon/downloads/package/oculus-platform-sdk/ |
+| libogg                    | 1.3.5#1             | vcpkg |
+| libvorbis                 | 1.3.7#3             | vcpkg |
+| libopusenc                | 0.2.1#3             | vcpkg |
+| opus                      | 1.5.2               | vcpkg |
+| libjpeg-turbo             | 3.0.4               | vcpkg |
+| libpng                    | 1.6.43#3            | vcpkg |
+| zlib                      | 1.3.1               | vcpkg |
+
+
+¹ This SDK is discontinued and Facebook removed all download links from their website. The included copy was archived by Angelo Farina.
+
+
+Aside from fixing a couple of includes no other change was made to the code base.
+
+To build I used Visual Studio 2022 with Windows SDK 10.0.26100. Build order: libCore > libImmImporter > libImmPlayer > appImmViewer.
+
+Original Readme.md below.
+
+--------------------------------
+
 # Introduction
 
 Immersive media (IMM) is an API-neutral runtime immersive media delivery format. IMM provides an efficient, extensible, interoperable format for the transmission and loading of immersive 3D and 2D animated content of mixed media types (geometry, pictures, 360 panoramas, stroke based paintings, etc).
