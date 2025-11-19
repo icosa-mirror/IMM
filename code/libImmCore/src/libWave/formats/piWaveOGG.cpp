@@ -10,8 +10,8 @@
 #include "../../libBasics/piStreamFileO.h"
 #include "../../libBasics/piStreamArrayO.h"
 
-#include <os_types.h>
-#include <ogg.h>
+#include <ogg/os_types.h>
+#include <ogg/ogg.h>
 #include <vorbisfile.h>
 #include <vorbisenc.h>
 

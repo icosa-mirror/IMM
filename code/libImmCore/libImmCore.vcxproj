@@ -127,12 +127,12 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <UseOfAtl>false</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -142,22 +142,12 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="..\projects\windows\ImmCommonPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmPNGPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmJPGPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmAudio360WrapperPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmOPUSPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmOculusPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmOGGPropertySheet.props" />
+    <Import Project="..\projects\windows\ImmBuildCore.props" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="..\projects\windows\ImmCommonPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmAudio360WrapperPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmPNGPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmJPGPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmOPUSPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmOculusPropertySheet.props" />
-    <Import Project="..\projects\windows\ImmOGGPropertySheet.props" />
+    <Import Project="..\projects\windows\ImmBuildCore.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
@@ -167,7 +157,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(IMM_OculusIncDir);$(IMM_Audio360IncDir);$(IMM_PNGIncDir);$(IMM_JPGIncDir);$(IMM_OPUSIncDir);$(IMM_OGGIncDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WIN32_DCOM;WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>Disabled</Optimization>
     </ClCompile>
@@ -197,7 +187,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>$(IMM_OculusIncDir);$(IMM_Audio360IncDir);$(IMM_PNGIncDir);$(IMM_JPGIncDir);$(IMM_OPUSIncDir);$(IMM_OGGIncDir)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WIN32_DCOM;WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>
       </PrecompiledHeader>

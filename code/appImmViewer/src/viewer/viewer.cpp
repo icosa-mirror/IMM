@@ -8,6 +8,7 @@
 
 // if you enable the avatars, disable _controlfp(_EM_UNDERFLOW | _EM_INEXACT, _MCW_EM); in mymain.cpp (line 147)
 #include <algorithm>
+#include <chrono>
 #include <thread>
 
 #include "../settings.h"
