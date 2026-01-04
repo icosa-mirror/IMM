@@ -3,6 +3,7 @@
 #include <malloc.h>
 #include <thread>
 #include <chrono>
+#include <cwchar>
 
 
 #include "libImmCore/src/libBasics/piDebug.h"
@@ -15,6 +16,7 @@
 #include "libImmImporter/src/document/layerEffect.h"
 #include "libImmImporter/src/document/layerInstance.h"
 #include "libImmImporter/src/document/layerPaint.h"
+#include "libImmImporter/src/document/layerPaint/drawing.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 #include "layerRenderers/layerRendererPaint/pretessellated/layerRendererPaintPretessellated.h"
@@ -29,6 +31,18 @@ using namespace ImmImporter;
 namespace ImmPlayer
 {
     static const wchar_t *kRenderingTechniques[] = { L"static", L"pretessellated" };
+
+    static void iCopyWide(wchar_t *dst, size_t dstCount, const wchar_t *src)
+    {
+        if (!dst || dstCount == 0)
+            return;
+        if (!src)
+        {
+            dst[0] = 0;
+            return;
+        }
+        wcsncpy_s(dst, dstCount, src, _TRUNCATE);
+    }
 
     Player::Player() {}
 
@@ -290,6 +304,243 @@ namespace ImmPlayer
         state.mPlaybackState = static_cast<Player::PlaybackState>(doc->GetPlaybackState());
     }
 
+    bool Player::IsSequenceReady(int docId) const
+    {
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        return doc->IsSequenceReady();
+    }
+
+    int Player::GetLayerCount(int docId) const
+    {
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return 0;
+        Document::LoadingState lst = doc->GetLoadingState();
+        if (lst == Document::LoadingState::LoadingPending || lst == Document::LoadingState::LoadingCPU)
+            return 0;
+
+        Sequence *sq = doc->GetSequence();
+        int count = 0;
+        sq->Recurse([&count](Layer* layer, int level, int child, bool instance) -> bool
+            {
+                count++;
+                return true;
+            }, false, false, false, false);
+        return count;
+    }
+
+    bool Player::GetLayerInfoByIndex(int docId, int index, LayerInfo & info) const
+    {
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc || index < 0)
+            return false;
+        Document::LoadingState lst = doc->GetLoadingState();
+        if (lst == Document::LoadingState::LoadingPending || lst == Document::LoadingState::LoadingCPU)
+            return false;
+
+        Sequence *sq = doc->GetSequence();
+        int current = 0;
+        Layer *target = nullptr;
+        sq->Recurse([&](Layer* layer, int level, int child, bool instance) -> bool
+            {
+                if (current == index)
+                {
+                    target = layer;
+                    return false;
+                }
+                current++;
+                return true;
+            }, false, false, false, false);
+
+        if (!target)
+            return false;
+
+        memset(&info, 0, sizeof(LayerInfo));
+        info.id = (int)target->GetID();
+        info.type = (int)target->GetType();
+        Layer *parent = target->GetParent();
+        info.parentId = parent ? (int)parent->GetID() : -1;
+        info.isTimeline = target->GetIsTimeline() ? 1 : 0;
+        info.isLoaded = target->GetLoaded() ? 1 : 0;
+        info.isVisible = target->GetWorldVisible() ? 1 : 0;
+        info.opacity = target->GetWorldOpacity();
+        info.hasBBox = target->HasBBox() ? 1 : 0;
+        if (info.hasBBox)
+        {
+            const ImmCore::bound3d bb = target->GetBBox();
+            info.bbox.mMinX = (float)bb.mMinX;
+            info.bbox.mMaxX = (float)bb.mMaxX;
+            info.bbox.mMinY = (float)bb.mMinY;
+            info.bbox.mMaxY = (float)bb.mMaxY;
+            info.bbox.mMinZ = (float)bb.mMinZ;
+            info.bbox.mMaxZ = (float)bb.mMaxZ;
+        }
+        info.numChildren = (int)target->GetNumChildren();
+        info.assetId = (int)target->GetAssetID();
+
+        iCopyWide(info.name, sizeof(info.name) / sizeof(wchar_t), target->GetName().GetS());
+        const ImmCore::piString *fullName = target->GetFullName();
+        iCopyWide(info.fullName, sizeof(info.fullName) / sizeof(wchar_t), fullName ? fullName->GetS() : L"");
+
+        if (target->GetType() == Layer::Type::Paint)
+        {
+            LayerPaint *lp = (LayerPaint *)target->GetImplementation();
+            if (lp)
+            {
+                const unsigned int numDrawings = lp->GetNumDrawings();
+                info.paintNumDrawings = (int)numDrawings;
+                info.paintNumFrames = (int)lp->GetNumFrames();
+                int strokes = 0;
+                for (unsigned int i = 0; i < numDrawings; i++)
+                {
+                    Drawing *dr = lp->GetDrawing((int)i);
+                    if (dr && dr->GetLoaded())
+                    {
+                        strokes += (int)dr->GetNumStrokes();
+                    }
+                }
+                info.paintNumStrokes = strokes;
+            }
+        }
+
+        return true;
+    }
+
+    static Layer *iFindLayerById(Sequence *sq, int layerId)
+    {
+        if (!sq || layerId < 0)
+            return nullptr;
+
+        Layer *target = nullptr;
+        sq->Recurse([&](Layer* layer, int level, int child, bool instance) -> bool
+        {
+            if (layer && (int)layer->GetID() == layerId)
+            {
+                target = layer;
+                return false;
+            }
+            return true;
+        }, false, false, false, false);
+
+        return target;
+    }
+
+    bool Player::SetLayerVisible(int docId, int layerId, bool visible)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer)
+            return false;
+
+        // Override animated visibility so runtime changes are respected.
+        layer->SetVisibilityOverride(true, visible);
+        return true;
+    }
+
+    bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer)
+            return false;
+
+        layer->SetOpacity(opacity);
+        return true;
+    }
+
+    bool Player::ClearLayerVisibilityOverride(int docId, int layerId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer)
+            return false;
+
+        layer->SetVisibilityOverride(false, layer->GetVisible());
+        return true;
+    }
+
+    bool Player::SetLayerTransform(int docId, int layerId, const ImmCore::trans3d & transform)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer)
+            return false;
+
+        layer->SetTransformOverride(true, transform);
+        return true;
+    }
+
+    bool Player::ClearLayerTransformOverride(int docId, int layerId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer)
+            return false;
+
+        layer->SetTransformOverride(false, layer->GetTransform());
+        return true;
+    }
+
+    bool Player::GetLayerDiagnostics(int docId, int layerId, LayerDiagnostics & outDiag) const
+    {
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
+            return false;
+
+        Sequence *sq = doc->GetSequence();
+        Layer *layer = iFindLayerById(sq, layerId);
+        if (!layer)
+            return false;
+
+        outDiag.hasVisibilityKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) > 0) ? 1 : 0;
+        outDiag.hasOpacityKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Opacity) > 0) ? 1 : 0;
+        outDiag.isVisible = layer->GetVisible() ? 1 : 0;
+        outDiag.opacity = layer->GetOpacity();
+        outDiag.isWorldVisible = layer->GetWorldVisible() ? 1 : 0;
+        outDiag.worldOpacity = layer->GetWorldOpacity();
+        Layer *parent = layer->GetParent();
+        outDiag.parentId = parent ? (int)parent->GetID() : -1;
+        outDiag.visibilityOverrideEnabled = layer->GetVisibilityOverrideEnabled() ? 1 : 0;
+        outDiag.visibilityOverrideValue = layer->GetVisibilityOverrideValue() ? 1 : 0;
+        outDiag.hasTransformKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Transform) > 0) ? 1 : 0;
+        outDiag.transformOverrideEnabled = layer->GetTransformOverrideEnabled() ? 1 : 0;
+        return true;
+    }
+
     void Player::GetPlayerInfo(PlayerInfo & info) const
     {
         vec3 col = vec3(0.0f, 0.0f, 0.0f);
@@ -491,32 +742,46 @@ namespace ImmPlayer
                     Document *doc = (Document *)mDocuments.GetAddress(currDocId);
                     int cmdId = doc->GetCommandId();
 
+                    const Document::Command *cmd = nullptr;
+                    if (cmdId >= 0 && cmdId < mCommandList.GetLength())
+                    {
+                        if ((mCommandList[cmdId].mCommand.mType != Document::Command::Type::None) &&
+                            (mCommandList[cmdId].mTarget == currDocId))
+                        {
+                            cmd = &mCommandList[cmdId].mCommand;
+                        }
+                    }
+
                     if (doc->GetLoadingState() == Document::LoadingState::UnloadingCompleted)
                     {
-                        // free fully unloaded documents
-                        mDocuments.Free(currDocId);
-                        mCommandList.RemoveAndShift(cmdId);
-                        for (int i = cmdId; i < mCommandList.GetLength(); i++)
+                        if (cmd != nullptr && cmd->mType == Document::Command::Type::Load)
                         {
-                            int d = mCommandList[i].mTarget;
-
-                            if (d != -1 && mDocuments.IsUsed(d))
-                            {
-                                Document *doc = (Document *)mDocuments.GetAddress(d);
-                                doc->SetCommandId(i);
-                            }
+                            // Don't free; allow the load command to be processed below.
+                            // mSynced is already false on Load().
                         }
-                        mSynced[currDocId] = true;
-                        continue;
+                        else
+                        {
+                            // free fully unloaded documents
+                            mDocuments.Free(currDocId);
+                            mCommandList.RemoveAndShift(cmdId);
+                            for (int i = cmdId; i < mCommandList.GetLength(); i++)
+                            {
+                                int d = mCommandList[i].mTarget;
+
+                                if (d != -1 && mDocuments.IsUsed(d))
+                                {
+                                    Document *doc = (Document *)mDocuments.GetAddress(d);
+                                    doc->SetCommandId(i);
+                                }
+                            }
+                            mSynced[currDocId] = true;
+                            continue;
+                        }
+
                     }
 
 
-                    const Document::Command *cmd = nullptr;
-                    if ((mCommandList[cmdId].mCommand.mType != Document::Command::Type::None) &&
-                        (mCommandList[cmdId].mTarget == currDocId))
-                    {
-                        cmd = &mCommandList[cmdId].mCommand;
-                    }
+                    // cmd already resolved above
 
                     if (needDisable)
                     {

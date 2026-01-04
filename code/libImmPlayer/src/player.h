@@ -107,6 +107,30 @@ namespace ImmPlayer {
 
         ImmCore::bound3d GetDocumentBBox(int id) const; // get bounding box from root layer
 
+        // layer edits (runtime)
+        bool SetLayerVisible(int docId, int layerId, bool visible);
+        bool ClearLayerVisibilityOverride(int docId, int layerId);
+        bool SetLayerOpacity(int docId, int layerId, float opacity);
+        bool SetLayerTransform(int docId, int layerId, const ImmCore::trans3d & transform);
+        bool ClearLayerTransformOverride(int docId, int layerId);
+
+        struct LayerDiagnostics
+        {
+            int hasVisibilityKeys = 0;
+            int hasOpacityKeys = 0;
+            int isVisible = 0;
+            float opacity = 0.0f;
+            int isWorldVisible = 0;
+            float worldOpacity = 0.0f;
+            int parentId = -1;
+            int visibilityOverrideEnabled = 0;
+            int visibilityOverrideValue = 0;
+            int hasTransformKeys = 0;
+            int transformOverrideEnabled = 0;
+        };
+
+        bool GetLayerDiagnostics(int docId, int layerId, LayerDiagnostics & outDiag) const;
+
         struct PerformanceInfo
         {
             PerformanceInfo & operator=(const PerformanceInfo& info)
@@ -161,6 +185,26 @@ namespace ImmPlayer {
             PlaybackState mPlaybackState = PlaybackState::Playing;
         };
 
+        struct LayerInfo
+        {
+            int id = -1;
+            int type = 0;
+            int parentId = -1;
+            int isTimeline = 0;
+            int isLoaded = 0;
+            int isVisible = 0;
+            float opacity = 0.0f;
+            int hasBBox = 0;
+            ImmCore::bound3 bbox;
+            int numChildren = 0;
+            int assetId = -1;
+            int paintNumDrawings = 0;
+            int paintNumFrames = 0;
+            int paintNumStrokes = 0;
+            wchar_t name[128];
+            wchar_t fullName[256];
+        };
+
         enum class DocumentType : int
         {
             Still = 0,
@@ -187,6 +231,9 @@ namespace ImmPlayer {
         uint32_t GetDocumentInfoEx(int id) const;
         void GetPlayerInfo(PlayerInfo & info) const;
         void CancelLoading(int id);
+        int GetLayerCount(int docId) const;
+        bool GetLayerInfoByIndex(int docId, int index, LayerInfo & info) const;
+        bool IsSequenceReady(int docId) const;
 
         void EnablePerformanceMeasurement(bool enabled) { mEnablePerformanceMeasurement = enabled; }
 		void GetChapterInfo(size_t& numChapters, ImmCore::piTArray<ImmCore::piTick>& chapterLengths, bool& hasPlays, int id);

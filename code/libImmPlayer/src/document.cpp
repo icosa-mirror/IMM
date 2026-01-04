@@ -37,13 +37,16 @@ namespace ImmPlayer
         if (!mFileName.Init(1024))
             return false;
 
-        mState.mLoadingState = LoadingState::LoadingPending;
+        mState.mLoadingState = LoadingState::UnloadingCompleted;
         mState.mErrorState = ErrorState::NoError;
         mState.mPlaybackState = PlaybackState::Waiting;
         mHidden = false;
         mDocumentToWorld = trans3d::identity();
         mMasterVolume = 1.0f;
         mCmdID = -1;
+        mFileType = ImportType::IMM_disk;
+        mIMM = nullptr;
+        mSequenceReady = false;
         return true;
     }
 
@@ -536,7 +539,6 @@ namespace ImmPlayer
         std::chrono::steady_clock::time_point timeStart = std::chrono::steady_clock::now();
 
         log->Printf(LT_MESSAGE, L"Loading in CPU...");
-
         //----------------------
         // sequence
         //----------------------
@@ -562,6 +564,8 @@ namespace ImmPlayer
             break;
         }
         }
+
+        mSequenceReady = true;
 
         //----------------------
         //

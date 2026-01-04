@@ -30,8 +30,12 @@ namespace ImmImporter
 	{
 		mType = type;
         mLoaded = false;
-		mVisible = visible;
-		mPotentiallyVisible = visible;
+	mVisible = visible;
+    mVisibilityOverrideEnabled = false;
+    mVisibilityOverrideValue = visible;
+    mTransformOverrideEnabled = false;
+    mTransformOverrideValue = transform;
+	mPotentiallyVisible = visible;
 		mImplementation = nullptr;
 		mTransform = transform;
         mPivotTransform = pivot;
@@ -143,18 +147,18 @@ namespace ImmImporter
 		}		
 	}
 
-	trans3d Layer::GetTransformToWorld(void) const
-	{
-		trans3d mat = mTransform;
+trans3d Layer::GetTransformToWorld(void) const
+{
+	trans3d mat = GetTransform();
 
-		Layer* la = mParent;
-		while (la != nullptr)
-		{
-			mat = la->mTransform * mat;
-			la = la->mParent;
-		}
-		return mat;
+	Layer* la = mParent;
+	while (la != nullptr)
+	{
+		mat = la->GetTransform() * mat;
+		la = la->mParent;
 	}
+	return mat;
+}
 
 	bool Layer::iCalcFullName(void)
 	{
@@ -203,25 +207,34 @@ namespace ImmImporter
 		return &mOpacity;
 	}
 
-	bool Layer::GetVisible(void) const { return mVisible; }
+	bool Layer::GetVisible(void) const { return mVisibilityOverrideEnabled ? mVisibilityOverrideValue : mVisible; }
 	bool Layer::GetPotentiallyVisible(void) const { return mPotentiallyVisible; }
     bool Layer::GetWorldVisible(void) const
     {
-        bool visible = mVisible;
+        bool visible = GetVisible();
         if (visible)
         {
             Layer* tmpLa = mParent;
             while (tmpLa)
             {
-                if (!tmpLa->mVisible) { visible = false; break; }
+                if (!tmpLa->GetVisible()) { visible = false; break; }
                 tmpLa = tmpLa->mParent;
             }
         }
         return visible;
     }
+bool Layer::GetVisibilityOverrideEnabled(void) const { return mVisibilityOverrideEnabled; }
+bool Layer::GetVisibilityOverrideValue(void) const { return mVisibilityOverrideValue; }
+bool Layer::GetTransformOverrideEnabled(void) const { return mTransformOverrideEnabled; }
+const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformOverrideValue; }
 
 
 	void Layer::SetVisible(bool visible) { mVisible = visible; }
+    void Layer::SetVisibilityOverride(bool enabled, bool visible)
+    {
+        mVisibilityOverrideEnabled = enabled;
+        mVisibilityOverrideValue = visible;
+    }
 	void Layer::SetPotentiallyVisible(bool visible) { mPotentiallyVisible = visible; }
 
 	const Layer::Type Layer::GetType(void) const { return mType; }
@@ -249,9 +262,15 @@ namespace ImmImporter
 		mOpacity = opacity;
 	}
 
-	trans3d Layer::GetTransform(void) const { return mTransform; }
+trans3d Layer::GetTransform(void) const { return mTransformOverrideEnabled ? mTransformOverrideValue : mTransform; }
 
-	void Layer::SetTransform(const trans3d & mat) { mTransform = mat; }
+void Layer::SetTransform(const trans3d & mat) { mTransform = mat; }
+void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
+{
+    mTransformOverrideEnabled = enabled;
+    mTransformOverrideValue = mat;
+}
+
 
 	void Layer::SetDrawInTime(double v) { mDrawInTime = v; }
 	double Layer::GetDrawInTime(void) const { return mDrawInTime; }

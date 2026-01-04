@@ -120,6 +120,10 @@ namespace ImmImporter
 		bool    GetVisible(void) const;
 		bool    GetPotentiallyVisible(void) const;
         bool    GetWorldVisible(void) const; // recurses parents
+        bool    GetVisibilityOverrideEnabled(void) const;
+        bool    GetVisibilityOverrideValue(void) const;
+        bool    GetTransformOverrideEnabled(void) const;
+        const ImmCore::trans3d &GetTransformOverrideValue(void) const;
 		float   GetOpacity(void) const;
         float   GetWorldOpacity(void) const;
 
@@ -151,11 +155,13 @@ namespace ImmImporter
 		// hm, do we really need these?
 		void SetOpacity(float opacity);
 		void SetVisible(bool visible);
+        void SetVisibilityOverride(bool enabled, bool visible);
 		void SetPotentiallyVisible(bool visible);
 		void SetStartTime(ImmCore::piTick time);
 		void SetStopTime(ImmCore::piTick time);
 		void SetDrawInTime(double v);
 		void SetTransform(const ImmCore::trans3d & t);
+        void SetTransformOverride(bool enabled, const ImmCore::trans3d & t);
 		void SetPlaying(bool playing);
 		void    SetPosition(const ImmCore::vec3d& pos);
 		void    SetRotation(const ImmCore::quatd& rot);
@@ -164,7 +170,7 @@ namespace ImmImporter
         void SetIsTimeline(bool timeline);
         void SetDuration(ImmCore::piTick duration);
         void SetPivot(const ImmCore::trans3d& p);
-        void SetLoaded(bool loaded);
+		void SetLoaded(bool loaded);
 
         void GetLocalTimeOffsetAndVisiblity(ImmCore::piTick rootTime, ImmCore::piTick * offset, bool * visible);
 
@@ -191,6 +197,10 @@ namespace ImmImporter
 		uint32_t mID;
 		Type mType;
 		bool mVisible;
+        bool mVisibilityOverrideEnabled;
+        bool mVisibilityOverrideValue;
+        bool mTransformOverrideEnabled;
+        ImmCore::trans3d mTransformOverrideValue;
         bool mLoaded;
 		bool mPotentiallyVisible;
 		ImmCore::piString mName;

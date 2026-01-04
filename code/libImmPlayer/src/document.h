@@ -143,6 +143,7 @@ namespace ImmPlayer {
 		bool GetHasPlays(void) const;
         void SetCommandId(int id);
         int  GetCommandId(void);
+        bool IsSequenceReady(void) const { return mSequenceReady; }
     private:
         bool iLoadCPU(ImmCore::piLog *log, ImmCore::piSoundEngine* soundEngine,
             LayerRendererPaint *layerPaintRender,
@@ -177,6 +178,8 @@ namespace ImmPlayer {
             PlaybackState mPlaybackState;
             ImmCore::piMutex       mMutex;
         }mState;
+
+        bool mSequenceReady = false;
     };
 
 }

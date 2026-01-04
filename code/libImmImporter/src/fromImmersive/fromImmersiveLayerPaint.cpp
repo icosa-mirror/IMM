@@ -159,6 +159,7 @@ namespace ImmImporter
             const uint32_t version = lp->GetVersion();
                 
             fp->Seek(dr->GetFileOffset(), piIStream::SeekMode::SET);
+            log->Printf(LT_MESSAGE, L"IMM_IMPORT: ReadDrawing id=%u offset=%llu version=%u", drawingId, (unsigned long long)dr->GetFileOffset(), version);
                 
             struct
             {
@@ -214,10 +215,26 @@ namespace ImmImporter
             if (!mTmp.mBufB.Init(512 * 1024, false)) return false;
 
             const uint32_t numElements = fp->ReadUInt32();
+            if (numElements > 2000000)
+            {
+                log->Printf(LT_ERROR, L"IMM_IMPORT: numElements too large (%u) in drawing %u", numElements, drawingId);
+                return false;
+            }
 
             if (numElements > 0)
             {
                 const uint32_t numTotalPoints = fp->ReadUInt32();
+                if (numTotalPoints < numElements)
+                {
+                    log->Printf(LT_ERROR, L"IMM_IMPORT: numTotalPoints (%u) < numElements (%u) in drawing %u", numTotalPoints, numElements, drawingId);
+                    return false;
+                }
+                if (numTotalPoints > 50000000)
+                {
+                    log->Printf(LT_ERROR, L"IMM_IMPORT: numTotalPoints too large (%u) in drawing %u", numTotalPoints, drawingId);
+                    return false;
+                }
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: drawing %u elements=%u totalPoints=%u", drawingId, numElements, numTotalPoints);
 
                 mData.mBrush.SetMaxLengthNoShrink(numElements);
                 mData.mVisible.SetMaxLengthNoShrink(numElements);
@@ -240,6 +257,10 @@ namespace ImmImporter
                 mTmp.mBufB.SetMaxLengthNoShrink(numTotalPoints * 3 * 2 * 2);
 
                 const float biggestStroke = fp->ReadFloat();
+                if (!(biggestStroke > 0.0f))
+                {
+                    log->Printf(LT_WARNING, L"IMM_IMPORT: biggestStroke=%f in drawing %u", biggestStroke, drawingId);
+                }
                 
                 if (version == 1)
                 {
@@ -490,6 +511,7 @@ namespace ImmImporter
                 }
 
                 dr->StopAdding();
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: Finished drawing %u", drawingId);
             }
 
             mData.mBrush.End();
@@ -524,6 +546,7 @@ namespace ImmImporter
             const uint32_t numDrawings = me->GetNumDrawings();
             const uint32_t numFrames = me->GetNumFrames();
             const uint32_t version = me->GetVersion();
+            log->Printf(LT_MESSAGE, L"IMM_IMPORT: ReadAsset Paint drawings=%u frames=%u version=%u", numDrawings, numFrames, version);
 
             // read the frames
             fp->ReadUInt32array(me->GetFrameBuffer(), numFrames);
@@ -565,6 +588,7 @@ namespace ImmImporter
 
                 // read global info
                 const uint32_t numElements = fp->ReadUInt32();
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: Drawing %u offset=%llu elements=%u", i, (unsigned long long)dr->GetFileOffset(), numElements);
 
                 if (!dr->Init(numElements))
                     return false;

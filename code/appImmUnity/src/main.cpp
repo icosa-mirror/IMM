@@ -242,9 +242,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	}
 	else if (stereoType == 1) // two pass stereo
 	{
-
-		const int eyeID = gImmUnityPlugin.FromUnity.mCamera[cameraID].mCurrentEye & 1;
-		gImmUnityPlugin.FromUnity.mCamera[cameraID].mCurrentEye++;
+		const int eyeID = event_id & 1;
 
         gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
             fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
@@ -346,6 +344,11 @@ static mat4x4 iUnityToPilibs(const float *m)
 		          m[1], m[5], m[ 9], m[13],
 		          m[2], m[6], m[10], m[14],
 		          m[3], m[7], m[11], m[15]);
+}
+
+static trans3d iUnityToTrans3d(const float *m)
+{
+    return fromMatrix(f2d(iUnityToPilibs(m)) * mat4x4d::flipZ());
 }
 
 
@@ -513,7 +516,30 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
 {
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"loading from file: %s", pistr2ws(fileName));
 
-    return gImmUnityPlugin.IMM.mPlayer.Load(pistr2ws(fileName));
+    if (fileName == nullptr || fileName[0] == '\0')
+    {
+        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"LoadFromFile: filename is null or empty");
+        return -1;
+    }
+
+    try
+    {
+        int result = gImmUnityPlugin.IMM.mPlayer.Load(pistr2ws(fileName));
+        if (result < 0)
+        {
+            gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"LoadFromFile: Player.Load failed with code %d for file: %s", result, pistr2ws(fileName));
+        }
+        else
+        {
+            gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"LoadFromFile: Successfully loaded file: %s (ID: %d)", pistr2ws(fileName), result);
+        }
+        return result;
+    }
+    catch (...)
+    {
+        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"LoadFromFile: Exception caught while loading file: %s", pistr2ws(fileName));
+        return -1;
+    }
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, void* data) // ToDo: need to pass data from managed code to native code.
@@ -542,6 +568,38 @@ extern "C" void UNITY_INTERFACE_EXPORT Unload(int id)
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetDocumentToWorld(int id, float *doc2world)
 {
 	gImmUnityPlugin.IMM.mPlayer.SetDocumentToWorld(id, fromMatrix(f2d(iUnityToPilibs(doc2world)) * mat4x4d::flipZ()));
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT SetLayerVisible(int docId, int layerId, int visible)
+{
+    return gImmUnityPlugin.IMM.mPlayer.SetLayerVisible(docId, layerId, visible != 0);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT ClearLayerVisibilityOverride(int docId, int layerId)
+{
+    return gImmUnityPlugin.IMM.mPlayer.ClearLayerVisibilityOverride(docId, layerId);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT SetLayerOpacity(int docId, int layerId, float opacity)
+{
+    return gImmUnityPlugin.IMM.mPlayer.SetLayerOpacity(docId, layerId, opacity);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT SetLayerTransform(int docId, int layerId, float *layerToWorld)
+{
+    return gImmUnityPlugin.IMM.mPlayer.SetLayerTransform(docId, layerId, iUnityToTrans3d(layerToWorld));
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT ClearLayerTransformOverride(int docId, int layerId)
+{
+    return gImmUnityPlugin.IMM.mPlayer.ClearLayerTransformOverride(docId, layerId);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerId, Player::LayerDiagnostics *outDiag)
+{
+    if (outDiag == nullptr)
+        return false;
+    return gImmUnityPlugin.IMM.mPlayer.GetLayerDiagnostics(docId, layerId, *outDiag);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Pause(int id)
@@ -643,6 +701,21 @@ extern "C" void UNITY_INTERFACE_EXPORT SetSound(int id, float volume)
 extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 {
     bound = d2f(gImmUnityPlugin.IMM.mPlayer.GetDocumentBBox(id));
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT IsSequenceReady(int docId)
+{
+    return gImmUnityPlugin.IMM.mPlayer.IsSequenceReady(docId);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT GetLayerCount(int docId)
+{
+    return gImmUnityPlugin.IMM.mPlayer.GetLayerCount(docId);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT GetLayerInfoByIndex(int docId, int index, Player::LayerInfo & info)
+{
+    return gImmUnityPlugin.IMM.mPlayer.GetLayerInfoByIndex(docId, index, info);
 }
 
 #pragma region SpawnArea

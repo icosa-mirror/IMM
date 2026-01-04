@@ -119,6 +119,8 @@ namespace ImmImporter
         doLoad = true;
         doneLoading = false;
 
+        log->Printf(LT_MESSAGE, L"Importing IMM stream...");
+
         Sequence::Type sqType = Sequence::Type::Still;
         uint16_t sqCaps = 0;
 
@@ -197,19 +199,43 @@ namespace ImmImporter
 
         std::vector<LayerTime> sortedLayers;
 
-        auto populateLayerNeededRootTime = [sq, &sortedLayers, fp, log, colorSpace,renderingTechnique](Layer* layer, int level, int child, bool instance) -> bool
+        auto populateLayerNeededRootTime = [sq, &sortedLayers, fp, log, colorSpace, renderingTechnique](Layer* layer, int level, int child, bool instance) -> bool
         {
             Layer* root = sq->GetRoot();
             Layer* rootParent = layer;
-            while (rootParent->GetTimeline() != root)
+            int guard = 0;
+            while (rootParent && rootParent->GetTimeline() != root)
             {
                 rootParent = rootParent->GetParent();
+                if (++guard > 2048)
+                {
+                    log->Printf(LT_ERROR, L"Timeline parent loop detected for layer %s", layer->GetName().GetS());
+                    return false;
+                }
             }
-            const piTick firstLayerAppearTime = rootParent->GetAnimKey(Layer::AnimProperty::Visibility, 0)->mTime;
+
+            if (rootParent == nullptr)
+            {
+                log->Printf(LT_ERROR, L"Null timeline parent for layer %s", layer->GetName().GetS());
+                return false;
+            }
+
+            const Layer::AnimKey* visibilityKey = rootParent->GetAnimKey(Layer::AnimProperty::Visibility, 0);
+            if (visibilityKey == nullptr)
+            {
+                log->Printf(LT_ERROR, L"Missing visibility key for layer %s", layer->GetName().GetS());
+                return false;
+            }
+            const piTick firstLayerAppearTime = visibilityKey->mTime;
 
             if (layer->GetType() == Layer::Type::Paint)
             {
                 LayerPaint* lp = (LayerPaint*)layer->GetImplementation();
+                if (lp == nullptr)
+                {
+                    log->Printf(LT_ERROR, L"Null LayerPaint implementation for layer %s", layer->GetName().GetS());
+                    return false;
+                }
 
                 if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))
                     log->Printf(LT_ERROR, L"Could not load asset for layer %s", layer->GetName().GetS());
@@ -219,6 +245,12 @@ namespace ImmImporter
                 uint32_t* frames = lp->GetFrameBuffer();
                 const uint32_t numDrawings = lp->GetNumDrawings();
                 const uint32_t numFrames = lp->GetNumFrames();
+                if (frames == nullptr || numFrames == 0 || numDrawings == 0)
+                {
+                    log->Printf(LT_WARNING, L"Layer %s has no frames (drawings=%u frames=%u)", layer->GetName().GetS(), numDrawings, numFrames);
+                    sortedLayers.push_back({ layer, 0, firstLayerAppearTime });
+                    return true;
+                }
                 // Store individual drawings and offset each drawing by first frame appearance
                 for (unsigned int i = 0; i < numDrawings; i++)
                 {
@@ -243,6 +275,7 @@ namespace ImmImporter
         std::sort(sortedLayers.begin(), sortedLayers.end(), [](const LayerTime& a, const LayerTime& b)->bool { return a.mTime < b.mTime; });
 
         const piTick bufferingTime = piTick::FromSeconds(5.0);
+        log->Printf(LT_MESSAGE, L"IMM_IMPORT: sortedLayers=%d bufferingTime=5s", (int)sortedLayers.size());
 
         // Blocking load all assets needed for first 5 seconds
         for (auto i : sortedLayers)
@@ -255,6 +288,7 @@ namespace ImmImporter
 
             if (i.mLayer->GetType() == Layer::Type::SpawnArea)
             {
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: LoadAsset SpawnArea layer=%s", i.mLayer->GetName().GetS());
                 if (!fiLayer::LoadAsset(i.mLayer, fp, sq, log, colorSpace, renderingTechnique))
                 {
                     log->Printf(LT_ERROR, L"Could not load asset for layer %s", i.mLayer->GetName().GetS());
@@ -269,6 +303,7 @@ namespace ImmImporter
             if (i.mLayer->GetType() == Layer::Type::Paint)
             {
                 const bool flipped = (i.mLayer->GetTransformToWorld().mFlip != flip3::N);
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: ReadDrawing layer=%s drawingId=%u flipped=%d", i.mLayer->GetName().GetS(), i.mDrawingId, flipped ? 1 : 0);
                 if (!fiLayerPaint::ReadDrawing(i.mLayer->GetImplementation(), i.mDrawingId, fp, log, colorSpace, renderingTechnique, flipped))
                     log->Printf(LT_ERROR, L"Could not load drawing %d for layer %s",i.mDrawingId, i.mLayer->GetName().GetS());
                 //else
@@ -276,6 +311,7 @@ namespace ImmImporter
             }
             else
             {
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: LoadAsset layer=%s type=%d", i.mLayer->GetName().GetS(), (int)i.mLayer->GetType());
                 if (!fiLayer::LoadAsset(i.mLayer, fp, sq, log, colorSpace, renderingTechnique))
                 {
                     log->Printf(LT_ERROR, L"Could not load asset for layer %s", i.mLayer->GetName().GetS());
@@ -303,35 +339,37 @@ namespace ImmImporter
 
             for (auto i : sortedLayers)
             {
-                if (doLoad == false)
-                {
-                    doneLoading = true;
-                    if (filename != nullptr)
+            if (doLoad == false)
+            {
+                doneLoading = true;
+                if (filename != nullptr)
                     {
                         file.Close();
                     }
                     delete stream;
                     return false;
                 }
-                if (i.mTime <= bufferingTime) continue;
+            if (i.mTime <= bufferingTime) continue;
 
-                if (i.mLayer->GetType() == Layer::Type::Paint)
-                {
-                    const bool flipped = (i.mLayer->GetTransformToWorld().mFlip != flip3::N);
-                    if (!fiLayerPaint::ReadDrawing(i.mLayer->GetImplementation(), i.mDrawingId, stream, log, colorSpace, renderingTechnique, flipped))
-                        log->Printf(LT_ERROR, L"Could not load drawing %d for layer %s", i.mDrawingId, i.mLayer->GetName().GetS());
+            if (i.mLayer->GetType() == Layer::Type::Paint)
+            {
+                const bool flipped = (i.mLayer->GetTransformToWorld().mFlip != flip3::N);
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: Async ReadDrawing layer=%s drawingId=%u flipped=%d", i.mLayer->GetName().GetS(), i.mDrawingId, flipped ? 1 : 0);
+                if (!fiLayerPaint::ReadDrawing(i.mLayer->GetImplementation(), i.mDrawingId, stream, log, colorSpace, renderingTechnique, flipped))
+                    log->Printf(LT_ERROR, L"Could not load drawing %d for layer %s", i.mDrawingId, i.mLayer->GetName().GetS());
 #ifdef _DEBUG
-                    else
+                else
                         log->Printf(LT_MESSAGE, L"Loaded drawing %d for layer %s", i.mDrawingId, i.mLayer->GetName().GetS());
 #endif
-                }
-                else
+            }
+            else
+            {
+                log->Printf(LT_MESSAGE, L"IMM_IMPORT: Async LoadAsset layer=%s type=%d", i.mLayer->GetName().GetS(), (int)i.mLayer->GetType());
+                if (!fiLayer::LoadAsset(i.mLayer, stream, sq, log, colorSpace, renderingTechnique))
                 {
-                    if (!fiLayer::LoadAsset(i.mLayer, stream, sq, log, colorSpace, renderingTechnique))
-                    {
-                        log->Printf(LT_ERROR, L"Could not load asset for layer %s", i.mLayer->GetName().GetS());
-                        return false;
-                    }
+                    log->Printf(LT_ERROR, L"Could not load asset for layer %s", i.mLayer->GetName().GetS());
+                    return false;
+                }
                     i.mLayer->SetLoaded(true);
                 }
             }
@@ -357,11 +395,21 @@ namespace ImmImporter
 
     bool ImportFromDisk(Sequence* sq, piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique)
     {
+        if (filename == nullptr)
+        {
+            if (log) log->Printf(LT_ERROR, L"IMM_IMPORT: ImportFromDisk filename is null");
+            return false;
+        }
+
+        if (log) log->Printf(LT_MESSAGE, L"IMM_IMPORT: ImportFromDisk entering");
+        if (log) log->Printf(LT_MESSAGE, L"IMM_IMPORT: filename pointer=%p", filename);
         piFile fp;
         if (!fp.Open(filename, L"rb"))
             return false;
 
+        if (log) log->Printf(LT_MESSAGE, L"IMM_IMPORT: ImportFromDisk opened file");
         piIStreamFile fstr(&fp, piIStreamFile::kDefaultFileSize);
+        if (log) log->Printf(LT_MESSAGE, L"IMM_IMPORT: ImportFromDisk created stream");
 
         bool error = iImportStream(&fstr, filename, sq, log, colorSpace, renderingTechnique);
 
