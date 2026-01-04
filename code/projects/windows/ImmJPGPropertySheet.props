@@ -2,7 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
-    <IMM_JPGIncDir>../../../libs_3rd_party/libs/jpg/include</IMM_JPGIncDir>
-    <IMM_JPGLibDir>../../../libs_3rd_party/libs/jpg/lib/x64/$(Configuration)/</IMM_JPGLibDir>
+    <IMM_JPGIncDir>..\..\thirdparty\libjpeg-turbo\include</IMM_JPGIncDir>
+    <IMM_JPGLibDir>..\..\thirdparty\libjpeg-turbo\lib</IMM_JPGLibDir>
   </PropertyGroup>
 </Project>

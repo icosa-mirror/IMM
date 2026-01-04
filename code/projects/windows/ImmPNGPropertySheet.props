@@ -2,7 +2,7 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
-    <IMM_PNGIncDir>../../../libs_3rd_party/libs/png/include</IMM_PNGIncDir>
-    <IMM_PNGLibDir>../../../libs_3rd_party/libs/png/lib/x64/$(Configuration)/</IMM_PNGLibDir>
+    <IMM_PNGIncDir>..\..\thirdparty\libpng\include</IMM_PNGIncDir>
+    <IMM_PNGLibDir>..\..\thirdparty\libpng\lib</IMM_PNGLibDir>
   </PropertyGroup>
 </Project>
