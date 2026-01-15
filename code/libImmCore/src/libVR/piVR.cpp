@@ -2,13 +2,17 @@
 // Branched off piLibs (Copyright © 2015 Inigo Quilez, The MIT License), in 2015. See THIRD_PARTY_LICENSES.txt
 //
 #include "piVR.h"
+
+#if defined(WINDOWS)
 #include "oculus/piOculus.h"
 #include "vive/piVive.h"
+#endif
 
 namespace ImmCore
 {
 	piVRHMD * piVRHMD::Create(HwType hw, const char * appID, int deviceID, float pixelDensity, piLog* log, piTimer* timer)
 	{
+#if defined(WINDOWS)
         if (hw == Oculus_Rift || hw == ANY_AVAILABLE)
 		{
 			piVROculus * me = new piVROculus();
@@ -23,6 +27,7 @@ namespace ImmCore
 				return me;
 		}
 #endif
+#endif // WINDOWS
 		return nullptr;
 	}
 

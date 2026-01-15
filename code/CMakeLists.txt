@@ -98,7 +98,7 @@ if(ANDROID)
         GIT_TAG v1.3.5
     )
     FetchContent_MakeAvailable(ogg)
-    set(OGG_INCLUDE_DIRS ${ogg_SOURCE_DIR}/include ${ogg_BINARY_DIR}/include)
+    set(OGG_INCLUDE_DIRS ${ogg_SOURCE_DIR}/include ${ogg_BINARY_DIR}/include ${ogg_SOURCE_DIR}/include/ogg)
     set(OGG_LIBRARIES ogg)
 
     # Create alias target and set variables for vorbis to find ogg
