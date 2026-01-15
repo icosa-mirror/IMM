@@ -1,0 +1,136 @@
+name: Build Android
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # Build native Android plugin (.so) using CMake + NDK
+  build-android-native:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        abi: [arm64-v8a]  # Can add armeabi-v7a if needed
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Android NDK
+      uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r26d
+        add-to-path: true
+
+    - name: Configure CMake for Android
+      working-directory: code
+      env:
+        ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      run: |
+        cmake -B build-android \
+          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=${{ matrix.abi }} \
+          -DANDROID_PLATFORM=android-24 \
+          -DANDROID_STL=c++_shared \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DIMM_BUILD_UNITY_PLUGIN=ON \
+          -DIMM_USE_NULL_AUDIO=ON
+
+    - name: Build Android Native Plugin
+      working-directory: code
+      run: cmake --build build-android --config Release --parallel
+
+    - name: Upload Android Plugin
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmUnityPlugin-Android-${{ matrix.abi }}
+        path: code/build-android/appImmUnity/libImmUnityPlugin.so
+        if-no-files-found: warn
+
+  # Also build Windows plugin (needed for Unity editor)
+  build-windows-plugin:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Build Native Plugin (Windows)
+      working-directory: code/projects/windows
+      run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+
+    - name: Upload Windows Plugin
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmUnityPlugin-Windows-x64
+        path: code/appImmUnity/exe/ImmUnityPlugin.dll
+        if-no-files-found: error
+
+  # Build Unity project for Android (optional - requires Unity license)
+  build-unity-android:
+    needs: [build-android-native, build-windows-plugin]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'  # Only on manual trigger
+
+    env:
+      UNITY_VERSION: 2022.3.62f1
+      UNITY_PROJECT_PATH: code/ImmUnitySampleProject
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        lfs: true
+
+    - name: Download Windows Plugin (for Editor)
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmUnityPlugin-Windows-x64
+        path: ${{ env.UNITY_PROJECT_PATH }}/Assets/Plugins/x86_64/
+
+    - name: Download Android Plugin
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmUnityPlugin-Android-arm64-v8a
+        path: ${{ env.UNITY_PROJECT_PATH }}/Assets/Plugins/Android/libs/arm64-v8a/
+
+    - name: Cache Unity Library
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.UNITY_PROJECT_PATH }}/Library
+        key: Library-${{ env.UNITY_PROJECT_PATH }}-Android-${{ hashFiles(format('{0}/**/*.cs', env.UNITY_PROJECT_PATH)) }}
+        restore-keys: |
+          Library-${{ env.UNITY_PROJECT_PATH }}-Android-
+          Library-${{ env.UNITY_PROJECT_PATH }}-
+
+    - name: Build Unity Android
+      uses: game-ci/unity-builder@v4
+      env:
+        UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+        UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      with:
+        projectPath: ${{ env.UNITY_PROJECT_PATH }}
+        unityVersion: ${{ env.UNITY_VERSION }}
+        targetPlatform: Android
+        buildName: ImmViewer
+        androidExportType: androidPackage
+        androidKeystoreName: user.keystore
+        androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+        androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+
+    - name: Upload Android APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Android-APK
+        path: build/Android/*.apk
+        if-no-files-found: warn

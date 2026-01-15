@@ -404,7 +404,11 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 		return -1;
 
     // SOUND ENGINE
-    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
+#if defined(IMM_NULL_AUDIO) || defined(ANDROID)
+    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &gImmUnityPlugin.IMM.mLog);
+#else
+    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR, &gImmUnityPlugin.IMM.mLog);
+#endif
 
     if(!gImmUnityPlugin.IMM.mSoundBackend)
         gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to create SoundBackend.");
