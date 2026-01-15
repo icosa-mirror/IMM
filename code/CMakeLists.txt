@@ -101,8 +101,15 @@ if(ANDROID)
     set(OGG_INCLUDE_DIRS ${ogg_SOURCE_DIR}/include ${ogg_BINARY_DIR}/include)
     set(OGG_LIBRARIES ogg)
 
+    # Create alias target and set variables for vorbis to find ogg
+    if(NOT TARGET Ogg::ogg)
+        add_library(Ogg::ogg ALIAS ogg)
+    endif()
+    set(OGG_FOUND TRUE CACHE BOOL "" FORCE)
+    set(OGG_INCLUDE_DIR "${ogg_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+    set(OGG_LIBRARY Ogg::ogg CACHE STRING "" FORCE)
+
     # vorbis
-    set(OGG_ROOT ${ogg_BINARY_DIR})
     FetchContent_Declare(
         vorbis
         GIT_REPOSITORY https://github.com/xiph/vorbis.git
