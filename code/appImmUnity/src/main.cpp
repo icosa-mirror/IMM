@@ -404,7 +404,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 		return -1;
 
     // SOUND ENGINE
-#if defined(IMM_NULL_AUDIO) || defined(ANDROID)
+#if defined(ANDROID)
+    // Use miniaudio for stereo audio on Android
+    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Miniaudio, &gImmUnityPlugin.IMM.mLog);
+#elif defined(IMM_NULL_AUDIO)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &gImmUnityPlugin.IMM.mLog);
 #else
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR, &gImmUnityPlugin.IMM.mLog);

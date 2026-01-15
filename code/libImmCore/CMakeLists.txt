@@ -20,12 +20,16 @@ set(IMMCORE_COMMON_SOURCES
     src/libRender/piRenderer.cpp
     src/libSound/piSound.cpp
     src/libSound/piSoundEngineNULL.cpp
+    src/libSound/piSoundEngineMiniaudio.cpp
     src/libVR/piVR.cpp
     src/libWave/piWave.cpp
     src/libWave/formats/piWaveOGG.cpp
     src/libWave/formats/piWaveOPUS.cpp
     src/libWave/formats/piWaveWAV.cpp
 )
+
+# Miniaudio include directory
+set(MINIAUDIO_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty/miniaudio")
 
 # Platform-specific sources
 if(ANDROID)
@@ -91,11 +95,12 @@ target_include_directories(ImmCore PUBLIC
     ${VORBIS_INCLUDE_DIRS}
     ${OPUS_INCLUDE_DIRS}
     ${OPUSENC_INCLUDE_DIRS}
+    ${MINIAUDIO_INCLUDE_DIR}
 )
 
 # Platform-specific includes and definitions
 if(ANDROID)
-    target_compile_definitions(ImmCore PUBLIC IMM_NULL_AUDIO)
+    # Use miniaudio for stereo audio on Android (no spatial audio)
 elseif(WIN32)
     target_include_directories(ImmCore PUBLIC ${OCULUS_INCLUDE_DIRS})
     if(NOT IMM_USE_NULL_AUDIO)

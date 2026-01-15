@@ -15,7 +15,8 @@ public:
 	{
 		Null = 0,
 		DirectSound = 1,
-		DirectSoundOVR = 2
+		DirectSoundOVR = 2,
+		Miniaudio = 3
 	};
 
     struct Configuration
