@@ -106,8 +106,12 @@ if(ANDROID)
         add_library(Ogg::ogg ALIAS ogg)
     endif()
     set(OGG_FOUND TRUE CACHE BOOL "" FORCE)
+    set(OGG_ROOT "${ogg_SOURCE_DIR}" CACHE PATH "" FORCE)
     set(OGG_INCLUDE_DIR "${ogg_SOURCE_DIR}/include" CACHE PATH "" FORCE)
-    set(OGG_LIBRARY Ogg::ogg CACHE STRING "" FORCE)
+    set(OGG_INCLUDE_DIRS "${ogg_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+    set(OGG_LIBRARY_DIRS "${ogg_BINARY_DIR}" CACHE PATH "" FORCE)
+    # Vorbis uses FindOgg.cmake; provide a direct target name to satisfy it.
+    set(OGG_LIBRARY ogg CACHE STRING "" FORCE)
 
     # vorbis
     FetchContent_Declare(
@@ -116,7 +120,7 @@ if(ANDROID)
         GIT_TAG v1.3.7
     )
     FetchContent_MakeAvailable(vorbis)
-    set(VORBIS_INCLUDE_DIRS ${vorbis_SOURCE_DIR}/include)
+    set(VORBIS_INCLUDE_DIRS ${vorbis_SOURCE_DIR}/include ${vorbis_SOURCE_DIR}/include/vorbis)
     set(VORBIS_LIBRARIES vorbis vorbisenc vorbisfile)
 
     # opus
