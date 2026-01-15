@@ -5,7 +5,7 @@
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>..\..\thirdparty\audio360-sdk\Audio360\include;..\..\thirdparty\libogg\include;..\..\thirdparty\libvorbis\include\vorbis;..\..\thirdparty\libopusenc\include\opus;..\..\thirdparty\opus\include\opus;..\..\thirdparty\ovr-sdk\LibOVR\Include;..\..\thirdparty\ovr-platform-sdk\Include;..\..\thirdparty\libpng\include;..\..\thirdparty\libjpeg-turbo\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\thirdparty\miniaudio;..\..\thirdparty\audio360-sdk\Audio360\include;..\..\thirdparty\libogg\include;..\..\thirdparty\libvorbis\include\vorbis;..\..\thirdparty\libopusenc\include\opus;..\..\thirdparty\opus\include\opus;..\..\thirdparty\ovr-sdk\LibOVR\Include;..\..\thirdparty\ovr-platform-sdk\Include;..\..\thirdparty\libpng\include;..\..\thirdparty\libjpeg-turbo\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>..\..\thirdparty\audio360-sdk\Audio360\Windows\x64;..\..\thirdparty\libogg\lib;..\..\thirdparty\libopusenc\lib;..\..\thirdparty\libvorbis\lib;..\..\thirdparty\opus\lib;..\..\thirdparty\ovr-sdk\LibOVR\Lib\Windows\x64\Release\VS2017;..\..\thirdparty\libpng\lib;..\..\thirdparty\libjpeg-turbo\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
