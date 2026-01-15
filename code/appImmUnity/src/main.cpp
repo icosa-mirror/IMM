@@ -81,6 +81,11 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#include "libImmExporter/src/document/sequence.h"
+#include "libImmExporter/src/document/layerPaint.h"
+#include "libImmExporter/src/document/layerPaint/element.h"
+#include "libImmExporter/src/toImmersive/toImmersive.h"
+#include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #include "IUnityGraphics.h"
 #if !defined(__ANDROID__) && !defined(ANDROID)
 #include "IUnityGraphicsD3D11.h"
@@ -874,3 +879,320 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaInfo(int docId, int spawnarea
 
 
 #pragma endregion
+
+// ----------------------------------------------------------------------------------------------------------------------------------------------------
+// Exporter API (C ABI for Unity)
+// ----------------------------------------------------------------------------------------------------------------------------------------------------
+struct ImmExporterTransformC
+{
+    float tx, ty, tz;
+    float qx, qy, qz, qw;
+    float scale;
+};
+
+struct ImmExporterPointC
+{
+    float px, py, pz;
+    float nx, ny, nz;
+    float dx, dy, dz;
+    float r, g, b;
+    float a;
+    float width;
+    float length;
+    float time;
+};
+
+struct ImmExporterDrawingHandle
+{
+    ImmExporter::LayerPaint* paint = nullptr;
+    ImmExporter::Drawing* drawing = nullptr;
+    uint32_t index = 0;
+};
+
+static ImmCore::trans3d ImmExporterMakeTransform(const ImmExporterTransformC* t)
+{
+    if (t == nullptr)
+        return ImmCore::trans3d::identity();
+
+    ImmCore::quatd q(t->qx, t->qy, t->qz, t->qw);
+    ImmCore::vec3d tr(t->tx, t->ty, t->tz);
+    return ImmCore::trans3d(q, static_cast<double>(t->scale), ImmCore::flip3::N, tr);
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSequence(
+    int type,
+    int caps,
+    float bgR, float bgG, float bgB,
+    uint32_t frameRate,
+    int64_t maxMemory,
+    int64_t maxRenderCalls,
+    int64_t maxTriangles,
+    int64_t maxSoundChannels)
+{
+    ImmExporter::Sequence* seq = new ImmExporter::Sequence();
+    ImmExporter::Sequence::Requirements reqs = {};
+    reqs.mMaxMemory = maxMemory;
+    reqs.mMaxRenderCalls = maxRenderCalls;
+    reqs.mMaxTriangles = maxTriangles;
+    reqs.mMaxSoundChannels = maxSoundChannels;
+
+    ImmExporter::Sequence::Type seqType = ImmExporter::Sequence::Type::Still;
+    if (type >= 0 && type < static_cast<int>(ImmExporter::Sequence::Type::COUNT))
+        seqType = static_cast<ImmExporter::Sequence::Type>(type);
+
+    ImmCore::vec3 bg(bgR, bgG, bgB);
+    if (!seq->Init(seqType, static_cast<uint8_t>(caps), reqs, bg, frameRate))
+    {
+        delete seq;
+        return nullptr;
+    }
+    return seq;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_DestroySequence(void* sequenceHandle)
+{
+    ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    if (seq == nullptr)
+        return;
+
+    seq->Deinit();
+    delete seq;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreatePaintLayer(
+    void* sequenceHandle,
+    void* parentLayerHandle,
+    const char* name,
+    int visible,
+    float opacity,
+    const ImmExporterTransformC* transform,
+    const ImmExporterTransformC* pivot,
+    int isTimeline,
+    int64_t durationTicks,
+    uint32_t maxRepeatCount)
+{
+    ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    if (seq == nullptr)
+        return nullptr;
+
+    ImmExporter::Layer* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    ImmExporter::Layer* layer = seq->CreateLayer(parent);
+    if (layer == nullptr)
+        return nullptr;
+
+    const ImmCore::trans3d t = ImmExporterMakeTransform(transform);
+    const ImmCore::trans3d p = ImmExporterMakeTransform(pivot);
+
+    ImmCore::piString wname;
+    if (name != nullptr && name[0] != '\0')
+        wname.InitCopyS(name);
+    else
+        wname.InitCopyW(L"Paint");
+
+    const bool ok = layer->Init(
+        ImmExporter::Layer::Type::Paint,
+        wname.GetS(),
+        visible != 0,
+        t,
+        p,
+        opacity,
+        isTimeline != 0,
+        static_cast<ImmCore::piTick>(durationTicks),
+        maxRepeatCount);
+
+    wname.End();
+    if (!ok)
+        return nullptr;
+
+    ImmExporter::LayerPaint* paint = new ImmExporter::LayerPaint();
+    paint->Init();
+    layer->SetImplementation(paint);
+    return layer;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateGroupLayer(
+    void* sequenceHandle,
+    void* parentLayerHandle,
+    const char* name,
+    int visible,
+    float opacity,
+    const ImmExporterTransformC* transform,
+    const ImmExporterTransformC* pivot,
+    int isTimeline,
+    int64_t durationTicks,
+    uint32_t maxRepeatCount)
+{
+    ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    if (seq == nullptr)
+        return nullptr;
+
+    ImmExporter::Layer* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    ImmExporter::Layer* layer = seq->CreateLayer(parent);
+    if (layer == nullptr)
+        return nullptr;
+
+    const ImmCore::trans3d t = ImmExporterMakeTransform(transform);
+    const ImmCore::trans3d p = ImmExporterMakeTransform(pivot);
+
+    ImmCore::piString wname;
+    if (name != nullptr && name[0] != '\0')
+        wname.InitCopyS(name);
+    else
+        wname.InitCopyW(L"Group");
+
+    const bool ok = layer->Init(
+        ImmExporter::Layer::Type::Group,
+        wname.GetS(),
+        visible != 0,
+        t,
+        p,
+        opacity,
+        isTimeline != 0,
+        static_cast<ImmCore::piTick>(durationTicks),
+        maxRepeatCount);
+
+    wname.End();
+    if (!ok)
+        return nullptr;
+
+    return layer;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateDrawing(void* paintLayerHandle)
+{
+    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(paintLayerHandle);
+    if (layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::Paint)
+        return nullptr;
+
+    ImmExporter::LayerPaint* paint = reinterpret_cast<ImmExporter::LayerPaint*>(layer->GetImplementation());
+    if (paint == nullptr)
+        return nullptr;
+
+    const uint32_t drawingIndex = paint->GetNumDrawings();
+    ImmExporter::Drawing* drawing = paint->CreateDrawing();
+    if (drawing == nullptr)
+        return nullptr;
+
+    ImmExporterDrawingHandle* handle = new ImmExporterDrawingHandle();
+    handle->paint = paint;
+    handle->drawing = drawing;
+    handle->index = drawingIndex;
+    return handle;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_DestroyDrawing(void* drawingHandle)
+{
+    ImmExporterDrawingHandle* handle = reinterpret_cast<ImmExporterDrawingHandle*>(drawingHandle);
+    if (handle == nullptr)
+        return;
+    delete handle;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT uint32_t UNITY_INTERFACE_API ImmExporter_GetDrawingIndex(void* drawingHandle)
+{
+    ImmExporterDrawingHandle* handle = reinterpret_cast<ImmExporterDrawingHandle*>(drawingHandle);
+    if (handle == nullptr)
+        return 0;
+    return handle->index;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_DrawingInit(void* drawingHandle, uint32_t numElements, int flipped)
+{
+    ImmExporterDrawingHandle* handle = reinterpret_cast<ImmExporterDrawingHandle*>(drawingHandle);
+    if (handle == nullptr || handle->drawing == nullptr)
+        return false;
+    return handle->drawing->Init(numElements, flipped != 0);
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_DrawingGetElement(void* drawingHandle, uint32_t elementIndex)
+{
+    ImmExporterDrawingHandle* handle = reinterpret_cast<ImmExporterDrawingHandle*>(drawingHandle);
+    if (handle == nullptr || handle->drawing == nullptr)
+        return nullptr;
+    return handle->drawing->GetElement(elementIndex);
+}
+
+extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ElementInit(
+    void* elementHandle,
+    uint32_t numPoints,
+    int brushSectionType,
+    int visibilityType)
+{
+    ImmExporter::Element* element = reinterpret_cast<ImmExporter::Element*>(elementHandle);
+    if (element == nullptr)
+        return false;
+    return element->Init(
+        numPoints,
+        static_cast<ImmExporter::Element::BrushSectionType>(brushSectionType),
+        static_cast<ImmExporter::Element::VisibilityType>(visibilityType));
+}
+
+extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ElementSetPoint(
+    void* elementHandle,
+    uint32_t pointIndex,
+    const ImmExporterPointC* point)
+{
+    ImmExporter::Element* element = reinterpret_cast<ImmExporter::Element*>(elementHandle);
+    if (element == nullptr || point == nullptr)
+        return false;
+
+    ImmExporter::Point* p = element->GetPoint(pointIndex);
+    if (p == nullptr)
+        return false;
+
+    p->mPos = ImmCore::vec3(point->px, point->py, point->pz);
+    p->mNor = ImmCore::vec3(point->nx, point->ny, point->nz);
+    p->mDir = ImmCore::vec3(point->dx, point->dy, point->dz);
+    p->mCol = ImmCore::vec3(point->r, point->g, point->b);
+    p->mTra = point->a;
+    p->mWid = point->width;
+    p->mLen = point->length;
+    p->mTim = point->time;
+    return true;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_ComputeElementBounds(void* elementHandle)
+{
+    ImmExporter::Element* element = reinterpret_cast<ImmExporter::Element*>(elementHandle);
+    if (element == nullptr)
+        return;
+    element->ComputeBoundingBox();
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_ComputeDrawingBounds(void* drawingHandle)
+{
+    ImmExporterDrawingHandle* handle = reinterpret_cast<ImmExporterDrawingHandle*>(drawingHandle);
+    if (handle == nullptr || handle->drawing == nullptr)
+        return;
+    handle->drawing->ComputeBoundingBox();
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_PaintAddFrame(void* paintLayerHandle, uint32_t drawingIndex)
+{
+    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(paintLayerHandle);
+    if (layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::Paint)
+        return;
+
+    ImmExporter::LayerPaint* paint = reinterpret_cast<ImmExporter::LayerPaint*>(layer->GetImplementation());
+    if (paint == nullptr)
+        return;
+
+    paint->AddFrame(drawingIndex);
+}
+
+extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ExportToFile(
+    void* sequenceHandle,
+    const char* fileName,
+    int opusBitrate,
+    int audioType)
+{
+    ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    if (seq == nullptr || fileName == nullptr || fileName[0] == '\0')
+        return false;
+
+    return ImmExporter::ExportToFile(
+        fileName,
+        seq,
+        opusBitrate,
+        static_cast<ImmExporter::tiLayerSound::AudioType>(audioType));
+}

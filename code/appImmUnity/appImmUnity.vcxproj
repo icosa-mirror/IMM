@@ -84,7 +84,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <AdditionalLibraryDirectories>$(IMM_ZLibLibDir);$(IMM_JPGLibDir);$(IMM_PNGLibDir);$(IMM_Audio360LibDir);$(IMM_OPUSENCLibDir);$(IMM_OPUSLibDir);$(IMM_OGGLibDir);$(IMM_VorbisLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -110,7 +110,7 @@
       <DebugInformationFormat>None</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
