@@ -33,8 +33,8 @@ using namespace ImmImporter;
 namespace ImmPlayer
 {
 #if defined(ANDROID)
-	#include "shader_pretessellated_brush_vs.es.glsl"
-	#include "shader_pretessellated_brush_fs.es.glsl"
+	#include "shader_pretessellated_brush_vs_es.h"
+	#include "shader_pretessellated_brush_fs_es.h"
 #else
 	#include "tmp/shader_pretessellated_brush_vs_hlsl.inc"
 	#include "tmp/shader_pretessellated_brush_fs_hlsl.inc"

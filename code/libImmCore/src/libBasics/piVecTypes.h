@@ -3,6 +3,79 @@
 //
 #pragma once
 
+#if defined(ANDROID)
+#include <math.h>
+#undef signbit
+#undef fpclassify
+#undef isfinite
+#undef isinf
+#undef isnan
+#undef isnormal
+#undef isgreater
+#undef isgreaterequal
+#undef isless
+#undef islessequal
+#undef islessgreater
+#undef isunordered
+
+static inline int signbit(float x) { return __builtin_signbitf(x); }
+static inline int signbit(double x) { return __builtin_signbit(x); }
+static inline int signbit(long double x) { return __builtin_signbitl(x); }
+
+static inline int fpclassify(float x)
+{
+    return __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL, FP_ZERO, x);
+}
+static inline int fpclassify(double x)
+{
+    return __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL, FP_ZERO, x);
+}
+static inline int fpclassify(long double x)
+{
+    return __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL, FP_ZERO, x);
+}
+
+static inline int isfinite(float x) { return __builtin_isfinite(x); }
+static inline int isfinite(double x) { return __builtin_isfinite(x); }
+static inline int isfinite(long double x) { return __builtin_isfinite(x); }
+
+static inline int isinf(float x) { return __builtin_isinf(x); }
+static inline int isinf(double x) { return __builtin_isinf(x); }
+static inline int isinf(long double x) { return __builtin_isinf(x); }
+
+static inline int isnan(float x) { return __builtin_isnan(x); }
+static inline int isnan(double x) { return __builtin_isnan(x); }
+static inline int isnan(long double x) { return __builtin_isnan(x); }
+
+static inline int isnormal(float x) { return __builtin_isnormal(x); }
+static inline int isnormal(double x) { return __builtin_isnormal(x); }
+static inline int isnormal(long double x) { return __builtin_isnormal(x); }
+
+static inline int isgreater(float x, float y) { return __builtin_isgreater(x, y); }
+static inline int isgreater(double x, double y) { return __builtin_isgreater(x, y); }
+static inline int isgreater(long double x, long double y) { return __builtin_isgreater(x, y); }
+
+static inline int isgreaterequal(float x, float y) { return __builtin_isgreaterequal(x, y); }
+static inline int isgreaterequal(double x, double y) { return __builtin_isgreaterequal(x, y); }
+static inline int isgreaterequal(long double x, long double y) { return __builtin_isgreaterequal(x, y); }
+
+static inline int isless(float x, float y) { return __builtin_isless(x, y); }
+static inline int isless(double x, double y) { return __builtin_isless(x, y); }
+static inline int isless(long double x, long double y) { return __builtin_isless(x, y); }
+
+static inline int islessequal(float x, float y) { return __builtin_islessequal(x, y); }
+static inline int islessequal(double x, double y) { return __builtin_islessequal(x, y); }
+static inline int islessequal(long double x, long double y) { return __builtin_islessequal(x, y); }
+
+static inline int islessgreater(float x, float y) { return __builtin_islessgreater(x, y); }
+static inline int islessgreater(double x, double y) { return __builtin_islessgreater(x, y); }
+static inline int islessgreater(long double x, long double y) { return __builtin_islessgreater(x, y); }
+
+static inline int isunordered(float x, float y) { return __builtin_isunordered(x, y); }
+static inline int isunordered(double x, double y) { return __builtin_isunordered(x, y); }
+static inline int isunordered(long double x, long double y) { return __builtin_isunordered(x, y); }
+#endif
+
 #include <cmath>
 #include <cstdint>
 #include <string.h>

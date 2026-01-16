@@ -71,6 +71,8 @@ if(ANDROID)
         libjpeg-turbo-external
         GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
         GIT_TAG 3.0.3
+        UPDATE_COMMAND ""
+        UPDATE_DISCONNECTED TRUE
         CMAKE_ARGS
             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
             -DANDROID_ABI=${ANDROID_ABI}

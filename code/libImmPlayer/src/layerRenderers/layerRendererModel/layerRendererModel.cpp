@@ -41,8 +41,8 @@ namespace ImmPlayer
 #include "shader_model_vs.glsl"
 #include "shader_model_fs.glsl"
 #elif defined(ANDROID)
-#include "gles/shader_model_vs.es.glsl"
-#include "gles/shader_model_fs.es.glsl"
+#include "shader_model_vs_es.h"
+#include "shader_model_fs_es.h"
 #endif
 
 	bool LayerRendererModel::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
