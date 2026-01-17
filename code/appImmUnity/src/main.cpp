@@ -81,11 +81,13 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#if !defined(__ANDROID__) && !defined(ANDROID)
 #include "libImmExporter/src/document/sequence.h"
 #include "libImmExporter/src/document/layerPaint.h"
 #include "libImmExporter/src/document/layerPaint/element.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
+#endif
 #include "IUnityGraphics.h"
 #if !defined(__ANDROID__) && !defined(ANDROID)
 #include "IUnityGraphicsD3D11.h"
@@ -215,8 +217,8 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 #else
 		if (apiType == kUnityGfxRendererOpenGLES30)
 		{
-			gImmPlayerPlugin.UnityAPI.mDevice = nullptr;
-			gImmPlayerPlugin.IMM.mLog.Printf(LT_MESSAGE, L"kUnityGfxDeviceEventInitialize using OpenGL ES 3.0 device");
+			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
+			gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"kUnityGfxDeviceEventInitialize using OpenGL ES 3.0 device");
 		}
 #endif
 	}
@@ -404,7 +406,11 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 		return -1;
 
     // SOUND ENGINE
+#if defined(__ANDROID__) || defined(ANDROID)
+    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
+#else
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
+#endif
 
     if(!gImmUnityPlugin.IMM.mSoundBackend)
         gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to create SoundBackend.");
@@ -441,7 +447,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 
 #if defined(__ANDROID__) || defined(ANDROID)
 	const piRenderer::API api = piRenderer::API::GLES;
-	gImmPlayerPlugin.IMM.mRenderReporter = nullptr;
+	gImmUnityPlugin.IMM.mRenderReporter = nullptr;
 #else
 	const piRenderer::API api = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
 	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
@@ -457,7 +463,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Renderer created successfully");
 
 #if defined(__ANDROID__) || defined(ANDROID)
-	if (!gImmPlayerPlugin.IMM.mRenderer->Initialize(0, nullptr, 1, false, false, gImmPlayerPlugin.IMM.mRenderReporter, false, nullptr, nullptr))
+	if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 1, false, false, gImmUnityPlugin.IMM.mRenderReporter, false, nullptr))
 #else
     if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 0, true, false, gImmUnityPlugin.IMM.mRenderReporter, false, gImmUnityPlugin.UnityAPI.mDevice))
 #endif
@@ -470,12 +476,12 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 	// PLAYER
     Player::Configuration conf;
 #if defined(__ANDROID__) || defined(ANDROID)
-    conf.colorSpace = ColorSpace::Gamma;
+    conf.colorSpace = Drawing::ColorSpace::Gamma;
     conf.depthBuffer = DepthBuffer::Linear01;
     conf.clipDepth = ClipSpaceDepth::FromNegativeOneToOne;
     conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
     conf.frontIsCCW = true;
-    conf.paintRenderingTechnique = PaintRenderingTechnique::Static;
+    conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
 #else
     conf.colorSpace = static_cast<Drawing::ColorSpace>(colorSpace);
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"ColorSpace: %s", conf.colorSpace == Drawing::ColorSpace::Gamma ? L"Gamma" : L"Linear" );
@@ -902,6 +908,9 @@ struct ImmExporterPointC
     float time;
 };
 
+// Exporter functionality - not available on Android
+#if !defined(__ANDROID__) && !defined(ANDROID)
+
 struct ImmExporterDrawingHandle
 {
     ImmExporter::LayerPaint* paint = nullptr;
@@ -1196,3 +1205,5 @@ extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ExportToF
         opusBitrate,
         static_cast<ImmExporter::tiLayerSound::AudioType>(audioType));
 }
+
+#endif // !ANDROID - End of exporter functionality

@@ -32,40 +32,49 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOGG.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSound.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSoundEngineNULL.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/libVR/piVR.cpp
+    # piVR.cpp excluded - uses Oculus PC SDK, not available on Android (Quest uses OpenXR)
 )
 
+# Thirdparty root (relative to repo root, not code/)
+set(THIRDPARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty)
+
 # OGG/Vorbis from thirdparty
-set(ogg-third-party ${CMAKE_SOURCE_DIR}/../thirdparty/ogg)
+set(ogg-third-party ${THIRDPARTY_DIR}/ogg)
 add_subdirectory(${ogg-third-party} ${CMAKE_BINARY_DIR}/ogg-build)
 
 include_directories(
     ${ogg-third-party}/include
     ${ogg-third-party}/libvorbis-1.3.5/include
+    ${ogg-third-party}/libvorbis-1.3.5/include/vorbis
     ${ogg-third-party}/libvorbis-1.3.5/lib
 )
 
-# libpng from thirdparty
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/lpng1637
-)
+# libpng from thirdparty (build from source)
+# Set ZLIB for Android NDK (zlib is included in the sysroot)
+set(ZLIB_LIBRARY z)
+set(ZLIB_INCLUDE_DIR "${CMAKE_SYSROOT}/usr/include")
+set(ZLIB_FOUND TRUE)
+set(PNG_BUILD_ZLIB OFF CACHE BOOL "Use system zlib" FORCE)
+set(PNG_SHARED OFF CACHE BOOL "Build shared lib" FORCE)
+set(PNG_STATIC ON CACHE BOOL "Build static lib" FORCE)
+set(PNG_TESTS OFF CACHE BOOL "Build libpng tests" FORCE)
+add_subdirectory(${THIRDPARTY_DIR}/lpng1637 ${CMAKE_BINARY_DIR}/libpng-build)
 
-add_library(png-lib STATIC IMPORTED)
-set_target_properties(
-    png-lib PROPERTIES IMPORTED_LOCATION
-    ${CMAKE_SOURCE_DIR}/../thirdparty/lpng1637/projects/androidstudio/pngandroid/build/intermediates/cmake/debug/obj/${ANDROID_ABI}/libpng16d.a
+include_directories(
+    ${THIRDPARTY_DIR}/lpng1637
+    ${CMAKE_BINARY_DIR}/libpng-build  # For pnglibconf.h
 )
 
 # libjpeg-turbo from thirdparty
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/libjpeg-turbo/libjpeg-turbo/
-    ${CMAKE_CURRENT_SOURCE_DIR}/../thirdparty/libjpeg-turbo/include/android
+    ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo/
+    ${THIRDPARTY_DIR}/libjpeg-turbo/include/android
 )
 
 add_library(jpeg-lib STATIC IMPORTED)
 set_target_properties(
     jpeg-lib PROPERTIES IMPORTED_LOCATION
-    ${CMAKE_SOURCE_DIR}/../thirdparty/libjpeg-turbo/lib/${ANDROID_ABI}/libturbojpeg.a
+    ${THIRDPARTY_DIR}/libjpeg-turbo/lib/${ANDROID_ABI}/libturbojpeg.a
 )
 
 # Android system libraries
@@ -78,7 +87,7 @@ find_library(gl3-lib GLESv3)
 target_link_libraries(
     libImmCore
     vorbis
-    png-lib
+    png_static
     jpeg-lib
     ${log-lib}
     ${egl-lib}
@@ -86,7 +95,15 @@ target_link_libraries(
     ${android-lib}
 )
 
-# Output directory
+# Output directories for all libraries
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
 set_target_properties(libImmCore PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
+
+# Also copy ogg/vorbis/png libs to predictable output location
+set_target_properties(ogg PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
+set_target_properties(vorbis PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
+set_target_properties(png_static PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})

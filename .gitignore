@@ -4,6 +4,7 @@ code/libImmExporter/bin
 code/libImmPlayer/bin
 code/libImmPlayer/src/layerRenderers/layerRendererPicture/tmp
 code/libImmPlayer/src/layerRenderers/layerRendererModel/tmp
+code/libImmPlayer/src/layerRenderers/layerRendererPaint/pretessellated/tmp
 code/appDX11ShaderCompiler/bin
 code/appDX11ShaderCompiler/exe
 code/appImmUnity/bin
@@ -16,6 +17,29 @@ code/appImmUnity/exe/
 code/appImmViewer/bin
 code/appImmViewer/exe/appImmViewer_Debug.*
 code/appImmViewer/exe/appImmViewer_Release.*
+
+# Android/Gradle build artifacts
+.cxx/
+.gradle/
+build/
+local.properties
+*.aar
+
+# Android build directories (explicit paths)
+code/libImmCore/.cxx/
+code/libImmCore/build/
+code/libImmCore/build-android-test/
+code/libImmImporter/.cxx/
+code/libImmImporter/build/
+code/libImmPlayer/.cxx/
+code/libImmPlayer/build/
+code/appImmUnity/Projects/Android/app/.cxx/
+code/appImmUnity/Projects/Android/app/build/
+code/projects/android/.gradle/
+code/projects/android/local.properties
+
+# Unity Android plugin (copied by post-build)
+code/ImmUnitySampleProject/Assets/Plugins/Android/libs/
 
 # User-specific files
 *.rsuser

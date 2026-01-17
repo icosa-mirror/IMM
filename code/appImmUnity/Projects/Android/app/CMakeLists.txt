@@ -2,6 +2,8 @@
 cmake_minimum_required(VERSION 3.4.1)
 
 set(appImmUnity-dir ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+# Thirdparty is at repo root, not in code/ directory
+set(THIRDPARTY_DIR ${appImmUnity-dir}/../../thirdparty)
 
 add_library(
     ImmUnityPlugin
@@ -42,34 +44,34 @@ set_target_properties(libImmPlayer PROPERTIES IMPORTED_LOCATION
     ${imm-player-build-dir}/libs/${ANDROID_ABI}/liblibImmPlayer.a)
 
 # OGG/Vorbis from thirdparty
-set(ogg-third-party ${appImmUnity-dir}/../thirdparty/ogg)
+set(ogg-third-party ${THIRDPARTY_DIR}/ogg)
 include_directories(
     ${ogg-third-party}/include
     ${ogg-third-party}/libvorbis-1.3.5/include
 )
 
-# libpng
+# libpng (built by libImmCore)
 include_directories(
-    ${appImmUnity-dir}/../thirdparty/lpng1637
+    ${THIRDPARTY_DIR}/lpng1637
 )
 
 add_library(png-lib STATIC IMPORTED)
 set_target_properties(png-lib PROPERTIES IMPORTED_LOCATION
-    ${appImmUnity-dir}/../thirdparty/lpng1637/projects/androidstudio/pngandroid/build/intermediates/cmake/debug/obj/${ANDROID_ABI}/libpng16d.a)
+    ${core-build-dir}/libs/${ANDROID_ABI}/libpng16d.a)
 
 # libjpeg-turbo
 add_library(jpeg-lib STATIC IMPORTED)
 set_target_properties(jpeg-lib PROPERTIES IMPORTED_LOCATION
-    ${appImmUnity-dir}/../thirdparty/libjpeg-turbo/lib/${ANDROID_ABI}/libturbojpeg.a)
+    ${THIRDPARTY_DIR}/libjpeg-turbo/lib/${ANDROID_ABI}/libturbojpeg.a)
 
-# Vorbis libraries (built from thirdparty/ogg)
+# Vorbis libraries (built by libImmCore, output to build/libs)
 add_library(vorbis-lib STATIC IMPORTED)
 set_target_properties(vorbis-lib PROPERTIES IMPORTED_LOCATION
-    ${core-build-dir}/../ogg-build/libvorbis.a)
+    ${core-build-dir}/libs/${ANDROID_ABI}/libvorbis.a)
 
 add_library(ogg-lib STATIC IMPORTED)
 set_target_properties(ogg-lib PROPERTIES IMPORTED_LOCATION
-    ${core-build-dir}/../ogg-build/libogg.a)
+    ${core-build-dir}/libs/${ANDROID_ABI}/libogg.a)
 
 # Android system libraries
 find_library(android-lib android)

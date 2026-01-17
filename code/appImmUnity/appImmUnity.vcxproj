@@ -69,12 +69,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>exe\</OutDir>
     <TargetName>ImmUnityPlugin</TargetName>
-    <PostBuildEventUseInBuild>false</PostBuildEventUseInBuild>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>exe\</OutDir>
     <TargetName>ImmUnityPlugin</TargetName>
-    <PostBuildEventUseInBuild>false</PostBuildEventUseInBuild>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -90,8 +88,9 @@
       <AdditionalLibraryDirectories>$(IMM_ZLibLibDir);$(IMM_JPGLibDir);$(IMM_PNGLibDir);$(IMM_Audio360LibDir);$(IMM_OPUSENCLibDir);$(IMM_OPUSLibDir);$(IMM_OGGLibDir);$(IMM_VorbisLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>echo Copying ImmUnityPlugin.dll to Unity sample project...
+copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Assets\Plugins\x86_64\ImmUnityPlugin.dll"
+if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
     </PostBuildEvent>
     <FxCompile>
       <ShaderModel>4.0_level_9_3</ShaderModel>
@@ -117,8 +116,9 @@
       <AdditionalLibraryDirectories>$(IMM_ZLibLibDir);$(IMM_JPGLibDir);$(IMM_PNGLibDir);$(IMM_Audio360LibDir);$(IMM_OPUSENCLibDir);$(IMM_OPUSLibDir);$(IMM_OGGLibDir);$(IMM_VorbisLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>echo Copying ImmUnityPlugin.dll to Unity sample project...
+copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Assets\Plugins\x86_64\ImmUnityPlugin.dll"
+if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
     </PostBuildEvent>
     <FxCompile>
       <HeaderFileOutput>src/tmp/%(Filename).inc</HeaderFileOutput>

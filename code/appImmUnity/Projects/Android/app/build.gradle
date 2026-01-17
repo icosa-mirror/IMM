@@ -1,11 +1,14 @@
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+}
 
 android {
-    compileSdkVersion 27
-    ndkVersion "20.1.5948944"
+    namespace 'com.immersive.immunityplugin'
+    compileSdk 34
+
     defaultConfig {
-        minSdkVersion 25
-        targetSdkVersion 27
+        minSdk 26
+        targetSdk 34
         versionCode 1
         versionName "1.0"
         externalNativeBuild {
@@ -26,5 +29,35 @@ android {
         cmake {
             path "CMakeLists.txt"
         }
+    }
+}
+
+// Copy .so to Unity sample project after build
+def unityPluginDir = "${projectDir}/../../../../ImmUnitySampleProject/Assets/Plugins/Android/libs/arm64-v8a"
+
+tasks.register('copyToUnity') {
+    doLast {
+        // Find the .so file in build output
+        def soFile = fileTree(dir: "${buildDir}/intermediates/cxx", include: '**/arm64-v8a/libImmUnityPlugin.so').files.find()
+        if (soFile != null && soFile.exists()) {
+            def destDir = file(unityPluginDir)
+            destDir.mkdirs()
+            copy {
+                from soFile
+                into destDir
+            }
+            println "Copied libImmUnityPlugin.so to ${destDir}"
+        } else {
+            println "WARNING: libImmUnityPlugin.so not found, skipping copy to Unity project"
+        }
+    }
+}
+
+afterEvaluate {
+    tasks.named('assembleDebug').configure {
+        finalizedBy 'copyToUnity'
+    }
+    tasks.named('assembleRelease').configure {
+        finalizedBy 'copyToUnity'
     }
 }

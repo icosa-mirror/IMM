@@ -19,27 +19,8 @@ add_library(
     ${libImmPlayer-dir}/src/layerRenderers/layerRendererModel/layerRendererModel.cpp
 )
 
-# Shader transformation
-add_custom_target(
-    ShadersStatic
-    COMMAND ${CMAKE_COMMAND}
-    -D INPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPaint/static/
-    -D OUTPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPaint/static/tmp/shader_static_brush_GLES_glsl.h
-    -D NAMESPACE=INVALID
-    -P ${shaderUtil-dir}/create_shader.cmake
-)
-add_dependencies(libImmPlayer ShadersStatic)
-
-add_custom_target(
-    ShadersPretessellated
-    COMMAND ${CMAKE_COMMAND}
-    -D INPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPaint/pretessellated/
-    -D OUTPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPaint/pretessellated/tmp/shader_pretessellated_brush_GLES_glsl.h
-    -D NAMESPACE=INVALID
-    -P ${shaderUtil-dir}/create_shader.cmake
-)
-add_dependencies(libImmPlayer ShadersPretessellated)
-
+# Shader transformation - convert GLES shaders to C headers
+# Model shaders are in gles subdirectory
 add_custom_target(
     ShadersModel
     COMMAND ${CMAKE_COMMAND}
@@ -50,15 +31,18 @@ add_custom_target(
 )
 add_dependencies(libImmPlayer ShadersModel)
 
+# Pretessellated shaders are in main directory (not gles subdirectory)
 add_custom_target(
-    ShadersPicture
+    ShadersPretessellated
     COMMAND ${CMAKE_COMMAND}
-    -D INPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPicture/gles
-    -D OUTPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPicture/tmp/shader_layerRendererPicture_GLES_glsl.h
+    -D INPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPaint/pretessellated
+    -D OUTPUT=${libImmPlayer-dir}/src/layerRenderers/layerRendererPaint/pretessellated/tmp/shader_pretessellated_brush_GLES_glsl.h
     -D NAMESPACE=INVALID
     -P ${shaderUtil-dir}/create_shader.cmake
 )
-add_dependencies(libImmPlayer ShadersPicture)
+add_dependencies(libImmPlayer ShadersPretessellated)
+
+# Picture shaders are already C-string wrapped in .es.glsl files (included directly)
 
 # Add libImmCore dependency
 set(core-dir ${CMAKE_CURRENT_SOURCE_DIR}/../libImmCore)

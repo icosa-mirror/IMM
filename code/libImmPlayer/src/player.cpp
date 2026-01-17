@@ -41,7 +41,12 @@ namespace ImmPlayer
             dst[0] = 0;
             return;
         }
+#if defined(WINDOWS)
         wcsncpy_s(dst, dstCount, src, _TRUNCATE);
+#else
+        wcsncpy(dst, src, dstCount - 1);
+        dst[dstCount - 1] = 0;
+#endif
     }
 
     Player::Player() {}
