@@ -1,5 +1,8 @@
 static const char* shader_pretessellated_brush_fs = R"(
 #extension GL_ARB_bindless_texture : enable
+#ifdef GL_OES_sample_variables
+#extension GL_OES_sample_variables : enable
+#endif
 
 layout (std140, row_major, binding=0) uniform FrameState
 {
@@ -71,11 +74,15 @@ void main( void )
 	float al = vf.col_tra.w;
 
     #if RENDERMODE==1
+    #ifdef GL_OES_sample_variables
     if( bitCount(gl_SampleMaskIn[0]) < 8 ) col = vec3(0.0,0.0,0.0);
+    #endif
     #endif
 
 	outColor = vec4( col, 1.0 );
 
+    #ifdef GL_OES_sample_variables
 	gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.xy), frame.mFrame, vf.mask );
+    #endif
 }
 )";

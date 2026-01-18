@@ -1,6 +1,9 @@
 static const char* shader_pip360Cubemap_fs = R"(
 
 #extension GL_EXT_shader_io_blocks : enable
+#ifdef GL_OES_sample_variables
+#extension GL_OES_sample_variables : enable
+#endif
 
 precision highp float;
 precision highp sampler2DArray;
@@ -86,11 +89,15 @@ void main( void )
     #endif
 
     #if DEBUG_RENDER_MODE == 1 || DEBUG_RENDER_MODE == 3
+    #ifdef GL_OES_sample_variables
     if( bitCount(gl_SampleMaskIn[0]) < 4) { col = vec3(0.0); }
+    #endif
         #endif
 
     out_color = vec4( col, 1.0 );
 
+    #ifdef GL_OES_sample_variables
     gl_SampleMask[0] = alpha2coverage( al, ivec2(gl_FragCoord.x / dFdx(gl_FragCoord.x), gl_FragCoord.y / dFdy(gl_FragCoord.y)), uint(frame.mFrame), 0u );
+    #endif
 }
 )";

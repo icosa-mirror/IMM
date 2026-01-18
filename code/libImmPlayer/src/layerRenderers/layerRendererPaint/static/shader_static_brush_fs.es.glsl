@@ -1,5 +1,8 @@
 static const char* shader_static_brush_fs = R"(
 #extension GL_EXT_shader_io_blocks : enable
+#ifdef GL_OES_sample_variables
+#extension GL_OES_sample_variables : enable
+#endif
 
 precision highp float;
 precision highp sampler2DArray;
@@ -61,6 +64,8 @@ void main( void )
 
     outColor = vec4(col, 1.0);
 
+    #ifdef GL_OES_sample_variables
     gl_SampleMask[0] = alpha2coverage(al, ivec2(gl_FragCoord.x / dFdx(gl_FragCoord.x), gl_FragCoord.y / dFdy(gl_FragCoord.y)), uint(frame.mFrame), vf.mask);
+    #endif
 }
 )";

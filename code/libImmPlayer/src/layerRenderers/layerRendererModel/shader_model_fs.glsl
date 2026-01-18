@@ -1,5 +1,8 @@
 static const char* shader_model_fs = R"(
 #extension GL_ARB_bindless_texture : enable
+#ifdef GL_OES_sample_variables
+#extension GL_OES_sample_variables : enable
+#endif
 
 layout (std140, row_major, binding=0) uniform FrameState
 {
@@ -72,6 +75,8 @@ void main( void )
 
 	// Alpha to Coverage
     outColor = vec4( col, 1.0 );
+    #ifdef GL_OES_sample_variables
 	gl_SampleMask[0] = alpha2coverage(al,  ivec2(gl_FragCoord.xy), frame.mFrame, 0);
+    #endif
 }
 )";

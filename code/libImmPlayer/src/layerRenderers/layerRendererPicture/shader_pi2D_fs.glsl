@@ -1,6 +1,9 @@
 static const char* shader_pi2D_fs = R"(
 
 #extension GL_ARB_bindless_texture : enable
+#ifdef GL_OES_sample_variables
+#extension GL_OES_sample_variables : enable
+#endif
 
 layout (std140, row_major, binding=0) uniform FrameState
 {
@@ -81,7 +84,9 @@ void main( void )
     outColor = vec4( col*col, 1.0 );
 
 	// Alpha to Coverage
+    #ifdef GL_OES_sample_variables
 	gl_SampleMask[0] = alpha2coverage(al,  ivec2(gl_FragCoord.xy), frame.mFrame, 0);
+    #endif
 
 	//outColor = te;
 }

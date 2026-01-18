@@ -292,6 +292,9 @@ void main()
 
 const char * shader_overdraw_fs = R"(
 #extension GL_EXT_shader_io_blocks : enable
+#ifdef GL_OES_sample_variables
+#extension GL_OES_sample_variables : enable
+#endif
 
 precision highp float;
 
@@ -311,7 +314,9 @@ void main( void )
     //if(0.0001 > al) discard;
 
 #if RENDER_WIREFRAME==1
+    #ifdef GL_OES_sample_variables
     if( bitCount(gl_SampleMaskIn[0]) < 4) { col = vec3(0.0); }
+    #endif
 #endif
 
     outColor = vec4( col, al );
