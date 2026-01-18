@@ -58,6 +58,9 @@ set(PNG_BUILD_ZLIB OFF CACHE BOOL "Use system zlib" FORCE)
 set(PNG_SHARED OFF CACHE BOOL "Build shared lib" FORCE)
 set(PNG_STATIC ON CACHE BOOL "Build static lib" FORCE)
 set(PNG_TESTS OFF CACHE BOOL "Build libpng tests" FORCE)
+# Skip install targets to avoid POST_BUILD copy conflicts with custom output directory
+set(SKIP_INSTALL_LIBRARIES ON CACHE BOOL "Skip libpng install" FORCE)
+set(SKIP_INSTALL_ALL ON CACHE BOOL "Skip all libpng install" FORCE)
 add_subdirectory(${THIRDPARTY_DIR}/lpng1637 ${CMAKE_BINARY_DIR}/libpng-build)
 
 include_directories(

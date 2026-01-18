@@ -34,11 +34,6 @@ jobs:
       working-directory: code/projects/android
       run: |
         chmod +x gradlew
-        ./gradlew :libImmCore:assembleDebug || true
-        # Workaround: libpng post-build copy fails but library is built
-        # Copy the file to where the post-build step expects it
-        mkdir -p ../../../libImmCore/.cxx/Debug/*/arm64-v8a/libpng-build/ 2>/dev/null || true
-        find ../../../libImmCore/.cxx -name "libpng16d.a" -path "*/arm64-v8a/*" ! -path "*libpng-build*" -exec cp {} ../../../libImmCore/.cxx/Debug/*/arm64-v8a/libpng-build/ \; 2>/dev/null || true
         ./gradlew :libImmCore:assembleDebug
 
     - name: Build libImmImporter
