@@ -38,8 +38,6 @@ code/appImmUnity/Projects/Android/app/build/
 code/projects/android/.gradle/
 code/projects/android/local.properties
 
-# Unity Android plugin (copied by post-build)
-code/ImmUnitySampleProject/Assets/Plugins/Android/libs/
 
 # User-specific files
 *.rsuser
