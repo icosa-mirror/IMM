@@ -15,11 +15,11 @@ object Utils {
   // Need to modify the value in |assetVersionFile| every time this is incremented.
   // If this doesn't match the value in |assetVersionFile| then we need to delete and recopy assets.
   // Note the below line is referred in drop_fetch_quill_theater.py in case of change
-  private const val currentAssetVersion = 2
+  private const val currentAssetVersion = 3
 
   // Path to Quill we show when there's an error loading a Quill path.
-  var quillErrorPath = "quill-error.imm"
-  var quillDemoPath = "retail-demo.imm"
+  var quillErrorPath = "sample1.imm"
+  var quillDemoPath = "sample1.imm"
   /*var controllerAssets = arrayOf(
       "controllers/controller_new.obj",
       "controllers/pointer.obj"

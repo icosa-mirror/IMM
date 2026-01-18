@@ -103,6 +103,10 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :appImmUnity:assembleDebug
 
+    - name: Build appImmViewer
+      working-directory: code/projects/android
+      run: ./gradlew :appImmViewer:assembleDebug
+
     - name: Upload Unity Plugin SO
       uses: actions/upload-artifact@v4
       with:
@@ -118,3 +122,11 @@ jobs:
         path: |
           code/appImmUnity/Projects/Android/app/build/outputs/aar/*.aar
         if-no-files-found: warn
+
+    - name: Upload Android Viewer APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: appImmViewer-Android-APK
+        path: |
+          code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
+        if-no-files-found: error

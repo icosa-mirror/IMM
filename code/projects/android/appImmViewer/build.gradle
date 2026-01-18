@@ -1,0 +1,86 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+}
+
+android {
+    namespace 'org.linuxfoundation.imm.player'
+    compileSdk 34
+    ndkVersion "26.1.10909125"
+
+    defaultConfig {
+        applicationId 'org.linuxfoundation.imm.player'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17", "-D__ANDROID__", "-DANDROID"
+                arguments "-DANDROID_STL=c++_shared", "-DIMM_ANDROID_NON_VR=ON"
+                abiFilters "arm64-v8a"
+                targets "appImmPlayer"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+        }
+    }
+
+    sourceSets {
+        main {
+            def viewerSrc = "${projectDir}/../../../appImmViewer/src/android"
+            manifest.srcFile "${viewerSrc}/AndroidManifest.xml"
+            java.srcDirs = ["${viewerSrc}/java"]
+            res.srcDirs = ["${viewerSrc}/res"]
+            assets.srcDirs = ["${viewerSrc}/assets", "${buildDir}/generated/assets"]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.annotation:annotation:1.8.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+}
+
+def generatedAssetsDir = "${buildDir}/generated/assets"
+def sampleImmSrc = "${projectDir}/../../../../exampleImmFiles/sample1.imm"
+
+tasks.register('copySampleImm') {
+    inputs.file(sampleImmSrc)
+    outputs.dir(generatedAssetsDir)
+    doLast {
+        def destDir = file(generatedAssetsDir)
+        destDir.mkdirs()
+        copy {
+            from sampleImmSrc
+            into destDir
+        }
+    }
+}
+
+preBuild.dependsOn tasks.named('copySampleImm')
