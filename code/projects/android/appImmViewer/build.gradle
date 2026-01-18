@@ -3,6 +3,10 @@ plugins {
     id 'kotlin-android'
 }
 
+if (project.hasProperty("immBuildDir")) {
+    buildDir = file(project.property("immBuildDir"))
+}
+
 android {
     namespace 'org.linuxfoundation.imm.player'
     compileSdk 34
@@ -17,8 +21,15 @@ android {
 
         externalNativeBuild {
             cmake {
+                def immNonVr = project.findProperty("immNonVr") ?: "ON"
                 cppFlags "-std=c++17", "-D__ANDROID__", "-DANDROID"
-                arguments "-DANDROID_STL=c++_shared", "-DIMM_ANDROID_NON_VR=ON"
+                arguments "-DANDROID_STL=c++_shared",
+                        "-DIMM_ANDROID_NON_VR=${immNonVr}",
+                        "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
+                        "-DCMAKE_C_COMPILER_WORKS=1",
+                        "-DCMAKE_CXX_COMPILER_WORKS=1",
+                        "-DCMAKE_C_ABI_COMPILED=1",
+                        "-DCMAKE_CXX_ABI_COMPILED=1"
                 abiFilters "arm64-v8a"
                 targets "appImmPlayer"
             }

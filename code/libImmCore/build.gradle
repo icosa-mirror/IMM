@@ -16,6 +16,12 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++17", "-DANDROID", "-Werror"
+                arguments "-DANDROID_STL=c++_shared",
+                        "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
+                        "-DCMAKE_C_COMPILER_WORKS=1",
+                        "-DCMAKE_CXX_COMPILER_WORKS=1",
+                        "-DCMAKE_C_ABI_COMPILED=1",
+                        "-DCMAKE_CXX_ABI_COMPILED=1"
                 abiFilters "arm64-v8a"
                 targets "libImmCore" // Need to specify target when building a static lib
             }

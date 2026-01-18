@@ -109,7 +109,12 @@ set_target_properties(ogg-lib PROPERTIES IMPORTED_LOCATION
 
 # Oculus Mobile SDK (VrApi) and Platform SDK (VR builds only)
 if (NOT IMM_ANDROID_NON_VR)
-    set(OCULUS_MOBILE_SDK_DIR ${THIRDPARTY_DIR}/oculus-mobile-sdk)
+    if (NOT OCULUS_MOBILE_SDK_DIR AND DEFINED ENV{OCULUS_MOBILE_SDK_DIR})
+        set(OCULUS_MOBILE_SDK_DIR $ENV{OCULUS_MOBILE_SDK_DIR})
+    endif()
+    if (NOT OCULUS_MOBILE_SDK_DIR)
+        set(OCULUS_MOBILE_SDK_DIR ${THIRDPARTY_DIR}/oculus-mobile-sdk)
+    endif()
     if (NOT EXISTS ${OCULUS_MOBILE_SDK_DIR})
         message(FATAL_ERROR "Oculus Mobile SDK not found at ${OCULUS_MOBILE_SDK_DIR}")
     endif()
