@@ -39,15 +39,22 @@ jobs:
           code/appImmUnity/exe/ImmUnityPlugin.dll
         if-no-files-found: error
 
+    - name: Package Viewer Artifact
+      shell: pwsh
+      run: |
+        $staging = "viewer_artifact"
+        New-Item -ItemType Directory -Force $staging | Out-Null
+        Copy-Item code/appImmViewer/exe/appImmViewer_${{ matrix.configuration }}.exe $staging
+        Copy-Item code/appImmViewer/exe/settings.json $staging
+        Copy-Item code/appImmViewer/exe/*.dll $staging
+        Copy-Item docs/viewer_settings.md $staging
+        Compress-Archive -Path "$staging\\*" -DestinationPath "appImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip" -Force
+
     - name: Upload Viewer Executable
       uses: actions/upload-artifact@v4
       with:
         name: appImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}
-        path: |
-          code/appImmViewer/exe/appImmViewer_${{ matrix.configuration }}.exe
-          code/appImmViewer/exe/settings.json
-          code/appImmViewer/exe/*.dll
-          docs/viewer_settings.md
+        path: appImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip
         if-no-files-found: error
     - name: Upload Sample IMM
       uses: actions/upload-artifact@v4
