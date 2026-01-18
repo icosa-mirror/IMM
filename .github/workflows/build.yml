@@ -46,6 +46,7 @@ jobs:
         path: |
           code/appImmViewer/exe/appImmViewer_${{ matrix.configuration }}.exe
           code/appImmViewer/exe/settings.json
+          code/appImmViewer/exe/*.dll
         if-no-files-found: error
 
   build-android:
