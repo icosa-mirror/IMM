@@ -15,7 +15,8 @@ public:
 	{
 		Null = 0,
 		DirectSound = 1,
-		DirectSoundOVR = 2
+		DirectSoundOVR = 2,
+		Android = 3
 	};
 
     struct Configuration
@@ -24,6 +25,7 @@ public:
         int mSampleRate = 48000;
         int mBufferSize = 512;
         bool mLowLatency = false;
+        const char *mTempPath = nullptr;
     };
 
     virtual bool           Init(void *hwnd, int deviceID, const Configuration* config) = 0;

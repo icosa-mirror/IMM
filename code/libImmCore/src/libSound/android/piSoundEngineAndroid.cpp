@@ -5,10 +5,18 @@
 
 #include <SLES/OpenSLES.h>
 #include <SLES/OpenSLES_Android.h>
+#include <media/NdkMediaCodec.h>
+#include <media/NdkMediaExtractor.h>
+#include <media/NdkMediaFormat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include "../../libBasics/piLog.h"
@@ -16,6 +24,216 @@
 
 namespace ImmCore
 {
+    namespace
+    {
+        static bool DecodeOpusToPcm(const char *tempDir, const uint8_t *data, size_t size,
+                                    int &outRate, int &outChannels, std::vector<int16_t> &outPcm,
+                                    piLog *log)
+        {
+            if (!tempDir || !*tempDir || !data || size == 0)
+                return false;
+            if (log)
+                log->Printf(LT_MESSAGE, L"Opus decode: start size=%llu", static_cast<unsigned long long>(size));
+
+            std::string dir = tempDir;
+            if (!dir.empty() && (dir.back() == '/' || dir.back() == '\\'))
+                dir.pop_back();
+
+            std::string pattern = dir + "/imm_audio_XXXXXX";
+            std::vector<char> path(pattern.begin(), pattern.end());
+            path.push_back('\0');
+
+            int fd = mkstemp(path.data());
+            if (fd < 0)
+            {
+                if (log)
+                    log->Printf(LT_WARNING, L"Opus decode: could not create temp file");
+                return false;
+            }
+
+            size_t written = 0;
+            while (written < size)
+            {
+                const ssize_t w = write(fd, data + written, size - written);
+                if (w <= 0)
+                    break;
+                written += static_cast<size_t>(w);
+            }
+            lseek(fd, 0, SEEK_SET);
+
+            AMediaExtractor *extractor = AMediaExtractor_new();
+            if (!extractor)
+            {
+                close(fd);
+                unlink(path.data());
+                return false;
+            }
+            media_status_t status = AMediaExtractor_setDataSourceFd(extractor, fd, 0, static_cast<off64_t>(size));
+            if (status != AMEDIA_OK)
+            {
+                if (log)
+                    log->Printf(LT_WARNING, L"Opus decode: setDataSource failed (%d)", int(status));
+                AMediaExtractor_delete(extractor);
+                close(fd);
+                unlink(path.data());
+                return false;
+            }
+
+            int audioTrack = -1;
+            AMediaFormat *trackFormat = nullptr;
+            const char *mime = nullptr;
+            const int trackCount = AMediaExtractor_getTrackCount(extractor);
+            if (log)
+                log->Printf(LT_MESSAGE, L"Opus decode: track count=%d", trackCount);
+            for (int i = 0; i < trackCount; ++i)
+            {
+                AMediaFormat *format = AMediaExtractor_getTrackFormat(extractor, i);
+                const char *trackMime = nullptr;
+                if (format && AMediaFormat_getString(format, AMEDIAFORMAT_KEY_MIME, &trackMime))
+                {
+                    if (trackMime && strncmp(trackMime, "audio/", 6) == 0)
+                    {
+                        audioTrack = i;
+                        trackFormat = format;
+                        mime = trackMime;
+                        if (log)
+                            log->Printf(LT_MESSAGE, L"Opus decode: using audio track %d", audioTrack);
+                        break;
+                    }
+                }
+                if (format)
+                    AMediaFormat_delete(format);
+            }
+
+            if (audioTrack < 0 || !trackFormat || !mime)
+            {
+                if (log)
+                    log->Printf(LT_WARNING, L"Opus decode: no audio track found (tracks=%d)", trackCount);
+                if (trackFormat)
+                    AMediaFormat_delete(trackFormat);
+                AMediaExtractor_delete(extractor);
+                close(fd);
+                unlink(path.data());
+                return false;
+            }
+
+            AMediaExtractor_selectTrack(extractor, audioTrack);
+
+            int32_t sampleRate = 0;
+            int32_t channels = 0;
+            AMediaFormat_getInt32(trackFormat, AMEDIAFORMAT_KEY_SAMPLE_RATE, &sampleRate);
+            AMediaFormat_getInt32(trackFormat, AMEDIAFORMAT_KEY_CHANNEL_COUNT, &channels);
+
+            AMediaCodec *codec = AMediaCodec_createDecoderByType(mime);
+            if (!codec)
+            {
+                if (log)
+                    log->Printf(LT_WARNING, L"Opus decode: no decoder for mime");
+                AMediaFormat_delete(trackFormat);
+                AMediaExtractor_delete(extractor);
+                close(fd);
+                unlink(path.data());
+                return false;
+            }
+
+            status = AMediaCodec_configure(codec, trackFormat, nullptr, nullptr, 0);
+            if (status != AMEDIA_OK)
+            {
+                if (log)
+                    log->Printf(LT_WARNING, L"Opus decode: codec configure failed (%d)", int(status));
+                AMediaCodec_delete(codec);
+                AMediaFormat_delete(trackFormat);
+                AMediaExtractor_delete(extractor);
+                close(fd);
+                unlink(path.data());
+                return false;
+            }
+
+            AMediaFormat_delete(trackFormat);
+            AMediaCodec_start(codec);
+
+            bool sawInputEOS = false;
+            bool sawOutputEOS = false;
+            outRate = sampleRate > 0 ? sampleRate : 48000;
+            outChannels = channels > 0 ? channels : 2;
+            outPcm.clear();
+
+            int emptyLoops = 0;
+            while (!sawOutputEOS && emptyLoops < 2000)
+            {
+                if (!sawInputEOS)
+                {
+                    const ssize_t inputIndex = AMediaCodec_dequeueInputBuffer(codec, 2000);
+                    if (inputIndex >= 0)
+                    {
+                        size_t inputSize = 0;
+                        uint8_t *inputBuffer = AMediaCodec_getInputBuffer(codec, inputIndex, &inputSize);
+                        const ssize_t sampleSize = AMediaExtractor_readSampleData(extractor, inputBuffer, inputSize);
+                        if (sampleSize < 0)
+                        {
+                            AMediaCodec_queueInputBuffer(codec, inputIndex, 0, 0, 0, AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM);
+                            sawInputEOS = true;
+                        }
+                        else
+                        {
+                            const int64_t pts = AMediaExtractor_getSampleTime(extractor);
+                            AMediaCodec_queueInputBuffer(codec, inputIndex, 0, sampleSize, pts, 0);
+                            AMediaExtractor_advance(extractor);
+                        }
+                    }
+                }
+
+                AMediaCodecBufferInfo info;
+                const ssize_t outputIndex = AMediaCodec_dequeueOutputBuffer(codec, &info, 2000);
+                if (outputIndex >= 0)
+                {
+                    size_t outputSize = 0;
+                    uint8_t *outputBuffer = AMediaCodec_getOutputBuffer(codec, outputIndex, &outputSize);
+                    if (info.size > 0 && outputBuffer)
+                    {
+                        const uint8_t *dataPtr = outputBuffer + info.offset;
+                        const size_t sampleCount = info.size / sizeof(int16_t);
+                        const int16_t *src = reinterpret_cast<const int16_t*>(dataPtr);
+                        outPcm.insert(outPcm.end(), src, src + sampleCount);
+                    }
+                    if (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM)
+                        sawOutputEOS = true;
+                    AMediaCodec_releaseOutputBuffer(codec, outputIndex, false);
+                    emptyLoops = 0;
+                }
+                else if (outputIndex == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED)
+                {
+                    AMediaFormat *outFormat = AMediaCodec_getOutputFormat(codec);
+                    if (outFormat)
+                    {
+                        int32_t fmtRate = 0;
+                        int32_t fmtChannels = 0;
+                        if (AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_SAMPLE_RATE, &fmtRate))
+                            outRate = fmtRate;
+                        if (AMediaFormat_getInt32(outFormat, AMEDIAFORMAT_KEY_CHANNEL_COUNT, &fmtChannels))
+                            outChannels = fmtChannels;
+                        AMediaFormat_delete(outFormat);
+                    }
+                    emptyLoops = 0;
+                }
+                else
+                {
+                    emptyLoops++;
+                }
+            }
+
+            AMediaCodec_stop(codec);
+            AMediaCodec_delete(codec);
+            AMediaExtractor_delete(extractor);
+            close(fd);
+            unlink(path.data());
+
+            if (outPcm.empty() && log)
+                log->Printf(LT_WARNING, L"Opus decode: no PCM output produced");
+            return !outPcm.empty();
+        }
+    }
+
     struct AndroidSound
     {
         std::vector<int16_t> mData;
@@ -33,9 +251,10 @@ namespace ImmCore
     class piSoundEngineAndroid final : public piSoundEngine
     {
     public:
-        piSoundEngineAndroid(piLog *log, int outputRate)
+        piSoundEngineAndroid(piLog *log, int outputRate, std::string tempDir)
             : mLog(log)
             , mOutputRate(outputRate)
+            , mTempDir(std::move(tempDir))
         {
         }
 
@@ -43,21 +262,63 @@ namespace ImmCore
         {
             if (numChannels <= 0)
                 return -1;
-            if (mLog)
-                mLog->Printf(LT_WARNING, L"Compressed audio not supported on Android non-VR builds; using silent placeholder");
+            if (!buffer || length == 0)
+                return -1;
+
+            std::vector<int16_t> decoded;
+            int decodedRate = mOutputRate;
+            int decodedChannels = numChannels;
+            if (!DecodeOpusToPcm(mTempDir.c_str(), reinterpret_cast<const uint8_t*>(buffer),
+                                 static_cast<size_t>(length), decodedRate, decodedChannels, decoded, mLog))
+            {
+                if (mLog)
+                    mLog->Printf(LT_WARNING, L"Failed to decode OPUS audio on Android; using silent placeholder");
+
+                AndroidSound silent;
+                silent.mNumChannels = numChannels;
+                silent.mRate = mOutputRate;
+                silent.mFrames = 0;
+                silent.mCursor = 0.0;
+                silent.mLooping = false;
+                silent.mPlaying = false;
+                silent.mPaused = false;
+                silent.mVolume = 0.0f;
+                if (makePositional)
+                    silent.mType = SoundType::Positional;
+                else if (numChannels > 2)
+                    silent.mType = SoundType::Ambisonic;
+                else
+                    silent.mType = SoundType::Flat;
+
+                std::lock_guard<std::mutex> lock(mMutex);
+                int id = -1;
+                if (!mFreeIds.empty())
+                {
+                    id = mFreeIds.back();
+                    mFreeIds.pop_back();
+                    mSounds[id] = std::move(silent);
+                }
+                else
+                {
+                    id = static_cast<int>(mSounds.size());
+                    mSounds.push_back(std::move(silent));
+                }
+                return id;
+            }
 
             AndroidSound sound;
-            sound.mNumChannels = numChannels;
-            sound.mRate = mOutputRate;
-            sound.mFrames = 0;
+            sound.mNumChannels = decodedChannels;
+            sound.mRate = decodedRate > 0 ? decodedRate : mOutputRate;
+            sound.mFrames = decodedChannels > 0 ? (decoded.size() / decodedChannels) : 0;
+            sound.mData = std::move(decoded);
             sound.mCursor = 0.0;
             sound.mLooping = false;
             sound.mPlaying = false;
             sound.mPaused = false;
-            sound.mVolume = 0.0f;
+            sound.mVolume = 1.0f;
             if (makePositional)
                 sound.mType = SoundType::Positional;
-            else if (numChannels > 2)
+            else if (decodedChannels > 2)
                 sound.mType = SoundType::Ambisonic;
             else
                 sound.mType = SoundType::Flat;
@@ -353,14 +614,34 @@ namespace ImmCore
 
                 sound.mCursor = cursor;
             }
+
+            if (mTestToneEnabled)
+            {
+                const double twoPi = 6.283185307179586;
+                const double step = twoPi * mTestToneHz / static_cast<double>(mOutputRate);
+                for (int i = 0; i < frames; ++i)
+                {
+                    const float s = static_cast<float>(std::sin(mTestTonePhase) * mTestToneAmp);
+                    mixBuffer[2 * i] += s;
+                    mixBuffer[2 * i + 1] += s;
+                    mTestTonePhase += step;
+                    if (mTestTonePhase >= twoPi)
+                        mTestTonePhase -= twoPi;
+                }
+            }
         }
 
     private:
         piLog *mLog = nullptr;
         int mOutputRate = 48000;
+        std::string mTempDir;
         mutable std::mutex mMutex;
         std::vector<AndroidSound> mSounds;
         std::vector<int> mFreeIds;
+        bool mTestToneEnabled = false;
+        double mTestTonePhase = 0.0;
+        double mTestToneHz = 440.0;
+        float mTestToneAmp = 0.1f;
     };
 
     struct AndroidAudioBackend
@@ -369,6 +650,7 @@ namespace ImmCore
         int sampleRate = 48000;
         int framesPerBuffer = 512;
         std::atomic<bool> running{false};
+        std::string tempDir;
 
         SLObjectItf engineObject = nullptr;
         SLEngineItf engineEngine = nullptr;
@@ -438,9 +720,11 @@ namespace ImmCore
                 backend->sampleRate = config->mSampleRate;
             if (config->mBufferSize > 0)
                 backend->framesPerBuffer = config->mBufferSize;
+            if (config->mTempPath)
+                backend->tempDir = config->mTempPath;
         }
 
-        backend->engine = new piSoundEngineAndroid(backend->log, backend->sampleRate);
+        backend->engine = new piSoundEngineAndroid(backend->log, backend->sampleRate, backend->tempDir);
         if (!backend->engine)
             return false;
 

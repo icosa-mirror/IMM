@@ -32,6 +32,7 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOGG.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSound.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSoundEngineNULL.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/android/piSoundEngineAndroid.cpp
     # piVR.cpp excluded - uses Oculus PC SDK, not available on Android (Quest uses OpenXR)
 )
 
@@ -85,6 +86,8 @@ find_library(android-lib android)
 find_library(log-lib log)
 find_library(egl-lib EGL)
 find_library(gl3-lib GLESv3)
+find_library(opensles-lib OpenSLES)
+find_library(mediandk-lib mediandk)
 
 # Link libraries
 target_link_libraries(
@@ -95,6 +98,8 @@ target_link_libraries(
     ${log-lib}
     ${egl-lib}
     ${gl3-lib}
+    ${opensles-lib}
+    ${mediandk-lib}
     ${android-lib}
 )
 

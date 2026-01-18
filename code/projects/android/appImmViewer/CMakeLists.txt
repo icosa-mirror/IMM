@@ -143,6 +143,8 @@ find_library(android-lib android)
 find_library(log-lib log)
 find_library(egl-lib EGL)
 find_library(gl3-lib GLESv3)
+find_library(opensles-lib OpenSLES)
+find_library(mediandk-lib mediandk)
 find_library(z-lib z)
 
 target_link_libraries(
@@ -158,6 +160,8 @@ target_link_libraries(
     ${log-lib}
     ${egl-lib}
     ${gl3-lib}
+    ${opensles-lib}
+    ${mediandk-lib}
     ${z-lib}
 )
 

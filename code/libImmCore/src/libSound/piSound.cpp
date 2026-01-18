@@ -5,6 +5,8 @@
 #if !defined(ANDROID) && !defined(__ANDROID__)
 #include "windows/piSoundEngineDS.h"
 #include "windows/piSoundEngineAudioSDKBackend.h"
+#else
+#include "android/piSoundEngineAndroid.h"
 #endif
 
 namespace ImmCore
@@ -16,6 +18,8 @@ namespace ImmCore
 #if !defined(ANDROID) && !defined(__ANDROID__)
 		else if (api == piSoundEngineBackend::API::DirectSound)    me = new piSoundEngineBackendDS();
 		else if (api == piSoundEngineBackend::API::DirectSoundOVR) me = new piSoundEngineAudioSDKBackend();
+#else
+		else if (api == piSoundEngineBackend::API::Android)        me = new piSoundEngineBackendAndroid();
 #endif
 		else return nullptr;
 

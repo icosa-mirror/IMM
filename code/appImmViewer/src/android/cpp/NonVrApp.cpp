@@ -220,15 +220,21 @@ void initViewer() {
     }
 
     gEngine.stereoMode = ImmPlayer::StereoMode::None;
-    gEngine.soundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, gEngine.log);
+    gEngine.soundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Android, gEngine.log);
     if (!gEngine.soundBackend) {
-        ALOGW("Sound backend unavailable; using stereo rendering fallback");
+        ALOGW("Android audio backend unavailable; using stereo rendering fallback");
         gEngine.stereoMode = ImmPlayer::StereoMode::Fallback;
     } else {
         piSoundEngineBackend::Configuration config;
         config.mLowLatency = true;
+        config.mSampleRate = 48000;
+        config.mBufferSize = 512;
+        const char *tempPath = getAssetDirectory();
+        if ((!tempPath || !*tempPath) && gEngine.app && gEngine.app->activity)
+            tempPath = gEngine.app->activity->internalDataPath;
+        config.mTempPath = tempPath;
         if (!gEngine.soundBackend->Init(nullptr, -1, &config)) {
-            ALOGW("Sound backend init failed; using stereo rendering fallback");
+            ALOGW("Android audio backend init failed; using stereo rendering fallback");
             gEngine.soundBackend->Deinit();
             piDestroySoundEngineBackend(gEngine.soundBackend);
             gEngine.soundBackend = nullptr;
