@@ -226,19 +226,27 @@ namespace ImmPlayer
 		for (int j = 0; j < 2; j++) // drawin
 		for (int i = 0; i < 3; i++) // stereo
 		{
-            if (renderer->GetAPI()==piRenderer::API::GL && static_cast<StereoMode>(i) == StereoMode::Preferred &&
-                (!renderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY) ||
-                    !renderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT)
-                    )
-                )
-            {
-                // skip compiling fast stereo shaders when we don't support the feature
-                dindex++;
-                continue;
-            }
 #if defined(ANDROID)
 		    if (j >= 1) continue; // skip drawin shaders
 #endif
+            if (static_cast<StereoMode>(i) == StereoMode::Preferred)
+            {
+                if (renderer->GetAPI() == piRenderer::API::GL &&
+                    (!renderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY) ||
+                        !renderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT)))
+                {
+                    // skip compiling fast stereo shaders when we don't support the feature
+                    dindex++;
+                    continue;
+                }
+                if (renderer->GetAPI() == piRenderer::API::GLES &&
+                    !renderer->SupportsFeature(piRenderer::RendererFeature::MULTIVIEW))
+                {
+                    // skip compiling multiview shaders when the extension isn't available
+                    dindex++;
+                    continue;
+                }
+            }
 			const piShaderOptions ops = { 5,{ { "COLOR_COMPRESSED", static_cast<int>(colorSpace) },
 												{ "WIGGLE", k },
 												{ "DRAWIN", j },
@@ -605,12 +613,25 @@ namespace ImmPlayer
 #if !defined(ANDROID)
             shaderID += (me->mDrawin == true) ? 3 : 0;
 #endif
+#if defined(ANDROID)
+            shaderID += (me->mWiggle == true) ? 3 : 0;
+#else
             shaderID += (me->mWiggle == true) ? 6 : 0;
+#endif
 
 #if defined(ANDROID)
 			shaderID += 3 * 2 * 0/*(mDebugRenderMode == Disabled ? 0 : mDebugRenderMode*/; // 4 x 6 shaders for 4 debug render modes
 #endif
-            if (shaderID != lastShaderID) { lastShaderID = shaderID; renderer->AttachShader(mShader[shaderID]); }
+            if (shaderID != lastShaderID)
+            {
+                lastShaderID = shaderID;
+                if (shaderID < 0 || shaderID >= kNumShaders || mShader[shaderID] == nullptr)
+                {
+                    log->Printf(LT_ERROR, L"Missing shader id %d (stereo=%d wiggle=%d)", shaderID, stereoModeInt, me->mWiggle ? 1 : 0);
+                    continue;
+                }
+                renderer->AttachShader(mShader[shaderID]);
+            }
 
 			// for each chunk in that layer
 			for (uint32_t chunkType = 0; chunkType < kNumChunkTypes; chunkType++)

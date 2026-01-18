@@ -327,10 +327,18 @@ bool piRendererGLES::Initialize(int id, const void **hwnd, int num, bool disable
 	int nume = 0; glGetIntegerv(GL_NUM_EXTENSIONS, &nume);
 	mFeatureVertexViewport = false;
 	mFeatureViewportArray  = false;
+	mFeatureMultiview = false;
 	for (int i = 0; i<nume; i++)
 	{
-		if( strcmp( (const char*)glGetStringi(GL_EXTENSIONS, i), "GL_ARB_viewport_array"			 ) == 0) mFeatureViewportArray	= true;
-		if( strcmp( (const char*)glGetStringi(GL_EXTENSIONS, i), "GL_ARB_shader_viewport_layer_array") == 0) mFeatureVertexViewport = true;
+		const char *ext = (const char*)glGetStringi(GL_EXTENSIONS, i);
+		if( strcmp( ext, "GL_ARB_viewport_array"			 ) == 0) mFeatureViewportArray	= true;
+		if( strcmp( ext, "GL_ARB_shader_viewport_layer_array") == 0) mFeatureVertexViewport = true;
+		if( strcmp( ext, "GL_OVR_multiview") == 0 ||
+			strcmp( ext, "GL_OVR_multiview2") == 0 ||
+			strcmp( ext, "GL_EXT_multiview") == 0)
+		{
+			mFeatureMultiview = true;
+		}
 	}
 
 
@@ -407,6 +415,7 @@ bool piRendererGLES::SupportsFeature(RendererFeature feature)
 {
 	if (feature == RendererFeature::VIEWPORT_ARRAY)  return mFeatureViewportArray;
 	if (feature == RendererFeature::VERTEX_VIEWPORT) return mFeatureVertexViewport;
+	if (feature == RendererFeature::MULTIVIEW) return mFeatureMultiview;
 	return false;
 }
 
@@ -1064,7 +1073,7 @@ void piRendererGLES::DettachSamplers( void )
 }
 
 //===========================================================================================================================================
-static const char *versionStr = "#version 320 es\n";
+static const char *versionStr = "#version 310 es\n";
 
 static bool createOptionsString(char *buffer, const int bufferLength, const piShaderOptions *options )
 {

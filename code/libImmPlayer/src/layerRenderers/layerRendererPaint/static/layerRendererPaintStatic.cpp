@@ -201,25 +201,37 @@ namespace ImmPlayer
             return false;
 
         int dindex = 0;
+        for (int i = 0; i < kNumShaders; i++)
+        {
+            mShader[i] = nullptr;
+        }
         for (int l = 0; l < 5; l++) // brush
         for (int k = 0; k < 2; k++) // wiggle
         for (int j = 0; j < 2; j++) // drawin
         for (int i = 0; i < 3; i++) // stereo
         {
-            if (renderer->GetAPI() == piRenderer::API::GL && static_cast<StereoMode>(i) == StereoMode::Preferred &&
-                (!renderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY) ||
-                    !renderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT)
-                    )
-                )
-            {
-                // skip compiling fast stereo shaders when we don't support the feature
-                dindex++;
-                continue;
-            }
-                
 #if defined(ANDROID)
             if (j == 1) continue; // skip the drawin shaders on Android
 #endif
+            if (static_cast<StereoMode>(i) == StereoMode::Preferred)
+            {
+                if (renderer->GetAPI() == piRenderer::API::GL &&
+                    (!renderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY) ||
+                        !renderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT)))
+                {
+                    // skip compiling fast stereo shaders when we don't support the feature
+                    dindex++;
+                    continue;
+                }
+                if (renderer->GetAPI() == piRenderer::API::GLES &&
+                    !renderer->SupportsFeature(piRenderer::RendererFeature::MULTIVIEW))
+                {
+                    // skip compiling multiview shaders when the extension isn't available
+                    dindex++;
+                    continue;
+                }
+            }
+
             const piShaderOptions ops = { 6,{ { "COLOR_COMPRESSED", static_cast<int>(colorSpace) },
                                               { "BRUSHTYPE", l },
                                               { "WIGGLE", k },
@@ -649,7 +661,11 @@ namespace ImmPlayer
 #if !defined(ANDROID)
             tmpShaderId += (me->mDrawin == true) ? 3 : 0;
 #endif
+#if defined(ANDROID)
+            tmpShaderId += (me->mWiggle == true) ? 3 : 0;
+#else
             tmpShaderId += (me->mWiggle == true) ? 6 : 0;
+#endif
 
             renderer->AttachTextures(1, &mBlueNoise, 7);
             
@@ -667,9 +683,18 @@ namespace ImmPlayer
 #if !defined(ANDROID)
                 int shaderID = tmpShaderId + 2 * 2 * 3 * chunkType;
 #else
-                int shaderID = tmpShaderId + 2 * 3 * chunkType;
+                int shaderID = tmpShaderId + 3 * 2 * chunkType;
 #endif
-                if (shaderID != lastShaderID) { lastShaderID = shaderID; renderer->AttachShader(mShader[shaderID]); }
+                if (shaderID != lastShaderID)
+                {
+                    lastShaderID = shaderID;
+                    if (shaderID < 0 || shaderID >= kNumShaders || mShader[shaderID] == nullptr)
+                    {
+                        log->Printf(LT_ERROR, L"Missing shader id %d (chunk=%d stereo=%d wiggle=%d)", shaderID, chunkType, stereoModeInt, me->mWiggle ? 1 : 0);
+                        continue;
+                    }
+                    renderer->AttachShader(mShader[shaderID]);
+                }
 
 
                 // attach vertex and index data

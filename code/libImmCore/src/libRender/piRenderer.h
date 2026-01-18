@@ -94,7 +94,8 @@ public:
 	enum class RendererFeature : int
 	{
 		VIEWPORT_ARRAY = 0,
-		VERTEX_VIEWPORT = 1
+		VERTEX_VIEWPORT = 1,
+		MULTIVIEW = 2
 	};
 
 	enum class IndexArrayFormat : int

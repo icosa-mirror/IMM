@@ -193,6 +193,7 @@ protected:
 
     bool mFeatureVertexViewport;
     bool mFeatureViewportArray;
+    bool mFeatureMultiview;
 
     static const int QUERY_BUFFER_SIZE = 2;
     piQuery mPerfQueries[QUERY_BUFFER_SIZE];

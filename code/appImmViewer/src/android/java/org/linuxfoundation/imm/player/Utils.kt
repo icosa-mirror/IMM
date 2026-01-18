@@ -29,7 +29,7 @@ object Utils {
 
   // Called once in each onCreate before extraction tasks.
   fun shouldReloadAssets(): Boolean {
-    val version = readStringFromFile(assetsDirectory + assetVersionFile)
+    val version = readStringFromFile(assetsDirectory + assetVersionFile)?.trim()
     if (version == null) {
       Log.d(TAG, "Could not find " + assetVersionFile + " reloading assets from APK...")
       return true

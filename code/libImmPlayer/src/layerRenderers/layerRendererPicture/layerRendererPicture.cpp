@@ -168,14 +168,21 @@ namespace ImmPlayer
         for (int j = 0; j < 4; ++j) // debug render modes: normal, wireframe, overdraw, wireframe + overdraw
         for (int i = 0; i < 3; i++)
         {
-            if (renderer->GetAPI() == piRenderer::API::GL && static_cast<StereoMode>(i) == StereoMode::Preferred &&
-                (!renderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY) ||
-                    !renderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT)
-                    )
-                )
+            if (static_cast<StereoMode>(i) == StereoMode::Preferred)
             {
-                // skip compiling fast stereo shaders when we don't support the feature
-                continue;
+                if (renderer->GetAPI() == piRenderer::API::GL &&
+                    (!renderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY) ||
+                        !renderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT)))
+                {
+                    // skip compiling fast stereo shaders when we don't support the feature
+                    continue;
+                }
+                if (renderer->GetAPI() == piRenderer::API::GLES &&
+                    !renderer->SupportsFeature(piRenderer::RendererFeature::MULTIVIEW))
+                {
+                    // skip compiling multiview shaders when the extension isn't available
+                    continue;
+                }
             }
 
             char error[2048];

@@ -17,6 +17,7 @@
 #include <jni.h>
 
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES3/gl3.h>
 
 #include <cstdlib>
@@ -25,6 +26,9 @@
 
 #if !defined(EGL_OPENGL_ES3_BIT_KHR)
 #define EGL_OPENGL_ES3_BIT_KHR 0x0040
+#endif
+#if !defined(EGL_CONTEXT_MINOR_VERSION_KHR)
+#define EGL_CONTEXT_MINOR_VERSION_KHR 0x30FB
 #endif
 
 using namespace ImmCore;
@@ -104,11 +108,20 @@ bool initEgl(android_app* app) {
     eglGetConfigAttrib(gEngine.display, config, EGL_NATIVE_VISUAL_ID, &format);
     ANativeWindow_setBuffersGeometry(app->window, 0, 0, format);
 
-    const EGLint contextAttribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 3,
+    const EGLint contextAttribs31[] = {
+        EGL_CONTEXT_MAJOR_VERSION_KHR, 3,
+        EGL_CONTEXT_MINOR_VERSION_KHR, 1,
         EGL_NONE
     };
-    gEngine.context = eglCreateContext(gEngine.display, config, EGL_NO_CONTEXT, contextAttribs);
+    gEngine.context = eglCreateContext(gEngine.display, config, EGL_NO_CONTEXT, contextAttribs31);
+    if (gEngine.context == EGL_NO_CONTEXT) {
+        ALOGW("EGL: 3.1 context failed, falling back to 3.0");
+        const EGLint contextAttribs[] = {
+            EGL_CONTEXT_CLIENT_VERSION, 3,
+            EGL_NONE
+        };
+        gEngine.context = eglCreateContext(gEngine.display, config, EGL_NO_CONTEXT, contextAttribs);
+    }
     if (gEngine.context == EGL_NO_CONTEXT) {
         ALOGE("EGL: create context failed");
         return false;
@@ -124,6 +137,11 @@ bool initEgl(android_app* app) {
         ALOGE("EGL: make current failed");
         return false;
     }
+
+    const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const char* glslVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+    ALOGV("GL_VERSION: %s", glVersion ? glVersion : "unknown");
+    ALOGV("GLSL_VERSION: %s", glslVersion ? glslVersion : "unknown");
 
     eglQuerySurface(gEngine.display, gEngine.surface, EGL_WIDTH, &gEngine.width);
     eglQuerySurface(gEngine.display, gEngine.surface, EGL_HEIGHT, &gEngine.height);

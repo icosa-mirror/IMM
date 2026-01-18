@@ -42,8 +42,6 @@ layout (std140, row_major, binding=5) uniform PassState
     int kk3;
 }pass;
 
-#if USE_28_BYTE_VERTS==1
-
 struct vertex_format_t
 {
     float   mPosX;
@@ -54,22 +52,6 @@ struct vertex_format_t
     uint    mAxUUn2;
     uint    mAxVUn3;
 };
-
-#else
-
-struct vertex_format_t
-{
-    float   mPosX;
-    float   mPosY;
-    float   mPosZ;
-    float   mWid;
-    uint    mColAlp;
-    uint    mDirInf;
-    uint    mAxUUn2;
-    uint    mAxVUn3;
-    float   mTim;
-};
-#endif
 
 layout(std430, binding = 8) readonly buffer VertexData
 {
@@ -120,7 +102,11 @@ void main()
     uint bid = uint(real_vertexID) >> 1u;
     uint vid = uint(real_vertexID) & 1u;
     #endif
-    #if BRUSHTYPE==2 || BRUSHTYPE==3
+    #if BRUSHTYPE==2
+    uint bid = uint(real_vertexID) / 7u;
+    uint vid = uint(real_vertexID) % 7u;
+    #endif
+    #if BRUSHTYPE==3
     uint bid = uint(real_vertexID) / 7u;
     uint vid = uint(real_vertexID) % 7u;
     #endif
@@ -135,15 +121,8 @@ void main()
     vec4  inColAlpha = unpack4( vertex.mColAlp );
     vec3  inAxU      = decodeUnitVector( vertex.mAxUUn2 );
     vec3  inAxV      = decodeUnitVector( vertex.mAxVUn3 );
-    #if VERTEX_FORMAT==1
 	float inWid      = 1.7*chunk_data.mBiggestStroke * float(vertex.mWidInfo >> 8u)/32767.0;
     uint  inInfo     = uint(vertex.mWidInfo & 7u);
-    #else
-    uint  inInfo     = vertex.mDirInf>>24u;
-    float inTime     = vertex.mTim;
-    vec3  inOri      = normalize( -1.0+2.0*unpack3( vertex.mDirInf ) );
-    float inWid      = vertex.mWid;
-    #endif
 
     vec3 pos = inVertex;
 
@@ -170,17 +149,6 @@ void main()
 
     vg.mask = (inColAlpha.w>0.999) ? layer.mID : inInfo;
 
-    #if USE_28_BYTE_VERTS==0
-    // directional stroke
-    vec3 ori = inOri;
-    if( ((inInfo>>7)&1u)==0u)
-    {
-        vec3 wori = normalize( (layer.mLayerToViewer * vec4(ori,0.0) ).xyz );
-        //f = clamp( -wori.z, 0.0, 1.0 );
-        f = clamp( dot(wori,normalize(cpos)), 0.0, 1.0 );
-        f = f*f;
-    }
-    #endif
 
     vg.col_tra.w = inColAlpha.w * f * layer.mOpacity;
     #if COLOR_COMPRESSED==0
@@ -211,15 +179,20 @@ void main()
 
     //-------- sphere and thick ribbon brush -------------------------
 
-    #if BRUSHTYPE==2 || BRUSHTYPE==3
+    #if BRUSHTYPE==2
     float u = float(vid)/7.0;
     float a = u*6.283185;
     vec2 sc = vec2( cos(a), sin(a) );
-    #if BRUSHTYPE==3
-    sc *= vec2(1.0,0.3);
-    #endif
     float wb = inWid * layer.mLayerToViewerScale;
+    vec3 bWPos = bPos + wb*(bU*sc.x + bV*sc.y);
+    #endif
 
+    #if BRUSHTYPE==3
+    float u = float(vid)/7.0;
+    float a = u*6.283185;
+    vec2 sc = vec2( cos(a), sin(a) );
+    sc *= vec2(1.0,0.3);
+    float wb = inWid * layer.mLayerToViewerScale;
     vec3 bWPos = bPos + wb*(bU*sc.x + bV*sc.y);
     #endif
 
