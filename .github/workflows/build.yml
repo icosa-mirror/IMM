@@ -47,6 +47,13 @@ jobs:
           code/appImmViewer/exe/appImmViewer_${{ matrix.configuration }}.exe
           code/appImmViewer/exe/settings.json
           code/appImmViewer/exe/*.dll
+          docs/viewer_settings.md
+        if-no-files-found: error
+    - name: Upload Sample IMM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sample1-imm
+        path: exampleImmFiles/sample1.imm
         if-no-files-found: error
 
   build-android:
