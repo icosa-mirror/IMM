@@ -55,7 +55,6 @@ android {
     sourceSets {
         main {
             def viewerSrc = "${projectDir}/../../../appImmViewer/src/android"
-            manifest.srcFile "${viewerSrc}/AndroidManifest.xml"
             java.srcDirs = ["${viewerSrc}/java"]
             res.srcDirs = ["${viewerSrc}/res"]
             assets.srcDirs = ["${viewerSrc}/assets", "${buildDir}/generated/assets"]

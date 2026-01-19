@@ -79,6 +79,8 @@ find_library(log-lib log)
 find_library(egl-lib EGL)
 find_library(gl3-lib GLESv3)
 find_library(z-lib z)
+find_library(opensles-lib OpenSLES)
+find_library(mediandk-lib mediandk)
 
 # Link libraries (order matters for static libraries)
 target_link_libraries(
@@ -95,4 +97,6 @@ target_link_libraries(
     ${egl-lib}
     ${gl3-lib}
     ${z-lib}
+    ${opensles-lib}
+    ${mediandk-lib}
 )

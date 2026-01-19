@@ -23,6 +23,8 @@ import kotlinx.coroutines.*
 
 @Keep
 class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatchers.IO) {
+  private var didFinishInit = false
+
   companion object {
     val TAG = MainActivity::class.java.simpleName
     const val EXTRA_QUILL_PATH = "QUILL_PATH"
@@ -81,14 +83,22 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
         Log.d(TAG, "onCreate intent category: " + intent.categories + " action: " + intent.action)
     else Log.d(TAG, "onCreate null intent")
 
-    if (!requestExternalStoragePermission())
-    // finishInit() will be called in onRequestPermissionsResult
-    return
+    if (!requestExternalStoragePermission()) {
+      // Continue init even if the permission dialog is pending to avoid blocking startup.
+      Log.d(TAG, "Permissions pending; continuing init")
+      finishInit()
+      return
+    }
 
     finishInit()
   }
 
   private fun finishInit() {
+    if (didFinishInit) {
+      return
+    }
+    didFinishInit = true
+
     Utils.assetsDirectory = applicationContext.filesDir.path + "/"
     Utils.cacheDirectory = filesDir.path + "/cache/"
     val cacheDir = File(Utils.cacheDirectory)

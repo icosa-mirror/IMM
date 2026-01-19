@@ -9,7 +9,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libMesh/piRenderMesh.h"
 
-#include "libImmCore/src/libSound/windows/piSoundEngineAudioSDKBackend.h"
+#include "libImmCore/src/libSound/piSoundEngineBackend.h"
 
 #include "../../viewer/viewer.h"
 #include "../../settings.h"
@@ -27,6 +27,7 @@
 #include <android_native_app_glue.h>
 
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -35,11 +36,12 @@
 #include <android/keycodes.h>
 #include <android/input.h>
 #include <VrApi_Types.h>
+#if defined(IMM_USE_OVR_PLATFORM) && IMM_USE_OVR_PLATFORM
 #include <OVR_PlatformInitializeResult.h>
 #include <OVR_Requests_Entitlement.h>
 #include <OVR_Message.h>
 #include <OVR_Platform.h>
-#include <OVR_Platform_Internal.h>
+#endif
 
 #include "VrApi.h"
 #include "VrApi_Helpers.h"
@@ -62,6 +64,7 @@ static const int NUM_MULTI_SAMPLES  = 4;
 // Set these to override system defaults;
 static const int EYE_BUFFER_WIDTH   = 0; //1216;
 static const int EYE_BUFFER_HEIGHT  = 0; //1344;
+static const bool FORCE_SOLID_CLEAR = true;
 
 // Requested levels may change if we detect too many stale frames.
 int requestedCPULevel = CPU_LEVEL_DEFAULT;
@@ -108,6 +111,19 @@ using namespace ImmPlayer;
 using namespace ExePlayer;
 
 static const uint32_t RENDER_BUDGET_MICROSECONDS = 8000;
+
+static const char *LoadingStateToString(ImmPlayer::Player::LoadingState state)
+{
+    switch (state)
+    {
+        case ImmPlayer::Player::LoadingState::Unloaded:  return "Unloaded";
+        case ImmPlayer::Player::LoadingState::Loading:   return "Loading";
+        case ImmPlayer::Player::LoadingState::Loaded:    return "Loaded";
+        case ImmPlayer::Player::LoadingState::Unloading: return "Unloading";
+        case ImmPlayer::Player::LoadingState::Failed:    return "Failed";
+        default:                                         return "Unknown";
+    }
+}
 
 static const double MIN_SPEED = 0.001;
 static const int JOYSTICK_ORIENTATION_SPEED = 1;
@@ -584,7 +600,11 @@ void initQuillPlayer(const wchar_t * quillPath, Settings::Rendering::Technique r
 
     immPlayer.pLog = new piLog();
     immPlayer.pTimer = new piTimer();
-    immPlayer.soundEngineBackend = piSoundEngineAudioSDKBackend::Create(immPlayer.pLog);
+    immPlayer.soundEngineBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Android, immPlayer.pLog);
+    if (!immPlayer.soundEngineBackend)
+    {
+        ALOGF("Could not create Android sound backend");
+    }
 
     //WaitForDebuggerToAttach3();
     if (!immPlayer.glesRenderer->Initialize(0, nullptr, 1, false, false, nullptr, false, nullptr))
@@ -600,9 +620,10 @@ void initQuillPlayer(const wchar_t * quillPath, Settings::Rendering::Technique r
 
     piSoundEngineBackend::Configuration config;
     config.mLowLatency = true; // enable android fast-path
+    config.mTempPath = getAssetDirectory();
     if (!immPlayer.soundEngineBackend->Init(nullptr, -1, &config))
     {
-        ALOGF("Can't init Audio360 soundEngineBackend");
+        ALOGF("Can't init Android soundEngineBackend");
     }
 
     immPlayer.viewer = new Viewer();
@@ -610,6 +631,7 @@ void initQuillPlayer(const wchar_t * quillPath, Settings::Rendering::Technique r
     // Setup analytics logging
     Viewer::OnDocumentStateChange logAnalyticsEvents = [](Player::LoadingState loadingState)
     {
+        ALOGV("Document loading state: %s", LoadingStateToString(loadingState));
         switch (loadingState)
         {
             case ImmPlayer::Player::LoadingState::Loaded:
@@ -661,7 +683,7 @@ void destroyQuillPlayer()
     immPlayer.viewer = nullptr;
 
     immPlayer.soundEngineBackend->Deinit();
-    piSoundEngineAudioSDKBackend::Destroy(immPlayer.soundEngineBackend);
+    piDestroySoundEngineBackend(immPlayer.soundEngineBackend);
     immPlayer.soundEngineBackend = nullptr;
 #ifdef LOCALIZED_TEXT
     destroyTextTexture();
@@ -872,8 +894,8 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame( ovrRenderer * renderer, ovrJ
         }
         else
         {
-            // do not render subsequent frames
-            return vrapi_DefaultLayerBlackProjection2();
+            // Allow rendering even if the mount sensor never reports mounted.
+            // Some devices report VRAPI_SYS_STATUS_MOUNTED=false in dev builds.
         }
     }
 
@@ -951,67 +973,77 @@ static ovrLayerProjection2 ovrRenderer_RenderFrame( ovrRenderer * renderer, ovrJ
         GL(glViewport(0, 0, frameBuffer->Width, frameBuffer->Height));
         GL(glScissor(0, 0, frameBuffer->Width, frameBuffer->Height));
 
-        const double time = immPlayer.pTimer->GetTime() - immPlayerState.startTime;
-        const float dtime = float(time - immPlayerState.oldTime);
-
-        immPlayerState.oldTime = time;
-
-        const ivec2 resolution(EYE_BUFFER_WIDTH, EYE_BUFFER_HEIGHT);
-
-        // TODO: populate controller and handle input directly in Viewer.
-        //  Can create multiple navigation models with a shared interface.
-        piVRHMD::Controller controller;
-
-        // For mono rendering, we'll just use the perf info from the left eye so we don't get
-        // different values rendered because of asymmetric eye matrices.
-        if (eye == 0)
+        if (FORCE_SOLID_CLEAR)
         {
-            immPlayerState.lastPerformanceInfo = immPlayer.viewer->GetPerformanceInfoForFrame();
-        }
-
-        const trans3d &transWorldToHead = fromMatrix(worldToHead);
-
-        if (STEREO_MODE == ImmPlayer::StereoMode::None)
-        {
-            ImmCore::mat4x4 viewer2eyeProjection = eye == 0 ? projectionLEye * d2f(headToLEye) : projectionREye * d2f(headToREye);
-
-#if defined(PERFORMANCE_TESTING)
-            const trans3d transPlayerWorldToHead = fromMatrix(worldToHead) * fromMatrix(quillState.playerCamera.GetWorldToCamera());
-#else
-            const trans3d transPlayerWorldToHead = transWorldToHead * fromMatrix(immPlayerState.playerCamera.GetWorldToCamera()) ;
-#endif
-            if (eye == 0)
-            {
-                immPlayer.viewer->GlobalWork(nullptr, true, transPlayerWorldToHead, &controller,
-                                             nullptr, immPlayer.pLog, dtime, resolution, true,
-                                             RENDER_BUDGET_MICROSECONDS, immPlayerState.isFirstFrame);
-            }
-
-            immPlayer.viewer->GlobalRender(transPlayerWorldToHead, viewer2eyeProjection);
-            immPlayer.viewer->RenderMono(resolution, transPlayerWorldToHead, eye);
+            GL(glDisable(GL_CULL_FACE));
+            GL(glDisable(GL_DEPTH_TEST));
+            GL(glClearColor(1.0f, 0.0f, 1.0f, 1.0f));
+            GL(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
         }
         else
         {
-            const trans3d transPlayerWorldToHead = transWorldToHead * fromMatrix(immPlayerState.playerCamera.GetWorldToCamera());
+            const double time = immPlayer.pTimer->GetTime() - immPlayerState.startTime;
+            const float dtime = float(time - immPlayerState.oldTime);
 
-            if (STEREO_MODE == ImmPlayer::StereoMode::Fallback)
+            immPlayerState.oldTime = time;
+
+            const ivec2 resolution(frameBuffer->Width, frameBuffer->Height);
+
+            // TODO: populate controller and handle input directly in Viewer.
+            //  Can create multiple navigation models with a shared interface.
+            piVRHMD::Controller controller;
+
+            // For mono rendering, we'll just use the perf info from the left eye so we don't get
+            // different values rendered because of asymmetric eye matrices.
+            if (eye == 0)
             {
-                mat4x4d headToEye = eye == 0 ? headToLEye : headToREye;
-                mat4x4 eyeProjection = eye == 0 ? projectionLEye : projectionREye;
+                immPlayerState.lastPerformanceInfo = immPlayer.viewer->GetPerformanceInfoForFrame();
+            }
 
+            const trans3d &transWorldToHead = fromMatrix(worldToHead);
+
+            if (STEREO_MODE == ImmPlayer::StereoMode::None)
+            {
+                ImmCore::mat4x4 viewer2eyeProjection = eye == 0 ? projectionLEye * d2f(headToLEye) : projectionREye * d2f(headToREye);
+
+#if defined(PERFORMANCE_TESTING)
+                const trans3d transPlayerWorldToHead = fromMatrix(worldToHead) * fromMatrix(quillState.playerCamera.GetWorldToCamera());
+#else
+                const trans3d transPlayerWorldToHead = transWorldToHead * fromMatrix(immPlayerState.playerCamera.GetWorldToCamera()) ;
+#endif
                 if (eye == 0)
                 {
-                    immPlayer.viewer->GlobalWork(nullptr, true, transPlayerWorldToHead, &controller, nullptr, immPlayer.pLog, dtime, resolution, true, RENDER_BUDGET_MICROSECONDS, immPlayerState.isFirstFrame);
-                    immPlayer.viewer->GlobalRender(transPlayerWorldToHead, projectionLEye); // TODO schevrel: this should be head projection
+                    immPlayer.viewer->GlobalWork(nullptr, true, transPlayerWorldToHead, &controller,
+                                                 nullptr, immPlayer.pLog, dtime, resolution, true,
+                                                 RENDER_BUDGET_MICROSECONDS, immPlayerState.isFirstFrame);
                 }
 
-                immPlayer.viewer->RenderStereoMultiPass(resolution, eye, headToEye, eyeProjection, transPlayerWorldToHead );
+                immPlayer.viewer->GlobalRender(transPlayerWorldToHead, viewer2eyeProjection);
+                immPlayer.viewer->RenderMono(resolution, transPlayerWorldToHead, eye);
             }
-            else if (STEREO_MODE == ImmPlayer::StereoMode::Preferred)
+            else
             {
-                immPlayer.viewer->GlobalWork(nullptr, true, transPlayerWorldToHead, &controller, nullptr, immPlayer.pLog, dtime, resolution, true, RENDER_BUDGET_MICROSECONDS, immPlayerState.isFirstFrame);
-                immPlayer.viewer->GlobalRender(transPlayerWorldToHead, projectionLEye);  // TODO schevrel: this should be head projection
-                immPlayer.viewer->RenderStereoSinglePass(resolution, transPlayerWorldToHead, headToLEye, projectionLEye, headToREye, projectionREye, nullptr);
+                const trans3d transPlayerWorldToHead = transWorldToHead * fromMatrix(immPlayerState.playerCamera.GetWorldToCamera());
+
+                if (STEREO_MODE == ImmPlayer::StereoMode::Fallback)
+                {
+                    mat4x4d headToEye = eye == 0 ? headToLEye : headToREye;
+                    mat4x4 eyeProjection = eye == 0 ? projectionLEye : projectionREye;
+
+                    if (eye == 0)
+                    {
+                        immPlayer.viewer->GlobalWork(nullptr, true, transPlayerWorldToHead, &controller, nullptr, immPlayer.pLog, dtime, resolution, true, RENDER_BUDGET_MICROSECONDS, immPlayerState.isFirstFrame);
+                        immPlayer.viewer->GlobalRender(transPlayerWorldToHead, projectionLEye); // TODO schevrel: this should be head projection
+                    }
+
+                    immPlayer.viewer->RenderStereoMultiPass(resolution, eye, headToEye, eyeProjection, transPlayerWorldToHead );
+                }
+                else if (STEREO_MODE == ImmPlayer::StereoMode::Preferred)
+                {
+                    immPlayer.viewer->GlobalWork(nullptr, true, transPlayerWorldToHead, &controller, nullptr, immPlayer.pLog, dtime, resolution, true, RENDER_BUDGET_MICROSECONDS, immPlayerState.isFirstFrame);
+                    immPlayer.viewer->GlobalRender(transPlayerWorldToHead, projectionLEye);  // TODO schevrel: this should be head projection
+                    immPlayer.viewer->RenderStereoSinglePass(resolution, transPlayerWorldToHead, headToLEye, projectionLEye, headToREye, projectionREye, nullptr);
+                }
             }
         }
 
@@ -1785,6 +1817,11 @@ static void ovrApp_PushBlackFinal( ovrApp * app );
 
 void processOVRMessages(const android_app * app, ovrJava * java)
 {
+#if !(defined(IMM_USE_OVR_PLATFORM) && IMM_USE_OVR_PLATFORM)
+    (void)app;
+    (void)java;
+    return;
+#else
     if (!immPlayerState.buildFlavorHeadless)
         return;
 
@@ -1837,6 +1874,7 @@ void processOVRMessages(const android_app * app, ovrJava * java)
                 break;
         }
     }
+#endif
 }
 
 /**
@@ -1875,23 +1913,26 @@ void android_main( struct android_app * app )
     ovrApp_Clear( &appState );
     appState.Java = java;
 
+    // Ensure we have a default asset directory early, before Java sets it.
+    if (getAssetDirectory() == nullptr || getAssetDirectory()[0] == '\0')
+    {
+        std::string internalAssetsDir = std::string(app->activity->internalDataPath) + "/";
+        setAssetDirectory(internalAssetsDir.c_str());
+        ALOGV("    set default asset directory: %s", internalAssetsDir.c_str());
+    }
+
     //WaitForDebuggerToAttach3();
 
     if (immPlayerState.buildFlavorHeadless)
     {
-        // Not sure if we actually need to do this but VrShell and Venues is...
-        // Disable FBNS. We don't use it and it's a huge battery drain
-        // If the API isn't found in Horizon, it gracefully falls back to no ConfigOptions
-        ovrKeyValuePair options[1];
-        options[0] = ovr_ConfigOption_CreateInternal(ovrConfigOption_DisableFbns, true);
-
-        // Initialization call
-        ovr_PlatformInitializeAndroidWithOptions(APP_ID, java.ActivityObject, java.Env, options, 1);
+        #if defined(IMM_USE_OVR_PLATFORM) && IMM_USE_OVR_PLATFORM
+        ovr_PlatformInitializeAndroid(APP_ID, java.ActivityObject, java.Env);
         ovr_User_GetAccessToken();
 
         #if !defined(DEBUG)
         ALOGV("ovrApp_PerformEntitlementCheck");
         ovr_Entitlement_GetIsViewerEntitled();
+        #endif
         #endif
     }
 
@@ -2092,6 +2133,22 @@ void android_main( struct android_app * app )
                         fclose(fp);
                         qPath = L"/sdcard/Oculus/quill/default";
                         ALOGV("    Loading Quill: default authoring folder from disk");
+                    }
+                    else
+                    {
+                        const char *assetDir = getAssetDirectory();
+                        if (assetDir != nullptr && assetDir[0] != '\0')
+                        {
+                            std::string assetImmPath = std::string(assetDir) + "sample1.imm";
+                            fp = fopen(assetImmPath.c_str(), "rb");
+                            if (fp)
+                            {
+                                fclose(fp);
+                                qPath = pistr2ws(assetImmPath.c_str());
+                                shouldFree = true;
+                                ALOGV("    Loading Quill: %s from assets directory", assetImmPath.c_str());
+                            }
+                        }
                     }
                 }
                 else
