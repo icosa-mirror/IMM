@@ -14,13 +14,13 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++17", "-D__ANDROID__", "-DANDROID"
-                arguments "-DANDROID_STL=c++_shared",
+                arguments "-DANDROID_STL=c++_static",
                         "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
                         "-DCMAKE_C_COMPILER_WORKS=1",
                         "-DCMAKE_CXX_COMPILER_WORKS=1",
                         "-DCMAKE_C_ABI_COMPILED=1",
                         "-DCMAKE_CXX_ABI_COMPILED=1",
-                        "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
+                        "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
                 abiFilters "arm64-v8a"
             }
         }
