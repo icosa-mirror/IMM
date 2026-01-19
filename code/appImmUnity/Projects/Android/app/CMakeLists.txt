@@ -11,6 +11,9 @@ add_library(
     ${appImmUnity-dir}/src/main.cpp
 )
 
+# 16KB page size alignment for Android 15+ ARM64 devices
+target_link_options(ImmUnityPlugin PRIVATE "-Wl,-z,max-page-size=16384")
+
 # Add libImmCore dependency
 set(core-dir ${appImmUnity-dir}/../libImmCore)
 set(core-build-dir ${core-dir}/build)
