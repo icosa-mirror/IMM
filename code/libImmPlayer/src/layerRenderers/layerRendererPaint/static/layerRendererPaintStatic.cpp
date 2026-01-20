@@ -28,7 +28,7 @@ namespace ImmPlayer
     #include "shader_static_brush_vs.glsl"
     #include "shader_static_brush_fs.glsl"
 #elif defined(ANDROID)
-    #include "shader_static_brush_vs.es.glsl"
+#include "shader_static_brush_vs.es.glsl"
     #include "shader_static_brush_fs.es.glsl"
 #endif
 
@@ -183,13 +183,13 @@ namespace ImmPlayer
     LayerRendererPaintStatic::LayerRendererPaintStatic() : LayerRendererPaint() {}
     LayerRendererPaintStatic::~LayerRendererPaintStatic() {}
 
-    bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
+bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
     {
-        #if ST_VERTEX_FORMAT == 1
+#if ST_VERTEX_FORMAT == 1
         piAssert( sizeof(DrawingStatic::MyVertexFormat)==28 );
-        #else
+#else
         piAssert( sizeof(DrawingStatic::MyVertexFormat)==36 );
-        #endif
+#endif
 
         mCapLayersToRender = 1;
 
@@ -246,7 +246,7 @@ namespace ImmPlayer
             char error[1024] = { 0 };
 
 
-            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
             {
                 mShader[dindex] = renderer->CreateShader(&ops, shader_static_brush_vs, nullptr, nullptr, nullptr, shader_static_brush_fs, error);
             }
