@@ -1,7 +1,7 @@
 //
 // Branched off piLibs (Copyright © 2015 Inigo Quilez, The MIT License), in 2015. See THIRD_PARTY_LICENSES.txt
 //
-#include <malloc.h>
+#include <stdlib.h>
 #include "piSoundEngineNULL.h"
 #include "../libBasics/piTypes.h"
 

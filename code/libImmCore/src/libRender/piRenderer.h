@@ -3,6 +3,7 @@
 //
 #pragma once
 
+#include <stddef.h>
 #include "../libBasics/piTypes.h"
 
 namespace ImmCore {

@@ -1,4 +1,4 @@
-#include <malloc.h>
+#include <stdlib.h>
 #include "../../libBasics/piTypes.h"
 #include "../../libBasics/piFile.h"
 #include "../../libBasics/piStreamI.h"

@@ -6,7 +6,7 @@
 #endif
 #include <stdarg.h>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <wchar.h>
 #include "piString.h"
@@ -151,6 +151,11 @@ bool piString::InitCopyS(const char *ori, uint32_t numChars)
         const wchar_t *wori = wstr.w_cstr();
         memcpy(mBuffer, wori, len * sizeof(wchar_t));
     }
+#else
+    if (len > 0)
+    {
+        mbstowcs(mBuffer, ori, len);
+    }
 #endif
     mBuffer[len] = 0;
     return true;
@@ -242,6 +247,11 @@ bool piString::InitCopyS(const char *ori)
             const wchar_t *wori = wstr.w_cstr();
             memcpy(mBuffer, wori, len * sizeof(wchar_t));
         }
+#else
+        if (len > 0)
+        {
+            mbstowcs(mBuffer, ori, len);
+        }
 #endif
     }
 
@@ -329,14 +339,21 @@ bool piString::CopyS( const char *ori )
 
 	mNum = len;
 
-    #ifdef WINDOWS
+#ifdef WINDOWS
 	if (!MultiByteToWideChar(CP_ACP, 0, ori, len, mBuffer, len))
 		return false;
-    #elif defined(ANDROID)
+#elif defined(ANDROID)
     ScopedCStr wstr(pistr2ws(ori));
     int ret = CopyW(wstr.w_cstr());
     return ret;
-    #endif
+#else
+    wchar_t *tmp = pistr2ws(ori);
+    if (!tmp)
+        return false;
+    int ret = CopyW(tmp);
+    free(tmp);
+    return ret;
+#endif
 
     mBuffer[len] = 0;
 
@@ -560,7 +577,12 @@ bool piString::AppendSA(const char *str)
     return true;
 
 #else
-    return false;
+    wchar_t *tmp = pistr2ws(str);
+    if (!tmp)
+        return false;
+    bool ok = AppendSW(tmp);
+    free(tmp);
+    return ok;
 #endif
 }
 
@@ -630,7 +652,7 @@ bool piString::Printf( const wchar_t *format,  ...  )
 
     va_list args;
     va_start( args, format );
-#if !defined(ANDROID)
+#if defined(WINDOWS)
     const int res = vswprintf_s( mBuffer, mMax, format, args );
 #else
     const int res = vswprintf( mBuffer, mMax, format, args );

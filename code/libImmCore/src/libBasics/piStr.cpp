@@ -4,17 +4,19 @@
 #ifdef WINDOWS
 #include <windows.h>
 #endif
-#include <cwchar>
+#include <wchar.h>
+#include <wctype.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <limits.h>
 
 #ifdef ANDROID
 #include "android/piCStr.h"
-#include <cstdio>
+#include <stdio.h>
 #include <wchar.h>
-#include <cstdlib>
+#include <string>
 #include <string>
 #include <cstring>
 #endif
@@ -178,7 +180,7 @@ namespace ImmCore
 #ifdef WINDOWS
 		return wcstok_s(strToken, strDelimit, context);
 #else
-		return 0;
+		return wcstok(strToken, strDelimit, context);
 #endif
 	}
 
@@ -195,6 +197,8 @@ namespace ImmCore
 		replaceAll(formatStr, L"%s", L"%ls");
 
 		const int res = vswprintf( buffer, sizeOfBuffer, formatStr.c_str(), args );
+#else
+		const int res = vswprintf(buffer, sizeOfBuffer, format, args);
 #endif 
 		va_end(args);
 
@@ -220,7 +224,7 @@ namespace ImmCore
 
 		res = vswprintf( buffer, sizeInBytes, format, arglist );
 #else
-		res = vsprintf(buffer, format, arglist);
+		res = vswprintf(buffer, sizeInBytes, format, arglist);
 #endif
 
 		return res;
@@ -249,6 +253,19 @@ namespace ImmCore
 			buf_size *= 2;
 		}
 		return -1;
+#else
+		int buf_size = 1024;
+		while (buf_size < 1024 * 1024)
+		{
+			va_list args;
+			va_copy(args, arglist);
+			wchar_t buffer[buf_size];
+			int fmt_size = vswprintf(buffer, sizeof(buffer) / sizeof(buffer[0]), format, args);
+			if (fmt_size >= 0)
+				return fmt_size;
+			buf_size *= 2;
+		}
+		return -1;
 #endif
 	}
 
@@ -259,6 +276,8 @@ namespace ImmCore
 #elif ANDROID
 		wcscat( strDest, strSource );
 #else
+		(void)bufferSizeInBytes;
+		wcscat(strDest, strSource);
 #endif
 	}
 
@@ -267,6 +286,7 @@ namespace ImmCore
 #if defined(WINDOWS) || defined(ANDROID)
 		return wcsrchr(str, c);
 #else
+		return wcsrchr(str, c);
 #endif
 	}
 
@@ -275,6 +295,8 @@ namespace ImmCore
 #if defined(WINDOWS) || defined(ANDROID)
 		wcscpy(strDestination, strSource);
 #else
+		(void)sizeInBytes;
+		wcscpy(strDestination, strSource);
 #endif
 	}
 
@@ -283,6 +305,7 @@ namespace ImmCore
 #if defined(WINDOWS) || defined(ANDROID)
 		return (int)wcslen(buffer);
 #else
+		return (int)wcslen(buffer);
 #endif
 	}
 
@@ -291,6 +314,7 @@ namespace ImmCore
 #if defined(WINDOWS) || defined(ANDROID)
 		return wcscmp(a, b);
 #else
+		return wcscmp(a, b);
 #endif
 	}
 
@@ -300,6 +324,9 @@ namespace ImmCore
 		if (count == 0) count = piwstrlen(strSource);
 		wcsncpy(strDest, strSource, count);
 #else
+		(void)sizeInBytes;
+		if (count == 0) count = (size_t)piwstrlen(strSource);
+		wcsncpy(strDest, strSource, count);
 #endif
 	}
 
@@ -309,6 +336,8 @@ namespace ImmCore
 #if defined(WINDOWS) || defined(ANDROID)
 		wcsncat(strDest, strSource, count);
 #else
+		(void)bufferSizeInBytes;
+		wcsncat(strDest, strSource, count);
 #endif
 	}
 
@@ -323,6 +352,12 @@ namespace ImmCore
 		else
 			*status = true;
 #else
+		wchar_t *ec;
+		int res = wcstol(str, &ec, 10);
+		if (ec[0] != 0)
+			*status = false;
+		else
+			*status = true;
 #endif
 		return res;
 	}
@@ -339,6 +374,12 @@ namespace ImmCore
 		else
 			*status = true;
 #else
+		wchar_t *ec;
+		uint64_t res = wcstoull(str, &ec, 10);
+		if (ec[0] != 0)
+			*status = false;
+		else
+			*status = true;
 #endif
 		return res;
 	}
@@ -370,7 +411,7 @@ namespace ImmCore
 #if defined(WINDOWS) || defined(ANDROID)
 		return (int)wcscspn(str, charSet);
 #else
-		return 0;
+		return (int)wcscspn(str, charSet);
 #endif
 	}
 
@@ -447,22 +488,25 @@ namespace ImmCore
 
 		return dst;
 #elif defined(ANDROID)
-		std::wstring ws(len, L' ');
-		std::mbstowcs(&ws[0], ori, len);
-
-		wchar_t * dst = (wchar_t*)malloc( (ws.length() + 1) * sizeof(wchar_t) );
-		piwstrcpy(dst, ws.length() * sizeof(wchar_t), ws.c_str());
-		dst[ws.length()] = '\0';
-
+		size_t wlen = mbstowcs(0, ori, 0);
+		if (wlen == (size_t)-1) return 0;
+		wchar_t * dst = (wchar_t*)malloc((wlen + 1) * sizeof(wchar_t));
+		if (!dst) return 0;
+		mbstowcs(dst, ori, wlen + 1);
 		return dst;
 #else
-		return nullptr;
+		size_t wlen = mbstowcs(0, ori, 0);
+		if (wlen == (size_t)-1) return 0;
+		wchar_t * dst = (wchar_t*)malloc((wlen + 1) * sizeof(wchar_t));
+		if (!dst) return 0;
+		mbstowcs(dst, ori, wlen + 1);
+		return dst;
 #endif
 	}
 
-    bool pistr2ws(wchar_t *dst, const int dstLen, const char *ori)
-    {
-        const int len = (int)strlen(ori);
+	bool pistr2ws(wchar_t *dst, const int dstLen, const char *ori)
+	{
+		const int len = (int)strlen(ori);
 
 #ifdef WINDOWS
         int n = MultiByteToWideChar(CP_ACP, 0, ori, len, 0, 0);
@@ -474,12 +518,13 @@ namespace ImmCore
 
         return true;
 #elif defined(ANDROID)
-        std::mbstowcs(dst, ori, dstLen);
-        return true;
+		mbstowcs(dst, ori, dstLen);
+		return true;
 #else
-        return false;
+		mbstowcs(dst, ori, dstLen);
+		return true;
 #endif
-    }
+	}
 
 
 	char* piws2str(const wchar_t *ori)
@@ -494,7 +539,7 @@ namespace ImmCore
 		}
 		// allocate and convert
 		char *res = (char*)malloc(numMultiBytes + 1);
-		if (!res) return nullptr;
+		if (!res) return 0;
 		int l = (int)wcstombs(res, ori, numMultiBytes);
 		res[l] = 0;
 		return res;

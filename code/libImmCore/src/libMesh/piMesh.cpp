@@ -2,7 +2,7 @@
 // Branched off piLibs (Copyright © 2015 Inigo Quilez, The MIT License), in 2015. See THIRD_PARTY_LICENSES.txt
 //
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 
 #include "../libBasics/piFile.h"
 #include "../libBasics/piArray.h"

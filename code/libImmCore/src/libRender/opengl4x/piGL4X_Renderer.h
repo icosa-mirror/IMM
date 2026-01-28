@@ -8,6 +8,10 @@
 #include "piGL4X_RenderContext.h"
 #include "piGL4X_Ext.h"
 
+#ifndef CALLBACK
+#define CALLBACK
+#endif
+
 namespace ImmCore {
 
 class piRendererGL4X : public piRenderer

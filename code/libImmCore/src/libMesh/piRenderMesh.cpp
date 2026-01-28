@@ -3,7 +3,7 @@
 //
 #include <string.h>
 #include <stdio.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <float.h>
 
 #include "../libBasics/piFile.h"

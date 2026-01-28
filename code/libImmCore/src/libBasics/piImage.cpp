@@ -2,9 +2,9 @@
 // Branched off piLibs (Copyright © 2015 Inigo Quilez, The MIT License), in 2015. See THIRD_PARTY_LICENSES.txt
 //
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <math.h>
-#include <cstdio>
+#include <stdio.h>
 
 #include <png.h>
 #include <setjmp.h>
@@ -1135,12 +1135,15 @@ bool piImage::ReadFromMemory( const piTArray<uint8_t> * data, const wchar_t *ext
 
 	    FILE *infile;
 
-    #if defined(ANDROID)
-        ScopedCStr cName(piws2str(name));
-        infile = fopen( cName.c_str(), "rb" );
-    #else
+#if defined(WINDOWS)
         infile = _wfopen(name, L"rb");
-    #endif
+#else
+        char *cName = piws2str(name);
+        if (!cName)
+            return false;
+        infile = fopen(cName, "rb");
+        free(cName);
+#endif
         if( !infile  )
         {
             return false;

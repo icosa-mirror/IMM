@@ -30,6 +30,9 @@ namespace ImmPlayer
 #elif defined(ANDROID)
     #include "shader_static_brush_vs.es.glsl"
     #include "shader_static_brush_fs.es.glsl"
+#else
+    #include "shader_static_brush_vs.glsl"
+    #include "shader_static_brush_fs.glsl"
 #endif
 
 
@@ -147,9 +150,9 @@ namespace ImmPlayer
                     return false;
                 }
 
+#if defined(WINDOWS)
                 if (renderer->GetAPI() == piRenderer::API::DX)
                 {
-                    #if !defined(ANDROID)
                     for (int j = 0; j < 3; j++)
                     {
                         dst->mVertexArray[j] = renderer->CreateVertexArray2(0, nullptr, nullptr, nullptr, nullptr, shader_static_brush_vs_code[chunkType], shader_static_brush_vs_size[chunkType], dst->mIBO, piRenderer::IndexArrayFormat::UINT_16);
@@ -159,9 +162,9 @@ namespace ImmPlayer
                             return false;
                         }
                     }
-                    #endif
                 }
                 else
+#endif
                 {
                     dst->mVertexArray[0] = renderer->CreateVertexArray(0, nullptr, nullptr, nullptr, nullptr, dst->mIBO, piRenderer::IndexArrayFormat::UINT_16);
                     if (!dst->mVertexArray[0])
@@ -252,7 +255,7 @@ namespace ImmPlayer
             }
             else
             {
-#ifndef ANDROID
+#if defined(WINDOWS)
                 int vs_index = i +
                     j * 3 +
                     k * 3 * 2 +

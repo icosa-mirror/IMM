@@ -15,9 +15,17 @@
 #include <GL/glx.h>
 #endif
 
+#if defined(__APPLE__)
+#include <dlfcn.h>
+#endif
+
 #include "piGL4X_Ext.h"
 
+#if defined(__APPLE__)
+#include <stdlib.h>
+#else
 #include <malloc.h>
+#endif
 #include <string.h>
 
 //--- d a t a ---------------------------------------------------------------
@@ -180,11 +188,14 @@ NGLEXTINFO *piGL4X_Ext_Init(piRenderer::piReporter *reporter)
         #ifdef IRIX
         info->myglfunc[i] = (void *)glXGetProcAddress( (const unsigned char *)str );
         #endif
+        #if defined(__APPLE__)
+        info->myglfunc[i] = dlsym(RTLD_DEFAULT, str);
+        #endif
 
         if( !info->myglfunc[i] )
         {
             reporter->Error( str, 0 );
-            return nullptr;
+            return 0;
         }
 
         str += 1 + strlen(str);

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include "piTypes.h"
 #include "piDebug.h"
 

@@ -14,7 +14,7 @@ namespace ImmCore
 		void Lock(void);
 		void UnLock(void);
 	private:
-		void * p = nullptr;
+		void * p = 0;
 	};
 
 

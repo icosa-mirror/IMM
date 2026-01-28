@@ -1,7 +1,7 @@
 //
 // Branched off piLibs (Copyright © 2015 Inigo Quilez, The MIT License), in 2015. See THIRD_PARTY_LICENSES.txt
 //
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 #include "piGL4X_Renderer.h"
@@ -820,7 +820,7 @@ piTexture piRendererGL4X::CreateTextureFromID(unsigned int id, TextureFilter fil
     else if( data[2]==GL_TEXTURE_2D_MULTISAMPLE_ARRAY) me->mInfo.mType = TextureType::T2D_ARRAY;
     else return nullptr;
 
-         if( data[3]==GL_CLAMP ) me->mWrap = TextureWrap::CLAMP;
+		 if( data[3]==GL_CLAMP_TO_EDGE ) me->mWrap = TextureWrap::CLAMP;
     else if( data[3]==GL_REPEAT) me->mWrap = TextureWrap::REPEAT;
     else if( data[3]==GL_CLAMP_TO_EDGE) me->mWrap = TextureWrap::CLAMP_TO_BORDER;
     else return nullptr;

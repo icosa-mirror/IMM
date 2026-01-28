@@ -42,6 +42,9 @@ namespace ImmPlayer
 #include "shader_model_fs.glsl"
 #elif defined(ANDROID)
 #include "tmp/shader_model_GLES_glsl.h"
+#else
+#include "shader_model_vs.glsl"
+#include "shader_model_fs.glsl"
 #endif
 
 	bool LayerRendererModel::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
@@ -90,7 +93,7 @@ namespace ImmPlayer
 			}
 			else
 			{
-#ifndef ANDROID
+#if defined(WINDOWS)
 				const int poff = 3 * (static_cast<int>(colorSpace));
                 const int vid = i + poff;
                 const int fid = i;

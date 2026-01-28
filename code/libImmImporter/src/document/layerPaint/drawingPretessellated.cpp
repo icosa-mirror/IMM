@@ -4,10 +4,11 @@
 #include "libImmCore/src/libBasics/piFile.h"
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piColor.h"
+#include <stdint.h>
 
 #include "drawingPretessellated.h"
 
-#if defined(ANDROID)
+#ifndef __forceinline
 #define __forceinline inline
 #endif
 using namespace ImmCore;

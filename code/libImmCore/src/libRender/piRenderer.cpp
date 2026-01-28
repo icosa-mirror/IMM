@@ -3,11 +3,13 @@
 //
 #include "piRenderer.h"
 
-#if !defined(ANDROID) // Need this because piGL4X_Ext.h includes <GL/gl.h>
+#if defined(ANDROID)
+#include "opengles/piGLES_Renderer.h"
+#elif defined(WINDOWS)
 #include "opengl4x/piGL4X_Renderer.h"
 #include "directx11/piDX11_Renderer.h"
 #else
-#include "opengles/piGLES_Renderer.h"
+#include "opengl4x/piGL4X_Renderer.h"
 #endif
 
 
@@ -16,14 +18,16 @@ namespace ImmCore {
 
 piRenderer *piRenderer::Create( const API type )
 {
-#if !defined(ANDROID)
+#if defined(ANDROID)
+	if( type==API::GLES ) return new piRendererGLES();
+#elif defined(WINDOWS)
 	if( type==API::GL ) return new piRendererGL4X();
 	if( type==API::DX ) return new piRendererDX11();
 #else
-	if( type==API::GLES ) return new piRendererGLES();
+	if( type==API::GL ) return new piRendererGL4X();
 #endif
 
-	return NULL;
+	return 0;
 }
 
 }

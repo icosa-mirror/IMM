@@ -5,9 +5,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include "piTypes.h"
 #include "piFile.h"
+#include "piStr.h"
 
 #ifdef ANDROID
 #include <cwchar>
@@ -67,7 +68,11 @@ char *piFile::ReadString(char *buffer, int num)
 
 void piFile::Prints(const wchar_t *str)
 {
-    fwprintf( (FILE*)mInternal, str);
+    char *cstr = piws2str(str);
+    if (!cstr)
+        return;
+    fputs(cstr, (FILE*)mInternal);
+    free(cstr);
 }
 
 void piFile::Printf(const wchar_t *format, ...)
@@ -75,19 +80,30 @@ void piFile::Printf(const wchar_t *format, ...)
     va_list arglist;
 
     va_start(arglist, format);
-
-
-    vfwprintf( (FILE*)mInternal, format, arglist);
-    //int maxLen = pivscwprintf(format, arglist) + 1;
-    //wchar_t *tmpstr = (wchar_t*)_malloca(maxLen*sizeof(wchar_t));
-    //if (!tmpstr) return;
-
-
-    //pivwsprintf(tmpstr, maxLen, format, arglist);
-
+    va_list argcopy;
+    va_copy(argcopy, arglist);
+    int maxLen = pivscwprintf(format, argcopy) + 1;
+    va_end(argcopy);
+    if (maxLen < 2)
+    {
+        va_end(arglist);
+        return;
+    }
+    wchar_t *tmpstr = (wchar_t*)malloc(maxLen * sizeof(wchar_t));
+    if (!tmpstr)
+    {
+        va_end(arglist);
+        return;
+    }
+    pivwsprintf(tmpstr, maxLen, format, arglist);
     va_end(arglist);
 
-    //fwprintf((FILE*)mInternal, str);
+    char *cstr = piws2str(tmpstr);
+    free(tmpstr);
+    if (!cstr)
+        return;
+    fputs(cstr, (FILE*)mInternal);
+    free(cstr);
 }
 
 //-------------------------------------------------------------------------------------------

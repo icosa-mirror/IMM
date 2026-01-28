@@ -7,9 +7,14 @@
 #ifdef WINDOWS
 #include <windows.h>
 #endif
+#if defined(__APPLE__)
+#include <OpenGL/gl3.h>
+#else
 #include <GL/gl.h>
+#endif
 #define GLCOREARB_PROTOTYPES
 
+#include "khrplatform.h"
 #include "glcorearb.h"
 
 
@@ -167,4 +172,3 @@ void  piGL4X_Ext_Free( NGLEXTINFO *me );
 
 
 } // namespace ImmCore
-

@@ -3,6 +3,8 @@
 //
 #pragma once
 
+#include <stddef.h>
+
 #include <stdarg.h>
 #include "piTypes.h"
 

@@ -81,7 +81,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
-#if !defined(__ANDROID__) && !defined(ANDROID)
+#if defined(WINDOWS)
 #include "libImmExporter/src/document/sequence.h"
 #include "libImmExporter/src/document/layerPaint.h"
 #include "libImmExporter/src/document/layerPaint/element.h"
@@ -89,7 +89,7 @@
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #endif
 #include "IUnityGraphics.h"
-#if !defined(__ANDROID__) && !defined(ANDROID)
+#if defined(WINDOWS)
 #include "IUnityGraphicsD3D11.h"
 #include "IUnityGraphicsD3D12.h"
 #endif
@@ -199,7 +199,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 	{
 		UnityGfxRenderer apiType = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
 
-#if !defined(__ANDROID__) && !defined(ANDROID)
+#if defined(WINDOWS)
 		if (apiType == kUnityGfxRendererD3D11)
 		{
 			IUnityGraphicsD3D11* ud3d = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsD3D11>();
@@ -214,11 +214,20 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 		{
 			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 		}
-#else
+#elif defined(__ANDROID__) || defined(ANDROID)
 		if (apiType == kUnityGfxRendererOpenGLES30)
 		{
 			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 			gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"kUnityGfxDeviceEventInitialize using OpenGL ES 3.0 device");
+		}
+#else
+		if (apiType == kUnityGfxRendererOpenGLCore)
+		{
+			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
+		}
+		else if (apiType == kUnityGfxRendererMetal)
+		{
+			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 		}
 #endif
 	}
@@ -408,8 +417,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     // SOUND ENGINE
 #if defined(__ANDROID__) || defined(ANDROID)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
-#else
+#elif defined(WINDOWS)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
+#else
+    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
 #endif
 
     if(!gImmUnityPlugin.IMM.mSoundBackend)
@@ -448,8 +459,17 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 #if defined(__ANDROID__) || defined(ANDROID)
 	const piRenderer::API api = piRenderer::API::GLES;
 	gImmUnityPlugin.IMM.mRenderReporter = nullptr;
-#else
+#elif defined(WINDOWS)
 	const piRenderer::API api = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
+	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
+#else
+	UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
+	if (gfx != kUnityGfxRendererOpenGLCore)
+	{
+		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unsupported renderer on macOS. Expected OpenGL Core.");
+		return -1;
+	}
+	const piRenderer::API api = piRenderer::API::GL;
 	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
 #endif
 	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"API: %s", pistr2ws(apiName[static_cast<int>(api)]));
@@ -909,7 +929,7 @@ struct ImmExporterPointC
 };
 
 // Exporter functionality - not available on Android
-#if !defined(__ANDROID__) && !defined(ANDROID)
+#if defined(WINDOWS)
 
 struct ImmExporterDrawingHandle
 {
@@ -1206,4 +1226,4 @@ extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ExportToF
         static_cast<ImmExporter::tiLayerSound::AudioType>(audioType));
 }
 
-#endif // !ANDROID - End of exporter functionality
+#endif // WINDOWS - End of exporter functionality
