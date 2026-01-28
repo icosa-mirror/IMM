@@ -12,8 +12,6 @@ if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "" FORCE)
 endif()
 
-set(MACOSX_SDK_PATH "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
-include_directories(SYSTEM "${MACOSX_SDK_PATH}/usr/include/c++/v1")
 
 if(NOT CMAKE_INSTALL_DOCDIR)
     set(CMAKE_INSTALL_DOCDIR "share/doc" CACHE STRING "" FORCE)
