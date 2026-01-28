@@ -130,3 +130,29 @@ jobs:
         path: |
           code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
         if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install CMake
+      run: brew install cmake
+
+    - name: Configure macOS build
+      run: cmake -S code/projects/macos -B build/macos
+
+    - name: Build macOS Unity plugin
+      run: cmake --build build/macos --config Release
+
+    - name: Upload Unity Plugin Bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmUnityPlugin-macOS
+        path: |
+          code/ImmUnitySampleProject/Assets/Plugins/OSX/ImmUnity.bundle
+        if-no-files-found: error
