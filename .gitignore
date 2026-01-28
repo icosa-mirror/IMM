@@ -29,6 +29,7 @@ Makefile
 *.ninja
 *.ninja_deps
 *.ninja_log
+code/ImmUnitySampleProject/UserSettings/
 local.properties
 *.aar
 
