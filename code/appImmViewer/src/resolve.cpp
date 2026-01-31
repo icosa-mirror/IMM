@@ -1,5 +1,5 @@
 #include "resolve.h"
-
+#include <stdio.h>
 static const char* vsShaderAAResolve = ""
 
 "layout(location = 0) in vec2 inVertex;"
@@ -17,10 +17,15 @@ static const char* vsShaderAAResolve = ""
 
 static const char* fsShaderAAResolve = ""
 
+#if EXPLICIT_UNIFORMS
 "layout(binding = 0) uniform sampler2DMS unTex0;"
-
 "layout(location = 0) uniform vec4 unFade;"
 "layout(location = 1) uniform int  unXOffset;"
+#else
+"uniform sampler2DMS unTex0;"
+"uniform vec4 unFade;"
+"uniform int  unXOffset;"
+#endif
 "layout(location = 0, index = 0) out vec4 outColor;"
 
 
@@ -57,7 +62,38 @@ static const char* fsShaderAAResolve = ""
 
 	"col *= unFade.x;"
 
-	"outColor = vec4(col, 1.0);"
+"outColor = vec4(col, 1.0);"
+"}";
+
+static const char* fsShaderResolve = ""
+
+#if EXPLICIT_UNIFORMS
+"layout(binding = 0) uniform sampler2D unTex0;"
+"layout(location = 0) uniform vec4 unFade;"
+"layout(location = 1) uniform int  unXOffset;"
+#else
+"uniform sampler2D unTex0;"
+"uniform vec4 unFade;"
+"uniform int  unXOffset;"
+#endif
+"layout(location = 0, index = 0) out vec4 outColor;"
+
+"vec3 linear2srgb(vec3 val)"
+"{"
+    "if (val.x < 0.0031308) val.x *= 12.92; else val.x = 1.055*pow(val.x, 1.0 / 2.4) - 0.055;"
+    "if (val.y < 0.0031308) val.y *= 12.92; else val.y = 1.055*pow(val.y, 1.0 / 2.4) - 0.055;"
+    "if (val.z < 0.0031308) val.z *= 12.92; else val.z = 1.055*pow(val.z, 1.0 / 2.4) - 0.055;"
+    "return val;"
+"}\n"
+
+"void main(void)"
+"{"
+    "ivec2 p = ivec2(gl_FragCoord.xy);"
+    "p.x += unXOffset;"
+    "vec3 col = texelFetch(unTex0, p, 0).xyz;"
+    "col = linear2srgb(col);"
+    "col *= unFade.x;"
+    "outColor = vec4(col, 1.0);"
 "}";
 
 #if !defined(ANDROID)
@@ -68,8 +104,12 @@ using namespace ImmCore;
 
 namespace ExePlayer
 {
-    bool Resolve::Init(piRenderer* renderer, int superSample)
+    bool Resolve::Init(piRenderer* renderer, int superSample, int msaaSamples)
     {
+        mExplicitUniforms = true;
+#if defined(__APPLE__)
+        mExplicitUniforms = false;
+#endif
         mRenderStateResolve = renderer->CreateRasterState(false, true, piRenderer::CullMode::NONE, false, false);
         if (!mRenderStateResolve)
             return false;
@@ -78,11 +118,12 @@ namespace ExePlayer
         if (!mBlendStateNone)
             return false;
 
-        const piShaderOptions ops = { 1,{ { "SS", superSample } } };
+        const piShaderOptions ops = { 2,{ { "SS", superSample }, { "EXPLICIT_UNIFORMS", mExplicitUniforms ? 1 : 0 } } };
         char error[2048];
         if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
         {
-            mAAResolveShader = renderer->CreateShader(&ops, vsShaderAAResolve, nullptr, nullptr, nullptr, fsShaderAAResolve, error);
+            const char *fs = (msaaSamples > 1) ? fsShaderAAResolve : fsShaderResolve;
+            mAAResolveShader = renderer->CreateShader(&ops, vsShaderAAResolve, nullptr, nullptr, nullptr, fs, error);
         }
         else
         {
@@ -92,7 +133,19 @@ namespace ExePlayer
 #endif
         }
         if (!mAAResolveShader)
+        {
+            fprintf(stderr, "Resolve shader compile failed: %s\n", error);
             return false;
+        }
+
+        if (!mExplicitUniforms)
+        {
+            mFadeLoc = renderer->GetShaderUniformLocation(mAAResolveShader, "unFade");
+            mOffsetLoc = renderer->GetShaderUniformLocation(mAAResolveShader, "unXOffset");
+            mTexLoc = renderer->GetShaderUniformLocation(mAAResolveShader, "unTex0");
+            if (mFadeLoc < 0 || mOffsetLoc < 0 || mTexLoc < 0)
+                return false;
+        }
 
         return true;
     }
@@ -126,8 +179,15 @@ namespace ExePlayer
 
         float data[4] = { fade, 0.0f, 0.0f, 0.0f };
         renderer->AttachShader(mAAResolveShader);
-        renderer->SetShaderConstant4F(0, (float*)data, 1);
-        renderer->SetShaderConstant1I(1, &unXOffset, 1);
+        const int fadeLoc = mExplicitUniforms ? 0 : mFadeLoc;
+        const int offsetLoc = mExplicitUniforms ? 1 : mOffsetLoc;
+        renderer->SetShaderConstant4F(fadeLoc, (float*)data, 1);
+        renderer->SetShaderConstant1I(offsetLoc, &unXOffset, 1);
+        if (!mExplicitUniforms)
+        {
+            const int texUnit = 0;
+            renderer->SetShaderConstant1I(mTexLoc, &texUnit, 1);
+        }
         renderer->AttachTextures(1, colorTextureM);
         renderer->DrawUnitQuad_XY(1);
         renderer->DettachTextures();

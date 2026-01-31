@@ -13,10 +13,14 @@ namespace ExePlayer
         ImmCore::piRasterState mRenderStateResolve;
         ImmCore::piShader mAAResolveShader;
         ImmCore::piBlendState mBlendStateNone;
+        int mFadeLoc = 0;
+        int mOffsetLoc = 1;
+        int mTexLoc = 0;
+        bool mExplicitUniforms = true;
 
     public:
 
-        bool Init(ImmCore::piRenderer* renderer, int superSample);
+        bool Init(ImmCore::piRenderer* renderer, int superSample, int msaaSamples);
         void DeInit(ImmCore::piRenderer* renderer);
         void Do(ImmCore::piRenderer* renderer, ImmCore::piRTarget target, const int *vp, const int unXOffset, const float fade, ImmCore::piTexture colorTextureM);
     };

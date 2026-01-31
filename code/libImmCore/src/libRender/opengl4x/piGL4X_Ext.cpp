@@ -194,8 +194,14 @@ NGLEXTINFO *piGL4X_Ext_Init(piRenderer::piReporter *reporter)
 
         if( !info->myglfunc[i] )
         {
+#if defined(__APPLE__)
+            info->myglfunc[i] = 0;
+            str += 1 + strlen(str);
+            continue;
+#else
             reporter->Error( str, 0 );
             return 0;
+#endif
         }
 
         str += 1 + strlen(str);

@@ -59,6 +59,7 @@ set(IMMCORE_SOURCES
     ${CODE_DIR}/libImmCore/src/libBasics/macos/piMutex.cpp
     ${CODE_DIR}/libImmCore/src/libBasics/macos/piThread.cpp
     ${CODE_DIR}/libImmCore/src/libBasics/macos/piSystemInfo.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piWindow.mm
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piBitInterlacer.cpp
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piPredictors.cpp
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piQuantize.cpp
@@ -169,7 +170,7 @@ target_include_directories(ImmUnity PUBLIC ${CODE_DIR})
 target_link_libraries(ImmUnity PRIVATE libImmPlayer libImmImporter libImmCore)
 set_target_properties(ImmUnity PROPERTIES
     BUNDLE TRUE
-    OUTPUT_NAME "ImmUnity"
+    OUTPUT_NAME "ImmUnityPlugin"
     PREFIX ""
 )
 
@@ -178,8 +179,27 @@ set_target_properties(ImmUnity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/unity
 )
 
+set(IMMVIEWER_SOURCES
+    ${CODE_DIR}/appImmViewer/src/macos/main.mm
+    ${CODE_DIR}/appImmViewer/src/mymain.cpp
+    ${CODE_DIR}/appImmViewer/src/resolve.cpp
+    ${CODE_DIR}/appImmViewer/src/settings.cpp
+    ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
+    ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
+    ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
+    ${CODE_DIR}/appImmViewer/src/simpleJSON/JSONValue.cpp
+)
+
+add_executable(appImmViewer ${IMMVIEWER_SOURCES})
+target_include_directories(appImmViewer PUBLIC ${CODE_DIR})
+target_link_libraries(appImmViewer PRIVATE libImmPlayer libImmImporter libImmCore)
+target_compile_definitions(appImmViewer PRIVATE DISABLE_VR=1)
+set_target_properties(appImmViewer PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/viewer
+)
+
 set(IMMUNITY_SAMPLE_DIR ${CODE_DIR}/ImmUnitySampleProject/Assets/Plugins/OSX)
 add_custom_command(TARGET ImmUnity POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_SAMPLE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ImmUnity>" "${IMMUNITY_SAMPLE_DIR}/ImmUnity.bundle"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ImmUnity>" "${IMMUNITY_SAMPLE_DIR}/ImmUnityPlugin.bundle"
 )

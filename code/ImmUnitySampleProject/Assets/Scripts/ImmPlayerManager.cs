@@ -128,6 +128,16 @@ namespace ImmPlayer
 
             Log("=== IMM Player Initialization Started ===");
 
+#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
+            if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore)
+            {
+                LogError("IMM Player requires OpenGL Core on macOS.");
+                LogError($"Current Graphics API: {SystemInfo.graphicsDeviceType}");
+                LogError("Switch the macOS Graphics API to OpenGLCore and restart Unity (or build a macOS player with OpenGLCore). ");
+                return false;
+            }
+#endif
+
             int colorSpace = useLinearColorSpace ? 0 : 1;
 
             // Use Unity's temporary cache path for temporary files
@@ -143,7 +153,7 @@ namespace ImmPlayer
                     LogError("Possible causes:");
                     LogError("  1. Missing DLL dependencies in Assets/Plugins/x86_64/");
                     LogError("  2. DLL platform settings incorrect (must be x86_64, Standalone + Editor)");
-                    LogError("  3. Graphics API not supported (requires DirectX 11 or OpenGL Core)");
+                    LogError("  3. Graphics API not supported (requires DirectX 11 or OpenGL Core; Metal is not supported)");
                     LogError($"  4. Check native log file: {logFileName}");
                     return false;
                 }
@@ -492,4 +502,3 @@ namespace ImmPlayer
         #endregion
     }
 }
-

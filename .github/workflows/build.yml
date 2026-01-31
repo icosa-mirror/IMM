@@ -154,5 +154,5 @@ jobs:
       with:
         name: ImmUnityPlugin-macOS
         path: |
-          code/ImmUnitySampleProject/Assets/Plugins/OSX/ImmUnity.bundle
+          code/ImmUnitySampleProject/Assets/Plugins/OSX/ImmUnityPlugin.bundle
         if-no-files-found: error

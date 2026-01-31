@@ -58,11 +58,19 @@ namespace ImmPlayer
         log->Printf(LT_MESSAGE, L"Player Init...");
 
 #if !defined(ANDROID)
+#if defined(__APPLE__)
+        if (configuration->multisamplingLevel < 1)
+        {
+            log->Printf(LT_ERROR, L"Invalid AA level");
+            return false;
+        }
+#else
         if (configuration->multisamplingLevel != 8)
         {
             log->Printf(LT_ERROR, L"We only suport 8xAA");
             return false;
         }
+#endif
 #endif
 
         #ifdef RENDER_BUDGET
@@ -176,6 +184,7 @@ namespace ImmPlayer
         if( !mCurrentPerfInfo.paintRenderingStrategy.InitCopyW(kRenderingTechniques[mPaintRenderingTechnique]) )
             return false;
 
+        log->Printf(LT_MESSAGE, L"Player Init OK");
         return true;
     }
 

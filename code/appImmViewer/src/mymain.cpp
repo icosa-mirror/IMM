@@ -1,9 +1,15 @@
+#if defined(__APPLE__)
+#define AA 1
+#else
 #define AA 8
+#endif
 
 // Set this to 1, ONLY if you need to build the viewer without the Oculus SDF installed
 // This flag is NOT meant to force mono rendering. Mono rendering can always be forced
 // from the config file even if the viewer is built to do VR
+#ifndef DISABLE_VR
 #define DISABLE_VR 0
+#endif
 
 #include <float.h>
 #include "libImmCore/src/libBasics/piTimer.h"
@@ -64,8 +70,24 @@ private:
 public:
     MainRenderReporter(piLog* log) : piRenderer::piReporter() { mLog = log; }
     virtual ~MainRenderReporter() {}
-    void Info(const char* str) { pistr2ws(tmp, 2048, str); mLog->Printf(LT_MESSAGE, L"%s", tmp); }
-    void Error(const char* str, int level) { pistr2ws(tmp, 2048, str);  mLog->Printf(LT_ERROR, L"%s", tmp); }
+    void Info(const char* str)
+    {
+        pistr2ws(tmp, 2048, str);
+#if defined(WINDOWS)
+        mLog->Printf(LT_MESSAGE, L"%s", tmp);
+#else
+        mLog->Printf(LT_MESSAGE, L"%ls", tmp);
+#endif
+    }
+    void Error(const char* str, int level)
+    {
+        pistr2ws(tmp, 2048, str);
+#if defined(WINDOWS)
+        mLog->Printf(LT_ERROR, L"%s", tmp);
+#else
+        mLog->Printf(LT_ERROR, L"%ls", tmp);
+#endif
+    }
     void Begin(uint64_t memCurrent, uint64_t memPeak, int texCurrent, int texPeak)
     {
         mLog->Printf(LT_MESSAGE, L"---- Renderer Report ---- ");
@@ -85,7 +107,9 @@ public:
 //----------------------------------------------------------------------------------
 
 #if !defined(ANDROID)
+#if defined(WINDOWS)
 extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
+#endif
 #endif
 
 
@@ -139,10 +163,18 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     {
         settingsFileName = args[1];
     }
+#if defined(WINDOWS)
     mLog.Printf(LT_MESSAGE, L"Reading config file \"%s\"...", settingsFileName);
+#else
+    mLog.Printf(LT_MESSAGE, L"Reading config file \"%ls\"...", settingsFileName);
+#endif
 
     if (!mSettings.Init(settingsFileName, &mLog))
+    {
+        mLog.Printf(LT_ERROR, L"Failed to load settings");
         return false;
+    }
+    mLog.Printf(LT_MESSAGE, L"Settings loaded");
 
     mSuperSample = mSettings.mRendering.mSupersampling;
     if (mSuperSample < 1) { mSuperSample = 1; mLog.Printf(LT_WARNING, L"Supersampling factor must be between 1 and 3 (1 sample per pixel and 3x3 samples per pixel"); }
@@ -152,12 +184,14 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     mWinMgr = piWindowMgr_Init();
     if (!mWinMgr)
     {
+        mLog.Printf(LT_ERROR, L"Failed to init window manager");
         mSettings.End();
         return false;
     }
     mWindow = piWindow_init(mWinMgr, L"rendering", mSettings.mWindow.mPositionX, mSettings.mWindow.mPositionY, mSettings.mWindow.mWidth, mSettings.mWindow.mHeight, mSettings.mWindow.mFullScreen, !mSettings.mWindow.mFullScreen, false, mSettings.mWindow.mFullScreen);
     if (!mWindow)
     {
+        mLog.Printf(LT_ERROR, L"Failed to create window");
         mSettings.End();
         return false;
     }
@@ -193,6 +227,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
         }
     }
     mRenderer->SetActiveWindow(0);
+    mLog.Printf(LT_MESSAGE, L"Renderer initialized");
 
     //=============
     mWindowSize = ivec2(mSettings.mWindow.mWidth, mSettings.mWindow.mHeight);
@@ -318,8 +353,13 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     mSoundEngineBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&mLog);
     if (!mSoundEngineBackend)
     {
-        mSettings.End();
-        return false;
+        mLog.Printf(LT_WARNING, L"Sound backend unavailable; continuing without audio");
+        mSoundEngineBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &mLog);
+        if (!mSoundEngineBackend)
+        {
+            mSettings.End();
+            return false;
+        }
     }
 
     const int num = mSoundEngineBackend->GetNumDevices();
@@ -327,7 +367,11 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     for (int i = 0; i < num; ++i)
     {
         const wchar_t * deviceName = mSoundEngineBackend->GetDeviceName(i);
+#if defined(WINDOWS)
         mLog.Printf(LT_MESSAGE, L"    %d: %s", i, deviceName);
+#else
+        mLog.Printf(LT_MESSAGE, L"    %d: %ls", i, deviceName);
+#endif
     }
 
     int soundDevice = -1;
@@ -369,14 +413,17 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     }
 
     const wchar_t *deviceName = (soundDevice == -1) ? L"Default" : mSoundEngineBackend->GetDeviceName(soundDevice);
+#if defined(WINDOWS)
     mLog.Printf(LT_MESSAGE, L"Sound device selected: \"%s\", requested \"%s\"", deviceName, mSettings.mSound.mDevice.GetS());
+#else
+    mLog.Printf(LT_MESSAGE, L"Sound device selected: \"%ls\", requested \"%ls\"", deviceName, mSettings.mSound.mDevice.GetS());
+#endif
 
     piSoundEngineBackend::Configuration config;
 
     if (!mSoundEngineBackend->Init(piWindow_getHandle(mWindow), soundDevice, &config)) // TODO: copy max sounds setting from app
     {
-        mSettings.End();
-        return false;
+        mLog.Printf(LT_WARNING, L"Sound backend init failed; continuing without audio");
     }
 
 
@@ -387,38 +434,70 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     {
         const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
         const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        mColorTextureM = mRenderer->CreateTexture(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0); if (!mColorTextureM) return false;
-        mDepthTextureM = mRenderer->CreateTexture(0, &infozm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0); if (!mDepthTextureM) return false;
+        mLog.Printf(LT_MESSAGE, L"Creating render textures (%d x %d)", mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample);
+        mColorTextureM = mRenderer->CreateTexture(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0);
+        if (!mColorTextureM)
+        {
+            mLog.Printf(LT_ERROR, L"Failed to create color render texture");
+            return false;
+        }
+        mDepthTextureM = mRenderer->CreateTexture(0, &infozm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0);
+        if (!mDepthTextureM)
+        {
+            mLog.Printf(LT_ERROR, L"Failed to create depth render texture");
+            return false;
+        }
     }
     else
     {
         const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
         const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
         //const piRenderer::TextureInfo2 infozm = { piRenderer::TextureType::T2D, piRenderer::Format::D1_32_FLOAT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        mColorTextureM = mRenderer->CreateTexture2(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 1 + 2); if (!mColorTextureM) return false;
-        mDepthTextureM = mRenderer->CreateTexture2(0, &infozm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 2); if (!mDepthTextureM) return false;
+        mColorTextureM = mRenderer->CreateTexture2(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 1 + 2);
+        if (!mColorTextureM)
+        {
+            mLog.Printf(LT_ERROR, L"Failed to create color render texture (DX path)");
+            return false;
+        }
+        mDepthTextureM = mRenderer->CreateTexture2(0, &infozm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 2);
+        if (!mDepthTextureM)
+        {
+            mLog.Printf(LT_ERROR, L"Failed to create depth render texture (DX path)");
+            return false;
+        }
     }
     if (!mColorTextureM || !mDepthTextureM)
     {
+        mLog.Printf(LT_ERROR, L"Render textures missing");
         mSettings.End();
         return false;
     }
-    mRenderTargetM = mRenderer->CreateRenderTarget(mColorTextureM, 0, 0, 0, mDepthTextureM); if (!mRenderTargetM) return false;
-
-
-    if (!mResolve.Init(mRenderer, mSuperSample))
+    mRenderTargetM = mRenderer->CreateRenderTarget(mColorTextureM, 0, 0, 0, mDepthTextureM);
+    if (!mRenderTargetM)
     {
+        mLog.Printf(LT_ERROR, L"Failed to create render target");
+        return false;
+    }
+
+
+    mLog.Printf(LT_MESSAGE, L"Initializing resolve");
+    if (!mResolve.Init(mRenderer, mSuperSample, AA))
+    {
+        mLog.Printf(LT_ERROR, L"Resolve init failed");
         mSettings.End();
         return false;
     }
+    mLog.Printf(LT_MESSAGE, L"Resolve initialized");
 
     piSoundEngine* soundEngine = mSoundEngineBackend->GetEngine();
 
     if (!mViewer.Init(nullptr, mRenderer, soundEngine, &mLog, &mTimer, mStereoMode, &mSettings))
     {
+        mLog.Printf(LT_ERROR, L"Viewer init failed");
         mSettings.End();
         return false;
     }
+    mLog.Printf(LT_MESSAGE, L"Viewer initialized");
 
     // enter render loop
 
@@ -439,6 +518,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     static const uint32_t kRenderBudgetMicroseconds = 9000;
 #elif defined(ANDROID)
     static const uint32_t kRenderBudgetMicroseconds = 5000;
+#else
+    static const uint32_t kRenderBudgetMicroseconds = 9000;
 #endif
 
 

@@ -249,21 +249,11 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
     va_list arglist;
     va_start(arglist, format);
 
-    int maxLen = pivscwprintf(format, arglist) + 1;
-    if (maxLen < 2)
-    {
-        va_end(arglist);
-        return;
-    }
-    wchar_t *tmpstr = (wchar_t*)malloc(maxLen * sizeof(wchar_t));
-    if (!tmpstr)
-    {
-        va_end(arglist);
-        return;
-    }
-
-    pivwsprintf(tmpstr, maxLen, format, arglist);
+    wchar_t tmpstr[4096];
+    const int res = vswprintf(tmpstr, sizeof(tmpstr) / sizeof(tmpstr[0]), format, arglist);
     va_end(arglist);
+    if (res < 0)
+        return;
 
     for (int i = 0; i < me->mNumLoggers; i++)
     {
@@ -272,7 +262,6 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
     }
 
     me->mMessageCounter++;
-    free(tmpstr);
 }
 
 }

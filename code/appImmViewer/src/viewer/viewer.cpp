@@ -1,6 +1,8 @@
 #if defined(ANDROID)
 #define AA 4
 #include "android/log.h"
+#elif defined(__APPLE__)
+#define AA 1
 #else
 #define AA 8
 #endif
