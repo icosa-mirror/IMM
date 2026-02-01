@@ -2139,7 +2139,15 @@ void android_main( struct android_app * app )
                         const char *assetDir = getAssetDirectory();
                         if (assetDir != nullptr && assetDir[0] != '\0')
                         {
-                            std::string assetImmPath = std::string(assetDir) + "sample1.imm";
+                            // Ensure path separator
+                            std::string assetImmPath = std::string(assetDir);
+                            if (assetImmPath.back() != '/') {
+                                assetImmPath += "/";
+                            }
+                            assetImmPath += "sample1.imm";
+                            
+                            ALOGV("    Checking for sample1.imm at: %s", assetImmPath.c_str());
+                            
                             fp = fopen(assetImmPath.c_str(), "rb");
                             if (fp)
                             {
@@ -2148,6 +2156,14 @@ void android_main( struct android_app * app )
                                 shouldFree = true;
                                 ALOGV("    Loading Quill: %s from assets directory", assetImmPath.c_str());
                             }
+                            else
+                            {
+                                ALOGE("    FAILED to open sample1.imm at: %s, errno=%d", assetImmPath.c_str(), errno);
+                            }
+                        }
+                        else
+                        {
+                            ALOGE("    Asset directory is null or empty!");
                         }
                     }
                 }

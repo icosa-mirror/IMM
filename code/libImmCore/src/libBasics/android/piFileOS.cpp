@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <android/log.h>
 
 #include "piCStr.h"
 
@@ -21,6 +22,10 @@ bool piFile::Open(const wchar_t *name, const wchar_t *mode)
 	FILE * fp = fopen(nameStr.c_str(), modeStr.c_str());
 	if(!fp)
 	{
+		// Log file open failure for debugging
+		int err = errno;
+		__android_log_print(ANDROID_LOG_ERROR, "ImmPlayer", "piFile::Open failed: path=%s, mode=%s, errno=%d (%s)", 
+			nameStr.c_str(), modeStr.c_str(), err, strerror(err));
 		return false;
 	}
 

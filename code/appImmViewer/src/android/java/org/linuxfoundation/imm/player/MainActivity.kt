@@ -106,10 +106,51 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
       cacheDir.mkdir()
     }
     nativeSetAssetDirectory(Utils.assetsDirectory)
-    unpackQuillAssets()
+    
+    // Extract assets synchronously to avoid race condition
+    val shouldReload = Utils.shouldReloadAssets()
+    extractAssetSync(Utils.quillDemoPath, shouldReload)
+    extractAssetSync(Utils.quillErrorPath, shouldReload)
+    
+    // Verify the demo file exists
+    val demoFile = File(Utils.assetsDirectory, Utils.quillDemoPath)
+    if (!demoFile.exists()) {
+      Log.e(TAG, "DEMO FILE NOT FOUND: ${demoFile.absolutePath}")
+    } else {
+      Log.d(TAG, "Demo file ready: ${demoFile.absolutePath}, size: ${demoFile.length()}")
+    }
 
     if (!handleNewIntent(intent)) {
-      loadImm("${applicationContext.filesDir.path}/${Utils.quillDemoPath}")
+      val immPath = "${applicationContext.filesDir.path}/${Utils.quillDemoPath}"
+      Log.d(TAG, "Loading IMM from path: $immPath")
+      loadImm(immPath)
+    }
+  }
+  
+  private fun extractAssetSync(assetName: String, forceExtract: Boolean) {
+    val assetPath = Utils.assetsDirectory + assetName
+    val file = File(assetPath)
+    
+    if (!forceExtract && file.exists()) {
+      Log.d(TAG, "$assetPath already exists, size: ${file.length()}")
+      return
+    }
+    
+    if (file.exists()) {
+      file.delete()
+    }
+    
+    Log.d(TAG, "Extracting $assetName to $assetPath")
+    try {
+      file.parentFile?.mkdirs()
+      resources.assets.open(assetName).use { input ->
+        file.outputStream().use { output ->
+          input.copyTo(output)
+        }
+      }
+      Log.d(TAG, "Successfully extracted $assetName, size: ${file.length()}")
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to extract $assetName: $e")
     }
   }
 
