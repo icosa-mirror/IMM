@@ -192,6 +192,53 @@ struct ImmUnityPlugin
 // this is the only global data structure, live cycle is plugin load/unload
 static ImmUnityPlugin gImmUnityPlugin;
 
+#if defined(__ANDROID__) || defined(ANDROID)
+// Deferred initialization for Android - renderer must be initialized on render thread
+static struct {
+	bool needsInit = false;
+	bool isInitialized = false;
+	int colorSpace = 0;
+	int antialiasing = 8;
+} sAndroidDeferredInit;
+
+// Called on render thread to complete initialization
+static bool AndroidCompleteInit() {
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "AndroidCompleteInit - completing deferred init on render thread");
+
+__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing GLES renderer...");
+	if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 1, false, false, gImmUnityPlugin.IMM.mRenderReporter, false, nullptr))
+	{
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to initialize GLES renderer in deferred init");
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
+
+	// PLAYER
+	Player::Configuration conf;
+	conf.colorSpace = Drawing::ColorSpace::Gamma;
+	conf.depthBuffer = DepthBuffer::Linear01;
+	conf.clipDepth = ClipSpaceDepth::FromNegativeOneToOne;
+	conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
+	conf.frontIsCCW = true;
+	conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
+
+__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing ImmPlayer...");
+	if (!gImmUnityPlugin.IMM.mPlayer.Init(gImmUnityPlugin.IMM.mRenderer, gImmUnityPlugin.IMM.mSoundBackend->GetEngine(), &gImmUnityPlugin.IMM.mLog, &gImmUnityPlugin.IMM.mTimer, &conf))
+	{
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to initialize ImmPlayer in deferred init");
+		gImmUnityPlugin.IMM.mRenderer->Deinitialize();
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
+
+	sAndroidDeferredInit.isInitialized = true;
+	sAndroidDeferredInit.needsInit = false;
+	return true;
+}
+#endif
+
 static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType eventType)
 {
 	// Create graphics API implementation upon initialization
@@ -227,33 +274,67 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 	}
 }
 
+static int sRenderEventCount = 0;
 static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 {
+#if defined(__ANDROID__) || defined(ANDROID)
+	if (sRenderEventCount < 5) {
+		__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "iOnRenderEvent called, event_id=%d", event_id);
+		sRenderEventCount++;
+	}
+
+	// Complete deferred initialization on first render event (we now have GL context)
+	if (sAndroidDeferredInit.needsInit && !sAndroidDeferredInit.isInitialized) {
+		if (!AndroidCompleteInit()) {
+			__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Deferred init failed - rendering disabled");
+			sAndroidDeferredInit.needsInit = false; // Don't keep retrying
+			return;
+		}
+	}
+
+	// Skip rendering if not initialized
+	if (!sAndroidDeferredInit.isInitialized) {
+		return;
+	}
+#endif
 	int numVp = 1;
 	float oldVp[6];
 	gImmUnityPlugin.IMM.mRenderer->GetViewports(&numVp, oldVp);
 	if (numVp < 1) return;
 
-	//const int eventType = (event_id >> 0) & 0xff;
+//const int eventType = (event_id >> 0) & 0xff;
 	const int cameraID  = (event_id >> 8) & 0xff;
+	
+	// Safety check: ensure cameraID is valid before accessing camera data
+	if (cameraID < 0 || cameraID >= 256) {
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid cameraID: %d", cameraID);
+		return;
+	}
+	
 	const int stereoType = gImmUnityPlugin.FromUnity.mCamera[cameraID].mStereoType;
 	const ivec2 res = ivec2(int(oldVp[2]), int(oldVp[3]));
 
 	if (stereoType == 0) // mono
 	{
-
+	
 		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-            fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-            gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::None);
+		           fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
+			gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::None);
 		gImmUnityPlugin.IMM.mPlayer.RenderMono(res,0);
 	}
-	else if (stereoType == 1) // two pass stereo
+else if (stereoType == 1) // two pass stereo
 	{
 		const int eyeID = event_id & 1;
+		
+		// Safety check: ensure eyeID is valid
+		if (eyeID < 0 || eyeID > 1) {
+			__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid eyeID: %d", eyeID);
+			return;
+		}
 
-        gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-            fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-            gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Fallback);
+        	gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
+             fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
+             gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Fallback);
 
 		if (eyeID == 0) // left eye
 		{
@@ -390,6 +471,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 	const wchar_t *wstrLogFileName = (logFileName == nullptr) ? L"imm_player_log.txt" : pistr2ws(logFileName);
 
 #if defined(__ANDROID__) || defined(ANDROID)
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init called - colorSpace=%d, antialiasing=%d", colorSpace, antialiasing);
 #else // !ANDROID
 	#ifdef _DEBUG
 	if (!gImmUnityPlugin.IMM.mLog.Init(wstrLogFileName, PILOG_TXT + PILOG_CNS))
@@ -403,11 +485,20 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 #endif // ANDROID
 
 	if (!gImmUnityPlugin.IMM.mTimer.Init())
+	{
+#if defined(__ANDROID__) || defined(ANDROID)
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Timer init failed");
+#endif
 		return -1;
+	}
+#if defined(__ANDROID__) || defined(ANDROID)
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Timer initialized");
+#endif
 
     // SOUND ENGINE
 #if defined(__ANDROID__) || defined(ANDROID)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Sound backend created (Null)");
 #else
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
 #endif
@@ -458,15 +549,27 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     if (!gImmUnityPlugin.IMM.mRenderer)
     {
         gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to create Renderer.");
+#if defined(__ANDROID__) || defined(ANDROID)
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to create GLES renderer");
+#endif
 		return -1;
     }
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Renderer created successfully");
+#if defined(__ANDROID__) || defined(ANDROID)
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer created");
+#endif
 
 #if defined(__ANDROID__) || defined(ANDROID)
-	if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 1, false, false, gImmUnityPlugin.IMM.mRenderReporter, false, nullptr))
+	// On Android, defer renderer and player init to render thread (first iOnRenderEvent call)
+	// because GL context is not available on this thread
+	sAndroidDeferredInit.colorSpace = colorSpace;
+	sAndroidDeferredInit.antialiasing = antialiasing;
+	sAndroidDeferredInit.needsInit = true;
+	sAndroidDeferredInit.isInitialized = false;
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - renderer init deferred to render thread");
+	return 0;
 #else
     if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 0, true, false, gImmUnityPlugin.IMM.mRenderReporter, false, gImmUnityPlugin.UnityAPI.mDevice))
-#endif
     {
         gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to initialize Renderer.");
         return -1;
@@ -475,14 +578,6 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 
 	// PLAYER
     Player::Configuration conf;
-#if defined(__ANDROID__) || defined(ANDROID)
-    conf.colorSpace = Drawing::ColorSpace::Gamma;
-    conf.depthBuffer = DepthBuffer::Linear01;
-    conf.clipDepth = ClipSpaceDepth::FromNegativeOneToOne;
-    conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
-    conf.frontIsCCW = true;
-    conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
-#else
     conf.colorSpace = static_cast<Drawing::ColorSpace>(colorSpace);
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"ColorSpace: %s", conf.colorSpace == Drawing::ColorSpace::Gamma ? L"Gamma" : L"Linear" );
 
@@ -495,7 +590,6 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Rending in Static mode");
 
-#endif
     if (!gImmUnityPlugin.IMM.mPlayer.Init(gImmUnityPlugin.IMM.mRenderer, gImmUnityPlugin.IMM.mSoundBackend->GetEngine(), &gImmUnityPlugin.IMM.mLog, &gImmUnityPlugin.IMM.mTimer, &conf))
 	{
         gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to initialize ImmPlayer.");
@@ -508,6 +602,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"IMMl Player initialized successfully.");
 
 	return 0;
+#endif
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT End(void)

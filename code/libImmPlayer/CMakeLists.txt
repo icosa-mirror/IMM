@@ -19,6 +19,9 @@ add_library(
     ${libImmPlayer-dir}/src/layerRenderers/layerRendererModel/layerRendererModel.cpp
 )
 
+# Define ANDROID macro for conditional compilation
+target_compile_definitions(libImmPlayer PRIVATE ANDROID)
+
 # Shader transformation - convert GLES shaders to C headers
 # Model shaders are in gles subdirectory
 add_custom_target(
