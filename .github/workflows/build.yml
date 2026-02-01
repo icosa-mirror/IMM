@@ -107,6 +107,10 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :appImmViewer:assembleDebug
 
+    - name: Build appImmViewer (VR)
+      working-directory: code/projects/android
+      run: ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vr && ./gradlew :appImmViewer:assembleDebug -PimmNonVr=OFF -PimmBuildDir=build_vr
+
     - name: Upload Unity Plugin SO
       uses: actions/upload-artifact@v4
       with:
@@ -129,6 +133,14 @@ jobs:
         name: appImmViewer-Android-APK
         path: |
           code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
+        if-no-files-found: error
+
+    - name: Upload Android Viewer VR APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: appImmViewer-Android-APK-VR
+        path: |
+          code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk
         if-no-files-found: error
 
   build-macos:

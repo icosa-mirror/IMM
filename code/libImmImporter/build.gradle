@@ -6,6 +6,7 @@ plugins {
 android {
     namespace 'com.immersive.libimmimporter'
     compileSdk 34
+    ndkVersion "26.1.10909125"
 
     defaultConfig {
         minSdk 26
