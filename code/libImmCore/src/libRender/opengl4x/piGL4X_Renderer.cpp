@@ -613,11 +613,13 @@ piRTarget piRendererGL4X::CreateRenderTarget( piTexture vtex0, piTexture vtex1, 
     {
         oglCreateFramebuffers(1, (GLuint*)&me->mObjectID);
     }
+#if defined(__APPLE__)
     else
     {
         glGenFramebuffers(1, (GLuint*)&me->mObjectID);
         glBindFramebuffer(GL_FRAMEBUFFER, me->mObjectID);
     }
+#endif
 
 
     if( zbu )
@@ -629,11 +631,13 @@ piRTarget piRendererGL4X::CreateRenderTarget( piTexture vtex0, piTexture vtex1, 
             else
                 oglNamedFramebufferTexture(me->mObjectID, GL_DEPTH_ATTACHMENT, zbu->mObjectID, 0);
         }
+#if defined(__APPLE__)
         else
         {
             GLenum target = (me->mSamples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, zbu->mObjectID, 0);
         }
+#endif
     }
     else
     {
@@ -644,11 +648,13 @@ piRTarget piRendererGL4X::CreateRenderTarget( piTexture vtex0, piTexture vtex1, 
             else
                 oglNamedFramebufferTexture(me->mObjectID, GL_DEPTH_ATTACHMENT, 0, 0);
         }
+#if defined(__APPLE__)
         else
         {
             GLenum target = (me->mSamples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, target, 0, 0);
         }
+#endif
     }
 
     GLenum       mMRT[4];
@@ -664,11 +670,13 @@ piRTarget piRendererGL4X::CreateRenderTarget( piTexture vtex0, piTexture vtex1, 
                 else
                     oglNamedFramebufferTexture(me->mObjectID, GL_COLOR_ATTACHMENT0 + i, tex[i]->mObjectID, 0);
             }
+#if defined(__APPLE__)
             else
             {
                 GLenum target = (me->mSamples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, target, tex[i]->mObjectID, 0);
             }
+#endif
             mMRT[i] = GL_COLOR_ATTACHMENT0 + i;
             mNumMRT++;
         }
@@ -681,23 +689,31 @@ piRTarget piRendererGL4X::CreateRenderTarget( piTexture vtex0, piTexture vtex1, 
                 else
                     oglNamedFramebufferTexture(me->mObjectID, GL_COLOR_ATTACHMENT0 + i, 0, 0);
             }
+#if defined(__APPLE__)
             else
             {
                 GLenum target = (me->mSamples > 1) ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
                 glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, target, 0, 0);
             }
+#endif
             mMRT[i] = 0;
         }
     }
 
     if (oglNamedFramebufferDrawBuffers)
         oglNamedFramebufferDrawBuffers(me->mObjectID, mNumMRT, mMRT);
+#if defined(__APPLE__)
     else
         glDrawBuffers(mNumMRT, mMRT);
+#endif
 
 
     GLenum st = oglCheckNamedFramebufferStatus ? oglCheckNamedFramebufferStatus(me->mObjectID, GL_FRAMEBUFFER)
+#if defined(__APPLE__)
                                                : glCheckFramebufferStatus(GL_FRAMEBUFFER);
+#else
+                                               : GL_FRAMEBUFFER_UNSUPPORTED;
+#endif
     if (st != GL_FRAMEBUFFER_COMPLETE)
     {
         if (mReporter)
@@ -718,8 +734,10 @@ void piRendererGL4X::DestroyRenderTarget( piRTarget obj )
 
     if (oglDeleteFramebuffers)
         oglDeleteFramebuffers( 1, (GLuint*)&me->mObjectID );
+#if defined(__APPLE__)
     else
         glDeleteFramebuffers(1, (GLuint*)&me->mObjectID);
+#endif
 }
 
 void piRendererGL4X::RenderTargetSampleLocations(piRTarget vdst, const float *locations )
