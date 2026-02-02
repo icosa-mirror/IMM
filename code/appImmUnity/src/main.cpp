@@ -316,7 +316,11 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	
 	// Safety check: ensure cameraID is valid before accessing camera data
 	if (cameraID < 0 || cameraID >= 256) {
+		#if defined(__ANDROID__) || defined(ANDROID)
 		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid cameraID: %d", cameraID);
+		#else
+		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid cameraID: %d", cameraID);
+		#endif
 		return;
 	}
 	
@@ -337,7 +341,11 @@ else if (stereoType == 1) // two pass stereo
 		
 		// Safety check: ensure eyeID is valid
 		if (eyeID < 0 || eyeID > 1) {
+			#if defined(__ANDROID__) || defined(ANDROID)
 			__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid eyeID: %d", eyeID);
+			#else
+			gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid eyeID: %d", eyeID);
+			#endif
 			return;
 		}
 
