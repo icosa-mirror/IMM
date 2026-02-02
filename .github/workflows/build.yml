@@ -11,6 +11,7 @@ on:
 
 jobs:
   build-windows:
+    name: Windows - Unity Plugin + Viewer (Release x64)
     runs-on: windows-latest
 
     strategy:
@@ -64,6 +65,7 @@ jobs:
         if-no-files-found: error
 
   build-android:
+    name: Android - Unity Plugin + Viewer (non-VR + VR)
     runs-on: ubuntu-latest
 
     steps:
@@ -144,6 +146,7 @@ jobs:
         if-no-files-found: error
 
   build-macos:
+    name: macOS - Unity Plugin + Viewer
     runs-on: macos-latest
 
     steps:
