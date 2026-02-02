@@ -149,20 +149,12 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vr && ./gradlew :appImmViewer:assembleDebug -PimmNonVr=OFF -PimmBuildDir=build_vr
 
-    - name: Upload Unity Plugin SO
+    - name: Upload Unity Plugin
       uses: actions/upload-artifact@v4
       with:
-        name: ImmUnityPlugin-Android-arm64-v8a
+        name: ImmUnityPlugin-Android
         path: |
           code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so
-        if-no-files-found: warn
-
-    - name: Upload AAR
-      uses: actions/upload-artifact@v4
-      with:
-        name: ImmUnityPlugin-Android-AAR
-        path: |
-          code/appImmUnity/Projects/Android/app/build/outputs/aar/*.aar
         if-no-files-found: warn
 
     - name: Upload Android Viewer
