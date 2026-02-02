@@ -243,7 +243,7 @@ std::string ResolveInitialImmPath() {
             assetImmPath += "/";
         }
         assetImmPath += "sample1.imm";
-        fp = fopen(assetImmPath.c_str(), "rb");
+        FILE *fp = fopen(assetImmPath.c_str(), "rb");
         if (fp) {
             fclose(fp);
             return assetImmPath;
