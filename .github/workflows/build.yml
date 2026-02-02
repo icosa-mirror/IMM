@@ -61,11 +61,33 @@ jobs:
         Copy-Item docs/viewer_settings.md $staging
         Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip" -Force
 
+    - name: Package Viewer Artifact (VR)
+      shell: pwsh
+      run: |
+        $staging = "viewer_artifact_vr"
+        New-Item -ItemType Directory -Force $staging | Out-Null
+        Copy-Item code/appImmViewer/exe/appImmViewer_${{ matrix.configuration }}.exe $staging
+        Copy-Item code/appImmViewer/exe/settings.json $staging
+        Copy-Item code/appImmViewer/exe/*.dll $staging
+        Copy-Item docs/viewer_settings.md $staging
+        $settingsPath = Join-Path $staging "settings.json"
+        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $json.Rendering.EnableVR = $true
+        $json.Rendering.RenderingAPI = "OpenGL"
+        $json | ConvertTo-Json -Depth 6 | Set-Content $settingsPath -Encoding UTF8
+        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}-VR.zip" -Force
+
     - name: Upload Viewer Executable
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}
         path: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip
+        if-no-files-found: error
+    - name: Upload Viewer Executable (VR)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}-VR
+        path: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}-VR.zip
         if-no-files-found: error
     - name: Upload Sample IMM
       uses: actions/upload-artifact@v4
