@@ -1744,7 +1744,22 @@ static void ovrApp_HandleInput(ovrApp * app, ANativeActivity * activity)
 
             if ( buttonsReleased & ovrButton_Y )
             {
-                ALOGV("Y button released");
+                const int docId = 0;
+                if (immPlayer.viewer != nullptr && immPlayer.viewer->IsDocumentLoaded(docId))
+                {
+                    const int spawnCount = immPlayer.viewer->GetSpawnAreaCount(docId);
+                    if (spawnCount > 0)
+                    {
+                        int currentSpawn = immPlayer.viewer->GetSpawnArea(docId);
+                        if (currentSpawn < 0)
+                        {
+                            currentSpawn = 0;
+                        }
+                        const int nextSpawn = (currentSpawn + 1) % spawnCount;
+                        immPlayer.viewer->SetSpawnArea(docId, nextSpawn, true);
+                        ALOGV("Switched spawn area to %d/%d", nextSpawn, spawnCount);
+                    }
+                }
             }
 
             if ( buttonsReleased & ovrButton_GripTrigger )

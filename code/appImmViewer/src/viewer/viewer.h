@@ -155,6 +155,7 @@ namespace ExePlayer
         const ImmCore::piImage * GetSpawnAreaScreenshot(int docID, int spawnAreaID);
         int GetInitalSpawnArea(int docID);
         int GetSpawnAreaCount(int docID) { return mPlayer.GetSpawnAreaCount(0); }
+        int GetSpawnArea(int docID) { return mPlayer.GetSpawnArea(docID); }
         void TogglePlaybackState(int docID);
 
         void EnablePerformanceMeasurement(bool enabled) { mPlayer.EnablePerformanceMeasurement(enabled); }
