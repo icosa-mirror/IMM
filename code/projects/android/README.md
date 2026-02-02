@@ -26,8 +26,8 @@ To play a different file, copy it to the app’s external files directory:
 
 `/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM/`
 
-Note: `/sdcard/IMM/` is currently disabled until we add a UI to request "All files access" (Android 11+).
+Note: Quest devices load from the app folder as expected. Many Android phones do not allow apps to read files copied into `Android/data` via MTP/adb; for those devices, use the intent flow below.
 
 ## Opening .imm files via Android intents
 
-The Android player accepts `ACTION_VIEW` intents for `.imm` files. If a file manager provides a `content://` URI, the player will copy it into the app’s external files directory and load it from there.
+The Android player accepts `ACTION_VIEW` intents for `.imm` files. If a file manager provides a `content://` URI, the player will copy it into the app’s internal files directory and load it from there. This is the most reliable approach on Android phones.
