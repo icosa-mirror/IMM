@@ -49,13 +49,13 @@ jobs:
         Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
-        Compress-Archive -Path "$staging\\*" -DestinationPath "appImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip" -Force
+        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip" -Force
 
     - name: Upload Viewer Executable
       uses: actions/upload-artifact@v4
       with:
-        name: appImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}
-        path: appImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip
+        name: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip
         if-no-files-found: error
     - name: Upload Sample IMM
       uses: actions/upload-artifact@v4
@@ -132,7 +132,7 @@ jobs:
     - name: Upload Android Viewer APK
       uses: actions/upload-artifact@v4
       with:
-        name: appImmViewer-Android-APK
+        name: ImmViewer-Android-APK
         path: |
           code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
         if-no-files-found: error
@@ -140,7 +140,7 @@ jobs:
     - name: Upload Android Viewer VR APK
       uses: actions/upload-artifact@v4
       with:
-        name: appImmViewer-Android-APK-VR
+        name: ImmViewer-Android-APK-VR
         path: |
           code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk
         if-no-files-found: error
