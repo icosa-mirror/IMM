@@ -319,12 +319,27 @@ void piRendererGLES::PrintInfo( int showExtensions ) //0=none, 1=inline, 2=mulit
 
 bool piRendererGLES::Initialize(int id, const void **hwnd, int num, bool disableVSync, bool disableErrors, piReporter *reporter, bool createDevice, void *device)
 {
+	LOGD("Initialize called - id=%d, num=%d", id, num);
 	mID = id;
 	mBindedTarget = nullptr;
 	mBoundVertexArray = nullptr;
 	mReporter = reporter;
 
+	// Check if we have a valid GL context
+	const char* vendor = (const char*)glGetString(GL_VENDOR);
+	const char* renderer = (const char*)glGetString(GL_RENDERER);
+	const char* version = (const char*)glGetString(GL_VERSION);
+	LOGD("GL_VENDOR: %s", vendor ? vendor : "NULL");
+	LOGD("GL_RENDERER: %s", renderer ? renderer : "NULL");
+	LOGD("GL_VERSION: %s", version ? version : "NULL");
+
+	if (!vendor || !renderer || !version) {
+		LOGE("No valid GL context - GL strings are NULL");
+		return false;
+	}
+
 	int nume = 0; glGetIntegerv(GL_NUM_EXTENSIONS, &nume);
+	LOGD("Number of extensions: %d", nume);
 	mFeatureVertexViewport = false;
 	mFeatureViewportArray  = false;
 	mFeatureMultiview = false;
@@ -366,11 +381,15 @@ bool piRendererGLES::Initialize(int id, const void **hwnd, int num, bool disable
 
 	//////////////
 
+	LOGD("Creating VBOs...");
 	mVBO[0] = this->CreateBuffer(verts2f,	sizeof(verts2f),   BufferType::Static, BufferUse::Vertex);
 	mVBO[1] = this->CreateBuffer(verts3f3f, sizeof(verts3f3f), BufferType::Static, BufferUse::Vertex);
 	mVBO[2] = this->CreateBuffer(verts3f,	sizeof(verts3f),   BufferType::Static, BufferUse::Vertex);
-    if (!mVBO[0] || !mVBO[1] || !mVBO[2])
+    if (!mVBO[0] || !mVBO[1] || !mVBO[2]) {
+		LOGE("VBO creation failed: VBO[0]=%p, VBO[1]=%p, VBO[2]=%p", mVBO[0], mVBO[1], mVBO[2]);
         return false;
+	}
+	LOGD("VBOs created successfully");
 
 	const piRArrayLayout lay0 = { 2 * sizeof(float), 1, 0, { { 2, piRArrayType_Float, false } } };
 	const piRArrayLayout lay1 = { 6 * sizeof(float), 2, 0, { { 3, piRArrayType_Float, false }, { 3, piRArrayType_Float, false } } };
@@ -378,19 +397,27 @@ bool piRendererGLES::Initialize(int id, const void **hwnd, int num, bool disable
 	const piRArrayLayout lay3 = { 2 * sizeof(float), 1, 0, { { 2, piRArrayType_Float, false } } };
 	const piRArrayLayout lay4 = { 4 * sizeof(float), 2, 0, { { 2, piRArrayType_Float, false }, { 2, piRArrayType_Float, false } } };
 
+	LOGD("Creating VertexArrays...");
 	mVA[0] = this->CreateVertexArray(1, mVBO[0], &lay0, nullptr, nullptr, nullptr, IndexArrayFormat::UINT_32);
 	mVA[1] = this->CreateVertexArray(1, mVBO[1], &lay1, nullptr, nullptr, nullptr, IndexArrayFormat::UINT_32);
 	mVA[2] = this->CreateVertexArray(1, mVBO[2], &lay2, nullptr, nullptr, nullptr, IndexArrayFormat::UINT_32);
-    if (!mVA[0] || !mVA[1] || !mVA[2])
+    if (!mVA[0] || !mVA[1] || !mVA[2]) {
+		LOGE("VertexArray creation failed: VA[0]=%p, VA[1]=%p, VA[2]=%p", mVA[0], mVA[1], mVA[2]);
         return false;
+	}
+	LOGD("VertexArrays created successfully");
 
+    LOGD("Creating performance queries...");
     mNextPerformanceQuery = 0;
     for (int i = 0; i < QUERY_BUFFER_SIZE; ++i)
 	{
 		mPerfQueries[i] = this->CreateQuery(QueryType::TimeElapsed);
-		if (!mPerfQueries[i])
+		if (!mPerfQueries[i]) {
+			LOGE("Query creation failed at index %d", i);
 			return false;
+		}
 	}
+	LOGD("Performance queries created successfully");
 
     // GL_EXT_disjoint_timer_query, providing accurate GPU render timing in real-time to the app.
 	GLint disjointOccurred;
