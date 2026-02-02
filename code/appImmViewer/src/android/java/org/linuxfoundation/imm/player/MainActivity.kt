@@ -10,6 +10,7 @@ package org.linuxfoundation.imm.player
 import android.Manifest
 import android.app.NativeActivity
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.graphics.*
 import android.os.AsyncTask
@@ -226,7 +227,61 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
       return true
     }
 
+    if (handleViewIntent(intent)) {
+      return true
+    }
+
     return false
+  }
+
+  private fun handleViewIntent(intent: Intent): Boolean {
+    if (Intent.ACTION_VIEW != intent.action) {
+      return false
+    }
+
+    val data = intent.data ?: return false
+    val uriPath = when (data.scheme) {
+      "file" -> data.path
+      "content" -> importContentUriToExternalFiles(data)
+      else -> null
+    }
+
+    if (uriPath.isNullOrEmpty()) {
+      return false
+    }
+
+    loadImmPath(uriPath)
+    return true
+  }
+
+  private fun importContentUriToExternalFiles(uri: Uri): String? {
+    try {
+      val baseDir = getExternalFilesDir(null) ?: return null
+      val immDir = File(baseDir, "IMM")
+      if (!immDir.exists()) {
+        immDir.mkdirs()
+      }
+
+      val name = uri.lastPathSegment?.substringAfterLast('/')?.ifEmpty { null }
+      val fileName = if (name != null && name.endsWith(".imm", ignoreCase = true)) {
+        name
+      } else {
+        "imported_${System.currentTimeMillis()}.imm"
+      }
+
+      val destFile = File(immDir, fileName)
+      contentResolver.openInputStream(uri)?.use { input ->
+        destFile.outputStream().use { output ->
+          input.copyTo(output)
+        }
+      } ?: return null
+
+      Log.d(TAG, "Imported IMM from content URI to: ${destFile.absolutePath}")
+      return destFile.absolutePath
+    } catch (e: Exception) {
+      Log.e(TAG, "Failed to import IMM from URI: $uri", e)
+      return null
+    }
   }
 
   private fun handleIntentExtras(intent: Intent): Boolean {

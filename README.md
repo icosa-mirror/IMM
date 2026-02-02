@@ -116,3 +116,7 @@ To play a different file, copy it to the app’s external files directory:
 `/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM/`
 
 Note: `/sdcard/IMM/` is currently disabled until we add a UI to request "All files access" (Android 11+).
+
+### Opening .imm files via Android intents
+
+The Android player accepts `ACTION_VIEW` intents for `.imm` files. If a file manager provides a `content://` URI, the player will copy it into the app’s external files directory and load it from there.
