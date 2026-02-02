@@ -64,7 +64,7 @@ static const int NUM_MULTI_SAMPLES  = 4;
 // Set these to override system defaults;
 static const int EYE_BUFFER_WIDTH   = 0; //1216;
 static const int EYE_BUFFER_HEIGHT  = 0; //1344;
-static const bool FORCE_SOLID_CLEAR = true;
+static const bool FORCE_SOLID_CLEAR = false;
 
 // Requested levels may change if we detect too many stale frames.
 int requestedCPULevel = CPU_LEVEL_DEFAULT;
