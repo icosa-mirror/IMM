@@ -59,7 +59,7 @@ jobs:
         Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
-        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip" -Force
+        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-Windows.zip" -Force
 
     - name: Package Viewer Artifact (VR)
       shell: pwsh
@@ -75,19 +75,19 @@ jobs:
         $json.Rendering.EnableVR = $true
         $json.Rendering.RenderingAPI = "OpenGL"
         $json | ConvertTo-Json -Depth 6 | Set-Content $settingsPath -Encoding UTF8
-        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}-VR.zip" -Force
+        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-Windows-VR.zip" -Force
 
     - name: Upload Viewer Executable
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}
-        path: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}.zip
+        name: ImmViewer-Windows
+        path: ImmViewer-Windows.zip
         if-no-files-found: error
     - name: Upload Viewer Executable (VR)
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}-VR
-        path: ImmViewer-${{ matrix.configuration }}-${{ matrix.platform }}-VR.zip
+        name: ImmViewer-Windows-VR
+        path: ImmViewer-Windows-VR.zip
         if-no-files-found: error
     - name: Upload Sample IMM
       uses: actions/upload-artifact@v4
@@ -167,18 +167,18 @@ jobs:
           code/appImmUnity/Projects/Android/app/build/outputs/aar/*.aar
         if-no-files-found: warn
 
-    - name: Upload Android Viewer APK
+    - name: Upload Android Viewer
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewer-Android-APK
+        name: ImmViewer-Android
         path: |
           code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
         if-no-files-found: error
 
-    - name: Upload Android Viewer VR APK
+    - name: Upload Android Viewer VR
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewer-Android-APK-VR
+        name: ImmViewer-Android-VR
         path: |
           code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk
         if-no-files-found: error
