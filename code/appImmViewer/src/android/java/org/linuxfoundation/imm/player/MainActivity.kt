@@ -41,6 +41,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     const val PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 0x1
 
     @JvmStatic external fun nativeSetAssetDirectory(assetsDir: String?)
+    @JvmStatic external fun nativeSetExternalFilesDirectory(externalDir: String?)
     @JvmStatic external fun nativeSendMessage(message: String?, messageType: Int)
     @JvmStatic external fun nativeSetQuillRenderingTechnique(renderingTechnique: Int)
     @JvmStatic
@@ -107,6 +108,8 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
       cacheDir.mkdir()
     }
     nativeSetAssetDirectory(Utils.assetsDirectory)
+    val externalDir = getExternalFilesDir(null)?.path
+    nativeSetExternalFilesDirectory(externalDir)
     
     // Extract assets synchronously to avoid race condition
     val shouldReload = Utils.shouldReloadAssets()
@@ -241,8 +244,8 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
 
     val data = intent.data ?: return false
     val uriPath = when (data.scheme) {
-      "file" -> data.path
-      "content" -> importContentUriToExternalFiles(data)
+      "file" -> importUriToInternalFiles(data)
+      "content" -> importUriToInternalFiles(data)
       else -> null
     }
 
@@ -254,9 +257,9 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     return true
   }
 
-  private fun importContentUriToExternalFiles(uri: Uri): String? {
+  private fun importUriToInternalFiles(uri: Uri): String? {
     try {
-      val baseDir = getExternalFilesDir(null) ?: return null
+      val baseDir = filesDir
       val immDir = File(baseDir, "IMM")
       if (!immDir.exists()) {
         immDir.mkdirs()
@@ -276,7 +279,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
         }
       } ?: return null
 
-      Log.d(TAG, "Imported IMM from content URI to: ${destFile.absolutePath}")
+      Log.d(TAG, "Imported IMM to internal files: ${destFile.absolutePath}")
       return destFile.absolutePath
     } catch (e: Exception) {
       Log.e(TAG, "Failed to import IMM from URI: $uri", e)

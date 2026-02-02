@@ -309,6 +309,20 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetAssetDirectory(
     jni->ReleaseStringUTFChars(assetDirectory, assetDirUtf);
 }
 
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetExternalFilesDirectory(
+        JNIEnv * jni,
+        jclass,
+        jstring externalDirectory)
+{
+    const char* externalDirUtf = externalDirectory ? jni->GetStringUTFChars(externalDirectory, 0) : "";
+    ExePlayer::setExternalFilesDirectory(externalDirUtf);
+    ALOGV("nativeSetExternalFilesDirectory %s", externalDirUtf);
+    if (externalDirectory)
+    {
+        jni->ReleaseStringUTFChars(externalDirectory, externalDirUtf);
+    }
+}
+
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetLocale(
         JNIEnv * jni,
         jclass clazz,
@@ -2208,7 +2222,16 @@ void android_main( struct android_app * app )
                     // NOTE: /sdcard/IMM requires MANAGE_EXTERNAL_STORAGE on Android 11+.
                     // Keep this disabled until we add UI/flow for "All files access" permission.
                     // const char *primaryDir = "/sdcard/IMM";
-                    const char *appDir = "/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM";
+                    std::string appDir;
+                    const char *externalFilesDir = getExternalFilesDirectory();
+                    if (externalFilesDir != nullptr && externalFilesDir[0] != '\0')
+                    {
+                        appDir = std::string(externalFilesDir) + "/IMM";
+                    }
+                    else
+                    {
+                        appDir = "/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM";
+                    }
                     std::string resolvedImmPath;
                     // if (ResolveImmPathInDirectory(primaryDir, resolvedImmPath))
                     // {
@@ -2217,7 +2240,7 @@ void android_main( struct android_app * app )
                     //     ALOGV("    Loading Quill: %s (from %s)", resolvedImmPath.c_str(), primaryDir);
                     // }
                     // else if (ResolveImmPathInDirectory(appDir, resolvedImmPath))
-                    if (ResolveImmPathInDirectory(appDir, resolvedImmPath))
+                    if (ResolveImmPathInDirectory(appDir.c_str(), resolvedImmPath))
                     {
                         qPath = pistr2ws(resolvedImmPath.c_str());
                         shouldFree = true;

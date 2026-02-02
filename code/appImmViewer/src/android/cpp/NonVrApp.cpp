@@ -69,6 +69,7 @@ std::wstring gPendingPath;
 bool gTriedAutoLoad = false;
 
 std::string gAssetDirectory;
+std::string gExternalFilesDirectory;
 
 void setAssetDirectory(const char* dir) {
     gAssetDirectory = dir ? dir : "";
@@ -76,6 +77,14 @@ void setAssetDirectory(const char* dir) {
 
 const char* getAssetDirectory() {
     return gAssetDirectory.c_str();
+}
+
+void setExternalFilesDirectory(const char* dir) {
+    gExternalFilesDirectory = dir ? dir : "";
+}
+
+const char* getExternalFilesDirectory() {
+    return gExternalFilesDirectory.c_str();
 }
 
 bool initEgl(android_app* app) {
@@ -226,14 +235,19 @@ std::string ResolveInitialImmPath() {
     // NOTE: /sdcard/IMM requires MANAGE_EXTERNAL_STORAGE on Android 11+.
     // Keep this disabled until we add UI/flow for "All files access" permission.
     // const char *primaryDir = "/sdcard/IMM";
-    const char *appDir = "/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM";
+    std::string appDir;
+    if (!gExternalFilesDirectory.empty()) {
+        appDir = gExternalFilesDirectory + "/IMM";
+    } else {
+        appDir = "/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM";
+    }
     std::string resolvedPath;
 
     // if (ResolveImmPathInDirectory(primaryDir, resolvedPath)) {
     //     return resolvedPath;
     // }
 
-    if (ResolveImmPathInDirectory(appDir, resolvedPath)) {
+    if (ResolveImmPathInDirectory(appDir.c_str(), resolvedPath)) {
         return resolvedPath;
     }
 
@@ -479,6 +493,17 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetAssetDirectory(
     setAssetDirectory(assetDirUtf);
     if (assetDirectory) {
         jni->ReleaseStringUTFChars(assetDirectory, assetDirUtf);
+    }
+}
+
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetExternalFilesDirectory(
+    JNIEnv* jni,
+    jclass,
+    jstring externalDirectory) {
+    const char* externalDirUtf = externalDirectory ? jni->GetStringUTFChars(externalDirectory, 0) : "";
+    setExternalFilesDirectory(externalDirUtf);
+    if (externalDirectory) {
+        jni->ReleaseStringUTFChars(externalDirectory, externalDirUtf);
     }
 }
 

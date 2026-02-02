@@ -107,6 +107,7 @@ void enableDebugMessageCallback()
 #endif
 
 static std::string assetDirectory = "";
+static std::string externalFilesDirectory = "";
 
 void setAssetDirectory(const char * androidAssetDirectory)
 {
@@ -116,6 +117,16 @@ void setAssetDirectory(const char * androidAssetDirectory)
 const char * getAssetDirectory()
 {
     return assetDirectory.c_str();
+}
+
+void setExternalFilesDirectory(const char * androidExternalFilesDirectory)
+{
+    externalFilesDirectory = androidExternalFilesDirectory ? androidExternalFilesDirectory : "";
+}
+
+const char * getExternalFilesDirectory()
+{
+    return externalFilesDirectory.c_str();
 }
 
 char * readFile(const char *filename)

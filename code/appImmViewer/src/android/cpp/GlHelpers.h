@@ -74,6 +74,8 @@ void enableDebugMessageCallback();
 bool enabledMultiView();
 void setAssetDirectory(const char * androidAssetDirectory);
 const char * getAssetDirectory();
+void setExternalFilesDirectory(const char * androidExternalFilesDirectory);
+const char * getExternalFilesDirectory();
 char * readFile(const char *filename);
 GLuint loadShader(GLenum shaderType, const char** pSource);
 GLuint createProgram(
