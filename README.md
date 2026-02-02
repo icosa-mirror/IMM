@@ -102,6 +102,13 @@ The ImmViewer works both on Mono and in VR (either with Oculus RIFT or Oculus Qu
 
 4. Add a new Android App runnable in Configurations. Set the module as android.appImmViewer and click the play button on the menu bar.
 
+### Loading IMM files on Android player
 
+The Android player looks for content in this order:
 
+1. `/sdcard/IMM/default.imm` (if present)
+2. `/sdcard/IMM/default` (authoring folder)
+3. The newest `.imm` file in `/sdcard/IMM/`
+4. `sample1.imm` bundled in the APK
 
+To play a different file, copy it to `/sdcard/IMM/`. The player will use `default.imm` if it exists, otherwise it will pick the newest `.imm` file in that directory.

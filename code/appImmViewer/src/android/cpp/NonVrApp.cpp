@@ -21,8 +21,11 @@
 #include <GLES3/gl3.h>
 
 #include <cstdlib>
+#include <dirent.h>
 #include <mutex>
 #include <string>
+#include <strings.h>
+#include <sys/stat.h>
 
 #if !defined(EGL_OPENGL_ES3_BIT_KHR)
 #define EGL_OPENGL_ES3_BIT_KHR 0x0040
@@ -63,6 +66,7 @@ struct EngineState {
 EngineState gEngine;
 std::mutex gMessageMutex;
 std::wstring gPendingPath;
+bool gTriedAutoLoad = false;
 
 std::string gAssetDirectory;
 
@@ -147,6 +151,92 @@ bool initEgl(android_app* app) {
     eglQuerySurface(gEngine.display, gEngine.surface, EGL_HEIGHT, &gEngine.height);
     gEngine.hasWindow = true;
     return true;
+}
+
+bool FindNewestImmInDirectory(const char *dirPath, std::string &outPath) {
+    DIR *dir = opendir(dirPath);
+    if (dir == nullptr) {
+        return false;
+    }
+
+    time_t newestTime = 0;
+    std::string newestPath;
+
+    struct dirent *entry = nullptr;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+
+        const char *name = entry->d_name;
+        const size_t nameLen = strlen(name);
+        if (nameLen < 4) {
+            continue;
+        }
+
+        const char *ext = name + (nameLen - 4);
+        if (strcasecmp(ext, ".imm") != 0) {
+            continue;
+        }
+
+        std::string candidatePath = std::string(dirPath) + "/" + name;
+        struct stat st;
+        if (stat(candidatePath.c_str(), &st) != 0) {
+            continue;
+        }
+
+        if (st.st_mtime >= newestTime) {
+            newestTime = st.st_mtime;
+            newestPath = candidatePath;
+        }
+    }
+
+    closedir(dir);
+
+    if (newestPath.empty()) {
+        return false;
+    }
+
+    outPath = newestPath;
+    return true;
+}
+
+std::string ResolveInitialImmPath() {
+    const char *immDir = "/sdcard/IMM";
+    const char *defaultImmPath = "/sdcard/IMM/default.imm";
+    const char *defaultAuthoringPath = "/sdcard/IMM/default";
+
+    FILE *fp = fopen(defaultImmPath, "rb");
+    if (fp) {
+        fclose(fp);
+        return defaultImmPath;
+    }
+
+    fp = fopen(defaultAuthoringPath, "rb");
+    if (fp) {
+        fclose(fp);
+        return defaultAuthoringPath;
+    }
+
+    std::string newestImmPath;
+    if (FindNewestImmInDirectory(immDir, newestImmPath)) {
+        return newestImmPath;
+    }
+
+    if (!gAssetDirectory.empty()) {
+        std::string assetImmPath = gAssetDirectory;
+        if (assetImmPath.back() != '/') {
+            assetImmPath += "/";
+        }
+        assetImmPath += "sample1.imm";
+        fp = fopen(assetImmPath.c_str(), "rb");
+        if (fp) {
+            fclose(fp);
+            return assetImmPath;
+        }
+    }
+
+    return std::string();
 }
 
 void shutdownEgl() {
@@ -287,7 +377,19 @@ bool loadPath(const std::wstring& path) {
 void pollMessages() {
     std::lock_guard<std::mutex> lock(gMessageMutex);
     if (gPendingPath.empty()) {
-        return;
+        if (!gEngine.viewerInitialized && !gTriedAutoLoad) {
+            gTriedAutoLoad = true;
+            const std::string autoPath = ResolveInitialImmPath();
+            if (!autoPath.empty()) {
+                wchar_t *widePath = pistr2ws(autoPath.c_str());
+                gPendingPath = widePath ? widePath : L"";
+                free(widePath);
+            }
+        }
+
+        if (gPendingPath.empty()) {
+            return;
+        }
     }
 
     const std::wstring path = gPendingPath;

@@ -2170,8 +2170,9 @@ void android_main( struct android_app * app )
             {
                 // For Oculus store build try to load:
                 // 1) quill path in intent extra
-                // 2) /sdcard/Oculus/quill/default.imm or /sdcard/Oculus/quill/default if present
-                // 3) goro_the_beast embedded in APK
+                // 2) /sdcard/IMM/default.imm or /sdcard/IMM/default if present
+                // 3) newest .imm in /sdcard/IMM
+                // 4) goro_the_beast embedded in APK
 
                 const wchar_t *qPath = nullptr;
                 bool shouldFree = false;
@@ -2180,9 +2181,9 @@ void android_main( struct android_app * app )
                 {
                     vrTrackingTransformLevel = VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_EYE_LEVEL;
 
-                    const char *quillDir = "/sdcard/Oculus/quill";
-                    const char *defaultImmPath = "/sdcard/Oculus/quill/default.imm";
-                    const char *defaultAuthoringPath = "/sdcard/Oculus/quill/default";
+                    const char *quillDir = "/sdcard/IMM";
+                    const char *defaultImmPath = "/sdcard/IMM/default.imm";
+                    const char *defaultAuthoringPath = "/sdcard/IMM/default";
                     FILE *fp = fopen(defaultImmPath, "rb");
                     if (fp)
                     {
