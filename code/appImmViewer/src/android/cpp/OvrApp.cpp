@@ -612,6 +612,30 @@ static bool FindNewestImmInDirectory(const char *dirPath, std::string &outPath)
     return true;
 }
 
+static bool ResolveImmPathInDirectory(const char *dirPath, std::string &outPath)
+{
+    std::string defaultImmPath = std::string(dirPath) + "/default.imm";
+    std::string defaultAuthoringPath = std::string(dirPath) + "/default";
+
+    FILE *fp = fopen(defaultImmPath.c_str(), "rb");
+    if (fp)
+    {
+        fclose(fp);
+        outPath = defaultImmPath;
+        return true;
+    }
+
+    fp = fopen(defaultAuthoringPath.c_str(), "rb");
+    if (fp)
+    {
+        fclose(fp);
+        outPath = defaultAuthoringPath;
+        return true;
+    }
+
+    return FindNewestImmInDirectory(dirPath, outPath);
+}
+
 void handleMessageLoadImmPath(const Message & msg)
 {
     immPlayerState.quillPath = msg.value;
@@ -2181,62 +2205,54 @@ void android_main( struct android_app * app )
                 {
                     vrTrackingTransformLevel = VRAPI_TRACKING_TRANSFORM_SYSTEM_CENTER_EYE_LEVEL;
 
-                    const char *quillDir = "/sdcard/IMM";
-                    const char *defaultImmPath = "/sdcard/IMM/default.imm";
-                    const char *defaultAuthoringPath = "/sdcard/IMM/default";
-                    FILE *fp = fopen(defaultImmPath, "rb");
-                    if (fp)
+                    // NOTE: /sdcard/IMM requires MANAGE_EXTERNAL_STORAGE on Android 11+.
+                    // Keep this disabled until we add UI/flow for "All files access" permission.
+                    // const char *primaryDir = "/sdcard/IMM";
+                    const char *appDir = "/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM";
+                    std::string resolvedImmPath;
+                    // if (ResolveImmPathInDirectory(primaryDir, resolvedImmPath))
+                    // {
+                    //     qPath = pistr2ws(resolvedImmPath.c_str());
+                    //     shouldFree = true;
+                    //     ALOGV("    Loading Quill: %s (from %s)", resolvedImmPath.c_str(), primaryDir);
+                    // }
+                    // else if (ResolveImmPathInDirectory(appDir, resolvedImmPath))
+                    if (ResolveImmPathInDirectory(appDir, resolvedImmPath))
                     {
-                        fclose(fp);
-                        qPath = L"/sdcard/Oculus/quill/default.imm";
-                        ALOGV("    Loading Quill: default.imm from disk");
-                    }
-                    else if ((fp = fopen(defaultAuthoringPath, "rb")))
-                    {
-                        fclose(fp);
-                        qPath = L"/sdcard/Oculus/quill/default";
-                        ALOGV("    Loading Quill: default authoring folder from disk");
+                        qPath = pistr2ws(resolvedImmPath.c_str());
+                        shouldFree = true;
+                        ALOGV("    Loading Quill: %s (from app storage)", resolvedImmPath.c_str());
                     }
                     else
                     {
-                        std::string newestImmPath;
-                        if (FindNewestImmInDirectory(quillDir, newestImmPath))
+                        const char *assetDir = getAssetDirectory();
+                        if (assetDir != nullptr && assetDir[0] != '\0')
                         {
-                            qPath = pistr2ws(newestImmPath.c_str());
-                            shouldFree = true;
-                            ALOGV("    Loading Quill: %s (newest in %s)", newestImmPath.c_str(), quillDir);
-                        }
-                        else
-                        {
-                            const char *assetDir = getAssetDirectory();
-                            if (assetDir != nullptr && assetDir[0] != '\0')
+                            // Ensure path separator
+                            std::string assetImmPath = std::string(assetDir);
+                            if (assetImmPath.back() != '/') {
+                                assetImmPath += "/";
+                            }
+                            assetImmPath += "sample1.imm";
+                            
+                            ALOGV("    Checking for sample1.imm at: %s", assetImmPath.c_str());
+                            
+                            FILE *fp = fopen(assetImmPath.c_str(), "rb");
+                            if (fp)
                             {
-                                // Ensure path separator
-                                std::string assetImmPath = std::string(assetDir);
-                                if (assetImmPath.back() != '/') {
-                                    assetImmPath += "/";
-                                }
-                                assetImmPath += "sample1.imm";
-                                
-                                ALOGV("    Checking for sample1.imm at: %s", assetImmPath.c_str());
-                                
-                                fp = fopen(assetImmPath.c_str(), "rb");
-                                if (fp)
-                                {
-                                    fclose(fp);
-                                    qPath = pistr2ws(assetImmPath.c_str());
-                                    shouldFree = true;
-                                    ALOGV("    Loading Quill: %s from assets directory", assetImmPath.c_str());
-                                }
-                                else
-                                {
-                                    ALOGE("    FAILED to open sample1.imm at: %s, errno=%d", assetImmPath.c_str(), errno);
-                                }
+                                fclose(fp);
+                                qPath = pistr2ws(assetImmPath.c_str());
+                                shouldFree = true;
+                                ALOGV("    Loading Quill: %s from assets directory", assetImmPath.c_str());
                             }
                             else
                             {
-                                ALOGE("    Asset directory is null or empty!");
+                                ALOGE("    FAILED to open sample1.imm at: %s, errno=%d", assetImmPath.c_str(), errno);
                             }
+                        }
+                        else
+                        {
+                            ALOGE("    Asset directory is null or empty!");
                         }
                     }
                 }

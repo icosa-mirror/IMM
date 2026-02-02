@@ -15,11 +15,15 @@ APK output:
 
 ## Loading IMM content on device
 
-The Android VR player loads content in this order:
+The Android player loads content in this order:
 
-1. `/sdcard/IMM/default.imm` (if present)
-2. `/sdcard/IMM/default` (authoring folder)
-3. The newest `.imm` file in `/sdcard/IMM/`
+1. `/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM/default.imm` (if present)
+2. `/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM/default` (folder-based Quill export)
+3. The newest `.imm` file in `/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM/`
 4. `sample1.imm` bundled in the APK
 
-To play a different file, copy it to `/sdcard/IMM/`. The player uses `default.imm` if it exists, otherwise it picks the newest `.imm` in that directory.
+To play a different file, copy it to the app’s external files directory:
+
+`/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM/`
+
+Note: `/sdcard/IMM/` is currently disabled until we add a UI to request "All files access" (Android 11+).

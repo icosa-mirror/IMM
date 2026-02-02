@@ -121,9 +121,13 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     }
 
     if (!handleNewIntent(intent)) {
-      val immPath = "${applicationContext.filesDir.path}/${Utils.quillDemoPath}"
-      Log.d(TAG, "Loading IMM from path: $immPath")
-      loadImm(immPath)
+      val externalImmPath = findExternalImmPath()
+      if (externalImmPath != null) {
+        Log.d(TAG, "Loading IMM from external files: $externalImmPath")
+        loadImm(externalImmPath)
+      } else {
+        Log.d(TAG, "No intent or external IMM path; native loader will select content")
+      }
     }
   }
   
@@ -152,6 +156,35 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     } catch (e: Exception) {
       Log.e(TAG, "Failed to extract $assetName: $e")
     }
+  }
+
+  private fun findExternalImmPath(): String? {
+    val baseDir = getExternalFilesDir(null) ?: return null
+    val immDir = File(baseDir, "IMM")
+    if (!immDir.exists()) {
+      return null
+    }
+
+    val defaultImm = File(immDir, "default.imm")
+    if (defaultImm.exists()) {
+      return defaultImm.absolutePath
+    }
+
+    val defaultAuthoring = File(immDir, "default")
+    if (defaultAuthoring.exists()) {
+      return defaultAuthoring.absolutePath
+    }
+
+    val immFiles = immDir.listFiles { file ->
+      file.isFile && file.name.endsWith(".imm", ignoreCase = true)
+    } ?: return null
+
+    if (immFiles.isEmpty()) {
+      return null
+    }
+
+    val newest = immFiles.maxByOrNull { it.lastModified() } ?: return null
+    return newest.absolutePath
   }
 
   override fun onNewIntent(intent: Intent) {

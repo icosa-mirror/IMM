@@ -201,26 +201,40 @@ bool FindNewestImmInDirectory(const char *dirPath, std::string &outPath) {
     return true;
 }
 
+bool ResolveImmPathInDirectory(const char *dirPath, std::string &outPath) {
+    std::string defaultImmPath = std::string(dirPath) + "/default.imm";
+    std::string defaultAuthoringPath = std::string(dirPath) + "/default";
+
+    FILE *fp = fopen(defaultImmPath.c_str(), "rb");
+    if (fp) {
+        fclose(fp);
+        outPath = defaultImmPath;
+        return true;
+    }
+
+    fp = fopen(defaultAuthoringPath.c_str(), "rb");
+    if (fp) {
+        fclose(fp);
+        outPath = defaultAuthoringPath;
+        return true;
+    }
+
+    return FindNewestImmInDirectory(dirPath, outPath);
+}
+
 std::string ResolveInitialImmPath() {
-    const char *immDir = "/sdcard/IMM";
-    const char *defaultImmPath = "/sdcard/IMM/default.imm";
-    const char *defaultAuthoringPath = "/sdcard/IMM/default";
+    // NOTE: /sdcard/IMM requires MANAGE_EXTERNAL_STORAGE on Android 11+.
+    // Keep this disabled until we add UI/flow for "All files access" permission.
+    // const char *primaryDir = "/sdcard/IMM";
+    const char *appDir = "/sdcard/Android/data/org.linuxfoundation.imm.player/files/IMM";
+    std::string resolvedPath;
 
-    FILE *fp = fopen(defaultImmPath, "rb");
-    if (fp) {
-        fclose(fp);
-        return defaultImmPath;
-    }
+    // if (ResolveImmPathInDirectory(primaryDir, resolvedPath)) {
+    //     return resolvedPath;
+    // }
 
-    fp = fopen(defaultAuthoringPath, "rb");
-    if (fp) {
-        fclose(fp);
-        return defaultAuthoringPath;
-    }
-
-    std::string newestImmPath;
-    if (FindNewestImmInDirectory(immDir, newestImmPath)) {
-        return newestImmPath;
+    if (ResolveImmPathInDirectory(appDir, resolvedPath)) {
+        return resolvedPath;
     }
 
     if (!gAssetDirectory.empty()) {
