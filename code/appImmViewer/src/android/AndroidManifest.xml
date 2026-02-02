@@ -16,7 +16,7 @@
     <uses-feature android:name="android.hardware.usb.host" />
     <!-- Tell the system this app requires OpenGL ES 3.2. -->
     <uses-feature android:glEsVersion="0x00030002" android:required="true" />
-
+    
     <application android:allowBackup="false" android:label="Imm Viewer">
         <meta-data android:name="com.oculus.supportedDevices" android:value="all" />
         <meta-data android:name="com.oculus.vr.application.mode" android:value="vr_only" />
@@ -42,6 +42,7 @@
             <meta-data android:name="com.oculus.vr.application.mode" android:value="vr_only" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="com.oculus.intent.category.VR" />
             </intent-filter>
         </activity>
