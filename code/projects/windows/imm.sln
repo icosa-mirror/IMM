@@ -36,6 +36,12 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libImmExporter", "..\..\lib
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "appDX11ShaderCompiler", "..\..\appDX11ShaderCompiler\appDX11ShaderCompiler.vcxproj", "{A59B53C1-0D4A-47DE-B41F-11AB1E9428A8}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "appImmStrokeReader", "..\..\appImmStrokeReader\appImmStrokeReader.vcxproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B1FE1863-B1AA-49EC-B753-1DB111FDC272} = {B1FE1863-B1AA-49EC-B753-1DB111FDC272}
+		{FEA47370-9405-48D1-AC8F-83BBA0006D7B} = {FEA47370-9405-48D1-AC8F-83BBA0006D7B}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -86,6 +92,12 @@ Global
 		{A59B53C1-0D4A-47DE-B41F-11AB1E9428A8}.Release|x64.ActiveCfg = Release|x64
 		{A59B53C1-0D4A-47DE-B41F-11AB1E9428A8}.Release|x64.Build.0 = Release|x64
 		{A59B53C1-0D4A-47DE-B41F-11AB1E9428A8}.Release|x86.ActiveCfg = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x64.ActiveCfg = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x64.Build.0 = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|x86.ActiveCfg = Debug|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x64.ActiveCfg = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x64.Build.0 = Release|x64
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -17,6 +17,11 @@ code/appImmUnity/exe/
 code/appImmViewer/bin
 code/appImmViewer/exe/appImmViewer_Debug.*
 code/appImmViewer/exe/appImmViewer_Release.*
+code/appImmStrokeReader/bin
+code/appImmStrokeReader/exe/*.pdb
+code/appImmStrokeReader/exe/*.exp
+code/appImmStrokeReader/exe/*.lib
+code/appImmStrokeReader/exe/*.ilk
 
 # Android/Gradle build artifacts
 .cxx/
@@ -70,3 +75,9 @@ ipch/
 *.VC.db
 *.VC.VC.opendb
 code/ImmUnitySampleProject/imm_player_log.txt
+/code/ImmUnitySampleProject/Assets/ExampleImmFiles
+/.gradle-local
+/.gradle-user
+/quillplayer_decompiled
+/LLM Docs
+/LLM Scripts

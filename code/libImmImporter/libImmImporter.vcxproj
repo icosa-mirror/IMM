@@ -59,6 +59,7 @@
     <ClInclude Include="src\fromImmersive\fromImmersiveLayerSound.h" />
     <ClInclude Include="src\fromImmersive\fromImmersiveLayerSpawnArea.h" />
     <ClInclude Include="src\fromImmersive\fromImmersiveUtils.h" />
+    <ClInclude Include="src\fromImmersive\strokeCollector.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectName>libImmImporter</ProjectName>

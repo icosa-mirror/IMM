@@ -3,6 +3,7 @@
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmCore/src/libBasics/piTypes.h"
 #include "../document//sequence.h"
+#include "strokeCollector.h"
 
 namespace ImmImporter
 {
@@ -11,7 +12,7 @@ namespace ImmImporter
 
     bool IsStoppedLoading();
     void StopLoadingAsync();
-		
-    bool ImportFromDisk(Sequence* sq, ImmCore::piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique);
-    bool ImportFromMemory(ImmCore::piTArray<uint8_t>* data, Sequence* sq, ImmCore::piLog* log, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique);
+
+    bool ImportFromDisk(Sequence* sq, ImmCore::piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, IStrokeCollector* collector = nullptr);
+    bool ImportFromMemory(ImmCore::piTArray<uint8_t>* data, Sequence* sq, ImmCore::piLog* log, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, IStrokeCollector* collector = nullptr);
 }

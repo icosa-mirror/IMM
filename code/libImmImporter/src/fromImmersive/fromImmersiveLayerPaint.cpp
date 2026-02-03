@@ -152,7 +152,7 @@ namespace ImmImporter
         #endif
 
            
-        bool ReadDrawing(LayerImplementation vme, uint32_t drawingId, piIStream *fp, piLog* log, Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, bool flipped)
+        bool ReadDrawing(LayerImplementation vme, uint32_t drawingId, piIStream *fp, piLog* log, Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, bool flipped, IStrokeCollector* collector)
         {
             LayerPaint* lp = (LayerPaint*)vme;
             Drawing* dr = lp->GetDrawing(drawingId);
@@ -505,6 +505,19 @@ namespace ImmImporter
                     //points[numPoints-1].mPos = points[numPoints-1].mPos + 0.0001f*normalize(points[numPoints-2].mPos - points[numPoints-3].mPos);
 
                     ele.Compute(biggestStroke);
+
+                    // Forward to collector if present
+                    if (collector)
+                    {
+                        collector->OnStroke(
+                            j,
+                            static_cast<uint8_t>(ele.GetBrush()),
+                            static_cast<uint8_t>(ele.GetVisibleMode()),
+                            ele.GetNumPoints(),
+                            ele.GetPoints(),
+                            ele.GetBBox()
+                        );
+                    }
 
                     if (!dr->Add(&ele, static_cast<Drawing::ColorSpace>(colorSpace), flipped))
                         return false;
