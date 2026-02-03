@@ -8,6 +8,20 @@ using System.IO;
 /// </summary>
 public class ImmStrokeReaderTestEditor : EditorWindow
 {
+    private static class Native
+    {
+        public static bool IsInitialized() => ImmPlayer.ImmStrokeReader.StrokeReader_IsInitialized();
+        public static int Init(string logPath) => ImmPlayer.ImmStrokeReader.StrokeReader_Init(logPath);
+        public static int LoadFromFile(string path) => ImmPlayer.ImmStrokeReader.StrokeReader_LoadFromFile(path);
+        public static void Unload(int docId) => ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
+        public static int GetDocumentCount() => ImmPlayer.ImmStrokeReader.StrokeReader_GetDocumentCount();
+        public static int GetLayerCount(int docId) => ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerCount(docId);
+        public static bool GetLayerInfo(int docId, int layerIdx, out StrokeLayerInfo info) => ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerInfo(docId, layerIdx, out info);
+        public static int GetDrawingCount(int docId, int layerIdx) => ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
+        public static int GetStrokeCount(int docId, int layerIdx, int drawingIdx) => ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeCount(docId, layerIdx, drawingIdx);
+        public static bool GetStrokeInfo(int docId, int layerIdx, int drawingIdx, int strokeIdx, out StrokeInfo info) => ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, layerIdx, drawingIdx, strokeIdx, out info);
+        public static bool GetStrokePoints(int docId, int layerIdx, int drawingIdx, int strokeIdx, StrokePoint[] points, int maxPoints) => ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokePoints(docId, layerIdx, drawingIdx, strokeIdx, points, maxPoints);
+    }
     private string _logPath = "";
     private Vector2 _scrollPos;
     private string _output = "";
@@ -77,12 +91,12 @@ public class ImmStrokeReaderTestEditor : EditorWindow
 
         // Initialize
         Log("\n--- Initializing ---");
-        bool wasInitialized = ImmStrokeReader.StrokeReader_IsInitialized();
+        bool wasInitialized = Native.IsInitialized();
         Log($"Already initialized: {wasInitialized}");
 
         if (!wasInitialized)
         {
-            int initResult = ImmStrokeReader.StrokeReader_Init(_logPath);
+            int initResult = Native.Init(_logPath);
             Log($"Init result: {initResult}");
             if (initResult != 0)
             {
@@ -93,7 +107,7 @@ public class ImmStrokeReaderTestEditor : EditorWindow
 
         // Load
         Log("\n--- Loading ---");
-        int docId = ImmStrokeReader.StrokeReader_LoadFromFile(fullPath);
+        int docId = Native.LoadFromFile(fullPath);
         Log($"LoadFromFile result (docId): {docId}");
 
         if (docId < 0)
@@ -104,7 +118,7 @@ public class ImmStrokeReaderTestEditor : EditorWindow
 
         // Query structure
         Log("\n--- Document Structure ---");
-        int layerCount = ImmStrokeReader.StrokeReader_GetLayerCount(docId);
+        int layerCount = Native.GetLayerCount(docId);
         Log($"Layer count: {layerCount}");
 
         int totalStrokes = 0;
@@ -112,14 +126,14 @@ public class ImmStrokeReaderTestEditor : EditorWindow
 
         for (int l = 0; l < layerCount; l++)
         {
-            if (ImmStrokeReader.StrokeReader_GetLayerInfo(docId, l, out StrokeLayerInfo layerInfo))
+            if (Native.GetLayerInfo(docId, l, out StrokeLayerInfo layerInfo))
             {
-                int drawingCount = ImmStrokeReader.StrokeReader_GetDrawingCount(docId, l);
+                int drawingCount = Native.GetDrawingCount(docId, l);
                 Log($"  Layer {l}: id={layerInfo.id}, type={layerInfo.type}, name='{layerInfo.name}', drawings={drawingCount}");
 
                 for (int d = 0; d < drawingCount; d++)
                 {
-                    int strokeCount = ImmStrokeReader.StrokeReader_GetStrokeCount(docId, l, d);
+                    int strokeCount = Native.GetStrokeCount(docId, l, d);
                     totalStrokes += strokeCount;
 
                     if (strokeCount > 0)
@@ -129,7 +143,7 @@ public class ImmStrokeReaderTestEditor : EditorWindow
 
                     for (int s = 0; s < strokeCount; s++)
                     {
-                        if (ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, l, d, s, out StrokeInfo strokeInfo))
+                        if (Native.GetStrokeInfo(docId, l, d, s, out StrokeInfo strokeInfo))
                         {
                             totalPoints += strokeInfo.numPoints;
                         }
@@ -144,19 +158,19 @@ public class ImmStrokeReaderTestEditor : EditorWindow
         Log("\n--- First Stroke Sample ---");
         for (int l = 0; l < layerCount && totalStrokes > 0; l++)
         {
-            int drawingCount = ImmStrokeReader.StrokeReader_GetDrawingCount(docId, l);
+            int drawingCount = Native.GetDrawingCount(docId, l);
             for (int d = 0; d < drawingCount; d++)
             {
-                int strokeCount = ImmStrokeReader.StrokeReader_GetStrokeCount(docId, l, d);
+                int strokeCount = Native.GetStrokeCount(docId, l, d);
                 for (int s = 0; s < strokeCount; s++)
                 {
-                    if (ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, l, d, s, out StrokeInfo info) && info.numPoints > 0)
+                    if (Native.GetStrokeInfo(docId, l, d, s, out StrokeInfo info) && info.numPoints > 0)
                     {
                         Log($"Stroke [{l},{d},{s}]: brush={info.brushType}, vis={info.visibilityMode}, pts={info.numPoints}");
                         Log($"  BBox: ({info.bboxMinX:F3}, {info.bboxMinY:F3}, {info.bboxMinZ:F3}) to ({info.bboxMaxX:F3}, {info.bboxMaxY:F3}, {info.bboxMaxZ:F3})");
 
                         StrokePoint[] points = new StrokePoint[info.numPoints];
-                        if (ImmStrokeReader.StrokeReader_GetStrokePoints(docId, l, d, s, points, info.numPoints))
+                        if (Native.GetStrokePoints(docId, l, d, s, points, info.numPoints))
                         {
                             int numToShow = Mathf.Min(3, points.Length);
                             for (int p = 0; p < numToShow; p++)
@@ -178,10 +192,10 @@ public class ImmStrokeReaderTestEditor : EditorWindow
 
         // Cleanup
         Log("\n--- Cleanup ---");
-        ImmStrokeReader.StrokeReader_Unload(docId);
+        Native.Unload(docId);
         Log($"Document unloaded");
 
-        int remaining = ImmStrokeReader.StrokeReader_GetDocumentCount();
+        int remaining = Native.GetDocumentCount();
         Log($"Remaining documents: {remaining}");
 
         Log("\n=== Test Complete ===");

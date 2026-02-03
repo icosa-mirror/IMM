@@ -179,6 +179,24 @@ set_target_properties(ImmUnity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/unity
 )
 
+# -----------------------------------------------------------------------------
+# ImmStrokeReader Unity plugin (macOS)
+# -----------------------------------------------------------------------------
+
+set(IMMSTROKEREADER_SOURCES
+    ${CODE_DIR}/appImmStrokeReader/src/main.cpp
+    ${CODE_DIR}/appImmStrokeReader/src/strokeStore.cpp
+)
+
+add_library(ImmStrokeReader SHARED ${IMMSTROKEREADER_SOURCES})
+target_include_directories(ImmStrokeReader PUBLIC ${CODE_DIR})
+target_link_libraries(ImmStrokeReader PRIVATE libImmImporter libImmCore)
+set_target_properties(ImmStrokeReader PROPERTIES
+    OUTPUT_NAME "ImmStrokeReader"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stroke-reader
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stroke-reader
+)
+
 set(IMMVIEWER_SOURCES
     ${CODE_DIR}/appImmViewer/src/macos/main.mm
     ${CODE_DIR}/appImmViewer/src/mymain.cpp
@@ -202,4 +220,10 @@ set(IMMUNITY_SAMPLE_DIR ${CODE_DIR}/ImmUnitySampleProject/Assets/Plugins/OSX)
 add_custom_command(TARGET ImmUnity POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_SAMPLE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ImmUnity>" "${IMMUNITY_SAMPLE_DIR}/ImmUnityPlugin.bundle"
+)
+
+set(IMMSTROKEREADER_UPM_MAC_DIR ${CODE_DIR}/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS)
+add_custom_command(TARGET ImmStrokeReader POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMSTROKEREADER_UPM_MAC_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ImmStrokeReader>" "${IMMSTROKEREADER_UPM_MAC_DIR}/$<TARGET_FILE_NAME:ImmStrokeReader>"
 )
