@@ -37,6 +37,14 @@ jobs:
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
 
+    - name: Upload Stroke Reader DLL
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmStrokeReader-Windows
+        path: |
+          code/appImmStrokeReader/exe/ImmStrokeReader.dll
+        if-no-files-found: error
+
     - name: Upload Unity Plugin DLL
       uses: actions/upload-artifact@v4
       with:
@@ -173,7 +181,6 @@ jobs:
   build-macos:
     name: macOS
     runs-on: macos-latest
-    if: false
 
     steps:
     - name: Checkout repository
@@ -188,12 +195,25 @@ jobs:
       run: cmake -S code/projects/macos -B build/macos
 
     - name: Build macOS Unity plugin
+      if: false
       run: cmake --build build/macos --config Release
 
+    - name: Build macOS Stroke Reader plugin
+      run: cmake --build build/macos --target ImmStrokeReader --config Release
+
     - name: Upload Unity Plugin Bundle
+      if: false
       uses: actions/upload-artifact@v4
       with:
         name: ImmUnityPlugin-macOS
         path: |
           code/ImmUnitySampleProject/Assets/Plugins/OSX/ImmUnityPlugin.bundle
+        if-no-files-found: error
+
+    - name: Upload Stroke Reader dylib
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmStrokeReader-macOS
+        path: |
+          code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
         if-no-files-found: error
