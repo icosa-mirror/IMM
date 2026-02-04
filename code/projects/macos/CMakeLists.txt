@@ -190,6 +190,7 @@ set(IMMSTROKEREADER_SOURCES
 
 add_library(ImmStrokeReader SHARED ${IMMSTROKEREADER_SOURCES})
 target_include_directories(ImmStrokeReader PUBLIC ${CODE_DIR})
+target_include_directories(ImmStrokeReader PRIVATE ${CODE_DIR}/libImmCore/src/libBasics)
 target_link_libraries(ImmStrokeReader PRIVATE libImmImporter libImmCore)
 set_target_properties(ImmStrokeReader PROPERTIES
     OUTPUT_NAME "ImmStrokeReader"

@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#include "piStr.h"
+#include "libImmCore/src/libBasics/piStr.h"
 
 namespace ImmStrokeReader
 {

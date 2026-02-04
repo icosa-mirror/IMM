@@ -34,7 +34,7 @@ using namespace ImmStrokeReader;
 static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53";
 static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53";
 
-extern "C" const char* UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetBuildId()
+extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_GetBuildId()
 {
     return kImmStrokeReaderBuildIdA;
 }
