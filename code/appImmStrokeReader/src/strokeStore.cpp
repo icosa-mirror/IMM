@@ -1,8 +1,9 @@
 #include "strokeStore.h"
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
-#include <codecvt>
-#include <locale>
+
+#include "piStr.h"
 
 namespace ImmStrokeReader
 {
@@ -31,8 +32,20 @@ namespace
 
     std::string ToUtf8(const std::wstring& input)
     {
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-        return converter.to_bytes(input);
+        if (input.empty())
+        {
+            return std::string();
+        }
+
+        char* res = ImmCore::piws2str(input.c_str());
+        if (!res)
+        {
+            return std::string();
+        }
+
+        std::string out(res);
+        free(res);
+        return out;
     }
 }
 

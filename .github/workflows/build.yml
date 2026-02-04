@@ -154,6 +154,10 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vr && ./gradlew :appImmViewer:assembleDebug -PimmNonVr=OFF -PimmBuildDir=build_vr
 
+    - name: Build appImmStrokeReader
+      working-directory: code/projects/android
+      run: ./gradlew :appImmStrokeReader:assembleDebug
+
     - name: Upload Unity Plugin
       uses: actions/upload-artifact@v4
       with:
@@ -161,6 +165,14 @@ jobs:
         path: |
           code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so
         if-no-files-found: warn
+
+    - name: Upload Stroke Reader
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmStrokeReader-Android
+        path: |
+          code/appImmStrokeReader/Projects/Android/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmStrokeReader.so
+        if-no-files-found: error
 
     - name: Upload Android Viewer
       uses: actions/upload-artifact@v4
