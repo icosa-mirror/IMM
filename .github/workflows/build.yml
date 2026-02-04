@@ -229,3 +229,34 @@ jobs:
         path: |
           code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
         if-no-files-found: error
+
+  build-ios:
+    name: iOS
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install CMake
+      run: brew install cmake
+
+    - name: Configure iOS build
+      run: |
+        cmake -S code/projects/ios -B build/ios \
+          -DCMAKE_SYSTEM_NAME=iOS \
+          -DCMAKE_OSX_SYSROOT=iphoneos \
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+
+    - name: Build iOS Stroke Reader
+      run: cmake --build build/ios --target ImmStrokeReader --config Release
+
+    - name: Upload Stroke Reader (iOS)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmStrokeReader-iOS
+        path: |
+          build/ios/stroke-reader/libImmStrokeReader.a
+        if-no-files-found: error

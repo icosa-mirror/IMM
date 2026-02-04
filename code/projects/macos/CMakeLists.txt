@@ -103,6 +103,58 @@ target_link_libraries(libImmCore
         "-framework Cocoa"
 )
 
+# ----------------------------------------------------------------------------
+# Minimal core (no rendering/window/audio) for stroke reader and iOS
+# ----------------------------------------------------------------------------
+
+set(IMMCORE_MIN_SOURCES
+    ${CODE_DIR}/libImmCore/src/libBasics/piArray.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piPool.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piString.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piTick.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piImage.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piStr.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piFile.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piFileName.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/piTypes.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piLog.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piFileOS.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piTimer.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piMutex.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piThread.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/macos/piSystemInfo.cpp
+    ${CODE_DIR}/libImmCore/src/libCompression/basic/piBitInterlacer.cpp
+    ${CODE_DIR}/libImmCore/src/libCompression/basic/piPredictors.cpp
+    ${CODE_DIR}/libImmCore/src/libCompression/basic/piQuantize.cpp
+    ${CODE_DIR}/libImmCore/src/libCompression/basic/piTransforms.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
+)
+
+add_library(libImmCoreMinimal STATIC ${IMMCORE_MIN_SOURCES})
+target_include_directories(libImmCoreMinimal
+    PUBLIC
+        ${CODE_DIR}
+        ${THIRDPARTY_DIR}/ogg/include
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include/vorbis
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/lib
+        ${THIRDPARTY_DIR}/lpng1637
+        ${CMAKE_BINARY_DIR}/libpng-build
+        ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo
+        ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo/include
+        ${CMAKE_BINARY_DIR}/libjpeg-turbo-build
+)
+target_link_libraries(libImmCoreMinimal
+    PUBLIC
+        ogg
+        vorbis
+        png_static
+        turbojpeg-static
+        ZLIB::ZLIB
+)
+
 set(IMMIMPORTER_SOURCES
     ${CODE_DIR}/libImmImporter/src/document/layerPaint/element.cpp
     ${CODE_DIR}/libImmImporter/src/document/layerPaint/drawingPretessellated.cpp
@@ -130,6 +182,10 @@ set(IMMIMPORTER_SOURCES
 add_library(libImmImporter STATIC ${IMMIMPORTER_SOURCES})
 target_include_directories(libImmImporter PUBLIC ${CODE_DIR})
 target_link_libraries(libImmImporter PUBLIC libImmCore)
+
+add_library(libImmImporterMinimal STATIC ${IMMIMPORTER_SOURCES})
+target_include_directories(libImmImporterMinimal PUBLIC ${CODE_DIR})
+target_link_libraries(libImmImporterMinimal PUBLIC libImmCoreMinimal)
 
 set(IMMPLAYER_SOURCES
     ${CODE_DIR}/libImmPlayer/src/player.cpp
@@ -191,7 +247,7 @@ set(IMMSTROKEREADER_SOURCES
 add_library(ImmStrokeReader SHARED ${IMMSTROKEREADER_SOURCES})
 target_include_directories(ImmStrokeReader PUBLIC ${CODE_DIR})
 target_include_directories(ImmStrokeReader PRIVATE ${CODE_DIR}/libImmCore/src/libBasics)
-target_link_libraries(ImmStrokeReader PRIVATE libImmImporter libImmCore)
+target_link_libraries(ImmStrokeReader PRIVATE libImmImporterMinimal libImmCoreMinimal)
 set_target_properties(ImmStrokeReader PROPERTIES
     OUTPUT_NAME "ImmStrokeReader"
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stroke-reader
