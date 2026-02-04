@@ -197,24 +197,28 @@ set_target_properties(ImmStrokeReader PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stroke-reader
 )
 
-set(IMMVIEWER_SOURCES
-    ${CODE_DIR}/appImmViewer/src/macos/main.mm
-    ${CODE_DIR}/appImmViewer/src/mymain.cpp
-    ${CODE_DIR}/appImmViewer/src/resolve.cpp
-    ${CODE_DIR}/appImmViewer/src/settings.cpp
-    ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
-    ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
-    ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
-    ${CODE_DIR}/appImmViewer/src/simpleJSON/JSONValue.cpp
-)
+option(IMM_BUILD_VIEWER "Build the macOS ImmViewer app" ON)
 
-add_executable(appImmViewer ${IMMVIEWER_SOURCES})
-target_include_directories(appImmViewer PUBLIC ${CODE_DIR})
-target_link_libraries(appImmViewer PRIVATE libImmPlayer libImmImporter libImmCore)
-target_compile_definitions(appImmViewer PRIVATE DISABLE_VR=1)
-set_target_properties(appImmViewer PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/viewer
-)
+if(IMM_BUILD_VIEWER)
+    set(IMMVIEWER_SOURCES
+        ${CODE_DIR}/appImmViewer/src/macos/main.mm
+        ${CODE_DIR}/appImmViewer/src/mymain.cpp
+        ${CODE_DIR}/appImmViewer/src/resolve.cpp
+        ${CODE_DIR}/appImmViewer/src/settings.cpp
+        ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
+        ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
+        ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
+        ${CODE_DIR}/appImmViewer/src/simpleJSON/JSONValue.cpp
+    )
+
+    add_executable(appImmViewer ${IMMVIEWER_SOURCES})
+    target_include_directories(appImmViewer PUBLIC ${CODE_DIR})
+    target_link_libraries(appImmViewer PRIVATE libImmPlayer libImmImporter libImmCore)
+    target_compile_definitions(appImmViewer PRIVATE DISABLE_VR=1)
+    set_target_properties(appImmViewer PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/viewer
+    )
+endif()
 
 set(IMMUNITY_SAMPLE_DIR ${CODE_DIR}/ImmUnitySampleProject/Assets/Plugins/OSX)
 add_custom_command(TARGET ImmUnity POST_BUILD
