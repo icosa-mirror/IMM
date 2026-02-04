@@ -74,12 +74,6 @@ ipch/
 *.cachefile
 *.VC.db
 *.VC.VC.opendb
-code/ImmUnitySampleProject/imm_player_log.txt
-/code/ImmUnitySampleProject/Assets/ExampleImmFiles
 /.gradle-local
 /.gradle-user
-/quillplayer_decompiled
-/LLM Docs
-/LLM Scripts
-/exampleImmFiles
 /code/ImmUnitySampleProject/UserSettings
