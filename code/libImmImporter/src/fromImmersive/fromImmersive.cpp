@@ -476,6 +476,8 @@ namespace ImmImporter
             if (layer->GetType() == Layer::Type::Paint)
             {
                 collector->OnBeginLayer(layer->GetID(), static_cast<uint32_t>(layer->GetType()), layer->GetName().GetS());
+                collector->OnLayerTransform(layer->GetID(), layer->GetTransform(), layer->GetTransformToWorld());
+                collector->OnLayerTransform(layer->GetID(), layer->GetTransform(), layer->GetTransformToWorld());
 
                 // Load the asset first (sets up file offsets for drawings)
                 if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))

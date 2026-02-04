@@ -13,6 +13,15 @@ namespace ImmPlayer
     {
         private const string DllName = "ImmStrokeReader";
 
+        [DllImport(DllName)]
+        private static extern IntPtr StrokeReader_GetBuildId();
+
+        public static string GetBuildId()
+        {
+            IntPtr p = StrokeReader_GetBuildId();
+            return p == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(p);
+        }
+
         #region Lifecycle API
 
         /// <summary>
@@ -94,6 +103,10 @@ namespace ImmPlayer
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetLayerInfo(int docId, int layerIdx, out StrokeLayerInfo info);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetLayerTransform(int docId, int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world);
+
         /// <summary>
         /// Get the number of drawings in a layer.
         /// </summary>
@@ -152,7 +165,7 @@ namespace ImmPlayer
     /// <summary>
     /// Information about a layer in an IMM document.
     /// </summary>
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
     public struct StrokeLayerInfo
     {
         /// <summary>Layer ID</summary>
@@ -165,8 +178,22 @@ namespace ImmPlayer
         public int numDrawings;
 
         /// <summary>Layer name (up to 128 characters)</summary>
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
         public string name;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeLayerTransform
+    {
+        public float rotX;
+        public float rotY;
+        public float rotZ;
+        public float rotW;
+        public float scale;
+        public int flip;
+        public float transX;
+        public float transY;
+        public float transZ;
     }
 
     /// <summary>

@@ -261,6 +261,11 @@ namespace ImmImporter
                 {
                     log->Printf(LT_WARNING, L"IMM_IMPORT: biggestStroke=%f in drawing %u", biggestStroke, drawingId);
                 }
+
+                if (collector)
+                {
+                    collector->OnDrawingBiggestStroke(drawingId, biggestStroke);
+                }
                 
                 if (version == 1)
                 {

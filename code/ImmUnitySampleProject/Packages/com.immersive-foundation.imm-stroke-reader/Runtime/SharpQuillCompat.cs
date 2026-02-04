@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using ImmPlayer;
 
@@ -9,11 +10,30 @@ namespace ImmStrokeReader.SharpQuill
 
     public static class QuillSequenceReader
     {
+        private static bool s_LayerTransformApiAvailable = true;
+
         public static Sequence ReadImm(string path)
         {
             if (string.IsNullOrEmpty(path))
             {
                 return null;
+            }
+
+            try
+            {
+                string buildId = ImmPlayer.ImmStrokeReader.GetBuildId();
+                if (!string.IsNullOrEmpty(buildId))
+                {
+                    UnityEngine.Debug.Log($"ImmStrokeReader: {buildId}");
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                UnityEngine.Debug.LogWarning("ImmStrokeReader: build id symbol not found (old dylib loaded?)");
+            }
+            catch (DllNotFoundException)
+            {
+                UnityEngine.Debug.LogError("ImmStrokeReader: native plugin not found");
             }
 
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_IsInitialized())
@@ -44,7 +64,8 @@ namespace ImmStrokeReader.SharpQuill
                 // We currently expose strokes as paint layers only.
                 LayerPaint layer = new LayerPaint
                 {
-                    Name = info.name
+                    Name = info.name,
+                    Transform = GetLayerTransform(docId, layerIdx)
                 };
 
                 int drawingCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
@@ -98,6 +119,65 @@ namespace ImmStrokeReader.SharpQuill
 
             ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
             return seq;
+        }
+
+        private static Transform GetLayerTransform(int docId, int layerIdx)
+        {
+            if (!s_LayerTransformApiAvailable)
+            {
+                return Transform.Identity;
+            }
+
+            try
+            {
+                if (ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerTransform(docId, layerIdx, out var local, out var world))
+                {
+                    return ConvertTransform(world);
+                }
+            }
+            catch (EntryPointNotFoundException)
+            {
+                s_LayerTransformApiAvailable = false;
+            }
+
+            return Transform.Identity;
+        }
+
+        private static Transform ConvertTransform(ImmPlayer.StrokeLayerTransform native)
+        {
+            float rotX = native.rotX;
+            float rotY = native.rotY;
+            float rotZ = native.rotZ;
+            float rotW = native.rotW;
+            if (rotX == 0f && rotY == 0f && rotZ == 0f && rotW == 0f)
+            {
+                rotW = 1f;
+            }
+
+            float scale = native.scale;
+            if (scale == 0f || float.IsNaN(scale) || float.IsInfinity(scale))
+            {
+                scale = 1.0f;
+            }
+
+            return new Transform
+            {
+                Rotation = new Quaternion(rotX, rotY, rotZ, rotW),
+                Scale = scale,
+                Flip = FlipToString(native.flip),
+                Translation = new Vector3(native.transX, native.transY, native.transZ)
+            };
+        }
+
+        private static string FlipToString(int flip)
+        {
+            switch (flip)
+            {
+                case 1: return "X";
+                case 2: return "Y";
+                case 3: return "Z";
+                default: return "N";
+            }
         }
     }
 
@@ -188,6 +268,9 @@ namespace ImmStrokeReader.SharpQuill
         public float X;
         public float Y;
         public float Z;
+        public float x { get => X; set => X = value; }
+        public float y { get => Y; set => Y = value; }
+        public float z { get => Z; set => Z = value; }
 
         public Vector3(float x, float y, float z)
         {
@@ -205,6 +288,12 @@ namespace ImmStrokeReader.SharpQuill
         public float W;
 
         public static Quaternion Identity => new Quaternion(0, 0, 0, 1);
+        public static Quaternion identity => Identity;
+
+        public float x { get => X; set => X = value; }
+        public float y { get => Y; set => Y = value; }
+        public float z { get => Z; set => Z = value; }
+        public float w { get => W; set => W = value; }
 
         public Quaternion(float x, float y, float z, float w)
         {

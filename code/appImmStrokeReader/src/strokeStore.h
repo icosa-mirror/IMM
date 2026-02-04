@@ -16,7 +16,15 @@ struct StrokeLayerInfoC
     int id;
     int type;
     int numDrawings;
-    wchar_t name[128];
+    char name[256];
+};
+
+struct StrokeLayerTransformC
+{
+    float rotation[4];
+    float scale;
+    int flip;
+    float translation[3];
 };
 
 struct StrokeInfoC
@@ -51,6 +59,7 @@ struct StoredStroke
 struct StoredDrawing
 {
     uint32_t drawingId;
+    float biggestStroke = 0.0f;
     std::vector<StoredStroke> strokes;
 };
 
@@ -59,6 +68,8 @@ struct StoredLayer
     uint32_t layerId;
     uint32_t layerType;
     std::wstring name;
+    ImmCore::trans3d localTransform = ImmCore::trans3d::identity();
+    ImmCore::trans3d worldTransform = ImmCore::trans3d::identity();
     std::vector<StoredDrawing> drawings;
 };
 
@@ -76,7 +87,9 @@ public:
 
     // IStrokeCollector interface
     void OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name) override;
+    void OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform) override;
     void OnBeginDrawing(uint32_t drawingId) override;
+    void OnDrawingBiggestStroke(uint32_t drawingId, float biggestStroke) override;
     void OnStroke(
         uint32_t strokeId,
         uint8_t brushType,
@@ -91,7 +104,9 @@ public:
     // Query interface
     int GetLayerCount() const;
     bool GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const;
+    bool GetLayerTransform(int layerIdx, StrokeLayerTransformC* local, StrokeLayerTransformC* world) const;
     int GetDrawingCount(int layerIdx) const;
+    bool GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* biggestStroke) const;
     int GetStrokeCount(int layerIdx, int drawingIdx) const;
     bool GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info) const;
     bool GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokePointC* points, int maxPoints) const;

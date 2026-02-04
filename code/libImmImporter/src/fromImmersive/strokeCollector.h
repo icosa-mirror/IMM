@@ -20,9 +20,25 @@ public:
     // @param name - name of the layer (null-terminated wide string)
     virtual void OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name) = 0;
 
+    // Optional callback when layer transforms are available
+    virtual void OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform)
+    {
+        (void)layerId;
+        (void)localTransform;
+        (void)worldTransform;
+    }
+
     // Called when a drawing within a paint layer begins loading
     // @param drawingId - index of the drawing within the layer
     virtual void OnBeginDrawing(uint32_t drawingId) = 0;
+
+    // Optional callback providing the per-drawing scale used to decode quantized data.
+    // This is read from the .imm and is needed to reconstruct widths (see Element::Point::mWid comment).
+    virtual void OnDrawingBiggestStroke(uint32_t drawingId, float biggestStroke)
+    {
+        (void)drawingId;
+        (void)biggestStroke;
+    }
 
     // Called for each stroke (element) in a drawing after it has been decoded
     // @param strokeId - index of the stroke within the drawing

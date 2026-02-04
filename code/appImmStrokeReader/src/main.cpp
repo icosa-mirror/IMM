@@ -30,6 +30,15 @@ using namespace ImmStrokeReader;
     #define UNITY_INTERFACE_EXPORT
 #endif
 
+// Bump this when you need to confirm Unity loaded the new dylib.
+static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53";
+static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53";
+
+extern "C" const char* UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetBuildId()
+{
+    return kImmStrokeReaderBuildIdA;
+}
+
 // Global state
 static struct
 {
@@ -62,7 +71,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_Init(char
         return -1;
     }
 
-    gStrokeReader.mLog.Printf(LT_MESSAGE, L"ImmStrokeReader initialized");
+    gStrokeReader.mLog.Printf(LT_MESSAGE, L"ImmStrokeReader initialized (%s)", kImmStrokeReaderBuildIdW);
     gStrokeReader.mInitialized = true;
     gStrokeReader.mNextDocId = 1;
 
@@ -106,6 +115,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromF
         gStrokeReader.mLog.Printf(LT_ERROR, L"StrokeReader_LoadFromFile: filename is null or empty");
         return -2;
     }
+
+    // Emit build ID from an always-called API so we can tell if Unity
+    // is running the updated dylib without restarting.
+    gStrokeReader.mLog.Printf(LT_MESSAGE, L"%s", kImmStrokeReaderBuildIdW);
 
     gStrokeReader.mLog.Printf(LT_MESSAGE, L"StrokeReader_LoadFromFile: %s", pistr2ws(fileName));
 
@@ -245,6 +258,20 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayer
     return it->second->GetLayerInfo(layerIdx, info);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerTransform(int docId, int layerIdx, StrokeLayerTransformC* localTransform, StrokeLayerTransformC* worldTransform)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return false;
+
+    return it->second->GetLayerTransform(layerIdx, localTransform, worldTransform);
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawingCount(int docId, int layerIdx)
 {
     std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
@@ -257,6 +284,24 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawin
         return 0;
 
     return it->second->GetDrawingCount(layerIdx);
+}
+
+extern "C" float UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawingBiggestStroke(int docId, int layerIdx, int drawingIdx)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0.0f;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0.0f;
+
+    float biggestStroke = 0.0f;
+    if (!it->second->GetDrawingBiggestStroke(layerIdx, drawingIdx, &biggestStroke))
+        return 0.0f;
+
+    return biggestStroke;
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrokeCount(int docId, int layerIdx, int drawingIdx)
