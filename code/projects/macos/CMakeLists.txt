@@ -122,11 +122,12 @@ set(IMMCORE_MIN_SOURCES
     ${CODE_DIR}/libImmCore/src/libBasics/macos/piTimer.cpp
     ${CODE_DIR}/libImmCore/src/libBasics/macos/piMutex.cpp
     ${CODE_DIR}/libImmCore/src/libBasics/macos/piThread.cpp
-    ${CODE_DIR}/libImmCore/src/libBasics/macos/piSystemInfo.cpp
+    ${CODE_DIR}/libImmCore/src/libBasics/ios/piSystemInfo.cpp
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piBitInterlacer.cpp
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piPredictors.cpp
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piQuantize.cpp
     ${CODE_DIR}/libImmCore/src/libCompression/basic/piTransforms.cpp
+    ${CODE_DIR}/libImmCore/src/libMesh/piMesh.cpp
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
