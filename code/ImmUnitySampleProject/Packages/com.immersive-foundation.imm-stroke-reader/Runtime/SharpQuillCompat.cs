@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using ImmPlayer;
 
 namespace ImmStrokeReader.SharpQuill
@@ -60,57 +61,59 @@ namespace ImmStrokeReader.SharpQuill
                     continue;
                 }
 
-                // We currently expose strokes as paint layers only.
-                LayerPaint layer = new LayerPaint
+                Layer layer = CreateLayerFromInfo(docId, layerIdx, info);
+                if (layer == null)
                 {
-                    Name = info.name,
-                    Transform = GetLayerTransform(docId, layerIdx)
-                };
+                    continue;
+                }
 
-                int drawingCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
-                for (int drawingIdx = 0; drawingIdx < drawingCount; drawingIdx++)
+                if (layer is LayerPaint paint)
                 {
-                    Drawing drawing = new Drawing();
-                    int strokeCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeCount(docId, layerIdx, drawingIdx);
-                    for (int strokeIdx = 0; strokeIdx < strokeCount; strokeIdx++)
+                    int drawingCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
+                    for (int drawingIdx = 0; drawingIdx < drawingCount; drawingIdx++)
                     {
-                        if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, layerIdx, drawingIdx, strokeIdx, out StrokeInfo strokeInfo))
+                        Drawing drawing = new Drawing();
+                        int strokeCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeCount(docId, layerIdx, drawingIdx);
+                        for (int strokeIdx = 0; strokeIdx < strokeCount; strokeIdx++)
                         {
-                            continue;
+                            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, layerIdx, drawingIdx, strokeIdx, out StrokeInfo strokeInfo))
+                            {
+                                continue;
+                            }
+
+                            StrokePoint[] points = new StrokePoint[strokeInfo.numPoints];
+                            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokePoints(docId, layerIdx, drawingIdx, strokeIdx, points, strokeInfo.numPoints))
+                            {
+                                continue;
+                            }
+
+                            Stroke stroke = new Stroke
+                            {
+                                Id = (uint)strokeIdx,
+                                BrushType = (BrushType)(short)strokeInfo.brushType,
+                                DisableRotationalOpacity = true,
+                                BoundingBox = new BoundingBox(strokeInfo.bboxMinX, strokeInfo.bboxMinY, strokeInfo.bboxMinZ,
+                                    strokeInfo.bboxMaxX, strokeInfo.bboxMaxY, strokeInfo.bboxMaxZ)
+                            };
+
+                            for (int p = 0; p < points.Length; p++)
+                            {
+                                StrokePoint pt = points[p];
+                                stroke.Vertices.Add(new Vertex(
+                                    new Vector3(pt.px, pt.py, pt.pz),
+                                    new Vector3(pt.nx, pt.ny, pt.nz),
+                                    new Vector3(pt.dx, pt.dy, pt.dz),
+                                    new Color(pt.r, pt.g, pt.b),
+                                    pt.alpha,
+                                    pt.width));
+                            }
+
+                            drawing.Data.Strokes.Add(stroke);
                         }
 
-                        StrokePoint[] points = new StrokePoint[strokeInfo.numPoints];
-                        if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokePoints(docId, layerIdx, drawingIdx, strokeIdx, points, strokeInfo.numPoints))
-                        {
-                            continue;
-                        }
-
-                        Stroke stroke = new Stroke
-                        {
-                            Id = (uint)strokeIdx,
-                            BrushType = (BrushType)(short)strokeInfo.brushType,
-                            DisableRotationalOpacity = true,
-                            BoundingBox = new BoundingBox(strokeInfo.bboxMinX, strokeInfo.bboxMinY, strokeInfo.bboxMinZ,
-                                strokeInfo.bboxMaxX, strokeInfo.bboxMaxY, strokeInfo.bboxMaxZ)
-                        };
-
-                        for (int p = 0; p < points.Length; p++)
-                        {
-                            StrokePoint pt = points[p];
-                            stroke.Vertices.Add(new Vertex(
-                                new Vector3(pt.px, pt.py, pt.pz),
-                                new Vector3(pt.nx, pt.ny, pt.nz),
-                                new Vector3(pt.dx, pt.dy, pt.dz),
-                                new Color(pt.r, pt.g, pt.b),
-                                pt.alpha,
-                                pt.width));
-                        }
-
-                        drawing.Data.Strokes.Add(stroke);
+                        paint.Drawings.Add(drawing);
+                        paint.Frames.Add(paint.Drawings.Count - 1);
                     }
-
-                    layer.Drawings.Add(drawing);
-                    layer.Frames.Add(layer.Drawings.Count - 1);
                 }
 
                 seq.RootLayer.Children.Add(layer);
@@ -168,6 +171,129 @@ namespace ImmStrokeReader.SharpQuill
             };
         }
 
+        private static Transform GetLayerPivot(StrokeLayerInfo info)
+        {
+            float rotX = info.pivotRotX;
+            float rotY = info.pivotRotY;
+            float rotZ = info.pivotRotZ;
+            float rotW = info.pivotRotW;
+            if (rotX == 0f && rotY == 0f && rotZ == 0f && rotW == 0f)
+            {
+                rotW = 1f;
+            }
+
+            float scale = info.pivotScale;
+            if (scale == 0f || float.IsNaN(scale) || float.IsInfinity(scale))
+            {
+                scale = 1.0f;
+            }
+
+            return new Transform
+            {
+                Rotation = new Quaternion(rotX, rotY, rotZ, rotW),
+                Scale = scale,
+                Flip = FlipToString(info.pivotFlip),
+                Translation = new Vector3(info.pivotTransX, info.pivotTransY, info.pivotTransZ)
+            };
+        }
+
+        private static Layer CreateLayerFromInfo(int docId, int layerIdx, StrokeLayerInfo info)
+        {
+            Layer layer;
+            if (info.type == (int)LayerType.Picture)
+            {
+                LayerPicture picture = TryBuildPictureLayer(docId, layerIdx);
+                if (picture == null)
+                {
+                    return null;
+                }
+                layer = picture;
+            }
+            else
+            {
+                layer = new LayerPaint();
+            }
+
+            layer.Name = info.name;
+            layer.Transform = GetLayerTransform(docId, layerIdx);
+            layer.Visible = info.visible != 0;
+            layer.Opacity = info.opacity;
+            layer.Pivot = GetLayerPivot(info);
+            return layer;
+        }
+
+        private static LayerPicture TryBuildPictureLayer(int docId, int layerIdx)
+        {
+            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetPictureInfo(docId, layerIdx, out StrokePictureInfo pictureInfo))
+            {
+                return null;
+            }
+
+            if (pictureInfo.width <= 0 || pictureInfo.height <= 0 || pictureInfo.dataSize <= 0)
+            {
+                return null;
+            }
+
+            int dataSize = pictureInfo.dataSize;
+            if (dataSize <= 0)
+            {
+                return null;
+            }
+
+            byte[] pixels = new byte[dataSize];
+            System.IntPtr buffer = Marshal.AllocHGlobal(dataSize);
+            try
+            {
+                int bytesWritten = ImmPlayer.ImmStrokeReader.StrokeReader_GetPicturePixelData(docId, layerIdx, buffer, dataSize);
+                if (bytesWritten <= 0)
+                {
+                    return null;
+                }
+
+                Marshal.Copy(buffer, pixels, 0, dataSize);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+
+            PictureData data = new PictureData
+            {
+                HasAlpha = pictureInfo.hasAlpha != 0,
+                Width = pictureInfo.width,
+                Height = pictureInfo.height,
+                Pixels = pixels
+            };
+
+            LayerPicture picture = new LayerPicture
+            {
+                PictureType = ConvertPictureType(pictureInfo.contentType),
+                ViewerLocked = pictureInfo.isViewerLocked != 0,
+                Data = data,
+                DataFileOffset = pictureInfo.layerId
+            };
+            return picture;
+        }
+
+        private static PictureType ConvertPictureType(int contentType)
+        {
+            switch (contentType)
+            {
+                case 0:
+                    return PictureType.TwoD;
+                case 1:
+                    return PictureType.ThreeSixty_Equirect_Mono;
+                case 2:
+                    return PictureType.ThreeSixty_Equirect_Stereo;
+                case 3:
+                    return PictureType.ThreeSixty_Equirect_Mono;
+                case 4:
+                    return PictureType.ThreeSixty_Equirect_Mono;
+                default:
+                    return PictureType.Unknown;
+            }
+        }
+
         private static string FlipToString(int flip)
         {
             switch (flip)
@@ -188,7 +314,8 @@ namespace ImmStrokeReader.SharpQuill
     public enum LayerType : short
     {
         Group = 0,
-        Paint = 1
+        Paint = 1,
+        Picture = 4
     }
 
     public abstract class Layer
@@ -217,6 +344,33 @@ namespace ImmStrokeReader.SharpQuill
         public int MaxRepeatCount { get; set; }
         public List<Drawing> Drawings { get; set; } = new List<Drawing>();
         public List<int> Frames { get; set; } = new List<int>();
+    }
+
+    public class LayerPicture : Layer
+    {
+        public override LayerType Type { get { return LayerType.Picture; } }
+        public PictureType PictureType { get; set; }
+        public bool ViewerLocked { get; set; }
+        public long DataFileOffset { get; set; }
+        public string ImportFilePath { get; set; }
+        public PictureData Data { get; set; }
+    }
+
+    public enum PictureType
+    {
+        Unknown,
+        TwoD,
+        TwoDDepth,
+        ThreeSixty_Equirect_Mono,
+        ThreeSixty_Equirect_Stereo,
+    }
+
+    public class PictureData
+    {
+        public bool HasAlpha { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public byte[] Pixels { get; set; }
     }
 
     public class Drawing

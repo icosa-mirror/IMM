@@ -128,6 +128,7 @@ namespace ImmImporter
         float   GetWorldOpacity(void) const;
 
 		ImmCore::trans3d GetTransform(void) const;
+		ImmCore::trans3d GetPivot(void) const;
 		bool    HasBBox(void) const;
 		const ImmCore::bound3d GetBBox(void);
 		bool* GetVisibleRef(void);

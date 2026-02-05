@@ -475,9 +475,17 @@ namespace ImmImporter
         {
             if (layer->GetType() == Layer::Type::Paint)
             {
-                collector->OnBeginLayer(layer->GetID(), static_cast<uint32_t>(layer->GetType()), layer->GetName().GetS());
-                collector->OnLayerTransform(layer->GetID(), layer->GetTransform(), layer->GetTransformToWorld());
-                collector->OnLayerTransform(layer->GetID(), layer->GetTransform(), layer->GetTransformToWorld());
+                collector->OnBeginLayer(
+                    layer->GetID(),
+                    static_cast<uint32_t>(layer->GetType()),
+                    layer->GetName().GetS(),
+                    layer->GetWorldVisible(),
+                    layer->GetWorldOpacity());
+                collector->OnLayerTransform(
+                    layer->GetID(),
+                    layer->GetTransform(),
+                    layer->GetTransformToWorld(),
+                    layer->GetPivot());
 
                 // Load the asset first (sets up file offsets for drawings)
                 if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))
@@ -502,6 +510,50 @@ namespace ImmImporter
                     }
 
                     collector->OnEndDrawing();
+                }
+
+                collector->OnEndLayer();
+            }
+            else if (layer->GetType() == Layer::Type::Picture)
+            {
+                collector->OnBeginLayer(
+                    layer->GetID(),
+                    static_cast<uint32_t>(layer->GetType()),
+                    layer->GetName().GetS(),
+                    layer->GetWorldVisible(),
+                    layer->GetWorldOpacity());
+                collector->OnLayerTransform(
+                    layer->GetID(),
+                    layer->GetTransform(),
+                    layer->GetTransformToWorld(),
+                    layer->GetPivot());
+
+                if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))
+                {
+                    log->Printf(LT_ERROR, L"Could not load asset for layer %s", layer->GetName().GetS());
+                    collector->OnEndLayer();
+                    return true;
+                }
+                layer->SetLoaded(true);
+
+                LayerPicture* lp = (LayerPicture*)layer->GetImplementation();
+                piImage* image = lp ? lp->GetImage() : nullptr;
+                if (image)
+                {
+                    const int width = image->GetXRes();
+                    const int height = image->GetYRes();
+                    const uint64_t dataSize = image->GetDataSize(0);
+                    const uint8_t* pixels = static_cast<const uint8_t*>(image->GetData(0));
+                    const bool hasAlpha = (image->GetNumChannels() >= 4);
+                    collector->OnPictureLayer(
+                        layer->GetID(),
+                        static_cast<uint32_t>(lp->GetType()),
+                        lp->GetIsViewerLocked(),
+                        width,
+                        height,
+                        hasAlpha,
+                        pixels,
+                        static_cast<int>(dataSize));
                 }
 
                 collector->OnEndLayer();

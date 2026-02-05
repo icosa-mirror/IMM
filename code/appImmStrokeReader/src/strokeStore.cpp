@@ -1,4 +1,7 @@
 #include "strokeStore.h"
+
+#include <algorithm>
+#include <cstring>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -60,24 +63,28 @@ StrokeStore::~StrokeStore()
     Clear();
 }
 
-void StrokeStore::OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name)
+void StrokeStore::OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name, bool visible, float opacity)
 {
     StoredLayer layer;
     layer.layerId = layerId;
     layer.layerType = layerType;
     layer.name = name ? name : L"";
+    layer.visible = visible;
+    layer.opacity = opacity;
+    layer.pivotTransform = ImmCore::trans3d::identity();
     layer.localTransform = ImmCore::trans3d::identity();
     layer.worldTransform = ImmCore::trans3d::identity();
     mDocument.layers.push_back(layer);
     mCurrentLayer = &mDocument.layers.back();
 }
 
-void StrokeStore::OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform)
+void StrokeStore::OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform, const ImmCore::trans3d& pivotTransform)
 {
     if (mCurrentLayer && mCurrentLayer->layerId == layerId)
     {
         mCurrentLayer->localTransform = localTransform;
         mCurrentLayer->worldTransform = worldTransform;
+        mCurrentLayer->pivotTransform = pivotTransform;
         return;
     }
 
@@ -87,8 +94,42 @@ void StrokeStore::OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& loc
         {
             layer.localTransform = localTransform;
             layer.worldTransform = worldTransform;
+            layer.pivotTransform = pivotTransform;
             return;
         }
+    }
+}
+
+void StrokeStore::OnPictureLayer(
+    uint32_t layerId,
+    uint32_t contentType,
+    bool isViewerLocked,
+    int width,
+    int height,
+    bool hasAlpha,
+    const uint8_t* pixels,
+    int pixelDataSize)
+{
+    if (layerId == 0 || width <= 0 || height <= 0 || !pixels || pixelDataSize <= 0)
+    {
+        return;
+    }
+
+    for (auto& layer : mDocument.layers)
+    {
+        if (layer.layerId != layerId)
+        {
+            continue;
+        }
+
+        layer.hasPicture = true;
+        layer.pictureContentType = contentType;
+        layer.pictureViewerLocked = isViewerLocked;
+        layer.pictureWidth = width;
+        layer.pictureHeight = height;
+        layer.pictureHasAlpha = hasAlpha;
+        layer.picturePixels.assign(pixels, pixels + pixelDataSize);
+        return;
     }
 }
 
@@ -177,6 +218,20 @@ bool StrokeStore::GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const
     info->id = static_cast<int>(layer.layerId);
     info->type = static_cast<int>(layer.layerType);
     info->numDrawings = static_cast<int>(layer.drawings.size());
+    info->visible = layer.visible ? 1 : 0;
+    info->opacity = static_cast<float>(layer.opacity);
+    info->visible = layer.visible ? 1 : 0;
+
+    StrokeLayerTransformC pivot = ToTransformC(layer.pivotTransform);
+    info->pivotRotation[0] = pivot.rotation[0];
+    info->pivotRotation[1] = pivot.rotation[1];
+    info->pivotRotation[2] = pivot.rotation[2];
+    info->pivotRotation[3] = pivot.rotation[3];
+    info->pivotScale = pivot.scale;
+    info->pivotFlip = pivot.flip;
+    info->pivotTranslation[0] = pivot.translation[0];
+    info->pivotTranslation[1] = pivot.translation[1];
+    info->pivotTranslation[2] = pivot.translation[2];
 
     const std::string utf8Name = ToUtf8(layer.name);
     std::memset(info->name, 0, sizeof(info->name));
@@ -302,6 +357,57 @@ bool StrokeStore::GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, S
         dst.width = widthScale * static_cast<float>(widQ);
     }
 
+    return true;
+}
+
+bool StrokeStore::GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const
+{
+    if (!info)
+    {
+        return false;
+    }
+
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+    {
+        return false;
+    }
+
+    const StoredLayer& layer = mDocument.layers[layerIdx];
+    if (!layer.hasPicture)
+    {
+        return false;
+    }
+
+    info->layerId = static_cast<int>(layer.layerId);
+    info->contentType = static_cast<int>(layer.pictureContentType);
+    info->isViewerLocked = layer.pictureViewerLocked ? 1 : 0;
+    info->width = layer.pictureWidth;
+    info->height = layer.pictureHeight;
+    info->hasAlpha = layer.pictureHasAlpha ? 1 : 0;
+    info->dataSize = static_cast<int>(layer.picturePixels.size());
+    return true;
+}
+
+bool StrokeStore::GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) const
+{
+    if (!pixels || maxBytes <= 0)
+    {
+        return false;
+    }
+
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+    {
+        return false;
+    }
+
+    const StoredLayer& layer = mDocument.layers[layerIdx];
+    if (!layer.hasPicture || layer.picturePixels.empty())
+    {
+        return false;
+    }
+
+    const int copyBytes = std::min(maxBytes, static_cast<int>(layer.picturePixels.size()));
+    memcpy(pixels, layer.picturePixels.data(), static_cast<size_t>(copyBytes));
     return true;
 }
 

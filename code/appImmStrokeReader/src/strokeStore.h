@@ -17,6 +17,12 @@ struct StrokeLayerInfoC
     int type;
     int numDrawings;
     char name[256];
+    int visible;
+    float opacity;
+    float pivotRotation[4];
+    float pivotScale;
+    int pivotFlip;
+    float pivotTranslation[3];
 };
 
 struct StrokeLayerTransformC
@@ -46,6 +52,17 @@ struct StrokePointC
     float width;       // stroke width (quantized int, needs conversion with biggestStroke)
 };
 
+struct StrokePictureInfoC
+{
+    int layerId;
+    int contentType;
+    int isViewerLocked;
+    int width;
+    int height;
+    int hasAlpha;
+    int dataSize;
+};
+
 // Internal storage structures
 struct StoredStroke
 {
@@ -68,8 +85,18 @@ struct StoredLayer
     uint32_t layerId;
     uint32_t layerType;
     std::wstring name;
+    bool visible = true;
+    double opacity = 1.0;
+    ImmCore::trans3d pivotTransform = ImmCore::trans3d::identity();
     ImmCore::trans3d localTransform = ImmCore::trans3d::identity();
     ImmCore::trans3d worldTransform = ImmCore::trans3d::identity();
+    bool hasPicture = false;
+    uint32_t pictureContentType = 0;
+    bool pictureViewerLocked = false;
+    int pictureWidth = 0;
+    int pictureHeight = 0;
+    bool pictureHasAlpha = false;
+    std::vector<uint8_t> picturePixels;
     std::vector<StoredDrawing> drawings;
 };
 
@@ -86,8 +113,17 @@ public:
     ~StrokeStore();
 
     // IStrokeCollector interface
-    void OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name) override;
-    void OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform) override;
+    void OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name, bool visible, float opacity) override;
+    void OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform, const ImmCore::trans3d& pivotTransform) override;
+    void OnPictureLayer(
+        uint32_t layerId,
+        uint32_t contentType,
+        bool isViewerLocked,
+        int width,
+        int height,
+        bool hasAlpha,
+        const uint8_t* pixels,
+        int pixelDataSize) override;
     void OnBeginDrawing(uint32_t drawingId) override;
     void OnDrawingBiggestStroke(uint32_t drawingId, float biggestStroke) override;
     void OnStroke(
@@ -110,6 +146,8 @@ public:
     int GetStrokeCount(int layerIdx, int drawingIdx) const;
     bool GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info) const;
     bool GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokePointC* points, int maxPoints) const;
+    bool GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const;
+    bool GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) const;
 
     // Clear all stored data
     void Clear();

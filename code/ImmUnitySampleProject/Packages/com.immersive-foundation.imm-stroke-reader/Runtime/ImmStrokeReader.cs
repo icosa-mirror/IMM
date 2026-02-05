@@ -157,6 +157,15 @@ namespace ImmPlayer
             int docId, int layerIdx, int drawingIdx, int strokeIdx,
             [Out] StrokePoint[] points, int maxPoints);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetPictureInfo(
+            int docId, int layerIdx, out StrokePictureInfo info);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetPicturePixelData(
+            int docId, int layerIdx, IntPtr pixels, int maxBytes);
+
         #endregion
     }
 
@@ -180,6 +189,29 @@ namespace ImmPlayer
         /// <summary>Layer name (up to 128 characters)</summary>
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
         public string name;
+
+        /// <summary>Layer visible flag (0/1)</summary>
+        public int visible;
+
+        /// <summary>Layer opacity (0-1)</summary>
+        public float opacity;
+
+        /// <summary>Pivot rotation (x,y,z,w)</summary>
+        public float pivotRotX;
+        public float pivotRotY;
+        public float pivotRotZ;
+        public float pivotRotW;
+
+        /// <summary>Pivot scale</summary>
+        public float pivotScale;
+
+        /// <summary>Pivot flip</summary>
+        public int pivotFlip;
+
+        /// <summary>Pivot translation</summary>
+        public float pivotTransX;
+        public float pivotTransY;
+        public float pivotTransZ;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -289,6 +321,18 @@ namespace ImmPlayer
 
         /// <summary>Get color as Color (with alpha)</summary>
         public Color Color => new Color(r, g, b, alpha);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokePictureInfo
+    {
+        public int layerId;
+        public int contentType;
+        public int isViewerLocked;
+        public int width;
+        public int height;
+        public int hasAlpha;
+        public int dataSize;
     }
 
     #endregion

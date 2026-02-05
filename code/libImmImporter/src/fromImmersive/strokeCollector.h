@@ -18,14 +18,35 @@ public:
     // @param layerId - unique ID of the layer
     // @param layerType - type of layer (Paint, Group, etc.)
     // @param name - name of the layer (null-terminated wide string)
-    virtual void OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name) = 0;
+    virtual void OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name, bool visible, float opacity) = 0;
 
     // Optional callback when layer transforms are available
-    virtual void OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform)
+    virtual void OnLayerTransform(uint32_t layerId, const ImmCore::trans3d& localTransform, const ImmCore::trans3d& worldTransform, const ImmCore::trans3d& pivotTransform)
     {
         (void)layerId;
         (void)localTransform;
         (void)worldTransform;
+        (void)pivotTransform;
+    }
+
+    virtual void OnPictureLayer(
+        uint32_t layerId,
+        uint32_t contentType,
+        bool isViewerLocked,
+        int width,
+        int height,
+        bool hasAlpha,
+        const uint8_t* pixels,
+        int pixelDataSize)
+    {
+        (void)layerId;
+        (void)contentType;
+        (void)isViewerLocked;
+        (void)width;
+        (void)height;
+        (void)hasAlpha;
+        (void)pixels;
+        (void)pixelDataSize;
     }
 
     // Called when a drawing within a paint layer begins loading

@@ -350,6 +350,43 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrok
     return it->second->GetStrokePoints(layerIdx, drawingIdx, strokeIdx, points, maxPoints);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPictureInfo(
+    int docId, int layerIdx, StrokePictureInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized || !info)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return false;
+
+    return it->second->GetPictureInfo(layerIdx, info);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPicturePixelData(
+    int docId, int layerIdx, uint8_t* pixels, int maxBytes)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized || !pixels || maxBytes <= 0)
+        return 0;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0;
+
+    StrokePictureInfoC info;
+    if (!it->second->GetPictureInfo(layerIdx, &info))
+        return 0;
+
+    if (!it->second->GetPicturePixels(layerIdx, pixels, maxBytes))
+        return 0;
+
+    return info.dataSize;
+}
+
 // ============================================================================
 // Utility API
 // ============================================================================
