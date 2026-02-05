@@ -40,7 +40,7 @@ jobs:
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReader-Windows
+        name: ImmStrokeReaderPlugin-Windows
         path: |
           code/appImmStrokeReader/exe/ImmStrokeReader.dll
         if-no-files-found: error
@@ -48,7 +48,7 @@ jobs:
     - name: Upload Unity Plugin DLL
       uses: actions/upload-artifact@v4
       with:
-        name: ImmUnityPlugin-Windows
+        name: ImmViewerPlugin-Windows
         path: |
           code/appImmUnity/exe/ImmUnityPlugin.dll
         if-no-files-found: error
@@ -161,7 +161,7 @@ jobs:
     - name: Upload Unity Plugin
       uses: actions/upload-artifact@v4
       with:
-        name: ImmUnityPlugin-Android
+        name: ImmViewerPlugin-Android
         path: |
           code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so
         if-no-files-found: warn
@@ -169,7 +169,7 @@ jobs:
     - name: Upload Stroke Reader
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReader-Android
+        name: ImmStrokeReaderPlugin-Android
         path: |
           code/appImmStrokeReader/Projects/Android/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmStrokeReader.so
         if-no-files-found: error
@@ -217,7 +217,7 @@ jobs:
       if: false
       uses: actions/upload-artifact@v4
       with:
-        name: ImmUnityPlugin-macOS
+        name: ImmViewerPlugin-macOS
         path: |
           code/ImmUnitySampleProject/Assets/Plugins/OSX/ImmUnityPlugin.bundle
         if-no-files-found: error
@@ -225,7 +225,7 @@ jobs:
     - name: Upload Stroke Reader dylib
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReader-macOS
+        name: ImmStrokeReaderPlugin-macOS
         path: |
           code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
         if-no-files-found: error
@@ -256,7 +256,7 @@ jobs:
     - name: Upload Stroke Reader (iOS)
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReader-iOS
+        name: ImmStrokeReaderPlugin-iOS
         path: |
           build/ios/stroke-reader/libImmStrokeReader.a
         if-no-files-found: error
