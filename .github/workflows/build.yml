@@ -260,3 +260,102 @@ jobs:
         path: |
           build/ios/stroke-reader/libImmStrokeReader.a
         if-no-files-found: error
+
+  package-unity-plugins:
+    name: Package Unity Plugins
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-android
+      - build-macos
+      - build-ios
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Download Windows Stroke Reader
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-Windows
+        path: artifacts/ImmStrokeReaderPlugin-Windows
+
+    - name: Download Android Stroke Reader
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-Android
+        path: artifacts/ImmStrokeReaderPlugin-Android
+
+    - name: Download macOS Stroke Reader
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-macOS
+        path: artifacts/ImmStrokeReaderPlugin-macOS
+
+    - name: Download iOS Stroke Reader
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-iOS
+        path: artifacts/ImmStrokeReaderPlugin-iOS
+
+    - name: Download Windows ImmUnity Plugin
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerPlugin-Windows
+        path: artifacts/ImmViewerPlugin-Windows
+
+    - name: Download Android ImmUnity Plugin
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerPlugin-Android
+        path: artifacts/ImmViewerPlugin-Android
+
+    - name: Sync stroke reader package binaries
+      shell: bash
+      run: |
+        set -euo pipefail
+        stroke_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader"
+        mkdir -p "$stroke_pkg/Plugins/x86_64" "$stroke_pkg/Plugins/Android/arm64-v8a" "$stroke_pkg/Plugins/macOS" "$stroke_pkg/Plugins/iOS"
+        cp artifacts/ImmStrokeReaderPlugin-Windows/ImmStrokeReader.dll "$stroke_pkg/Plugins/x86_64/ImmStrokeReader.dll"
+        cp artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so "$stroke_pkg/Plugins/Android/arm64-v8a/libImmStrokeReader.so"
+        cp artifacts/ImmStrokeReaderPlugin-macOS/libImmStrokeReader.dylib "$stroke_pkg/Plugins/macOS/libImmStrokeReader.dylib"
+        cp artifacts/ImmStrokeReaderPlugin-iOS/libImmStrokeReader.a "$stroke_pkg/Plugins/iOS/libImmStrokeReader.a"
+
+    - name: Sync ImmUnity package binaries
+      shell: bash
+      run: |
+        set -euo pipefail
+        unity_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity"
+        mkdir -p "$unity_pkg/Plugins/x86_64" "$unity_pkg/Plugins/Android/libs/arm64-v8a"
+        cp artifacts/ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
+        cp artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+
+    - name: Archive stroke reader package
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd code/ImmUnitySampleProject/Packages
+        zip -r ../../../../ImmStrokeReaderPlugin-UnityPackage.zip com.immersive-foundation.imm-stroke-reader
+
+    - name: Archive ImmUnity package
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd code/ImmUnitySampleProject/Packages
+        zip -r ../../../../ImmViewerPlugin-UnityPackage.zip com.immersive-foundation.imm-unity
+
+    - name: Upload stroke reader Unity package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-UnityPackage
+        path: ImmStrokeReaderPlugin-UnityPackage.zip
+        if-no-files-found: error
+
+    - name: Upload ImmUnity Unity package
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerPlugin-UnityPackage
+        path: ImmViewerPlugin-UnityPackage.zip
+        if-no-files-found: error
