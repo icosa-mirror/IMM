@@ -287,6 +287,8 @@ jobs:
       - build-android
       - build-macos
       - build-ios
+    permissions:
+      actions: write
 
     steps:
     - name: Checkout repository
