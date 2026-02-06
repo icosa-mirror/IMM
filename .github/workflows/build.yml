@@ -421,3 +421,85 @@ jobs:
               });
             }
           }
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-android
+      - package-unity-plugins
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[RELEASE]')
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+    - name: Download UPM packages
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-UPM
+        path: release-assets/upm
+
+    - name: Download UPM packages (ImmViewer)
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerPlugin-UPM
+        path: release-assets/upm
+
+    - name: Download Windows viewer
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewer-Windows
+        path: release-assets/ImmViewer-Windows
+
+    - name: Download Windows viewer (VR)
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewer-Windows-VR
+        path: release-assets/ImmViewer-Windows-VR
+
+    - name: Download Android viewer
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewer-Android
+        path: release-assets/ImmViewer-Android
+
+    - name: Download Android viewer (VR)
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewer-Android-VR
+        path: release-assets/ImmViewer-Android-VR
+
+    - name: Download sample IMM
+      uses: actions/download-artifact@v4
+      with:
+        name: sample1-imm
+        path: release-assets/sample1-imm
+
+    - name: Zip Windows viewer artifacts
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd release-assets
+        zip -r ImmViewer-Windows.zip ImmViewer-Windows
+        zip -r ImmViewer-Windows-VR.zip ImmViewer-Windows-VR
+
+    - name: Create GitHub release
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        tag="release-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+        gh release create "$tag" \
+          --repo "${GITHUB_REPOSITORY}" \
+          --title "$tag" \
+          --generate-notes \
+          release-assets/upm/ImmStrokeReaderPlugin-UPM.zip \
+          release-assets/upm/ImmViewerPlugin-UPM.zip \
+          release-assets/ImmViewer-Windows.zip \
+          release-assets/ImmViewer-Windows-VR.zip \
+          release-assets/ImmViewer-Android/*.apk \
+          release-assets/ImmViewer-Android-VR/*.apk \
+          release-assets/sample1-imm/sample1.imm
