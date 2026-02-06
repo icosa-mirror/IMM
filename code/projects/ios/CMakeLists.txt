@@ -135,3 +135,9 @@ set_target_properties(ImmStrokeReader PROPERTIES
     OUTPUT_NAME "ImmStrokeReader"
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/stroke-reader
 )
+
+set(IMMSTROKEREADER_UPM_IOS_DIR ${CODE_DIR}/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS)
+add_custom_command(TARGET ImmStrokeReader POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMSTROKEREADER_UPM_IOS_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ImmStrokeReader>" "${IMMSTROKEREADER_UPM_IOS_DIR}/$<TARGET_FILE_NAME:ImmStrokeReader>"
+)

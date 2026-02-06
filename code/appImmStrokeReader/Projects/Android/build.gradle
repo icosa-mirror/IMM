@@ -45,3 +45,32 @@ android {
         }
     }
 }
+
+// Copy .so to Unity sample project after build
+def unityPluginDir = "${projectDir}/../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/Android/arm64-v8a"
+
+tasks.register('copyToUnity') {
+    doLast {
+        def soFile = fileTree(dir: "${buildDir}/intermediates/cxx", include: '**/arm64-v8a/libImmStrokeReader.so').files.find()
+        if (soFile != null && soFile.exists()) {
+            def destDir = file(unityPluginDir)
+            destDir.mkdirs()
+            copy {
+                from soFile
+                into destDir
+            }
+            println "Copied libImmStrokeReader.so to ${destDir}"
+        } else {
+            println "WARNING: libImmStrokeReader.so not found, skipping copy to Unity project"
+        }
+    }
+}
+
+afterEvaluate {
+    tasks.named('assembleDebug').configure {
+        finalizedBy 'copyToUnity'
+    }
+    tasks.named('assembleRelease').configure {
+        finalizedBy 'copyToUnity'
+    }
+}

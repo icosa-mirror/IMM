@@ -83,7 +83,7 @@
     </Link>
     <PostBuildEvent>
       <Command>echo Copying ImmStrokeReader.dll to Unity sample project...
-copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Assets\Plugins\x86_64\ImmStrokeReader.dll"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-stroke-reader\Plugins\x86_64\ImmStrokeReader.dll"
 if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -105,7 +105,7 @@ if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not e
     </Link>
     <PostBuildEvent>
       <Command>echo Copying ImmStrokeReader.dll to Unity sample project...
-copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Assets\Plugins\x86_64\ImmStrokeReader.dll"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-stroke-reader\Plugins\x86_64\ImmStrokeReader.dll"
 if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>

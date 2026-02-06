@@ -89,7 +89,7 @@
     </Link>
     <PostBuildEvent>
       <Command>echo Copying ImmUnityPlugin.dll to Unity sample project...
-copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Assets\Plugins\x86_64\ImmUnityPlugin.dll"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll"
 if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
     </PostBuildEvent>
     <FxCompile>
@@ -117,7 +117,7 @@ if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not e
     </Link>
     <PostBuildEvent>
       <Command>echo Copying ImmUnityPlugin.dll to Unity sample project...
-copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Assets\Plugins\x86_64\ImmUnityPlugin.dll"
+copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll"
 if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
     </PostBuildEvent>
     <FxCompile>

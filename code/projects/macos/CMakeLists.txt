@@ -278,7 +278,7 @@ if(IMM_BUILD_VIEWER)
     )
 endif()
 
-set(IMMUNITY_SAMPLE_DIR ${CODE_DIR}/ImmUnitySampleProject/Assets/Plugins/OSX)
+set(IMMUNITY_SAMPLE_DIR ${CODE_DIR}/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/OSX)
 add_custom_command(TARGET ImmUnity POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_SAMPLE_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ImmUnity>" "${IMMUNITY_SAMPLE_DIR}/ImmUnityPlugin.bundle"

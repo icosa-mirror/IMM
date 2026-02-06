@@ -120,3 +120,58 @@ Note: Quest devices load from the app folder as expected. Many Android phones do
 ### Opening .imm files via Android intents
 
 The Android player accepts `ACTION_VIEW` intents for `.imm` files. If a file manager provides a `content://` URI, the player will copy it into the app’s internal files directory and load it from there. This is the most reliable approach on Android phones.
+# Local plugin builds (auto-copy into Unity sample project)
+
+This repo auto-copies plugin binaries into the Unity sample UPM packages during local builds.
+The destinations are:
+- ImmUnity plugin: `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/...`
+- ImmStrokeReader plugin: `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/...`
+
+### Windows (Visual Studio / MSBuild)
+
+Build the Windows solution:
+
+```powershell
+msbuild code/projects/windows/imm.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+
+This builds and auto-copies:
+- `ImmUnityPlugin.dll` → `Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
+- `ImmStrokeReader.dll` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
+
+### macOS (CMake)
+
+```bash
+cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=OFF
+cmake --build build/macos --target ImmStrokeReader --config Release
+```
+
+This builds and auto-copies:
+- `libImmStrokeReader.dylib` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS`
+
+Note: the ImmUnity macOS bundle copy is also wired, but the macOS ImmUnity build is currently disabled in CI.
+
+### iOS (CMake)
+
+```bash
+cmake -S code/projects/ios -B build/ios \
+  -DCMAKE_SYSTEM_NAME=iOS \
+  -DCMAKE_OSX_SYSROOT=iphoneos \
+  -DCMAKE_OSX_ARCHITECTURES=arm64
+cmake --build build/ios --target ImmStrokeReader --config Release
+```
+
+This builds and auto-copies:
+- `libImmStrokeReader.a` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS`
+
+### Android (Gradle)
+
+```bash
+cd code/projects/android
+./gradlew :appImmUnity:assembleDebug
+./gradlew :appImmStrokeReader:assembleDebug
+```
+
+This builds and auto-copies:
+- `libImmUnityPlugin.so` → `Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a`
+- `libImmStrokeReader.so` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/Android/arm64-v8a`

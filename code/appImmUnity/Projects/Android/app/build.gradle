@@ -40,7 +40,7 @@ android {
 }
 
 // Copy .so to Unity sample project after build
-def unityPluginDir = "${projectDir}/../../../../ImmUnitySampleProject/Assets/Plugins/Android/libs/arm64-v8a"
+def unityPluginDir = "${projectDir}/../../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a"
 
 tasks.register('copyToUnity') {
     doLast {
