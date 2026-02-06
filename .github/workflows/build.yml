@@ -44,6 +44,7 @@ jobs:
         path: |
           code/appImmStrokeReader/exe/ImmStrokeReader.dll
         if-no-files-found: error
+        retention-days: 1
 
     - name: Upload Unity Plugin DLL
       uses: actions/upload-artifact@v4
@@ -52,6 +53,7 @@ jobs:
         path: |
           code/appImmUnity/exe/ImmUnityPlugin.dll
         if-no-files-found: error
+        retention-days: 1
 
     - name: Package Viewer Artifact
       shell: pwsh
@@ -170,6 +172,7 @@ jobs:
         name: ImmViewerPlugin-Android
         path: artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
         if-no-files-found: error
+        retention-days: 1
 
     - name: Upload Stroke Reader
       shell: bash
@@ -185,6 +188,7 @@ jobs:
         name: ImmStrokeReaderPlugin-Android
         path: artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
         if-no-files-found: error
+        retention-days: 1
 
     - name: Upload Android Viewer
       uses: actions/upload-artifact@v4
@@ -241,6 +245,7 @@ jobs:
         path: |
           code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
         if-no-files-found: error
+        retention-days: 1
 
   build-ios:
     name: iOS
@@ -272,6 +277,7 @@ jobs:
         path: |
           build/ios/stroke-reader/libImmStrokeReader.a
         if-no-files-found: error
+        retention-days: 1
 
   package-unity-plugins:
     name: Package Unity Plugins
@@ -356,30 +362,60 @@ jobs:
         fi
         cp "${android_unity_so[0]}" "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
 
-    - name: Archive stroke reader package
+    - name: Archive stroke reader UPM package
       shell: bash
       run: |
         set -euo pipefail
         cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-UnityPackage.zip" com.immersive-foundation.imm-stroke-reader
+        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-UPM.zip" com.immersive-foundation.imm-stroke-reader
 
-    - name: Archive ImmUnity package
+    - name: Archive ImmUnity UPM package
       shell: bash
       run: |
         set -euo pipefail
         cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmViewerPlugin-UnityPackage.zip" com.immersive-foundation.imm-unity
+        zip -r "$GITHUB_WORKSPACE/ImmViewerPlugin-UPM.zip" com.immersive-foundation.imm-unity
 
-    - name: Upload stroke reader Unity package
+    - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UnityPackage
-        path: ImmStrokeReaderPlugin-UnityPackage.zip
+        name: ImmStrokeReaderPlugin-UPM
+        path: ImmStrokeReaderPlugin-UPM.zip
         if-no-files-found: error
 
-    - name: Upload ImmUnity Unity package
+    - name: Upload ImmUnity UPM package
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-UnityPackage
-        path: ImmViewerPlugin-UnityPackage.zip
+        name: ImmViewerPlugin-UPM
+        path: ImmViewerPlugin-UPM.zip
         if-no-files-found: error
+
+    - name: Delete intermediate plugin artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const targetNames = new Set([
+            'ImmStrokeReaderPlugin-Windows',
+            'ImmStrokeReaderPlugin-Android',
+            'ImmStrokeReaderPlugin-macOS',
+            'ImmStrokeReaderPlugin-iOS',
+            'ImmViewerPlugin-Windows',
+            'ImmViewerPlugin-Android',
+          ]);
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const run_id = context.runId;
+          const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+            owner,
+            repo,
+            run_id,
+          });
+          for (const artifact of artifacts) {
+            if (targetNames.has(artifact.name)) {
+              await github.rest.actions.deleteArtifact({
+                owner,
+                repo,
+                artifact_id: artifact.id,
+              });
+            }
+          }
