@@ -319,7 +319,13 @@ jobs:
         stroke_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader"
         mkdir -p "$stroke_pkg/Plugins/x86_64" "$stroke_pkg/Plugins/Android/arm64-v8a" "$stroke_pkg/Plugins/macOS" "$stroke_pkg/Plugins/iOS"
         cp artifacts/ImmStrokeReaderPlugin-Windows/ImmStrokeReader.dll "$stroke_pkg/Plugins/x86_64/ImmStrokeReader.dll"
-        cp artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so "$stroke_pkg/Plugins/Android/arm64-v8a/libImmStrokeReader.so"
+        shopt -s nullglob globstar
+        android_so=(artifacts/ImmStrokeReaderPlugin-Android/**/libImmStrokeReader.so)
+        if [ ${#android_so[@]} -eq 0 ]; then
+          echo "Missing libImmStrokeReader.so in ImmStrokeReaderPlugin-Android artifact"
+          exit 1
+        fi
+        cp "${android_so[0]}" "$stroke_pkg/Plugins/Android/arm64-v8a/libImmStrokeReader.so"
         cp artifacts/ImmStrokeReaderPlugin-macOS/libImmStrokeReader.dylib "$stroke_pkg/Plugins/macOS/libImmStrokeReader.dylib"
         cp artifacts/ImmStrokeReaderPlugin-iOS/libImmStrokeReader.a "$stroke_pkg/Plugins/iOS/libImmStrokeReader.a"
 
@@ -330,7 +336,13 @@ jobs:
         unity_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity"
         mkdir -p "$unity_pkg/Plugins/x86_64" "$unity_pkg/Plugins/Android/libs/arm64-v8a"
         cp artifacts/ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
-        cp artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+        shopt -s nullglob globstar
+        android_unity_so=(artifacts/ImmViewerPlugin-Android/**/libImmUnityPlugin.so)
+        if [ ${#android_unity_so[@]} -eq 0 ]; then
+          echo "Missing libImmUnityPlugin.so in ImmViewerPlugin-Android artifact"
+          exit 1
+        fi
+        cp "${android_unity_so[0]}" "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
 
     - name: Archive stroke reader package
       shell: bash
