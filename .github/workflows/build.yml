@@ -485,6 +485,24 @@ jobs:
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
         zip -r ImmViewer-Windows-VR.zip ImmViewer-Windows-VR
 
+    - name: Normalize Android APK names
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        apk=(release-assets/ImmViewer-Android/*.apk)
+        apk_vr=(release-assets/ImmViewer-Android-VR/*.apk)
+        if [ ${#apk[@]} -eq 0 ]; then
+          echo "Missing Android APK in ImmViewer-Android artifact"
+          exit 1
+        fi
+        if [ ${#apk_vr[@]} -eq 0 ]; then
+          echo "Missing Android APK in ImmViewer-Android-VR artifact"
+          exit 1
+        fi
+        cp "${apk[0]}" release-assets/ImmViewer-Android.apk
+        cp "${apk_vr[0]}" release-assets/ImmViewer-Android-VR.apk
+
     - name: Create GitHub release
       shell: bash
       env:
@@ -500,6 +518,6 @@ jobs:
           release-assets/upm/ImmViewerPlugin-UPM.zip \
           release-assets/ImmViewer-Windows.zip \
           release-assets/ImmViewer-Windows-VR.zip \
-          release-assets/ImmViewer-Android/*.apk \
-          release-assets/ImmViewer-Android-VR/*.apk \
+          release-assets/ImmViewer-Android.apk \
+          release-assets/ImmViewer-Android-VR.apk \
           release-assets/sample1-imm/sample1.imm
