@@ -62,7 +62,6 @@ jobs:
         Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
-        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-Windows.zip" -Force
 
     - name: Package Viewer Artifact (VR)
       shell: pwsh
@@ -78,19 +77,18 @@ jobs:
         $json.Rendering.EnableVR = $true
         $json.Rendering.RenderingAPI = "OpenGL"
         $json | ConvertTo-Json -Depth 6 | Set-Content $settingsPath -Encoding UTF8
-        Compress-Archive -Path "$staging\\*" -DestinationPath "ImmViewer-Windows-VR.zip" -Force
 
     - name: Upload Viewer Executable
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-Windows
-        path: ImmViewer-Windows.zip
+        path: viewer_artifact
         if-no-files-found: error
     - name: Upload Viewer Executable (VR)
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-Windows-VR
-        path: ImmViewer-Windows-VR.zip
+        path: viewer_artifact_vr
         if-no-files-found: error
     - name: Upload Sample IMM
       uses: actions/upload-artifact@v4
