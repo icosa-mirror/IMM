@@ -157,19 +157,33 @@ jobs:
       run: ./gradlew :appImmStrokeReader:assembleDebug
 
     - name: Upload Unity Plugin
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/ImmViewerPlugin-Android
+        so_file=$(ls code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so | head -n 1)
+        cp "$so_file" artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
+
+    - name: Upload Unity Plugin
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewerPlugin-Android
-        path: |
-          code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so
-        if-no-files-found: warn
+        path: artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
+        if-no-files-found: error
+
+    - name: Upload Stroke Reader
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/ImmStrokeReaderPlugin-Android
+        so_file=$(ls code/appImmStrokeReader/Projects/Android/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmStrokeReader.so | head -n 1)
+        cp "$so_file" artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
 
     - name: Upload Stroke Reader
       uses: actions/upload-artifact@v4
       with:
         name: ImmStrokeReaderPlugin-Android
-        path: |
-          code/appImmStrokeReader/Projects/Android/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmStrokeReader.so
+        path: artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
         if-no-files-found: error
 
     - name: Upload Android Viewer
