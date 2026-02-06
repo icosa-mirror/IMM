@@ -361,14 +361,14 @@ jobs:
       run: |
         set -euo pipefail
         cd code/ImmUnitySampleProject/Packages
-        zip -r ../../../../ImmStrokeReaderPlugin-UnityPackage.zip com.immersive-foundation.imm-stroke-reader
+        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-UnityPackage.zip" com.immersive-foundation.imm-stroke-reader
 
     - name: Archive ImmUnity package
       shell: bash
       run: |
         set -euo pipefail
         cd code/ImmUnitySampleProject/Packages
-        zip -r ../../../../ImmViewerPlugin-UnityPackage.zip com.immersive-foundation.imm-unity
+        zip -r "$GITHUB_WORKSPACE/ImmViewerPlugin-UnityPackage.zip" com.immersive-foundation.imm-unity
 
     - name: Upload stroke reader Unity package
       uses: actions/upload-artifact@v4
