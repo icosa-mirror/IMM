@@ -389,7 +389,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   loadSource: 1
   directoryPath: 
-  selectedFileName: electric-melancholy.imm
+  selectedFileName: sample1.imm
   loadOnStart: 1
   autoPlay: 1
   documentTransform: {fileID: 0}
