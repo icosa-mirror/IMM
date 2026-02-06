@@ -628,14 +628,14 @@ namespace ImmImporter
         }
     }
 
-}
+    bool ImportFromDisk(Sequence* sq, ImmCore::piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique)
+    {
+        return ImportFromDisk(sq, log, filename, colorSpace, renderingTechnique, nullptr);
+    }
 
-bool ImportFromDisk(Sequence* sq, ImmCore::piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique)
-{
-    return ImportFromDisk(sq, log, filename, colorSpace, renderingTechnique, nullptr);
-}
+    bool ImportFromMemory(ImmCore::piTArray<uint8_t>* data, Sequence* sq, ImmCore::piLog* log, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique)
+    {
+        return ImportFromMemory(data, sq, log, colorSpace, renderingTechnique, nullptr);
+    }
 
-bool ImportFromMemory(ImmCore::piTArray<uint8_t>* data, Sequence* sq, ImmCore::piLog* log, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique)
-{
-    return ImportFromMemory(data, sq, log, colorSpace, renderingTechnique, nullptr);
 }
