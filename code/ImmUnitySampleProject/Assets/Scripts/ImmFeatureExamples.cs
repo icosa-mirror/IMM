@@ -2,6 +2,7 @@ using System.IO;
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine.Networking;
 
 namespace ImmPlayer
 {
@@ -10,6 +11,12 @@ namespace ImmPlayer
     /// </summary>
     public class ImmFeatureExamples : MonoBehaviour
     {
+        public enum LoadSource
+        {
+            FileSystem,       // Load from absolute path (Editor/Desktop only)
+            StreamingAssets   // Load from StreamingAssets folder (works on Android)
+        }
+
         private const string DiagPrefix = "[IMM_DIAG] ";
         [System.Serializable]
         public struct LayerListEntry
@@ -22,7 +29,10 @@ namespace ImmPlayer
         }
 
         [Header("Document")]
-        [SerializeField] private string documentPath = "";
+        [SerializeField] private LoadSource loadSource = LoadSource.StreamingAssets;
+        [Tooltip("For FileSystem mode only - ignored when using StreamingAssets")]
+        [SerializeField] private string directoryPath = "";
+        [SerializeField, HideInInspector] private string selectedFileName = "";
         [SerializeField] private bool loadOnStart = true;
         [SerializeField] private bool autoPlay = true;
         [SerializeField] private Transform documentTransform;
@@ -144,22 +154,31 @@ namespace ImmPlayer
 
         public void LoadDocument()
         {
+            StartCoroutine(LoadDocumentCoroutine());
+        }
+
+        private IEnumerator LoadDocumentCoroutine()
+        {
             if (_doc != null)
             {
                 ImmPlayerManager.Instance.UnloadDocument(_doc);
                 _doc = null;
             }
 
-            if (string.IsNullOrEmpty(documentPath))
-                return;
+            if (string.IsNullOrEmpty(selectedFileName))
+                yield break;
 
-            string path = ResolvePath(documentPath);
-            if (string.IsNullOrEmpty(path))
-                return;
+            if (loadSource == LoadSource.StreamingAssets)
+            {
+                yield return StartCoroutine(LoadFromStreamingAssets(selectedFileName));
+            }
+            else
+            {
+                LoadFromFileSystem();
+            }
 
-            _doc = ImmPlayerManager.Instance.LoadDocument(path);
             if (_doc == null)
-                return;
+                yield break;
 
             _isDocumentTransformDirty = true;
 
@@ -175,6 +194,52 @@ namespace ImmPlayer
 
             StartCoroutine(WaitForSequenceAndRefreshLayers());
             StartCoroutine(ApplyInitialPlaybackState());
+        }
+
+        private IEnumerator LoadFromStreamingAssets(string fileName)
+        {
+            string streamingPath = Path.Combine(Application.streamingAssetsPath, fileName);
+            Debug.Log($"{DiagPrefix}Loading from StreamingAssets: {streamingPath}");
+
+            using (UnityWebRequest request = UnityWebRequest.Get(streamingPath))
+            {
+                yield return request.SendWebRequest();
+
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    Debug.LogError($"{DiagPrefix}Failed to load from StreamingAssets: {request.error}");
+                    Debug.LogError($"{DiagPrefix}  Path: {streamingPath}");
+                    yield break;
+                }
+
+                byte[] data = request.downloadHandler.data;
+                Debug.Log($"{DiagPrefix}Loaded {data.Length} bytes from StreamingAssets");
+
+                // Copy to persistentDataPath and load from there (avoids native plugin memory issues)
+                string destPath = Path.Combine(Application.persistentDataPath, fileName);
+                File.WriteAllBytes(destPath, data);
+                Debug.Log($"{DiagPrefix}Copied to: {destPath}");
+
+                _doc = ImmPlayerManager.Instance.LoadDocument(destPath);
+            }
+        }
+
+        private void LoadFromFileSystem()
+        {
+            if (string.IsNullOrEmpty(directoryPath))
+            {
+                Debug.LogError($"{DiagPrefix}Directory path is empty");
+                return;
+            }
+
+            string path = Path.Combine(directoryPath, selectedFileName);
+            if (!File.Exists(path))
+            {
+                Debug.LogError($"{DiagPrefix}File not found: {path}");
+                return;
+            }
+
+            _doc = ImmPlayerManager.Instance.LoadDocument(path);
         }
 
         public void UnloadDocument()
@@ -555,22 +620,6 @@ namespace ImmPlayer
                 currentId = d.ParentId;
                 depth++;
             }
-        }
-
-        private static string ResolvePath(string path)
-        {
-            if (Path.IsPathRooted(path))
-                return path;
-
-            string assetsPath = Path.Combine(Application.dataPath, path);
-            if (File.Exists(assetsPath))
-                return assetsPath;
-
-            string projectPath = Path.Combine(Application.dataPath, "..", path);
-            if (File.Exists(projectPath))
-                return projectPath;
-
-            return null;
         }
 
         private bool HasLayerTransformChanged()

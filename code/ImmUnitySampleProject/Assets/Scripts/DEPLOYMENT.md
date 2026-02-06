@@ -113,19 +113,22 @@ ImmUnityPlugin.dll
 
 ### Method 1: Automated (Recommended)
 
-Use the provided helper script:
+Use the repo helper script from the repository root:
 
 **Windows Command Prompt:**
 ```batch
-cd C:\Users\andyb\Documents\IMM\code\appImmUnity\Scripts
-CopyDllsToUnity.bat "C:\Path\To\YourUnityProject"
+code\projects\windows\build-unity-plugins.bat
 ```
 
 **PowerShell:**
 ```powershell
-cd C:\Users\andyb\Documents\IMM\code\appImmUnity\Scripts
-.\CopyDllsToUnity.ps1 "C:\Path\To\YourUnityProject"
+.\code\projects\windows\build-unity-plugins.ps1
 ```
+
+This rebuilds `appImmUnity` and `appImmStrokeReader`, then updates:
+
+- `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
+- `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
 
 ### Method 2: Manual Copy
 

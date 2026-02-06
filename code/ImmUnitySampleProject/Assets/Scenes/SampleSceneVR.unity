@@ -340,7 +340,7 @@ GameObject:
   - component: {fileID: 1009379718}
   m_Layer: 0
   m_Name: IMM
-  m_TagString: Untagged
+  m_TagString: MainCamera
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -388,11 +388,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   loadSource: 1
-  directoryPath: 
-  selectedFileName: electric-melancholy.imm
+  directoryPath: I:\Unity Projects\IMM Unity Test\Assets\StreamingAssets
+  selectedFileName: sample1.imm
   loadOnStart: 1
   autoPlay: 1
-  documentTransform: {fileID: 0}
+  documentTransform: {fileID: 1009379717}
   selectedLayerIndex: -1
   layerVisible: 1
   layerOpacity: 1
@@ -467,7 +467,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2142085716}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 34acd6f0bc55366448fc08024171d6c1, type: 3}
+  m_Script: {fileID: 11500000, guid: d87469abfa1e2324da71f14193f7c1e2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   rigRoot: {fileID: 2142085717}

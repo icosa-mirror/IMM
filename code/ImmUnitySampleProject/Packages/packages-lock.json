@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.immersive-foundation.imm-unity": {
+      "version": "file:com.immersive-foundation.imm-unity",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.immersive-foundation.imm-stroke-reader": {
       "version": "file:com.immersive-foundation.imm-stroke-reader",
       "depth": 0,

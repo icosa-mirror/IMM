@@ -54,6 +54,7 @@ namespace ImmPlayer
 
         private bool _isInitialized = false;
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
+        private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
         private IntPtr _renderEventFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private bool _useCommandBufferRendering = false;
@@ -200,6 +201,13 @@ namespace ImmPlayer
             }
             _loadedDocuments.Clear();
 
+            // Free any remaining memory allocated for documents loaded from memory
+            foreach (var memPtr in _documentMemoryPtrs.Values)
+            {
+                Marshal.FreeHGlobal(memPtr);
+            }
+            _documentMemoryPtrs.Clear();
+
             ImmNativePlugin.End();
             _isInitialized = false;
             CleanupCommandBuffers();
@@ -254,13 +262,18 @@ namespace ImmPlayer
             Marshal.Copy(data, 0, dataPtr, data.Length);
 
             int docId = ImmNativePlugin.LoadFromMemory(fileName, data.Length, dataPtr);
-            Marshal.FreeHGlobal(dataPtr);
 
             if (docId < 0)
             {
+                // Free memory immediately on failure
+                Marshal.FreeHGlobal(dataPtr);
                 LogError($"Failed to load document from memory: {fileName}");
                 return null;
             }
+
+            // Track the memory pointer - native code loads asynchronously in a background thread,
+            // so we must keep the memory alive until the document is unloaded
+            _documentMemoryPtrs[docId] = dataPtr;
 
             ImmDocument doc = new ImmDocument(docId, fileName);
             _loadedDocuments[docId] = doc;
@@ -280,9 +293,19 @@ namespace ImmPlayer
             if (document == null)
                 return;
 
-            if (_loadedDocuments.ContainsKey(document.DocumentId))
+            int docId = document.DocumentId;
+
+            if (_loadedDocuments.ContainsKey(docId))
             {
-                _loadedDocuments.Remove(document.DocumentId);
+                _loadedDocuments.Remove(docId);
+            }
+
+            // Free any memory that was allocated for loading from memory
+            if (_documentMemoryPtrs.TryGetValue(docId, out IntPtr memPtr))
+            {
+                _documentMemoryPtrs.Remove(docId);
+                Marshal.FreeHGlobal(memPtr);
+                Log($"Freed memory buffer for document {docId}");
             }
 
             document.Unload();

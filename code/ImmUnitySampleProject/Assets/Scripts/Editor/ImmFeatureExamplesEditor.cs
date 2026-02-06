@@ -9,7 +9,9 @@ public class ImmFeatureExamplesEditor : Editor
 {
     private static readonly HashSet<string> SkipFields = new HashSet<string>
     {
-        "documentPath",
+        "loadSource",
+        "directoryPath",
+        "selectedFileName",
         "loadOnStart",
         "autoPlay",
         "documentTransform",
@@ -101,10 +103,90 @@ public class ImmFeatureExamplesEditor : Editor
 
     private void DrawDocumentFields()
     {
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("documentPath"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("loadSource"));
+
+        SerializedProperty loadSourceProp = serializedObject.FindProperty("loadSource");
+        bool isFileSystemMode = loadSourceProp.enumValueIndex == (int)ImmFeatureExamples.LoadSource.FileSystem;
+
+        if (isFileSystemMode)
+        {
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("directoryPath"));
+        }
+
+        DrawImmFileDropdown(isFileSystemMode);
         EditorGUILayout.PropertyField(serializedObject.FindProperty("loadOnStart"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("autoPlay"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("documentTransform"));
+    }
+
+    private void DrawImmFileDropdown(bool isFileSystemMode)
+    {
+        SerializedProperty selectedFileNameProp = serializedObject.FindProperty("selectedFileName");
+        if (selectedFileNameProp == null)
+            return;
+
+        string dirPath;
+        if (isFileSystemMode)
+        {
+            SerializedProperty directoryPathProp = serializedObject.FindProperty("directoryPath");
+            if (directoryPathProp == null)
+                return;
+            dirPath = directoryPathProp.stringValue;
+
+            if (string.IsNullOrEmpty(dirPath))
+            {
+                EditorGUILayout.HelpBox("Please set a directory path.", MessageType.Info);
+                return;
+            }
+        }
+        else
+        {
+            // StreamingAssets mode - use the StreamingAssets folder
+            dirPath = Application.streamingAssetsPath;
+        }
+
+        if (!System.IO.Directory.Exists(dirPath))
+        {
+            if (isFileSystemMode)
+            {
+                EditorGUILayout.HelpBox($"Directory not found: {dirPath}", MessageType.Warning);
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("StreamingAssets folder not found. Create Assets/StreamingAssets/ and add .imm files.", MessageType.Warning);
+            }
+            return;
+        }
+
+        string[] immFiles = System.IO.Directory.GetFiles(dirPath, "*.imm");
+
+        if (immFiles.Length == 0)
+        {
+            string location = isFileSystemMode ? "directory" : "StreamingAssets folder";
+            EditorGUILayout.HelpBox($"No .imm files found in {location}.", MessageType.Info);
+            return;
+        }
+
+        // Extract just filenames
+        string[] fileNames = new string[immFiles.Length];
+        for (int i = 0; i < immFiles.Length; i++)
+        {
+            fileNames[i] = System.IO.Path.GetFileName(immFiles[i]);
+        }
+
+        // Find current selection index
+        string currentFileName = selectedFileNameProp.stringValue;
+        int currentIndex = System.Array.IndexOf(fileNames, currentFileName);
+        if (currentIndex < 0) currentIndex = 0;
+
+        // Draw dropdown
+        int newIndex = EditorGUILayout.Popup("IMM File", currentIndex, fileNames);
+
+        if (newIndex != currentIndex || string.IsNullOrEmpty(currentFileName))
+        {
+            selectedFileNameProp.stringValue = fileNames[newIndex];
+            serializedObject.ApplyModifiedProperties();
+        }
     }
 
     private void DrawDocumentStatusFoldout()

@@ -11,21 +11,24 @@ This directory contains C# wrapper classes for the IMM Unity native plugin.
 
 ## Quick Setup (Automated)
 
-Use the provided helper script to automatically copy all DLLs:
+From the repo root, run one of these commands:
 
 **Windows Batch:**
 ```batch
-cd C:\Users\andyb\Documents\IMM\code\appImmUnity\Scripts
-CopyDllsToUnity.bat "C:\Path\To\YourUnityProject"
+code\projects\windows\build-unity-plugins.bat
 ```
 
 **PowerShell:**
 ```powershell
-cd C:\Users\andyb\Documents\IMM\code\appImmUnity\Scripts
-.\CopyDllsToUnity.ps1 "C:\Path\To\YourUnityProject"
+.\code\projects\windows\build-unity-plugins.ps1
 ```
 
-Then manually copy the C# scripts and proceed to step 3 below.
+This does all of the following:
+
+1. Rebuilds the Windows Unity plugin targets (`appImmUnity` and `appImmStrokeReader`)
+2. Copies the fresh Windows DLLs into this sample project's local UPM packages:
+   - `Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
+   - `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
 
 ## Manual Setup
 

@@ -1,4 +1,7 @@
+using System.Collections;
+using System.IO;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.Rendering;
 
 namespace ImmPlayer
@@ -9,12 +12,20 @@ namespace ImmPlayer
     /// </summary>
     public class ImmPlayerExample : MonoBehaviour
     {
-        
+        public enum LoadSource
+        {
+            FileSystem,       // Load from absolute or relative file path (Editor/Desktop only)
+            StreamingAssets   // Load from StreamingAssets folder (works on Android)
+        }
+
         private const string LogPrefix = "[IMM] ";
         private static void Log(string message) => Debug.Log(LogPrefix + message);
         private static void LogWarning(string message) => Debug.LogWarning(LogPrefix + message);
         private static void LogError(string message) => Debug.LogError(LogPrefix + message);
-[Header("Document Settings")]
+
+        [Header("Document Settings")]
+        [SerializeField] private LoadSource loadSource = LoadSource.StreamingAssets;
+        [Tooltip("For StreamingAssets: filename only (e.g., 'myfile.imm'). For FileSystem: relative or absolute path.")]
         [SerializeField] private string documentPath = "";
         [SerializeField] private bool loadOnStart = false;
 
@@ -74,14 +85,14 @@ namespace ImmPlayer
             }
         }
 
-        private System.Collections.IEnumerator LoadDocumentAfterInit()
+        private IEnumerator LoadDocumentAfterInit()
         {
             // Wait for end of frame to ensure ImmPlayerManager.Start() has completed
             yield return new WaitForEndOfFrame();
 
             if (!string.IsNullOrEmpty(documentPath))
             {
-                LoadDocument(documentPath);
+                yield return StartCoroutine(LoadDocumentCoroutine(documentPath));
             }
         }
 
@@ -127,9 +138,17 @@ namespace ImmPlayer
         #region Public Methods
 
         /// <summary>
-        /// Load a document from a file path
+        /// Load a document (starts coroutine internally)
         /// </summary>
         public void LoadDocument(string filePath)
+        {
+            StartCoroutine(LoadDocumentCoroutine(filePath));
+        }
+
+        /// <summary>
+        /// Load a document from StreamingAssets or FileSystem based on loadSource setting
+        /// </summary>
+        private IEnumerator LoadDocumentCoroutine(string filePath)
         {
             // Unload existing document if any
             if (_currentDocument != null)
@@ -138,19 +157,66 @@ namespace ImmPlayer
                 _currentDocument = null;
             }
 
+            if (loadSource == LoadSource.StreamingAssets)
+            {
+                yield return StartCoroutine(LoadFromStreamingAssets(filePath));
+            }
+            else
+            {
+                LoadFromFileSystem(filePath);
+            }
+        }
+
+        /// <summary>
+        /// Load from StreamingAssets using UnityWebRequest (works on Android)
+        /// </summary>
+        private IEnumerator LoadFromStreamingAssets(string fileName)
+        {
+            string streamingPath = Path.Combine(Application.streamingAssetsPath, fileName);
+            Log($"Loading IMM file from StreamingAssets: {streamingPath}");
+
+            using (UnityWebRequest request = UnityWebRequest.Get(streamingPath))
+            {
+                yield return request.SendWebRequest();
+
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    LogError($"Failed to load from StreamingAssets: {request.error}");
+                    LogError($"  Path: {streamingPath}");
+                    yield break;
+                }
+
+                byte[] data = request.downloadHandler.data;
+                Log($"Loaded {data.Length} bytes from StreamingAssets");
+
+                // Copy to persistentDataPath and load from there (avoids native plugin memory issues)
+                string destPath = Path.Combine(Application.persistentDataPath, fileName);
+                File.WriteAllBytes(destPath, data);
+                Log($"Copied to: {destPath}");
+
+                _currentDocument = ImmPlayerManager.Instance.LoadDocument(destPath);
+                OnDocumentLoaded(fileName);
+            }
+        }
+
+        /// <summary>
+        /// Load from file system (Editor/Desktop only)
+        /// </summary>
+        private void LoadFromFileSystem(string filePath)
+        {
             // Convert relative paths to absolute paths
             string absolutePath = filePath;
-            if (!System.IO.Path.IsPathRooted(filePath))
+            if (!Path.IsPathRooted(filePath))
             {
                 // Relative path - make it relative to Assets folder or project root
-                string assetsPath = System.IO.Path.Combine(Application.dataPath, filePath);
-                string projectPath = System.IO.Path.Combine(Application.dataPath, "..", filePath);
+                string assetsPath = Path.Combine(Application.dataPath, filePath);
+                string projectPath = Path.Combine(Application.dataPath, "..", filePath);
 
-                if (System.IO.File.Exists(assetsPath))
+                if (File.Exists(assetsPath))
                 {
                     absolutePath = assetsPath;
                 }
-                else if (System.IO.File.Exists(projectPath))
+                else if (File.Exists(projectPath))
                 {
                     absolutePath = projectPath;
                 }
@@ -163,11 +229,18 @@ namespace ImmPlayer
                 }
             }
 
-            Log($"Loading IMM file from: {absolutePath}");
+            Log($"Loading IMM file from FileSystem: {absolutePath}");
 
             // Load new document
             _currentDocument = ImmPlayerManager.Instance.LoadDocument(absolutePath);
+            OnDocumentLoaded(filePath);
+        }
 
+        /// <summary>
+        /// Called after document is loaded from any source
+        /// </summary>
+        private void OnDocumentLoaded(string filePath)
+        {
             if (_currentDocument != null)
             {
                 Log($"Loaded document: {filePath}");
@@ -184,7 +257,6 @@ namespace ImmPlayer
 
                 // Position the document at this GameObject's transform
                 _currentDocument.SetTransform(transform);
-
             }
         }
 

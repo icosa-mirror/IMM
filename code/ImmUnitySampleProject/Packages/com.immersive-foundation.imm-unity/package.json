@@ -1,0 +1,17 @@
+{
+  "name": "com.immersive-foundation.imm-unity",
+  "version": "0.1.0",
+  "displayName": "IMM Unity",
+  "description": "IMM Unity player runtime and samples.",
+  "unity": "2021.3",
+  "author": {
+    "name": "Immersive Foundation"
+  },
+  "samples": [
+    {
+      "displayName": "IMM Samples",
+      "description": "Example scripts for IMM runtime.",
+      "path": "Samples~/Examples"
+    }
+  ]
+}

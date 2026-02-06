@@ -8,6 +8,8 @@ using System.IO;
 /// </summary>
 public class ImmStrokeReaderTestEditor : EditorWindow
 {
+    private const string SampleFileName = "sample1.imm";
+
     private static class Native
     {
         public static bool IsInitialized() => ImmPlayer.ImmStrokeReader.StrokeReader_IsInitialized();
@@ -37,19 +39,9 @@ public class ImmStrokeReaderTestEditor : EditorWindow
         EditorGUILayout.LabelField("ImmStrokeReader Integration Test", EditorStyles.boldLabel);
         EditorGUILayout.Space();
 
-        if (GUILayout.Button("Run Test on logo_animation.imm"))
-        {
-            RunTest("Assets/ExampleImmFiles/logo_animation.imm");
-        }
-
-        if (GUILayout.Button("Run Test on fail-snail.imm"))
-        {
-            RunTest("Assets/ExampleImmFiles/fail-snail.imm");
-        }
-
         if (GUILayout.Button("Run Test on sample1.imm"))
         {
-            RunTest("Assets/ExampleImmFiles/sample1.imm");
+            RunTestSample1();
         }
 
         EditorGUILayout.Space();
@@ -70,13 +62,15 @@ public class ImmStrokeReaderTestEditor : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
-    void RunTest(string relativePath)
+    void RunTestSample1()
     {
         _output = "";
         Log($"=== ImmStrokeReader Test ===");
-        Log($"Testing: {relativePath}");
+        Log($"Testing: {SampleFileName}");
 
-        string fullPath = Path.GetFullPath(relativePath);
+        string fullPath = Path.Combine(Application.dataPath, "StreamingAssets", SampleFileName);
+        Log($"Expected location: Assets/StreamingAssets/{SampleFileName}");
+        
         Log($"Full path: {fullPath}");
 
         if (!File.Exists(fullPath))

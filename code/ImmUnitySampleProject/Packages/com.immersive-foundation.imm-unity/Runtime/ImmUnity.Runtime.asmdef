@@ -1,0 +1,9 @@
+{
+  "name": "ImmUnity.Runtime",
+  "rootNamespace": "ImmPlayer",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "autoReferenced": true
+}
