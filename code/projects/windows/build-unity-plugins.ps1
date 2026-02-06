@@ -104,6 +104,14 @@ $unityDllMap = @{
     "zlib1.dll"          = (Join-Path $repoRoot "thirdparty\zlib\bin\zlib1.dll")
 }
 
+$strokeRuntimeDllMap = @{
+    "zlib1.dll"    = (Join-Path $repoRoot "thirdparty\zlib\bin\zlib1.dll")
+    "jpeg62.dll"   = (Join-Path $repoRoot "thirdparty\libjpeg-turbo\bin\jpeg62.dll")
+    "libpng16.dll" = (Join-Path $repoRoot "thirdparty\libpng\bin\libpng16.dll")
+    "ogg.dll"      = (Join-Path $repoRoot "thirdparty\libogg\bin\ogg.dll")
+    "vorbis.dll"   = (Join-Path $repoRoot "thirdparty\libvorbis\bin\vorbis.dll")
+}
+
 foreach ($name in $unityDllMap.Keys) {
     $src = $unityDllMap[$name]
     if (-not (Test-Path $src)) {
@@ -114,6 +122,15 @@ foreach ($name in $unityDllMap.Keys) {
 }
 
 Copy-Item $strokePluginSource (Join-Path $strokePkgWin "ImmStrokeReader.dll") -Force
+
+foreach ($name in $strokeRuntimeDllMap.Keys) {
+    $src = $strokeRuntimeDllMap[$name]
+    if (-not (Test-Path $src)) {
+        throw "Required stroke reader runtime DLL source is missing: $src"
+    }
+
+    Copy-Item $src (Join-Path $strokePkgWin $name) -Force
+}
 
 Write-Host "Updated Unity sample packages:"
 Write-Host "  $unityPkgWin"

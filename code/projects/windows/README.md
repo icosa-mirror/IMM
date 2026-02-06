@@ -29,3 +29,4 @@ Optional configuration:
 3. Copies Windows plugin outputs into:
    - `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
    - `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
+4. Ensures `com.immersive-foundation.imm-stroke-reader` also gets its required Windows runtime dependencies (`zlib1.dll`, `jpeg62.dll`, `libpng16.dll`, `ogg.dll`, `vorbis.dll`)
