@@ -386,6 +386,25 @@ namespace ImmPlayer
         }
     }
 
+    bool MngrPlayer::SetChapter(const piTick now, size_t chapterIndex)
+    {
+        if (mNumChapters == 0)
+            return false;
+        if (chapterIndex >= mNumChapters)
+            return false;
+
+        if (mIsPaused)
+            mIsPaused = false;
+
+        piTick rootTime = piTick(0);
+        if (!iGetChapterStartTime(chapterIndex, &rootTime))
+            return false;
+
+        iJumpAndReset(now, rootTime);
+        mCurrentChapter = chapterIndex;
+        return true;
+    }
+
     void MngrPlayer::SetTime(const piTick now, piTick timeSinceStart, piTick timeSinceStop)
     {
         Layer* root = mDocument->GetRoot();
@@ -586,6 +605,55 @@ namespace ImmPlayer
         root->SetStartTime(now - rootTime);
         mIsWaitingForInput = false;
 
+    }
+
+    bool MngrPlayer::iGetChapterStartTime(size_t chapterIndex, ImmCore::piTick* rootTime) const
+    {
+        if (rootTime == nullptr)
+            return false;
+
+        *rootTime = piTick(0);
+
+        if (mDocument == nullptr || mNumChapters == 0 || chapterIndex >= mNumChapters)
+            return false;
+        if (chapterIndex == 0)
+            return true;
+
+        Layer* root = mDocument->GetRoot();
+        if (root == nullptr)
+            return false;
+
+        const int numKeys = root->GetNumAnimKeys(Layer::AnimProperty::Action);
+        size_t markerCount = 0;
+        for (int i = 0; i < numKeys; i++)
+        {
+            const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
+            const Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
+            if (mNumPlayMarkers > 0)
+            {
+                if (action != Layer::AnimAction::Play)
+                    continue;
+                markerCount++;
+                if (markerCount == chapterIndex)
+                {
+                    *rootTime = key->mTime;
+                    return true;
+                }
+            }
+            else
+            {
+                if (action != Layer::AnimAction::Stop)
+                    continue;
+                markerCount++;
+                if (markerCount == chapterIndex)
+                {
+                    *rootTime = key->mTime + 1;
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     int MngrPlayer::FindSpawnAreaIdByLayer(const Layer* spawnAreaLayer) const

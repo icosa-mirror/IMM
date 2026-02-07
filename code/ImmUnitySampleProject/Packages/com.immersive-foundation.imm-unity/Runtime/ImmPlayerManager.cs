@@ -374,14 +374,15 @@ namespace ImmPlayer
             }
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
-            ConvertMatrixToArray(info.HeadProj, GL.GetGPUProjectionMatrix(cam.projectionMatrix, true));
+            Matrix4x4 headProjection = cam.nonJitteredProjectionMatrix;
+            ConvertMatrixToArray(info.HeadProj, headProjection);
 
             if (cam.stereoEnabled)
             {
                 ConvertMatrixToArray(info.WorldToLeft, cam.GetStereoViewMatrix(Camera.StereoscopicEye.Left));
-                ConvertMatrixToArray(info.LeftProj, GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left), true));
+                ConvertMatrixToArray(info.LeftProj, cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left));
                 ConvertMatrixToArray(info.WorldToRight, cam.GetStereoViewMatrix(Camera.StereoscopicEye.Right));
-                ConvertMatrixToArray(info.RightProj, GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right), true));
+                ConvertMatrixToArray(info.RightProj, cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right));
             }
 
             ImmNativePlugin.SetMatrices(
@@ -417,7 +418,7 @@ namespace ImmPlayer
                 return;
 
             Matrix4x4 worldToCamera = camera.worldToCameraMatrix;
-            Matrix4x4 projection = camera.projectionMatrix;
+            Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
 
             float[] world2head = MatrixToFloatArray(worldToCamera);
             float[] prjHead = MatrixToFloatArray(projection);

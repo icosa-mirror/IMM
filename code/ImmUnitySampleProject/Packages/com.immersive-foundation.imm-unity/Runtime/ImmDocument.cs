@@ -191,6 +191,16 @@ namespace ImmPlayer
         }
 
         /// <summary>
+        /// Jump to a specific chapter index
+        /// </summary>
+        public void SetChapter(int chapterIndex)
+        {
+            if (!IsLoaded) return;
+            if (chapterIndex < 0) return;
+            ImmNativePlugin.SetChapter(DocumentId, chapterIndex);
+        }
+
+        /// <summary>
         /// Restart the document from the beginning
         /// </summary>
         public void Restart()
@@ -412,6 +422,15 @@ namespace ImmPlayer
         }
 
         /// <summary>
+        /// Get the document's authored initial/default spawn area ID.
+        /// </summary>
+        public int GetInitialSpawnAreaId()
+        {
+            if (!IsLoaded) return -1;
+            return ImmNativePlugin.GetInitialSpawnAreaId(DocumentId);
+        }
+
+        /// <summary>
         /// Set the active spawn area
         /// </summary>
         public void SetActiveSpawnAreaId(int spawnAreaId)
@@ -474,6 +493,109 @@ namespace ImmPlayer
             SpawnAreaInfo[] trimmed = new SpawnAreaInfo[count];
             Array.Copy(areas, trimmed, count);
             return trimmed;
+        }
+
+        /// <summary>
+        /// Resolve a spawn area's world pose using a document root transform.
+        /// </summary>
+        public bool TryGetSpawnAreaWorldPose(int spawnAreaId, Transform documentRoot, out Pose worldPose)
+        {
+            worldPose = default;
+            if (!IsLoaded || documentRoot == null)
+                return false;
+
+            var info = GetSpawnAreaInfoManaged(spawnAreaId);
+            if (!info.HasValue)
+                return false;
+
+            Vector3 localPosition;
+            Quaternion localRotation;
+            ConvertSpawnAreaPoseToUnity(
+                info.Value.Transform.GetPosition(),
+                info.Value.Transform.GetRotation(),
+                info.Value.Transform.GetScale(),
+                out localPosition,
+                out localRotation);
+
+            Vector3 worldPosition = documentRoot.TransformPoint(localPosition);
+            Quaternion worldRotation = documentRoot.rotation * localRotation;
+            worldPose = new Pose(worldPosition, worldRotation);
+            return true;
+        }
+
+        /// <summary>
+        /// Resolve the active spawn area's world pose using a document root transform.
+        /// </summary>
+        public bool TryGetActiveSpawnAreaWorldPose(Transform documentRoot, out Pose worldPose)
+        {
+            worldPose = default;
+            int spawnAreaId = GetActiveSpawnAreaId();
+            if (spawnAreaId < 0)
+                return false;
+            return TryGetSpawnAreaWorldPose(spawnAreaId, documentRoot, out worldPose);
+        }
+
+        /// <summary>
+        /// Resolve a spawn area to a view-target pose (for camera rig roots), compensating for current head position offset.
+        /// </summary>
+        public bool TryGetSpawnAreaViewTargetPose(
+            int spawnAreaId,
+            Transform documentRoot,
+            Transform currentViewTarget,
+            Transform currentHead,
+            bool keepHeadHeightForFloorAreas,
+            out Pose targetPose)
+        {
+            targetPose = default;
+            if (!IsLoaded || documentRoot == null || currentViewTarget == null || currentHead == null)
+                return false;
+
+            var info = GetSpawnAreaInfoManaged(spawnAreaId);
+            if (!info.HasValue)
+                return false;
+
+            if (!TryGetSpawnAreaWorldPose(spawnAreaId, documentRoot, out Pose worldPose))
+                return false;
+
+            Vector3 worldPosition = worldPose.position;
+            Quaternion headLocalRotation = Quaternion.Inverse(currentViewTarget.rotation) * currentHead.rotation;
+            Quaternion desiredHeadRotation = worldPose.rotation;
+            Quaternion targetRotation = desiredHeadRotation * Quaternion.Inverse(headLocalRotation);
+
+            Vector3 headLocalPosition = currentViewTarget.InverseTransformPoint(currentHead.position);
+            if (keepHeadHeightForFloorAreas && info.Value.Type == SerializedSpawnArea.Type.FloorLevel)
+            {
+                headLocalPosition.y = 0.0f;
+            }
+
+            Vector3 targetPosition = worldPosition - (targetRotation * headLocalPosition);
+            targetPose = new Pose(targetPosition, targetRotation);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Resolve the active spawn area to a view-target pose (for camera rig roots).
+        /// </summary>
+        public bool TryGetActiveSpawnAreaViewTargetPose(
+            Transform documentRoot,
+            Transform currentViewTarget,
+            Transform currentHead,
+            bool keepHeadHeightForFloorAreas,
+            out Pose targetPose)
+        {
+            targetPose = default;
+            int spawnAreaId = GetActiveSpawnAreaId();
+            if (spawnAreaId < 0)
+                return false;
+
+            return TryGetSpawnAreaViewTargetPose(
+                spawnAreaId,
+                documentRoot,
+                currentViewTarget,
+                currentHead,
+                keepHeadHeightForFloorAreas,
+                out targetPose);
         }
 
         #endregion
@@ -674,6 +796,29 @@ namespace ImmPlayer
                 result[i] = matrix[i];
             }
             return result;
+        }
+
+        private static void ConvertSpawnAreaPoseToUnity(
+            Vector3 immPosition,
+            Quaternion immRotation,
+            float immScale,
+            out Vector3 unityPosition,
+            out Quaternion unityRotation)
+        {
+            Matrix4x4 imm = Matrix4x4.TRS(immPosition, immRotation, Vector3.one * immScale);
+            Matrix4x4 flip = Matrix4x4.Scale(new Vector3(1f, 1f, -1f));
+            Matrix4x4 converted = flip * imm * flip;
+
+            unityPosition = converted.GetColumn(3);
+
+            Vector3 up = converted.GetColumn(1);
+            Vector3 forward = converted.GetColumn(2);
+            if (up.sqrMagnitude < 0.0001f)
+                up = Vector3.up;
+            if (forward.sqrMagnitude < 0.0001f)
+                forward = Vector3.forward;
+
+            unityRotation = Quaternion.LookRotation(forward.normalized, up.normalized);
         }
 
         #endregion

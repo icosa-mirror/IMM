@@ -84,7 +84,8 @@ namespace ImmPlayer {
                 Pause = 7,
                 Resume = 8,
                 Restart = 9,
-                Continue = 10
+                Continue = 10,
+                SetChapter = 11
             }mType;
             ImmCore::piTArray<uint8_t>* mArrayArg = nullptr;
             ImmCore::piString mStrArg;

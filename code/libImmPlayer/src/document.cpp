@@ -323,6 +323,13 @@ namespace ImmPlayer
                     mPlayerManager.SkipBack(now);
                 }
             }
+            else if (command->mType == Command::Type::SetChapter)
+            {
+                if (mState.mLoadingState == LoadingState::Loaded)
+                {
+                    mPlayerManager.SetChapter(now, static_cast<size_t>(command->mIntArg));
+                }
+            }
             else if (command->mType == Command::Type::Pause)
             {
                 if (mState.mLoadingState == LoadingState::Loaded && !mHidden)

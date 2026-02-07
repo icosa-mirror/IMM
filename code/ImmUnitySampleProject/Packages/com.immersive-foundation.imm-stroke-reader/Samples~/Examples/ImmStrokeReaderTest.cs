@@ -17,6 +17,9 @@ namespace ImmPlayer
         [Tooltip("Load file automatically on Start")]
         public bool loadOnStart = true;
 
+        [Tooltip("Optional chapter index to select after load (-1 keeps default)")]
+        public int initialChapter = -1;
+
         private StrokeReaderDocument _document;
 
         void Start()
@@ -50,7 +53,7 @@ namespace ImmPlayer
 
             Debug.Log($"[StrokeReaderTest] Loading: {immFilePath}");
 
-            if (!_document.Load(immFilePath, logPath))
+            if (!_document.Load(immFilePath, logPath, initialChapter))
             {
                 Debug.LogError("[StrokeReaderTest] Failed to load document");
                 return;
@@ -69,7 +72,7 @@ namespace ImmPlayer
             }
 
             int layerCount = _document.LayerCount;
-            Debug.Log($"[StrokeReaderTest] Document loaded with {layerCount} layers");
+            Debug.Log($"[StrokeReaderTest] Document loaded with {layerCount} layers, chapter {_document.CurrentChapter}/{_document.ChapterCount - 1}");
 
             int totalStrokes = 0;
             int totalPoints = 0;
@@ -163,6 +166,24 @@ namespace ImmPlayer
                 _document = null;
                 Debug.Log("[StrokeReaderTest] Document unloaded");
             }
+        }
+
+        [ContextMenu("Set Chapter")]
+        public void SetChapter()
+        {
+            if (_document == null || !_document.IsLoaded)
+            {
+                Debug.LogWarning("[StrokeReaderTest] No document loaded");
+                return;
+            }
+
+            if (!_document.SetChapter(initialChapter))
+            {
+                Debug.LogWarning($"[StrokeReaderTest] Failed to set chapter {initialChapter}");
+                return;
+            }
+
+            Debug.Log($"[StrokeReaderTest] Current chapter is now {_document.CurrentChapter}");
         }
     }
 }

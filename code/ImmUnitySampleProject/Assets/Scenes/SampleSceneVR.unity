@@ -340,7 +340,7 @@ GameObject:
   - component: {fileID: 1009379718}
   m_Layer: 0
   m_Name: IMM
-  m_TagString: MainCamera
+  m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -393,6 +393,9 @@ MonoBehaviour:
   loadOnStart: 1
   autoPlay: 1
   documentTransform: {fileID: 1009379717}
+  applySpawnAreaToViewpoint: 1
+  spawnAreaTargetTransform: {fileID: 0}
+  keepCurrentViewHeightForFloorAreas: 1
   selectedLayerIndex: -1
   layerVisible: 1
   layerOpacity: 1
@@ -404,8 +407,13 @@ MonoBehaviour:
     Playback: 0
   documentInfoFlags: 0
   chapterCount: 0
+  currentChapter: 0
+  targetChapter: 0
   layerCount: 0
   spawnAreaCount: 0
+  activeSpawnAreaId: 0
+  currentSpawnAreaIndex: 0
+  targetSpawnAreaIndex: 0
   documentBounds:
     m_Center: {x: 0, y: 0, z: 0}
     m_Extent: {x: 0, y: 0, z: 0}

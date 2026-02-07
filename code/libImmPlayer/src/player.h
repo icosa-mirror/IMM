@@ -98,6 +98,7 @@ namespace ImmPlayer {
         void Show(int id);       // resume
         void SkipForward(int id);       // jump to next chapter
         void SkipBack(int id);         // jump to prev chapter
+        void SetChapter(int id, int chapterIndex); // jump to chapter index
         void Restart(int id);      // restart the whole comic
         void Continue(int id);       // continue from a stop
 

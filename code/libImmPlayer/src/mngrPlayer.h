@@ -44,6 +44,7 @@ namespace ImmPlayer
         void Restart(const ImmCore::piTick now);
         void SkipForward(const ImmCore::piTick now);
         void SkipBack(const ImmCore::piTick now);
+        bool SetChapter(const ImmCore::piTick now, size_t chapterIndex);
         void Continue(const ImmCore::piTick now);
 
         void SetTime(const ImmCore::piTick now, ImmCore::piTick timeSinceStart, ImmCore::piTick timeSinceStop);
@@ -56,6 +57,7 @@ namespace ImmPlayer
         inline bool GetIsPlaying(void) const { return mIsPlaying; }
 
     private:
+        bool iGetChapterStartTime(size_t chapterIndex, ImmCore::piTick* rootTime) const;
         void iJumpAndReset(const ImmCore::piTick now, const ImmCore::piTick rootTime);
         int FindSpawnAreaIdByLayer(const Layer* spawnAreaLayer) const ;
 

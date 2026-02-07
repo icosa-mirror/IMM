@@ -80,6 +80,16 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetDocumentCount();
 
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetChapterCount(int docId);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetCurrentChapter(int docId);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_SetChapter(int docId, int chapterIndex);
+
         #endregion
 
         #region Query API
@@ -362,7 +372,7 @@ namespace ImmPlayer
         /// <param name="filePath">Path to the IMM file</param>
         /// <param name="logPath">Optional log file path</param>
         /// <returns>True on success</returns>
-        public bool Load(string filePath, string logPath = null)
+        public bool Load(string filePath, string logPath = null, int chapterIndex = -1)
         {
             if (_docId > 0)
             {
@@ -388,6 +398,19 @@ namespace ImmPlayer
                 return false;
             }
 
+            if (chapterIndex >= 0)
+            {
+                int chapterCount = ImmStrokeReader.StrokeReader_GetChapterCount(_docId);
+                if (chapterIndex >= chapterCount)
+                {
+                    Debug.LogWarning($"StrokeReaderDocument: chapterIndex {chapterIndex} is out of range (chapterCount={chapterCount}).");
+                }
+                else
+                {
+                    ImmStrokeReader.StrokeReader_SetChapter(_docId, chapterIndex);
+                }
+            }
+
             return true;
         }
 
@@ -407,6 +430,20 @@ namespace ImmPlayer
         /// Get layer count.
         /// </summary>
         public int LayerCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetLayerCount(_docId) : 0;
+
+        public int ChapterCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetChapterCount(_docId) : 0;
+
+        public int CurrentChapter => _docId > 0 ? ImmStrokeReader.StrokeReader_GetCurrentChapter(_docId) : 0;
+
+        public bool SetChapter(int chapterIndex)
+        {
+            if (_docId <= 0)
+                return false;
+            if (chapterIndex < 0)
+                return false;
+
+            return ImmStrokeReader.StrokeReader_SetChapter(_docId, chapterIndex);
+        }
 
         /// <summary>
         /// Get layer info by index.

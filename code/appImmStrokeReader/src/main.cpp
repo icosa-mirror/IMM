@@ -49,6 +49,60 @@ static struct
     std::mutex mMutex;
 } gStrokeReader = { {}, false, 1, {}, {} };
 
+static void ExtractChapterStartTimes(const Sequence& seq, std::vector<piTick>* chapterStartTimes)
+{
+    if (chapterStartTimes == nullptr)
+    {
+        return;
+    }
+
+    chapterStartTimes->clear();
+    chapterStartTimes->push_back(piTick(0));
+
+    Layer* root = seq.GetRoot();
+    if (root == nullptr)
+    {
+        return;
+    }
+
+    const int numActionKeys = root->GetNumAnimKeys(Layer::AnimProperty::Action);
+    int numPlayMarkers = 0;
+    int numStopMarkers = 0;
+    for (int i = 0; i < numActionKeys; i++)
+    {
+        const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
+        const Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
+        if (action == Layer::AnimAction::Play)
+        {
+            numPlayMarkers++;
+        }
+        else if (action == Layer::AnimAction::Stop)
+        {
+            numStopMarkers++;
+        }
+    }
+
+    for (int i = 0; i < numActionKeys; i++)
+    {
+        const Layer::AnimKey* key = root->GetAnimKey(Layer::AnimProperty::Action, i);
+        const Layer::AnimAction action = static_cast<Layer::AnimAction>(key->mValue.mInt);
+        if (numPlayMarkers > 0)
+        {
+            if (action == Layer::AnimAction::Play)
+            {
+                chapterStartTimes->push_back(key->mTime);
+            }
+        }
+        else if (numStopMarkers > 0)
+        {
+            if (action == Layer::AnimAction::Stop)
+            {
+                chapterStartTimes->push_back(key->mTime + 1);
+            }
+        }
+    }
+}
+
 // ============================================================================
 // Lifecycle API
 // ============================================================================
@@ -146,6 +200,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromF
     }
 
     // Store and return document ID
+    std::vector<piTick> chapterStartTimes;
+    ExtractChapterStartTimes(seq, &chapterStartTimes);
+    store->SetChapterStartTimes(chapterStartTimes);
+
     int docId = gStrokeReader.mNextDocId++;
     gStrokeReader.mDocuments[docId] = store;
 
@@ -201,6 +259,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromM
     }
 
     // Store and return document ID
+    std::vector<piTick> chapterStartTimes;
+    ExtractChapterStartTimes(seq, &chapterStartTimes);
+    store->SetChapterStartTimes(chapterStartTimes);
+
     int docId = gStrokeReader.mNextDocId++;
     gStrokeReader.mDocuments[docId] = store;
 
@@ -316,6 +378,48 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStroke
         return 0;
 
     return it->second->GetStrokeCount(layerIdx, drawingIdx);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetChapterCount(int docId)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0;
+
+    return it->second->GetChapterCount();
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetCurrentChapter(int docId)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0;
+
+    return it->second->GetCurrentChapter();
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_SetChapter(int docId, int chapterIndex)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return false;
+
+    return it->second->SetCurrentChapter(chapterIndex);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrokeInfo(

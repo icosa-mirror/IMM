@@ -156,6 +156,9 @@ namespace ImmPlayer
         public static extern void SkipBack(int id);
 
         [DllImport(DllName)]
+        public static extern void SetChapter(int id, int chapterIndex);
+
+        [DllImport(DllName)]
         public static extern void Restart(int id);
 
         #endregion
@@ -232,6 +235,9 @@ namespace ImmPlayer
 
         [DllImport(DllName)]
         public static extern int GetActiveSpawnAreaId(int docId);
+
+        [DllImport(DllName)]
+        public static extern int GetInitialSpawnAreaId(int docId);
 
         [DllImport(DllName)]
         public static extern void SetActiveSpawnAreaId(int docId, int activeSpawnAreaId);

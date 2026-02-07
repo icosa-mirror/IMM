@@ -37,6 +37,11 @@ namespace ImmPlayer
         [SerializeField] private bool autoPlay = true;
         [SerializeField] private Transform documentTransform;
 
+        [Header("Viewpoint")]
+        [SerializeField] private bool applySpawnAreaToViewpoint = true;
+        [SerializeField] private Transform spawnAreaTargetTransform;
+        [SerializeField] private bool keepCurrentViewHeightForFloorAreas = true;
+
         [Header("Layer Target")]
         [SerializeField, HideInInspector] private int selectedLayerIndex = -1;
 
@@ -51,8 +56,13 @@ namespace ImmPlayer
         public ImmDocument.DocumentStateInfo documentState;
         public ImmDocument.DocumentInfoFlags documentInfoFlags;
         public int chapterCount;
+        public int currentChapter;
+        public int targetChapter;
         public int layerCount;
         public int spawnAreaCount;
+        public int activeSpawnAreaId;
+        public int currentSpawnAreaIndex;
+        public int targetSpawnAreaIndex;
         public Bounds documentBounds;
 
         [Header("Selected Layer Status (Read Only)")]
@@ -77,12 +87,16 @@ namespace ImmPlayer
         private bool _isSyncingSelection;
         private int _lastSelectedLayerIndex = int.MinValue;
         private Coroutine _visibilityDiagCoroutine;
+        private Coroutine _initialSpawnAreaCoroutine;
+        private Coroutine _spawnAreaApplyCoroutine;
+        private Coroutine _chapterSyncCoroutine;
         private bool _isDocumentTransformDirty;
         private Vector3 _lastLayerPosition;
         private Vector3 _lastLayerEuler;
         private float _lastLayerScale = 1.0f;
         private bool _lastLayerVisible;
         private float _lastLayerOpacity;
+        private int[] _spawnAreaIds = new int[0];
 
         private void Start()
         {
@@ -157,6 +171,28 @@ namespace ImmPlayer
             StartCoroutine(LoadDocumentCoroutine());
         }
 
+        public bool PickRandomStreamingAssetsFile()
+        {
+            string dirPath = Application.streamingAssetsPath;
+            if (!Directory.Exists(dirPath))
+            {
+                Debug.LogWarning($"{DiagPrefix}StreamingAssets folder not found: {dirPath}");
+                return false;
+            }
+
+            string[] immFiles = Directory.GetFiles(dirPath, "*.imm");
+            if (immFiles.Length == 0)
+            {
+                Debug.LogWarning($"{DiagPrefix}No .imm files found in StreamingAssets: {dirPath}");
+                return false;
+            }
+
+            int fileIndex = Random.Range(0, immFiles.Length);
+            selectedFileName = Path.GetFileName(immFiles[fileIndex]);
+            Debug.Log($"{DiagPrefix}Selected random StreamingAssets file: {selectedFileName}");
+            return true;
+        }
+
         private IEnumerator LoadDocumentCoroutine()
         {
             if (_doc != null)
@@ -194,6 +230,7 @@ namespace ImmPlayer
 
             StartCoroutine(WaitForSequenceAndRefreshLayers());
             StartCoroutine(ApplyInitialPlaybackState());
+            StartCoroutine(ApplyInitialSpawnAreaViewpoint());
         }
 
         private IEnumerator LoadFromStreamingAssets(string fileName)
@@ -247,6 +284,24 @@ namespace ImmPlayer
             if (_doc == null)
                 return;
 
+            if (_initialSpawnAreaCoroutine != null)
+            {
+                StopCoroutine(_initialSpawnAreaCoroutine);
+                _initialSpawnAreaCoroutine = null;
+            }
+
+            if (_spawnAreaApplyCoroutine != null)
+            {
+                StopCoroutine(_spawnAreaApplyCoroutine);
+                _spawnAreaApplyCoroutine = null;
+            }
+
+            if (_chapterSyncCoroutine != null)
+            {
+                StopCoroutine(_chapterSyncCoroutine);
+                _chapterSyncCoroutine = null;
+            }
+
             ImmPlayerManager.Instance.UnloadDocument(_doc);
             _doc = null;
         }
@@ -259,8 +314,10 @@ namespace ImmPlayer
             documentState = _doc.GetStateInfo();
             documentInfoFlags = _doc.GetInfoFlags();
             chapterCount = _doc.GetChapterCount();
+            currentChapter = _doc.GetCurrentChapter();
             layerCount = _doc.GetLayerCount();
             spawnAreaCount = _doc.GetSpawnAreaCount();
+            SyncSpawnAreaSelection();
 
             if (_doc.IsSequenceReady())
             {
@@ -270,6 +327,21 @@ namespace ImmPlayer
             layers = _doc.GetLayersManaged();
             spawnAreas = _doc.GetSpawnAreas();
             RefreshLayerList();
+        }
+
+        public void NextSpawnArea()
+        {
+            SetSpawnAreaByOffset(1);
+        }
+
+        public void PreviousSpawnArea()
+        {
+            SetSpawnAreaByOffset(-1);
+        }
+
+        public void JumpToSpawnArea()
+        {
+            SetSpawnAreaByIndex(targetSpawnAreaIndex);
         }
 
         public void RefreshLayerList()
@@ -345,6 +417,51 @@ namespace ImmPlayer
             }
         }
 
+        private IEnumerator ApplyInitialSpawnAreaViewpoint()
+        {
+            if (_initialSpawnAreaCoroutine != null)
+            {
+                StopCoroutine(_initialSpawnAreaCoroutine);
+            }
+
+            _initialSpawnAreaCoroutine = StartCoroutine(ApplyInitialSpawnAreaViewpointRoutine());
+            yield return _initialSpawnAreaCoroutine;
+            _initialSpawnAreaCoroutine = null;
+        }
+
+        private IEnumerator ApplyInitialSpawnAreaViewpointRoutine()
+        {
+            if (_doc == null)
+                yield break;
+
+            while (_doc != null && !_doc.IsSequenceReady())
+                yield return null;
+
+            if (_doc == null)
+                yield break;
+
+            const int maxFrames = 120;
+            int frames = 0;
+            while (_doc != null && frames < maxFrames)
+            {
+                SyncSpawnAreaSelection();
+                if (_spawnAreaIds.Length == 0)
+                {
+                    yield return null;
+                    frames++;
+                    continue;
+                }
+
+                int initialSpawnId = _doc.GetInitialSpawnAreaId();
+                int initialIndex = System.Array.IndexOf(_spawnAreaIds, initialSpawnId);
+                int index = initialIndex >= 0
+                    ? initialIndex
+                    : (currentSpawnAreaIndex >= 0 ? currentSpawnAreaIndex : 0);
+                SetSpawnAreaByIndex(index);
+                yield break;
+            }
+        }
+
         public void Play()
         {
             _doc?.Resume();
@@ -364,12 +481,100 @@ namespace ImmPlayer
 
         public void SkipForward()
         {
-            _doc?.SkipForward();
+            if (_doc == null)
+                return;
+
+            int count = _doc.GetChapterCount();
+            if (count <= 0)
+            {
+                _doc.SkipForward();
+                return;
+            }
+
+            int current = _doc.GetCurrentChapter();
+            int next = (current + 1) % count;
+            RequestChapterAndSync(next);
         }
 
         public void SkipBack()
         {
-            _doc?.SkipBack();
+            if (_doc == null)
+                return;
+
+            int count = _doc.GetChapterCount();
+            if (count <= 0)
+            {
+                _doc.SkipBack();
+                return;
+            }
+
+            int current = _doc.GetCurrentChapter();
+            int previous = (current - 1 + count) % count;
+            RequestChapterAndSync(previous);
+        }
+
+        public void JumpToChapter()
+        {
+            if (_doc == null)
+                return;
+
+            if (targetChapter < 0)
+                targetChapter = 0;
+
+            RequestChapterAndSync(targetChapter);
+        }
+
+        private void RequestChapterAndSync(int chapterIndex)
+        {
+            if (_doc == null)
+                return;
+
+            int count = _doc.GetChapterCount();
+            if (count <= 0)
+                return;
+
+            int clampedChapter = Mathf.Clamp(chapterIndex, 0, count - 1);
+            if (_chapterSyncCoroutine != null)
+            {
+                StopCoroutine(_chapterSyncCoroutine);
+            }
+
+            _chapterSyncCoroutine = StartCoroutine(ApplyChapterAndSync(clampedChapter));
+        }
+
+        private IEnumerator ApplyChapterAndSync(int chapterIndex)
+        {
+            if (_doc == null)
+                yield break;
+
+            _doc.SetChapter(chapterIndex);
+
+            const int maxFrames = 10;
+            int frames = 0;
+            while (_doc != null && frames < maxFrames)
+            {
+                int current = _doc.GetCurrentChapter();
+                if (current == chapterIndex)
+                    break;
+
+                yield return null;
+                frames++;
+            }
+
+            if (_doc == null)
+                yield break;
+
+            currentChapter = _doc.GetCurrentChapter();
+            targetChapter = currentChapter;
+
+            SyncSpawnAreaSelection();
+            int activeSpawnId = _doc.GetActiveSpawnAreaId();
+            if (activeSpawnId >= 0)
+            {
+                StartSpawnAreaViewpointApply(activeSpawnId);
+            }
+
+            _chapterSyncCoroutine = null;
         }
 
         public void ApplyLayerVisibility()
@@ -416,6 +621,164 @@ namespace ImmPlayer
             }
 
             return -1;
+        }
+
+        private void SetSpawnAreaByOffset(int offset)
+        {
+            if (_doc == null)
+                return;
+
+            SyncSpawnAreaSelection();
+            if (_spawnAreaIds.Length == 0)
+                return;
+
+            int startIndex = currentSpawnAreaIndex >= 0 ? currentSpawnAreaIndex : 0;
+            int count = _spawnAreaIds.Length;
+            int targetIndex = (startIndex + offset) % count;
+            if (targetIndex < 0)
+                targetIndex += count;
+            SetSpawnAreaByIndex(targetIndex);
+        }
+
+        private void SetSpawnAreaByIndex(int spawnAreaIndex)
+        {
+            if (_doc == null)
+                return;
+
+            SyncSpawnAreaSelection();
+            if (_spawnAreaIds.Length == 0)
+                return;
+
+            int clampedIndex = Mathf.Clamp(spawnAreaIndex, 0, _spawnAreaIds.Length - 1);
+            int spawnAreaId = _spawnAreaIds[clampedIndex];
+
+            _doc.SetActiveSpawnAreaId(spawnAreaId);
+
+            StartSpawnAreaViewpointApply(spawnAreaId);
+
+            activeSpawnAreaId = spawnAreaId;
+            currentSpawnAreaIndex = clampedIndex;
+            targetSpawnAreaIndex = clampedIndex;
+        }
+
+        private void StartSpawnAreaViewpointApply(int spawnAreaId)
+        {
+            if (_spawnAreaApplyCoroutine != null)
+            {
+                StopCoroutine(_spawnAreaApplyCoroutine);
+            }
+
+            _spawnAreaApplyCoroutine = StartCoroutine(ApplySpawnAreaViewpointDeferred(spawnAreaId));
+        }
+
+        private IEnumerator ApplySpawnAreaViewpointDeferred(int requestedSpawnAreaId)
+        {
+            if (_doc == null)
+                yield break;
+
+            var info = _doc.GetSpawnAreaInfoManaged(requestedSpawnAreaId);
+            int settleFrames = (info.HasValue && info.Value.Animated) ? 3 : 1;
+            for (int i = 0; i < settleFrames; i++)
+                yield return null;
+
+            const int maxFrames = 10;
+            int resolvedSpawnAreaId = requestedSpawnAreaId;
+            for (int i = 0; i < maxFrames; i++)
+            {
+                if (_doc == null)
+                    yield break;
+
+                int activeSpawnAreaId = _doc.GetActiveSpawnAreaId();
+                if (activeSpawnAreaId >= 0)
+                {
+                    resolvedSpawnAreaId = activeSpawnAreaId;
+                }
+
+                if (activeSpawnAreaId == requestedSpawnAreaId)
+                {
+                    break;
+                }
+
+                yield return null;
+            }
+
+            ApplySpawnAreaViewpoint(resolvedSpawnAreaId);
+            _spawnAreaApplyCoroutine = null;
+        }
+
+        private void ApplySpawnAreaViewpoint(int spawnAreaId)
+        {
+            if (!applySpawnAreaToViewpoint || _doc == null)
+                return;
+
+            Transform target = ResolveSpawnAreaTargetTransform();
+            if (target == null)
+                return;
+
+            Transform head = ResolveViewpointHeadTransform(target);
+            Transform documentRoot = documentTransform != null ? documentTransform : transform;
+            if (_doc.TryGetSpawnAreaViewTargetPose(
+                spawnAreaId,
+                documentRoot,
+                target,
+                head,
+                keepCurrentViewHeightForFloorAreas,
+                out Pose targetPose))
+            {
+                target.SetPositionAndRotation(targetPose.position, targetPose.rotation);
+            }
+        }
+
+        private Transform ResolveSpawnAreaTargetTransform()
+        {
+            if (spawnAreaTargetTransform != null)
+                return spawnAreaTargetTransform;
+
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null)
+                return null;
+
+            Transform cameraTransform = mainCamera.transform;
+            return cameraTransform.parent != null ? cameraTransform.parent : cameraTransform;
+        }
+
+        private Transform ResolveViewpointHeadTransform(Transform target)
+        {
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null)
+                return target;
+            return mainCamera.transform;
+        }
+
+        private void SyncSpawnAreaSelection()
+        {
+            if (_doc == null)
+                return;
+
+            _spawnAreaIds = _doc.GetSpawnAreaList();
+            spawnAreaCount = _spawnAreaIds.Length;
+            activeSpawnAreaId = _doc.GetActiveSpawnAreaId();
+            currentSpawnAreaIndex = -1;
+
+            for (int i = 0; i < _spawnAreaIds.Length; i++)
+            {
+                if (_spawnAreaIds[i] == activeSpawnAreaId)
+                {
+                    currentSpawnAreaIndex = i;
+                    break;
+                }
+            }
+
+            if (_spawnAreaIds.Length == 0)
+            {
+                targetSpawnAreaIndex = 0;
+                return;
+            }
+
+            if (targetSpawnAreaIndex < 0 || targetSpawnAreaIndex >= _spawnAreaIds.Length)
+            {
+                targetSpawnAreaIndex = currentSpawnAreaIndex >= 0 ? currentSpawnAreaIndex : 0;
+            }
         }
 
         private void ApplyDocumentTransform()

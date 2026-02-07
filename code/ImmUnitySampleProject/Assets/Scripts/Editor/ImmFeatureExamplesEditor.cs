@@ -18,8 +18,12 @@ public class ImmFeatureExamplesEditor : Editor
         "documentState",
         "documentInfoFlags",
         "chapterCount",
+        "currentChapter",
         "layerCount",
         "spawnAreaCount",
+        "activeSpawnAreaId",
+        "currentSpawnAreaIndex",
+        "targetSpawnAreaIndex",
         "documentBounds",
         "selectedLayerId",
         "selectedLayerName",
@@ -32,6 +36,7 @@ public class ImmFeatureExamplesEditor : Editor
         "selectedLayerBounds",
         "selectedLayerVisibilityOverrideEnabled",
         "selectedLayerVisibilityOverrideValue",
+        "targetChapter",
         "layerVisible",
         "layerOpacity",
         "layerPosition",
@@ -49,8 +54,11 @@ public class ImmFeatureExamplesEditor : Editor
         "documentState",
         "documentInfoFlags",
         "chapterCount",
+        "currentChapter",
         "layerCount",
         "spawnAreaCount",
+        "activeSpawnAreaId",
+        "currentSpawnAreaIndex",
         "documentBounds",
         "selectedLayerId",
         "selectedLayerName",
@@ -114,6 +122,7 @@ public class ImmFeatureExamplesEditor : Editor
         }
 
         DrawImmFileDropdown(isFileSystemMode);
+
         EditorGUILayout.PropertyField(serializedObject.FindProperty("loadOnStart"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("autoPlay"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("documentTransform"));
@@ -201,8 +210,11 @@ public class ImmFeatureExamplesEditor : Editor
             EditorGUILayout.PropertyField(serializedObject.FindProperty("documentState"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("documentInfoFlags"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("chapterCount"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("currentChapter"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("layerCount"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("spawnAreaCount"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("activeSpawnAreaId"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("currentSpawnAreaIndex"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("documentBounds"));
         }
     }
@@ -250,6 +262,27 @@ public class ImmFeatureExamplesEditor : Editor
 
         using (new EditorGUI.DisabledScope(!Application.isPlaying))
         {
+            SerializedProperty loadSourceProp = serializedObject.FindProperty("loadSource");
+            bool isFileSystemMode = loadSourceProp.enumValueIndex == (int)ImmFeatureExamples.LoadSource.FileSystem;
+
+            using (new EditorGUI.DisabledScope(isFileSystemMode))
+            {
+                if (GUILayout.Button("Pick Random + Load"))
+                {
+                    Undo.RecordObject(target, "Pick Random StreamingAssets File");
+                    bool selected = script.PickRandomStreamingAssetsFile();
+                    EditorUtility.SetDirty(target);
+                    serializedObject.Update();
+
+                    if (selected)
+                    {
+                        script.LoadDocument();
+                        script.RefreshStatus();
+                        Repaint();
+                    }
+                }
+            }
+
             if (GUILayout.Button("Load Document"))
             {
                 script.LoadDocument();
@@ -273,13 +306,61 @@ public class ImmFeatureExamplesEditor : Editor
             {
                 script.Restart();
             }
-            if (GUILayout.Button("Next Chapter"))
+            bool hasMultipleChapters = script.chapterCount > 1;
+            using (new EditorGUI.DisabledScope(!hasMultipleChapters))
             {
-                script.SkipForward();
+                if (GUILayout.Button("Next Chapter"))
+                {
+                    script.SkipForward();
+                }
+                if (GUILayout.Button("Previous Chapter"))
+                {
+                    script.SkipBack();
+                }
+
+                SerializedProperty targetChapterProp = serializedObject.FindProperty("targetChapter");
+                int maxChapter = Mathf.Max(0, script.chapterCount - 1);
+                int oldTargetChapter = targetChapterProp.intValue;
+                int newTargetChapter = EditorGUILayout.IntSlider("Target Chapter", oldTargetChapter, 0, maxChapter);
+                if (newTargetChapter != oldTargetChapter)
+                {
+                    targetChapterProp.intValue = newTargetChapter;
+                    serializedObject.ApplyModifiedProperties();
+                    script.JumpToChapter();
+                    script.RefreshStatus();
+                    serializedObject.Update();
+                    Repaint();
+                }
             }
-            if (GUILayout.Button("Previous Chapter"))
+
+            EditorGUILayout.Space(4);
+            bool hasMultipleSpawnAreas = script.spawnAreaCount > 1;
+            using (new EditorGUI.DisabledScope(!hasMultipleSpawnAreas))
             {
-                script.SkipBack();
+                if (GUILayout.Button("Next Spawn Area"))
+                {
+                    script.NextSpawnArea();
+                    script.RefreshStatus();
+                }
+                if (GUILayout.Button("Previous Spawn Area"))
+                {
+                    script.PreviousSpawnArea();
+                    script.RefreshStatus();
+                }
+
+                SerializedProperty targetSpawnAreaIndexProp = serializedObject.FindProperty("targetSpawnAreaIndex");
+                int maxSpawnAreaIndex = Mathf.Max(0, script.spawnAreaCount - 1);
+                int oldTargetSpawnArea = targetSpawnAreaIndexProp.intValue;
+                int newTargetSpawnArea = EditorGUILayout.IntSlider("Target Spawn Area", oldTargetSpawnArea, 0, maxSpawnAreaIndex);
+                if (newTargetSpawnArea != oldTargetSpawnArea)
+                {
+                    targetSpawnAreaIndexProp.intValue = newTargetSpawnArea;
+                    serializedObject.ApplyModifiedProperties();
+                    script.JumpToSpawnArea();
+                    script.RefreshStatus();
+                    serializedObject.Update();
+                    Repaint();
+                }
             }
         }
     }

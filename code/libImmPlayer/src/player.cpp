@@ -1562,6 +1562,14 @@ namespace ImmPlayer
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::SkipBack;
         mCommandList[cmdId].mTarget = id;
     }
+    void Player::SetChapter(int id, int chapterIndex)
+    {
+        Document *doc = (Document *)mDocuments.GetAddress(id);
+        int cmdId = doc->GetCommandId();
+        mCommandList[cmdId].mCommand.mType = Document::Command::Type::SetChapter;
+        mCommandList[cmdId].mTarget = id;
+        mCommandList[cmdId].mCommand.mIntArg = static_cast<uint64_t>(chapterIndex);
+    }
     void Player::Restart(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);

@@ -411,9 +411,51 @@ bool StrokeStore::GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) 
     return true;
 }
 
+int StrokeStore::GetChapterCount() const
+{
+    if (mDocument.chapterStartTimes.empty())
+    {
+        return 1;
+    }
+
+    return static_cast<int>(mDocument.chapterStartTimes.size());
+}
+
+int StrokeStore::GetCurrentChapter() const
+{
+    return mDocument.currentChapter;
+}
+
+bool StrokeStore::SetCurrentChapter(int chapterIndex)
+{
+    if (chapterIndex < 0 || chapterIndex >= GetChapterCount())
+    {
+        return false;
+    }
+
+    mDocument.currentChapter = chapterIndex;
+    return true;
+}
+
+void StrokeStore::SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapterStartTimes)
+{
+    mDocument.chapterStartTimes = chapterStartTimes;
+    if (mDocument.chapterStartTimes.empty())
+    {
+        mDocument.chapterStartTimes.push_back(ImmCore::piTick(0));
+    }
+
+    if (mDocument.currentChapter < 0 || mDocument.currentChapter >= static_cast<int>(mDocument.chapterStartTimes.size()))
+    {
+        mDocument.currentChapter = 0;
+    }
+}
+
 void StrokeStore::Clear()
 {
     mDocument.layers.clear();
+    mDocument.chapterStartTimes.clear();
+    mDocument.currentChapter = 0;
     mCurrentLayer = nullptr;
     mCurrentDrawing = nullptr;
 }

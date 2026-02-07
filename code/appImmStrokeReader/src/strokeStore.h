@@ -6,6 +6,7 @@
 #include "libImmImporter/src/fromImmersive/strokeCollector.h"
 #include "libImmImporter/src/document/layerPaint/element.h"
 #include "libImmCore/src/libBasics/piVecTypes.h"
+#include "libImmCore/src/libBasics/piTick.h"
 
 namespace ImmStrokeReader
 {
@@ -103,6 +104,8 @@ struct StoredLayer
 struct StoredDocument
 {
     std::vector<StoredLayer> layers;
+    std::vector<ImmCore::piTick> chapterStartTimes;
+    int currentChapter = 0;
 };
 
 // Collector implementation that stores stroke data
@@ -148,6 +151,10 @@ public:
     bool GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokePointC* points, int maxPoints) const;
     bool GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const;
     bool GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) const;
+    int GetChapterCount() const;
+    int GetCurrentChapter() const;
+    bool SetCurrentChapter(int chapterIndex);
+    void SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapterStartTimes);
 
     // Clear all stored data
     void Clear();

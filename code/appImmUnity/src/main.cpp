@@ -611,9 +611,9 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 
     conf.multisamplingLevel = antialiasing;
     // NOTE. THESE SHOULD BE PASSED IN THE INIT OF THE DLL. But for now we hardcode it her since our only clients are Unity in DX or GLES modes
-    conf.depthBuffer      = (api == piRenderer::API::DX) ? DepthBuffer::Linear10         : DepthBuffer::Linear01;
+    conf.depthBuffer      = DepthBuffer::Linear01;
     conf.clipDepth        = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-    conf.projectionMatrix = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+    conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
     conf.frontIsCCW       = (api == piRenderer::API::DX) ? false                         : true;
     conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Rending in Static mode");
@@ -771,6 +771,11 @@ extern "C" void UNITY_INTERFACE_EXPORT SkipBack(int id)
 	gImmUnityPlugin.IMM.mPlayer.SkipBack(id);
 }
 
+extern "C" void UNITY_INTERFACE_EXPORT SetChapter(int id, int chapterIndex)
+{
+    gImmUnityPlugin.IMM.mPlayer.SetChapter(id, chapterIndex);
+}
+
 extern "C" void UNITY_INTERFACE_EXPORT Restart(int id)
 {
 	gImmUnityPlugin.IMM.mPlayer.Restart(id);
@@ -873,6 +878,11 @@ extern "C" int UNITY_INTERFACE_EXPORT GetSpawnAreaList(int docId, int spawnAreaI
 extern "C" int UNITY_INTERFACE_EXPORT GetActiveSpawnAreaId(int docId)
 {
     return gImmUnityPlugin.IMM.mPlayer.GetSpawnArea(docId);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT GetInitialSpawnAreaId(int docId)
+{
+    return gImmUnityPlugin.IMM.mPlayer.GetInitialSpawnArea(docId);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SetActiveSpawnAreaId(int docId, int activeSpawnAreaId)
