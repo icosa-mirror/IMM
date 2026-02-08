@@ -3,6 +3,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Networking;
+using UnityEngine.XR;
 
 namespace ImmPlayer
 {
@@ -41,6 +42,7 @@ namespace ImmPlayer
         [SerializeField] private bool applySpawnAreaToViewpoint = true;
         [SerializeField] private Transform spawnAreaTargetTransform;
         [SerializeField] private bool keepCurrentViewHeightForFloorAreas = true;
+        [SerializeField] private bool constrainViewpointRotationToYawInXR = true;
 
         [Header("Layer Target")]
         [SerializeField, HideInInspector] private int selectedLayerIndex = -1;
@@ -725,7 +727,20 @@ namespace ImmPlayer
                 keepCurrentViewHeightForFloorAreas,
                 out Pose targetPose))
             {
-                target.SetPositionAndRotation(targetPose.position, targetPose.rotation);
+                Pose finalPose = targetPose;
+                if (constrainViewpointRotationToYawInXR && XRSettings.enabled)
+                {
+                    Quaternion yawOnlyRotation = Quaternion.Euler(0.0f, targetPose.rotation.eulerAngles.y, 0.0f);
+                    Vector3 headLocalPosition = target.InverseTransformPoint(head.position);
+                    if (keepCurrentViewHeightForFloorAreas)
+                        headLocalPosition.y = 0.0f;
+
+                    Vector3 worldHeadAnchor = targetPose.position + (targetPose.rotation * headLocalPosition);
+                    Vector3 yawOnlyPosition = worldHeadAnchor - (yawOnlyRotation * headLocalPosition);
+                    finalPose = new Pose(yawOnlyPosition, yawOnlyRotation);
+                }
+
+                target.SetPositionAndRotation(finalPose.position, finalPose.rotation);
             }
         }
 

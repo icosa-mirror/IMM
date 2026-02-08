@@ -3,6 +3,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Rendering;
+using UnityEngine.XR;
 
 namespace ImmPlayer
 {
@@ -42,6 +43,7 @@ namespace ImmPlayer
         [SerializeField] private bool applySpawnAreaToCamera = true;
         [SerializeField] private Transform spawnAreaTargetTransform;
         [SerializeField] private bool keepCurrentViewHeightForFloorAreas = true;
+        [SerializeField] private bool constrainViewpointRotationToYawInXR = true;
 
         private ImmDocument _currentDocument;
         private bool _useScriptableRenderPipeline;
@@ -703,7 +705,20 @@ namespace ImmPlayer
                 keepCurrentViewHeightForFloorAreas,
                 out Pose targetPose))
             {
-                target.SetPositionAndRotation(targetPose.position, targetPose.rotation);
+                Pose finalPose = targetPose;
+                if (constrainViewpointRotationToYawInXR && XRSettings.enabled)
+                {
+                    Quaternion yawOnlyRotation = Quaternion.Euler(0.0f, targetPose.rotation.eulerAngles.y, 0.0f);
+                    Vector3 headLocalPosition = target.InverseTransformPoint(head.position);
+                    if (keepCurrentViewHeightForFloorAreas)
+                        headLocalPosition.y = 0.0f;
+
+                    Vector3 worldHeadAnchor = targetPose.position + (targetPose.rotation * headLocalPosition);
+                    Vector3 yawOnlyPosition = worldHeadAnchor - (yawOnlyRotation * headLocalPosition);
+                    finalPose = new Pose(yawOnlyPosition, yawOnlyRotation);
+                }
+
+                target.SetPositionAndRotation(finalPose.position, finalPose.rotation);
             }
         }
 

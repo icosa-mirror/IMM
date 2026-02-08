@@ -57,6 +57,8 @@ namespace ImmPlayer
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
         private IntPtr _renderEventFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
+        private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
+        private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private bool _useCommandBufferRendering = false;
 
         #endregion
@@ -374,15 +376,23 @@ namespace ImmPlayer
             }
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
+            bool renderIntoTexture = cam.cameraType == CameraType.SceneView || cam.stereoEnabled;
             Matrix4x4 headProjection = cam.nonJitteredProjectionMatrix;
-            ConvertMatrixToArray(info.HeadProj, headProjection);
+            ConvertMatrixToArray(info.HeadProj, GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture));
+
+            if (!_lastNearClipLogged.TryGetValue(cam, out float lastNear) || !Mathf.Approximately(lastNear, cam.nearClipPlane))
+            {
+                _lastNearClipLogged[cam] = cam.nearClipPlane;
+                Matrix4x4 gpuProjection = GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture);
+                Debug.Log($"{NearDiagPrefix}cam={cam.name} type={cam.cameraType} near={cam.nearClipPlane:F5} far={cam.farClipPlane:F2} renderIntoTex={renderIntoTexture} nonJit(m22={headProjection[10]:F6},m23={headProjection[14]:F6},m32={headProjection[11]:F6}) gpu(m22={gpuProjection[10]:F6},m23={gpuProjection[14]:F6},m32={gpuProjection[11]:F6})");
+            }
 
             if (cam.stereoEnabled)
             {
                 ConvertMatrixToArray(info.WorldToLeft, cam.GetStereoViewMatrix(Camera.StereoscopicEye.Left));
-                ConvertMatrixToArray(info.LeftProj, cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left));
+                ConvertMatrixToArray(info.LeftProj, GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Left), renderIntoTexture));
                 ConvertMatrixToArray(info.WorldToRight, cam.GetStereoViewMatrix(Camera.StereoscopicEye.Right));
-                ConvertMatrixToArray(info.RightProj, cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right));
+                ConvertMatrixToArray(info.RightProj, GL.GetGPUProjectionMatrix(cam.GetStereoProjectionMatrix(Camera.StereoscopicEye.Right), renderIntoTexture));
             }
 
             ImmNativePlugin.SetMatrices(
@@ -418,7 +428,8 @@ namespace ImmPlayer
                 return;
 
             Matrix4x4 worldToCamera = camera.worldToCameraMatrix;
-            Matrix4x4 projection = camera.nonJitteredProjectionMatrix;
+            bool renderIntoTexture = camera.cameraType == CameraType.SceneView || camera.stereoEnabled;
+            Matrix4x4 projection = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, renderIntoTexture);
 
             float[] world2head = MatrixToFloatArray(worldToCamera);
             float[] prjHead = MatrixToFloatArray(projection);

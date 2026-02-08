@@ -22,7 +22,16 @@ namespace ImmPlayer
         [SerializeField] private float snapCooldown = 0.25f;
         [SerializeField] private float snapDeadzone = 0.5f;
 
+        [Header("Testing")]
+        [SerializeField] private ImmFeatureExamples featureExamples;
+        [SerializeField] private bool enableRandomLoadButton = true;
+        [SerializeField] private bool enableNavigationButtons = true;
+
         private float _nextSnapTime;
+        private bool _wasRandomLoadPressed;
+        private bool _wasNextChapterPressed;
+        private bool _wasPrevSpawnPressed;
+        private bool _wasNextSpawnPressed;
 
         private void Reset()
         {
@@ -36,6 +45,8 @@ namespace ImmPlayer
                 rigRoot = transform;
             if (headCamera == null)
                 headCamera = Camera.main;
+            if (featureExamples == null)
+                featureExamples = FindObjectOfType<ImmFeatureExamples>();
         }
 
         private void Update()
@@ -43,8 +54,10 @@ namespace ImmPlayer
             if (rigRoot == null)
                 return;
 
-            InputDevices.GetDeviceAtXRNode(XRNode.LeftHand).TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 leftStick);
-            InputDevices.GetDeviceAtXRNode(XRNode.RightHand).TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 rightStick);
+            InputDevice leftHand = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            leftHand.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 leftStick);
+            InputDevice rightHand = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+            rightHand.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 rightStick);
 
             Vector2 move = ApplyDeadzone(leftStick, deadzone);
             Vector3 forward = headCamera != null ? headCamera.transform.forward : rigRoot.forward;
@@ -60,6 +73,52 @@ namespace ImmPlayer
             rigRoot.position += moveDelta;
 
             HandleSnapTurn(rightStick.x);
+            HandleRandomLoadShortcut(rightHand);
+            HandleNavigationShortcuts(leftHand, rightHand);
+        }
+
+        private void HandleRandomLoadShortcut(InputDevice rightHand)
+        {
+            if (!enableRandomLoadButton)
+                return;
+
+            rightHand.TryGetFeatureValue(CommonUsages.secondaryButton, out bool isPressed);
+            if (isPressed && !_wasRandomLoadPressed)
+            {
+                if (featureExamples != null && featureExamples.PickRandomStreamingAssetsFile())
+                {
+                    featureExamples.LoadDocument();
+                }
+            }
+
+            _wasRandomLoadPressed = isPressed;
+        }
+
+        private void HandleNavigationShortcuts(InputDevice leftHand, InputDevice rightHand)
+        {
+            if (!enableNavigationButtons || featureExamples == null)
+                return;
+
+            rightHand.TryGetFeatureValue(CommonUsages.triggerButton, out bool nextChapterPressed);
+            if (nextChapterPressed && !_wasNextChapterPressed)
+            {
+                featureExamples.SkipForward();
+            }
+            _wasNextChapterPressed = nextChapterPressed;
+
+            leftHand.TryGetFeatureValue(CommonUsages.gripButton, out bool prevSpawnPressed);
+            if (prevSpawnPressed && !_wasPrevSpawnPressed)
+            {
+                featureExamples.PreviousSpawnArea();
+            }
+            _wasPrevSpawnPressed = prevSpawnPressed;
+
+            rightHand.TryGetFeatureValue(CommonUsages.gripButton, out bool nextSpawnPressed);
+            if (nextSpawnPressed && !_wasNextSpawnPressed)
+            {
+                featureExamples.NextSpawnArea();
+            }
+            _wasNextSpawnPressed = nextSpawnPressed;
         }
 
         private void HandleSnapTurn(float axisX)
