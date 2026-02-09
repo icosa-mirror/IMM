@@ -1,12 +1,16 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using ImmPlayer;
 using SharpQuill;
+using UnityEngine;
 
 namespace ImmStrokeReader
 {
     public static class SharpQuillCompat
     {
+        private const string LogPrefix = "[IMM2QUILL_20260209A] ";
+
         public static Sequence ReadImmAsSequence(string path, bool includePictures = false)
         {
             if (string.IsNullOrEmpty(path))
@@ -22,8 +26,7 @@ namespace ImmStrokeReader
                 }
             }
 
-            int docId = ImmPlayer.ImmStrokeReader.StrokeReader_LoadFromFile(path);
-            if (docId < 0)
+            if (!TryLoadDocument(path, out int docId))
             {
                 return null;
             }
@@ -35,6 +38,48 @@ namespace ImmStrokeReader
             finally
             {
                 ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
+            }
+        }
+
+        private static bool TryLoadDocument(string path, out int docId)
+        {
+            docId = ImmPlayer.ImmStrokeReader.StrokeReader_LoadFromFile(path);
+            if (docId >= 0)
+            {
+                return true;
+            }
+
+            Debug.LogWarning($"{LogPrefix}StrokeReader_LoadFromFile failed for '{path}', trying memory fallback");
+
+            byte[] immBytes;
+            try
+            {
+                immBytes = File.ReadAllBytes(path);
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (immBytes == null || immBytes.Length == 0)
+            {
+                return false;
+            }
+
+            IntPtr data = Marshal.AllocHGlobal(immBytes.Length);
+            try
+            {
+                Marshal.Copy(immBytes, 0, data, immBytes.Length);
+                docId = ImmPlayer.ImmStrokeReader.StrokeReader_LoadFromMemory(data, immBytes.Length);
+                if (docId >= 0)
+                {
+                    Debug.Log($"{LogPrefix}Memory fallback succeeded for '{path}'");
+                }
+                return docId >= 0;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(data);
             }
         }
 
