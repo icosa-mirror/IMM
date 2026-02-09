@@ -1,0 +1,216 @@
+===================================================
+date  : 16:4:29 of Tue 9/2/2026
+
+Memory: 557 / 31968 Megabytes 
+CPU   : AMD Ryzen 7 7800X3D 8-Core Processor           
+Units : 16
+Speed : 4200 Mhz
+OS    : Windows
+GPU   : Unkown, NVIDIA GeForce RTX 4090
+VRam  : 0 Megabytes 
+Screen: 1920 x 1080
+Multitouch Integrated: 1
+Monitors: 1
+===================================================
+ImmStrokeReader initialized (IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53)
+IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53
+StrokeReader_LoadFromFile: I:/Unity Projects/IMM Unity Test/Assets/StreamingAssets/586546413263416_Lava Lamp_by_Yaaniriyo.imm
+IMM_IMPORT: ImportFromDisk entering
+IMM_IMPORT: filename pointer=0000012761DF6160
+IMM_IMPORT: ImportFromDisk opened file
+IMM_IMPORT: ImportFromDisk created stream
+Importing IMM stream with collector...
+IMM_IMPORT: ReadAsset Paint drawings=1 frames=1 version=1
+IMM_IMPORT: Drawing 0 offset=17191 elements=12
+IMM_IMPORT: ReadDrawing id=0 offset=17191 version=1
+IMM_IMPORT: drawing 0 elements=12 totalPoints=1324
+IMM_IMPORT: Finished drawing 0
+IMM_IMPORT: ReadAsset Paint drawings=57 frames=58 version=1
+IMM_IMPORT: Drawing 0 offset=24175 elements=2
+IMM_IMPORT: Drawing 1 offset=24480 elements=1
+IMM_IMPORT: Drawing 2 offset=24734 elements=1
+IMM_IMPORT: Drawing 3 offset=24991 elements=2
+IMM_IMPORT: Drawing 4 offset=25293 elements=3
+IMM_IMPORT: Drawing 5 offset=25656 elements=2
+IMM_IMPORT: Drawing 6 offset=25983 elements=3
+IMM_IMPORT: Drawing 7 offset=26362 elements=3
+IMM_IMPORT: Drawing 8 offset=26745 elements=4
+IMM_IMPORT: Drawing 9 offset=27184 elements=4
+IMM_IMPORT: Drawing 10 offset=27632 elements=4
+IMM_IMPORT: Drawing 11 offset=28070 elements=6
+IMM_IMPORT: Drawing 12 offset=28610 elements=8
+IMM_IMPORT: Drawing 13 offset=29252 elements=10
+IMM_IMPORT: Drawing 14 offset=30050 elements=10
+IMM_IMPORT: Drawing 15 offset=30861 elements=11
+IMM_IMPORT: Drawing 16 offset=31722 elements=11
+IMM_IMPORT: Drawing 17 offset=32567 elements=10
+IMM_IMPORT: Drawing 18 offset=33371 elements=11
+IMM_IMPORT: Drawing 19 offset=34232 elements=12
+IMM_IMPORT: Drawing 20 offset=35104 elements=10
+IMM_IMPORT: Drawing 21 offset=35906 elements=9
+IMM_IMPORT: Drawing 22 offset=36635 elements=6
+IMM_IMPORT: Drawing 23 offset=37190 elements=6
+IMM_IMPORT: Drawing 24 offset=37746 elements=6
+IMM_IMPORT: Drawing 25 offset=38300 elements=5
+IMM_IMPORT: Drawing 26 offset=38772 elements=4
+IMM_IMPORT: Drawing 27 offset=39181 elements=3
+IMM_IMPORT: Drawing 28 offset=39557 elements=3
+IMM_IMPORT: Drawing 29 offset=39925 elements=2
+IMM_IMPORT: Drawing 30 offset=40239 elements=3
+IMM_IMPORT: Drawing 31 offset=40588 elements=0
+IMM_IMPORT: Drawing 32 offset=40592 elements=0
+IMM_IMPORT: Drawing 33 offset=40596 elements=0
+IMM_IMPORT: Drawing 34 offset=40600 elements=0
+IMM_IMPORT: Drawing 35 offset=40604 elements=0
+IMM_IMPORT: Drawing 36 offset=40608 elements=0
+IMM_IMPORT: Drawing 37 offset=40612 elements=0
+IMM_IMPORT: Drawing 38 offset=40616 elements=0
+IMM_IMPORT: Drawing 39 offset=40620 elements=0
+IMM_IMPORT: Drawing 40 offset=40624 elements=0
+IMM_IMPORT: Drawing 41 offset=40628 elements=0
+IMM_IMPORT: Drawing 42 offset=40632 elements=0
+IMM_IMPORT: Drawing 43 offset=40636 elements=0
+IMM_IMPORT: Drawing 44 offset=40640 elements=0
+IMM_IMPORT: Drawing 45 offset=40644 elements=0
+IMM_IMPORT: Drawing 46 offset=40648 elements=0
+IMM_IMPORT: Drawing 47 offset=40652 elements=0
+IMM_IMPORT: Drawing 48 offset=40656 elements=0
+IMM_IMPORT: Drawing 49 offset=40660 elements=0
+IMM_IMPORT: Drawing 50 offset=40664 elements=0
+IMM_IMPORT: Drawing 51 offset=40668 elements=0
+IMM_IMPORT: Drawing 52 offset=40672 elements=0
+IMM_IMPORT: Drawing 53 offset=40676 elements=0
+IMM_IMPORT: Drawing 54 offset=40680 elements=0
+IMM_IMPORT: Drawing 55 offset=40684 elements=0
+IMM_IMPORT: Drawing 56 offset=40688 elements=0
+IMM_IMPORT: ReadDrawing id=0 offset=24175 version=1
+IMM_IMPORT: drawing 0 elements=2 totalPoints=11
+IMM_IMPORT: Finished drawing 0
+IMM_IMPORT: ReadDrawing id=1 offset=24480 version=1
+IMM_IMPORT: drawing 1 elements=1 totalPoints=7
+IMM_IMPORT: Finished drawing 1
+IMM_IMPORT: ReadDrawing id=2 offset=24734 version=1
+IMM_IMPORT: drawing 2 elements=1 totalPoints=7
+IMM_IMPORT: Finished drawing 2
+IMM_IMPORT: ReadDrawing id=3 offset=24991 version=1
+IMM_IMPORT: drawing 3 elements=2 totalPoints=11
+IMM_IMPORT: Finished drawing 3
+IMM_IMPORT: ReadDrawing id=4 offset=25293 version=1
+IMM_IMPORT: drawing 4 elements=3 totalPoints=17
+IMM_IMPORT: Finished drawing 4
+IMM_IMPORT: ReadDrawing id=5 offset=25656 version=1
+IMM_IMPORT: drawing 5 elements=2 totalPoints=14
+IMM_IMPORT: Finished drawing 5
+IMM_IMPORT: ReadDrawing id=6 offset=25983 version=1
+IMM_IMPORT: drawing 6 elements=3 totalPoints=19
+IMM_IMPORT: Finished drawing 6
+IMM_IMPORT: ReadDrawing id=7 offset=26362 version=1
+IMM_IMPORT: drawing 7 elements=3 totalPoints=20
+IMM_IMPORT: Finished drawing 7
+IMM_IMPORT: ReadDrawing id=8 offset=26745 version=1
+IMM_IMPORT: drawing 8 elements=4 totalPoints=25
+IMM_IMPORT: Finished drawing 8
+IMM_IMPORT: ReadDrawing id=9 offset=27184 version=1
+IMM_IMPORT: drawing 9 elements=4 totalPoints=26
+IMM_IMPORT: Finished drawing 9
+IMM_IMPORT: ReadDrawing id=10 offset=27632 version=1
+IMM_IMPORT: drawing 10 elements=4 totalPoints=25
+IMM_IMPORT: Finished drawing 10
+IMM_IMPORT: ReadDrawing id=11 offset=28070 version=1
+IMM_IMPORT: drawing 11 elements=6 totalPoints=34
+IMM_IMPORT: Finished drawing 11
+IMM_IMPORT: ReadDrawing id=12 offset=28610 version=1
+IMM_IMPORT: drawing 12 elements=8 totalPoints=47
+IMM_IMPORT: Finished drawing 12
+IMM_IMPORT: ReadDrawing id=13 offset=29252 version=1
+IMM_IMPORT: drawing 13 elements=10 totalPoints=66
+IMM_IMPORT: Finished drawing 13
+IMM_IMPORT: ReadDrawing id=14 offset=30050 version=1
+IMM_IMPORT: drawing 14 elements=10 totalPoints=70
+IMM_IMPORT: Finished drawing 14
+IMM_IMPORT: ReadDrawing id=15 offset=30861 version=1
+IMM_IMPORT: drawing 15 elements=11 totalPoints=74
+IMM_IMPORT: Finished drawing 15
+IMM_IMPORT: ReadDrawing id=16 offset=31722 version=1
+IMM_IMPORT: drawing 16 elements=11 totalPoints=70
+IMM_IMPORT: Finished drawing 16
+IMM_IMPORT: ReadDrawing id=17 offset=32567 version=1
+IMM_IMPORT: drawing 17 elements=10 totalPoints=66
+IMM_IMPORT: Finished drawing 17
+IMM_IMPORT: ReadDrawing id=18 offset=33371 version=1
+IMM_IMPORT: drawing 18 elements=11 totalPoints=69
+IMM_IMPORT: Finished drawing 18
+IMM_IMPORT: ReadDrawing id=19 offset=34232 version=1
+IMM_IMPORT: drawing 19 elements=12 totalPoints=69
+IMM_IMPORT: Finished drawing 19
+IMM_IMPORT: ReadDrawing id=20 offset=35104 version=1
+IMM_IMPORT: drawing 20 elements=10 totalPoints=63
+IMM_IMPORT: Finished drawing 20
+IMM_IMPORT: ReadDrawing id=21 offset=35906 version=1
+IMM_IMPORT: drawing 21 elements=9 totalPoints=54
+IMM_IMPORT: Finished drawing 21
+IMM_IMPORT: ReadDrawing id=22 offset=36635 version=1
+IMM_IMPORT: drawing 22 elements=6 totalPoints=37
+IMM_IMPORT: Finished drawing 22
+IMM_IMPORT: ReadDrawing id=23 offset=37190 version=1
+IMM_IMPORT: drawing 23 elements=6 totalPoints=37
+IMM_IMPORT: Finished drawing 23
+IMM_IMPORT: ReadDrawing id=24 offset=37746 version=1
+IMM_IMPORT: drawing 24 elements=6 totalPoints=36
+IMM_IMPORT: Finished drawing 24
+IMM_IMPORT: ReadDrawing id=25 offset=38300 version=1
+IMM_IMPORT: drawing 25 elements=5 totalPoints=27
+IMM_IMPORT: Finished drawing 25
+IMM_IMPORT: ReadDrawing id=26 offset=38772 version=1
+IMM_IMPORT: drawing 26 elements=4 totalPoints=22
+IMM_IMPORT: Finished drawing 26
+IMM_IMPORT: ReadDrawing id=27 offset=39181 version=1
+IMM_IMPORT: drawing 27 elements=3 totalPoints=19
+IMM_IMPORT: Finished drawing 27
+IMM_IMPORT: ReadDrawing id=28 offset=39557 version=1
+IMM_IMPORT: drawing 28 elements=3 totalPoints=18
+IMM_IMPORT: Finished drawing 28
+IMM_IMPORT: ReadDrawing id=29 offset=39925 version=1
+IMM_IMPORT: drawing 29 elements=2 totalPoints=12
+IMM_IMPORT: Finished drawing 29
+IMM_IMPORT: ReadDrawing id=30 offset=40239 version=1
+IMM_IMPORT: drawing 30 elements=3 totalPoints=14
+IMM_IMPORT: Finished drawing 30
+IMM_IMPORT: ReadDrawing id=31 offset=40588 version=1
+IMM_IMPORT: ReadDrawing id=32 offset=40592 version=1
+IMM_IMPORT: ReadDrawing id=33 offset=40596 version=1
+IMM_IMPORT: ReadDrawing id=34 offset=40600 version=1
+IMM_IMPORT: ReadDrawing id=35 offset=40604 version=1
+IMM_IMPORT: ReadDrawing id=36 offset=40608 version=1
+IMM_IMPORT: ReadDrawing id=37 offset=40612 version=1
+IMM_IMPORT: ReadDrawing id=38 offset=40616 version=1
+IMM_IMPORT: ReadDrawing id=39 offset=40620 version=1
+IMM_IMPORT: ReadDrawing id=40 offset=40624 version=1
+IMM_IMPORT: ReadDrawing id=41 offset=40628 version=1
+IMM_IMPORT: ReadDrawing id=42 offset=40632 version=1
+IMM_IMPORT: ReadDrawing id=43 offset=40636 version=1
+IMM_IMPORT: ReadDrawing id=44 offset=40640 version=1
+IMM_IMPORT: ReadDrawing id=45 offset=40644 version=1
+IMM_IMPORT: ReadDrawing id=46 offset=40648 version=1
+IMM_IMPORT: ReadDrawing id=47 offset=40652 version=1
+IMM_IMPORT: ReadDrawing id=48 offset=40656 version=1
+IMM_IMPORT: ReadDrawing id=49 offset=40660 version=1
+IMM_IMPORT: ReadDrawing id=50 offset=40664 version=1
+IMM_IMPORT: ReadDrawing id=51 offset=40668 version=1
+IMM_IMPORT: ReadDrawing id=52 offset=40672 version=1
+IMM_IMPORT: ReadDrawing id=53 offset=40676 version=1
+IMM_IMPORT: ReadDrawing id=54 offset=40680 version=1
+IMM_IMPORT: ReadDrawing id=55 offset=40684 version=1
+IMM_IMPORT: ReadDrawing id=56 offset=40688 version=1
+IMM_IMPORT: ReadAsset Paint drawings=1 frames=1 version=1
+IMM_IMPORT: Drawing 0 offset=40696 elements=95
+IMM_IMPORT: ReadDrawing id=0 offset=40696 version=1
+IMM_IMPORT: drawing 0 elements=95 totalPoints=2470
+IMM_IMPORT: Finished drawing 0
+IMM_IMPORT: ReadAsset Paint drawings=1 frames=1 version=1
+IMM_IMPORT: Drawing 0 offset=57413 elements=14
+IMM_IMPORT: ReadDrawing id=0 offset=57413 version=1
+IMM_IMPORT: drawing 0 elements=14 totalPoints=498
+IMM_IMPORT: Finished drawing 0
+StrokeReader_LoadFromFile: Loaded 4 layers, docId=1
+StrokeReader_Unload: docId=1

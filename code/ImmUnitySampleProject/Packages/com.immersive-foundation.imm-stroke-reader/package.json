@@ -4,6 +4,9 @@
   "displayName": "IMM Stroke Reader",
   "description": "IMM stroke reader runtime and samples.",
   "unity": "2021.3",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
   "author": {
     "name": "Immersive Foundation"
   },

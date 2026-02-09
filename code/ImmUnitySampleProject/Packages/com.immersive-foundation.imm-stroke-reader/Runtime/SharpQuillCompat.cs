@@ -1,39 +1,17 @@
 using System;
-using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using ImmPlayer;
+using SharpQuill;
 
-namespace ImmStrokeReader.SharpQuill
+namespace ImmStrokeReader
 {
-    // This is a minimal, SharpQuill-like data model for stroke drawing.
-    // It intentionally does not depend on the real SharpQuill C# types so it can live in a reusable UPM package.
-
-    public static class QuillSequenceReader
+    public static class SharpQuillCompat
     {
-        private static bool s_LayerTransformApiAvailable = true;
-
-        public static Sequence ReadImm(string path)
+        public static Sequence ReadImmAsSequence(string path, bool includePictures = false)
         {
             if (string.IsNullOrEmpty(path))
             {
                 return null;
-            }
-
-            try
-            {
-                string buildId = ImmPlayer.ImmStrokeReader.GetBuildId();
-                if (!string.IsNullOrEmpty(buildId))
-                {
-                    UnityEngine.Debug.Log($"ImmStrokeReader: {buildId}");
-                }
-            }
-            catch (EntryPointNotFoundException)
-            {
-                UnityEngine.Debug.LogWarning("ImmStrokeReader: build id symbol not found (old dylib loaded?)");
-            }
-            catch (DllNotFoundException)
-            {
-                UnityEngine.Debug.LogError("ImmStrokeReader: native plugin not found");
             }
 
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_IsInitialized())
@@ -50,9 +28,37 @@ namespace ImmStrokeReader.SharpQuill
                 return null;
             }
 
-            Sequence seq = new Sequence();
-            seq.RootLayer = new LayerGroup();
+            try
+            {
+                return ConvertDocument(docId, includePictures);
+            }
+            finally
+            {
+                ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
+            }
+        }
 
+        public static bool WriteImmAsQuillProject(string immPath, string outputFolder, bool includePictures = false)
+        {
+            Sequence sequence = ReadImmAsSequence(immPath, includePictures);
+            if (sequence == null)
+            {
+                return false;
+            }
+
+            QuillSequenceWriter.Write(sequence, outputFolder);
+            return true;
+        }
+
+        private static Sequence ConvertDocument(int docId, bool includePictures)
+        {
+            Sequence sequence = Sequence.CreateDefault();
+            if (sequence.RootLayer == null)
+            {
+                return sequence;
+            }
+
+            uint maxStrokeId = 0;
             int layerCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerCount(docId);
             for (int layerIdx = 0; layerIdx < layerCount; layerIdx++)
             {
@@ -61,168 +67,105 @@ namespace ImmStrokeReader.SharpQuill
                     continue;
                 }
 
-                Layer layer = CreateLayerFromInfo(docId, layerIdx, info);
-                if (layer == null)
+                bool isPicture = info.type == 4;
+                if (isPicture && !includePictures)
                 {
                     continue;
                 }
 
-                if (layer is LayerPaint paint)
+                Layer layer = isPicture
+                    ? ConvertPictureLayer(docId, layerIdx, info)
+                    : ConvertPaintLayer(docId, layerIdx, info, ref maxStrokeId);
+
+                if (layer != null)
                 {
-                    int drawingCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
-                    for (int drawingIdx = 0; drawingIdx < drawingCount; drawingIdx++)
+                    sequence.RootLayer.Children.Add(layer);
+                }
+            }
+
+            sequence.LastStrokeId = maxStrokeId;
+            return sequence;
+        }
+
+        private static LayerPaint ConvertPaintLayer(int docId, int layerIdx, StrokeLayerInfo info, ref uint maxStrokeId)
+        {
+            LayerPaint layer = new LayerPaint(info.name);
+            ApplyCommonLayerProperties(layer, docId, layerIdx, info);
+
+            int drawingCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
+            for (int drawingIdx = 0; drawingIdx < drawingCount; drawingIdx++)
+            {
+                Drawing drawing = new Drawing();
+                int strokeCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeCount(docId, layerIdx, drawingIdx);
+
+                for (int strokeIdx = 0; strokeIdx < strokeCount; strokeIdx++)
+                {
+                    if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, layerIdx, drawingIdx, strokeIdx, out StrokeInfo strokeInfo))
                     {
-                        Drawing drawing = new Drawing();
-                        int strokeCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeCount(docId, layerIdx, drawingIdx);
-                        for (int strokeIdx = 0; strokeIdx < strokeCount; strokeIdx++)
-                        {
-                            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokeInfo(docId, layerIdx, drawingIdx, strokeIdx, out StrokeInfo strokeInfo))
-                            {
-                                continue;
-                            }
-
-                            StrokePoint[] points = new StrokePoint[strokeInfo.numPoints];
-                            if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokePoints(docId, layerIdx, drawingIdx, strokeIdx, points, strokeInfo.numPoints))
-                            {
-                                continue;
-                            }
-
-                            Stroke stroke = new Stroke
-                            {
-                                Id = (uint)strokeIdx,
-                                BrushType = (BrushType)(short)strokeInfo.brushType,
-                                DisableRotationalOpacity = true,
-                                BoundingBox = new BoundingBox(strokeInfo.bboxMinX, strokeInfo.bboxMinY, strokeInfo.bboxMinZ,
-                                    strokeInfo.bboxMaxX, strokeInfo.bboxMaxY, strokeInfo.bboxMaxZ)
-                            };
-
-                            for (int p = 0; p < points.Length; p++)
-                            {
-                                StrokePoint pt = points[p];
-                                stroke.Vertices.Add(new Vertex(
-                                    new Vector3(pt.px, pt.py, pt.pz),
-                                    new Vector3(pt.nx, pt.ny, pt.nz),
-                                    new Vector3(pt.dx, pt.dy, pt.dz),
-                                    new Color(pt.r, pt.g, pt.b),
-                                    pt.alpha,
-                                    pt.width));
-                            }
-
-                            drawing.Data.Strokes.Add(stroke);
-                        }
-
-                        paint.Drawings.Add(drawing);
-                        paint.Frames.Add(paint.Drawings.Count - 1);
+                        continue;
                     }
+
+                    if (strokeInfo.numPoints <= 0)
+                    {
+                        continue;
+                    }
+
+                    StrokePoint[] points = new StrokePoint[strokeInfo.numPoints];
+                    if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetStrokePoints(docId, layerIdx, drawingIdx, strokeIdx, points, points.Length))
+                    {
+                        continue;
+                    }
+
+                    uint strokeId = (uint)strokeIdx;
+                    if (strokeId > maxStrokeId)
+                    {
+                        maxStrokeId = strokeId;
+                    }
+
+                    Stroke stroke = new Stroke
+                    {
+                        Id = strokeId,
+                        BrushType = ConvertBrushType(strokeInfo.brushType),
+                        DisableRotationalOpacity = strokeInfo.visibilityMode == 1,
+                        BoundingBox = new BoundingBox(
+                            strokeInfo.bboxMinX,
+                            strokeInfo.bboxMinY,
+                            strokeInfo.bboxMinZ,
+                            strokeInfo.bboxMaxX,
+                            strokeInfo.bboxMaxY,
+                            strokeInfo.bboxMaxZ)
+                    };
+
+                    for (int p = 0; p < points.Length; p++)
+                    {
+                        StrokePoint pt = points[p];
+                        stroke.Vertices.Add(new Vertex(
+                            new Vector3(pt.px, pt.py, pt.pz),
+                            new Vector3(pt.nx, pt.ny, pt.nz),
+                            new Vector3(pt.dx, pt.dy, pt.dz),
+                            new Color(pt.r, pt.g, pt.b),
+                            pt.alpha,
+                            pt.width));
+                    }
+
+                    drawing.Data.Strokes.Add(stroke);
                 }
 
-                seq.RootLayer.Children.Add(layer);
+                drawing.UpdateBoundingBox(true);
+                layer.Drawings.Add(drawing);
+                layer.Frames.Add(layer.Drawings.Count - 1);
             }
 
-            ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
-            return seq;
-        }
-
-        private static Transform GetLayerTransform(int docId, int layerIdx)
-        {
-            if (!s_LayerTransformApiAvailable)
+            if (layer.Drawings.Count == 0)
             {
-                return Transform.Identity;
+                layer.Drawings.Add(new Drawing());
+                layer.Frames.Add(0);
             }
 
-            try
-            {
-                if (ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerTransform(docId, layerIdx, out var local, out var world))
-                {
-                    return ConvertTransform(world);
-                }
-            }
-            catch (EntryPointNotFoundException)
-            {
-                s_LayerTransformApiAvailable = false;
-            }
-
-            return Transform.Identity;
-        }
-
-        private static Transform ConvertTransform(ImmPlayer.StrokeLayerTransform native)
-        {
-            float rotX = native.rotX;
-            float rotY = native.rotY;
-            float rotZ = native.rotZ;
-            float rotW = native.rotW;
-            if (rotX == 0f && rotY == 0f && rotZ == 0f && rotW == 0f)
-            {
-                rotW = 1f;
-            }
-
-            float scale = native.scale;
-            if (scale == 0f || float.IsNaN(scale) || float.IsInfinity(scale))
-            {
-                scale = 1.0f;
-            }
-
-            return new Transform
-            {
-                Rotation = new Quaternion(rotX, rotY, rotZ, rotW),
-                Scale = scale,
-                Flip = FlipToString(native.flip),
-                Translation = new Vector3(native.transX, native.transY, native.transZ)
-            };
-        }
-
-        private static Transform GetLayerPivot(StrokeLayerInfo info)
-        {
-            float rotX = info.pivotRotX;
-            float rotY = info.pivotRotY;
-            float rotZ = info.pivotRotZ;
-            float rotW = info.pivotRotW;
-            if (rotX == 0f && rotY == 0f && rotZ == 0f && rotW == 0f)
-            {
-                rotW = 1f;
-            }
-
-            float scale = info.pivotScale;
-            if (scale == 0f || float.IsNaN(scale) || float.IsInfinity(scale))
-            {
-                scale = 1.0f;
-            }
-
-            return new Transform
-            {
-                Rotation = new Quaternion(rotX, rotY, rotZ, rotW),
-                Scale = scale,
-                Flip = FlipToString(info.pivotFlip),
-                Translation = new Vector3(info.pivotTransX, info.pivotTransY, info.pivotTransZ)
-            };
-        }
-
-        private static Layer CreateLayerFromInfo(int docId, int layerIdx, StrokeLayerInfo info)
-        {
-            Layer layer;
-            if (info.type == (int)LayerType.Picture)
-            {
-                LayerPicture picture = TryBuildPictureLayer(docId, layerIdx);
-                if (picture == null)
-                {
-                    return null;
-                }
-                layer = picture;
-            }
-            else
-            {
-                layer = new LayerPaint();
-            }
-
-            layer.Name = info.name;
-            layer.Transform = GetLayerTransform(docId, layerIdx);
-            layer.Visible = info.visible != 0;
-            layer.Opacity = info.opacity;
-            layer.Pivot = GetLayerPivot(info);
             return layer;
         }
 
-        private static LayerPicture TryBuildPictureLayer(int docId, int layerIdx)
+        private static LayerPicture ConvertPictureLayer(int docId, int layerIdx, StrokeLayerInfo info)
         {
             if (!ImmPlayer.ImmStrokeReader.StrokeReader_GetPictureInfo(docId, layerIdx, out StrokePictureInfo pictureInfo))
             {
@@ -234,45 +177,117 @@ namespace ImmStrokeReader.SharpQuill
                 return null;
             }
 
-            int dataSize = pictureInfo.dataSize;
-            if (dataSize <= 0)
-            {
-                return null;
-            }
-
-            byte[] pixels = new byte[dataSize];
-            System.IntPtr buffer = Marshal.AllocHGlobal(dataSize);
+            byte[] pixels = new byte[pictureInfo.dataSize];
+            IntPtr buffer = Marshal.AllocHGlobal(pictureInfo.dataSize);
             try
             {
-                int bytesWritten = ImmPlayer.ImmStrokeReader.StrokeReader_GetPicturePixelData(docId, layerIdx, buffer, dataSize);
-                if (bytesWritten <= 0)
+                int bytesRead = ImmPlayer.ImmStrokeReader.StrokeReader_GetPicturePixelData(docId, layerIdx, buffer, pictureInfo.dataSize);
+                if (bytesRead <= 0)
                 {
                     return null;
                 }
 
-                Marshal.Copy(buffer, pixels, 0, dataSize);
+                Marshal.Copy(buffer, pixels, 0, pictureInfo.dataSize);
             }
             finally
             {
                 Marshal.FreeHGlobal(buffer);
             }
 
-            PictureData data = new PictureData
-            {
-                HasAlpha = pictureInfo.hasAlpha != 0,
-                Width = pictureInfo.width,
-                Height = pictureInfo.height,
-                Pixels = pixels
-            };
-
-            LayerPicture picture = new LayerPicture
+            LayerPicture layer = new LayerPicture(info.name)
             {
                 PictureType = ConvertPictureType(pictureInfo.contentType),
                 ViewerLocked = pictureInfo.isViewerLocked != 0,
-                Data = data,
-                DataFileOffset = pictureInfo.layerId
+                Data = new PictureData
+                {
+                    Width = pictureInfo.width,
+                    Height = pictureInfo.height,
+                    HasAlpha = pictureInfo.hasAlpha != 0,
+                    Pixels = pixels
+                }
             };
-            return picture;
+
+            ApplyCommonLayerProperties(layer, docId, layerIdx, info);
+            return layer;
+        }
+
+        private static void ApplyCommonLayerProperties(Layer layer, int docId, int layerIdx, StrokeLayerInfo info)
+        {
+            layer.Visible = info.visible != 0;
+            layer.Opacity = info.opacity;
+            layer.Pivot = ConvertPivot(info);
+
+            if (ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerTransform(docId, layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform _))
+            {
+                layer.Transform = ConvertTransform(local);
+            }
+            else
+            {
+                layer.Transform = Transform.Identity;
+            }
+        }
+
+        private static Transform ConvertTransform(StrokeLayerTransform source)
+        {
+            float rotW = source.rotW;
+            if (source.rotX == 0f && source.rotY == 0f && source.rotZ == 0f && source.rotW == 0f)
+            {
+                rotW = 1f;
+            }
+
+            float scale = source.scale;
+            if (scale == 0f || float.IsNaN(scale) || float.IsInfinity(scale))
+            {
+                scale = 1f;
+            }
+
+            return new Transform
+            {
+                Rotation = new Quaternion(source.rotX, source.rotY, source.rotZ, rotW),
+                Scale = scale,
+                Flip = ConvertFlip(source.flip),
+                Translation = new Vector3(source.transX, source.transY, source.transZ)
+            };
+        }
+
+        private static Transform ConvertPivot(StrokeLayerInfo source)
+        {
+            float rotW = source.pivotRotW;
+            if (source.pivotRotX == 0f && source.pivotRotY == 0f && source.pivotRotZ == 0f && source.pivotRotW == 0f)
+            {
+                rotW = 1f;
+            }
+
+            float scale = source.pivotScale;
+            if (scale == 0f || float.IsNaN(scale) || float.IsInfinity(scale))
+            {
+                scale = 1f;
+            }
+
+            return new Transform
+            {
+                Rotation = new Quaternion(source.pivotRotX, source.pivotRotY, source.pivotRotZ, rotW),
+                Scale = scale,
+                Flip = ConvertFlip(source.pivotFlip),
+                Translation = new Vector3(source.pivotTransX, source.pivotTransY, source.pivotTransZ)
+            };
+        }
+
+        private static BrushType ConvertBrushType(int immBrushType)
+        {
+            switch (immBrushType)
+            {
+                case 1:
+                    return BrushType.Ribbon;
+                case 2:
+                    return BrushType.Cylinder;
+                case 3:
+                    return BrushType.Ellipse;
+                case 4:
+                    return BrushType.Cube;
+                default:
+                    return BrushType.Cylinder;
+            }
         }
 
         private static PictureType ConvertPictureType(int contentType)
@@ -285,225 +300,24 @@ namespace ImmStrokeReader.SharpQuill
                     return PictureType.ThreeSixty_Equirect_Mono;
                 case 2:
                     return PictureType.ThreeSixty_Equirect_Stereo;
-                case 3:
-                    return PictureType.ThreeSixty_Equirect_Mono;
-                case 4:
-                    return PictureType.ThreeSixty_Equirect_Mono;
                 default:
                     return PictureType.Unknown;
             }
         }
 
-        private static string FlipToString(int flip)
+        private static string ConvertFlip(int flip)
         {
             switch (flip)
             {
-                case 1: return "X";
-                case 2: return "Y";
-                case 3: return "Z";
-                default: return "N";
+                case 1:
+                    return "X";
+                case 2:
+                    return "Y";
+                case 3:
+                    return "Z";
+                default:
+                    return "N";
             }
         }
-    }
-
-    public class Sequence
-    {
-        public LayerGroup RootLayer { get; set; }
-    }
-
-    public enum LayerType : short
-    {
-        Group = 0,
-        Paint = 1,
-        Picture = 4
-    }
-
-    public abstract class Layer
-    {
-        public string Name { get; set; }
-        public bool Visible { get; set; } = true;
-        public bool Locked { get; set; }
-        public bool Collapsed { get; set; }
-        public bool BBoxVisible { get; set; }
-        public float Opacity { get; set; } = 1.0f;
-        public abstract LayerType Type { get; }
-        public Transform Transform { get; set; } = Transform.Identity;
-        public Transform Pivot { get; set; } = Transform.Identity;
-    }
-
-    public class LayerGroup : Layer
-    {
-        public override LayerType Type { get { return LayerType.Group; } }
-        public List<Layer> Children { get; set; } = new List<Layer>();
-    }
-
-    public class LayerPaint : Layer
-    {
-        public override LayerType Type { get { return LayerType.Paint; } }
-        public int Framerate { get; set; } = 24;
-        public int MaxRepeatCount { get; set; }
-        public List<Drawing> Drawings { get; set; } = new List<Drawing>();
-        public List<int> Frames { get; set; } = new List<int>();
-    }
-
-    public class LayerPicture : Layer
-    {
-        public override LayerType Type { get { return LayerType.Picture; } }
-        public PictureType PictureType { get; set; }
-        public bool ViewerLocked { get; set; }
-        public long DataFileOffset { get; set; }
-        public string ImportFilePath { get; set; }
-        public PictureData Data { get; set; }
-    }
-
-    public enum PictureType
-    {
-        Unknown,
-        TwoD,
-        TwoDDepth,
-        ThreeSixty_Equirect_Mono,
-        ThreeSixty_Equirect_Stereo,
-    }
-
-    public class PictureData
-    {
-        public bool HasAlpha { get; set; }
-        public int Width { get; set; }
-        public int Height { get; set; }
-        public byte[] Pixels { get; set; }
-    }
-
-    public class Drawing
-    {
-        public BoundingBox BoundingBox { get; set; }
-        public long DataFileOffset { get; set; }
-        public DrawingData Data { get; set; } = new DrawingData();
-    }
-
-    public class DrawingData
-    {
-        public List<Stroke> Strokes { get; set; } = new List<Stroke>();
-    }
-
-    public class Stroke
-    {
-        public uint Id { get; set; }
-        public int u2 { get; set; }
-        public BoundingBox BoundingBox { get; set; } = new BoundingBox();
-        public BrushType BrushType { get; set; } = BrushType.Ribbon;
-        public bool DisableRotationalOpacity { get; set; } = true;
-        public byte u3 { get; set; }
-        public List<Vertex> Vertices { get; set; } = new List<Vertex>();
-    }
-
-    public struct Vertex
-    {
-        public Vector3 Position;
-        public Vector3 Normal;
-        public Vector3 Tangent;
-        public Color Color;
-        public float Opacity;
-        public float Width;
-
-        public Vertex(Vector3 position, Vector3 normal, Vector3 tangent, Color color, float opacity, float width)
-        {
-            Position = position;
-            Normal = normal;
-            Tangent = tangent;
-            Color = color;
-            Opacity = opacity;
-            Width = width;
-        }
-    }
-
-    public struct Vector3
-    {
-        public float X;
-        public float Y;
-        public float Z;
-        public float x { get => X; set => X = value; }
-        public float y { get => Y; set => Y = value; }
-        public float z { get => Z; set => Z = value; }
-
-        public Vector3(float x, float y, float z)
-        {
-            X = x;
-            Y = y;
-            Z = z;
-        }
-    }
-
-    public struct Quaternion
-    {
-        public float X;
-        public float Y;
-        public float Z;
-        public float W;
-
-        public static Quaternion Identity => new Quaternion(0, 0, 0, 1);
-        public static Quaternion identity => Identity;
-
-        public float x { get => X; set => X = value; }
-        public float y { get => Y; set => Y = value; }
-        public float z { get => Z; set => Z = value; }
-        public float w { get => W; set => W = value; }
-
-        public Quaternion(float x, float y, float z, float w)
-        {
-            X = x;
-            Y = y;
-            Z = z;
-            W = w;
-        }
-    }
-
-    public struct Transform
-    {
-        public Quaternion Rotation;
-        public float Scale;
-        public string Flip;
-        public Vector3 Translation;
-
-        public static Transform Identity => new Transform
-        {
-            Rotation = Quaternion.Identity,
-            Scale = 1.0f,
-            Flip = "N",
-            Translation = new Vector3(0, 0, 0)
-        };
-    }
-
-    public struct Color
-    {
-        public float R;
-        public float G;
-        public float B;
-
-        public Color(float r, float g, float b)
-        {
-            R = r;
-            G = g;
-            B = b;
-        }
-    }
-
-    public struct BoundingBox
-    {
-        public Vector3 Min;
-        public Vector3 Max;
-
-        public BoundingBox(float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
-        {
-            Min = new Vector3(minX, minY, minZ);
-            Max = new Vector3(maxX, maxY, maxZ);
-        }
-    }
-
-    public enum BrushType : short
-    {
-        Ribbon = 1,
-        Cylinder = 2,
-        Ellipse = 3,
-        Cube = 4
     }
 }
