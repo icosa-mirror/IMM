@@ -428,6 +428,7 @@ jobs:
     needs:
       - build-windows
       - build-android
+      - publish-upm
       - package-unity-plugins
     if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[RELEASE]')
     permissions:
@@ -503,17 +504,37 @@ jobs:
         cp "${apk[0]}" release-assets/ImmViewer-Android.apk
         cp "${apk_vr[0]}" release-assets/ImmViewer-Android-VR.apk
 
+    - name: Compute release metadata
+      id: release_meta
+      shell: bash
+      run: |
+        set -euo pipefail
+        release_tag="release-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+        upm_tag="upm/${release_tag}"
+        repo_url="https://github.com/${GITHUB_REPOSITORY}.git"
+        stroke_url="${repo_url}?path=/Packages/com.immersive-foundation.imm-stroke-reader#${upm_tag}"
+        unity_url="${repo_url}?path=/Packages/com.immersive-foundation.imm-unity#${upm_tag}"
+        {
+          echo "release_tag=${release_tag}"
+          echo "upm_tag=${upm_tag}"
+          echo "stroke_url=${stroke_url}"
+          echo "unity_url=${unity_url}"
+        } >> "$GITHUB_OUTPUT"
+
     - name: Create GitHub release
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        tag="release-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
-        gh release create "$tag" \
+        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n' \
+          "${{ steps.release_meta.outputs.stroke_url }}" \
+          "${{ steps.release_meta.outputs.unity_url }}")"
+        gh release create "${{ steps.release_meta.outputs.release_tag }}" \
           --repo "${GITHUB_REPOSITORY}" \
-          --title "$tag" \
+          --title "${{ steps.release_meta.outputs.release_tag }}" \
           --generate-notes \
+          --notes "$release_notes" \
           release-assets/upm/ImmStrokeReaderPlugin-UPM.zip \
           release-assets/upm/ImmViewerPlugin-UPM.zip \
           release-assets/ImmViewer-Windows.zip \
@@ -521,3 +542,71 @@ jobs:
           release-assets/ImmViewer-Android.apk \
           release-assets/ImmViewer-Android-VR.apk \
           release-assets/sample1-imm/sample1.imm
+
+  publish-upm:
+    name: Publish UPM Branch
+    runs-on: ubuntu-latest
+    needs:
+      - package-unity-plugins
+    if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[RELEASE]')
+    permissions:
+      contents: write
+      actions: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download stroke reader UPM package
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmStrokeReaderPlugin-UPM
+        path: ${{ runner.temp }}/upm
+
+    - name: Download ImmUnity UPM package
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerPlugin-UPM
+        path: ${{ runner.temp }}/upm
+
+    - name: Publish package contents to upm branch
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        git fetch origin upm || true
+
+        if git rev-parse --verify --quiet origin/upm >/dev/null; then
+          git switch --create upm --track origin/upm || git switch upm
+          git reset --hard origin/upm
+        else
+          git switch --orphan upm
+          git reset
+          git clean -fdx
+        fi
+
+        find . -mindepth 1 -maxdepth 1 \
+          ! -name '.git' \
+          -exec rm -rf {} +
+
+        mkdir -p Packages
+        unzip -q "$RUNNER_TEMP/upm/ImmStrokeReaderPlugin-UPM.zip" -d Packages
+        unzip -q "$RUNNER_TEMP/upm/ImmViewerPlugin-UPM.zip" -d Packages
+
+        git add Packages
+
+        release_tag="release-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+        upm_tag="upm/${release_tag}"
+
+        if ! git diff --cached --quiet; then
+          git commit -m "chore(upm): publish ${release_tag} [skip ci]"
+        fi
+
+        git push origin upm
+        git tag -a "${upm_tag}" -m "UPM publish ${upm_tag}"
+        git push origin "${upm_tag}"
