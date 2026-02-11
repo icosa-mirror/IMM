@@ -4,6 +4,10 @@ using System.Runtime.InteropServices;
 using ImmPlayer;
 using SharpQuill;
 using UnityEngine;
+using Color = SharpQuill.Color;
+using Quaternion = SharpQuill.Quaternion;
+using Transform = SharpQuill.Transform;
+using Vector3 = UnityEngine.Vector3;
 
 namespace ImmStrokeReader
 {
@@ -185,9 +189,9 @@ namespace ImmStrokeReader
                     {
                         StrokePoint pt = points[p];
                         stroke.Vertices.Add(new Vertex(
-                            new Vector3(pt.px, pt.py, pt.pz),
-                            new Vector3(pt.nx, pt.ny, pt.nz),
-                            new Vector3(pt.dx, pt.dy, pt.dz),
+                            new SharpQuill.Vector3(pt.px, pt.py, pt.pz),
+                            new SharpQuill.Vector3(pt.nx, pt.ny, pt.nz),
+                            new SharpQuill.Vector3(pt.dx, pt.dy, pt.dz),
                             new Color(pt.r, pt.g, pt.b),
                             pt.alpha,
                             pt.width));
@@ -291,7 +295,7 @@ namespace ImmStrokeReader
                 Rotation = new Quaternion(source.rotX, source.rotY, source.rotZ, rotW),
                 Scale = scale,
                 Flip = ConvertFlip(source.flip),
-                Translation = new Vector3(source.transX, source.transY, source.transZ)
+                Translation = new SharpQuill.Vector3(source.transX, source.transY, source.transZ)
             };
         }
 
@@ -314,7 +318,7 @@ namespace ImmStrokeReader
                 Rotation = new Quaternion(source.pivotRotX, source.pivotRotY, source.pivotRotZ, rotW),
                 Scale = scale,
                 Flip = ConvertFlip(source.pivotFlip),
-                Translation = new Vector3(source.pivotTransX, source.pivotTransY, source.pivotTransZ)
+                Translation = new SharpQuill.Vector3(source.pivotTransX, source.pivotTransY, source.pivotTransZ)
             };
         }
 
