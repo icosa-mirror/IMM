@@ -87,6 +87,9 @@
 #include "libImmExporter/src/document/layerPaint/element.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
+#include <windows.h>
+#include <array>
+#include <string>
 #endif
 #include "IUnityGraphics.h"
 #if defined(WINDOWS)
@@ -100,6 +103,72 @@ using namespace ImmPlayer;
 #if defined(__ANDROID__) || defined(ANDROID)
 #define _stdcall
 #include <android/log.h>
+#endif
+
+#if defined(WINDOWS)
+namespace
+{
+    bool iFileExists(const std::wstring &path)
+    {
+        const DWORD attrs = GetFileAttributesW(path.c_str());
+        return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) == 0;
+    }
+
+    std::wstring iDirName(const std::wstring &path)
+    {
+        const size_t slash = path.find_last_of(L"\\/");
+        if (slash == std::wstring::npos)
+        {
+            return L"";
+        }
+        return path.substr(0, slash);
+    }
+
+    void iPreloadSharedRuntimeDependencies(HMODULE moduleHandle)
+    {
+        wchar_t modulePath[MAX_PATH] = {};
+        const DWORD len = GetModuleFileNameW(moduleHandle, modulePath, MAX_PATH);
+        if (len == 0 || len >= MAX_PATH)
+        {
+            return;
+        }
+
+        const std::wstring modulePathStr(modulePath);
+        const std::wstring unityPluginDir = iDirName(modulePathStr);
+        const std::wstring unityPackageDir = iDirName(iDirName(unityPluginDir));
+        const std::wstring packagesDir = iDirName(unityPackageDir);
+        const std::wstring strokePluginDir = packagesDir + L"\\com.immersive-foundation.imm-stroke-reader\\Plugins\\x86_64";
+
+        constexpr std::array<const wchar_t*, 5> kSharedDeps = {
+            L"zlib1.dll",
+            L"jpeg62.dll",
+            L"libpng16.dll",
+            L"ogg.dll",
+            L"vorbis.dll",
+        };
+
+        for (const wchar_t* depName : kSharedDeps)
+        {
+            const std::wstring fullPath = strokePluginDir + L"\\" + depName;
+            if (!iFileExists(fullPath))
+            {
+                continue;
+            }
+
+            LoadLibraryW(fullPath.c_str());
+        }
+    }
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID)
+{
+    if (ul_reason_for_call == DLL_PROCESS_ATTACH)
+    {
+        iPreloadSharedRuntimeDependencies(hModule);
+    }
+
+    return TRUE;
+}
 #endif
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------

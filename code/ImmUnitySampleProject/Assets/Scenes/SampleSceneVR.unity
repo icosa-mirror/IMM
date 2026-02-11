@@ -396,6 +396,7 @@ MonoBehaviour:
   applySpawnAreaToViewpoint: 1
   spawnAreaTargetTransform: {fileID: 0}
   keepCurrentViewHeightForFloorAreas: 1
+  constrainViewpointRotationToYawInXR: 1
   selectedLayerIndex: -1
   layerVisible: 1
   layerOpacity: 1
@@ -486,6 +487,9 @@ MonoBehaviour:
   snapDegrees: 30
   snapCooldown: 0.25
   snapDeadzone: 0.5
+  featureExamples: {fileID: 0}
+  enableRandomLoadButton: 1
+  enableNavigationButtons: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -31,6 +31,7 @@ using namespace ImmImporter;
 namespace ImmPlayer
 {
     static const wchar_t *kRenderingTechniques[] = { L"static", L"pretessellated" };
+    static const wchar_t *kNullDocLogPrefix = L"[IMMDBG_NULLDOC_20260211A]";
 
     static void iCopyWide(wchar_t *dst, size_t dstCount, const wchar_t *src)
     {
@@ -584,12 +585,24 @@ namespace ImmPlayer
     void Player::CancelLoading(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls CancelLoading null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         doc->CancelLoading();
     }
 
 	void Player::GetChapterInfo(size_t& numChapters, piTArray<piTick>& chapterLengths, bool& hasPlays, int id)
 	{
 		Document *doc = (Document *)mDocuments.GetAddress(id);
+		if (!doc)
+		{
+			numChapters = 0;
+			hasPlays = false;
+			if (mLog) mLog->Printf(LT_ERROR, L"%ls GetChapterInfo null doc id=%d", kNullDocLogPrefix, id);
+			return;
+		}
 		const Sequence *sq = doc->GetSequence();
 		numChapters = doc->GetChapterCount();
 		hasPlays = doc->GetHasPlays();
@@ -641,6 +654,11 @@ namespace ImmPlayer
     void Player::SetDocumentToWorld(int id, const trans3d & m)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SetDocumentToWorld null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
 
         doc->SetDocumentToWorld(m);
     }
@@ -648,42 +666,77 @@ namespace ImmPlayer
     int Player::GetSpawnAreaCount(int docId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetSpawnAreaCount null doc id=%d", kNullDocLogPrefix, docId);
+            return 0;
+        }
         return doc->GetSpawnAreaCount();
     }
 
     int Player::GetSpawnArea(int docId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetSpawnArea null doc id=%d", kNullDocLogPrefix, docId);
+            return 0;
+        }
         return doc->GetSpawnArea();
     }
 
     int Player::GetInitialSpawnArea(int docId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetInitialSpawnArea null doc id=%d", kNullDocLogPrefix, docId);
+            return 0;
+        }
         return doc->GetInitialSpawnArea();
     }
 
     void Player::SetSpawnArea(int docId, int spawnAreaId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SetSpawnArea null doc id=%d spawnAreaId=%d", kNullDocLogPrefix, docId, spawnAreaId);
+            return;
+        }
         doc->SetSpawnArea(spawnAreaId);
     }
 
     bool Player::GetSpawnAreaNeedsUpdate(int docId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetSpawnAreaNeedsUpdate null doc id=%d", kNullDocLogPrefix, docId);
+            return false;
+        }
         return doc->GetSpawnAreaNeedsUpdate();
     }
 
     void Player::SetSpawnAreaNeedsUpdate(int docId, bool state)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SetSpawnAreaNeedsUpdate null doc id=%d", kNullDocLogPrefix, docId);
+            return;
+        }
         doc->SetSpawnAreaNeedsUpdate(state);
     }
 
     const piImage* Player::GetSpawnAreaScreenshot(int docId, int spawnAreaId)
     {
         Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetSpawnAreaScreenshot null doc id=%d spawnAreaId=%d", kNullDocLogPrefix, docId, spawnAreaId);
+            return nullptr;
+        }
         return doc->GetSpawnAreaScreenshot(spawnAreaId);
     }
 
@@ -1565,6 +1618,11 @@ namespace ImmPlayer
     void Player::SetChapter(int id, int chapterIndex)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SetChapter null doc id=%d chapterIndex=%d", kNullDocLogPrefix, id, chapterIndex);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::SetChapter;
         mCommandList[cmdId].mTarget = id;
@@ -1588,36 +1646,66 @@ namespace ImmPlayer
     int Player::GetChapterCount(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetChapterCount null doc id=%d", kNullDocLogPrefix, id);
+            return 0;
+        }
         return doc->GetChapterCount();
     }
 
     int Player::GetCurrentChapter(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetCurrentChapter null doc id=%d", kNullDocLogPrefix, id);
+            return 0;
+        }
         return doc->GetCurrentChapter();
     }
 
     bool Player::GetHasAudio(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetHasAudio null doc id=%d", kNullDocLogPrefix, id);
+            return false;
+        }
         return doc->GetHasAudio();
     }
 
     float Player::GetDocumentVolume(int id) const
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetDocumentVolume null doc id=%d", kNullDocLogPrefix, id);
+            return 0.0f;
+        }
         return doc->GetVolume();
     }
 
     void Player::SetDocumentVolume(int id, float volume)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SetDocumentVolume null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         doc->SetVolume(volume, mLog);
     }
 
     bound3d Player::GetDocumentBBox(int id) const
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetDocumentBBox null doc id=%d", kNullDocLogPrefix, id);
+            return bound3d(1e30);
+        }
         return doc->GetBBox();
     }
 }
