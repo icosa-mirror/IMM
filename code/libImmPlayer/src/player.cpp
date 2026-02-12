@@ -32,6 +32,8 @@ namespace ImmPlayer
 {
     static const wchar_t *kRenderingTechniques[] = { L"static", L"pretessellated" };
     static const wchar_t *kNullDocLogPrefix = L"[IMMDBG_NULLDOC_20260211A]";
+    static const wchar_t *kBBoxDiagPrefix = L"[IMMDBG_BBOX_20260211D]";
+    static int kBBoxDiagCount = 0;
 
     static void iCopyWide(wchar_t *dst, size_t dstCount, const wchar_t *src)
     {
@@ -248,9 +250,19 @@ namespace ImmPlayer
     uint32_t Player::GetDocumentInfoEx(int id) const
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetDocumentInfoEx null doc id=%d", kNullDocLogPrefix, id);
+            return 0;
+        }
 
         // TODO: this should be read from the metadata of the file instead of the sequence
         const Sequence *sq = doc->GetSequence();
+        if (!sq)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetDocumentInfoEx null sequence id=%d", kNullDocLogPrefix, id);
+            return 0;
+        }
         const Sequence::Type type = sq->GetType();
         const uint16_t caps = sq->GetCaps();
 
@@ -274,7 +286,7 @@ namespace ImmPlayer
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
         if (doc == nullptr) {
-            mLog->Printf(LT_ERROR, L"Null document at %d.", id);
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetDocumentState null doc id=%d", kNullDocLogPrefix, id);
             state.mLoadingState = LoadingState::Failed;
             return;
         }
@@ -332,11 +344,12 @@ namespace ImmPlayer
         Document *doc = (Document *)mDocuments.GetAddress(docId);
         if (!doc)
             return 0;
-        Document::LoadingState lst = doc->GetLoadingState();
-        if (lst == Document::LoadingState::LoadingPending || lst == Document::LoadingState::LoadingCPU)
+        if (doc->GetLoadingState() != Document::LoadingState::Loaded)
             return 0;
 
         Sequence *sq = doc->GetSequence();
+        if (!sq)
+            return 0;
         int count = 0;
         sq->Recurse([&count](Layer* layer, int level, int child, bool instance) -> bool
             {
@@ -352,10 +365,12 @@ namespace ImmPlayer
         if (!doc || index < 0)
             return false;
         Document::LoadingState lst = doc->GetLoadingState();
-        if (lst == Document::LoadingState::LoadingPending || lst == Document::LoadingState::LoadingCPU)
+        if (lst != Document::LoadingState::Loaded)
             return false;
 
         Sequence *sq = doc->GetSequence();
+        if (!sq)
+            return false;
         int current = 0;
         Layer *target = nullptr;
         sq->Recurse([&](Layer* layer, int level, int child, bool instance) -> bool
@@ -565,6 +580,7 @@ namespace ImmPlayer
         {
             if (!mDocuments.IsUsed(i)) continue;
             Document *doc = (Document *)mDocuments.GetAddress(i);
+            if (!doc) continue;
             const Document::LoadingState st = doc->GetLoadingState();
             if (st == Document::LoadingState::Loaded )
             {
@@ -604,6 +620,13 @@ namespace ImmPlayer
 			return;
 		}
 		const Sequence *sq = doc->GetSequence();
+		if (!sq)
+		{
+			numChapters = 0;
+			hasPlays = false;
+			if (mLog) mLog->Printf(LT_ERROR, L"%ls GetChapterInfo null sequence id=%d", kNullDocLogPrefix, id);
+			return;
+		}
 		numChapters = doc->GetChapterCount();
 		hasPlays = doc->GetHasPlays();
 
@@ -1470,7 +1493,11 @@ namespace ImmPlayer
     void Player::Unload(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
-        piAssert(doc != nullptr);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Unload null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
 
         mLog->Printf(LT_MESSAGE, L"Unload(%d) received", id);
         int cmdId = doc->GetCommandId();
@@ -1486,6 +1513,7 @@ namespace ImmPlayer
         {
             if (!mDocuments.IsUsed(i)) continue;
             Document *doc = (Document *)mDocuments.GetAddress(i);
+            if (!doc) continue;
             int cmdId = doc->GetCommandId();
             mCommandList[cmdId].mCommand.mType = Document::Command::Type::Unload;
             mCommandList[cmdId].mTarget = i;
@@ -1503,6 +1531,7 @@ namespace ImmPlayer
             if (!mDocuments.IsUsed(i)) continue;
             numUsed++;
             Document *doc = (Document *)mDocuments.GetAddress(i);
+            if (!doc) continue;
             int cmdId = doc->GetCommandId();
             mCommandList[cmdId].mCommand.mType = Document::Command::Type::Unload;
             mCommandList[cmdId].mTarget = i;
@@ -1522,6 +1551,7 @@ namespace ImmPlayer
             {
                 if (!mDocuments.IsUsed(i)) continue;
                 Document *doc = (Document *)mDocuments.GetAddress(i);
+                if (!doc) continue;
                 if (doc->GetLoadingState() != Document::LoadingState::UnloadingCompleted)
                 {
                     allUnloaded = false;
@@ -1538,12 +1568,22 @@ namespace ImmPlayer
     void Player::SetTime(int id, piTick timeSinceStart, piTick timeSinceStop)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SetTime null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         doc->SetTime(mTime, timeSinceStart, timeSinceStop);
     }
 
     void Player::GetTime(int id, piTick * timeSinceStart, piTick * timeSinceStop)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls GetTime null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         doc->GetTime(mTime, timeSinceStart, timeSinceStop);
     }
 
@@ -1556,6 +1596,11 @@ namespace ImmPlayer
     void Player::Pause(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Pause null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Pause;
         mCommandList[cmdId].mTarget = id;
@@ -1564,6 +1609,11 @@ namespace ImmPlayer
     void Player::Pause(int id, uint64_t stopTicks)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Pause(stop) null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Pause;
         mCommandList[cmdId].mTarget = id;
@@ -1573,6 +1623,11 @@ namespace ImmPlayer
     void Player::Hide(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Hide null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Hide;
         mCommandList[cmdId].mTarget = id;
@@ -1580,6 +1635,11 @@ namespace ImmPlayer
     void Player::Show(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Show null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Show;
         mCommandList[cmdId].mTarget = id;
@@ -1587,6 +1647,11 @@ namespace ImmPlayer
     void Player::Resume(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Resume null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Resume;
         mCommandList[cmdId].mTarget = cmdId;
@@ -1595,6 +1660,11 @@ namespace ImmPlayer
     void Player::Resume(int id, uint64_t startTicks)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Resume(start) null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Resume;
         mCommandList[cmdId].mTarget = id;
@@ -1604,6 +1674,11 @@ namespace ImmPlayer
     void Player::SkipForward(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SkipForward null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::SkipForward;
         mCommandList[cmdId].mTarget = id;
@@ -1611,6 +1686,11 @@ namespace ImmPlayer
     void Player::SkipBack(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls SkipBack null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::SkipBack;
         mCommandList[cmdId].mTarget = id;
@@ -1631,6 +1711,11 @@ namespace ImmPlayer
     void Player::Restart(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Restart null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Restart;
         mCommandList[cmdId].mTarget = id;
@@ -1638,6 +1723,11 @@ namespace ImmPlayer
     void Player::Continue(int id)
     {
         Document *doc = (Document *)mDocuments.GetAddress(id);
+        if (!doc)
+        {
+            if (mLog) mLog->Printf(LT_ERROR, L"%ls Continue null doc id=%d", kNullDocLogPrefix, id);
+            return;
+        }
         int cmdId = doc->GetCommandId();
         mCommandList[cmdId].mCommand.mType = Document::Command::Type::Continue;
         mCommandList[cmdId].mTarget = id;
@@ -1706,6 +1796,29 @@ namespace ImmPlayer
             if (mLog) mLog->Printf(LT_ERROR, L"%ls GetDocumentBBox null doc id=%d", kNullDocLogPrefix, id);
             return bound3d(1e30);
         }
-        return doc->GetBBox();
+
+        const Document::LoadingState loadingState = doc->GetLoadingState();
+        if (loadingState != Document::LoadingState::Loaded)
+        {
+            if (mLog && kBBoxDiagCount < 30)
+            {
+                mLog->Printf(LT_MESSAGE, L"%ls id=%d loading=%d returning sentinel", kBBoxDiagPrefix, id, int(loadingState));
+                kBBoxDiagCount++;
+            }
+            return bound3d(1e30);
+        }
+
+        const bound3d bbox = doc->GetBBox();
+        if (mLog && kBBoxDiagCount < 30)
+        {
+            mLog->Printf(LT_MESSAGE, L"%ls id=%d loading=%d bbox=[min=(%.6f,%.6f,%.6f) max=(%.6f,%.6f,%.6f)]",
+                kBBoxDiagPrefix,
+                id,
+                int(loadingState),
+                bbox.mMinX, bbox.mMinY, bbox.mMinZ,
+                bbox.mMaxX, bbox.mMaxY, bbox.mMaxZ);
+            kBBoxDiagCount++;
+        }
+        return bbox;
     }
 }

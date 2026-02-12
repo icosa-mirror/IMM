@@ -103,6 +103,7 @@ using namespace ImmPlayer;
 #if defined(__ANDROID__) || defined(ANDROID)
 #define _stdcall
 #include <android/log.h>
+#include <GLES3/gl3.h>
 #endif
 
 #if defined(WINDOWS)
@@ -289,8 +290,9 @@ __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing GLES rende
 	conf.depthBuffer = DepthBuffer::Linear01;
 	conf.clipDepth = ClipSpaceDepth::FromNegativeOneToOne;
 	conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
-	conf.frontIsCCW = true;
+	conf.frontIsCCW = false;
 	conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_RENDER_20260211A] Android conf: depth=Linear01 clip=-1..1 proj=-1..1 frontIsCCW=%d", conf.frontIsCCW ? 1 : 0);
 
 __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing ImmPlayer...");
 	if (!gImmUnityPlugin.IMM.mPlayer.Init(gImmUnityPlugin.IMM.mRenderer, gImmUnityPlugin.IMM.mSoundBackend->GetEngine(), &gImmUnityPlugin.IMM.mLog, &gImmUnityPlugin.IMM.mTimer, &conf))
@@ -353,6 +355,23 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 }
 
 static int sRenderEventCount = 0;
+static int sRenderEventDiagCount = 0;
+static int sRenderPixelDiagCount = 0;
+
+static bool IsReasonableBound3(const bound3& b)
+{
+	const float limit = 1.0e6f;
+	if (b.mMinX > b.mMaxX || b.mMinY > b.mMaxY || b.mMinZ > b.mMaxZ)
+		return false;
+	if (b.mMinX < -limit || b.mMinX > limit) return false;
+	if (b.mMaxX < -limit || b.mMaxX > limit) return false;
+	if (b.mMinY < -limit || b.mMinY > limit) return false;
+	if (b.mMaxY < -limit || b.mMaxY > limit) return false;
+	if (b.mMinZ < -limit || b.mMinZ > limit) return false;
+	if (b.mMaxZ < -limit || b.mMaxZ > limit) return false;
+	return true;
+}
+
 static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 {
 #if defined(__ANDROID__) || defined(ANDROID)
@@ -376,8 +395,18 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	}
 #endif
 	int numVp = 1;
-	float oldVp[6];
+	float oldVp[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f };
 	gImmUnityPlugin.IMM.mRenderer->GetViewports(&numVp, oldVp);
+
+#if defined(__ANDROID__) || defined(ANDROID)
+	GLint glViewport[4] = { 0, 0, 0, 0 };
+	glGetIntegerv(GL_VIEWPORT, glViewport);
+	oldVp[0] = static_cast<float>(glViewport[0]);
+	oldVp[1] = static_cast<float>(glViewport[1]);
+	oldVp[2] = static_cast<float>(glViewport[2]);
+	oldVp[3] = static_cast<float>(glViewport[3]);
+#endif
+
 	if (numVp < 1) return;
 
 //const int eventType = (event_id >> 0) & 0xff;
@@ -395,14 +424,62 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	
 	const int stereoType = gImmUnityPlugin.FromUnity.mCamera[cameraID].mStereoType;
 	const ivec2 res = ivec2(int(oldVp[2]), int(oldVp[3]));
+	if (res.x <= 0 || res.y <= 0)
+	{
+#if defined(__ANDROID__) || defined(ANDROID)
+		__android_log_print(ANDROID_LOG_WARN, "ImmUnityPlugin", "[IMMDBG_RENDER_20260211A] Skip render due to invalid viewport %dx%d", res.x, res.y);
+#endif
+		return;
+	}
+
+#if defined(__ANDROID__) || defined(ANDROID)
+	const int viewport[4] = { int(oldVp[0]), int(oldVp[1]), res.x, res.y };
+	gImmUnityPlugin.IMM.mRenderer->SetViewport(0, viewport);
+	glDisable(GL_SCISSOR_TEST);
+#endif
+
+	if (sRenderEventDiagCount < 20 || (sRenderEventDiagCount % 300) == 0)
+	{
+		GLint boundFbo = 0;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &boundFbo);
+		__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_RENDER_20260211A] evt=%d cam=%d stereo=%d eye=%d res=%dx%d fbo=%d", sRenderEventDiagCount, cameraID, stereoType, (event_id & 1), res.x, res.y, (int)boundFbo);
+	}
+	sRenderEventDiagCount++;
 
 	if (stereoType == 0) // mono
 	{
-	
+		GLint prevFbo = 0;
+		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		unsigned char prePx[4] = { 0, 0, 0, 0 };
+		unsigned char postPx[4] = { 0, 0, 0, 0 };
+		const bool doPixelDiag = sRenderPixelDiagCount < 20;
+		if (doPixelDiag)
+		{
+			const int sx = res.x / 2;
+			const int sy = res.y / 2;
+			glReadPixels(sx, sy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, prePx);
+		}
+
 		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
 		           fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
 			gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::None);
 		gImmUnityPlugin.IMM.mPlayer.RenderMono(res,0);
+
+		if (doPixelDiag)
+		{
+			const int sx = res.x / 2;
+			const int sy = res.y / 2;
+			glReadPixels(sx, sy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, postPx);
+			__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_RENDERPIX_20260211A] frame=%d pre=(%u,%u,%u,%u) post=(%u,%u,%u,%u)",
+				sRenderPixelDiagCount,
+				(unsigned int)prePx[0], (unsigned int)prePx[1], (unsigned int)prePx[2], (unsigned int)prePx[3],
+				(unsigned int)postPx[0], (unsigned int)postPx[1], (unsigned int)postPx[2], (unsigned int)postPx[3]);
+			sRenderPixelDiagCount++;
+		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prevFbo);
 	}
 else if (stereoType == 1) // two pass stereo
 	{
@@ -909,6 +986,24 @@ extern "C" void UNITY_INTERFACE_EXPORT SetSound(int id, float volume)
 extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 {
     bound = d2f(gImmUnityPlugin.IMM.mPlayer.GetDocumentBBox(id));
+    const int layerCount = gImmUnityPlugin.IMM.mPlayer.GetLayerCount(id);
+
+    bound3 filtered = bound3(1.0e30f);
+    for (int i = 0; i < layerCount; ++i)
+    {
+        Player::LayerInfo li;
+        if (!gImmUnityPlugin.IMM.mPlayer.GetLayerInfoByIndex(id, i, li))
+            continue;
+        if (li.hasBBox == 0)
+            continue;
+        if (!IsReasonableBound3(li.bbox))
+            continue;
+        filtered = include(filtered, li.bbox);
+    }
+    if (filtered.mMinX <= filtered.mMaxX)
+    {
+        bound = filtered;
+    }
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT IsSequenceReady(int docId)

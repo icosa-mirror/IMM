@@ -17,6 +17,21 @@ using namespace ImmCore;
 
 namespace ImmImporter
 {
+	static bool iIsBBoxReasonable(const bound3d& b)
+	{
+		if (isEmpty(b))
+			return false;
+
+		const double limit = 1.0e6;
+		if (b.mMinX < -limit || b.mMinX > limit) return false;
+		if (b.mMaxX < -limit || b.mMaxX > limit) return false;
+		if (b.mMinY < -limit || b.mMinY > limit) return false;
+		if (b.mMaxY < -limit || b.mMaxY > limit) return false;
+		if (b.mMinZ < -limit || b.mMinZ > limit) return false;
+		if (b.mMaxZ < -limit || b.mMaxZ > limit) return false;
+		return true;
+	}
+
 	Layer::Layer(Sequence* sq, Layer* parent, uint32_t id)
 	{
 		mSequence = sq;
@@ -298,10 +313,35 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
 	bool Layer::HasBBox(void) const
 	{
-		if (mType == Type::Group)   return mChildren.GetLength() > 0;
-		if (mType == Type::Paint)   return ((LayerPaint  *)mImplementation)->HasBBox();
-		if (mType == Type::Picture) return ((LayerPicture*)mImplementation)->HasBBox();
-		if (mType == Type::Model)   return ((LayerModel  *)mImplementation)->HasBBox();
+		if (mType == Type::Group)
+		{
+			const uint64_t numChildren = mChildren.GetLength();
+			for (uint64_t i = 0; i < numChildren; i++)
+			{
+				Layer* ch = mChildren.Get(i);
+				if (ch != nullptr && ch->HasBBox())
+					return true;
+			}
+			return false;
+		}
+		if (mType == Type::Paint)
+		{
+			const LayerPaint* lp = (LayerPaint*)mImplementation;
+			if (!lp->HasBBox()) return false;
+			return iIsBBoxReasonable(f2d(lp->GetBBox()));
+		}
+		if (mType == Type::Picture)
+		{
+			const LayerPicture* lp = (LayerPicture*)mImplementation;
+			if (!lp->HasBBox()) return false;
+			return iIsBBoxReasonable(f2d(lp->GetBBox()));
+		}
+		if (mType == Type::Model)
+		{
+			const LayerModel* lp = (LayerModel*)mImplementation;
+			if (!lp->HasBBox()) return false;
+			return iIsBBoxReasonable(f2d(lp->GetBBox()));
+		}
 
 		return false;
 	}
@@ -321,10 +361,17 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 				if (ch->HasBBox())
 				{
 					bound3d tmp = ch->GetBBox();
+					if (!iIsBBoxReasonable(tmp))
+						continue;
 					tmp = btransform(tmp, ch->GetTransform());
+					if (!iIsBBoxReasonable(tmp))
+						continue;
 					bbox = include(bbox, tmp);
 				}
 			}
+
+			if (!iIsBBoxReasonable(bbox))
+				return bound3d(1e30);
 
 			return bbox;
 		}

@@ -498,7 +498,20 @@ namespace ImmImporter
 
                 LayerPaint* lp = (LayerPaint*)layer->GetImplementation();
                 const uint32_t numDrawings = lp->GetNumDrawings();
+                const uint32_t numFrames = lp->GetNumFrames();
+                const uint32_t frameRate = lp->GetFrameRate();
+                const uint32_t maxRepeatCount = lp->GetMaxRepeatCount();
                 const bool flipped = (layer->GetTransformToWorld().mFlip != flip3::N);
+
+                // Notify collector of paint layer animation info
+                collector->OnPaintLayerInfo(frameRate, numFrames, maxRepeatCount);
+
+                // Pass frame buffer to collector
+                uint32_t* frameBuffer = lp->GetFrameBuffer();
+                if (frameBuffer != nullptr && numFrames > 0)
+                {
+                    collector->OnFrameBuffer(frameBuffer, numFrames);
+                }
 
                 for (uint32_t i = 0; i < numDrawings; i++)
                 {

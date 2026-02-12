@@ -49,6 +49,26 @@ public:
         (void)pixelDataSize;
     }
 
+    // Called when a paint layer's frame buffer info is available
+    // @param frameRate - frames per second
+    // @param numFrames - total number of frames in the animation
+    // @param maxRepeatCount - 0 = infinite loops, >0 = max repeats
+    virtual void OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint32_t maxRepeatCount)
+    {
+        (void)frameRate;
+        (void)numFrames;
+        (void)maxRepeatCount;
+    }
+
+    // Called when the frame buffer is available (maps frame indices to drawing indices)
+    // @param frameBuffer - array of drawing indices, one per frame
+    // @param numFrames - length of the frameBuffer array
+    virtual void OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames)
+    {
+        (void)frameBuffer;
+        (void)numFrames;
+    }
+
     // Called when a drawing within a paint layer begins loading
     // @param drawingId - index of the drawing within the layer
     virtual void OnBeginDrawing(uint32_t drawingId) = 0;

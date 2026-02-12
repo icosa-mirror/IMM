@@ -141,6 +141,32 @@ namespace ImmStrokeReader
             LayerPaint layer = new LayerPaint(info.name);
             ApplyCommonLayerProperties(layer, docId, layerIdx, info);
 
+            // Get animation info
+            int frameRate = 24;
+            int numFrames = 0;
+            int maxRepeatCount = 0;
+            bool hasAnimationInfo = ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerAnimationInfo(docId, layerIdx, out frameRate, out numFrames, out maxRepeatCount);
+            
+            if (hasAnimationInfo)
+            {
+                layer.Framerate = frameRate;
+                layer.MaxRepeatCount = maxRepeatCount;
+            }
+
+            // Get frame buffer (maps timeline frames to drawing indices)
+            int[] frameBuffer = null;
+            if (numFrames > 0)
+            {
+                frameBuffer = new int[numFrames];
+                int framesRead = ImmPlayer.ImmStrokeReader.StrokeReader_GetFrameBuffer(docId, layerIdx, frameBuffer, numFrames);
+                if (framesRead != numFrames)
+                {
+                    Debug.LogWarning($"{LogPrefix}Frame buffer mismatch: expected {numFrames}, got {framesRead}");
+                    frameBuffer = null;
+                }
+            }
+
+            // Load all drawings
             int drawingCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingCount(docId, layerIdx);
             for (int drawingIdx = 0; drawingIdx < drawingCount; drawingIdx++)
             {
@@ -202,11 +228,33 @@ namespace ImmStrokeReader
 
                 drawing.UpdateBoundingBox(true);
                 layer.Drawings.Add(drawing);
-                layer.Frames.Add(layer.Drawings.Count - 1);
             }
 
-            if (layer.Drawings.Count == 0)
+            // Build frame buffer using original mapping
+            if (frameBuffer != null && numFrames > 0)
             {
+                for (int i = 0; i < numFrames; i++)
+                {
+                    int drawingIndex = frameBuffer[i];
+                    // Clamp to valid range
+                    if (drawingIndex < 0 || drawingIndex >= layer.Drawings.Count)
+                    {
+                        drawingIndex = 0;
+                    }
+                    layer.Frames.Add(drawingIndex);
+                }
+            }
+            else if (layer.Drawings.Count > 0)
+            {
+                // Fallback: 1:1 mapping if no frame buffer available
+                for (int i = 0; i < layer.Drawings.Count; i++)
+                {
+                    layer.Frames.Add(i);
+                }
+            }
+            else
+            {
+                // No drawings at all - add empty one
                 layer.Drawings.Add(new Drawing());
                 layer.Frames.Add(0);
             }

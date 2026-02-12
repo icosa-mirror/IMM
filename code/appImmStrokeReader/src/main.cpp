@@ -422,6 +422,67 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_SetChapt
     return it->second->SetCurrentChapter(chapterIndex);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerAnimationInfo(int docId, int layerIdx, int* frameRate, int* numFrames, int* maxRepeatCount)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return false;
+
+    uint32_t fr = 0, nf = 0, mrc = 0;
+    bool ok = it->second->GetLayerAnimationInfo(layerIdx, &fr, &nf, &mrc);
+    if (ok)
+    {
+        if (frameRate) *frameRate = static_cast<int>(fr);
+        if (numFrames) *numFrames = static_cast<int>(nf);
+        if (maxRepeatCount) *maxRepeatCount = static_cast<int>(mrc);
+    }
+    return ok;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetFrameBuffer(int docId, int layerIdx, int* frames, int maxFrames)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0;
+
+    if (!frames || maxFrames <= 0)
+        return 0;
+
+    uint32_t* uframes = new uint32_t[maxFrames];
+    bool ok = it->second->GetFrameBuffer(layerIdx, uframes, maxFrames);
+    if (!ok)
+    {
+        delete[] uframes;
+        return 0;
+    }
+
+    // Get actual frame count
+    int count = 0;
+    uint32_t temp = 0;
+    if (it->second->GetLayerAnimationInfo(layerIdx, nullptr, &temp, nullptr))
+    {
+        count = std::min(maxFrames, static_cast<int>(temp));
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        frames[i] = static_cast<int>(uframes[i]);
+    }
+
+    delete[] uframes;
+    return count;
+}
+
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrokeInfo(
     int docId, int layerIdx, int drawingIdx, int strokeIdx,
     StrokeInfoC* info)

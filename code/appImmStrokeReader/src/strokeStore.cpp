@@ -133,6 +133,27 @@ void StrokeStore::OnPictureLayer(
     }
 }
 
+void StrokeStore::OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint32_t maxRepeatCount)
+{
+    if (!mCurrentLayer) return;
+
+    mCurrentLayer->frameRate = frameRate;
+    mCurrentLayer->numFrames = numFrames;
+    mCurrentLayer->maxRepeatCount = maxRepeatCount;
+}
+
+void StrokeStore::OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames)
+{
+    if (!mCurrentLayer) return;
+    if (frameBuffer == nullptr || numFrames == 0) return;
+
+    mCurrentLayer->frameBuffer.resize(numFrames);
+    for (uint32_t i = 0; i < numFrames; i++)
+    {
+        mCurrentLayer->frameBuffer[i] = frameBuffer[i];
+    }
+}
+
 void StrokeStore::OnBeginDrawing(uint32_t drawingId)
 {
     if (!mCurrentLayer) return;
@@ -449,6 +470,34 @@ void StrokeStore::SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapt
     {
         mDocument.currentChapter = 0;
     }
+}
+
+bool StrokeStore::GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount) const
+{
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+        return false;
+    
+    const StoredLayer& layer = mDocument.layers[layerIdx];
+    if (frameRate) *frameRate = layer.frameRate;
+    if (numFrames) *numFrames = layer.numFrames;
+    if (maxRepeatCount) *maxRepeatCount = layer.maxRepeatCount;
+    return true;
+}
+
+bool StrokeStore::GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames) const
+{
+    if (!frames || maxFrames <= 0)
+        return false;
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+        return false;
+    
+    const StoredLayer& layer = mDocument.layers[layerIdx];
+    int copyCount = std::min(maxFrames, static_cast<int>(layer.frameBuffer.size()));
+    for (int i = 0; i < copyCount; i++)
+    {
+        frames[i] = layer.frameBuffer[i];
+    }
+    return true;
 }
 
 void StrokeStore::Clear()

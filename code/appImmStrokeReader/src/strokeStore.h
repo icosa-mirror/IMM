@@ -99,6 +99,12 @@ struct StoredLayer
     bool pictureHasAlpha = false;
     std::vector<uint8_t> picturePixels;
     std::vector<StoredDrawing> drawings;
+    
+    // Animation info for paint layers
+    uint32_t frameRate = 24;
+    uint32_t numFrames = 0;
+    uint32_t maxRepeatCount = 0;
+    std::vector<uint32_t> frameBuffer;
 };
 
 struct StoredDocument
@@ -127,6 +133,8 @@ public:
         bool hasAlpha,
         const uint8_t* pixels,
         int pixelDataSize) override;
+    void OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint32_t maxRepeatCount) override;
+    void OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames) override;
     void OnBeginDrawing(uint32_t drawingId) override;
     void OnDrawingBiggestStroke(uint32_t drawingId, float biggestStroke) override;
     void OnStroke(
@@ -151,6 +159,11 @@ public:
     bool GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokePointC* points, int maxPoints) const;
     bool GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const;
     bool GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) const;
+    
+    // Frame buffer queries
+    bool GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount) const;
+    bool GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames) const;
+    
     int GetChapterCount() const;
     int GetCurrentChapter() const;
     bool SetCurrentChapter(int chapterIndex);
