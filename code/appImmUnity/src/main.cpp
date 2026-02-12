@@ -357,9 +357,12 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 static int sRenderEventCount = 0;
 static int sRenderEventDiagCount = 0;
 static int sRenderPixelDiagCount = 0;
+#if defined(__ANDROID__) || defined(ANDROID)
+static const bool kEnableXrLayerDiag = false;
 static int sXrLayerDiagFrame = 0;
 static bool sXrLayerDiagApplied = false;
 static bool sXrLayerDiagLoggedEmpty = false;
+#endif
 
 static bool IsReasonableBound3(const bound3& b)
 {
@@ -612,6 +615,10 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWork(int enable
 {
     gImmUnityPlugin.IMM.mPlayer.GlobalWork(enabled == 1, 9000);
 
+#if defined(__ANDROID__) || defined(ANDROID)
+    if (!kEnableXrLayerDiag)
+        return;
+
     if (enabled != 1)
         return;
 
@@ -669,6 +676,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWork(int enable
     }
 
     sXrLayerDiagFrame++;
+#endif
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetMatrices( int cameraID, int stereoType,

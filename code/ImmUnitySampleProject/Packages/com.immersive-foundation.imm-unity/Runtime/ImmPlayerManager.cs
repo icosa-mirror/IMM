@@ -47,7 +47,7 @@ namespace ImmPlayer
         [SerializeField] private bool useLinearColorSpace = true;
         [SerializeField] private int antialiasingLevel = 8;
         [SerializeField] private string logFileName = "imm_player_log.txt";
-        [SerializeField] private bool forceImmediateIssueInXR = true;
+        [SerializeField] private bool forceImmediateIssueInXR = false;
 
         #endregion
 
@@ -322,6 +322,8 @@ namespace ImmPlayer
         {
             public readonly CommandBuffer CommandBuffer = new CommandBuffer();
             public int CameraId = -1;
+            public CameraEvent HookEvent = CameraEvent.AfterImageEffectsOpaque;
+            public bool IsAttached = false;
             public readonly float[] WorldToHead = new float[16];
             public readonly float[] HeadProj = new float[16];
             public readonly float[] WorldToLeft = new float[16];
@@ -338,6 +340,8 @@ namespace ImmPlayer
             {
                 if (kvp.Key)
                 {
+                    kvp.Key.RemoveCommandBuffer(kvp.Value.HookEvent, kvp.Value.CommandBuffer);
+                    kvp.Key.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, kvp.Value.CommandBuffer);
                     kvp.Key.RemoveCommandBuffer(CameraEvent.AfterEverything, kvp.Value.CommandBuffer);
                 }
             }
@@ -356,7 +360,18 @@ namespace ImmPlayer
                 info.CameraId = _cameras.Count;
                 info.CommandBuffer.name = "Render IMM Content";
                 _cameras[cam] = info;
-                cam.AddCommandBuffer(CameraEvent.AfterEverything, info.CommandBuffer);
+            }
+
+            CameraEvent desiredEvent = XRSettings.enabled ? CameraEvent.AfterEverything : CameraEvent.AfterImageEffectsOpaque;
+            if (!info.IsAttached || info.HookEvent != desiredEvent)
+            {
+                if (info.IsAttached)
+                {
+                    cam.RemoveCommandBuffer(info.HookEvent, info.CommandBuffer);
+                }
+                info.HookEvent = desiredEvent;
+                cam.AddCommandBuffer(info.HookEvent, info.CommandBuffer);
+                info.IsAttached = true;
             }
 
             int stereoMode = (int)StereoMode.Mono;
@@ -377,7 +392,9 @@ namespace ImmPlayer
                 }
             }
 
-            if (XRSettings.enabled && stereoMode == (int)StereoMode.Mono)
+            bool isAndroidXr = XRSettings.enabled && Application.platform == RuntimePlatform.Android;
+
+            if (isAndroidXr && stereoMode == (int)StereoMode.Mono)
             {
                 stereoMode = XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.MultiPass
                     ? (int)StereoMode.TwoPass
@@ -421,7 +438,7 @@ namespace ImmPlayer
 
             info.CommandBuffer.Clear();
 
-            if (stereoMode == (int)StereoMode.TwoPass && XRSettings.enabled)
+            if (stereoMode == (int)StereoMode.TwoPass && isAndroidXr)
             {
                 int leftEventId = (info.CameraId << 8) | 0;
                 int rightEventId = (info.CameraId << 8) | 1;
