@@ -47,6 +47,7 @@ namespace ImmPlayer
         [SerializeField] private bool useLinearColorSpace = true;
         [SerializeField] private int antialiasingLevel = 8;
         [SerializeField] private string logFileName = "imm_player_log.txt";
+        [SerializeField] private bool forceImmediateIssueInXR = true;
 
         #endregion
 
@@ -59,6 +60,7 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
+        private const string XrStereoDiagPrefix = "[IMMDBG_XRSTEREO_20260212A] ";
         private bool _useCommandBufferRendering = false;
 
         #endregion
@@ -336,7 +338,7 @@ namespace ImmPlayer
             {
                 if (kvp.Key)
                 {
-                    kvp.Key.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, kvp.Value.CommandBuffer);
+                    kvp.Key.RemoveCommandBuffer(CameraEvent.AfterEverything, kvp.Value.CommandBuffer);
                 }
             }
             _cameras.Clear();
@@ -354,7 +356,7 @@ namespace ImmPlayer
                 info.CameraId = _cameras.Count;
                 info.CommandBuffer.name = "Render IMM Content";
                 _cameras[cam] = info;
-                cam.AddCommandBuffer(CameraEvent.AfterImageEffectsOpaque, info.CommandBuffer);
+                cam.AddCommandBuffer(CameraEvent.AfterEverything, info.CommandBuffer);
             }
 
             int stereoMode = (int)StereoMode.Mono;
@@ -373,6 +375,18 @@ namespace ImmPlayer
                     // The native plugin doesn't support instanced single-pass; force two-pass.
                     stereoMode = (int)StereoMode.TwoPass;
                 }
+            }
+
+            if (XRSettings.enabled && stereoMode == (int)StereoMode.Mono)
+            {
+                stereoMode = XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.MultiPass
+                    ? (int)StereoMode.TwoPass
+                    : (int)StereoMode.SinglePass;
+            }
+
+            if (XRSettings.enabled)
+            {
+                Debug.Log($"{XrStereoDiagPrefix}cam={cam.name} stereoEnabled={cam.stereoEnabled} xrEnabled={XRSettings.enabled} xrMode={XRSettings.stereoRenderingMode} chosenStereoMode={stereoMode}");
             }
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
@@ -405,15 +419,32 @@ namespace ImmPlayer
                 cam.stereoEnabled ? info.WorldToRight : null,
                 cam.stereoEnabled ? info.RightProj : null);
 
-            int eyeIndex = 0;
-            if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
-            {
-                eyeIndex = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
-            }
-
-            int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
             info.CommandBuffer.Clear();
-            info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+
+            if (stereoMode == (int)StereoMode.TwoPass && XRSettings.enabled)
+            {
+                int leftEventId = (info.CameraId << 8) | 0;
+                int rightEventId = (info.CameraId << 8) | 1;
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, leftEventId);
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, rightEventId);
+
+                if (forceImmediateIssueInXR)
+                {
+                    GL.IssuePluginEvent(_renderEventFunc, leftEventId);
+                    GL.IssuePluginEvent(_renderEventFunc, rightEventId);
+                }
+            }
+            else
+            {
+                int eyeIndex = 0;
+                if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
+                {
+                    eyeIndex = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
+                }
+
+                int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+            }
         }
 
         /// <summary>

@@ -357,6 +357,9 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 static int sRenderEventCount = 0;
 static int sRenderEventDiagCount = 0;
 static int sRenderPixelDiagCount = 0;
+static int sXrLayerDiagFrame = 0;
+static bool sXrLayerDiagApplied = false;
+static bool sXrLayerDiagLoggedEmpty = false;
 
 static bool IsReasonableBound3(const bound3& b)
 {
@@ -446,6 +449,16 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	}
 	sRenderEventDiagCount++;
 
+	unsigned char preDiagPx[4] = { 0, 0, 0, 0 };
+	unsigned char postDiagPx[4] = { 0, 0, 0, 0 };
+	const bool doStereoPixelDiag = (stereoType != 0) && (sRenderPixelDiagCount < 40);
+	if (doStereoPixelDiag)
+	{
+		const int sx = res.x / 2;
+		const int sy = res.y / 2;
+		glReadPixels(sx, sy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, preDiagPx);
+	}
+
 	if (stereoType == 0) // mono
 	{
 		GLint prevFbo = 0;
@@ -521,37 +534,29 @@ else if (stereoType == 1) // two pass stereo
 	{
         //gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Single pass rendering...");
 
-		// This all block here is a hack to fix the funny behavior of Unity in SinglePass stereo.
-		//
-		// Even if the render target is 2x the size to accommodate the left and right eyes, Unity
-		// will set the viewport to only cover the left eye. From an email response from Scorr Bassett:
-		//
-		//   "That behavior is correct.The single - pass mode that you are using does the following :
-		//
-		//    1. Set viewport to the left
-		// 	  2. Issue Draw
-		// 	  3. Set viewport to the right(internal)
-		// 	  4. Issue Draw(internal)
-		//
-		//    Therefore the viewport size will never be the full size.Since you are using a plug - in
-		//    and doing your own thing we don't handle that. It's up to you to change the viewport and
-		//    restore it afterwards."
-		//
-		// So there we go. In my case, I make the Imm Player left and right eyes in a single GPU geometry pass,
-		// so I have to set the viewport to the corret 2X size here, then restore it.
-		const float newVp[6] = { oldVp[0], oldVp[1], oldVp[2]*2.0f, oldVp[3], oldVp[4], oldVp[5] };
-		gImmUnityPlugin.IMM.mRenderer->SetViewports(1, newVp);
-
-		//const mat4x4d flz = mat4x4d(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+		// Keep Unity-provided viewport as-is. The old double-width viewport hack causes
+		// incorrect output on modern XR single-pass multiview targets.
 
 		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Preferred);
 		const mat4x4d head_to_lEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2LEye) * invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
 		const mat4x4d head_to_rEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2REye) * invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
 		gImmUnityPlugin.IMM.mPlayer.RenderStereoSinglePass( res, head_to_lEye, gImmUnityPlugin.FromUnity.mCamera[cameraID].mLEyeProjection,
- 			                                                          head_to_rEye, gImmUnityPlugin.FromUnity.mCamera[cameraID].mREyeProjection);
-		gImmUnityPlugin.IMM.mRenderer->SetViewports(1, oldVp);
+		 		                                                          head_to_rEye, gImmUnityPlugin.FromUnity.mCamera[cameraID].mREyeProjection);
 	}
     gImmUnityPlugin.IMM.mSoundBackend->Tick();
+
+	if (doStereoPixelDiag)
+	{
+		const int sx = res.x / 2;
+		const int sy = res.y / 2;
+		glReadPixels(sx, sy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, postDiagPx);
+		__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_XRPIX_20260212A] frame=%d eye=%d pre=(%u,%u,%u,%u) post=(%u,%u,%u,%u)",
+			sRenderPixelDiagCount,
+			(event_id & 1),
+			(unsigned int)preDiagPx[0], (unsigned int)preDiagPx[1], (unsigned int)preDiagPx[2], (unsigned int)preDiagPx[3],
+			(unsigned int)postDiagPx[0], (unsigned int)postDiagPx[1], (unsigned int)postDiagPx[2], (unsigned int)postDiagPx[3]);
+		sRenderPixelDiagCount++;
+	}
 
 }
 
@@ -606,6 +611,64 @@ static trans3d iUnityToTrans3d(const float *m)
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWork(int enabled)
 {
     gImmUnityPlugin.IMM.mPlayer.GlobalWork(enabled == 1, 9000);
+
+    if (enabled != 1)
+        return;
+
+    const int docId = 0;
+    if (!gImmUnityPlugin.IMM.mPlayer.IsSequenceReady(docId))
+    {
+        sXrLayerDiagFrame++;
+        return;
+    }
+
+    const int layerCount = gImmUnityPlugin.IMM.mPlayer.GetLayerCount(docId);
+    if (layerCount <= 0)
+    {
+        if (!sXrLayerDiagLoggedEmpty || (sXrLayerDiagFrame % 120) == 0)
+        {
+            __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_XRLAYERS_20260212B] frame=%d ready=1 layerCount=0", sXrLayerDiagFrame);
+            sXrLayerDiagLoggedEmpty = true;
+        }
+        sXrLayerDiagFrame++;
+        return;
+    }
+
+    if (!sXrLayerDiagApplied)
+    {
+        __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_XRLAYERS_20260212B] frame=%d ready=1 layerCount=%d applying visibility", sXrLayerDiagFrame, layerCount);
+
+        const int maxLogged = layerCount < 16 ? layerCount : 16;
+        for (int i = 0; i < layerCount; i++)
+        {
+            Player::LayerInfo li;
+            if (!gImmUnityPlugin.IMM.mPlayer.GetLayerInfoByIndex(docId, i, li))
+                continue;
+
+            gImmUnityPlugin.IMM.mPlayer.SetLayerVisible(docId, li.id, true);
+            gImmUnityPlugin.IMM.mPlayer.SetLayerOpacity(docId, li.id, 1.0f);
+
+            if (i < maxLogged)
+            {
+                __android_log_print(
+                    ANDROID_LOG_INFO,
+                    "ImmUnityPlugin",
+                    "[IMMDBG_XRLAYERS_20260212B] idx=%d id=%d type=%d visible=%d opacity=%.3f loaded=%d strokes=%d hasBBox=%d",
+                    i,
+                    li.id,
+                    li.type,
+                    li.isVisible,
+                    li.opacity,
+                    li.isLoaded,
+                    li.paintNumStrokes,
+                    li.hasBBox);
+            }
+        }
+
+        sXrLayerDiagApplied = true;
+    }
+
+    sXrLayerDiagFrame++;
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetMatrices( int cameraID, int stereoType,
