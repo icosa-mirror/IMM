@@ -474,8 +474,22 @@ namespace SharpQuill
             }
             break;
           }
-        case LayerType.Model:
         case LayerType.Sound:
+          {
+            layer = new LayerSound();
+            LayerSound ls = layer as LayerSound;
+            var impl = l["Implementation"];
+            if (impl != null)
+            {
+              ls.ImportFilePath = impl["ImportFilePath"]?.ToObject<string>();
+              ls.DataFileOffset = ParseHexLong(impl["DataFileOffset"], ls.DataFileOffset);
+              ls.Gain = ParseFloat(impl["Gain"], 1.0f);
+              ls.Loop = ParseBool(impl["Loop"], false);
+              // TODO: Parse SoundType, Attenuation, Modifiers if needed
+            }
+            break;
+          }
+        case LayerType.Model:
         case LayerType.Unknown:
         default:
           layer = null;
@@ -531,6 +545,15 @@ namespace SharpQuill
         {
           qbinReader.BaseStream.Seek(picture.DataFileOffset, SeekOrigin.Begin);
           picture.Data = qbinReader.ReadPictureData();
+        }
+      }
+      else if (layer.Type == LayerType.Sound)
+      {
+        LayerSound sound = layer as LayerSound;
+        if (sound != null && sound.DataFileOffset > 0)
+        {
+          qbinReader.BaseStream.Seek(sound.DataFileOffset, SeekOrigin.Begin);
+          sound.Data = qbinReader.ReadSoundData();
         }
       }
     }
