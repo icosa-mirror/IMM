@@ -622,8 +622,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 
     // SOUND ENGINE
 #if defined(__ANDROID__) || defined(ANDROID)
-    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
-    __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Sound backend created (Null)");
+    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Android,&gImmUnityPlugin.IMM.mLog);
+    __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Sound backend created (Android)");
 #elif defined(WINDOWS)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
 #else
@@ -652,6 +652,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         }
     }
     piSoundEngineBackend::Configuration config;
+    config.mTempPath = tmpFolferName;
 
     if (!gImmUnityPlugin.IMM.mSoundBackend->Init(nullptr, deviceID, &config))
     {
