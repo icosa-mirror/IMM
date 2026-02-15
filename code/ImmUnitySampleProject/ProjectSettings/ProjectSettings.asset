@@ -163,7 +163,7 @@ PlayerSettings:
   androidSupportedAspectRatio: 1
   androidMaxAspectRatio: 2.1
   applicationIdentifier:
-    Android: com.DefaultCompany.IMMUnityTest
+    Android: com.ImmersiveFoundation.IMMUnityTest
     Standalone: com.DefaultCompany.IMM-Unity-Test
   buildNumber:
     Standalone: 0
