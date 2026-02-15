@@ -355,8 +355,6 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 }
 
 static int sRenderEventCount = 0;
-static int sRenderEventDiagCount = 0;
-static int sRenderPixelDiagCount = 0;
 
 static bool IsReasonableBound3(const bound3& b)
 {
@@ -438,48 +436,12 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	glDisable(GL_SCISSOR_TEST);
 #endif
 
-	if (sRenderEventDiagCount < 20 || (sRenderEventDiagCount % 300) == 0)
-	{
-		GLint boundFbo = 0;
-		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &boundFbo);
-		__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_RENDER_20260211A] evt=%d cam=%d stereo=%d eye=%d res=%dx%d fbo=%d", sRenderEventDiagCount, cameraID, stereoType, (event_id & 1), res.x, res.y, (int)boundFbo);
-	}
-	sRenderEventDiagCount++;
-
 	if (stereoType == 0) // mono
 	{
-		GLint prevFbo = 0;
-		glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		unsigned char prePx[4] = { 0, 0, 0, 0 };
-		unsigned char postPx[4] = { 0, 0, 0, 0 };
-		const bool doPixelDiag = sRenderPixelDiagCount < 20;
-		if (doPixelDiag)
-		{
-			const int sx = res.x / 2;
-			const int sy = res.y / 2;
-			glReadPixels(sx, sy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, prePx);
-		}
-
 		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
 		           fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
 			gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::None);
 		gImmUnityPlugin.IMM.mPlayer.RenderMono(res,0);
-
-		if (doPixelDiag)
-		{
-			const int sx = res.x / 2;
-			const int sy = res.y / 2;
-			glReadPixels(sx, sy, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, postPx);
-			__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_RENDERPIX_20260211A] frame=%d pre=(%u,%u,%u,%u) post=(%u,%u,%u,%u)",
-				sRenderPixelDiagCount,
-				(unsigned int)prePx[0], (unsigned int)prePx[1], (unsigned int)prePx[2], (unsigned int)prePx[3],
-				(unsigned int)postPx[0], (unsigned int)postPx[1], (unsigned int)postPx[2], (unsigned int)postPx[3]);
-			sRenderPixelDiagCount++;
-		}
-
-		glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prevFbo);
 	}
 else if (stereoType == 1) // two pass stereo
 	{
