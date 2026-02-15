@@ -274,8 +274,9 @@ namespace ImmPlayer
     [StructLayout(LayoutKind.Sequential)]
     public struct Bounds3
     {
-        public float minX, minY, minZ;
-        public float maxX, maxY, maxZ;
+        public float minX, maxX;
+        public float minY, maxY;
+        public float minZ, maxZ;
 
         public UnityEngine.Bounds ToUnityBounds()
         {

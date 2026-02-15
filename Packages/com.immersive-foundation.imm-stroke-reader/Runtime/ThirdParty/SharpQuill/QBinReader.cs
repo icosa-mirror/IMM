@@ -65,6 +65,27 @@ namespace SharpQuill
 
       return data;
     }
+
+    /// <summary>
+    /// Reads the embedded audio data.
+    /// The format is expected to be: length (Int32) followed by audio file bytes (MP3/OGG/WAV).
+    /// </summary>
+    public SoundData ReadSoundData()
+    {
+      SoundData data = new SoundData();
+
+      // Read the length of the audio data
+      int length = ReadInt32();
+
+      if (length <= 0 || length > int.MaxValue)
+        return data;
+
+      // Read the audio file bytes (complete audio file with headers)
+      data.AudioBytes = ReadBytes(length);
+      data.Length = length;
+
+      return data;
+    }
     
     private Stroke ReadStroke()
     {
