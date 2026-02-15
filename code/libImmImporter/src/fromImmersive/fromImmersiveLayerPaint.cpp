@@ -556,7 +556,7 @@ namespace ImmImporter
             return true;
         }
 
-        bool ReadAsset(LayerImplementation vme, piIStream *fp, piLog* log, Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, bool flipped)
+        bool ReadAsset(LayerImplementation vme, piIStream *fp, piLog* log, Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, bool flipped, IStrokeCollector* collector)
         {
             // only loads the main layerpaint asset, drawings are loaded separately
             LayerPaint *me = (LayerPaint *)vme;
