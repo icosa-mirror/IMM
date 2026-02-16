@@ -1,6 +1,6 @@
 {
   "Rendering": {
-    "EnableVR": true,
+    "EnableVR": false,
     "RenderingAPI": "OpenGL",
     "// DirectX": "",
     "RenderingTechnique": "Static",
