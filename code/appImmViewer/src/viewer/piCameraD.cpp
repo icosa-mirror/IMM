@@ -74,8 +74,33 @@ void piCameraD::RotateXY(const double x, const double y )
 {
 	// x = yaw (rotation around Y axis)
 	// y = pitch (rotation around X axis)
-	mWorldToCamera = mat4x4d::rotateY(x) * mWorldToCamera;
-	mWorldToCamera = mat4x4d::rotateX(y) * mWorldToCamera;
+	// Ensure zero roll by reconstructing camera matrix from position and direction
+	
+	// Get current position
+	vec3d pos = GetPos();
+	
+	// Get current direction and convert to angles
+	vec3d dir = GetDir();
+	double yaw = std::atan2(dir.x, dir.z);  // Rotation around Y
+	double pitch = std::asin(-dir.y);        // Rotation around X (clamped)
+	
+	// Apply deltas
+	yaw += x;
+	pitch += y;
+	
+	// Clamp pitch to prevent looking too far up/down (e.g., -85 to 85 degrees)
+	const double maxPitch = 3.14159265359 * 0.48; // ~86 degrees
+	if (pitch > maxPitch) pitch = maxPitch;
+	if (pitch < -maxPitch) pitch = -maxPitch;
+	
+	// Calculate new direction from yaw and pitch (no roll possible)
+	vec3d newDir;
+	newDir.x = std::sin(yaw) * std::cos(pitch);
+	newDir.y = -std::sin(pitch);
+	newDir.z = std::cos(yaw) * std::cos(pitch);
+	
+	// Reconstruct camera matrix with world up (0,1,0) - ensures zero roll
+	mWorldToCamera = setLookat(pos, pos + newDir, vec3d(0.0, 1.0, 0.0));
 	mCameraToWorld = invert(mWorldToCamera);
 }
 
