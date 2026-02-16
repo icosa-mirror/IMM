@@ -26,6 +26,7 @@
 #include <string>
 #include <strings.h>
 #include <sys/stat.h>
+#include <cmath>
 
 #if !defined(EGL_OPENGL_ES3_BIT_KHR)
 #define EGL_OPENGL_ES3_BIT_KHR 0x0040
@@ -61,6 +62,21 @@ struct EngineState {
     std::wstring playerSpawnLocation = L"Default";
     ExePlayer::Settings::Rendering::Technique renderingTechnique =
         ExePlayer::Settings::Rendering::Technique::Static;
+
+    // Touch input state
+    struct TouchState {
+        bool active = false;
+        float startX = 0.0f;
+        float startY = 0.0f;
+        float lastX = 0.0f;
+        float lastY = 0.0f;
+        float deltaX = 0.0f;
+        float deltaY = 0.0f;
+    };
+    TouchState touch1;  // Single finger (camera rotation)
+    TouchState touch2;  // Second finger (forward/backward movement)
+    float pinchStartDistance = 0.0f;
+    bool isPinching = false;
 };
 
 EngineState gEngine;
@@ -449,7 +465,7 @@ void renderFrame() {
     lastTime = now;
 
     const float aspect = (gEngine.height > 0) ? (float)gEngine.width / (float)gEngine.height : 1.0f;
-    const mat4x4 projection = setPerspective(60.0f, aspect, 0.01f, 1000.0f);
+    const mat4x4 projection = setPerspective(50.0f, aspect, 0.01f, 1000.0f);
     const trans3d vrToHead = trans3d::identity();
 
     gEngine.viewer->GlobalWork(nullptr, false, vrToHead, nullptr, nullptr, gEngine.log, dtime,
@@ -458,6 +474,134 @@ void renderFrame() {
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
 
     eglSwapBuffers(gEngine.display, gEngine.surface);
+}
+
+static float getPinchDistance(float x1, float y1, float x2, float y2) {
+    float dx = x2 - x1;
+    float dy = y2 - y1;
+    return sqrtf(dx * dx + dy * dy);
+}
+
+static int32_t handleInput(android_app* app, AInputEvent* event) {
+    if (AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) {
+        return 0;
+    }
+
+    int32_t action = AMotionEvent_getAction(event);
+    int32_t pointerCount = AMotionEvent_getPointerCount(event);
+    int32_t actionType = action & AMOTION_EVENT_ACTION_MASK;
+    int32_t pointerIndex = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+
+    // Single finger: camera rotation (look around)
+    if (pointerCount == 1) {
+        float x = AMotionEvent_getX(event, 0);
+        float y = AMotionEvent_getY(event, 0);
+
+        switch (actionType) {
+            case AMOTION_EVENT_ACTION_DOWN:
+                gEngine.touch1.active = true;
+                gEngine.touch1.startX = x;
+                gEngine.touch1.startY = y;
+                gEngine.touch1.lastX = x;
+                gEngine.touch1.lastY = y;
+                gEngine.touch1.deltaX = 0;
+                gEngine.touch1.deltaY = 0;
+                break;
+
+            case AMOTION_EVENT_ACTION_MOVE:
+                if (gEngine.touch1.active) {
+                    gEngine.touch1.deltaX = x - gEngine.touch1.lastX;
+                    gEngine.touch1.deltaY = y - gEngine.touch1.lastY;
+                    gEngine.touch1.lastX = x;
+                    gEngine.touch1.lastY = y;
+                }
+                break;
+
+            case AMOTION_EVENT_ACTION_UP:
+                gEngine.touch1.active = false;
+                gEngine.touch1.deltaX = 0;
+                gEngine.touch1.deltaY = 0;
+                break;
+        }
+    }
+    // Two fingers: forward/backward movement
+    else if (pointerCount == 2) {
+        float x1 = AMotionEvent_getX(event, 0);
+        float y1 = AMotionEvent_getY(event, 0);
+        float x2 = AMotionEvent_getX(event, 1);
+        float y2 = AMotionEvent_getY(event, 1);
+
+        switch (actionType) {
+            case AMOTION_EVENT_ACTION_POINTER_DOWN:
+                // Second finger went down - start pinch tracking
+                gEngine.isPinching = true;
+                gEngine.pinchStartDistance = getPinchDistance(x1, y1, x2, y2);
+                gEngine.touch2.startX = (x1 + x2) * 0.5f;
+                gEngine.touch2.startY = (y1 + y2) * 0.5f;
+                gEngine.touch2.lastX = gEngine.touch2.startX;
+                gEngine.touch2.lastY = gEngine.touch2.startY;
+                break;
+
+            case AMOTION_EVENT_ACTION_MOVE:
+                if (gEngine.isPinching) {
+                    float currentPinch = getPinchDistance(x1, y1, x2, y2);
+                    float pinchDelta = currentPinch - gEngine.pinchStartDistance;
+                    
+                    // Also track vertical drag of both fingers
+                    float avgY = (y1 + y2) * 0.5f;
+                    gEngine.touch2.deltaY = avgY - gEngine.touch2.lastY;
+                    gEngine.touch2.lastY = avgY;
+                    
+                    // Use pinch delta for forward/backward movement
+                    gEngine.touch2.deltaX = pinchDelta;
+                    gEngine.pinchStartDistance = currentPinch;
+                }
+                break;
+
+            case AMOTION_EVENT_ACTION_POINTER_UP:
+                if (pointerIndex == 1) {
+                    // Second finger lifted, go back to single touch mode
+                    gEngine.isPinching = false;
+                    gEngine.touch2.active = false;
+                    gEngine.touch2.deltaX = 0;
+                    gEngine.touch2.deltaY = 0;
+                }
+                break;
+        }
+    }
+
+    return 1;
+}
+
+void updateCameraFromTouch(float dtime) {
+    if (!gEngine.viewer || !gEngine.viewerInitialized) return;
+
+    const float rotationSensitivity = 3.0f;
+    const float movementSensitivity = 0.003f;
+
+    // Single finger rotation (drag to look around)
+    if (gEngine.touch1.active && (fabsf(gEngine.touch1.deltaX) > 0.5f || fabsf(gEngine.touch1.deltaY) > 0.5f)) {
+        float rotX = gEngine.touch1.deltaX * rotationSensitivity / gEngine.width;
+        float rotY = gEngine.touch1.deltaY * rotationSensitivity / gEngine.height;
+        
+        // Apply rotation through viewer
+        gEngine.viewer->RotateCamera(rotX, rotY);
+        
+        // Decay the deltas
+        gEngine.touch1.deltaX *= 0.8f;
+        gEngine.touch1.deltaY *= 0.8f;
+    }
+
+    // Two finger movement (pinch or vertical drag to move forward/backward)
+    if (gEngine.isPinching && fabsf(gEngine.touch2.deltaX) > 1.0f) {
+        float moveDistance = gEngine.touch2.deltaX * movementSensitivity;
+        
+        // Apply movement through viewer
+        gEngine.viewer->MoveCameraForward(moveDistance);
+        
+        // Decay
+        gEngine.touch2.deltaX *= 0.8f;
+    }
 }
 
 void handleCmd(android_app* app, int32_t cmd) {
@@ -558,6 +702,7 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetTrackingTransform
 
 void android_main(android_app* app) {
     app->onAppCmd = handleCmd;
+    app->onInputEvent = handleInput;
     gEngine.app = app;
     gEngine.running = true;
 
@@ -579,6 +724,14 @@ void android_main(android_app* app) {
         }
 
         pollMessages();
+        
+        // Update camera from touch input before rendering
+        const double now = gEngine.timer->GetTime();
+        static double lastTime = now;
+        const float dtime = float(now - lastTime);
+        lastTime = now;
+        updateCameraFromTouch(dtime);
+        
         renderFrame();
     }
 

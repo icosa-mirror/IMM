@@ -72,7 +72,10 @@ void piCameraD::GlobalMove(const vec3d & pos)
 
 void piCameraD::RotateXY(const double x, const double y )
 {
+	// x = yaw (rotation around Y axis)
+	// y = pitch (rotation around X axis)
 	mWorldToCamera = mat4x4d::rotateY(x) * mWorldToCamera;
+	mWorldToCamera = mat4x4d::rotateX(y) * mWorldToCamera;
 	mCameraToWorld = invert(mWorldToCamera);
 }
 

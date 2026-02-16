@@ -163,6 +163,10 @@ namespace ExePlayer
         void SetVolume(int docID, float volume);
         bool GetVolume(int docID);
 
+        // Touch control methods for non-VR Android
+        void RotateCamera(float deltaYaw, float deltaPitch);
+        void MoveCameraForward(float distance);
+
         bool HasPrev(int docID);
 
         void Prev(int docID);

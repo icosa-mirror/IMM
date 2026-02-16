@@ -680,4 +680,20 @@ void Viewer::CancelLoading(int docID) {
     mPlayer.CancelLoading(docID);
 }
 
+void Viewer::RotateCamera(float deltaYaw, float deltaPitch)
+{
+    // Rotate the camera based on touch input
+    // deltaYaw is horizontal rotation (yaw)
+    // deltaPitch is vertical rotation (pitch)
+    mCamera.RotateXY(static_cast<double>(deltaYaw), static_cast<double>(deltaPitch));
+}
+
+void Viewer::MoveCameraForward(float distance)
+{
+    // Move camera forward/backward in local space
+    // Positive distance moves forward, negative moves backward
+    ImmCore::vec3d moveDelta(0.0, 0.0, -static_cast<double>(distance));
+    mCamera.LocalMove(moveDelta);
+}
+
 }
