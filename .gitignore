@@ -78,3 +78,5 @@ ipch/
 /.gradle-user
 /code/ImmUnitySampleProject/UserSettings
 code/ImmUnitySampleProject/imm_player_log.txt
+/code/projects/android/logs
+code/appImmViewer/exe/debug.txt

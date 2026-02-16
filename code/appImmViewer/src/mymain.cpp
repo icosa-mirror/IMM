@@ -633,7 +633,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
         #endif
         {
             const int vpM[4] = { 0, 0, mRenderSize.x * mSuperSample, mRenderSize.y * mSuperSample };
-            const trans3d vr_to_head = trans3d::translate(vec3d(0.0, -1.6, 0.0));
+            const trans3d vr_to_head = trans3d::identity();
 
             mRenderer->SetRenderTarget(mRenderTargetM);
             mRenderer->SetViewport(0, vpM);

@@ -66,6 +66,8 @@ namespace ExePlayer
 		//
 
         bool mFilesLoaded;
+        bool mWasMouseDown = false;
+        bool mSpawnAreaReady = false;
 
         struct DisplayRenderState
         {

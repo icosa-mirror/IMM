@@ -125,8 +125,16 @@ void Viewer::iHandleGlobalInputs(piWindowEvents* evt, float dtime, const ivec2 &
     if (evt->keyb.state[KEY_CONTROL]) { speed /= 5.0; }
     if (evt->mouse.lb_isDown)
     {
-        const vec2d mxy = double(dtime) * 1500.0 * vec2d(double(evt->mouse.dx) / double(wndowSize.x), double(evt->mouse.dy) / double(wndowSize.y));
-        mCamera.RotateXY(mxy.x, mxy.y);
+        if (mWasMouseDown && (evt->mouse.dx != 0 || evt->mouse.dy != 0))
+        {
+            const vec2d mxy = double(dtime) * 4500.0 * vec2d(double(evt->mouse.dx) / double(wndowSize.x), double(evt->mouse.dy) / double(wndowSize.y));
+            mCamera.RotateXY(mxy.x, mxy.y);
+        }
+        mWasMouseDown = true;
+    }
+    else
+    {
+        mWasMouseDown = false;
     }
     mCamera.LocalMove(dtime * speed * dis);
 
@@ -221,7 +229,12 @@ void Viewer::SetSpawnArea(int docID, int spawnAreaID, bool recenter)
 
     if (mCurrentSpawnArea.mIsFloorLevel)
     {
-        viewerTransform.mTranslation.y = 0.0;
+        // In VR, zero out the head offset — the HMD provides actual head height via vr_to_head.
+        // In non-VR (mono), vr_to_head is identity, so bake eye height directly into the camera.
+        if (mStereoMode != ImmPlayer::StereoMode::None)
+            viewerTransform.mTranslation.y = 0.0;
+        else
+            viewerTransform.mTranslation.y = 1.6;
     }
 
     mCamera.SetWorldToCamera(toMatrix( viewerTransform * invert(mCurrentSpawnArea.mSpawnAreaToWorld) ));
@@ -284,6 +297,9 @@ void Viewer::GlobalWork(piWindowEvents *evt, const bool vrEnabled, const trans3d
                 {
                     SetSpawnArea(mDocuments[0], mCurrentSpawnAreaID, isFirstFrame);
                 }
+
+                if (isFirstFrame)
+                    mSpawnAreaReady = true;
 
                 isFirstFrame = false;
             }
@@ -424,6 +440,13 @@ void Viewer::RenderStereoMultiPass(const ivec2 & pixelResolutionIncludingSupersa
 
 void Viewer::RenderMono(const ivec2 & pixelResolutionIncludingSupersampling, const trans3d & vr_to_head, int eyeID)
 {
+    if (!mSpawnAreaReady)
+    {
+        const float colorBlack[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        mRenderer->Clear(colorBlack, nullptr, nullptr, nullptr, true);
+        return;
+    }
+
     const trans3d world_to_head = vr_to_head * fromMatrix(mCamera.GetWorldToCamera());
 
     Player::PlayerInfo playerInfo;
