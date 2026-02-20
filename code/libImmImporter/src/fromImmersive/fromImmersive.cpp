@@ -557,7 +557,8 @@ namespace ImmImporter
                     const int height = image->GetYRes();
                     const uint64_t dataSize = image->GetDataSize(0);
                     const uint8_t* pixels = static_cast<const uint8_t*>(image->GetData(0));
-                    const bool hasAlpha = (image->GetNumChannels() >= 4);
+                    const piImage::Format fmt = image->GetFormat(0);
+                    const bool hasAlpha = (fmt == piImage::FORMAT_I_RGBA || fmt == piImage::FORMAT_F_RGBA);
                     collector->OnPictureLayer(
                         layer->GetID(),
                         static_cast<uint32_t>(lp->GetType()),
