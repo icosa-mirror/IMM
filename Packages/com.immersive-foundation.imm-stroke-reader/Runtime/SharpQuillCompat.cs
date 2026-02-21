@@ -15,19 +15,16 @@ namespace ImmStrokeReader
     {
         private const string LogPrefix = "[IMM2QUILL_20260209A] ";
 
-        public static Sequence ReadImmAsSequence(string path, bool includePictures = false)
+        public static Sequence ReadImmAsSequence(string path, bool includePictures = false, int chapterIndex = -1)
         {
             if (string.IsNullOrEmpty(path))
             {
                 return null;
             }
 
-            if (!ImmPlayer.ImmStrokeReader.StrokeReader_IsInitialized())
+            if (!EnsureInitialized())
             {
-                if (ImmPlayer.ImmStrokeReader.StrokeReader_Init(null) != 0)
-                {
-                    return null;
-                }
+                return null;
             }
 
             if (!TryLoadDocument(path, out int docId))
@@ -37,12 +34,69 @@ namespace ImmStrokeReader
 
             try
             {
+                if (chapterIndex >= 0)
+                {
+                    int chapterCount = ImmPlayer.ImmStrokeReader.StrokeReader_GetChapterCount(docId);
+                    if (chapterIndex >= chapterCount)
+                    {
+                        Debug.LogWarning($"{LogPrefix}Requested chapter {chapterIndex} is out of range (chapterCount={chapterCount}), falling back to chapter 0");
+                        chapterIndex = 0;
+                    }
+                    if (!ImmPlayer.ImmStrokeReader.StrokeReader_SetChapter(docId, chapterIndex))
+                    {
+                        Debug.LogWarning($"{LogPrefix}StrokeReader_SetChapter({chapterIndex}) failed, using default chapter");
+                    }
+                    else
+                    {
+                        Debug.Log($"{LogPrefix}Selected chapter {chapterIndex} of {chapterCount} for '{path}'");
+                    }
+                }
                 return ConvertDocument(docId, includePictures);
             }
             finally
             {
                 ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
             }
+        }
+
+        /// <summary>
+        /// Returns the number of chapters in an IMM file, or 0 on failure.
+        /// Loads and immediately unloads the document; avoid calling this in tight loops.
+        /// </summary>
+        public static int GetImmChapterCount(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return 0;
+            }
+
+            if (!EnsureInitialized())
+            {
+                return 0;
+            }
+
+            if (!TryLoadDocument(path, out int docId))
+            {
+                return 0;
+            }
+
+            try
+            {
+                return ImmPlayer.ImmStrokeReader.StrokeReader_GetChapterCount(docId);
+            }
+            finally
+            {
+                ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
+            }
+        }
+
+        private static bool EnsureInitialized()
+        {
+            if (ImmPlayer.ImmStrokeReader.StrokeReader_IsInitialized())
+            {
+                return true;
+            }
+            return ImmPlayer.ImmStrokeReader.StrokeReader_Init(null) == 0;
         }
 
         private static bool TryLoadDocument(string path, out int docId)
