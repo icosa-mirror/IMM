@@ -379,6 +379,19 @@ namespace SharpQuill
         }
       }
 
+      if (kkff["Action"] != null)
+      {
+        keyframes.Action.Clear();
+        foreach (var kf in kkff["Action"])
+        {
+          Keyframe<string> keyframe = new Keyframe<string>();
+          keyframe.Time = (int)kf["Time"].ToObject<float>();
+          keyframe.Value = kf["Value"].ToObject<string>();
+          keyframe.Interpolation = ParseEnum<Interpolation>(kf["Interpolation"]);
+          keyframes.Action.Add(keyframe);
+        }
+      }
+
       return keyframes;
     }
 

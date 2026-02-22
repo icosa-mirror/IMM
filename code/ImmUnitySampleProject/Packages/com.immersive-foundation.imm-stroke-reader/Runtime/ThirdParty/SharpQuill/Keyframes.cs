@@ -37,6 +37,11 @@ namespace SharpQuill
     /// </summary>
     public List<Keyframe<Transform>> Transform { get; set; } = new List<Keyframe<Transform>>();
 
+    /// <summary>
+    /// List of action keyframes (Play/Stop/Loop/MakeDefault markers).
+    /// </summary>
+    public List<Keyframe<string>> Action { get; set; } = new List<Keyframe<string>>();
+
     public Keyframes()
     {
       // The minimal working file requires a visibility and offset keyframes.
