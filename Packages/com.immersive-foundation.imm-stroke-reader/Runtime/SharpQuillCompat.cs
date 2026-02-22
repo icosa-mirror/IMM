@@ -61,7 +61,7 @@ namespace ImmStrokeReader
 
         /// <summary>
         /// Returns the number of chapters in an IMM file, or 0 on failure.
-        /// Loads and immediately unloads the document; avoid calling this in tight loops.
+        /// Uses a fast path that reads only the scene graph header without loading layer assets.
         /// </summary>
         public static int GetImmChapterCount(string path)
         {
@@ -75,19 +75,7 @@ namespace ImmStrokeReader
                 return 0;
             }
 
-            if (!TryLoadDocument(path, out int docId))
-            {
-                return 0;
-            }
-
-            try
-            {
-                return ImmPlayer.ImmStrokeReader.StrokeReader_GetChapterCount(docId);
-            }
-            finally
-            {
-                ImmPlayer.ImmStrokeReader.StrokeReader_Unload(docId);
-            }
+            return ImmPlayer.ImmStrokeReader.StrokeReader_GetChapterCountFromFile(path);
         }
 
         private static bool EnsureInitialized()
