@@ -652,4 +652,84 @@ namespace ImmImporter
         return ImportFromMemory(data, sq, log, colorSpace, renderingTechnique, nullptr);
     }
 
+    bool ImportSceneGraphOnly(Sequence* sq, piLog* log, const wchar_t* filename)
+    {
+        if (filename == nullptr)
+            return false;
+
+        piFile fp;
+        if (!fp.Open(filename, L"rb"))
+            return false;
+
+        piIStreamFile fstr(&fp, piIStreamFile::kDefaultFileSize);
+
+        Sequence::Type sqType = Sequence::Type::Still;
+        uint16_t sqCaps = 0;
+        int numChunks = 0;
+        bool done = false;
+
+        while (!done)
+        {
+            const uint64_t chunkSignature = fstr.ReadUInt64();
+            const uint64_t chunkSize = fstr.ReadUInt64();
+            const uint64_t currentOffset = fstr.Tell();
+            numChunks++;
+
+            if (numChunks == 1 && chunkSignature != kSig_Immersiv)
+            {
+                fp.Close();
+                return false;
+            }
+
+            if (chunkSignature == kSig_Immersiv)
+            {
+                const uint32_t version = fstr.ReadUInt32();
+                if (version != 0x00010001)
+                {
+                    fp.Close();
+                    return false;
+                }
+            }
+            else if (chunkSignature == kSig_CoordSys)
+            {
+                fstr.ReadUInt8(); // units
+                fstr.ReadUInt8(); // axes
+            }
+            else if (chunkSignature == kSig_Category)
+            {
+                const uint8_t type = fstr.ReadUInt8();
+                const uint8_t caps = fstr.ReadUInt8();
+                fstr.ReadUInt16(); // size
+
+                if (type >= static_cast<int>(Sequence::Type::COUNT))
+                {
+                    fp.Close();
+                    return false;
+                }
+
+                sqType = static_cast<Sequence::Type>(type);
+                sqCaps = static_cast<uint16_t>(caps);
+                fstr.ReadUInt8(); // axes
+            }
+            else if (chunkSignature == kSig_Sequence)
+            {
+                if (!iReadSceneGraph(&fstr, sq, log, sqType, sqCaps, Drawing::PaintRenderingTechnique::Static))
+                {
+                    fp.Close();
+                    return false;
+                }
+                done = true;
+            }
+            else
+            {
+                // Unknown chunk before Sequence - skip it
+            }
+
+            fstr.Seek(currentOffset + chunkSize, piIStreamArray::SeekMode::SET);
+        }
+
+        fp.Close();
+        return true;
+    }
+
 }

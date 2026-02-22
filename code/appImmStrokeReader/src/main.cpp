@@ -380,6 +380,30 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStroke
     return it->second->GetStrokeCount(layerIdx, drawingIdx);
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetChapterCountFromFile(char* fileName)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0;
+
+    if (fileName == nullptr || fileName[0] == '\0')
+        return 0;
+
+    Sequence seq;
+    if (!ImportSceneGraphOnly(&seq, &gStrokeReader.mLog, pistr2ws(fileName)))
+    {
+        return 0;
+    }
+
+    std::vector<piTick> chapterStartTimes;
+    ExtractChapterStartTimes(seq, &chapterStartTimes);
+    int count = static_cast<int>(chapterStartTimes.size());
+
+    seq.Deinit(&gStrokeReader.mLog);
+    return count;
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetChapterCount(int docId)
 {
     std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);

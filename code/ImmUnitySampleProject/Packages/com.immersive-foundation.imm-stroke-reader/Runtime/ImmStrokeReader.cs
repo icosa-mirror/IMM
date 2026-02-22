@@ -81,6 +81,9 @@ namespace ImmPlayer
         public static extern int StrokeReader_GetDocumentCount();
 
         [DllImport(DllName)]
+        public static extern int StrokeReader_GetChapterCountFromFile(string fileName);
+
+        [DllImport(DllName)]
         public static extern int StrokeReader_GetChapterCount(int docId);
 
         [DllImport(DllName)]
