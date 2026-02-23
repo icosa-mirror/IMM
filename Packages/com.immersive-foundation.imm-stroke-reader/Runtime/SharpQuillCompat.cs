@@ -51,7 +51,7 @@ namespace ImmStrokeReader
                         Debug.Log($"{LogPrefix}Selected chapter {chapterIndex} of {chapterCount} for '{path}'");
                     }
                 }
-                return ConvertDocument(docId, includePictures);
+                return ConvertDocument(docId, includePictures, chapterIndex);
             }
             finally
             {
@@ -141,7 +141,7 @@ namespace ImmStrokeReader
             return true;
         }
 
-        private static Sequence ConvertDocument(int docId, bool includePictures)
+        private static Sequence ConvertDocument(int docId, bool includePictures, int chapterIndex = -1)
         {
             Sequence sequence = Sequence.CreateDefault();
             if (sequence.RootLayer == null)
@@ -166,7 +166,7 @@ namespace ImmStrokeReader
 
                 Layer layer = isPicture
                     ? ConvertPictureLayer(docId, layerIdx, info)
-                    : ConvertPaintLayer(docId, layerIdx, info, ref maxStrokeId);
+                    : ConvertPaintLayer(docId, layerIdx, info, ref maxStrokeId, chapterIndex);
 
                 if (layer != null)
                 {
@@ -178,7 +178,7 @@ namespace ImmStrokeReader
             return sequence;
         }
 
-        private static LayerPaint ConvertPaintLayer(int docId, int layerIdx, StrokeLayerInfo info, ref uint maxStrokeId)
+        private static LayerPaint ConvertPaintLayer(int docId, int layerIdx, StrokeLayerInfo info, ref uint maxStrokeId, int chapterIndex = -1)
         {
             LayerPaint layer = new LayerPaint(info.name);
             ApplyCommonLayerProperties(layer, docId, layerIdx, info);
@@ -299,6 +299,17 @@ namespace ImmStrokeReader
                 // No drawings at all - add empty one
                 layer.Drawings.Add(new Drawing());
                 layer.Frames.Add(0);
+            }
+
+            // For chapter-specific loading, override Frames to point at the single
+            // drawing that corresponds to the requested chapter's start frame.
+            if (chapterIndex >= 0 && layer.Drawings.Count > 0)
+            {
+                int drawingIndex = ImmPlayer.ImmStrokeReader.StrokeReader_GetDrawingIndexForChapter(docId, layerIdx, chapterIndex);
+                if (drawingIndex < 0 || drawingIndex >= layer.Drawings.Count)
+                    drawingIndex = 0;
+                layer.Frames.Clear();
+                layer.Frames.Add(drawingIndex);
             }
 
             return layer;
