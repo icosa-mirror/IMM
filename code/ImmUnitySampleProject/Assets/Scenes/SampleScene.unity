@@ -376,8 +376,8 @@ MonoBehaviour:
   documentTransform: {fileID: 1009379717}
   applySpawnAreaToViewpoint: 1
   spawnAreaTargetTransform: {fileID: 2142085717}
-  keepCurrentViewHeightForFloorAreas: 1
-  constrainViewpointRotationToYawInXR: 1
+  keepCurrentViewHeightForFloorAreas: 0
+  constrainViewpointRotationToYawInXR: 0
   selectedLayerIndex: -1
   layerVisible: 1
   layerOpacity: 1
