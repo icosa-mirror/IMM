@@ -472,6 +472,43 @@ void StrokeStore::SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapt
     }
 }
 
+int StrokeStore::GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const
+{
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size())) return 0;
+    if (chapterIndex < 0 || chapterIndex >= GetChapterCount()) return 0;
+
+    const StoredLayer& layer = mDocument.layers[layerIdx];
+
+    if (layer.frameRate == 0 || layer.frameBuffer.empty()) return 0;
+
+    // A chapter is a pause point: the artwork is frozen at the END of the chapter
+    // (when the animation stops and waits for user input), not at the start.
+    // The end of chapter N is the start of chapter N+1. For the last chapter,
+    // use the final frame of the animation.
+    int64_t targetFrame;
+    int chapterCount = GetChapterCount();
+
+    if (chapterIndex + 1 < chapterCount)
+    {
+        ImmCore::piTick nextChapterTick = mDocument.chapterStartTimes[chapterIndex + 1];
+        targetFrame = ImmCore::piTick::ToFramesFloor(nextChapterTick, static_cast<int>(layer.frameRate));
+    }
+    else
+    {
+        targetFrame = static_cast<int64_t>(layer.frameBuffer.size()) - 1;
+    }
+
+    if (targetFrame < 0) targetFrame = 0;
+    if (targetFrame >= static_cast<int64_t>(layer.frameBuffer.size()))
+        targetFrame = static_cast<int64_t>(layer.frameBuffer.size()) - 1;
+
+    uint32_t drawingIndex = layer.frameBuffer[static_cast<size_t>(targetFrame)];
+    if (static_cast<int>(drawingIndex) >= static_cast<int>(layer.drawings.size()))
+        drawingIndex = 0;
+
+    return static_cast<int>(drawingIndex);
+}
+
 bool StrokeStore::GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount) const
 {
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))

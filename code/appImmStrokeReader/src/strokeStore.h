@@ -168,6 +168,7 @@ public:
     int GetCurrentChapter() const;
     bool SetCurrentChapter(int chapterIndex);
     void SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapterStartTimes);
+    int GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const;
 
     // Clear all stored data
     void Clear();

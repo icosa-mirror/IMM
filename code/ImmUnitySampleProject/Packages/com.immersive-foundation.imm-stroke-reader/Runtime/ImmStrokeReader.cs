@@ -94,6 +94,9 @@ namespace ImmPlayer
         public static extern bool StrokeReader_SetChapter(int docId, int chapterIndex);
 
         [DllImport(DllName)]
+        public static extern int StrokeReader_GetDrawingIndexForChapter(int docId, int layerIdx, int chapterIndex);
+
+        [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetLayerAnimationInfo(int docId, int layerIdx, out int frameRate, out int numFrames, out int maxRepeatCount);
 

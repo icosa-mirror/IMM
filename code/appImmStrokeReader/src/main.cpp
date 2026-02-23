@@ -446,6 +446,20 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_SetChapt
     return it->second->SetCurrentChapter(chapterIndex);
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawingIndexForChapter(int docId, int layerIdx, int chapterIndex)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0;
+
+    return it->second->GetDrawingIndexForChapter(layerIdx, chapterIndex);
+}
+
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerAnimationInfo(int docId, int layerIdx, int* frameRate, int* numFrames, int* maxRepeatCount)
 {
     std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
