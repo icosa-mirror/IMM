@@ -84,6 +84,7 @@ namespace ImmPlayer
         public bool selectedLayerVisibilityOverrideEnabled;
         public bool selectedLayerVisibilityOverrideValue;
 
+        public string currentFilePath;
         public ImmDocument.LayerInfo[] layers;
         public ImmDocument.SpawnAreaInfo[] spawnAreas;
         public LayerListEntry[] layerList;
@@ -259,6 +260,10 @@ namespace ImmPlayer
             if (_doc == null)
                 yield break;
 
+            currentFilePath = loadSource == LoadSource.StreamingAssets
+                ? Path.Combine(Application.streamingAssetsPath, selectedFileName)
+                : Path.Combine(directoryPath, selectedFileName);
+
             _isDocumentTransformDirty = true;
 
             if (autoPlay)
@@ -347,6 +352,7 @@ namespace ImmPlayer
 
             ImmPlayerManager.Instance.UnloadDocument(_doc);
             _doc = null;
+            currentFilePath = string.Empty;
         }
 
         public void RefreshStatus()

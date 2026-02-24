@@ -15,6 +15,7 @@ public class ImmFeatureExamplesEditor : Editor
         "loadOnStart",
         "autoPlay",
         "documentTransform",
+        "currentFilePath",
         "documentState",
         "documentInfoFlags",
         "chapterCount",
@@ -207,6 +208,7 @@ public class ImmFeatureExamplesEditor : Editor
 
         using (new EditorGUI.DisabledScope(true))
         {
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("currentFilePath"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("documentState"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("documentInfoFlags"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("chapterCount"));
