@@ -46,10 +46,6 @@ namespace ImmStrokeReader
                     {
                         Debug.LogWarning($"{LogPrefix}StrokeReader_SetChapter({chapterIndex}) failed, using default chapter");
                     }
-                    else
-                    {
-                        Debug.Log($"{LogPrefix}Selected chapter {chapterIndex} of {chapterCount} for '{path}'");
-                    }
                 }
                 return ConvertDocument(docId, includePictures, chapterIndex);
             }
