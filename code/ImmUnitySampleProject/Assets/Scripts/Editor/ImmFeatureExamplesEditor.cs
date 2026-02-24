@@ -262,25 +262,14 @@ public class ImmFeatureExamplesEditor : Editor
 
         using (new EditorGUI.DisabledScope(!Application.isPlaying))
         {
-            SerializedProperty loadSourceProp = serializedObject.FindProperty("loadSource");
-            bool isFileSystemMode = loadSourceProp.enumValueIndex == (int)ImmFeatureExamples.LoadSource.FileSystem;
-
-            using (new EditorGUI.DisabledScope(isFileSystemMode))
+            if (GUILayout.Button("Pick Random + Load"))
             {
-                if (GUILayout.Button("Pick Random + Load"))
-                {
-                    Undo.RecordObject(target, "Pick Random StreamingAssets File");
-                    bool selected = script.PickRandomStreamingAssetsFile();
-                    EditorUtility.SetDirty(target);
-                    serializedObject.Update();
-
-                    if (selected)
-                    {
-                        script.LoadDocument();
-                        script.RefreshStatus();
-                        Repaint();
-                    }
-                }
+                Undo.RecordObject(target, "Pick Random and Load");
+                script.PickRandomAndLoad();
+                EditorUtility.SetDirty(target);
+                serializedObject.Update();
+                script.RefreshStatus();
+                Repaint();
             }
 
             if (GUILayout.Button("Load Document"))

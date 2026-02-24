@@ -195,6 +195,43 @@ namespace ImmPlayer
             return true;
         }
 
+        public bool PickRandomFileSystemFile()
+        {
+            if (string.IsNullOrEmpty(directoryPath))
+            {
+                Debug.LogWarning($"{DiagPrefix}Directory path is empty");
+                return false;
+            }
+
+            if (!Directory.Exists(directoryPath))
+            {
+                Debug.LogWarning($"{DiagPrefix}Directory not found: {directoryPath}");
+                return false;
+            }
+
+            string[] immFiles = Directory.GetFiles(directoryPath, "*.imm");
+            if (immFiles.Length == 0)
+            {
+                Debug.LogWarning($"{DiagPrefix}No .imm files found in: {directoryPath}");
+                return false;
+            }
+
+            int fileIndex = Random.Range(0, immFiles.Length);
+            selectedFileName = Path.GetFileName(immFiles[fileIndex]);
+            Debug.Log($"{DiagPrefix}Selected random file system file: {selectedFileName}");
+            return true;
+        }
+
+        public void PickRandomAndLoad()
+        {
+            bool picked = loadSource == LoadSource.StreamingAssets
+                ? PickRandomStreamingAssetsFile()
+                : PickRandomFileSystemFile();
+
+            if (picked)
+                LoadDocument();
+        }
+
         private IEnumerator LoadDocumentCoroutine()
         {
             if (_doc != null)
