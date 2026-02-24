@@ -38,6 +38,10 @@ namespace ImmPlayer
         [SerializeField] private bool autoPlay = true;
         [SerializeField] private Transform documentTransform;
 
+        [Header("Background")]
+        [SerializeField] private bool applyDocumentBackgroundColor = false;
+        [SerializeField] private Camera backgroundCamera;
+
         [Header("Viewpoint")]
         [SerializeField] private bool applySpawnAreaToViewpoint = true;
         [SerializeField] private Transform spawnAreaTargetTransform;
@@ -428,6 +432,17 @@ namespace ImmPlayer
                 RefreshLayerList();
         }
 
+        private void ApplyDocumentBackgroundColor()
+        {
+            Camera cam = backgroundCamera != null ? backgroundCamera : Camera.main;
+            if (cam == null)
+                return;
+
+            var info = ImmPlayerManager.Instance.GetPlayerInfo();
+            cam.backgroundColor = info.BackgroundColor;
+            cam.clearFlags = CameraClearFlags.SolidColor;
+        }
+
         private IEnumerator ApplyInitialPlaybackState()
         {
             if (_doc == null)
@@ -444,6 +459,9 @@ namespace ImmPlayer
 
             if (_doc == null)
                 yield break;
+
+            if (applyDocumentBackgroundColor)
+                ApplyDocumentBackgroundColor();
 
             if (autoPlay)
             {

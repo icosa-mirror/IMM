@@ -376,7 +376,7 @@ namespace ImmPlayer
             }
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
-            bool renderIntoTexture = cam.cameraType == CameraType.SceneView;
+            bool renderIntoTexture = true; // TEST: was cam.cameraType == CameraType.SceneView
             Matrix4x4 headProjection = cam.nonJitteredProjectionMatrix;
             ConvertMatrixToArray(info.HeadProj, GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture));
 
@@ -428,7 +428,7 @@ namespace ImmPlayer
                 return;
 
             Matrix4x4 worldToCamera = camera.worldToCameraMatrix;
-            bool renderIntoTexture = camera.cameraType == CameraType.SceneView;
+            bool renderIntoTexture = true; // TEST: was camera.cameraType == CameraType.SceneView
             Matrix4x4 projection = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, renderIntoTexture);
 
             float[] world2head = MatrixToFloatArray(worldToCamera);

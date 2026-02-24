@@ -374,6 +374,8 @@ MonoBehaviour:
   loadOnStart: 1
   autoPlay: 1
   documentTransform: {fileID: 1009379717}
+  applyDocumentBackgroundColor: 1
+  backgroundCamera: {fileID: 963194227}
   applySpawnAreaToViewpoint: 1
   spawnAreaTargetTransform: {fileID: 2142085717}
   keepCurrentViewHeightForFloorAreas: 0

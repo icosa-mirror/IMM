@@ -388,13 +388,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   loadSource: 1
-  directoryPath:
+  directoryPath: 
   selectedFileName: sample1.imm
   loadOnStart: 1
   autoPlay: 1
-  documentTransform: {fileID: 0}
+  documentTransform: {fileID: 1009379717}
+  applyDocumentBackgroundColor: 1
+  backgroundCamera: {fileID: 963194227}
   applySpawnAreaToViewpoint: 1
-  spawnAreaTargetTransform: {fileID: 0}
+  spawnAreaTargetTransform: {fileID: 2142085717}
   keepCurrentViewHeightForFloorAreas: 1
   constrainViewpointRotationToYawInXR: 1
   selectedLayerIndex: -1
