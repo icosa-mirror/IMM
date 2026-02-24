@@ -1,4 +1,7 @@
 
+> **Before building:** see [`BUILDING.md`](BUILDING.md) for a concise reference.
+> Key rules: always build via the **solution file** (not individual `.vcxproj`); use **PowerShell/cmd** or `-p:` flags in bash.
+
 # About this fork
 
 This fork is a version of the IMM code base with the dependencies vendored in and committed. This is to have a reference snapshot of a reproducible build for the Windows IMM player, as some of the dependencies may become hard to find in the future. 
@@ -129,15 +132,25 @@ The destinations are:
 
 ### Windows (Visual Studio / MSBuild)
 
-Build the Windows solution:
+**Always build via the solution file, not individual `.vcxproj` files.** The projects use
+`$(SolutionDir)` in their include paths; building a standalone `.vcxproj` leaves that variable
+undefined and causes header-not-found errors.
+
+Run from **PowerShell or cmd.exe** (not bash — bash strips leading `/` from MSBuild flags):
 
 ```powershell
-msbuild code/projects/windows/imm.sln /p:Configuration=Release /p:Platform=x64 /m
+msbuild code\projects\windows\imm.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+
+If you are in a bash shell (Git Bash, WSL, etc.), use `-p:` instead of `/p:`:
+
+```bash
+msbuild "code/projects/windows/imm.sln" -p:Configuration=Release -p:Platform=x64 -m
 ```
 
 This builds and auto-copies:
-- `ImmUnityPlugin.dll` → `Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
-- `ImmStrokeReader.dll` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
+- `ImmUnityPlugin.dll` → `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
+- `ImmStrokeReader.dll` → `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
 
 ### macOS (CMake)
 
@@ -147,7 +160,7 @@ cmake --build build/macos --target ImmStrokeReader --config Release
 ```
 
 This builds and auto-copies:
-- `libImmStrokeReader.dylib` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS`
+- `libImmStrokeReader.dylib` → `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS`
 
 Note: the ImmUnity macOS bundle copy is also wired, but the macOS ImmUnity build is currently disabled in CI.
 
@@ -162,7 +175,7 @@ cmake --build build/ios --target ImmStrokeReader --config Release
 ```
 
 This builds and auto-copies:
-- `libImmStrokeReader.a` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS`
+- `libImmStrokeReader.a` → `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS`
 
 ### Android (Gradle)
 
@@ -173,5 +186,33 @@ cd code/projects/android
 ```
 
 This builds and auto-copies:
-- `libImmUnityPlugin.so` → `Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a`
-- `libImmStrokeReader.so` → `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/Android/arm64-v8a`
+- `libImmUnityPlugin.so` → `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a`
+- `libImmStrokeReader.so` → `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/Android/arm64-v8a`
+
+### Testing changes in a downstream project (e.g. open-brush-fast)
+
+When open-brush-fast (or any other project) references this package from GitHub, Unity caches
+it under `Library/PackageCache/com.immersive-foundation.imm-stroke-reader@<hash>/`. To test
+local C++ or C# changes in that project without publishing to GitHub:
+
+1. **Build the DLL** as above. The auto-copy puts the new DLL into
+   `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll`.
+
+2. **Copy the DLL** into the downstream project's package cache:
+   ```powershell
+   copy code\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-stroke-reader\Plugins\x86_64\ImmStrokeReader.dll
+        <downstream-project>\Library\PackageCache\com.immersive-foundation.imm-stroke-reader@<hash>\Plugins\x86_64\ImmStrokeReader.dll
+   ```
+   Replace `<hash>` with the 10-character hash shown in the `Library/PackageCache` folder name.
+
+3. **Copy any changed C# files** (e.g. `SharpQuillCompat.cs`, `ImmStrokeReader.cs`) from
+   `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime/`
+   to the corresponding path under `Library/PackageCache/...@<hash>/Runtime/`.
+
+4. **Give Unity focus** so it recompiles the scripts. No package refresh is needed — Unity
+   watches files in `Library/PackageCache` directly.
+
+Note: `Library/PackageCache` is a Unity-managed directory. Unity may overwrite your changes
+if it re-resolves the package (e.g. after editing `manifest.json` or running
+`Assets > Reimport All`). The permanent fix is to publish the changes to the GitHub `upm`
+branch and bump the version.
