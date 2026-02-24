@@ -425,7 +425,7 @@ namespace ImmPlayer
 
         private IEnumerator WaitForSequenceAndRefreshLayers()
         {
-            while (_doc != null && !_doc.IsSequenceReady())
+            while (_doc != null && _doc.GetStateInfo().Loading != ImmDocument.LoadingState.Loaded)
                 yield return null;
 
             if (_doc != null)
