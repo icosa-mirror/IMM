@@ -363,9 +363,11 @@ namespace ImmStrokeReader
             layer.Opacity = info.opacity;
             layer.Pivot = ConvertPivot(info);
 
-            if (ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerTransform(docId, layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform _))
+            // All IMM layers are placed as direct children of the sequence root (hierarchy is flattened).
+            // Use the world transform so that ancestor transforms are correctly included.
+            if (ImmPlayer.ImmStrokeReader.StrokeReader_GetLayerTransform(docId, layerIdx, out StrokeLayerTransform _, out StrokeLayerTransform world))
             {
-                layer.Transform = ConvertTransform(local);
+                layer.Transform = ConvertTransform(world);
             }
             else
             {
