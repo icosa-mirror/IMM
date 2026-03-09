@@ -64,6 +64,7 @@ jobs:
         Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
+        Copy-Item docs/viewer_readme.md $staging/README.md
 
     - name: Package Viewer Artifact (VR)
       shell: pwsh
@@ -74,6 +75,7 @@ jobs:
         Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
+        Copy-Item docs/viewer_readme.md $staging/README.md
         $settingsPath = Join-Path $staging "settings.json"
         $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
         $json.Rendering.EnableVR = $true
