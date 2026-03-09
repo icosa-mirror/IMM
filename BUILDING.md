@@ -16,9 +16,17 @@ In bash (Git Bash, WSL): use `-p:` not `/p:` — bash strips leading `/` from fl
 msbuild "code/projects/windows/imm.sln" -p:Configuration=Release -p:Platform=x64 -m
 ```
 
-The build auto-copies the output DLL to:
+Each target auto-copies its output DLL to the corresponding UPM package:
+
+| Target | Output DLL location |
+|--------|---------------------|
+| `appImmUnity` | `…/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll` |
+| `appImmStrokeReader` | `…/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll` |
+| `appImmStrokeWriter` | `…/com.immersive-foundation.imm-stroke-writer/Plugins/x86_64/ImmStrokeWriter.dll` |
+
+To build a single plugin, pass `-t:<target>`:
 ```
-code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll
+msbuild "code/projects/windows/imm.sln" -t:appImmStrokeWriter -p:Configuration=Release -p:Platform=x64 -m
 ```
 
 See `README.md` for macOS, iOS, and Android build instructions.
@@ -27,9 +35,12 @@ See `README.md` for macOS, iOS, and Android build instructions.
 
 | What to change | File |
 |---|---|
-| New native API function | `code/appImmStrokeReader/src/main.cpp`, `strokeStore.cpp`, `strokeStore.h` |
-| C# P/Invoke bindings | `code/ImmUnitySampleProject/Packages/.../Runtime/ImmStrokeReader.cs` |
-| IMM→SharpQuill conversion | `code/ImmUnitySampleProject/Packages/.../Runtime/SharpQuillCompat.cs` |
+| Reader native API | `code/appImmStrokeReader/src/main.cpp`, `strokeStore.cpp`, `strokeStore.h` |
+| Reader C# bindings | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime/ImmStrokeReader.cs` |
+| Reader IMM→SharpQuill | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime/SharpQuillCompat.cs` |
+| Writer native API | `code/appImmStrokeWriter/src/main.cpp` |
+| Writer C# bindings | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-writer/Runtime/ImmStrokeWriter.cs` |
+| Writer high-level API | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-writer/Runtime/ImmStrokeWriterDocument.cs` |
 
 ## Publishing changes
 
