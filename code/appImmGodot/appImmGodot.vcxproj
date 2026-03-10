@@ -12,19 +12,15 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\appImmShared\src\imm_engine_bridge.h" />
-    <ClInclude Include="src\IUnityGraphicsD3D11.h" />
-    <ClInclude Include="src\IUnityGraphicsD3D12.h" />
-    <ClInclude Include="src\IUnityInterface.h" />
-    <ClInclude Include="src\IUnityGraphics.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\appImmShared\src\imm_engine_bridge.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="..\appImmShared\src\imm_engine_bridge.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectName>appImmUnity</ProjectName>
-    <ProjectGuid>{F7CFEF5A-54BD-42E8-A59E-54ABAEB4EA9C}</ProjectGuid>
-    <RootNamespace>appImmUnity</RootNamespace>
+    <ProjectName>appImmGodot</ProjectName>
+    <ProjectGuid>{D4A2B760-58A7-4A0D-9E01-4A3E7BEE7B8C}</ProjectGuid>
+    <RootNamespace>appImmGodot</RootNamespace>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -70,67 +66,42 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>exe\</OutDir>
-    <TargetName>ImmUnityPlugin</TargetName>
+    <TargetName>ImmGodotPlugin</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>exe\</OutDir>
-    <TargetName>ImmUnityPlugin</TargetName>
+    <TargetName>ImmGodotPlugin</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;RENDERINGPLUGIN_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <DelayLoadDLLs>zlib1.dll;jpeg62.dll;libpng16.dll;ogg.dll;vorbis.dll;vorbisenc.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
       <AdditionalLibraryDirectories>$(IMM_ZLibLibDir);$(IMM_JPGLibDir);$(IMM_PNGLibDir);$(IMM_Audio360LibDir);$(IMM_OPUSENCLibDir);$(IMM_OPUSLibDir);$(IMM_OGGLibDir);$(IMM_VorbisLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
-    <PostBuildEvent>
-      <Command>echo Copying ImmUnityPlugin.dll to Unity sample project...
-copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll"
-if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
-    </PostBuildEvent>
-    <FxCompile>
-      <ShaderModel>4.0_level_9_3</ShaderModel>
-      <VariableName>%(Filename)</VariableName>
-      <HeaderFileOutput>src/tmp/%(Filename).inc</HeaderFileOutput>
-      <ObjectFileOutput>$(IntDir)/%(Filename).sho</ObjectFileOutput>
-    </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;RENDERINGPLUGIN_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <PrecompiledHeader>
-      </PrecompiledHeader>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\</AdditionalIncludeDirectories>
       <DebugInformationFormat>None</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <DelayLoadDLLs>zlib1.dll;jpeg62.dll;libpng16.dll;ogg.dll;vorbis.dll;vorbisenc.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
       <AdditionalLibraryDirectories>$(IMM_ZLibLibDir);$(IMM_JPGLibDir);$(IMM_PNGLibDir);$(IMM_Audio360LibDir);$(IMM_OPUSENCLibDir);$(IMM_OPUSLibDir);$(IMM_OGGLibDir);$(IMM_VorbisLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
-    <PostBuildEvent>
-      <Command>echo Copying ImmUnityPlugin.dll to Unity sample project...
-copy /Y "$(TargetPath)" "$(ProjectDir)..\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll"
-if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not exist)</Command>
-    </PostBuildEvent>
-    <FxCompile>
-      <HeaderFileOutput>src/tmp/%(Filename).inc</HeaderFileOutput>
-      <ObjectFileOutput>$(IntDir)/%(Filename).sho</ObjectFileOutput>
-      <VariableName>%(Filename)</VariableName>
-      <AdditionalOptions>/Qstrip_debug /Qstrip_priv /Qstrip_reflect</AdditionalOptions>
-      <ShaderModel>4.0_level_9_3</ShaderModel>
-    </FxCompile>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

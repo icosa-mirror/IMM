@@ -78,6 +78,7 @@
 #define VERBOSE 0
 
 
+#include "appImmShared/src/imm_engine_bridge.h"
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
@@ -172,47 +173,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID)
 }
 #endif
 
-// ----------------------------------------------------------------------------------------------------------------------------------------------------
-class MainRenderReporter : public piRenderer::piReporter
-{
-private:
-	piLog* mLog;
-
-public:
-	MainRenderReporter(piLog* log) : piRenderer::piReporter() { mLog = log; }
-	virtual ~MainRenderReporter() {}
-	void Info(const char* str)
-	{
-		piString wstr;
-		wstr.InitCopyS(str);
-		mLog->Printf(LT_MESSAGE, L"%s", wstr.GetS());
-		wstr.End();
-	}
-	void Error(const char* str, int level)
-	{
-		piString wstr;
-		wstr.InitCopyS(str);
-		mLog->Printf(LT_ERROR, L"%s", wstr.GetS());
-		wstr.End();
-	}
-	void Begin(uint64_t memCurrent, uint64_t memPeak, int texCurrent, int texPeak)
-	{
-		mLog->Printf(LT_MESSAGE, L"---- Renderer Report ---- ");
-		mLog->Printf(LT_MESSAGE, L"Peak: %d MB in %d textures", memPeak >> 20, texPeak);
-		mLog->Printf(LT_MESSAGE, L"Curr: %d MB in %d textures", memCurrent >> 20, texCurrent);
-	}
-	void End(void)
-	{
-		mLog->Printf(LT_MESSAGE, L"---- Renderer Report ---- ");
-	}
-	void Texture(const wchar_t* key, uint64_t kb, piRenderer::Format format, bool compressed, int xres, int yres, int zres)
-	{
-		mLog->Printf(LT_MESSAGE, L"* Texture: %5d kb, %4d x %4d x %4d %2d (%s)", (int)kb, xres, yres, zres, format,
-			(key == nullptr) ? L"null" : key);
-	}
-};
-
-// We create ONE of these per Unity process
 struct ImmUnityPlugin
 {
 	//----------------------------
@@ -222,45 +182,26 @@ struct ImmUnityPlugin
 	{
 		IUnityInterfaces * mUnityInterfaces = nullptr;
 		IUnityGraphics   * mGraphics = nullptr;
-		void             * mDevice;
+		void             * mDevice = nullptr;
 	}UnityAPI;
 
-	//----------------------------
-	// Provided info from Unity
-	//----------------------------
-	struct
-	{
-		struct
-		{
-			int          mStereoType;    // 0=mono, 1=two pass, 2=single pass
-			int          mCurrentEye;
-			mat4x4       mWorld2Head;
-			mat4x4       mWorld2LEye;
-			mat4x4       mWorld2REye;
-			mat4x4       mHeadProjection;
-			mat4x4       mLEyeProjection;
-			mat4x4       mREyeProjection;
-		}mCamera[256];
-	}FromUnity;
-
-	//----------------------------
-	// IMM classes
-	//----------------------------
-	struct
-	{
-		piRenderer * mRenderer;
-		MainRenderReporter *mRenderReporter;
-		piLog        mLog;
-        piSoundEngineBackend* mSoundBackend;
-		piTimer      mTimer;
-		Player       mPlayer; // actual player.
-	}IMM;
+    ImmShared::ImmEngineBridge mBridge;
 };
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------
 
 // this is the only global data structure, live cycle is plugin load/unload
 static ImmUnityPlugin gImmUnityPlugin;
+
+static Player &iPlayer()
+{
+    return *gImmUnityPlugin.mBridge.GetPlayer();
+}
+
+static piLog &iLog()
+{
+    return *gImmUnityPlugin.mBridge.GetLog();
+}
 
 #if defined(__ANDROID__) || defined(ANDROID)
 // Deferred initialization for Android - renderer must be initialized on render thread
@@ -275,32 +216,14 @@ static struct {
 static bool AndroidCompleteInit() {
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "AndroidCompleteInit - completing deferred init on render thread");
 
-__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing GLES renderer...");
-	if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 1, false, false, gImmUnityPlugin.IMM.mRenderReporter, false, nullptr))
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing GLES renderer...");
+	if (!gImmUnityPlugin.mBridge.CompleteGraphicsInitialization())
 	{
 		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to initialize GLES renderer in deferred init");
 		return false;
 	}
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
-
-	// PLAYER
-	Player::Configuration conf;
-	conf.colorSpace = Drawing::ColorSpace::Gamma;
-	conf.depthBuffer = DepthBuffer::Linear01;
-	conf.clipDepth = ClipSpaceDepth::FromNegativeOneToOne;
-	conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
-	conf.frontIsCCW = false;
-	conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "[IMMDBG_RENDER_20260211A] Android conf: depth=Linear01 clip=-1..1 proj=-1..1 frontIsCCW=%d", conf.frontIsCCW ? 1 : 0);
-
-__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing ImmPlayer...");
-	if (!gImmUnityPlugin.IMM.mPlayer.Init(gImmUnityPlugin.IMM.mRenderer, gImmUnityPlugin.IMM.mSoundBackend->GetEngine(), &gImmUnityPlugin.IMM.mLog, &gImmUnityPlugin.IMM.mTimer, &conf))
-	{
-		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to initialize ImmPlayer in deferred init");
-		gImmUnityPlugin.IMM.mRenderer->Deinitialize();
-		return false;
-	}
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
 
@@ -336,7 +259,6 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 		if (apiType == kUnityGfxRendererOpenGLES30)
 		{
 			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
-			gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"kUnityGfxDeviceEventInitialize using OpenGL ES 3.0 device");
 		}
 #else
 		if (apiType == kUnityGfxRendererOpenGLCore)
@@ -394,7 +316,11 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 #endif
 	int numVp = 1;
 	float oldVp[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f };
-	gImmUnityPlugin.IMM.mRenderer->GetViewports(&numVp, oldVp);
+	piRenderer *renderer = gImmUnityPlugin.mBridge.GetRenderer();
+	if (renderer == nullptr)
+		return;
+
+	renderer->GetViewports(&numVp, oldVp);
 
 #if defined(__ANDROID__) || defined(ANDROID)
 	GLint glViewport[4] = { 0, 0, 0, 0 };
@@ -409,18 +335,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 
 //const int eventType = (event_id >> 0) & 0xff;
 	const int cameraID  = (event_id >> 8) & 0xff;
-	
-	// Safety check: ensure cameraID is valid before accessing camera data
-	if (cameraID < 0 || cameraID >= 256) {
-		#if defined(__ANDROID__) || defined(ANDROID)
-		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid cameraID: %d", cameraID);
-		#else
-		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid cameraID: %d", cameraID);
-		#endif
-		return;
-	}
-	
-	const int stereoType = gImmUnityPlugin.FromUnity.mCamera[cameraID].mStereoType;
 	const ivec2 res = ivec2(int(oldVp[2]), int(oldVp[3]));
 	if (res.x <= 0 || res.y <= 0)
 	{
@@ -431,90 +345,15 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	}
 
 #if defined(__ANDROID__) || defined(ANDROID)
-	const int viewport[4] = { int(oldVp[0]), int(oldVp[1]), res.x, res.y };
-	gImmUnityPlugin.IMM.mRenderer->SetViewport(0, viewport);
 	glDisable(GL_SCISSOR_TEST);
 #endif
 
-	if (stereoType == 0) // mono
-	{
-		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-		           fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-			gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::None);
-		gImmUnityPlugin.IMM.mPlayer.RenderMono(res,0);
-	}
-else if (stereoType == 1) // two pass stereo
-	{
-		const int eyeID = event_id & 1;
-		
-		// Safety check: ensure eyeID is valid
-		if (eyeID < 0 || eyeID > 1) {
-			#if defined(__ANDROID__) || defined(ANDROID)
-			__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid eyeID: %d", eyeID);
-			#else
-			gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid eyeID: %d", eyeID);
-			#endif
-			return;
-		}
-
-        	gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-             fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-             gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Fallback);
-
-		if (eyeID == 0) // left eye
-		{
-			const mat4x4d head_to_lEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2LEye) *
-                invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
-			gImmUnityPlugin.IMM.mPlayer.RenderStereoMultiPass(res, 0,
-				head_to_lEye,
-				gImmUnityPlugin.FromUnity.mCamera[cameraID].mLEyeProjection);
-		}
-		else // right eye
-		{
-			const mat4x4d head_to_rEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2REye) *
-                invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
-
-			gImmUnityPlugin.IMM.mPlayer.RenderStereoMultiPass(res, 1,
-				head_to_rEye,
-				gImmUnityPlugin.FromUnity.mCamera[cameraID].mREyeProjection);
-		}
-	}
-	else if (stereoType == 2) // single pass stereo
-	{
-        //gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Single pass rendering...");
-
-		// This all block here is a hack to fix the funny behavior of Unity in SinglePass stereo.
-		//
-		// Even if the render target is 2x the size to accommodate the left and right eyes, Unity
-		// will set the viewport to only cover the left eye. From an email response from Scorr Bassett:
-		//
-		//   "That behavior is correct.The single - pass mode that you are using does the following :
-		//
-		//    1. Set viewport to the left
-		// 	  2. Issue Draw
-		// 	  3. Set viewport to the right(internal)
-		// 	  4. Issue Draw(internal)
-		//
-		//    Therefore the viewport size will never be the full size.Since you are using a plug - in
-		//    and doing your own thing we don't handle that. It's up to you to change the viewport and
-		//    restore it afterwards."
-		//
-		// So there we go. In my case, I make the Imm Player left and right eyes in a single GPU geometry pass,
-		// so I have to set the viewport to the corret 2X size here, then restore it.
-		const float newVp[6] = { oldVp[0], oldVp[1], oldVp[2]*2.0f, oldVp[3], oldVp[4], oldVp[5] };
-		gImmUnityPlugin.IMM.mRenderer->SetViewports(1, newVp);
-
-		//const mat4x4d flz = mat4x4d(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-
-		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Preferred);
-		const mat4x4d head_to_lEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2LEye) * invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
-		const mat4x4d head_to_rEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2REye) * invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
-		gImmUnityPlugin.IMM.mPlayer.RenderStereoSinglePass( res, head_to_lEye, gImmUnityPlugin.FromUnity.mCamera[cameraID].mLEyeProjection,
- 			                                                          head_to_rEye, gImmUnityPlugin.FromUnity.mCamera[cameraID].mREyeProjection);
-		gImmUnityPlugin.IMM.mRenderer->SetViewports(1, oldVp);
-	}
-    gImmUnityPlugin.IMM.mSoundBackend->Tick();
-
+    const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
+        oldVp[0], oldVp[1], oldVp[2], oldVp[3], oldVp[4], oldVp[5],
+        true
+    };
+    const int eyeID = event_id & 1;
+    gImmUnityPlugin.mBridge.RenderCamera(cameraID, viewport, eyeID, true);
 }
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -544,10 +383,13 @@ extern "C" UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRen
 
 extern "C" void UNITY_INTERFACE_EXPORT Debug()
 {
-	if(gImmUnityPlugin.IMM.mRenderer == nullptr)
-        gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Renderer has not initialized");
+    if (!gImmUnityPlugin.mBridge.IsInitialized())
+        return;
+
+	if(gImmUnityPlugin.mBridge.GetRenderer() == nullptr)
+        gImmUnityPlugin.mBridge.GetLog()->Printf(LT_DEBUG, L"Renderer has not initialized");
     else
-        gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Renderer has initialized");
+        gImmUnityPlugin.mBridge.GetLog()->Printf(LT_DEBUG, L"Renderer has initialized");
 
 }
 
@@ -567,7 +409,7 @@ static trans3d iUnityToTrans3d(const float *m)
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWork(int enabled)
 {
-    gImmUnityPlugin.IMM.mPlayer.GlobalWork(enabled == 1, 9000);
+    gImmUnityPlugin.mBridge.GlobalWork(enabled == 1, 9000);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetMatrices( int cameraID, int stereoType,
@@ -577,15 +419,21 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetMatrices( int came
 {
 	if (cameraID > 255)return;
 
-	gImmUnityPlugin.FromUnity.mCamera[cameraID].mStereoType = stereoType;
-	gImmUnityPlugin.FromUnity.mCamera[cameraID].mCurrentEye = 0;
+    const mat4x4 head = (world2head != nullptr) ? iUnityToPilibs(world2head) : mat4x4();
+    const mat4x4 left = (world2leye != nullptr) ? iUnityToPilibs(world2leye) : mat4x4();
+    const mat4x4 right = (world2reye != nullptr) ? iUnityToPilibs(world2reye) : mat4x4();
+    const mat4x4 headPrj = (prjHead != nullptr) ? iUnityToPilibs(prjHead) : mat4x4();
+    const mat4x4 leftPrj = (prjLeft != nullptr) ? iUnityToPilibs(prjLeft) : mat4x4();
+    const mat4x4 rightPrj = (prjRight != nullptr) ? iUnityToPilibs(prjRight) : mat4x4();
 
-	if(world2head !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head = iUnityToPilibs(world2head);
-	if(world2leye != nullptr) gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2LEye = iUnityToPilibs(world2leye);
-	if(world2reye != nullptr) gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2REye = iUnityToPilibs(world2reye);
-	if(prjHead    !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection = iUnityToPilibs(prjHead);
-	if(prjLeft    !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mLEyeProjection = iUnityToPilibs(prjLeft);
-	if(prjRight   !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mREyeProjection = iUnityToPilibs(prjRight);
+    gImmUnityPlugin.mBridge.SetCameraMatrices(cameraID,
+                                              stereoType,
+                                              (world2head != nullptr) ? &head : nullptr,
+                                              (prjHead != nullptr) ? &headPrj : nullptr,
+                                              (world2leye != nullptr) ? &left : nullptr,
+                                              (prjLeft != nullptr) ? &leftPrj : nullptr,
+                                              (world2reye != nullptr) ? &right : nullptr,
+                                              (prjRight != nullptr) ? &rightPrj : nullptr);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, // 0=linear 1=gamma
@@ -593,194 +441,75 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 											char *logFileName,
 											char *tmpFolferName)
 {
-	const wchar_t *wstrLogFileName = (logFileName == nullptr) ? L"imm_player_log.txt" : pistr2ws(logFileName);
+    ImmShared::ImmEngineBridge::InitConfig config = {};
+    config.colorSpace = colorSpace;
+    config.antialiasing = antialiasing;
+    config.logFileName = logFileName;
+    config.tmpFolderName = tmpFolferName;
 
 #if defined(__ANDROID__) || defined(ANDROID)
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init called - colorSpace=%d, antialiasing=%d", colorSpace, antialiasing);
-#else // !ANDROID
-	#ifdef _DEBUG
-	if (!gImmUnityPlugin.IMM.mLog.Init(wstrLogFileName, PILOG_TXT + PILOG_CNS))
-	#else
-	if (!gImmUnityPlugin.IMM.mLog.Init(wstrLogFileName, PILOG_TXT))
-	#endif
-		return -1;
-	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, colorSpace == 0 ? L"Linear": L"Gamma");
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Antialiasing: %d", antialiasing);
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Log File: %s", wstrLogFileName);
-#endif // ANDROID
-
-	if (!gImmUnityPlugin.IMM.mTimer.Init())
-	{
-#if defined(__ANDROID__) || defined(ANDROID)
-		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Timer init failed");
-#endif
-		return -1;
-	}
-#if defined(__ANDROID__) || defined(ANDROID)
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Timer initialized");
-#endif
-
-    // SOUND ENGINE
-#if defined(__ANDROID__) || defined(ANDROID)
-    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Android,&gImmUnityPlugin.IMM.mLog);
-    __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Sound backend created (Android)");
+    config.rendererApi = piRenderer::API::GLES;
+    config.initializeRendererOnInit = false;
+    config.initializeDisplay = 1;
 #elif defined(WINDOWS)
-    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
+    config.rendererApi = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
+    config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
+    config.initializeRendererOnInit = true;
+    config.initializeFullscreen = true;
 #else
-    gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
-#endif
-
-    if(!gImmUnityPlugin.IMM.mSoundBackend)
-        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to create SoundBackend.");
-    else
-		gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"SoundBackend created successfully.");
-
-    // start with the default sound device
-    int deviceID = -1;
-    // but try to find a "Rift" sound device
+    UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
+    if (gfx != kUnityGfxRendererOpenGLCore)
     {
-        const int num = gImmUnityPlugin.IMM.mSoundBackend->GetNumDevices();
-        for (int i = 0; i < num; i++)
-        {
-            const wchar_t * deviceName = gImmUnityPlugin.IMM.mSoundBackend->GetDeviceName(i);
-            if (piwstrcontains(deviceName, L"Rift"))
-            {
-                deviceID = i;
-                break;
-            }
-
-        }
-    }
-    piSoundEngineBackend::Configuration config;
-    config.mTempPath = tmpFolferName;
-
-    if (!gImmUnityPlugin.IMM.mSoundBackend->Init(nullptr, deviceID, &config))
-    {
-		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to initialize SoundBackend.");
         return -1;
     }
-	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"SoundBackend initialized successfully.");
-
-    // RENDERER
-	const char* apiName[] = {"GL", "DX", "GLES"};
-
-#if defined(__ANDROID__) || defined(ANDROID)
-	const piRenderer::API api = piRenderer::API::GLES;
-	gImmUnityPlugin.IMM.mRenderReporter = nullptr;
-#elif defined(WINDOWS)
-	const piRenderer::API api = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
-	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
-#else
-	UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
-	if (gfx != kUnityGfxRendererOpenGLCore)
-	{
-		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unsupported renderer on macOS. Expected OpenGL Core.");
-		return -1;
-	}
-	const piRenderer::API api = piRenderer::API::GL;
-	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
-#endif
-	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"API: %s", pistr2ws(apiName[static_cast<int>(api)]));
-
-	gImmUnityPlugin.IMM.mRenderer = piRenderer::Create(api);
-    if (!gImmUnityPlugin.IMM.mRenderer)
-    {
-        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to create Renderer.");
-#if defined(__ANDROID__) || defined(ANDROID)
-		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to create GLES renderer");
-#endif
-		return -1;
-    }
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Renderer created successfully");
-#if defined(__ANDROID__) || defined(ANDROID)
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer created");
+    config.rendererApi = piRenderer::API::GL;
+    config.initializeRendererOnInit = true;
 #endif
 
-#if defined(__ANDROID__) || defined(ANDROID)
-	// On Android, defer renderer and player init to render thread (first iOnRenderEvent call)
-	// because GL context is not available on this thread
-	sAndroidDeferredInit.colorSpace = colorSpace;
-	sAndroidDeferredInit.antialiasing = antialiasing;
-	sAndroidDeferredInit.needsInit = true;
-	sAndroidDeferredInit.isInitialized = false;
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - renderer init deferred to render thread");
-	return 0;
-#else
-    if (!gImmUnityPlugin.IMM.mRenderer->Initialize(0, nullptr, 0, true, false, gImmUnityPlugin.IMM.mRenderReporter, false, gImmUnityPlugin.UnityAPI.mDevice))
-    {
-        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to initialize Renderer.");
+    if (!gImmUnityPlugin.mBridge.Init(config))
         return -1;
-    }
-	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Renderer initialized successfully.");
 
-	// PLAYER
-    Player::Configuration conf;
-    conf.colorSpace = static_cast<Drawing::ColorSpace>(colorSpace);
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"ColorSpace: %s", conf.colorSpace == Drawing::ColorSpace::Gamma ? L"Gamma" : L"Linear" );
-
-    conf.multisamplingLevel = antialiasing;
-    // NOTE. THESE SHOULD BE PASSED IN THE INIT OF THE DLL. But for now we hardcode it her since our only clients are Unity in DX or GLES modes
-    conf.depthBuffer      = (api == piRenderer::API::DX) ? DepthBuffer::Linear10         : DepthBuffer::Linear01;
-    conf.clipDepth        = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-    conf.projectionMatrix = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-    conf.frontIsCCW       = (api == piRenderer::API::DX) ? false                         : true;
-    conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Rending in Static mode");
-
-    if (!gImmUnityPlugin.IMM.mPlayer.Init(gImmUnityPlugin.IMM.mRenderer, gImmUnityPlugin.IMM.mSoundBackend->GetEngine(), &gImmUnityPlugin.IMM.mLog, &gImmUnityPlugin.IMM.mTimer, &conf))
-	{
-        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Failed to initialize ImmPlayer.");
-		gImmUnityPlugin.IMM.mSoundBackend->Deinit();
-		gImmUnityPlugin.IMM.mRenderer->Deinitialize();
-		gImmUnityPlugin.IMM.mLog.End();
-		gImmUnityPlugin.IMM.mTimer.End();
-		return -2;
-	}
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"IMMl Player initialized successfully.");
-
-	return 0;
+#if defined(__ANDROID__) || defined(ANDROID)
+    sAndroidDeferredInit.colorSpace = colorSpace;
+    sAndroidDeferredInit.antialiasing = antialiasing;
+    sAndroidDeferredInit.needsInit = true;
+    sAndroidDeferredInit.isInitialized = false;
+    __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - renderer init deferred to render thread");
 #endif
+    return 0;
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT End(void)
 {
-    gImmUnityPlugin.IMM.mPlayer.UnloadAllSync();
-    //gImmUnityPlugin.IMM.mPlayer.GlobalWork(0,9000);
-    gImmUnityPlugin.IMM.mPlayer.Deinit();
-    gImmUnityPlugin.IMM.mRenderer->Deinitialize();
-
-    gImmUnityPlugin.IMM.mSoundBackend->Deinit();
-    piDestroySoundEngineBackend(gImmUnityPlugin.IMM.mSoundBackend);
-    gImmUnityPlugin.IMM.mTimer.End();
-	gImmUnityPlugin.IMM.mLog.End();
+    gImmUnityPlugin.mBridge.Shutdown();
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
 {
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"loading from file: %s", pistr2ws(fileName));
-
     if (fileName == nullptr || fileName[0] == '\0')
     {
-        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"LoadFromFile: filename is null or empty");
+        iLog().Printf(LT_ERROR, L"LoadFromFile: filename is null or empty");
         return -1;
     }
 
+    iLog().Printf(LT_DEBUG, L"loading from file: %s", pistr2ws(fileName));
+
     try
     {
-        int result = gImmUnityPlugin.IMM.mPlayer.Load(pistr2ws(fileName));
+        int result = iPlayer().Load(pistr2ws(fileName));
         if (result < 0)
         {
-            gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"LoadFromFile: Player.Load failed with code %d for file: %s", result, pistr2ws(fileName));
+            iLog().Printf(LT_ERROR, L"LoadFromFile: Player.Load failed with code %d for file: %s", result, pistr2ws(fileName));
         }
         else
         {
-            gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"LoadFromFile: Successfully loaded file: %s (ID: %d)", pistr2ws(fileName), result);
+            iLog().Printf(LT_MESSAGE, L"LoadFromFile: Successfully loaded file: %s (ID: %d)", pistr2ws(fileName), result);
         }
         return result;
     }
     catch (...)
     {
-        gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"LoadFromFile: Exception caught while loading file: %s", pistr2ws(fileName));
+        iLog().Printf(LT_ERROR, L"LoadFromFile: Exception caught while loading file: %s", pistr2ws(fileName));
         return -1;
     }
 }
@@ -789,126 +518,126 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, v
 {
     if (!data || size == 0)
     {
-        gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"loading from memory...\nfile name is %s\nsize is %d", pistr2ws(fileName), size);
-        gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Data is empty");
+        iLog().Printf(LT_DEBUG, L"loading from memory...\nfile name is %s\nsize is %d", pistr2ws(fileName), size);
+        iLog().Printf(LT_DEBUG, L"Data is empty");
         return -1;
 
     }
-    gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"loading from memory...\nfile name is %s\nsize is %d", pistr2ws(fileName), size);
+    iLog().Printf(LT_DEBUG, L"loading from memory...\nfile name is %s\nsize is %d", pistr2ws(fileName), size);
 
     piTArray<uint8_t> imm;
     imm.Init(0, false);
     imm.Set((uint8_t*)(data), (uint64_t)(size));
-    return gImmUnityPlugin.IMM.mPlayer.Load(&imm, pistr2ws(fileName));
+    return iPlayer().Load(&imm, pistr2ws(fileName));
 
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Unload(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Unload(id);
+	iPlayer().Unload(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetDocumentToWorld(int id, float *doc2world)
 {
-	gImmUnityPlugin.IMM.mPlayer.SetDocumentToWorld(id, fromMatrix(f2d(iUnityToPilibs(doc2world)) * mat4x4d::flipZ()));
+	iPlayer().SetDocumentToWorld(id, fromMatrix(f2d(iUnityToPilibs(doc2world)) * mat4x4d::flipZ()));
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT SetLayerVisible(int docId, int layerId, int visible)
 {
-    return gImmUnityPlugin.IMM.mPlayer.SetLayerVisible(docId, layerId, visible != 0);
+    return iPlayer().SetLayerVisible(docId, layerId, visible != 0);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT ClearLayerVisibilityOverride(int docId, int layerId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.ClearLayerVisibilityOverride(docId, layerId);
+    return iPlayer().ClearLayerVisibilityOverride(docId, layerId);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT SetLayerOpacity(int docId, int layerId, float opacity)
 {
-    return gImmUnityPlugin.IMM.mPlayer.SetLayerOpacity(docId, layerId, opacity);
+    return iPlayer().SetLayerOpacity(docId, layerId, opacity);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT SetLayerTransform(int docId, int layerId, float *layerToWorld)
 {
-    return gImmUnityPlugin.IMM.mPlayer.SetLayerTransform(docId, layerId, iUnityToTrans3d(layerToWorld));
+    return iPlayer().SetLayerTransform(docId, layerId, iUnityToTrans3d(layerToWorld));
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT ClearLayerTransformOverride(int docId, int layerId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.ClearLayerTransformOverride(docId, layerId);
+    return iPlayer().ClearLayerTransformOverride(docId, layerId);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerId, Player::LayerDiagnostics *outDiag)
 {
     if (outDiag == nullptr)
         return false;
-    return gImmUnityPlugin.IMM.mPlayer.GetLayerDiagnostics(docId, layerId, *outDiag);
+    return iPlayer().GetLayerDiagnostics(docId, layerId, *outDiag);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Pause(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Pause(id );
+	iPlayer().Pause(id );
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Resume(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Resume(id);
+	iPlayer().Resume(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Hide(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Hide(id);
+	iPlayer().Hide(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Show(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Show(id);
+	iPlayer().Show(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Continue(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Continue(id);
+	iPlayer().Continue(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SkipForward(int id)
 {
-    gImmUnityPlugin.IMM.mPlayer.SkipForward(id);
+    iPlayer().SkipForward(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SkipBack(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.SkipBack(id);
+	iPlayer().SkipBack(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SetChapter(int id, int chapterIndex)
 {
-    gImmUnityPlugin.IMM.mPlayer.SetChapter(id, chapterIndex);
+    iPlayer().SetChapter(id, chapterIndex);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Restart(int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.Restart(id);
+	iPlayer().Restart(id);
 }
 
 
 extern "C" int UNITY_INTERFACE_EXPORT GetChapterCount(int id)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetChapterCount(id);
+    return iPlayer().GetChapterCount(id);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT GetCurrentChapter(int id)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetCurrentChapter(id);
+    return iPlayer().GetCurrentChapter(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SetTime(int id, int64_t timeSinceStart, int64_t timeSinceStop)
 {
-	gImmUnityPlugin.IMM.mPlayer.SetTime(id, piTick(timeSinceStart), piTick(timeSinceStop));
+	iPlayer().SetTime(id, piTick(timeSinceStart), piTick(timeSinceStop));
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT GetTime(int id, int64_t * timeSinceStart, int64_t * timeSinceStop)
 {
-	gImmUnityPlugin.IMM.mPlayer.GetTime(id, (piTick*)timeSinceStart, (piTick*)timeSinceStop);
+	iPlayer().GetTime(id, (piTick*)timeSinceStart, (piTick*)timeSinceStop);
 }
 
 extern "C" int64_t UNITY_INTERFACE_EXPORT GetPlayTime(int id)
@@ -916,46 +645,46 @@ extern "C" int64_t UNITY_INTERFACE_EXPORT GetPlayTime(int id)
     piTick startTime;
     piTick stopTime;
 
-    gImmUnityPlugin.IMM.mPlayer.GetTime(id, &startTime, &stopTime);
+    iPlayer().GetTime(id, &startTime, &stopTime);
 
     return piTick::CastInt(startTime);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT GetPlayerInfo(Player::PlayerInfo & info)
 {
-	gImmUnityPlugin.IMM.mPlayer.GetPlayerInfo(info);
+	iPlayer().GetPlayerInfo(info);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT GetDocumentState(Player::DocumentState & state, int id)
 {
-	gImmUnityPlugin.IMM.mPlayer.GetDocumentState(state, id);
+	iPlayer().GetDocumentState(state, id);
 }
 
 extern "C" uint32_t UNITY_INTERFACE_EXPORT GetDocumentInfoEx(int id)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetDocumentInfoEx(id);
+    return iPlayer().GetDocumentInfoEx(id);
 }
 
 extern "C" float UNITY_INTERFACE_EXPORT GetSound(int id)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetDocumentVolume(id);
+    return iPlayer().GetDocumentVolume(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SetSound(int id, float volume)
 {
-    gImmUnityPlugin.IMM.mPlayer.SetDocumentVolume(id, volume);
+    iPlayer().SetDocumentVolume(id, volume);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 {
-    bound = d2f(gImmUnityPlugin.IMM.mPlayer.GetDocumentBBox(id));
-    const int layerCount = gImmUnityPlugin.IMM.mPlayer.GetLayerCount(id);
+    bound = d2f(iPlayer().GetDocumentBBox(id));
+    const int layerCount = iPlayer().GetLayerCount(id);
 
     bound3 filtered = bound3(1.0e30f);
     for (int i = 0; i < layerCount; ++i)
     {
         Player::LayerInfo li;
-        if (!gImmUnityPlugin.IMM.mPlayer.GetLayerInfoByIndex(id, i, li))
+        if (!iPlayer().GetLayerInfoByIndex(id, i, li))
             continue;
         if (li.hasBBox == 0)
             continue;
@@ -971,29 +700,29 @@ extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 
 extern "C" bool UNITY_INTERFACE_EXPORT IsSequenceReady(int docId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.IsSequenceReady(docId);
+    return iPlayer().IsSequenceReady(docId);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT GetLayerCount(int docId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetLayerCount(docId);
+    return iPlayer().GetLayerCount(docId);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT GetLayerInfoByIndex(int docId, int index, Player::LayerInfo & info)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetLayerInfoByIndex(docId, index, info);
+    return iPlayer().GetLayerInfoByIndex(docId, index, info);
 }
 
 #pragma region SpawnArea
 
 extern "C" int UNITY_INTERFACE_EXPORT GetSpawnAreaCount(int docId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetSpawnAreaCount(docId);
+    return iPlayer().GetSpawnAreaCount(docId);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT GetSpawnAreaList(int docId, int spawnAreaIdsSize, int* pSpawnAreaIds)
 {
-    const int num = gImmUnityPlugin.IMM.mPlayer.GetSpawnAreaCount(docId);
+    const int num = iPlayer().GetSpawnAreaCount(docId);
     piAssert(num <= spawnAreaIdsSize);
     for (int i = 0; i < num; ++i)
     {
@@ -1004,17 +733,17 @@ extern "C" int UNITY_INTERFACE_EXPORT GetSpawnAreaList(int docId, int spawnAreaI
 
 extern "C" int UNITY_INTERFACE_EXPORT GetActiveSpawnAreaId(int docId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetSpawnArea(docId);
+    return iPlayer().GetSpawnArea(docId);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT GetInitialSpawnAreaId(int docId)
 {
-    return gImmUnityPlugin.IMM.mPlayer.GetInitialSpawnArea(docId);
+    return iPlayer().GetInitialSpawnArea(docId);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT SetActiveSpawnAreaId(int docId, int activeSpawnAreaId)
 {
-    gImmUnityPlugin.IMM.mPlayer.SetSpawnArea(docId, activeSpawnAreaId);
+    iPlayer().SetSpawnArea(docId, activeSpawnAreaId);
 }
 
 struct SerializedSpawnArea
@@ -1076,7 +805,7 @@ struct SerializedSpawnArea
 extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaInfo(int docId, int spawnareaId, SerializedSpawnArea& serializedSpawnArea)
 {
     Document::SpawnAreaInfo spawnAreaInfo;
-    if (!gImmUnityPlugin.IMM.mPlayer.GetSpawnAreaInfo(spawnAreaInfo, docId, spawnareaId))
+    if (!iPlayer().GetSpawnAreaInfo(spawnAreaInfo, docId, spawnareaId))
         return false;
     serializedSpawnArea.mName = piws2str(spawnAreaInfo.mName);
     serializedSpawnArea.mVersion = spawnAreaInfo.mVersion;
@@ -1124,7 +853,7 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaInfo(int docId, int spawnarea
          ((spawnAreaInfo.mVolume.mAllowTranslationZ ? 1 : 0) << 0));
 
 
-    const piImage* pScreenshot = gImmUnityPlugin.IMM.mPlayer.GetSpawnAreaScreenshot(docId, spawnareaId);
+    const piImage* pScreenshot = iPlayer().GetSpawnAreaScreenshot(docId, spawnareaId);
     if (pScreenshot==nullptr)
     {
         serializedSpawnArea.screenshot.height = 0;
