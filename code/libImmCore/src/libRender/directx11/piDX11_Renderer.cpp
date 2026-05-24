@@ -2,6 +2,7 @@
 
 #include <malloc.h>
 #include <stdio.h>
+#include <string.h>
 
 
 #include "piDX11_Renderer.h"
@@ -2548,32 +2549,82 @@ void piRendererDX11::GetTextureSampling(piTexture vme, TextureFilter *rfilter, T
 
 void piRendererDX11::GetTextureContent( piTexture vme, void *data, const Format fmt )
 {
-	/*
-	piITexture *me = (piITexture*)vme;
-    int     	 mode, mode2, mode3, bpp;
-
-    if( !format2gl( fmt, &bpp, &mode, &mode2, &mode3, me->mInfo.mCompressed ) )
+    piITexture *me = (piITexture*)vme;
+    if (!me || !data || fmt != me->mInfo.mFormat)
         return;
 
-    oglGetTextureImage(me->mObjectID, 0, mode, mode3, me->mInfo.mXres*me->mInfo.mYres*me->mInfo.mZres * bpp, data);
-	*/
+    GetTextureContent(vme, data, 0, 0, 0, me->mInfo.mXres, me->mInfo.mYres, me->mInfo.mZres);
 }
 
 void piRendererDX11::GetTextureContent(piTexture vme, void *data, int x, int y, int z, int xres, int yres, int zres)
 {
-	/*
     piITexture *me = (piITexture*)vme;
-    int     	 exteriorFormat, internalFormat, ftype, bpp;
+    if (!me || !data || !me->mObjectID || me->mInfo.mType != TextureType::T2D || z != 0 || zres != 1 ||
+        x < 0 || y < 0 || xres <= 0 || yres <= 0 ||
+        x + xres > me->mInfo.mXres || y + yres > me->mInfo.mYres)
+    {
+        return;
+    }
 
-    if (!format2gl(me->mInfo.mFormat, &bpp, &exteriorFormat, &internalFormat, &ftype, me->mInfo.mCompressed))
+    ID3D11Device *dev = (ID3D11Device*)mDevice;
+    ID3D11DeviceContext *ctx = (ID3D11DeviceContext*)mDeviceContext;
+    if (!dev || !ctx)
         return;
 
-    oglGetTextureSubImage( me->mObjectID,
-                           0,
-                           x, y, z, xres, yres, zres,
-                           exteriorFormat, ftype,
-                           xres*yres*zres*bpp, data );
-						   */
+    D3D11_TEXTURE2D_DESC srcDesc;
+    me->mObjectID->GetDesc(&srcDesc);
+
+    ID3D11Texture2D *readSource = me->mObjectID;
+    ID3D11Texture2D *resolvedTexture = nullptr;
+    if (srcDesc.SampleDesc.Count > 1)
+    {
+        D3D11_TEXTURE2D_DESC resolveDesc = srcDesc;
+        resolveDesc.SampleDesc.Count = 1;
+        resolveDesc.SampleDesc.Quality = 0;
+        resolveDesc.Usage = D3D11_USAGE_DEFAULT;
+        resolveDesc.BindFlags = 0;
+        resolveDesc.CPUAccessFlags = 0;
+        resolveDesc.MiscFlags = 0;
+
+        if (FAILED(dev->CreateTexture2D(&resolveDesc, nullptr, &resolvedTexture)))
+            return;
+
+        ctx->ResolveSubresource(resolvedTexture, 0, me->mObjectID, 0, srcDesc.Format);
+        readSource = resolvedTexture;
+        srcDesc = resolveDesc;
+    }
+
+    D3D11_TEXTURE2D_DESC stagingDesc = srcDesc;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    stagingDesc.MiscFlags = 0;
+
+    ID3D11Texture2D *stagingTexture = nullptr;
+    if (FAILED(dev->CreateTexture2D(&stagingDesc, nullptr, &stagingTexture)))
+    {
+        if (resolvedTexture) resolvedTexture->Release();
+        return;
+    }
+
+    ctx->CopyResource(stagingTexture, readSource);
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (SUCCEEDED(ctx->Map(stagingTexture, 0, D3D11_MAP_READ, 0, &mapped)))
+    {
+        const int bpp = iDxFormatSize(me->mInfo.mFormat);
+        const uint8_t *src = (const uint8_t*)mapped.pData + (size_t)y * mapped.RowPitch + (size_t)x * bpp;
+        uint8_t *dst = (uint8_t*)data;
+        const size_t dstPitch = (size_t)xres * bpp;
+        for (int row = 0; row < yres; ++row)
+        {
+            memcpy(dst + (size_t)row * dstPitch, src + (size_t)row * mapped.RowPitch, dstPitch);
+        }
+        ctx->Unmap(stagingTexture, 0);
+    }
+
+    stagingTexture->Release();
+    if (resolvedTexture) resolvedTexture->Release();
 }
 
 void piRendererDX11::PolygonOffset( bool mode, bool wireframe, float a, float b )

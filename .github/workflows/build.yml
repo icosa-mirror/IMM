@@ -83,7 +83,9 @@ jobs:
         $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
         $json.Rendering.EnableVR = $true
         $json.Rendering.RenderingAPI = "OpenGL"
-        $json | ConvertTo-Json -Depth 6 | Set-Content $settingsPath -Encoding UTF8
+        $jsonText = $json | ConvertTo-Json -Depth 6
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($settingsPath, $jsonText, $utf8NoBom)
 
     - name: Upload Viewer Executable
       uses: actions/upload-artifact@v4

@@ -120,7 +120,9 @@ if ($runtimeSettings.File.PSObject.Properties["Load"]) {
 } else {
     $runtimeSettings.File | Add-Member -MemberType NoteProperty -Name "Load" -Value @($SamplePath)
 }
-$runtimeSettings | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $runtimeSettingsPath -Encoding UTF8
+$runtimeSettingsJson = $runtimeSettings | ConvertTo-Json -Depth 16
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($runtimeSettingsPath, $runtimeSettingsJson, $utf8NoBom)
 
 $env:IMM_VIEWER_VALIDATE_FRAME = "1"
 $env:IMM_VIEWER_VALIDATE_MAX_FRAME = "240"

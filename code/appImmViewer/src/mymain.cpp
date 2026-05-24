@@ -261,6 +261,24 @@ static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int w
     return iWriteRG11B10PPM(path, pixels, width, height);
 }
 
+static bool iFileExistsUtf8(const char *path)
+{
+    if (!path || !path[0])
+    {
+        return false;
+    }
+
+    wchar_t *widePath = pistr2ws(path);
+    if (!widePath)
+    {
+        return false;
+    }
+
+    const bool exists = piFile::Exists(widePath);
+    free(widePath);
+    return exists;
+}
+
 static const char *iGetValidationEnv(const char *genericName, const char *legacyName)
 {
     const char *value = getenv(genericName);
@@ -970,9 +988,27 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numDrawCallsCulled);
                             if (validationCapturePath[0])
                             {
+                                wchar_t *wideCapturePath = pistr2ws(validationCapturePath);
+                                if (wideCapturePath)
+                                {
+#if defined(WINDOWS)
+                                    mLog.Printf(LT_MESSAGE, L"IMM GL validation capture path: %s", wideCapturePath);
+#else
+                                    mLog.Printf(LT_MESSAGE, L"IMM GL validation capture path: %ls", wideCapturePath);
+#endif
+                                    free(wideCapturePath);
+                                }
                                 if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y))
                                 {
-                                    mLog.Printf(LT_MESSAGE, L"IMM GL validation capture written");
+                                    if (iFileExistsUtf8(validationCapturePath))
+                                    {
+                                        mLog.Printf(LT_MESSAGE, L"IMM GL validation capture written");
+                                    }
+                                    else
+                                    {
+                                        mLog.Printf(LT_ERROR, L"IMM GL validation capture write reported success but file is missing");
+                                        validationExitCode = 2;
+                                    }
                                 }
                                 else
                                 {
