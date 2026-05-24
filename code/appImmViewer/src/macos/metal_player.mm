@@ -1147,6 +1147,14 @@ struct ImmMetalDebugVertex
     }
 
     const char *path = [filename fileSystemRepresentation];
+    if (iHasExtension(path, ".json"))
+    {
+        return iSetSettingsPath(path) ? YES : NO;
+    }
+    if (gContentPathCount >= 1)
+    {
+        return YES;
+    }
     if (!iAddContentPath(path))
     {
         NSLog(@"IMM Metal player: could not accept opened IMM file");

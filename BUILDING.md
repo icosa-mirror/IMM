@@ -117,6 +117,22 @@ python3 code/appImmViewer/scripts/compare_captures.py \
   build/macos/metal-validation-captures/static.png
 ```
 
+The Windows CI job also uploads `ImmViewer-Windows-DirectX-Baseline`, containing `windows-directx-static.png` and the runtime settings JSON used to create it.
+The macOS CI job uploads `ImmViewerMetal-macOS-Baseline`, containing `metal-static.png` and the validation log, plus `ImmViewerMetal-macOS`, containing the standalone `.app` bundle.
+The `Compare Viewer Baselines` CI job uploads `ImmViewer-Baseline-Comparison`, containing the DirectX-vs-Metal static capture metrics, an amplified diff PNG, and a side-by-side DirectX/Metal/diff contact sheet. This comparison is informational until a verified tolerance is chosen.
+
+To generate the Windows DirectX baseline PNG from a Windows checkout:
+
+```powershell
+.\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
+```
+
+The downloaded `ImmViewer-Windows` artifact is self-contained for this baseline capture. From the artifact folder, run:
+
+```powershell
+.\capture_windows_directx_baseline.ps1
+```
+
 The validation target covers static paint playback, pretessellated paint draw-path coverage, the 360 picture backdrop in `sample1.imm`, render-target recreation after resize, command-line argument contract failures, capture output, repeated native-frame setup failures, the generated `.app` bundle layout/metadata, `.imm` document metadata, launching with only a content path from outside the repository root, and repeated app launch/teardown. The app bundle includes a default Metal settings file in `Contents/Resources`; validation requires that this bundled default selects Metal and Static, while a JSON argument still overrides the settings file explicitly. Validation fails on shader/pipeline failures, unsupported Metal renderer paths, blank output, missing picture/360 draw calls, the known old static backdrop-only hash, unexpected draw/triangle counts, and deterministic hash changes for the fixed-size static and pretessellated cases. The pretessellated capture is deterministic but is not yet a visual-equivalence reference.
 When capture output is enabled through `IMM_METAL_VALIDATE_CAPTURE_DIR`, the validation script also checks each PPM capture header for the expected format and dimensions. Single-run `IMM_METAL_VALIDATE_CAPTURE_PATH` captures can be `.png` or `.ppm`.
 

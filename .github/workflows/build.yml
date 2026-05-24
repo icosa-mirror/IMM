@@ -37,6 +37,20 @@ jobs:
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
 
+    - name: Generate Windows DirectX Baseline Capture
+      shell: pwsh
+      run: |
+        .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
+
+    - name: Upload Windows DirectX Baseline Capture
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Windows-DirectX-Baseline
+        path: |
+          build/baseline-captures/windows-directx-static.png
+          build/baseline-captures/settings-baseline-directx-sample1.runtime.json
+        if-no-files-found: error
+
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
       with:
@@ -63,6 +77,8 @@ jobs:
         Copy-Item code/appImmViewer/exe/appImmViewer_Release.exe $staging
         Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item code/appImmViewer/exe/settings-baseline-directx-sample1.json $staging
+        Copy-Item code/appImmViewer/scripts/capture_windows_directx_baseline.ps1 $staging
+        Copy-Item exampleImmFiles/sample1.imm $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
         Copy-Item docs/viewer_readme.md $staging/README.md
@@ -223,11 +239,53 @@ jobs:
       run: brew install cmake
 
     - name: Configure macOS build
-      run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=OFF
+      run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
 
     - name: Build macOS Unity plugin
       if: false
       run: cmake --build build/macos --config Release
+
+    - name: Build macOS Metal standalone viewer
+      run: cmake --build build/macos --target appImmViewerMetal --config Release
+
+    - name: Validate macOS Metal standalone viewer
+      run: ctest --test-dir build/macos -R appImmViewerMetal --output-on-failure
+
+    - name: Generate macOS Metal Baseline Capture
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p build/macos/metal-baseline-captures
+        IMM_METAL_VALIDATE_FRAME=1 \
+        IMM_METAL_VALIDATE_MAX_FRAME=240 \
+        IMM_METAL_VALIDATE_MIN_NONZERO=16 \
+        IMM_METAL_VALIDATE_MIN_DRAWCALLS=1 \
+        IMM_METAL_VALIDATE_MIN_PICTURE_DRAWCALLS=1 \
+        IMM_METAL_VALIDATE_MIN_PICTURE360_DRAWCALLS=1 \
+        IMM_METAL_VALIDATE_MIN_TRIANGLES=1 \
+        IMM_METAL_VALIDATE_CAPTURE_PATH="$PWD/build/macos/metal-baseline-captures/metal-static.png" \
+        IMM_METAL_EXIT_AFTER_VALIDATE=1 \
+        IMM_METAL_LOG_PATH="$PWD/build/macos/metal-baseline-captures/metal-static.player.log" \
+        build/macos/viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal \
+          code/projects/macos/appImmViewerMetal-settings.json \
+          exampleImmFiles/sample1.imm \
+          2>&1 | tee build/macos/metal-baseline-captures/metal-static.log
+
+    - name: Upload macOS Metal Baseline Capture
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerMetal-macOS-Baseline
+        path: |
+          build/macos/metal-baseline-captures/metal-static.png
+          build/macos/metal-baseline-captures/metal-static*.log
+        if-no-files-found: error
+
+    - name: Upload macOS Metal Standalone Viewer
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerMetal-macOS
+        path: build/macos/viewer/appImmViewerMetal.app
+        if-no-files-found: error
 
     - name: Build macOS Stroke Reader plugin
       run: cmake --build build/macos --target ImmStrokeReader --config Release
