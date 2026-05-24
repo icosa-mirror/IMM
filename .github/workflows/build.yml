@@ -62,6 +62,7 @@ jobs:
         New-Item -ItemType Directory -Force $staging | Out-Null
         Copy-Item code/appImmViewer/exe/appImmViewer_Release.exe $staging
         Copy-Item code/appImmViewer/exe/settings.json $staging
+        Copy-Item code/appImmViewer/exe/settings-baseline-directx-sample1.json $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
         Copy-Item docs/viewer_readme.md $staging/README.md

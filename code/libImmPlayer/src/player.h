@@ -140,6 +140,11 @@ namespace ImmPlayer {
                 cpuLoadTimeMS = info.cpuLoadTimeMS;
                 numDrawCalls = info.numDrawCalls;
                 numDrawCallsCulled = info.numDrawCallsCulled;
+                numPaintDrawCalls = info.numPaintDrawCalls;
+                numPictureDrawCalls = info.numPictureDrawCalls;
+                numPicture2DDrawCalls = info.numPicture2DDrawCalls;
+                numPicture360DrawCalls = info.numPicture360DrawCalls;
+                numModelDrawCalls = info.numModelDrawCalls;
                 numTriangles = info.numTriangles;
                 numTrianglesCulled = info.numTrianglesCulled;
                 gpuTimeAverageMs = info.gpuTimeAverageMs;
@@ -150,6 +155,11 @@ namespace ImmPlayer {
             int cpuLoadTimeMS = 0;
             int numDrawCalls = 0;
             int numDrawCallsCulled = 0;
+            int numPaintDrawCalls = 0;
+            int numPictureDrawCalls = 0;
+            int numPicture2DDrawCalls = 0;
+            int numPicture360DrawCalls = 0;
+            int numModelDrawCalls = 0;
             int numTriangles = 0;
             int numTrianglesCulled = 0;
             float gpuTimeAverageMs = 0;

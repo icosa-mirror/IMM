@@ -662,7 +662,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"SoundBackend initialized successfully.");
 
     // RENDERER
-	const char* apiName[] = {"GL", "DX", "GLES"};
+	const char* apiName[] = {"GL", "DX", "GLES", "Metal"};
 
 #if defined(__ANDROID__) || defined(ANDROID)
 	const piRenderer::API api = piRenderer::API::GLES;

@@ -104,6 +104,21 @@ namespace ImmPlayer
 					log->Printf(LT_ERROR, L"Could not initalize model layer shader\n%s", pistr2ws(error));
 					return false;
 				}
+#else
+                if (renderer->GetAPI() == piRenderer::API::Metal)
+                {
+                    const piShaderOptions opts = { 3,{
+                        {"COLOR_SPACE", static_cast<int>(colorSpace) },
+                        {"STEREOMODE", i },
+                        {"MODEL_LAYER", 1 },
+                    } };
+                    mShaders[i] = renderer->CreateShader(&opts, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+                    if (!mShaders[i])
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Metal model layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+                }
 #endif
 			}
 
@@ -197,6 +212,7 @@ namespace ImmPlayer
 	{
 		mVisibleLayerInfos.SetLength(0);
 		mStereoMode = stereoMode;
+        mDrawCallInfo = {};
 	}
 
 	void LayerRendererModel::DisplayPreRender(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la, const frustum3& frus, const trans3d & layerToViewer, float laOpacity)
@@ -290,6 +306,8 @@ namespace ImmPlayer
 
 
 			renderer->AttachShader(mShaders[idStereo]);
+			++mDrawCallInfo.numDrawCalls;
+            mDrawCallInfo.numTriangles += me->mRenderMesh.GetNumTriangles(0) * numInstances;
 			me->mRenderMesh.Render( renderer, 0, 0, numInstances);
 			renderer->DettachShader();
 		}

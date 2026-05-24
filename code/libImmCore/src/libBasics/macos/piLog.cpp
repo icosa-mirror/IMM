@@ -34,6 +34,7 @@ typedef struct
 class piLogger
 {
 public:
+    virtual ~piLogger() {}
     virtual bool Init(const wchar_t *path, const piLogStartInfo *info) = 0;
     virtual void End(void) = 0;
     virtual void Printf(int messageId, int threadId, const wchar_t *file, const wchar_t *func, int line, int type, const wchar_t *str) = 0;
@@ -249,11 +250,21 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
     va_list arglist;
     va_start(arglist, format);
 
-    wchar_t tmpstr[4096];
-    const int res = vswprintf(tmpstr, sizeof(tmpstr) / sizeof(tmpstr[0]), format, arglist);
+    const size_t tmpstrLen = 4096;
+    wchar_t *tmpstr = (wchar_t *)malloc(tmpstrLen * sizeof(wchar_t));
+    if (!tmpstr)
+    {
+        va_end(arglist);
+        return;
+    }
+
+    const int res = vswprintf(tmpstr, tmpstrLen, format, arglist);
     va_end(arglist);
     if (res < 0)
+    {
+        free(tmpstr);
         return;
+    }
 
     for (int i = 0; i < me->mNumLoggers; i++)
     {
@@ -261,6 +272,7 @@ void piLog::Printf(const wchar_t *file, const wchar_t *func, int line, int type,
         lo->Printf(me->mMessageCounter, (int)(uint64_t)piThread_GetOSID(), file, func, line, type, tmpstr);
     }
 
+    free(tmpstr);
     me->mMessageCounter++;
 }
 

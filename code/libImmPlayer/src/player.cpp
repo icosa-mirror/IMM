@@ -144,7 +144,7 @@ namespace ImmPlayer
         //----------------------------------------------------------------------------------------------------------------------------------------
 
         // render states
-        if (renderer->GetAPI() == piRenderer::API::DX)
+        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::Metal)
         {
             mRasterState = renderer->CreateRasterState(false,true, piRenderer::CullMode::NONE, true, false); // note multisample is set to false
             if (!mRasterState) return false;
@@ -1175,7 +1175,6 @@ namespace ImmPlayer
 
     void Player::PopulateDisplayRenderPerfInfo()
     {
-#if defined(ANDROID)
         LayerRenderer::DrawCallInfo paintInfo = mLayerPaintRender->GetDrawCallInfo();
         LayerRenderer::DrawCallInfo pictureInfo = mLayerRenderPicture.GetDrawCallInfo();
         LayerRenderer::DrawCallInfo modelInfo = mLayerRenderModel.GetDrawCallInfo();
@@ -1184,6 +1183,11 @@ namespace ImmPlayer
         const int totalTriangles = paintInfo.numTriangles + pictureInfo.numTriangles + modelInfo.numTriangles;
 
         mCurrentPerfInfo.numDrawCalls = totalDrawCalls;
+        mCurrentPerfInfo.numPaintDrawCalls = paintInfo.numDrawCalls;
+        mCurrentPerfInfo.numPictureDrawCalls = pictureInfo.numDrawCalls;
+        mCurrentPerfInfo.numPicture2DDrawCalls = pictureInfo.numPicture2DDrawCalls;
+        mCurrentPerfInfo.numPicture360DrawCalls = pictureInfo.numPicture360DrawCalls;
+        mCurrentPerfInfo.numModelDrawCalls = modelInfo.numDrawCalls;
         mCurrentPerfInfo.numTriangles = totalTriangles;
 
 #if defined(RENDER_BUDGET) || defined(MEASURE_GPU_TIME)
@@ -1202,8 +1206,6 @@ namespace ImmPlayer
                 mCurrentPerfInfo.totalGPUTimeAcrossFrames = 0;
             }
         }
-#endif
-
 #endif
     }
 

@@ -291,6 +291,48 @@ namespace ImmPlayer
                     log->Printf(LT_ERROR, L"Could not initalize 360 equirect mono image layer shader\n%s", pistr2ws(error));
                     return false;
                 }
+#else
+                if (renderer->GetAPI() == piRenderer::API::Metal)
+                {
+                    const piShaderOptions opts = { 3,{
+                        {"COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i },
+                        { "DEBUG_RENDER_MODE", j },
+                        } };
+
+                    mShaders[idx][LayerPicture::Image2D] = renderer->CreateShader(&opts, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+                    if (!mShaders[idx][LayerPicture::Image2D])
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Metal 2D image layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+
+                    const piShaderOptions opts360 = { 4,{
+                        { "COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i },
+                        { "FORMAT_IS_STEREO", 0 },
+                        { "DEBUG_RENDER_MODE", j },
+                    } };
+                    mShaders[idx][LayerPicture::Image360EquirectMono] = renderer->CreateShader(&opts360, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+                    if (!mShaders[idx][LayerPicture::Image360EquirectMono])
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Metal 360 equirect image layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+
+                    const piShaderOptions optsCube = { 3,{
+                        { "COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i },
+                        { "CUBEMAP", 1 },
+                    } };
+                    mShaders[idx][LayerPicture::Image360CubemapCrossMono] = renderer->CreateShader(&optsCube, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+                    if (!mShaders[idx][LayerPicture::Image360CubemapCrossMono])
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Metal cubemap image layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+                    mShaders[idx][LayerPicture::Image360CubemapVstripMono] = mShaders[idx][LayerPicture::Image360CubemapCrossMono];
+                }
 #endif
             }
 
@@ -307,11 +349,11 @@ namespace ImmPlayer
             if( !iGenerateDome( &mesh, &lay1))
                 return false;
 
-            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
             {
                 if (!m360SphereRenderMesh.InitFromMesh(renderer, &mesh, piRenderer::PrimitiveType::Triangle, nullptr))
                 {
-                    log->Printf(LT_ERROR, L"Could not initalize 360 sphere render mesh in GL");
+                    log->Printf(LT_ERROR, L"Could not initalize 360 sphere render mesh");
                     return false;
                 }
             }
@@ -341,7 +383,7 @@ namespace ImmPlayer
 
             mesh.Normalize(0, 0, 1);
 
-            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
             {
                 if (!m360CubemapRenderMesh.InitFromMesh(renderer, &mesh, piRenderer::PrimitiveType::Triangle, nullptr))
                 {
@@ -416,10 +458,30 @@ namespace ImmPlayer
 #endif
         for (int i = 0; i < num; i++)
         {
-            renderer->DestroyShader(mShaders[i][LayerPicture::Image2D]);
-            renderer->DestroyShader(mShaders[i][LayerPicture::Image360EquirectMono]);
-            renderer->DestroyShader(mShaders[i][LayerPicture::Image360EquirectStereo]);
-            renderer->DestroyShader(mShaders[i][LayerPicture::Image360CubemapCrossMono]);
+            piShader destroyed[4] = {};
+            piShader candidates[4] = {
+                mShaders[i][LayerPicture::Image2D],
+                mShaders[i][LayerPicture::Image360EquirectMono],
+                mShaders[i][LayerPicture::Image360EquirectStereo],
+                mShaders[i][LayerPicture::Image360CubemapCrossMono],
+            };
+            for (int j = 0; j < 4; ++j)
+            {
+                bool seen = false;
+                for (int k = 0; k < j; ++k)
+                {
+                    if (destroyed[k] == candidates[j])
+                    {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen)
+                {
+                    renderer->DestroyShader(candidates[j]);
+                    destroyed[j] = candidates[j];
+                }
+            }
         }
 
         mLayerInfo.End();
@@ -614,6 +676,7 @@ namespace ImmPlayer
     {
         mVisibleLayerInfos.SetLength(0);
         mStereoMode = stereoMode;
+        mDrawCallInfo = {};
     }
 
     void LayerRendererPicture::DisplayPreRender(piRenderer* renderer, piSoundEngine* sound, piLog* log, Layer* la, const frustum3& frus, const trans3d & layerToViewer, float laOpacity)
@@ -750,6 +813,9 @@ namespace ImmPlayer
             switch (me->mType)
             {
             case LayerPicture::Image2D:
+                ++mDrawCallInfo.numDrawCalls;
+                ++mDrawCallInfo.numPicture2DDrawCalls;
+                mDrawCallInfo.numTriangles += 2 * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image2D]);
                 renderer->AttachTextures(1, me->mTexture);
                 renderer->AttachTextures(1, &mBlueNoise, 7);
@@ -768,6 +834,9 @@ namespace ImmPlayer
                 renderer->DettachShader();
                 break;
             case LayerPicture::Image360EquirectMono:
+                ++mDrawCallInfo.numDrawCalls;
+                ++mDrawCallInfo.numPicture360DrawCalls;
+                mDrawCallInfo.numTriangles += m360SphereRenderMesh.GetNumTriangles(0) * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image360EquirectMono]);
                 renderer->AttachTextures(1, me->mTexture);
                 renderer->AttachTextures(1, &mBlueNoise, 7);
@@ -777,6 +846,9 @@ namespace ImmPlayer
                 renderer->DettachShader();
                 break;
             case LayerPicture::Image360EquirectStereo:
+                ++mDrawCallInfo.numDrawCalls;
+                ++mDrawCallInfo.numPicture360DrawCalls;
+                mDrawCallInfo.numTriangles += m360SphereRenderMesh.GetNumTriangles(0) * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image360EquirectStereo]);
                 renderer->AttachTextures(1, me->mTexture);
                 m360SphereRenderMesh.Render(renderer, 0, 0, numInstances);
@@ -785,6 +857,9 @@ namespace ImmPlayer
                 break;
             case LayerPicture::Image360CubemapCrossMono:
             case LayerPicture::Image360CubemapVstripMono:
+                ++mDrawCallInfo.numDrawCalls;
+                ++mDrawCallInfo.numPicture360DrawCalls;
+                mDrawCallInfo.numTriangles += m360CubemapRenderMesh.GetNumTriangles(0) * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image360CubemapCrossMono]);
                 renderer->AttachTextures(1, me->mTexture);
                 m360CubemapRenderMesh.Render(renderer, 0, 0, numInstances);

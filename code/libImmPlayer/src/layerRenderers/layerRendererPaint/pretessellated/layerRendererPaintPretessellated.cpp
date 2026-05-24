@@ -247,7 +247,7 @@ namespace ImmPlayer
                     continue;
                 }
             }
-			const piShaderOptions ops = { 5,{ { "COLOR_COMPRESSED", static_cast<int>(colorSpace) },
+			const piShaderOptions ops = { 6,{ { "COLOR_COMPRESSED", static_cast<int>(colorSpace) },
 												{ "WIGGLE", k },
 												{ "DRAWIN", j },
 #if PT_VERTEX_FORMAT==1
@@ -255,7 +255,8 @@ namespace ImmPlayer
 #else
 											  	{ "VERTEX_FORMAT", 0 },
 #endif
-												{ "STEREOMODE", static_cast<int>(i) } } };
+												{ "STEREOMODE", static_cast<int>(i) },
+                                                { "PRETESSELLATED", 1 } } };
 
 
 			char error[1024] = { 0 };
@@ -265,6 +266,10 @@ namespace ImmPlayer
 			{
 				mShader[dindex] = renderer->CreateShader(&ops, shader_pretessellated_brush_vs, nullptr, nullptr, nullptr, shader_pretessellated_brush_fs, error);
 			}
+            else if (renderer->GetAPI() == piRenderer::API::Metal)
+            {
+                mShader[dindex] = renderer->CreateShader(&ops, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+            }
 			else
 			{
                 #ifndef ANDROID
@@ -276,6 +281,11 @@ namespace ImmPlayer
 
 				mShader[dindex] = renderer->CreateShaderBinary(nullptr, shader_pretessellated_brush_vs_code[vs_index], shader_pretessellated_brush_vs_size[vs_index], nullptr, 0, nullptr, 0, nullptr, 0,
 					shader_pretessellated_brush_fs_code[fs_index], shader_pretessellated_brush_fs_size[fs_index], error);
+                #else
+                if (renderer->GetAPI() == piRenderer::API::Metal)
+                {
+                    mShader[dindex] = renderer->CreateShaderBinary(nullptr, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, nullptr, 0, error);
+                }
                 #endif
 			}
 

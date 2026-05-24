@@ -1694,6 +1694,18 @@ static bool createOptionsString(char *buffer, const int bufferLength, const piSh
 
     return true;
 }
+
+static void reportShaderBuildError(const char *stage, const char *error)
+{
+    if (error && error[0])
+    {
+        fprintf(stderr, "IMM OpenGL shader %s failed: %s\n", stage, error);
+    }
+    else
+    {
+        fprintf(stderr, "IMM OpenGL shader %s failed with no compiler log\n", stage);
+    }
+}
 /*
 piShader piRendererGL4X::CreateVertexShader(const piShaderOptions *options, const char *vs )
 {
@@ -1770,6 +1782,7 @@ piShader piRendererGL4X::CreateShader( const piShaderOptions *options, const cha
         if( !result )
         {
             if( error ) { error[0]='V'; error[1]='S'; error[2]=':'; oglGetShaderInfoLog( mVertShaderID, 1024, NULL, (char *)(error+3) ); }
+            reportShaderBuildError("vertex compile", error);
             return nullptr;
         }
     }
@@ -1781,6 +1794,7 @@ piShader piRendererGL4X::CreateShader( const piShaderOptions *options, const cha
         if( !result )
         {
             if( error ) { error[0]='C'; error[1]='S'; error[2]=':'; oglGetShaderInfoLog( mCtrlShaderID, 1024, NULL, (char *)(error+3) ); }
+            reportShaderBuildError("tess-control compile", error);
             return nullptr;
         }
     }
@@ -1792,6 +1806,7 @@ piShader piRendererGL4X::CreateShader( const piShaderOptions *options, const cha
         if( !result )
         {
             if( error ) { error[0]='E'; error[1]='S'; error[2]=':'; oglGetShaderInfoLog( mEvalShaderID, 1024, NULL, (char *)(error+3) ); }
+            reportShaderBuildError("tess-eval compile", error);
             return nullptr;
         }
     }
@@ -1803,6 +1818,7 @@ piShader piRendererGL4X::CreateShader( const piShaderOptions *options, const cha
         if( !result )
         {
             if( error ) { error[0]='G'; error[1]='S'; error[2]=':'; oglGetShaderInfoLog( mGeomShaderID, 1024, NULL, (char *)(error+3) ); }
+            reportShaderBuildError("geometry compile", error);
             return nullptr;
         }
     }
@@ -1814,6 +1830,7 @@ piShader piRendererGL4X::CreateShader( const piShaderOptions *options, const cha
         if( !result )
         {
             if( error ) { error[0]='F'; error[1]='S'; error[2]=':'; oglGetShaderInfoLog( mFragShaderID, 1024, NULL, (char *)(error+3) ); }
+            reportShaderBuildError("fragment compile", error);
             return nullptr;
         }
     }
@@ -1831,6 +1848,7 @@ piShader piRendererGL4X::CreateShader( const piShaderOptions *options, const cha
     if( !result )
     {
         if( error ) { error[0]='L'; error[1]='I'; error[2]=':'; oglGetProgramInfoLog( me->mProgID, 1024, NULL, (char *)(error+3) ); }
+        reportShaderBuildError("program link", error);
         return nullptr;
     }
 

@@ -175,6 +175,7 @@ namespace ExePlayer
                 std::transform(str.begin(), str.end(), str.begin(), ::tolower);
                      if (str == L"opengl" ) mRendering.mRenderingAPI = Rendering::API::GL;
                 else if (str == L"directx") mRendering.mRenderingAPI = Rendering::API::DX;
+                else if (str == L"metal"  ) mRendering.mRenderingAPI = Rendering::API::Metal;
                 else return false;
             }
 

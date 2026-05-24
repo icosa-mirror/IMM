@@ -24,6 +24,8 @@ namespace ImmPlayer
 			int numIndices = 0;
 			int numTriangles = 0;
 			int numTrianglesCulled = 0;
+			int numPicture2DDrawCalls = 0;
+			int numPicture360DrawCalls = 0;
 		};
 
 		virtual const DrawCallInfo & GetDrawCallInfo() = 0;

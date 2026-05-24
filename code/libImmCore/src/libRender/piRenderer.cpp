@@ -8,6 +8,9 @@
 #elif defined(WINDOWS)
 #include "opengl4x/piGL4X_Renderer.h"
 #include "directx11/piDX11_Renderer.h"
+#elif defined(__APPLE__)
+#include "opengl4x/piGL4X_Renderer.h"
+#include "metal/piMetal_Renderer.h"
 #else
 #include "opengl4x/piGL4X_Renderer.h"
 #endif
@@ -23,6 +26,9 @@ piRenderer *piRenderer::Create( const API type )
 #elif defined(WINDOWS)
 	if( type==API::GL ) return new piRendererGL4X();
 	if( type==API::DX ) return new piRendererDX11();
+#elif defined(__APPLE__)
+	if( type==API::GL ) return new piRendererGL4X();
+	if( type==API::Metal ) return new piRendererMetal();
 #else
 	if( type==API::GL ) return new piRendererGL4X();
 #endif

@@ -265,6 +265,11 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
 
                 mShader[dindex] = renderer->CreateShaderBinary(nullptr, shader_static_brush_vs_code[vs_index], shader_static_brush_vs_size[vs_index], nullptr, 0, nullptr, 0, nullptr, 0,
                     shader_static_brush_fs_code[fs_index], shader_static_brush_fs_size[fs_index], error);
+#else
+                if (renderer->GetAPI() == piRenderer::API::Metal)
+                {
+                    mShader[dindex] = renderer->CreateShader(&ops, nullptr, nullptr, nullptr, nullptr, nullptr, error);
+                }
 #endif
             }
 

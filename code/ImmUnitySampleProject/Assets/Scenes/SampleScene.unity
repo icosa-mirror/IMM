@@ -368,8 +368,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 90f7b0f4d714f7f4f853a11d1ff5b86b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  loadSource: 1
-  directoryPath: 
+  loadSource: 0
+  directoryPath: /Users/andrewbaker/Documents/GitHub/IMM/exampleImmFiles/
   selectedFileName: sample1.imm
   loadOnStart: 1
   autoPlay: 1
@@ -414,6 +414,7 @@ MonoBehaviour:
     m_Extent: {x: 0, y: 0, z: 0}
   selectedLayerVisibilityOverrideEnabled: 0
   selectedLayerVisibilityOverrideValue: 0
+  currentFilePath: 
   layers: []
   spawnAreas: []
   layerList: []

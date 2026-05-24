@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.20)
 
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
-project(imm_macos LANGUAGES C CXX)
+project(imm_macos LANGUAGES C CXX OBJCXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+enable_testing()
 
 if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "" FORCE)
@@ -70,6 +72,7 @@ set(IMMCORE_SOURCES
     ${CODE_DIR}/libImmCore/src/libRender/opengl4x/piGL4X_Renderer.cpp
     ${CODE_DIR}/libImmCore/src/libRender/opengl4x/piGL4X_Ext.cpp
     ${CODE_DIR}/libImmCore/src/libRender/opengl4x/macos/piGL4X_RenderContextOS.cpp
+    ${CODE_DIR}/libImmCore/src/libRender/metal/piMetal_Renderer.mm
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
@@ -98,6 +101,10 @@ target_link_libraries(libImmCore
         png_static
         turbojpeg-static
         ZLIB::ZLIB
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+        "-framework Foundation"
         "-framework OpenGL"
         "-framework CoreGraphics"
         "-framework Cocoa"
@@ -275,6 +282,205 @@ if(IMM_BUILD_VIEWER)
     target_compile_definitions(appImmViewer PRIVATE DISABLE_VR=1)
     set_target_properties(appImmViewer PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/viewer
+    )
+
+    add_executable(appImmViewerMetal MACOSX_BUNDLE
+        ${CODE_DIR}/appImmViewer/src/macos/metal_player.mm
+        ${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json
+        ${CODE_DIR}/appImmViewer/src/resolve.cpp
+        ${CODE_DIR}/appImmViewer/src/settings.cpp
+        ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
+        ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
+        ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
+        ${CODE_DIR}/appImmViewer/src/simpleJSON/JSONValue.cpp
+    )
+    target_include_directories(appImmViewerMetal PUBLIC ${CODE_DIR})
+    target_compile_definitions(appImmViewerMetal PRIVATE DISABLE_VR=1)
+    target_link_libraries(appImmViewerMetal PRIVATE
+        libImmPlayer
+        libImmImporter
+        libImmCore
+        "-framework Cocoa"
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+    )
+    set_target_properties(appImmViewerMetal PROPERTIES
+        BUNDLE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/viewer
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/viewer
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-Info.plist.in"
+        MACOSX_BUNDLE_BUNDLE_NAME "IMM Metal Viewer"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.immersivefoundation.imm.metalviewer"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1.0"
+        MACOSX_BUNDLE_BUNDLE_VERSION "0.1.0"
+    )
+    set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
+    )
+
+    add_custom_target(validateAppImmViewerMetalPlayback
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating standalone macOS Metal IMM playback"
+    )
+
+    add_custom_target(validateAppImmViewerMetalCliContract
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            --cli-contract
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating standalone macOS Metal command-line contract"
+    )
+
+    add_custom_target(validateAppImmViewerMetalCapture
+        COMMAND ${CMAKE_COMMAND}
+            -E env "IMM_METAL_VALIDATE_CAPTURE_DIR=${CMAKE_BINARY_DIR}/metal-validation-captures"
+            ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating standalone macOS Metal capture output"
+    )
+
+    add_custom_target(validateAppImmViewerMetalNativeFrameFailure
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            --native-frame-failure-contract
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating standalone macOS Metal native-frame failure handling"
+    )
+
+    add_custom_target(validateAppImmViewerMetalBundle
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            --bundle-contract
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating standalone macOS Metal app bundle"
+    )
+
+    add_custom_target(validateAppImmViewerMetalContentOverride
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            --content-override-contract
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating standalone macOS Metal content-path launch"
+    )
+
+    add_custom_target(validateAppImmViewerMetalRepeat
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            --repeat-contract
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating repeated standalone macOS Metal launch and teardown"
+    )
+
+    add_custom_target(validateAppImmViewerMetal
+        DEPENDS
+            validateAppImmViewerMetalPlayback
+            validateAppImmViewerMetalCliContract
+            validateAppImmViewerMetalCapture
+            validateAppImmViewerMetalNativeFrameFailure
+            validateAppImmViewerMetalBundle
+            validateAppImmViewerMetalContentOverride
+            validateAppImmViewerMetalRepeat
+    )
+
+    add_test(
+        NAME appImmViewerMetalPlayback
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalPlayback
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalPlayback PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
+    )
+
+    add_test(
+        NAME appImmViewerMetalCliContract
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalCliContract
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalCliContract PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
+    )
+
+    add_test(
+        NAME appImmViewerMetalCapture
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalCapture
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalCapture PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
+    )
+
+    add_test(
+        NAME appImmViewerMetalNativeFrameFailure
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalNativeFrameFailure
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalNativeFrameFailure PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
+    )
+
+    add_test(
+        NAME appImmViewerMetalBundle
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalBundle
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalBundle PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
+    )
+
+    add_test(
+        NAME appImmViewerMetalContentOverride
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalContentOverride
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalContentOverride PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
+    )
+
+    add_test(
+        NAME appImmViewerMetalRepeat
+        COMMAND ${CMAKE_COMMAND}
+            --build "${CMAKE_BINARY_DIR}"
+            --target validateAppImmViewerMetalRepeat
+            --config Release
+    )
+    set_tests_properties(appImmViewerMetalRepeat PROPERTIES
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        LABELS "macos;metal;standalone"
     )
 endif()
 

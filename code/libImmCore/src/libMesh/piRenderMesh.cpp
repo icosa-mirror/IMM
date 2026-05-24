@@ -42,6 +42,28 @@ const int piRenderMesh::GetNumVertices( void ) const
     return mVertexData.mStream[0].mLength;
 }
 
+const int piRenderMesh::GetNumIndices( int elementArrayID ) const
+{
+    if (mIndexData.mNumElementArrays == 0)
+    {
+        return mVertexData.mStream[0].mLength;
+    }
+    if (elementArrayID < 0 || elementArrayID >= (int)mIndexData.mNumElementArrays)
+    {
+        return 0;
+    }
+    return (int)mIndexData.mElementArray[elementArrayID].mNum;
+}
+
+const int piRenderMesh::GetNumTriangles( int elementArrayID ) const
+{
+    if (mIndexData.mType != piRenderer::PrimitiveType::Triangle)
+    {
+        return 0;
+    }
+    return GetNumIndices(elementArrayID) / 3;
+}
+
 const piBuffer piRenderMesh::GetVertexBuffer( int stream ) const
 {
     return mVertexData.mStream[stream].mVBO;

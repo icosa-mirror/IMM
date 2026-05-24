@@ -110,6 +110,10 @@ namespace ExePlayer
 #if defined(__APPLE__)
         mExplicitUniforms = false;
 #endif
+        if (renderer->GetAPI() == piRenderer::API::Metal)
+        {
+            mExplicitUniforms = true;
+        }
         mRenderStateResolve = renderer->CreateRasterState(false, true, piRenderer::CullMode::NONE, false, false);
         if (!mRenderStateResolve)
             return false;

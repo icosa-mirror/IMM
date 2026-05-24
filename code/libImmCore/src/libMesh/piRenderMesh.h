@@ -65,6 +65,8 @@ public:
     const bound3 & GetBBox( void ) const;
 
     const int GetNumVertices( void ) const;
+    const int GetNumIndices( int elementArrayID ) const;
+    const int GetNumTriangles( int elementArrayID ) const;
     const piBuffer GetVertexBuffer( int stream ) const;
 
 private:
