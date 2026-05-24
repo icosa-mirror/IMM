@@ -43,13 +43,15 @@ jobs:
         .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
 
     - name: Upload Windows DirectX Baseline Capture
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-Windows-DirectX-Baseline
         path: |
           build/baseline-captures/windows-directx-static.png
           build/baseline-captures/settings-baseline-directx-sample1.runtime.json
-        if-no-files-found: error
+          build/baseline-captures/windows-directx-static*.txt
+        if-no-files-found: warn
 
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4

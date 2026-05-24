@@ -84,9 +84,30 @@ $SamplePath = Resolve-RequiredFile $SamplePath "sample1.imm"
 
 $outputFullPath = [System.IO.Path]::GetFullPath($OutputPath)
 $outputDir = Split-Path -Parent $outputFullPath
+$viewerDir = Split-Path -Parent $ViewerExe
+$viewerDebugLogPath = Join-Path $viewerDir "debug.txt"
+$capturedDebugLogPath = Join-Path $outputDir "windows-directx-static.debug.txt"
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 if (Test-Path -LiteralPath $outputFullPath) {
     Remove-Item -LiteralPath $outputFullPath -Force
+}
+if (Test-Path -LiteralPath $viewerDebugLogPath) {
+    Remove-Item -LiteralPath $viewerDebugLogPath -Force
+}
+if (Test-Path -LiteralPath $capturedDebugLogPath) {
+    Remove-Item -LiteralPath $capturedDebugLogPath -Force
+}
+
+function Copy-ViewerDebugLog {
+    if (Test-Path -LiteralPath $viewerDebugLogPath -PathType Leaf) {
+        Copy-Item -LiteralPath $viewerDebugLogPath -Destination $capturedDebugLogPath -Force
+        Write-Host "Viewer debug log: $capturedDebugLogPath"
+        Write-Host "----- viewer debug tail -----"
+        Get-Content -LiteralPath $capturedDebugLogPath -Tail 200
+        Write-Host "----- end viewer debug tail -----"
+    } else {
+        Write-Host "Viewer debug log was not written: $viewerDebugLogPath"
+    }
 }
 
 $runtimeSettingsPath = Join-Path $outputDir "settings-baseline-directx-sample1.runtime.json"
@@ -117,14 +138,17 @@ Write-Host "Settings: $runtimeSettingsPath"
 Write-Host "Sample:   $SamplePath"
 Write-Host "Output:   $outputFullPath"
 
-$process = Start-Process -FilePath $ViewerExe -ArgumentList @($runtimeSettingsPath) -Wait -PassThru
+$process = Start-Process -FilePath $ViewerExe -ArgumentList @($runtimeSettingsPath) -WorkingDirectory $viewerDir -Wait -PassThru
 $exitCode = $process.ExitCode
 if ($exitCode -ne 0) {
+    Copy-ViewerDebugLog
     throw "Windows DirectX baseline capture failed with exit code $exitCode"
 }
 
 if (-not (Test-Path -LiteralPath $outputFullPath -PathType Leaf)) {
+    Copy-ViewerDebugLog
     throw "Windows DirectX baseline capture did not produce output: $outputFullPath"
 }
 
+Copy-ViewerDebugLog
 Write-Host "Windows DirectX baseline capture written: $outputFullPath"
