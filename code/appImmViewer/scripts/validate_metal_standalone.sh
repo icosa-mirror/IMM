@@ -354,9 +354,19 @@ validate_ppm_capture() {
     dimensions=$(sed -n '2p' "$capture_path")
     max_value=$(sed -n '3p' "$capture_path")
 
+    check_dimensions=1
+    if [ "${IMM_METAL_VALIDATE_EXPECTED_VALUES:-1}" = "0" ]; then
+        check_dimensions=0
+    fi
+
+    dimensions_unexpected=0
+    if [ "$check_dimensions" -eq 1 ] && [ "$dimensions" != "${expected_width} ${expected_height}" ]; then
+        dimensions_unexpected=1
+    fi
+
     if [ "$magic" != "P6" ] ||
-       [ "$dimensions" != "${expected_width} ${expected_height}" ] ||
-       [ "$max_value" != "255" ]; then
+       [ "$max_value" != "255" ] ||
+       [ "$dimensions_unexpected" -eq 1 ]; then
         echo "$name Metal validation capture has an unexpected PPM header: $capture_path" >&2
         echo "expected: P6 / ${expected_width} ${expected_height} / 255" >&2
         echo "actual:   $magic / $dimensions / $max_value" >&2

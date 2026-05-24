@@ -109,7 +109,13 @@ IMM_METAL_EXIT_AFTER_VALIDATE=1 \
   exampleImmFiles/sample1.imm
 ```
 
-After generating a Windows DirectX baseline PNG, compare it against the Metal PNG with:
+Baseline capture source:
+
+- Preferred: run the Windows CI job and inspect `ImmViewer-Windows-DirectX-Baseline/windows-directx-static.png`.
+- Fallback: run the Windows DirectX capture script manually from a Windows checkout or downloaded `ImmViewer-Windows` artifact.
+- Do not treat numeric image comparison as authoritative until the Windows DirectX PNG has been visually inspected.
+
+After generating or downloading a Windows DirectX baseline PNG, compare it against the Metal PNG with:
 
 ```bash
 python3 code/appImmViewer/scripts/compare_captures.py \
@@ -117,9 +123,8 @@ python3 code/appImmViewer/scripts/compare_captures.py \
   build/macos/metal-validation-captures/static.png
 ```
 
-The Windows CI job also uploads `ImmViewer-Windows-DirectX-Baseline`, containing `windows-directx-static.png` and the runtime settings JSON used to create it.
+The Windows CI job uploads `ImmViewer-Windows-DirectX-Baseline`, containing `windows-directx-static.png` and the runtime settings JSON used to create it.
 The macOS CI job uploads `ImmViewerMetal-macOS-Baseline`, containing `metal-static.png` and the validation log, plus `ImmViewerMetal-macOS`, containing the standalone `.app` bundle.
-The `Compare Viewer Baselines` CI job uploads `ImmViewer-Baseline-Comparison`, containing the DirectX-vs-Metal static capture metrics, an amplified diff PNG, and a side-by-side DirectX/Metal/diff contact sheet. This comparison is informational until a verified tolerance is chosen.
 
 To generate the Windows DirectX baseline PNG from a Windows checkout:
 

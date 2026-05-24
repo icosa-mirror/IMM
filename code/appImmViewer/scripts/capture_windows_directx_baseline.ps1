@@ -109,6 +109,7 @@ $env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "1"
 $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = "1"
 $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES = "1"
 $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH = $outputFullPath
+$env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO = "1"
 
 Write-Host "Running Windows DirectX baseline capture..."
 Write-Host "Viewer:   $ViewerExe"

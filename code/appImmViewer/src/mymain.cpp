@@ -538,7 +538,9 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
     //------------------------------
 
-    mSoundEngineBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&mLog);
+    const char *disableAudioForValidation = getenv("IMM_VIEWER_VALIDATE_DISABLE_AUDIO");
+    const bool useNullSoundBackend = disableAudioForValidation && disableAudioForValidation[0];
+    mSoundEngineBackend = piCreateSoundEngineBackend(useNullSoundBackend ? piSoundEngineBackend::API::Null : piSoundEngineBackend::API::DirectSoundOVR, &mLog);
     if (!mSoundEngineBackend)
     {
         mLog.Printf(LT_WARNING, L"Sound backend unavailable; continuing without audio");
