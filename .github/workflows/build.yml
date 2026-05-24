@@ -37,22 +37,6 @@ jobs:
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
 
-    - name: Generate Windows DirectX Baseline Capture
-      shell: pwsh
-      run: |
-        .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
-
-    - name: Upload Windows DirectX Baseline Capture
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ImmViewer-Windows-DirectX-Baseline
-        path: |
-          build/baseline-captures/windows-directx-static.png
-          build/baseline-captures/settings-baseline-directx-sample1.runtime.json
-          build/baseline-captures/windows-directx-static*.txt
-        if-no-files-found: warn
-
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
       with:
@@ -119,6 +103,23 @@ jobs:
         name: sample1-imm
         path: exampleImmFiles/sample1.imm
         if-no-files-found: error
+
+    - name: Generate Windows DirectX Baseline Capture
+      continue-on-error: true
+      shell: pwsh
+      run: |
+        .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
+
+    - name: Upload Windows DirectX Baseline Capture
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Windows-DirectX-Baseline
+        path: |
+          build/baseline-captures/windows-directx-static.png
+          build/baseline-captures/settings-baseline-directx-sample1.runtime.json
+          build/baseline-captures/windows-directx-static*.txt
+        if-no-files-found: warn
 
   build-android:
     name: Android
