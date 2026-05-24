@@ -117,8 +117,8 @@ Write-Host "Settings: $runtimeSettingsPath"
 Write-Host "Sample:   $SamplePath"
 Write-Host "Output:   $outputFullPath"
 
-& $ViewerExe $runtimeSettingsPath
-$exitCode = $LASTEXITCODE
+$process = Start-Process -FilePath $ViewerExe -ArgumentList @($runtimeSettingsPath) -Wait -PassThru
+$exitCode = $process.ExitCode
 if ($exitCode -ne 0) {
     throw "Windows DirectX baseline capture failed with exit code $exitCode"
 }
