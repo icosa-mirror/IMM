@@ -70,6 +70,7 @@ set(IMMCORE_SOURCES
     ${CODE_DIR}/libImmCore/src/libRender/opengl4x/piGL4X_Renderer.cpp
     ${CODE_DIR}/libImmCore/src/libRender/opengl4x/piGL4X_Ext.cpp
     ${CODE_DIR}/libImmCore/src/libRender/opengl4x/macos/piGL4X_RenderContextOS.cpp
+    ${CODE_DIR}/libImmCore/src/libRender/metal/piMetal_Renderer.mm
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
@@ -98,6 +99,10 @@ target_link_libraries(libImmCore
         png_static
         turbojpeg-static
         ZLIB::ZLIB
+        "-framework Metal"
+        "-framework MetalKit"
+        "-framework QuartzCore"
+        "-framework Foundation"
         "-framework OpenGL"
         "-framework CoreGraphics"
         "-framework Cocoa"
@@ -234,6 +239,22 @@ set_target_properties(ImmUnity PROPERTIES
 set_target_properties(ImmUnity PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/unity
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/unity
+)
+
+# -----------------------------------------------------------------------------
+# ImmGodot native plugin (macOS)
+# -----------------------------------------------------------------------------
+
+add_library(ImmGodotPlugin SHARED
+    ${CODE_DIR}/appImmGodot/src/main.cpp
+    ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
+)
+target_include_directories(ImmGodotPlugin PUBLIC ${CODE_DIR})
+target_link_libraries(ImmGodotPlugin PRIVATE libImmPlayer libImmImporter libImmCore)
+set_target_properties(ImmGodotPlugin PROPERTIES
+    OUTPUT_NAME "ImmGodotPlugin"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot
 )
 
 # -----------------------------------------------------------------------------

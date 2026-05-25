@@ -8,11 +8,23 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      unity_exe:
+        description: Optional Unity editor executable path for Windows parity capture
+        required: false
+        default: ''
+      parity_document:
+        description: Optional IMM document path for both Godot smoke and Unity parity capture
+        required: false
+        default: ''
 
 jobs:
   build-windows:
     name: Windows
     runs-on: windows-latest
+    env:
+      GODOT_CPP_REF: godot-4.2-stable
+      GODOT_VERSION: 4.2.2-stable
 
     steps:
     - name: Checkout repository
@@ -33,9 +45,103 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install SCons
+      run: python -m pip install scons
+
+    - name: Verify Godot bridge scaffolding
+      run: python code/appImmGodotGDExtension/verify_local.py
+
+    - name: Cache godot-cpp
+      uses: actions/cache@v4
+      with:
+        path: thirdparty/godot-cpp
+        key: godot-cpp-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/appImmGodotGDExtension/SConstruct') }}
+        restore-keys: |
+          godot-cpp-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-
+
     - name: Build Solution
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+
+    - name: Build Godot GDExtension
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force artifacts\godot-build | Out-Null
+        $buildLog = "artifacts\godot-build\build-godot-extension.log"
+        $buildExitCode = 0
+        try {
+          $buildOutput = .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF -SummaryDir artifacts\godot-build 2>&1
+          $buildExitCode = $LASTEXITCODE
+        }
+        catch {
+          $buildExitCode = 1
+          $buildOutput = @($_.Exception.Message, ($_ | Out-String))
+        }
+        $buildOutput | Tee-Object -FilePath $buildLog
+        $buildSummary = "artifacts\godot-build\godot-build-summary.json"
+        if (Test-Path $buildSummary) {
+          Get-Content $buildSummary
+        }
+        if ($buildExitCode -ne 0) {
+          throw "Godot GDExtension build failed. See $buildLog"
+        }
+
+    - name: Download Godot
+      shell: pwsh
+      run: |
+        $zip = "godot.zip"
+        $url = "https://github.com/godotengine/godot/releases/download/${env:GODOT_VERSION}/Godot_v${env:GODOT_VERSION}_win64.exe.zip"
+        Invoke-WebRequest -Uri $url -OutFile $zip
+        Expand-Archive -Path $zip -DestinationPath godot
+        $exe = Get-ChildItem godot -Filter "Godot_v*_win64.exe" -Recurse | Select-Object -First 1
+        if ($null -eq $exe) {
+          throw "Downloaded Godot executable was not found"
+        }
+        Rename-Item $exe.FullName "Godot.exe"
+        "GODOT_EXE=$((Resolve-Path (Join-Path $exe.DirectoryName 'Godot.exe')).Path)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Run Godot native smoke
+      shell: pwsh
+      run: |
+        $godotArgs = @("-Configuration", "Release", "-GodotExe", $env:GODOT_EXE, "-RequireExtension", "-LogDir", "artifacts\godot-smoke")
+        $parityDocument = "${{ inputs.parity_document }}"
+        if ("${{ github.event_name }}" -eq "workflow_dispatch" -and -not [string]::IsNullOrWhiteSpace("${{ inputs.unity_exe }}") -and [string]::IsNullOrWhiteSpace($parityDocument)) {
+          $parityDocument = (Resolve-Path "exampleImmFiles\sample1.imm").Path
+        }
+        if ("${{ github.event_name }}" -eq "workflow_dispatch" -and -not [string]::IsNullOrWhiteSpace($parityDocument)) {
+          $godotArgs += @("-DocumentPath", $parityDocument)
+        }
+        .\code\projects\windows\run-godot-smoke.ps1 @godotArgs
+
+    - name: Run Unity/Godot parity diagnostics
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.unity_exe != '' }}
+      shell: pwsh
+      run: |
+        $parityArgs = @(
+          "-UnityExe", "${{ inputs.unity_exe }}",
+          "-GodotExe", $env:GODOT_EXE,
+          "-Configuration", "Release",
+          "-LogRoot", "artifacts\parity",
+          "-RequireExtension",
+          "-SyncBuiltUnityPlugins"
+        )
+        $parityDocument = "${{ inputs.parity_document }}"
+        if ([string]::IsNullOrWhiteSpace($parityDocument)) {
+          $parityDocument = (Resolve-Path "exampleImmFiles\sample1.imm").Path
+        }
+        $parityArgs += @("-DocumentPath", $parityDocument)
+        .\code\projects\windows\run-unity-godot-parity.ps1 @parityArgs
+        if (-not (Test-Path "artifacts\parity\unity-parity\unity-matrix-diagnostics.log")) {
+          throw "Unity parity diagnostics log was not produced"
+        }
+        if (Test-Path "artifacts\parity\unity-godot-parity-summary.json") {
+          Get-Content "artifacts\parity\unity-godot-parity-summary.json"
+        }
 
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
@@ -53,6 +159,44 @@ jobs:
         path: |
           code/appImmUnity/exe/ImmUnityPlugin.dll
         if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload Godot GDExtension DLLs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotGDExtension-Windows
+        path: |
+          code/ImmGodotSampleProject/bin/windows/release/*.dll
+          code/ImmGodotSampleProject/bin/windows/release/godot-extension-dlls.txt
+        if-no-files-found: ignore
+        retention-days: 1
+
+    - name: Upload Godot Build Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotBuild-Windows
+        path: artifacts/godot-build
+        if-no-files-found: ignore
+        retention-days: 1
+
+    - name: Upload Godot Smoke Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotSmoke-Windows
+        path: artifacts/godot-smoke
+        if-no-files-found: ignore
+        retention-days: 1
+
+    - name: Upload Unity Parity Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmUnityParity-Windows
+        path: artifacts/parity
+        if-no-files-found: ignore
         retention-days: 1
 
     - name: Package Viewer Artifact

@@ -114,6 +114,14 @@ namespace ImmPlayer
             {
                 // Update camera matrices each frame
                 ImmPlayerManager.Instance.SetCameraMatrices(cameraId, targetCamera, stereoMode);
+                if (Input.GetKeyDown(KeyCode.M))
+                {
+                    ImmPlayerManager.Instance.LogLastMatrixDiagnostics();
+                }
+                if (Input.GetKeyDown(KeyCode.N))
+                {
+                    ImmPlayerManager.Instance.LogDeterministicMatrixDiagnostics(1, true, _currentDocument);
+                }
             }
         }
 
@@ -805,4 +813,3 @@ namespace ImmPlayer
         }
     }
 }
-

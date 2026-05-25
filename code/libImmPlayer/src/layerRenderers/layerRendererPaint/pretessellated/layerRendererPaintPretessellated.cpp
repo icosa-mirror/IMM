@@ -247,21 +247,22 @@ namespace ImmPlayer
                     continue;
                 }
             }
-			const piShaderOptions ops = { 5,{ { "COLOR_COMPRESSED", static_cast<int>(colorSpace) },
-												{ "WIGGLE", k },
-												{ "DRAWIN", j },
+				const piShaderOptions ops = { 6,{ { "COLOR_COMPRESSED", static_cast<int>(colorSpace) },
+													{ "WIGGLE", k },
+													{ "DRAWIN", j },
 #if PT_VERTEX_FORMAT==1
-											  	{ "VERTEX_FORMAT", 1 },
+													{ "VERTEX_FORMAT", 1 },
 #else
-											  	{ "VERTEX_FORMAT", 0 },
+													{ "VERTEX_FORMAT", 0 },
 #endif
-												{ "STEREOMODE", static_cast<int>(i) } } };
+													{ "STEREOMODE", static_cast<int>(i) },
+													{ "PRETESSELLATED", 1 } } };
 
 
 			char error[1024] = { 0 };
 
 
-			if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+				if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
 			{
 				mShader[dindex] = renderer->CreateShader(&ops, shader_pretessellated_brush_vs, nullptr, nullptr, nullptr, shader_pretessellated_brush_fs, error);
 			}

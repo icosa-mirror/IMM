@@ -14,6 +14,8 @@ code/appImmUnity/exe/ImmUnityPlugin.ilk
 code/appImmUnity/exe/ImmUnityPlugin.lib
 code/appImmUnity/exe/ImmUnityPlugin.pdb
 code/appImmUnity/exe/
+code/appImmGodot/bin
+code/appImmGodot/exe/
 code/appImmViewer/bin
 code/appImmViewer/exe/appImmViewer_Debug.*
 code/appImmViewer/exe/appImmViewer_Release.*
@@ -22,6 +24,9 @@ code/appImmStrokeReader/exe/*.pdb
 code/appImmStrokeReader/exe/*.exp
 code/appImmStrokeReader/exe/*.lib
 code/appImmStrokeReader/exe/*.ilk
+code/ImmGodotSampleProject/bin/
+code/ImmGodotSampleProject/.godot/
+thirdparty/godot-cpp/
 
 # Android/Gradle build artifacts
 .cxx/

@@ -1,0 +1,15 @@
+[gd_scene format=3]
+
+[node name="NativeSmokeScene" type="Node3D"]
+
+[node name="ImmViewer" type="ImmViewerNode" parent="."]
+document_path = "../../exampleImmFiles/sample1.imm"
+load_on_ready = false
+auto_play = true
+matrix_debug_logging = true
+
+[node name="CameraRig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 6)
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true

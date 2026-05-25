@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
+using UnityEngine;
 
 namespace ImmPlayer.Editor
 {
@@ -40,6 +41,54 @@ namespace ImmPlayer.Editor
             }
 
             UnityEngine.Debug.Log($"[IMM_AUTOBUILD] Android build succeeded: {outputApk}");
+        }
+
+        public static void CaptureDeterministicParityDiagnostics()
+        {
+            string projectPath = Directory.GetCurrentDirectory();
+            string documentPath = Environment.GetEnvironmentVariable("IMM_UNITY_PARITY_DOCUMENT");
+            if (string.IsNullOrWhiteSpace(documentPath))
+            {
+                documentPath = Path.Combine(projectPath, "Assets", "StreamingAssets", "sample1.imm");
+            }
+            if (!Path.IsPathRooted(documentPath))
+            {
+                documentPath = Path.GetFullPath(Path.Combine(projectPath, documentPath));
+            }
+            if (!File.Exists(documentPath))
+            {
+                throw new FileNotFoundException("IMM parity document was not found.", documentPath);
+            }
+
+            GameObject managerObject = new GameObject("IMM Parity Diagnostics Manager");
+            ImmPlayerManager manager = managerObject.AddComponent<ImmPlayerManager>();
+            ImmDocument document = null;
+            try
+            {
+                if (!manager.Initialize())
+                {
+                    throw new InvalidOperationException("ImmPlayerManager failed to initialize for parity diagnostics.");
+                }
+
+                document = manager.LoadDocument(documentPath);
+                if (document == null || !document.IsLoaded)
+                {
+                    throw new InvalidOperationException($"Failed to load parity document: {documentPath}");
+                }
+
+                ImmNativePlugin.GlobalWork(1);
+                manager.LogDeterministicMatrixDiagnostics(1, true, document, documentPath);
+                UnityEngine.Debug.Log($"[IMM_PARITY] Captured deterministic parity diagnostics for {documentPath}");
+            }
+            finally
+            {
+                if (document != null)
+                {
+                    manager.UnloadDocument(document);
+                }
+                manager.Shutdown();
+                UnityEngine.Object.DestroyImmediate(managerObject);
+            }
         }
     }
 }

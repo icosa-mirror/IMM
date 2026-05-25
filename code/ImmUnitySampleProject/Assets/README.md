@@ -30,6 +30,12 @@ This does all of the following:
    - `Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
    - `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
 
+## Matrix diagnostics
+
+While the sample document is loaded, press `M` to log the most recent camera feed as `IMM_UNITY_MATRIX_DIAGNOSTICS_JSON`. Press `N` to submit and log the deterministic parity camera matrices and document transform used by the Godot smoke runner, plus document state, background color, bounding box, and spawn-area state; this is the preferred interactive Unity capture for direct comparison with `godot-matrix-diagnostics.json`.
+
+For batch capture on Windows, run `code\projects\windows\capture-unity-parity.ps1`; it executes `ImmPlayer.Editor.BuildAutomation.CaptureDeterministicParityDiagnostics` and writes `artifacts\unity-parity\unity-matrix-diagnostics.log`.
+
 ## Manual Setup
 
 ### 1. Copy Files to Unity Project
@@ -281,6 +287,7 @@ To enable debug logging from the native plugin:
 1. Check the log file specified in `ImmPlayerManager` settings
 2. Call `ImmNativePlugin.Debug()` to verify initialization state
 3. Monitor the Unity console for C# wrapper messages
+4. Press `M` in the sample scene to print `IMM_UNITY_MATRIX_DIAGNOSTICS_JSON` for comparison with Godot smoke `IMM_GODOT_MATRIX_DIAGNOSTICS_JSON`
 
 ## Troubleshooting
 

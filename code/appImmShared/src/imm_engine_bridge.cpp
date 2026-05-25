@@ -1,6 +1,10 @@
 #include "imm_engine_bridge.h"
 
+#include "libImmCore/src/libBasics/piImage.h"
 #include "libImmCore/src/libBasics/piStr.h"
+
+#include <cstdlib>
+#include <vector>
 
 using namespace ImmCore;
 using namespace ImmPlayer;
@@ -180,6 +184,47 @@ namespace ImmShared
         if (res.x <= 0 || res.y <= 0)
             return false;
 
+        const char *capturePath = std::getenv("IMM_GODOT_NATIVE_CAPTURE_PATH");
+        const bool captureNativeRender = capturePath != nullptr && capturePath[0] != '\0';
+        piTexture captureColorTexture = nullptr;
+        piTexture captureDepthTexture = nullptr;
+        piRTarget captureRenderTarget = nullptr;
+        if (captureNativeRender)
+        {
+            const piRenderer::TextureInfo colorInfo = {
+                piRenderer::TextureType::T2D,
+                piRenderer::Format::C4_8_UNORM,
+                res.x,
+                res.y,
+                1,
+                1,
+                1,
+                0
+            };
+            const piRenderer::TextureInfo depthInfo = {
+                piRenderer::TextureType::T2D,
+                piRenderer::Format::D1_32_FLOAT,
+                res.x,
+                res.y,
+                1,
+                1,
+                1,
+                0
+            };
+            captureColorTexture = mRenderer->CreateTexture(L"imm_godot_capture_color", &colorInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, nullptr);
+            captureDepthTexture = mRenderer->CreateTexture(L"imm_godot_capture_depth", &depthInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, nullptr);
+            captureRenderTarget = mRenderer->CreateRenderTarget(captureColorTexture, nullptr, nullptr, nullptr, captureDepthTexture);
+            if (captureRenderTarget == nullptr || !mRenderer->SetRenderTarget(captureRenderTarget))
+            {
+                if (mLogInitialized)
+                    mLog.Printf(LT_ERROR, L"Failed to create native capture render target");
+                if (captureRenderTarget) mRenderer->DestroyRenderTarget(captureRenderTarget);
+                if (captureDepthTexture) mRenderer->DestroyTexture(captureDepthTexture);
+                if (captureColorTexture) mRenderer->DestroyTexture(captureColorTexture);
+                return false;
+            }
+        }
+
         if (viewport.forceViewport)
         {
             const int vp[4] = {
@@ -249,6 +294,32 @@ namespace ImmShared
         if (tickSound && mSoundBackend != nullptr)
             mSoundBackend->Tick();
 
+        if (captureNativeRender)
+        {
+            std::vector<uint8_t> pixels(static_cast<size_t>(res.x) * static_cast<size_t>(res.y) * 4u);
+            mRenderer->GetTextureContent(captureColorTexture, pixels.data(), piRenderer::Format::C4_8_UNORM);
+
+            piImage image;
+            image.Init();
+            image.InitWrap(piImage::TYPE_2D, res.x, res.y, 1, piImage::FORMAT_I_RGBA, pixels.data());
+            wchar_t *widePath = pistr2ws(capturePath);
+            if (widePath != nullptr)
+            {
+                if (!image.WriteToDisk(widePath, 0, L"png") && mLogInitialized)
+                    mLog.Printf(LT_ERROR, L"Failed to write native capture: %s", widePath);
+                std::free(widePath);
+            }
+            image.Free();
+
+            mRenderer->DettachTextures();
+            mRenderer->DettachSamplers();
+            mRenderer->DettachShader();
+            mRenderer->SetRenderTarget(nullptr);
+            mRenderer->DestroyRenderTarget(captureRenderTarget);
+            mRenderer->DestroyTexture(captureDepthTexture);
+            mRenderer->DestroyTexture(captureColorTexture);
+        }
+
         return true;
     }
 
@@ -301,7 +372,8 @@ namespace ImmShared
 
     bool ImmEngineBridge::InitializeLog()
     {
-        const wchar_t *logFileName = (mConfig.logFileName == nullptr) ? L"imm_player_log.txt" : pistr2ws(mConfig.logFileName);
+        wchar_t *allocatedLogFileName = (mConfig.logFileName == nullptr) ? nullptr : pistr2ws(mConfig.logFileName);
+        const wchar_t *logFileName = (allocatedLogFileName == nullptr) ? L"imm_player_log.txt" : allocatedLogFileName;
 
 #ifdef _DEBUG
         const int mode = PILOG_TXT + PILOG_CNS;
@@ -309,12 +381,18 @@ namespace ImmShared
         const int mode = PILOG_TXT;
 #endif
         if (!mLog.Init(logFileName, mode))
+        {
+            if (allocatedLogFileName != nullptr)
+                std::free(allocatedLogFileName);
             return false;
+        }
 
         mLogInitialized = true;
         mLog.Printf(LT_DEBUG, mConfig.colorSpace == 0 ? L"Linear" : L"Gamma");
         mLog.Printf(LT_DEBUG, L"Antialiasing: %d", mConfig.antialiasing);
         mLog.Printf(LT_DEBUG, L"Log File: %s", logFileName);
+        if (allocatedLogFileName != nullptr)
+            std::free(allocatedLogFileName);
         return true;
     }
 
@@ -379,8 +457,11 @@ namespace ImmShared
             return false;
         }
 
-        const char *apiName[] = { "GL", "DX", "GLES" };
-        mLog.Printf(LT_DEBUG, L"API: %s", pistr2ws(apiName[static_cast<int>(mConfig.rendererApi)]));
+        const char *apiName[] = { "GL", "DX", "GLES", "Metal" };
+        wchar_t *apiNameWide = pistr2ws(apiName[static_cast<int>(mConfig.rendererApi)]);
+        mLog.Printf(LT_DEBUG, L"API: %s", (apiNameWide == nullptr) ? L"unknown" : apiNameWide);
+        if (apiNameWide != nullptr)
+            std::free(apiNameWide);
         return true;
     }
 
@@ -414,9 +495,9 @@ namespace ImmShared
         Player::Configuration conf = {};
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
-        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
-        conf.clipDepth = (mConfig.rendererApi == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-        conf.projectionMatrix = (mConfig.rendererApi == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
+        conf.clipDepth = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+        conf.projectionMatrix = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
 

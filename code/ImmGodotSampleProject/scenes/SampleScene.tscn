@@ -8,7 +8,7 @@ script = ExtResource("1")
 
 [node name="ImmViewer" type="Node" parent="."]
 script = ExtResource("2")
-document_path = "../../../exampleImmFiles/sample1.imm"
+document_path = "../../exampleImmFiles/sample1.imm"
 load_on_ready = false
 auto_play = true
 

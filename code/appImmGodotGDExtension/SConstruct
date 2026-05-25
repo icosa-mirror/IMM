@@ -1,0 +1,96 @@
+import glob
+import os
+
+from SCons.Script import ARGUMENTS, Copy, Default, Dir, Environment, GetOption, Glob, Mkdir
+
+
+script_files = GetOption("file") or []
+script_path = script_files[0] if script_files else "SConstruct"
+if not os.path.isabs(script_path):
+    script_path = os.path.join(os.getcwd(), script_path)
+extension_root = os.path.dirname(os.path.abspath(script_path))
+repo_root = os.path.abspath(os.path.join(extension_root, "..", ".."))
+sample_root = os.path.join(repo_root, "code", "ImmGodotSampleProject")
+configuration = ARGUMENTS.get("configuration", "release").lower()
+if configuration not in ("debug", "release"):
+    raise RuntimeError("configuration must be 'debug' or 'release', got '%s'" % configuration)
+target = "template_debug" if configuration == "debug" else "template_release"
+platform = ARGUMENTS.get("platform", "windows" if os.name == "nt" else "macos").lower()
+if platform not in ("windows", "macos"):
+    raise RuntimeError("platform must be 'windows' or 'macos', got '%s'" % platform)
+arch = ARGUMENTS.get("arch", "arm64" if platform == "macos" and os.uname().machine == "arm64" else "x86_64")
+godot_cpp_path = os.path.abspath(ARGUMENTS.get("godot_cpp_path", os.environ.get("GODOT_CPP_PATH", os.path.join(repo_root, "thirdparty", "godot-cpp"))))
+godot_cpp_lib = ARGUMENTS.get("godot_cpp_lib", "")
+if platform == "windows":
+    imm_godot_lib = os.path.join(repo_root, "code", "appImmGodot", "exe", "ImmGodotPlugin.lib")
+    imm_godot_runtime = os.path.join(repo_root, "code", "appImmGodot", "exe", "ImmGodotPlugin.dll")
+    output_dir = os.path.join(sample_root, "bin", "windows", configuration)
+else:
+    imm_godot_lib = os.path.join(repo_root, "build", "macos-godot-appleclang", "godot", "libImmGodotPlugin.dylib")
+    imm_godot_runtime = imm_godot_lib
+    output_dir = os.path.join(sample_root, "bin", "macos", configuration)
+os.makedirs(output_dir, exist_ok=True)
+godot_cpp_include_dirs = [
+    os.path.join(godot_cpp_path, "include"),
+    os.path.join(godot_cpp_path, "gen", "include"),
+    os.path.join(godot_cpp_path, "gdextension"),
+]
+required_godot_cpp_files = [
+    os.path.join(godot_cpp_path, "gdextension", "gdextension_interface.h"),
+    os.path.join(godot_cpp_path, "gen", "include", "godot_cpp", "classes", "node3d.hpp"),
+    os.path.join(godot_cpp_path, "include", "godot_cpp", "variant", "transform3d.hpp"),
+]
+
+for include_dir in godot_cpp_include_dirs:
+    if not os.path.isdir(include_dir):
+        raise RuntimeError("Could not find godot-cpp include directory at %s. Build/bootstrap godot-cpp first." % include_dir)
+for required_file in required_godot_cpp_files:
+    if not os.path.isfile(required_file):
+        raise RuntimeError("Could not find required godot-cpp header at %s. Build/bootstrap godot-cpp first." % required_file)
+
+if not os.path.isfile(imm_godot_lib):
+    raise RuntimeError("Could not find ImmGodotPlugin link library at %s. Build appImmGodot first." % imm_godot_lib)
+if not os.path.isfile(imm_godot_runtime):
+    raise RuntimeError("Could not find ImmGodotPlugin runtime library at %s. Build appImmGodot first." % imm_godot_runtime)
+
+env = Environment(tools=["default", "msvc"] if platform == "windows" else ["default"], ENV=os.environ)
+env.Append(CPPPATH=[repo_root, os.path.join(repo_root, "code")] + godot_cpp_include_dirs)
+env.Append(CPPDEFINES=["TYPED_METHOD_BIND"])
+if platform == "windows":
+    env.Append(CPPDEFINES=["WIN32", "_WINDOWS"])
+    env.Append(CXXFLAGS=["/std:c++17", "/EHsc"])
+    env.Append(LIBS=["ImmGodotPlugin"])
+    env.Append(LIBPATH=[os.path.join(repo_root, "code", "appImmGodot", "exe")])
+else:
+    env.Append(CXXFLAGS=["-std=c++17", "-fPIC"])
+    env.Append(LINKFLAGS=[imm_godot_lib, "-Wl,-rpath,@loader_path"])
+    env["SHLIBPREFIX"] = "lib"
+
+if not godot_cpp_lib:
+    if platform == "windows":
+        godot_cpp_libs = glob.glob(os.path.join(godot_cpp_path, "bin", "libgodot-cpp.windows.%s.x86_64*.lib" % target))
+    else:
+        godot_cpp_libs = glob.glob(os.path.join(godot_cpp_path, "bin", "libgodot-cpp.macos.%s.%s*.a" % (target, arch)))
+    if not godot_cpp_libs:
+        raise RuntimeError("Could not find godot-cpp library under %s/bin. Build godot-cpp first." % godot_cpp_path)
+    godot_cpp_lib = godot_cpp_libs[0]
+
+if not os.path.isfile(godot_cpp_lib):
+    raise RuntimeError("Could not find godot-cpp library at %s" % godot_cpp_lib)
+
+if platform == "windows":
+    env.Append(LIBS=[os.path.splitext(os.path.basename(godot_cpp_lib))[0]])
+    env.Append(LIBPATH=[os.path.dirname(godot_cpp_lib)])
+else:
+    env.Append(LINKFLAGS=[godot_cpp_lib])
+
+sources = Glob(os.path.join(extension_root, "src", "*.cpp"))
+if len(sources) == 0:
+    raise RuntimeError("Could not find GDExtension C++ sources under %s" % os.path.join(extension_root, "src"))
+target_path = os.path.join(output_dir, "imm_godot_extension")
+library = env.SharedLibrary(target=target_path, source=sources)
+env.Depends(library, imm_godot_lib)
+
+runtime_name = "ImmGodotPlugin.dll" if platform == "windows" else "libImmGodotPlugin.dylib"
+copy_plugin = env.Command(os.path.join(output_dir, runtime_name), imm_godot_runtime, Copy("$TARGET", "$SOURCE"))
+Default([library, copy_plugin])

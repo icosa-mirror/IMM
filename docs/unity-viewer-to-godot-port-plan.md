@@ -139,10 +139,87 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
   - Added Windows `appImmGodot` native plugin skeleton that initializes IMM without Unity headers.
   - Added a Godot sample project scaffold mirroring the Unity sample scene structure and control surface.
   - Added a GDExtension source scaffold and `.gdextension` manifest so the sample project has a defined native integration target.
+  - Added a native Godot render-adapter C ABI with graphics init/shutdown and before/after camera render callbacks.
+  - Wired the GDExtension `ImmViewerNode` to initialize/shutdown the native Godot backend and expose render diagnostics.
+  - Added a script-mode Godot smoke runner that verifies the sample scene API, playback controls, and render diagnostics.
+  - Added a native smoke scene and `-RequireExtension` smoke path that must load the GDExtension `ImmViewerNode` class instead of the script stub.
+  - Extended the Godot smoke runner with repeated load/render/unload lifecycle cycles after parity diagnostics so native smoke covers the v1 stability acceptance criterion.
+  - Hardened the Windows smoke wrapper to require the lifecycle coverage marker and record it in smoke summaries, so CI fails if the repeated lifecycle path is skipped.
+  - Resolved native Godot document loads relative to the Godot project root so CI smoke runs are independent of process working directory.
+  - Corrected the Godot sample document path to resolve to the repository `exampleImmFiles/sample1.imm` from the Godot project root.
+  - Added a Godot smoke preflight that globalizes the configured document path and fails before native load if the file is missing.
+  - Routed native Godot backend logs to `user://imm_godot_log.txt` and had the Windows smoke wrapper collect that log in CI artifacts when present.
+  - Hardened native Godot document loading to free temporary UTF-8/UTF-16 path conversion buffers after `Player.Load`.
+  - Added Godot project, GDExtension manifest, and native smoke scene copies to Windows smoke artifacts so loader failures can be diagnosed from CI output alone.
+  - Extended the Windows Godot smoke wrapper so missing Godot executable and missing document preflight failures write the same smoke summary artifacts as runtime-DLL failures.
+  - Added initial Windows SCons/PowerShell build helpers for bootstrapping `godot-cpp` and producing the GDExtension DLL.
+  - Hardened the Godot Windows build helper to resolve a Visual Studio C++ MSBuild toolchain via `MSBUILD_EXE_PATH`, preferred VS paths, `vswhere`, or PATH before building `appImmGodot`.
+  - Hardened the GDExtension `SConstruct` with explicit configuration, `ImmGodotPlugin`, `godot-cpp`, and output-directory preflight checks.
+  - Hardened the GDExtension `SConstruct` path resolution so it derives repository paths from the SConstruct location instead of the process working directory.
+  - Added runtime dependency staging for the Godot output folder so `ImmGodotPlugin.dll` loads with its media DLLs.
+  - Added SHA-256 hashes to the Windows build/smoke DLL manifests for loader and artifact triage.
+  - Added Windows CI wiring to cache/build `godot-cpp`, build the Godot GDExtension, download Godot, run native smoke, and upload the resulting DLLs plus smoke diagnostics.
+  - Hardened Windows CI Godot artifact uploads so staged DLLs, build logs, and smoke logs are still uploaded after native smoke failures when files exist.
+  - Added Windows CI Godot build-log capture/upload (`ImmGodotBuild-Windows`) so compiler/linker failures before smoke still produce artifacts.
+  - Added a C-safe `ImmGodot_GetDocumentState` shape and exposed `get_document_state()` on `ImmViewerNode` for loading/playback state diagnostics.
+  - Added a C-safe `ImmGodot_GetBoundingBox` shape and exposed `get_bounding_box()` on `ImmViewerNode` for document bounds parity diagnostics.
+  - Added a C-safe `ImmGodot_GetPlayerInfo` shape and exposed `get_background_color()` on `ImmViewerNode` for background-color parity diagnostics.
+  - Converted exported Godot diagnostics APIs from C++ reference parameters to pointer parameters with null guards so the native bridge surface remains C ABI compatible.
+  - Split the native Godot ABI import/export macro so `appImmGodot` exports symbols while the GDExtension imports them, and made the header safe for C/C++ linkage with fixed integer spawn-area ABI constants.
+  - Tightened native Godot read-only ABI inputs to `const` pointers and removed the GDExtension document-path `const_cast`.
+  - Added backend-initialization guards and default-zero outputs around native Godot render, matrix, document, and query C ABI calls so failed initialization produces stable smoke diagnostics instead of undefined player calls.
+  - Added Godot spawn-area query/jump APIs (`get_spawn_area_info`, `get_active_spawn_area_id`, `set_active_spawn_area_index`) on top of the native spawn-area C ABI.
+  - Hardened the native Godot spawn-area C ABI against null/undersized output buffers and invalid spawn-area ids so diagnostics calls fail cleanly instead of crashing native smoke.
+  - Changed the native Godot spawn-area ABI to serialize names into a fixed buffer so Godot queries do not leak native string allocations.
+  - Aligned the script-stub and native Godot spawn-area id API around `PackedInt32Array` so native smoke does not rely on implicit Array conversion.
+  - Added matrix debug logging toggles and render diagnostics snapshots for the last submitted Godot camera matrices.
+  - Added native `set_document_transform(document_transform)` support on `ImmViewerNode`, forwarding to `ImmGodot_SetDocumentToWorld` and exposing document-to-world diagnostics in smoke output.
+  - Added an explicit `set_camera_matrices(camera_id, world_to_head, projection)` Godot API so parity tests can submit and verify deterministic matrix feeds.
+  - Hardened shared bridge initialization to free temporary UTF-8/UTF-16 conversion buffers for log and renderer API strings.
+  - Added machine-readable Godot smoke matrix diagnostics (`IMM_GODOT_MATRIX_DIAGNOSTICS_JSON` / `godot-matrix-diagnostics.json`) for Unity-vs-Godot parity comparisons.
+  - Hardened the Windows smoke wrapper to parse Godot matrix diagnostics and require the expected schema, camera id, 16-float matrix arrays, and deterministic document/camera/projection values.
+  - Added a machine-readable Godot smoke summary JSON artifact for CI triage alongside the raw Godot output and matrix diagnostics, including missing-runtime-DLL preflight failures and post-run diagnostics errors before failing the wrapper.
+  - Added matching Unity sample matrix diagnostics (`IMM_UNITY_MATRIX_DIAGNOSTICS_JSON`) from the existing Unity camera feed.
+  - Added a deterministic Unity matrix diagnostics path that emits the same parity matrices submitted by the Godot smoke runner.
+  - Extended the deterministic Unity diagnostics path to submit/log the same document transform as the Godot smoke runner and include document state, background color, bounding box, and spawn-area state when a sample document is loaded.
+  - Added document identity diagnostics (`document_name` and `document_size_bytes`) to Unity and Godot parity payloads so comparator artifacts prove both captures used matching IMM content.
+  - Added a Windows Unity batchmode parity-capture helper that runs the deterministic Unity diagnostics path and saves `unity-matrix-diagnostics.log` for comparison.
+  - Added Unity parity summary artifacts (`unity-parity-summary.txt/json`) so Unity executable, plugin-sync, batchmode, and missing-diagnostics failures are captured before the wrapper exits nonzero.
+  - Added Unity editor/runtime version diagnostics to Unity parity payloads and summaries so parity artifacts identify both engine runtimes involved.
+  - Extended Unity/Godot comparison summaries to preserve Unity and Godot runtime versions and require them during strict extended parity checks.
+  - Added an explicit Unity parity plugin sync path so Windows parity capture can copy the freshly built `ImmUnityPlugin.dll` and runtime dependencies into the Unity sample package before launching the editor.
+  - Hardened the Unity parity capture wrapper to always clear the `IMM_UNITY_PARITY_DOCUMENT` environment override after the Unity batch run.
+  - Added a matrix diagnostics comparator for Unity/Godot JSON payloads with tolerance-based mismatch reporting, machine-readable summary output, and optional or strict document/background/bounds/spawn parity checks.
+  - Added an end-to-end Windows parity helper that runs Godot smoke, Unity batch capture, and strict Unity-vs-Godot comparison into one artifact folder, with an optional document override applied to both engines.
+  - Added top-level end-to-end parity summary artifacts (`unity-godot-parity-summary.txt/json`) so Godot smoke, Unity capture, comparator, and success phases are recorded consistently.
+  - Added optional manual Windows workflow wiring to run Unity parity capture and strict Unity-vs-Godot diagnostics comparison when a Unity editor path is supplied, with an optional shared IMM document override for the Godot smoke and Unity capture steps.
+  - Hardened Windows parity fixture selection so manual CI parity and `run-unity-godot-parity.ps1` resolve one shared IMM document path and pass it to both Godot and Unity instead of relying on separate project-local defaults.
+  - Switched manual Windows CI parity to use `run-unity-godot-parity.ps1` directly so CI and local parity runs produce the same top-level phase summary and artifact layout.
+  - Added a local verifier for Godot bridge contracts, helper script wiring, matrix comparator coverage, and optional script-stub Godot smoke.
+  - Extended the verifier to check native C ABI declarations against implementations and the smoke-tested Godot API against both script and native `ImmViewerNode` surfaces.
+  - Extended the verifier to require explicit ownership cleanup for native UTF-8/UTF-16 string conversion allocations in the Godot/shared bridge path.
+  - Extended comparator verification to require machine-readable failure summaries for both matrix and camera-id mismatches.
+  - Hardened comparator summary output so malformed payloads, schema mismatches, and invalid matrix shapes still produce CI-readable failure JSON.
+  - Added the Godot bridge verifier to Windows CI before the native GDExtension build.
+  - Added optional PowerShell AST syntax validation for the Windows Godot helper scripts when PowerShell is available.
+  - Fixed Windows batch wrappers for Godot/Unity parity helpers to propagate PowerShell exit codes and added verifier coverage for that contract.
+  - Added optional Godot native build summary artifacts (`godot-build-summary.txt/json`) so Windows CI can identify toolchain, MSBuild, SCons, dependency staging, DLL verification, and success phases without scraping the full build log.
+  - Hardened the Godot Windows build helper to preflight SCons/Git tool resolution and include resolved tool paths in build summaries.
+  - Hardened the GDExtension SConstruct to preflight `godot-cpp` include directories, key Godot headers, and the native source list before invoking MSVC.
+  - Added Godot smoke diagnostics and verifier coverage for the `gl_compatibility` renderer method so Phase 1 artifacts prove the planned Compatibility/OpenGL path was used.
+  - Added Godot engine version diagnostics to smoke payloads and summaries so CI artifacts identify the runtime that produced native smoke/parity evidence.
+  - Added a local macOS `godot-cpp`/SCons path for building the Godot GDExtension against the Apple-Clang-built `ImmGodotPlugin.dylib`.
+  - Imported and wired the Metal `piRenderer` backend on macOS so the native Godot bridge no longer depends on unsupported Apple OpenGL features for local validation.
+  - Fixed native Godot autoplay sequencing so `Load` is not overwritten by `Resume/Show` before `GlobalWork` processes it.
+  - Fixed macOS native loader stability by moving the `piLog::Printf` formatting buffer off the async loader thread stack.
+  - Fixed Metal command-buffer ownership for internally-created command buffers so offscreen render/readback can survive repeated native render calls.
+  - Added an env-gated native offscreen capture path (`IMM_GODOT_NATIVE_CAPTURE_PATH`) that renders the IMM frame into a Metal render target, reads it back, and writes a PNG for validation.
+  - Tightened the local native smoke runner so it waits for the document to reach the real native `Loaded` state by pumping both `global_work()` and `render_camera()`, then requires valid bounds and spawn-area diagnostics.
+  - Verified macOS native smoke with `sample1.imm`: backend initialized, document reached loaded state, bounds were valid, four spawn areas were reported, lifecycle reload/render/unload cycles passed, and `build/validation/imm-native-offscreen.png` contained non-background IMM pixels.
 - **Remaining for Phase 1 completion:**
-  - Add adapter interfaces for engine-specific device/context callbacks beyond the current direct entrypoints.
-  - Vendor/configure `godot-cpp` and build the GDExtension binary.
-  - Add matrix/debug logging toggles and a minimal Godot-side smoke harness.
+  - Run the Windows GDExtension CI job and fix any compiler/linker/native-smoke issues it exposes.
+  - Compare `IMM_GODOT_MATRIX_DIAGNOSTICS_JSON` and `IMM_UNITY_MATRIX_DIAGNOSTICS_JSON` from equivalent sample camera poses and fix coordinate/clip-space mismatches.
+  - Promote the macOS offscreen capture check into a stable local/CI validation gate when the macOS toolchain is available.
 
 1. Add new project `appImmGodot` (parallel to `appImmUnity`).
 2. Wrap native player lifecycle behind engine-agnostic functions:
@@ -155,6 +232,13 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
 **Deliverable:** IMM runtime can initialize independently from Unity headers.
 
 ## Phase 2 — Godot rendering integration
+### Phase 2 status (in progress)
+- **Status:** In progress
+- **Current macOS evidence:**
+  - Native IMM content renders successfully into an offscreen Metal render target and can be captured through `IMM_GODOT_NATIVE_CAPTURE_PATH`.
+  - The Godot viewport capture still shows only the Godot background color, so native IMM pixels are not yet presented inside the Godot scene.
+- **Next required integration step:** bridge the native render target into Godot presentation, either by sharing/wrapping a native texture with Godot's rendering backend or by uploading offscreen readback pixels into a Godot texture for the first visible mono path.
+
 1. Implement a GDExtension class (e.g., `ImmViewerNode`) and register it.
 2. Hook render lifecycle using Godot rendering callbacks (render-thread safe):
    - per-frame global work trigger

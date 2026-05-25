@@ -60,6 +60,7 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private bool _useCommandBufferRendering = false;
+        private MatrixDiagnostics _lastMatrixDiagnostics = new MatrixDiagnostics();
 
         #endregion
 
@@ -404,6 +405,7 @@ namespace ImmPlayer
                 cam.stereoEnabled ? info.LeftProj : null,
                 cam.stereoEnabled ? info.WorldToRight : null,
                 cam.stereoEnabled ? info.RightProj : null);
+            CaptureMatrixDiagnostics(info.CameraId, stereoMode, info.WorldToHead, info.HeadProj);
 
             int eyeIndex = 0;
             if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
@@ -442,6 +444,7 @@ namespace ImmPlayer
                 world2head,
                 prjHead,
                 null, null, null, null);
+            CaptureMatrixDiagnostics(cameraId, stereoType, world2head, prjHead);
         }
 
         /// <summary>
@@ -460,15 +463,23 @@ namespace ImmPlayer
             if (!_isInitialized)
                 return;
 
+            float[] worldToHeadArray = MatrixToFloatArray(world2head);
+            float[] projectionHeadArray = MatrixToFloatArray(projectionHead);
+            float[] worldToLeftArray = MatrixToFloatArray(world2leftEye);
+            float[] projectionLeftArray = MatrixToFloatArray(projectionLeft);
+            float[] worldToRightArray = MatrixToFloatArray(world2rightEye);
+            float[] projectionRightArray = MatrixToFloatArray(projectionRight);
+
             ImmNativePlugin.SetMatrices(
                 cameraId,
                 (int)stereoMode,
-                MatrixToFloatArray(world2head),
-                MatrixToFloatArray(projectionHead),
-                MatrixToFloatArray(world2leftEye),
-                MatrixToFloatArray(projectionLeft),
-                MatrixToFloatArray(world2rightEye),
-                MatrixToFloatArray(projectionRight));
+                worldToHeadArray,
+                projectionHeadArray,
+                worldToLeftArray,
+                projectionLeftArray,
+                worldToRightArray,
+                projectionRightArray);
+            CaptureMatrixDiagnostics(cameraId, (int)stereoMode, worldToHeadArray, projectionHeadArray);
         }
 
         /// <summary>
@@ -505,6 +516,152 @@ namespace ImmPlayer
             };
         }
 
+        public string GetLastMatrixDiagnosticsJson()
+        {
+            return JsonUtility.ToJson(_lastMatrixDiagnostics);
+        }
+
+        public void LogLastMatrixDiagnostics()
+        {
+            Debug.Log("IMM_UNITY_MATRIX_DIAGNOSTICS_JSON " + GetLastMatrixDiagnosticsJson());
+        }
+
+        public void SetDeterministicMatrixDiagnostics(int cameraId = 1, bool submitToNative = false, ImmDocument document = null, string documentPath = null)
+        {
+            float[] worldToHead =
+            {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.25f, 1.6f, 6.0f, 1.0f,
+            };
+            float[] projection =
+            {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, -1.0f, -1.0f,
+                0.0f, 0.0f, -0.1f, 0.0f,
+            };
+            float[] documentToWorld =
+            {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.5f, 0.0f, -0.25f, 1.0f,
+            };
+            int stereoType = (int)StereoMode.Mono;
+            if (submitToNative && _isInitialized)
+            {
+                ImmNativePlugin.SetMatrices(
+                    cameraId,
+                    stereoType,
+                    worldToHead,
+                    projection,
+                    null, null, null, null);
+                if (document != null && document.IsLoaded)
+                {
+                    document.SetTransform(MatrixFromFloatArray(documentToWorld));
+                }
+            }
+            CaptureMatrixDiagnostics(cameraId, stereoType, worldToHead, projection);
+            _lastMatrixDiagnostics.document_to_world = CopyMatrix(documentToWorld);
+            CaptureDocumentIdentityDiagnostics(document, documentPath);
+            CapturePlayerParityDiagnostics(document);
+        }
+
+        public void LogDeterministicMatrixDiagnostics(int cameraId = 1, bool submitToNative = false, ImmDocument document = null, string documentPath = null)
+        {
+            SetDeterministicMatrixDiagnostics(cameraId, submitToNative, document, documentPath);
+            LogLastMatrixDiagnostics();
+        }
+
+        private void CaptureMatrixDiagnostics(int cameraId, int stereoMode, float[] worldToHead, float[] projection)
+        {
+            _lastMatrixDiagnostics.schema = "imm_unity_matrix_diagnostics_v1";
+            _lastMatrixDiagnostics.unity_version = Application.unityVersion;
+            _lastMatrixDiagnostics.camera_id = cameraId;
+            _lastMatrixDiagnostics.stereo_mode = stereoMode;
+            _lastMatrixDiagnostics.world_to_head = CopyMatrix(worldToHead);
+            _lastMatrixDiagnostics.projection = CopyMatrix(projection);
+        }
+
+        private void CapturePlayerParityDiagnostics(ImmDocument document)
+        {
+            PlayerInfo info;
+            ImmNativePlugin.GetPlayerInfo(out info);
+            _lastMatrixDiagnostics.background_color = new[]
+            {
+                info.backgroundColor.red,
+                info.backgroundColor.green,
+                info.backgroundColor.blue,
+                1.0f
+            };
+
+            if (document == null || !document.IsLoaded)
+            {
+                _lastMatrixDiagnostics.document_loading_state = -1;
+                _lastMatrixDiagnostics.document_playback_state = -1;
+                _lastMatrixDiagnostics.bounding_box_valid = false;
+                _lastMatrixDiagnostics.bounding_box_min = new float[3];
+                _lastMatrixDiagnostics.bounding_box_max = new float[3];
+                _lastMatrixDiagnostics.spawn_area_count = 0;
+                _lastMatrixDiagnostics.active_spawn_area_index = -1;
+                _lastMatrixDiagnostics.active_spawn_area_id = -1;
+                return;
+            }
+
+            DocumentState state = document.GetState();
+            _lastMatrixDiagnostics.document_loading_state = state.loadingState;
+            _lastMatrixDiagnostics.document_playback_state = state.playbackState;
+
+            Bounds bounds = document.GetBoundingBox();
+            _lastMatrixDiagnostics.bounding_box_valid = IsFinite(bounds.min) && IsFinite(bounds.max);
+            _lastMatrixDiagnostics.bounding_box_min = VectorToArray(bounds.min);
+            _lastMatrixDiagnostics.bounding_box_max = VectorToArray(bounds.max);
+
+            int[] spawnAreaIds = document.GetSpawnAreaList();
+            int activeSpawnAreaId = document.GetActiveSpawnAreaId();
+            _lastMatrixDiagnostics.spawn_area_count = spawnAreaIds.Length;
+            _lastMatrixDiagnostics.active_spawn_area_id = activeSpawnAreaId;
+            _lastMatrixDiagnostics.active_spawn_area_index = -1;
+            for (int i = 0; i < spawnAreaIds.Length; i++)
+            {
+                if (spawnAreaIds[i] == activeSpawnAreaId)
+                {
+                    _lastMatrixDiagnostics.active_spawn_area_index = i;
+                    break;
+                }
+            }
+        }
+
+        private void CaptureDocumentIdentityDiagnostics(ImmDocument document, string documentPath)
+        {
+            string path = !string.IsNullOrWhiteSpace(documentPath)
+                ? documentPath
+                : document?.FileName;
+            _lastMatrixDiagnostics.document_path = path ?? string.Empty;
+            _lastMatrixDiagnostics.document_name = string.IsNullOrEmpty(path)
+                ? string.Empty
+                : System.IO.Path.GetFileName(path);
+            long fileSize = System.IO.File.Exists(path)
+                ? new System.IO.FileInfo(path).Length
+                : -1L;
+            _lastMatrixDiagnostics.document_size_bytes = fileSize > int.MaxValue
+                ? int.MaxValue
+                : (int)fileSize;
+        }
+
+        private static float[] CopyMatrix(float[] matrix)
+        {
+            float[] result = new float[16];
+            if (matrix == null)
+            {
+                return result;
+            }
+            Array.Copy(matrix, result, Math.Min(matrix.Length, result.Length));
+            return result;
+        }
+
         private static float[] MatrixToFloatArray(Matrix4x4 matrix)
         {
             float[] result = new float[16];
@@ -513,6 +670,32 @@ namespace ImmPlayer
                 result[i] = matrix[i];
             }
             return result;
+        }
+
+        private static Matrix4x4 MatrixFromFloatArray(float[] values)
+        {
+            Matrix4x4 result = Matrix4x4.identity;
+            if (values == null)
+            {
+                return result;
+            }
+            for (int i = 0; i < Math.Min(values.Length, 16); i++)
+            {
+                result[i] = values[i];
+            }
+            return result;
+        }
+
+        private static float[] VectorToArray(Vector3 vector)
+        {
+            return new[] { vector.x, vector.y, vector.z };
+        }
+
+        private static bool IsFinite(Vector3 vector)
+        {
+            return !float.IsNaN(vector.x) && !float.IsInfinity(vector.x)
+                && !float.IsNaN(vector.y) && !float.IsInfinity(vector.y)
+                && !float.IsNaN(vector.z) && !float.IsInfinity(vector.z);
         }
 
         private static void ConvertMatrixToArray(float[] dst, Matrix4x4 matrix)
@@ -524,6 +707,30 @@ namespace ImmPlayer
         }
 
         #endregion
+
+        [Serializable]
+        private class MatrixDiagnostics
+        {
+            public string schema = "imm_unity_matrix_diagnostics_v1";
+            public string unity_version = "";
+            public int camera_id = -1;
+            public int stereo_mode = 0;
+            public float[] world_to_head = new float[16];
+            public float[] projection = new float[16];
+            public float[] document_to_world = new float[16];
+            public string document_path = "";
+            public string document_name = "";
+            public int document_size_bytes = -1;
+            public int document_loading_state = -1;
+            public int document_playback_state = -1;
+            public float[] background_color = new float[4];
+            public bool bounding_box_valid = false;
+            public float[] bounding_box_min = new float[3];
+            public float[] bounding_box_max = new float[3];
+            public int spawn_area_count = 0;
+            public int active_spawn_area_index = -1;
+            public int active_spawn_area_id = -1;
+        }
 
         #region Enums
 

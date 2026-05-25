@@ -201,7 +201,7 @@ namespace ImmPlayer
 
             int idx = j * 3 + i;
 
-            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
             {
                 // 2D
                 {
@@ -307,7 +307,7 @@ namespace ImmPlayer
             if( !iGenerateDome( &mesh, &lay1))
                 return false;
 
-            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
             {
                 if (!m360SphereRenderMesh.InitFromMesh(renderer, &mesh, piRenderer::PrimitiveType::Triangle, nullptr))
                 {
@@ -341,7 +341,7 @@ namespace ImmPlayer
 
             mesh.Normalize(0, 0, 1);
 
-            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
             {
                 if (!m360CubemapRenderMesh.InitFromMesh(renderer, &mesh, piRenderer::PrimitiveType::Triangle, nullptr))
                 {

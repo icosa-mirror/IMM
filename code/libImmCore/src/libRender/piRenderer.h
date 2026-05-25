@@ -89,7 +89,8 @@ public:
 	{
 		GL = 0,
 		DX = 1,
-		GLES = 2
+		GLES = 2,
+		Metal = 3
 	};
 
 	enum class RendererFeature : int

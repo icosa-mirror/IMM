@@ -5,3 +5,7 @@ compatibility_minimum="4.2"
 [libraries]
 windows.debug.x86_64="res://bin/windows/debug/imm_godot_extension.dll"
 windows.release.x86_64="res://bin/windows/release/imm_godot_extension.dll"
+macos.debug.arm64="res://bin/macos/debug/libimm_godot_extension.dylib"
+macos.release.arm64="res://bin/macos/release/libimm_godot_extension.dylib"
+macos.debug.x86_64="res://bin/macos/debug/libimm_godot_extension.dylib"
+macos.release.x86_64="res://bin/macos/release/libimm_godot_extension.dylib"

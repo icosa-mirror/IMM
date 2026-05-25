@@ -78,11 +78,12 @@ namespace ImmPlayer
 
 			char error[2048];
 
-			if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
-			{
-				const piShaderOptions opts = { 2,{
-					{"COLOR_SPACE", static_cast<int>(colorSpace) },
-					{"STEREOMODE", i }, } };
+				if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Metal)
+				{
+					const piShaderOptions opts = { 3,{
+						{"COLOR_SPACE", static_cast<int>(colorSpace) },
+						{"STEREOMODE", i },
+						{"MODEL_LAYER", 1 }, } };
 
 				mShaders[i] = renderer->CreateShader(&opts, shader_model_vs, nullptr, nullptr, nullptr, shader_model_fs, error);
 				if (!mShaders[i])
