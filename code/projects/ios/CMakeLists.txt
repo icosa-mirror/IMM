@@ -244,6 +244,11 @@ set_target_properties(ImmUnity PROPERTIES
 )
 
 set(IMMUNITY_UPM_IOS_DIR ${CODE_DIR}/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/iOS)
+set(IMMUNITY_COPY_TO_UPM_IOS ON)
+if(CMAKE_OSX_SYSROOT MATCHES "[Ii][Pp]hone[Ss]imulator")
+    set(IMMUNITY_COPY_TO_UPM_IOS OFF)
+endif()
+
 add_custom_command(TARGET ImmUnity POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/unity"
     COMMAND xcrun libtool -static -o "${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a"
@@ -256,9 +261,14 @@ add_custom_command(TARGET ImmUnity POST_BUILD
         "$<TARGET_FILE:opus>"
         "$<TARGET_FILE:png_static>"
         "$<TARGET_FILE:turbojpeg-static>"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_UPM_IOS_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a" "${IMMUNITY_UPM_IOS_DIR}/libImmUnityPlugin.a"
 )
+
+if(IMMUNITY_COPY_TO_UPM_IOS)
+    add_custom_command(TARGET ImmUnity POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_UPM_IOS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a" "${IMMUNITY_UPM_IOS_DIR}/libImmUnityPlugin.a"
+    )
+endif()
 
 file(WRITE "${CMAKE_BINARY_DIR}/unity_link_smoke.cpp"
     "extern \"C\" void UnityPluginLoad(void *);\n"
@@ -294,7 +304,9 @@ set_target_properties(ImmStrokeReader PROPERTIES
 )
 
 set(IMMSTROKEREADER_UPM_IOS_DIR ${CODE_DIR}/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS)
-add_custom_command(TARGET ImmStrokeReader POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMSTROKEREADER_UPM_IOS_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ImmStrokeReader>" "${IMMSTROKEREADER_UPM_IOS_DIR}/$<TARGET_FILE_NAME:ImmStrokeReader>"
-)
+if(IMMUNITY_COPY_TO_UPM_IOS)
+    add_custom_command(TARGET ImmStrokeReader POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMSTROKEREADER_UPM_IOS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:ImmStrokeReader>" "${IMMSTROKEREADER_UPM_IOS_DIR}/$<TARGET_FILE_NAME:ImmStrokeReader>"
+    )
+endif()

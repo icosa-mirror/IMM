@@ -84,10 +84,26 @@ namespace ImmPlayer.Editor
             string outputDir = Path.Combine(projectPath, "Builds", "iOS");
             Directory.CreateDirectory(outputDir);
 
+            PlayerSettings.iOS.sdkVersion = iOSSdkVersion.DeviceSDK;
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, new[] { GraphicsDeviceType.Metal });
 
             BuildPlayer(BuildTarget.iOS, outputDir, BuildOptions.Development, "iOS");
+        }
+
+        public static void BuildIOSSimulatorDevelopment()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.iOS, BuildTarget.iOS, "iOS Simulator");
+
+            string projectPath = Directory.GetCurrentDirectory();
+            string outputDir = Path.Combine(projectPath, "Builds", "iOSSimulator");
+            Directory.CreateDirectory(outputDir);
+
+            PlayerSettings.iOS.sdkVersion = iOSSdkVersion.SimulatorSDK;
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, new[] { GraphicsDeviceType.Metal });
+
+            BuildPlayer(BuildTarget.iOS, outputDir, BuildOptions.Development, "iOS Simulator");
         }
 
         public static void RunMacOSEditorPlayModeSmoke()

@@ -1078,9 +1078,22 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 	const piRenderer::API api = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
 	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
 #else
+	if (!gImmUnityPlugin.UnityAPI.mGraphics)
+	{
+		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unity graphics interface is unavailable before renderer initialization.");
+		return -1;
+	}
+	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Unity graphics interface available before renderer initialization.");
 	UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
+	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Unity renderer enum: %d", static_cast<int>(gfx));
 	if (gfx == kUnityGfxRendererMetal)
 	{
+		gImmUnityPlugin.IMM.mLog.Printf(
+			LT_DEBUG,
+			L"Unity Metal interfaces: v1=%d v2=%d device=%d",
+			gImmUnityPlugin.UnityAPI.mMetal ? 1 : 0,
+			gImmUnityPlugin.UnityAPI.mMetalV2 ? 1 : 0,
+			gImmUnityPlugin.UnityAPI.mDevice ? 1 : 0);
         if (!gImmUnityPlugin.UnityAPI.mMetal || !gImmUnityPlugin.UnityAPI.mDevice)
         {
             gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unity Metal interface or device is unavailable.");
