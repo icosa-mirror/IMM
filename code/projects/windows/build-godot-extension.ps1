@@ -27,7 +27,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $GodotCppRef) {
-    $GodotCppRef = "godot-4.2-stable"
+    $GodotCppRef = "godot-4.5-stable"
 }
 
 function Resolve-MsBuildPath {

@@ -1,6 +1,6 @@
 [configuration]
 entry_symbol="imm_godot_library_init"
-compatibility_minimum="4.2"
+compatibility_minimum="4.5"
 
 [libraries]
 windows.debug.x86_64="res://bin/windows/debug/imm_godot_extension.dll"

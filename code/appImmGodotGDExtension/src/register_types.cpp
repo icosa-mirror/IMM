@@ -1,3 +1,4 @@
+#include "imm_viewer_compositor_effect.h"
 #include "imm_viewer_node.h"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -13,6 +14,7 @@ void initialize_imm_godot_module(ModuleInitializationLevel p_level)
         return;
     }
 
+    ClassDB::register_class<ImmViewerCompositorEffect>();
     ClassDB::register_class<ImmViewerNode>();
 }
 

@@ -2,6 +2,9 @@
 #include "imm_godot_plugin.h"
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#if defined(__APPLE__)
+#include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
+#endif
 
 #include <cstdlib>
 #include <cstdio>
@@ -85,12 +88,49 @@ namespace
         return *gBridge.GetPlayer();
     }
 
+    piRenderer::API iResolveRendererApi(int requestedApi)
+    {
+        switch (requestedApi)
+        {
+        case ImmGodotRendererApi_OpenGL:
+            return piRenderer::API::GL;
+        case ImmGodotRendererApi_Direct3D:
+            return piRenderer::API::DX;
+        case ImmGodotRendererApi_GLES:
+            return piRenderer::API::GLES;
+        case ImmGodotRendererApi_Metal:
+            return piRenderer::API::Metal;
+        case ImmGodotRendererApi_Auto:
+        default:
+#if defined(__APPLE__)
+            return piRenderer::API::Metal;
+#elif defined(ANDROID)
+            return piRenderer::API::GLES;
+#else
+            return piRenderer::API::GL;
+#endif
+        }
+    }
+
 }
 
 extern "C" IMMGODOT_EXPORT int ImmGodot_Init(int colorSpace,
                                              int antialiasing,
                                              char *logFileName,
                                              char *tmpFolderName)
+{
+    return ImmGodot_InitEx(colorSpace,
+                           antialiasing,
+                           logFileName,
+                           tmpFolderName,
+                           ImmGodotRendererApi_OpenGL);
+}
+
+extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
+                                               int antialiasing,
+                                               char *logFileName,
+                                               char *tmpFolderName,
+                                               int rendererApi)
 {
     gDebugLogging = gDebugLogging || iEnvFlagEnabled("IMM_GODOT_DEBUG");
     if (gBridge.IsInitialized())
@@ -101,13 +141,18 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_Init(int colorSpace,
     config.antialiasing = antialiasing;
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolderName;
-    config.rendererApi = piRenderer::API::GL;
+    config.rendererApi = iResolveRendererApi(rendererApi);
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
     const int result = gBridge.Init(config) ? 0 : -1;
     if (result == 0 && iDebugLoggingEnabled())
     {
-        gBridge.GetLog()->Printf(LT_MESSAGE, L"ImmGodot_Init colorSpace=%d antialiasing=%d", colorSpace, antialiasing);
+        gBridge.GetLog()->Printf(LT_MESSAGE,
+                                  L"ImmGodot_InitEx colorSpace=%d antialiasing=%d requestedRenderer=%d resolvedRenderer=%d",
+                                  colorSpace,
+                                  antialiasing,
+                                  rendererApi,
+                                  static_cast<int>(config.rendererApi));
     }
     if (result == 0 && gRenderAdapter.onGraphicsInitialized != nullptr)
     {
@@ -148,6 +193,57 @@ extern "C" IMMGODOT_EXPORT void ImmGodot_SetRenderAdapter(const ImmGodotRenderAd
     }
 
     gRenderAdapter = *adapter;
+}
+
+extern "C" IMMGODOT_EXPORT int ImmGodot_BeginMetalFrame(const ImmGodotMetalFrame *frame)
+{
+    if (frame == nullptr || frame->version != 1 || frame->width <= 0 || frame->height <= 0)
+        return -1;
+    if (!gBridge.IsInitialized() || gBridge.GetRenderer() == nullptr || gBridge.GetRenderer()->GetAPI() != piRenderer::API::Metal)
+        return -1;
+
+#if defined(__APPLE__)
+    piRendererMetal *renderer = static_cast<piRendererMetal *>(gBridge.GetRenderer());
+    bool began = false;
+    switch (frame->mode)
+    {
+    case ImmGodotMetalFrameMode_CommandEncoder:
+        began = renderer->BeginExternalCommandEncoderFrame(frame->commandBuffer,
+                                                           frame->commandEncoder,
+                                                           frame->renderPassDescriptor,
+                                                           frame->width,
+                                                           frame->height);
+        break;
+    case ImmGodotMetalFrameMode_CommandBufferRenderPass:
+        began = renderer->BeginExternalRenderPassFrame(frame->commandBuffer,
+                                                       frame->renderPassDescriptor,
+                                                       frame->width,
+                                                       frame->height);
+        break;
+    case ImmGodotMetalFrameMode_CommandQueueRenderPass:
+        began = renderer->BeginExternalCommandQueueRenderPassFrame(frame->commandQueue,
+                                                                   frame->renderPassDescriptor,
+                                                                   frame->width,
+                                                                   frame->height);
+        break;
+    default:
+        return -1;
+    }
+    return began ? 0 : -1;
+#else
+    return -1;
+#endif
+}
+
+extern "C" IMMGODOT_EXPORT void ImmGodot_EndMetalFrame()
+{
+    if (!gBridge.IsInitialized() || gBridge.GetRenderer() == nullptr || gBridge.GetRenderer()->GetAPI() != piRenderer::API::Metal)
+        return;
+
+#if defined(__APPLE__)
+    piRendererMetal *renderer = static_cast<piRendererMetal *>(gBridge.GetRenderer());
+    renderer->EndNativeFrame();
+#endif
 }
 
 extern "C" IMMGODOT_EXPORT void ImmGodot_GlobalWork(int enabled)

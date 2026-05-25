@@ -50,7 +50,9 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
 
 ### Recommended target
 - **Godot 4.x + GDExtension (C++)**.
-- Use a **compatibility renderer path (OpenGL)** for v1 bring-up, then evaluate Vulkan after parity milestones.
+- Use **OpenGL Compatibility only as a bootstrap/smoke path** for early Godot lifecycle, document-load, matrix, and render-thread invocation validation.
+- Use the existing IMM **Metal** renderer as the preferred first production visible-rendering target on macOS via Godot Forward+/Mobile renderer integration. Do not continue treating OpenGL Compatibility as the production presentation path unless a clean Godot-owned OpenGL render-target hook is proven.
+- Treat Metal as the first production path, not the final portability answer. Windows/Linux/Android production parity will eventually require an IMM **Vulkan and/or Direct3D 11/12** backend/integration path compatible with Godot's non-OpenGL renderers.
 
 ---
 
@@ -67,16 +69,20 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
 
 | Area | Finding | Evidence/impact |
 |---|---|---|
-| Renderer APIs in IMM | `piRenderer::API` currently supports **GL, DX, GLES** only (no Vulkan enum path today). | Godot 4 Forward+ (Vulkan) is not a day-1 backend for IMM without renderer expansion. |
-| Unity integration backend choices | Unity plugin chooses **DX** when a device is supplied, otherwise **GL** (and GLES on Android). | Existing IMM integration patterns are DX/GL-centric and should be reused in Phase 1. |
-| Player render-path assumptions | `libImmPlayer` has API-conditional behavior for DX vs GL/GLES (clip-space/depth/front-face/stereo handling). | Godot bridge must preserve these assumptions and avoid introducing new math conventions during bring-up. |
+| Renderer APIs in IMM | `piRenderer::API` supports **GL, DX, GLES, and Metal**. | Godot 4 Forward+/Mobile renderer integration on macOS can target an existing IMM Metal backend instead of requiring a brand-new Vulkan backend for the first production path. |
+| Unity integration backend choices | Unity plugin chooses **DX** when a device is supplied, **Metal** when Unity exposes Metal interfaces on Apple platforms, otherwise **GL** (and GLES on Android). | Existing IMM integration patterns already include host-supplied native graphics context/resource handoff for Metal; Godot should reuse that shape. |
+| Player render-path assumptions | `libImmPlayer` has API-conditional behavior for DX/Metal vs GL/GLES (clip-space/depth/front-face/stereo handling). | Godot bridge must preserve these assumptions and avoid introducing new math conventions during bring-up. |
 | Build/tooling footprint | Repository currently contains a Windows-first solution under `code/projects/windows/imm.sln`. | Lowest-risk first target remains Windows desktop. |
+| Standalone Metal evidence | The repo contains `appImmViewerMetal`, `piMetal_Renderer.mm`, and macOS Metal validation targets. | Metal is not speculative; it is the preferred route to a Godot-owned production render target on macOS. |
+| Cross-platform production gap | Godot Forward+/Mobile use RenderingDevice-backed drivers on non-OpenGL renderers. | After macOS Metal parity, Windows/Linux/Android parity will need Vulkan and/or Direct3D 11/12 work rather than depending on the OpenGL bootstrap path. |
 
 ### Final Phase 0 decisions
-1. **Initial platform:** Windows desktop.
-2. **Initial renderer path:** OpenGL compatibility path for Godot integration in v1; Vulkan deferred.
-3. **Initial feature scope:** Mono rendering parity first; XR/stereo deferred.
-4. **Parity baseline for milestone 1:**
+1. **Bootstrap platform:** Windows desktop remains useful for CI, native GDExtension loading, and script/native smoke validation.
+2. **Bootstrap renderer path:** OpenGL Compatibility remains a smoke path only.
+3. **Production visible-rendering path:** macOS Metal through Godot Forward+/Mobile is now the preferred first target, using the existing IMM Metal backend and Godot-owned render resources.
+4. **Cross-platform renderer roadmap:** after Metal proves the Godot-owned render-target integration model, add Vulkan and/or Direct3D 11/12 support for Windows/Linux/Android production parity.
+5. **Initial feature scope:** Mono rendering parity first; XR/stereo deferred.
+6. **Parity baseline for milestone 1:**
    - Load/render one IMM document
    - Background color sync
    - Document transform parity (including handedness)
@@ -143,6 +149,8 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
   - Added Godot-native debug hooks (`IMM_GODOT_DEBUG` / `debug_logging`) for matrix submission and render-camera smoke tracing.
   - Added explicit GDExtension smoke-harness methods: `submit_mono_camera_matrices(camera_id, world_to_camera, projection)` and `smoke_render_camera(camera_id, width, height)`.
   - Added a versioned `ImmGodotRenderAdapter` callback table around graphics init/shutdown and render-camera begin/end so Godot render-thread/context hooks can be attached without changing the engine-agnostic bridge.
+  - Added `ImmGodot_InitEx(..., rendererApi)` plus a Godot-facing `renderer_api` property so the native bridge can select Auto/OpenGL/Direct3D/GLES/Metal instead of hardcoding the OpenGL bootstrap path.
+  - Added a C ABI Metal frame seam (`ImmGodotMetalFrame`, `ImmGodot_BeginMetalFrame`, `ImmGodot_EndMetalFrame`) that can wrap Godot-owned Metal command buffers/encoders/render-pass descriptors around existing `ImmGodot_RenderCamera` calls without CPU readback/upload.
   - Added a Windows SCons build scaffold for `appImmGodotGDExtension` that links against a prebuilt `godot-cpp` library and `ImmGodotPlugin.lib`, outputting the DLL path expected by the sample `.gdextension` manifest.
   - Extended the GDExtension SCons build to stage `ImmGodotPlugin.dll` and the IMM runtime dependency DLLs beside `imm_godot_extension.dll`, matching Godot's extension-load directory expectations.
   - Added Windows build helpers (`build-godot-extension.ps1` / `.bat`) that rebuild `appImmGodot`, optionally build `godot-cpp`, run the GDExtension SCons build, and copy runtime binaries into the sample project.
@@ -154,10 +162,13 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
   - Added a mutex-protected render request snapshot for the native queued render path so scene-thread camera/viewport submissions are not read directly by the render-thread callback, and kept the queued flag set until `ImmGodot_RenderCamera` returns.
   - Added a Godot-facing `get_render_diagnostics()` snapshot so script/native smoke tests can assert the queued camera id, viewport dimensions, registered camera set, projection submission, and render callback queued state without reaching into private render-thread state.
   - Replaced the initial no-op Godot render adapter callbacks with counted adapter callbacks, and extended smoke diagnostics to verify graphics initialization plus before/after render callback bracketing around queued camera work.
-  - Added `build-godot-extension.ps1 -BootstrapGodotCpp` so Windows local/CI builds can clone the default Godot 4.2-compatible `godot-cpp` bindings into `thirdparty/godot-cpp` instead of requiring a manual checkout first.
+  - Added `ImmViewerNode.get_render_backend_diagnostics()` in both the native node and script stub so smoke tests can report the active Godot rendering method, rendering-device driver setting, RenderingDevice availability, selected IMM renderer API, and whether the current project state is a candidate for the macOS Metal adapter. The Compatibility smoke path must report that it is not a Metal adapter candidate.
+  - Retargeted the Godot GDExtension build/smoke baseline from Godot 4.2 to **Godot 4.5** because `godot-4.2-stable` exposes only Vulkan-specific `RenderingDevice.DriverResource` handles, while Godot 4.5 exposes the generic driver resources and Metal rendering-driver enum needed for the macOS Metal adapter path.
+  - Added `ImmViewerCompositorEffect`, a registered native `CompositorEffect` render-pipeline entry point. Its `_render_callback` extracts `RenderSceneBuffersRD`, the active color texture RID, target/internal sizes, view count, and native driver handles for the command queue and color texture via `RenderingDevice.get_driver_resource`. This is the correct Godot render callback/resource path for the Metal adapter; it does not draw yet.
+  - Added `build-godot-extension.ps1 -BootstrapGodotCpp` so Windows local/CI builds can clone the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty/godot-cpp` instead of requiring a manual checkout first.
   - Added Windows preflight modes for the Godot extension build and smoke wrapper so tool/dependency/Godot executable resolution can be checked before starting the full native build or launching the project.
   - Added `build-godot-extension.ps1 -RunSmoke` to run the native Godot smoke scene immediately after a successful Windows GDExtension build.
-  - Extended the Windows GitHub Actions workflow to install SCons, cache the Godot 4.2 `godot-cpp` checkout/build tree, bootstrap/build `godot-cpp` on cache misses, run the Godot GDExtension build helper, and upload the staged GDExtension DLL set.
+  - Extended the Windows GitHub Actions workflow to install SCons, cache the Godot 4.5 `godot-cpp` checkout/build tree, bootstrap/build `godot-cpp` on cache misses, run the Godot GDExtension build helper, and upload the staged GDExtension DLL set.
   - Updated `build-godot-extension.ps1 -BuildGodotCpp` to reuse a cached `godot-cpp` library plus generated bindings when present, while still rebuilding the bindings on cache misses or incomplete cache restores.
   - Hardened `run-godot-smoke.ps1 -RequireExtension` so native smoke preflight requires the GDExtension DLL, `ImmGodotPlugin.dll`, and all staged IMM runtime dependency DLLs before launching Godot.
   - Hardened the Windows Godot smoke wrapper to require the `IMM Godot smoke test passed` marker in Godot output in addition to a zero process exit code, and to record the marker result in smoke summaries.
@@ -170,7 +181,7 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
   - Split the Windows workflow smoke gates into script-stub smoke before the native build and native-extension smoke after the GDExtension build, separating Godot project/GDScript regressions from native load/render failures.
   - Split smoke validation into a script-stub scene (`SampleScene.tscn`) and native-only scene (`NativeSmokeScene.tscn`), and removed the script stub's `class_name ImmViewerNode` so it does not shadow the GDExtension class during native validation.
   - Added Debug/Release selection to the Godot smoke wrapper so local runs validate the same `bin/windows/{debug,release}` output path used by the `.gdextension` manifest.
-  - Wired the Windows GitHub Actions job to download Godot 4.2.2, run the script-stub smoke before building the GDExtension, and run the native smoke after building the GDExtension.
+  - Wired the Windows GitHub Actions job to download Godot 4.5, run the script-stub smoke before building the GDExtension, and run the native smoke after building the GDExtension.
   - Added a C-safe `ImmGodotPlayerInfo` API and `ImmViewerNode.get_background_color()` so the Godot sample can observe IMM document background color without exposing C++ player structs across the ABI.
   - Added a Godot-facing `set_document_transform()` hook that stores a `Transform3D` and applies it through `ImmGodot_SetDocumentToWorld`, preserving the shared native `flipZ` parity path.
   - Added Godot-facing spawn-area info queries (`get_spawn_area_info`, `get_active_spawn_area_info`) with converted pose basis vectors, plus sample camera-rig jumps that mirror Unity's active-spawn view-target compensation.
@@ -186,7 +197,7 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
   - Added `verify_local.py` and wired `build-godot-extension.ps1 -VerifyOnly` through it so local Godot extension API, `.gdextension` manifest, sample Compatibility renderer setting, native `ImmViewerNode` registration, `ImmViewerNode` method binding coverage, sample/native scene structure, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, `ImmGodot` C ABI export alignment, Python, and native syntax checks can run before MSBuild/SCons/`godot-cpp` are installed.
   - Added optional PowerShell AST syntax validation for the Windows Godot build/smoke helper scripts when `pwsh` or Windows PowerShell is available, so CI can catch script parse errors before invoking the Windows build path.
   - Added optional local Godot script-smoke execution through `IMM_GODOT_RUN_LOCAL_SMOKE=1 python code/appImmGodotGDExtension/verify_local.py`, which runs the script-stub sample scene headlessly and validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, sample document load state, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, and the camera/viewport queue before native extension binaries exist.
-  - Added an optional `godot-cpp` syntax-only verification path: when `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a checkout with generated bindings, `verify_local.py` compiles `imm_viewer_node.cpp` and `register_types.cpp` against the actual Godot 4.2 C++ headers. This caught and fixed the Godot 4.2 `class_db.hpp` include path and GDExtension entry-point signature before the Windows build runs.
+  - Added an optional `godot-cpp` syntax-only verification path: when `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a checkout with generated bindings, `verify_local.py` compiles `imm_viewer_compositor_effect.cpp`, `imm_viewer_node.cpp`, and `register_types.cpp` against the actual Godot 4.5 C++ headers. This caught and fixed binding/API drift before the Windows build runs.
   - Updated the Windows build helper to rerun local verification with `GODOT_CPP_PATH` set after `godot-cpp` is built, so generated binding/API drift is checked before the extension SCons build.
 - **Remaining for Phase 1 completion:**
   - Run the updated Windows CI/local GDExtension build and Godot smoke test with `godot-cpp` bootstrap enabled, then fix any compiler/linker/project-load issues it exposes.
@@ -204,19 +215,22 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
 
 ## Phase 2 — Godot rendering integration
 ### Phase 2 status (in progress)
-- **Current state:** the GDExtension can queue camera matrices and invoke the native mono render smoke path from Godot's render-thread handoff.
+- **Current state:** the GDExtension can queue camera matrices and invoke the native mono render smoke path from Godot's render-thread handoff. It can also report backend readiness diagnostics (`get_render_backend_diagnostics`) that distinguish the current OpenGL Compatibility smoke project from a Forward+/Mobile RenderingDevice path suitable for the macOS Metal adapter. A native `ImmViewerCompositorEffect` now provides the production render-pipeline callback and records Godot-owned RD/driver resources from `RenderSceneBuffersRD`.
 - **Important limitation:** this smoke queue does not yet attach IMM drawing to a Godot viewport render target or Godot-owned texture, so it does not prove visible scene rendering.
-- **Required next step:** use Godot's rendering backend ownership model for presentation: render into a Godot-owned render target, wrap/share a native backend texture through `RenderingDevice`/`RenderingServer`, or add the missing IMM backend support needed for that path. CPU readback followed by upload to a Godot texture is allowed only as a diagnostic capture path, not as the renderer.
+- **Production renderer decision:** OpenGL Compatibility was selected only to simplify bootstrap. Because Godot's clean render-pipeline extension points are Forward+/Mobile and IMM already has a Metal renderer, the preferred first production target is **macOS Metal**, not OpenGL Compatibility.
+- **Current Metal seam:** `ImmGodot_BeginMetalFrame` can attach the existing IMM Metal renderer to externally owned Metal command buffers/encoders/render-pass descriptors, and `ImmGodot_EndMetalFrame` closes that frame after `ImmGodot_RenderCamera`.
+- **Required next step:** implement the macOS-specific part of the compositor effect that builds an `MTLRenderPassDescriptor` for the Godot-owned color texture, passes the Godot Metal command queue/render target through `ImmGodot_BeginMetalFrame`, invokes `ImmGodot_RenderCamera`, and closes with `ImmGodot_EndMetalFrame`. The backend diagnostics are only a readiness gate; CPU readback followed by upload to a Godot texture is allowed only as a diagnostic capture path, not as the renderer.
+- **Portability note:** Metal is the first production integration target because the backend already exists. It does not remove the need for Vulkan and/or Direct3D 11/12 backends later; those are required for production Godot rendering on non-Apple platforms.
 
 1. Implement a GDExtension class (e.g., `ImmViewerNode`) and register it.
 2. Hook render lifecycle using Godot rendering callbacks (render-thread safe):
    - per-frame global work trigger
    - per-camera data capture (view/projection for mono first)
-   - draw callback that invokes IMM render for that camera
+   - draw callback that invokes IMM Metal render for that camera into a Godot-owned render target
 3. Map Godot viewport/render-target dimensions to IMM `res` argument.
 4. Recreate single-pass/multipass stereo logic only after mono path is stable.
 
-**Key risk:** Godot render threading model differs from Unity command buffers; ensure all graphics calls occur on correct thread/context.
+**Key risk:** Godot render threading/resource ownership differs from Unity command buffers; ensure all Metal calls occur on the render thread and that IMM renders only into Godot-owned render targets or explicitly shared Metal textures.
 
 ## Phase 3 — Coordinate system and matrix parity
 1. Build explicit conversion utilities:

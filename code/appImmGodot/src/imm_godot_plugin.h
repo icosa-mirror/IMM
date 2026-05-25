@@ -17,6 +17,22 @@ extern "C"
         ImmGodotLayerFullNameCapacity = 256,
     };
 
+    enum ImmGodotRendererApi
+    {
+        ImmGodotRendererApi_Auto = 0,
+        ImmGodotRendererApi_OpenGL = 1,
+        ImmGodotRendererApi_Direct3D = 2,
+        ImmGodotRendererApi_GLES = 3,
+        ImmGodotRendererApi_Metal = 4,
+    };
+
+    enum ImmGodotMetalFrameMode
+    {
+        ImmGodotMetalFrameMode_CommandEncoder = 0,
+        ImmGodotMetalFrameMode_CommandBufferRenderPass = 1,
+        ImmGodotMetalFrameMode_CommandQueueRenderPass = 2,
+    };
+
     struct ImmGodotViewport
     {
         float x;
@@ -35,6 +51,18 @@ extern "C"
         void (*afterRenderCamera)(void *userData, int cameraID, int eyeID, const ImmGodotViewport *viewport, int renderResult);
         void (*onGraphicsInitialized)(void *userData);
         void (*onGraphicsShutdown)(void *userData);
+    };
+
+    struct ImmGodotMetalFrame
+    {
+        uint32_t version;
+        int mode;
+        void *commandQueue;
+        void *commandBuffer;
+        void *commandEncoder;
+        void *renderPassDescriptor;
+        int width;
+        int height;
     };
 
     struct ImmGodotPlayerInfo
@@ -152,10 +180,13 @@ extern "C"
     };
 
     IMMGODOT_EXPORT int ImmGodot_Init(int colorSpace, int antialiasing, char *logFileName, char *tmpFolderName);
+    IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace, int antialiasing, char *logFileName, char *tmpFolderName, int rendererApi);
     IMMGODOT_EXPORT void ImmGodot_Shutdown();
     IMMGODOT_EXPORT int ImmGodot_IsInitialized();
     IMMGODOT_EXPORT void ImmGodot_SetDebugLogging(int enabled);
     IMMGODOT_EXPORT void ImmGodot_SetRenderAdapter(const ImmGodotRenderAdapter *adapter);
+    IMMGODOT_EXPORT int ImmGodot_BeginMetalFrame(const ImmGodotMetalFrame *frame);
+    IMMGODOT_EXPORT void ImmGodot_EndMetalFrame();
     IMMGODOT_EXPORT void ImmGodot_GlobalWork(int enabled);
     IMMGODOT_EXPORT void ImmGodot_SetCameraMatrices(int cameraID,
                                                     int stereoType,

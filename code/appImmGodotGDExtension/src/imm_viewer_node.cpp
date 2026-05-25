@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
+#include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -75,6 +76,8 @@ void ImmViewerNode::_bind_methods()
     ClassDB::bind_method(D_METHOD("get_antialiasing"), &ImmViewerNode::get_antialiasing);
     ClassDB::bind_method(D_METHOD("set_color_space", "value"), &ImmViewerNode::set_color_space);
     ClassDB::bind_method(D_METHOD("get_color_space"), &ImmViewerNode::get_color_space);
+    ClassDB::bind_method(D_METHOD("set_renderer_api", "value"), &ImmViewerNode::set_renderer_api);
+    ClassDB::bind_method(D_METHOD("get_renderer_api"), &ImmViewerNode::get_renderer_api);
     ClassDB::bind_method(D_METHOD("set_log_file_path", "path"), &ImmViewerNode::set_log_file_path);
     ClassDB::bind_method(D_METHOD("get_log_file_path"), &ImmViewerNode::get_log_file_path);
     ClassDB::bind_method(D_METHOD("set_tmp_folder_path", "path"), &ImmViewerNode::set_tmp_folder_path);
@@ -98,6 +101,7 @@ void ImmViewerNode::_bind_methods()
     ClassDB::bind_method(D_METHOD("is_render_camera_registered", "camera_id"), &ImmViewerNode::is_render_camera_registered);
     ClassDB::bind_method(D_METHOD("get_registered_render_camera_ids"), &ImmViewerNode::get_registered_render_camera_ids);
     ClassDB::bind_method(D_METHOD("get_render_diagnostics"), &ImmViewerNode::get_render_diagnostics);
+    ClassDB::bind_method(D_METHOD("get_render_backend_diagnostics"), &ImmViewerNode::get_render_backend_diagnostics);
     ClassDB::bind_method(D_METHOD("render_last_camera_on_render_thread"), &ImmViewerNode::render_last_camera_on_render_thread);
 
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "document_path"), "set_document_path", "get_document_path");
@@ -106,6 +110,7 @@ void ImmViewerNode::_bind_methods()
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "volume", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_volume", "get_volume");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_logging"), "set_debug_logging", "get_debug_logging");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "color_space", PROPERTY_HINT_ENUM, "Linear,Gamma"), "set_color_space", "get_color_space");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "renderer_api", PROPERTY_HINT_ENUM, "Auto,OpenGL,Direct3D,GLES,Metal"), "set_renderer_api", "get_renderer_api");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "antialiasing", PROPERTY_HINT_RANGE, "1,16,1"), "set_antialiasing", "get_antialiasing");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "log_file_path"), "set_log_file_path", "get_log_file_path");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "tmp_folder_path"), "set_tmp_folder_path", "get_tmp_folder_path");
@@ -234,6 +239,16 @@ void ImmViewerNode::set_color_space(int value)
 int ImmViewerNode::get_color_space() const
 {
     return _color_space;
+}
+
+void ImmViewerNode::set_renderer_api(int value)
+{
+    _renderer_api = CLAMP(value, ImmGodotRendererApi_Auto, ImmGodotRendererApi_Metal);
+}
+
+int ImmViewerNode::get_renderer_api() const
+{
+    return _renderer_api;
 }
 
 void ImmViewerNode::set_log_file_path(const String &path)
@@ -864,6 +879,41 @@ Dictionary ImmViewerNode::get_render_diagnostics() const
     return result;
 }
 
+Dictionary ImmViewerNode::get_render_backend_diagnostics() const
+{
+    ProjectSettings *project_settings = ProjectSettings::get_singleton();
+    RenderingServer *rendering_server = RenderingServer::get_singleton();
+    RenderingDevice *rendering_device = rendering_server != nullptr ? rendering_server->get_rendering_device() : nullptr;
+
+    String rendering_method;
+    String rendering_driver;
+    if (project_settings != nullptr)
+    {
+        rendering_method = project_settings->get_setting("rendering/renderer/rendering_method");
+        rendering_driver = project_settings->get_setting("rendering/rendering_device/driver");
+    }
+
+    const bool is_compatibility = rendering_method == "gl_compatibility";
+    const bool wants_metal = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
+    const bool driver_is_metal = rendering_driver == "metal";
+    const bool has_generic_driver_resources = true;
+    const bool has_compositor_effect_path = true;
+    const bool metal_adapter_candidate = rendering_device != nullptr && !is_compatibility && wants_metal && driver_is_metal && has_generic_driver_resources && has_compositor_effect_path;
+
+    Dictionary result;
+    result["native_backend_initialized"] = _native_initialized;
+    result["renderer_api"] = _renderer_api;
+    result["project_rendering_method"] = rendering_method;
+    result["project_rendering_driver"] = rendering_driver;
+    result["has_rendering_device"] = rendering_device != nullptr;
+    result["is_compatibility_renderer"] = is_compatibility;
+    result["wants_metal_renderer"] = wants_metal;
+    result["has_generic_driver_resources"] = has_generic_driver_resources;
+    result["has_compositor_effect_path"] = has_compositor_effect_path;
+    result["metal_adapter_candidate"] = metal_adapter_candidate;
+    return result;
+}
+
 void ImmViewerNode::render_last_camera_on_render_thread()
 {
     RenderRequest request;
@@ -1201,10 +1251,11 @@ bool ImmViewerNode::initialize_native_backend()
     const String tmp_path = resolve_load_path(_tmp_folder_path);
     CharString log_utf8 = log_path.utf8();
     CharString tmp_utf8 = tmp_path.utf8();
-    const int result = ImmGodot_Init(_color_space,
-                                     _antialiasing,
-                                     const_cast<char *>(log_utf8.get_data()),
-                                     const_cast<char *>(tmp_utf8.get_data()));
+    const int result = ImmGodot_InitEx(_color_space,
+                                       _antialiasing,
+                                       const_cast<char *>(log_utf8.get_data()),
+                                       const_cast<char *>(tmp_utf8.get_data()),
+                                       _renderer_api);
     if (result != 0)
     {
         UtilityFunctions::push_error("ImmViewerNode failed to initialize native IMM backend: ", result);

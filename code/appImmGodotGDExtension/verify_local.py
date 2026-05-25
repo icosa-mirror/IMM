@@ -21,6 +21,8 @@ ABI_SOURCE = ROOT / "code/appImmGodot/src/main.cpp"
 REGISTER_TYPES = ROOT / "code/appImmGodotGDExtension/src/register_types.cpp"
 VIEWER_HEADER = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_node.h"
 VIEWER_SOURCE = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_node.cpp"
+COMPOSITOR_EFFECT_HEADER = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.h"
+COMPOSITOR_EFFECT_SOURCE = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp"
 WINDOWS_BUILD_HELPER = ROOT / "code/projects/windows/build-godot-extension.ps1"
 WINDOWS_SMOKE_HELPER = ROOT / "code/projects/windows/run-godot-smoke.ps1"
 WORKFLOW = ROOT / ".github/workflows/build.yml"
@@ -30,6 +32,7 @@ GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/scripts/imm_viewer_node.g
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
 GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
 GODOT_EXTENSION_SOURCES = [
+    ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp",
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_node.cpp",
     ROOT / "code/appImmGodotGDExtension/src/register_types.cpp",
 ]
@@ -157,10 +160,18 @@ def verify_native_method_bindings() -> None:
 def verify_render_thread_queue() -> None:
     source = VIEWER_SOURCE.read_text(encoding="utf-8")
     header = VIEWER_HEADER.read_text(encoding="utf-8")
+    compositor_header = COMPOSITOR_EFFECT_HEADER.read_text(encoding="utf-8")
+    compositor_source = COMPOSITOR_EFFECT_SOURCE.read_text(encoding="utf-8")
+    register_types = REGISTER_TYPES.read_text(encoding="utf-8")
+    sconstruct = SCONSTRUCT.read_text(encoding="utf-8")
+    abi_header = ABI_HEADER.read_text(encoding="utf-8")
+    abi_source = ABI_SOURCE.read_text(encoding="utf-8")
     sample = (ROOT / "code/ImmGodotSampleProject/scripts/sample_scene_controller.gd").read_text(encoding="utf-8")
     script_stub = GODOT_SCRIPT_STUB.read_text(encoding="utf-8")
     if "#include <godot_cpp/classes/rendering_server.hpp>" not in source:
         raise RuntimeError("ImmViewerNode does not include RenderingServer for render-thread scheduling")
+    if "#include <godot_cpp/classes/rendering_device.hpp>" not in source:
+        raise RuntimeError("ImmViewerNode does not include RenderingDevice for backend diagnostics")
     if "call_on_render_thread" not in source:
         raise RuntimeError("ImmViewerNode does not queue smoke rendering on the Godot render thread")
     if "render_last_camera_on_render_thread" not in source:
@@ -200,6 +211,22 @@ def verify_render_thread_queue() -> None:
             raise RuntimeError(f"ImmViewerNode script stub render adapter diagnostics token is missing: {token}")
     if "queue_render_camera_transform" in sample or "register_render_camera" in sample or "unregister_render_camera" in sample:
         raise RuntimeError("Sample controller should not own the per-frame render queue or render camera lifecycle")
+    for token in ["ImmGodotRendererApi_Metal", "ImmGodot_InitEx", "ImmGodotMetalFrame", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame"]:
+        if token not in abi_header or token not in abi_source:
+            raise RuntimeError(f"ImmGodot native renderer selection token is missing from C ABI: {token}")
+    for token in ["renderer_api", "set_renderer_api", "get_renderer_api", "ImmGodot_InitEx", "get_render_backend_diagnostics", "metal_adapter_candidate", "has_rendering_device", "has_generic_driver_resources", "has_compositor_effect_path"]:
+        if token not in source and token not in header:
+            raise RuntimeError(f"ImmViewerNode native renderer selection token is missing: {token}")
+    for token in ["renderer_api", "get_render_backend_diagnostics", "metal_adapter_candidate", "has_rendering_device", "has_generic_driver_resources", "has_compositor_effect_path"]:
+        if token not in script_stub:
+            raise RuntimeError(f"ImmViewerNode script stub renderer backend token is missing: {token}")
+    for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "get_driver_resource", "last_command_queue_handle", "last_color_texture_handle"]:
+        if token not in compositor_source and token not in compositor_header:
+            raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
+    if "register_class<ImmViewerCompositorEffect>" not in register_types:
+        raise RuntimeError("ImmViewerCompositorEffect is not registered with ClassDB")
+    if "src/imm_viewer_compositor_effect.cpp" not in sconstruct:
+        raise RuntimeError("SConstruct does not build ImmViewerCompositorEffect")
 
     print("ImmViewerNode camera/viewport render queue ownership ok", flush=True)
 
@@ -290,7 +317,7 @@ def verify_windows_build_wiring() -> None:
         if script_text.count("(") != script_text.count(")"):
             raise RuntimeError(f"PowerShell parenthesis balance looks wrong in {script_path}")
 
-    for token in ["BootstrapGodotCpp", "GodotCppRef", "PreflightOnly", "RunSmoke", "run-godot-smoke.ps1", "A full run with -BootstrapGodotCpp will clone", "Godot extension preflight passed", "godot-4.2-stable", "github.com/godotengine/godot-cpp.git", "godot-cpp generated bindings were not found yet", "Skipping godot-cpp build; cached library and generated bindings are already present", "Godot staged output DLLs are missing", "Verified staged Godot DLL set", "ExpectedDllCount=", "GeneratedUtc=", "godot-extension-dlls.txt"]:
+    for token in ["BootstrapGodotCpp", "GodotCppRef", "PreflightOnly", "RunSmoke", "run-godot-smoke.ps1", "A full run with -BootstrapGodotCpp will clone", "Godot extension preflight passed", "godot-4.5-stable", "github.com/godotengine/godot-cpp.git", "godot-cpp generated bindings were not found yet", "Skipping godot-cpp build; cached library and generated bindings are already present", "Godot staged output DLLs are missing", "Verified staged Godot DLL set", "ExpectedDllCount=", "GeneratedUtc=", "godot-extension-dlls.txt"]:
         if token not in helper:
             raise RuntimeError(f"Windows Godot build helper is missing bootstrap wiring token: {token}")
 
@@ -301,7 +328,7 @@ def verify_windows_build_wiring() -> None:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
-    for token in ["EXPECTED_RENDERER", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "get_document_state", "get_background_color", "get_chapter_count", "get_current_chapter", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "get_spawn_area_ids", "get_active_spawn_area_index", "get_active_spawn_area_info", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
+    for token in ["EXPECTED_RENDERER", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "get_document_state", "get_background_color", "get_chapter_count", "get_current_chapter", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "get_spawn_area_ids", "get_active_spawn_area_index", "get_active_spawn_area_info", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
         if token not in smoke_runner:
             raise RuntimeError(f"Godot smoke runner is missing token: {token}")
     if "viewer.register_render_camera(CAMERA_ID)" in smoke_runner or "viewer.unregister_render_camera(CAMERA_ID)" in smoke_runner:
@@ -311,7 +338,7 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Run Godot native smoke test", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -LogDir artifacts\\godot-smoke-native", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "code/ImmGodotSampleProject/bin/windows/release/*.dll", "code/ImmGodotSampleProject/bin/windows/release/godot-extension-dlls.txt", "ImmGodotGDExtension-Windows"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Run Godot native smoke test", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -LogDir artifacts\\godot-smoke-native", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "code/ImmGodotSampleProject/bin/windows/release/*.dll", "code/ImmGodotSampleProject/bin/windows/release/godot-extension-dlls.txt", "ImmGodotGDExtension-Windows"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
 
@@ -344,29 +371,32 @@ def verify_powershell_syntax() -> None:
         WINDOWS_BUILD_HELPER,
         WINDOWS_SMOKE_HELPER,
     ]
+    script_literals = "\n".join(f"    '{str(script).replace(chr(39), chr(39) + chr(39))}'" for script in scripts)
     command = [
         powershell,
         "-NoProfile",
         "-Command",
-        r"""
+        rf"""
 $ErrorActionPreference = "Stop"
 $hadErrors = $false
-foreach ($path in $args) {
+$paths = @(
+{script_literals}
+)
+foreach ($path in $paths) {{
     $tokens = $null
     $errors = $null
     [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null
-    if ($errors -and $errors.Count -gt 0) {
+    if ($errors -and $errors.Count -gt 0) {{
         $hadErrors = $true
-        foreach ($errorRecord in $errors) {
-            Write-Error "${path}:$($errorRecord.Extent.StartLineNumber):$($errorRecord.Extent.StartColumnNumber): $($errorRecord.Message)"
-        }
-    }
-}
-if ($hadErrors) {
+        foreach ($errorRecord in $errors) {{
+            Write-Error "${{path}}:$($errorRecord.Extent.StartLineNumber):$($errorRecord.Extent.StartColumnNumber): $($errorRecord.Message)"
+        }}
+    }}
+}}
+if ($hadErrors) {{
     exit 1
-}
+}}
 """,
-        *[str(script) for script in scripts],
     ]
     run(command)
     print(f"PowerShell AST syntax ok ({len(scripts)} scripts)", flush=True)
@@ -403,6 +433,9 @@ def verify_godot_cpp_syntax(clang: str | None) -> None:
     required_headers = [
         godot_cpp / "include/godot_cpp/core/class_db.hpp",
         godot_cpp / "gen/include/godot_cpp/classes/camera3d.hpp",
+        godot_cpp / "gen/include/godot_cpp/classes/compositor_effect.hpp",
+        godot_cpp / "gen/include/godot_cpp/classes/render_data.hpp",
+        godot_cpp / "gen/include/godot_cpp/classes/render_scene_buffers_rd.hpp",
         godot_cpp / "gen/include/godot_cpp/classes/rendering_server.hpp",
         godot_cpp / "gdextension/gdextension_interface.h",
     ]

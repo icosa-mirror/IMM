@@ -16,7 +16,8 @@ jobs:
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: windows-latest
     env:
-      GODOT_CPP_REF: godot-4.2-stable
+      GODOT_CPP_REF: godot-4.5-stable
+      GODOT_VERSION: 4.5-stable
 
     steps:
     - name: Checkout repository
@@ -61,7 +62,7 @@ jobs:
     - name: Download Godot
       shell: pwsh
       run: |
-        $version = "4.2.2-stable"
+        $version = "${env:GODOT_VERSION}"
         $zipName = "Godot_v$($version)_win64.exe.zip"
         $url = "https://github.com/godotengine/godot-builds/releases/download/$version/$zipName"
         Invoke-WebRequest -Uri $url -OutFile $zipName

@@ -52,6 +52,8 @@ namespace godot
         int get_antialiasing() const;
         void set_color_space(int value);
         int get_color_space() const;
+        void set_renderer_api(int value);
+        int get_renderer_api() const;
         void set_log_file_path(const String &path);
         String get_log_file_path() const;
         void set_tmp_folder_path(const String &path);
@@ -103,6 +105,7 @@ namespace godot
         bool is_render_camera_registered(int camera_id) const;
         PackedInt32Array get_registered_render_camera_ids() const;
         Dictionary get_render_diagnostics() const;
+        Dictionary get_render_backend_diagnostics() const;
 
         bool is_loaded() const;
         bool is_playing() const;
@@ -159,6 +162,7 @@ namespace godot
         bool _debug_logging = false;
         bool _native_initialized = false;
         int _color_space = 0;
+        int _renderer_api = ImmGodotRendererApi_Auto;
         int _antialiasing = 8;
         int _smoke_camera_id = 0;
         int _smoke_viewport_width = 1280;

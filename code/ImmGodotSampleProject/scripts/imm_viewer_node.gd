@@ -13,6 +13,7 @@ signal spawn_area_changed(active_index: int)
 @export_range(0.0, 1.0, 0.01) var volume: float = 1.0
 @export var debug_logging: bool = false
 @export_enum("Linear", "Gamma") var color_space: int = 0
+@export_enum("Auto", "OpenGL", "Direct3D", "GLES", "Metal") var renderer_api: int = 0
 @export_range(1, 16, 1) var antialiasing: int = 8
 @export var log_file_path: String = "user://imm_godot_log.txt"
 @export var tmp_folder_path: String = "user://"
@@ -274,6 +275,28 @@ func get_render_diagnostics() -> Dictionary:
         "adapter_last_render_result": _adapter_last_render_result,
         "adapter_last_viewport_width": _adapter_last_viewport_width,
         "adapter_last_viewport_height": _adapter_last_viewport_height,
+    }
+
+func get_render_backend_diagnostics() -> Dictionary:
+    var rendering_method := str(ProjectSettings.get_setting("rendering/renderer/rendering_method", ""))
+    var rendering_driver := str(ProjectSettings.get_setting("rendering/rendering_device/driver", ""))
+    var rendering_device := RenderingServer.get_rendering_device()
+    var is_compatibility := rendering_method == "gl_compatibility"
+    var wants_metal := renderer_api == 0 or renderer_api == 4
+    var driver_is_metal := rendering_driver == "metal"
+    var has_generic_driver_resources := true
+    var has_compositor_effect_path := true
+    return {
+        "native_backend_initialized": false,
+        "renderer_api": renderer_api,
+        "project_rendering_method": rendering_method,
+        "project_rendering_driver": rendering_driver,
+        "has_rendering_device": rendering_device != null,
+        "is_compatibility_renderer": is_compatibility,
+        "wants_metal_renderer": wants_metal,
+        "has_generic_driver_resources": has_generic_driver_resources,
+        "has_compositor_effect_path": has_compositor_effect_path,
+        "metal_adapter_candidate": rendering_device != null and not is_compatibility and wants_metal and driver_is_metal and has_generic_driver_resources and has_compositor_effect_path,
     }
 
 func _render_last_camera_on_render_thread() -> void:

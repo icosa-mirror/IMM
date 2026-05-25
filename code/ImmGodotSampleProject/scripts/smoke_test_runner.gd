@@ -49,6 +49,7 @@ func _run() -> void:
         "is_render_camera_registered",
         "get_registered_render_camera_ids",
         "get_render_diagnostics",
+        "get_render_backend_diagnostics",
         "queue_render_camera_transform",
         "queue_render_last_camera",
         "load_document",
@@ -85,6 +86,16 @@ func _run() -> void:
         failures.append("ImmViewer render_camera_path does not target ../CameraRig/Camera3D")
     if not viewer.is_render_camera_registered(CAMERA_ID):
         failures.append("camera %d was not auto-registered by ImmViewer" % CAMERA_ID)
+
+    var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
+    if backend_diagnostics.is_empty():
+        failures.append("get_render_backend_diagnostics returned an empty Dictionary")
+    if str(backend_diagnostics.get("project_rendering_method", "")) != EXPECTED_RENDERER:
+        failures.append("render backend diagnostics reported renderer %s" % str(backend_diagnostics.get("project_rendering_method", "")))
+    if bool(backend_diagnostics.get("metal_adapter_candidate", true)):
+        failures.append("Compatibility smoke path should not report a Metal adapter candidate")
+    if int(backend_diagnostics.get("renderer_api", -1)) < 0:
+        failures.append("render backend diagnostics did not report renderer_api")
 
     if not viewer.is_loaded():
         var load_result: int = int(viewer.load_document())
