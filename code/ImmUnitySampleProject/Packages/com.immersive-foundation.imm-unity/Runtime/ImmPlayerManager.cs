@@ -131,12 +131,12 @@ namespace ImmPlayer
 
             Log("=== IMM Player Initialization Started ===");
 
-#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-            if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.OpenGLCore)
+#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
+            if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Metal)
             {
-                LogError("IMM Player requires OpenGL Core on macOS.");
+                LogError("IMM Player requires Metal on Apple platforms.");
                 LogError($"Current Graphics API: {SystemInfo.graphicsDeviceType}");
-                LogError("Switch the macOS Graphics API to OpenGLCore and restart Unity (or build a macOS player with OpenGLCore). ");
+                LogError("Switch the Apple platform Graphics API to Metal and restart Unity or rebuild the player.");
                 return false;
             }
 #endif
@@ -156,7 +156,7 @@ namespace ImmPlayer
                     LogError("Possible causes:");
                     LogError("  1. Missing DLL dependencies in Assets/Plugins/x86_64/");
                     LogError("  2. DLL platform settings incorrect (must be x86_64, Standalone + Editor)");
-                    LogError("  3. Graphics API not supported (requires DirectX 11 or OpenGL Core; Metal is not supported)");
+                    LogError("  3. Graphics API not supported (requires DirectX 11 on Windows, GLES on Android, or Metal on Apple platforms)");
                     LogError($"  4. Check native log file: {logFileName}");
                     return false;
                 }
@@ -404,6 +404,7 @@ namespace ImmPlayer
                 cam.stereoEnabled ? info.LeftProj : null,
                 cam.stereoEnabled ? info.WorldToRight : null,
                 cam.stereoEnabled ? info.RightProj : null);
+            ImmNativePlugin.SetCameraViewport(info.CameraId, cam.pixelWidth, cam.pixelHeight);
 
             int eyeIndex = 0;
             if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
@@ -442,6 +443,7 @@ namespace ImmPlayer
                 world2head,
                 prjHead,
                 null, null, null, null);
+            ImmNativePlugin.SetCameraViewport(cameraId, camera.pixelWidth, camera.pixelHeight);
         }
 
         /// <summary>

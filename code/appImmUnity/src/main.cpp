@@ -96,6 +96,10 @@
 #include "IUnityGraphicsD3D11.h"
 #include "IUnityGraphicsD3D12.h"
 #endif
+#if defined(__APPLE__)
+#include "IUnityGraphicsMetal.h"
+#include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
+#endif
 using namespace ImmCore;
 using namespace ImmImporter;
 using namespace ImmPlayer;
@@ -222,6 +226,10 @@ struct ImmUnityPlugin
 	{
 		IUnityInterfaces * mUnityInterfaces = nullptr;
 		IUnityGraphics   * mGraphics = nullptr;
+#if defined(__APPLE__)
+        IUnityGraphicsMetalV1 *mMetal = nullptr;
+#endif
+        UnityGfxRenderer mRenderer = kUnityGfxRendererNull;
 		void             * mDevice;
 	}UnityAPI;
 
@@ -240,6 +248,8 @@ struct ImmUnityPlugin
 			mat4x4       mHeadProjection;
 			mat4x4       mLEyeProjection;
 			mat4x4       mREyeProjection;
+            int          mViewportWidth;
+            int          mViewportHeight;
 		}mCamera[256];
 	}FromUnity;
 
@@ -316,6 +326,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 	if (eventType == kUnityGfxDeviceEventInitialize)
 	{
 		UnityGfxRenderer apiType = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
+        gImmUnityPlugin.UnityAPI.mRenderer = apiType;
 
 #if defined(WINDOWS)
 		if (apiType == kUnityGfxRendererD3D11)
@@ -345,7 +356,15 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 		}
 		else if (apiType == kUnityGfxRendererMetal)
 		{
-			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
+            gImmUnityPlugin.UnityAPI.mMetal = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsMetalV1>();
+            if (gImmUnityPlugin.UnityAPI.mMetal)
+            {
+                gImmUnityPlugin.UnityAPI.mDevice = (__bridge void *)gImmUnityPlugin.UnityAPI.mMetal->MetalDevice();
+            }
+            else
+            {
+                gImmUnityPlugin.UnityAPI.mDevice = nullptr;
+            }
 		}
 #endif
 	}
@@ -394,7 +413,51 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 #endif
 	int numVp = 1;
 	float oldVp[6] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f };
-	gImmUnityPlugin.IMM.mRenderer->GetViewports(&numVp, oldVp);
+
+//const int eventType = (event_id >> 0) & 0xff;
+	const int cameraID  = (event_id >> 8) & 0xff;
+
+	// Safety check: ensure cameraID is valid before accessing camera data
+	if (cameraID < 0 || cameraID >= 256) {
+		#if defined(__ANDROID__) || defined(ANDROID)
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid cameraID: %d", cameraID);
+		#else
+		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid cameraID: %d", cameraID);
+		#endif
+		return;
+	}
+
+#if defined(__APPLE__)
+    const bool isUnityMetal = (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal);
+    if (isUnityMetal)
+    {
+        if (!gImmUnityPlugin.UnityAPI.mMetal || !gImmUnityPlugin.IMM.mRenderer)
+        {
+            return;
+        }
+
+        id<MTLCommandBuffer> commandBuffer = gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandBuffer();
+        id<MTLCommandEncoder> commandEncoder = gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandEncoder();
+        if (!commandBuffer || !commandEncoder)
+        {
+            gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unity Metal render event did not provide a current command buffer/encoder");
+            return;
+        }
+
+        const int viewportWidth = gImmUnityPlugin.FromUnity.mCamera[cameraID].mViewportWidth;
+        const int viewportHeight = gImmUnityPlugin.FromUnity.mCamera[cameraID].mViewportHeight;
+        if (!static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame((__bridge void *)commandBuffer, (__bridge void *)commandEncoder, viewportWidth, viewportHeight))
+        {
+            return;
+        }
+        oldVp[2] = static_cast<float>((viewportWidth > 0) ? viewportWidth : 1);
+        oldVp[3] = static_cast<float>((viewportHeight > 0) ? viewportHeight : 1);
+    }
+    else
+#endif
+    {
+        gImmUnityPlugin.IMM.mRenderer->GetViewports(&numVp, oldVp);
+    }
 
 #if defined(__ANDROID__) || defined(ANDROID)
 	GLint glViewport[4] = { 0, 0, 0, 0 };
@@ -406,19 +469,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 #endif
 
 	if (numVp < 1) return;
-
-//const int eventType = (event_id >> 0) & 0xff;
-	const int cameraID  = (event_id >> 8) & 0xff;
-	
-	// Safety check: ensure cameraID is valid before accessing camera data
-	if (cameraID < 0 || cameraID >= 256) {
-		#if defined(__ANDROID__) || defined(ANDROID)
-		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Invalid cameraID: %d", cameraID);
-		#else
-		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid cameraID: %d", cameraID);
-		#endif
-		return;
-	}
 	
 	const int stereoType = gImmUnityPlugin.FromUnity.mCamera[cameraID].mStereoType;
 	const ivec2 res = ivec2(int(oldVp[2]), int(oldVp[3]));
@@ -426,6 +476,12 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	{
 #if defined(__ANDROID__) || defined(ANDROID)
 		__android_log_print(ANDROID_LOG_WARN, "ImmUnityPlugin", "[IMMDBG_RENDER_20260211A] Skip render due to invalid viewport %dx%d", res.x, res.y);
+#endif
+#if defined(__APPLE__)
+        if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal)
+        {
+            gImmUnityPlugin.IMM.mRenderer->SwapBuffers();
+        }
 #endif
 		return;
 	}
@@ -454,6 +510,12 @@ else if (stereoType == 1) // two pass stereo
 			#else
 			gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Invalid eyeID: %d", eyeID);
 			#endif
+#if defined(__APPLE__)
+            if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal)
+            {
+                gImmUnityPlugin.IMM.mRenderer->SwapBuffers();
+            }
+#endif
 			return;
 		}
 
@@ -514,6 +576,12 @@ else if (stereoType == 1) // two pass stereo
 		gImmUnityPlugin.IMM.mRenderer->SetViewports(1, oldVp);
 	}
     gImmUnityPlugin.IMM.mSoundBackend->Tick();
+#if defined(__APPLE__)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal)
+    {
+        gImmUnityPlugin.IMM.mRenderer->SwapBuffers();
+    }
+#endif
 
 }
 
@@ -586,6 +654,13 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetMatrices( int came
 	if(prjHead    !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection = iUnityToPilibs(prjHead);
 	if(prjLeft    !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mLEyeProjection = iUnityToPilibs(prjLeft);
 	if(prjRight   !=nullptr ) gImmUnityPlugin.FromUnity.mCamera[cameraID].mREyeProjection = iUnityToPilibs(prjRight);
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetCameraViewport(int cameraID, int width, int height)
+{
+    if (cameraID < 0 || cameraID > 255) return;
+    gImmUnityPlugin.FromUnity.mCamera[cameraID].mViewportWidth = width;
+    gImmUnityPlugin.FromUnity.mCamera[cameraID].mViewportHeight = height;
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, // 0=linear 1=gamma
@@ -672,12 +747,20 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
 #else
 	UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
-	if (gfx != kUnityGfxRendererOpenGLCore)
+	if (gfx == kUnityGfxRendererMetal)
 	{
-		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unsupported renderer on macOS. Expected OpenGL Core.");
+        if (!gImmUnityPlugin.UnityAPI.mMetal || !gImmUnityPlugin.UnityAPI.mDevice)
+        {
+            gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unity Metal interface or device is unavailable.");
+            return -1;
+        }
+    }
+    else if (gfx != kUnityGfxRendererOpenGLCore)
+    {
+		gImmUnityPlugin.IMM.mLog.Printf(LT_ERROR, L"Unsupported renderer on Apple platform. Expected Metal.");
 		return -1;
 	}
-	const piRenderer::API api = piRenderer::API::GL;
+	const piRenderer::API api = (gfx == kUnityGfxRendererMetal) ? piRenderer::API::Metal : piRenderer::API::GL;
 	gImmUnityPlugin.IMM.mRenderReporter = new MainRenderReporter(&gImmUnityPlugin.IMM.mLog);
 #endif
 	gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"API: %s", pistr2ws(apiName[static_cast<int>(api)]));
@@ -721,7 +804,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     conf.multisamplingLevel = antialiasing;
     // NOTE. THESE SHOULD BE PASSED IN THE INIT OF THE DLL. But for now we hardcode it her since our only clients are Unity in DX or GLES modes
     conf.depthBuffer      = (api == piRenderer::API::DX) ? DepthBuffer::Linear10         : DepthBuffer::Linear01;
-    conf.clipDepth        = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+    conf.clipDepth        = (api == piRenderer::API::DX || api == piRenderer::API::Metal) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
     conf.projectionMatrix = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
     conf.frontIsCCW       = (api == piRenderer::API::DX) ? false                         : true;
     conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;

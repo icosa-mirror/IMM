@@ -63,6 +63,9 @@ namespace ImmPlayer
             float[] world2reye,
             float[] prjRight);
 
+        [DllImport(DllName)]
+        public static extern void SetCameraViewport(int cameraID, int width, int height);
+
         #endregion
 
         #region Document Loading and Unloading

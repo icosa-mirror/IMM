@@ -107,6 +107,7 @@ struct piMetalState
     id<CAMetalDrawable> nativeDrawable = nil;
     id<MTLCommandBuffer> commandBuffer = nil;
     id<MTLRenderCommandEncoder> encoder = nil;
+    bool externalCommandEncoder = false;
     MTLRenderPassDescriptor *activeRenderPass = nil;
     piRTarget currentRenderTarget = nullptr;
     piShader currentShader = nullptr;
@@ -718,9 +719,41 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
     }
 
     mState->frameActive = true;
+    mState->externalCommandEncoder = false;
     mState->passTouched = false;
     mState->activeRenderPass = mState->nativeRenderPass;
     mState->currentRenderTarget = nullptr;
+    return true;
+}
+
+bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, int width, int height)
+{
+    EndNativeFrame();
+
+    mState->commandBuffer = (__bridge id<MTLCommandBuffer>)commandBuffer;
+    mState->encoder = (__bridge id<MTLRenderCommandEncoder>)commandEncoder;
+    if (!mState->commandBuffer || !mState->encoder)
+    {
+        iError(mReporter, "Metal external frame is missing Unity command buffer or command encoder");
+        mState->commandBuffer = nil;
+        mState->encoder = nil;
+        return false;
+    }
+
+    mState->frameActive = true;
+    mState->externalCommandEncoder = true;
+    mState->passTouched = true;
+    mState->activeRenderPass = nil;
+    mState->currentRenderTarget = nullptr;
+    mState->nativeDrawable = nil;
+    mState->nativeRenderPass = nil;
+    mState->viewports[0] = 0.0f;
+    mState->viewports[1] = 0.0f;
+    mState->viewports[2] = (float)((width > 0) ? width : 1);
+    mState->viewports[3] = (float)((height > 0) ? height : 1);
+    mState->viewports[4] = 0.0f;
+    mState->viewports[5] = 1.0f;
+    iApplyEncoderState(mState);
     return true;
 }
 
@@ -731,20 +764,30 @@ void piRendererMetal::EndNativeFrame(void)
         return;
     }
 
-    if (!mState->encoder && mState->passTouched && mState->activeRenderPass)
+    if (!mState->externalCommandEncoder && !mState->encoder && mState->passTouched && mState->activeRenderPass)
     {
         mState->encoder = [mState->commandBuffer renderCommandEncoderWithDescriptor:mState->activeRenderPass];
         iApplyEncoderState(mState);
     }
 
-    iEndEncoder(mState);
+    if (mState->externalCommandEncoder)
+    {
+        mState->encoder = nil;
+    }
+    else
+    {
+        iEndEncoder(mState);
+    }
 
-    if (mState->nativeDrawable)
+    if (!mState->externalCommandEncoder && mState->nativeDrawable)
     {
         [mState->commandBuffer presentDrawable:mState->nativeDrawable];
     }
     iAttachRetainedBufferCleanup(mState);
-    [mState->commandBuffer commit];
+    if (!mState->externalCommandEncoder)
+    {
+        [mState->commandBuffer commit];
+    }
 
     mState->commandBuffer = nil;
     mState->nativeDrawable = nil;
@@ -762,6 +805,7 @@ void piRendererMetal::EndNativeFrame(void)
     memset(mState->constantBuffers, 0, sizeof(mState->constantBuffers));
     memset(mState->shaderBuffers, 0, sizeof(mState->shaderBuffers));
     mState->frameActive = false;
+    mState->externalCommandEncoder = false;
     mState->passTouched = false;
 }
 
