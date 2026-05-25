@@ -295,6 +295,22 @@ set_target_properties(ImmPictureScan PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tools
 )
 
+# -----------------------------------------------------------------------------
+# ImmGodot native plugin (macOS)
+# -----------------------------------------------------------------------------
+
+add_library(ImmGodotPlugin SHARED
+    ${CODE_DIR}/appImmGodot/src/main.cpp
+    ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
+)
+target_include_directories(ImmGodotPlugin PUBLIC ${CODE_DIR})
+target_link_libraries(ImmGodotPlugin PRIVATE libImmPlayer libImmImporter libImmCore)
+set_target_properties(ImmGodotPlugin PROPERTIES
+    OUTPUT_NAME "ImmGodotPlugin"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot
+)
+
 option(IMM_BUILD_VIEWER "Build the macOS ImmViewer app" ON)
 set(IMM_METAL_CONTENT_SWEEP_PATH "" CACHE PATH "Optional local .imm file or directory for standalone Metal content sweep validation")
 set(IMM_METAL_CONTENT_SWEEP_MAX_FILES "100" CACHE STRING "Maximum number of .imm files to render in the optional standalone Metal content sweep; set 0 for unbounded")
