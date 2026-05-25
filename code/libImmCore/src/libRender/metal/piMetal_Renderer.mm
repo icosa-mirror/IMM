@@ -179,6 +179,16 @@ static bool iMetalEnvFlagEnabled(const char *name)
     return value != nullptr && value[0] != '\0' && strcmp(value, "0") != 0;
 }
 
+static id<MTLCommandBuffer> iCreateOwnedCommandBuffer(id<MTLCommandQueue> queue)
+{
+    return queue ? [[queue commandBuffer] retain] : nil;
+}
+
+static void iReleaseOwnedCommandBuffer(id<MTLCommandBuffer> commandBuffer)
+{
+    [commandBuffer release];
+}
+
 static int iSuppressDrawCallsLevel(void)
 {
     static int enabled = -1;
@@ -872,7 +882,7 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
         return false;
     }
 
-    mState->commandBuffer = [mState->commandQueue commandBuffer];
+    mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
     if (!mState->commandBuffer)
     {
         iError(mReporter, "Metal native frame could not create command buffer");
@@ -976,7 +986,7 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
         return false;
     }
 
-    mState->commandBuffer = [queue commandBuffer];
+    mState->commandBuffer = iCreateOwnedCommandBuffer(queue);
     if (!mState->commandBuffer)
     {
         iError(mReporter, "Metal external frame failed to create a plugin command buffer");
@@ -988,6 +998,7 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
     if (!mState->encoder)
     {
         iError(mReporter, "Metal external frame failed to create a render command encoder");
+        iReleaseOwnedCommandBuffer(mState->commandBuffer);
         mState->commandBuffer = nil;
         mState->activeRenderPass = nil;
         return false;
@@ -1058,6 +1069,7 @@ void piRendererMetal::EndNativeFrame(void)
             [commandBuffer waitUntilCompleted];
             iReportCommandBufferStatus("after-wait", commandBuffer);
         }
+        iReleaseOwnedCommandBuffer(commandBuffer);
     }
 
     mState->commandBuffer = nil;
@@ -1138,7 +1150,7 @@ bool piRendererMetal::SetRenderTarget(piRTarget obj)
 {
     if (!mState->commandBuffer)
     {
-        mState->commandBuffer = [mState->commandQueue commandBuffer];
+        mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
         mState->frameActive = (mState->commandBuffer != nil);
         if (!mState->frameActive)
         {
@@ -1161,7 +1173,7 @@ void piRendererMetal::BlitRenderTarget(piRTarget dst, piRTarget src, bool color,
 
     if (!mState->commandBuffer)
     {
-        mState->commandBuffer = [mState->commandQueue commandBuffer];
+        mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
         mState->frameActive = (mState->commandBuffer != nil);
     }
     if (!mState->commandBuffer)
@@ -1610,6 +1622,7 @@ void piRendererMetal::GetTextureContent(piTexture vme, void *data, int x, int y,
         iAttachRetainedBufferCleanup(mState);
         [mState->commandBuffer commit];
         [mState->commandBuffer waitUntilCompleted];
+        iReleaseOwnedCommandBuffer(mState->commandBuffer);
         mState->commandBuffer = nil;
         mState->activeRenderPass = mState->currentRenderTarget ? iRenderPassForTarget(mState->currentRenderTarget) : mState->nativeRenderPass;
     }
@@ -1672,7 +1685,7 @@ void piRendererMetal::ComputeMipmaps(piTexture me)
 
     if (!mState->commandBuffer)
     {
-        mState->commandBuffer = [mState->commandQueue commandBuffer];
+        mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
         mState->frameActive = (mState->commandBuffer != nil);
     }
     if (!mState->commandBuffer)
