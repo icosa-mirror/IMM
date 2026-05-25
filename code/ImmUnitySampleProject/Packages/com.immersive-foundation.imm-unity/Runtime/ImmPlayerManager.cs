@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -164,10 +165,15 @@ namespace ImmPlayer
 
             // Use Unity's temporary cache path for temporary files
             string tempFolder = Application.temporaryCachePath;
+            string nativeLogPath = Path.Combine(tempFolder, logFileName);
 
             try
             {
-                int result = ImmNativePlugin.Init(colorSpace, antialiasingLevel, logFileName, tempFolder);
+#if UNITY_IOS && !UNITY_EDITOR
+                ImmNativePlugin.ImmUnityRegisterRenderingPlugin();
+#endif
+
+                int result = ImmNativePlugin.Init(colorSpace, antialiasingLevel, nativeLogPath, tempFolder);
 
                 if (result < 0)
                 {
@@ -176,7 +182,7 @@ namespace ImmPlayer
                     LogError("  1. Missing DLL dependencies in Assets/Plugins/x86_64/");
                     LogError("  2. DLL platform settings incorrect (must be x86_64, Standalone + Editor)");
                     LogError("  3. Graphics API not supported (requires DirectX 11 on Windows, GLES on Android, or Metal on Apple platforms)");
-                    LogError($"  4. Check native log file: {logFileName}");
+                    LogError($"  4. Check native log file: {nativeLogPath}");
                     return false;
                 }
 

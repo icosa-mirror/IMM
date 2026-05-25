@@ -24,6 +24,11 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void Debug();
 
+#if UNITY_IOS && !UNITY_EDITOR
+        [DllImport(DllName)]
+        public static extern void ImmUnityRegisterRenderingPlugin();
+#endif
+
         #endregion
 
         #region Initialization and Cleanup
