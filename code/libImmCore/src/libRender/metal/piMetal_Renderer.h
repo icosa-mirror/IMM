@@ -19,7 +19,7 @@ public:
     // Native macOS host entry points. The standalone Metal viewer passes the
     // current MTLRenderPassDescriptor and CAMetalDrawable as opaque pointers.
     bool      BeginNativeFrame(void *renderPassDescriptor, void *drawable);
-    bool      BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, int width, int height);
+    bool      BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, void *renderPassDescriptor, int width, int height);
     bool      BeginExternalRenderPassFrame(void *commandBuffer, void *renderPassDescriptor, int width, int height);
     bool      BeginExternalCommandQueueRenderPassFrame(void *commandQueue, void *renderPassDescriptor, int width, int height);
     void      EndNativeFrame(void);

@@ -152,8 +152,9 @@ struct piMetalState
     bool color0WriteEnabled = true;
     bool dynamicSourceAlphaBlendEnabled = false;
     bool cullFaceEnabled = true;
-    bool frontFaceCCW = true;
-    bool unsupportedReported[(int)piMetalUnsupportedFeature::Count] = {};
+	    bool frontFaceCCW = true;
+	    bool usesExternalDevice = false;
+	    bool unsupportedReported[(int)piMetalUnsupportedFeature::Count] = {};
     int numViewports = 1;
     float viewports[6 * 16] = {};
 };
@@ -697,6 +698,7 @@ piRendererMetal::~piRendererMetal()
 bool piRendererMetal::Initialize(int, const void **, int, bool, bool, piReporter *reporter, bool, void *device)
 {
     mReporter = reporter;
+    mState->usesExternalDevice = device != nullptr;
     mState->device = device ? (__bridge id<MTLDevice>)device : MTLCreateSystemDefaultDevice();
     if (!mState->device)
     {
@@ -888,17 +890,19 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
     return true;
 }
 
-bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, int width, int height)
+bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, void *renderPassDescriptor, int width, int height)
 {
     EndNativeFrame();
 
     mState->commandBuffer = (__bridge id<MTLCommandBuffer>)commandBuffer;
     mState->encoder = (__bridge id<MTLRenderCommandEncoder>)commandEncoder;
-    if (!mState->commandBuffer || !mState->encoder)
+    mState->activeRenderPass = (__bridge MTLRenderPassDescriptor *)renderPassDescriptor;
+    if (!mState->commandBuffer || !mState->encoder || !mState->activeRenderPass)
     {
-        iError(mReporter, "Metal external frame is missing Unity command buffer or command encoder");
+        iError(mReporter, "Metal external frame is missing Unity command buffer, command encoder, or render pass descriptor");
         mState->commandBuffer = nil;
         mState->encoder = nil;
+        mState->activeRenderPass = nil;
         return false;
     }
 
@@ -906,7 +910,6 @@ bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void
     mState->externalCommandEncoder = true;
     mState->externalCommandBuffer = true;
     mState->passTouched = true;
-    mState->activeRenderPass = nil;
     mState->currentRenderTarget = nullptr;
     mState->nativeDrawable = nil;
     mState->nativeRenderPass = nil;
@@ -2331,10 +2334,10 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
         requiresVertexBuffer = true;
         enableSourceAlphaBlending = false;
     }
-    else
-    {
-        source =
-            @"#include <metal_stdlib>\n"
+	    else
+	    {
+	        source =
+	            @"#include <metal_stdlib>\n"
              "using namespace metal;\n"
              "struct VertexIn { packed_float2 position; packed_float4 color; };\n"
              "struct VSOut { float4 position [[position]]; float4 color; };\n"
@@ -2348,10 +2351,19 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
         vertexFunctionName = "imm_vertex";
         fragmentFunctionName = "imm_fragment";
         colorFormat = MTLPixelFormatBGRA8Unorm;
-        requiresVertexBuffer = true;
-    }
+	        requiresVertexBuffer = true;
+	    }
 
-    NSError *compileError = nil;
+	    if (mState->usesExternalDevice)
+	    {
+	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0)); out.position.y = -out.position.y;"];
+	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0)); out.position.y = -out.position.y;"];
+	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0)); out.position.y = -out.position.y;"];
+	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0)); out.position.y = -out.position.y;"];
+	        source = [source stringByReplacingOccurrencesOfString:@"out.position.z = out.position.w;" withString:@"out.position.z = 0.0;"];
+	    }
+	
+	    NSError *compileError = nil;
     id<MTLLibrary> library = [mState->device newLibraryWithSource:source options:nil error:&compileError];
     if (!library)
     {

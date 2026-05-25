@@ -413,79 +413,6 @@ static bool iEnvFlagEnabled(const char *name)
     return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
 }
 
-static bool iDrawUnityMetalTestTriangle(void *devicePtr, void *encoderPtr, void *renderPassDescriptorPtr)
-{
-    id<MTLDevice> device = (__bridge id<MTLDevice>)devicePtr;
-    id<MTLRenderCommandEncoder> encoder = (__bridge id<MTLRenderCommandEncoder>)encoderPtr;
-    MTLRenderPassDescriptor *renderPassDescriptor = (__bridge MTLRenderPassDescriptor *)renderPassDescriptorPtr;
-    if (!device || !encoder || !renderPassDescriptor)
-    {
-        std::fprintf(stderr, "IMM_UNITY_METAL_TEST_TRIANGLE missing-object device=%p encoder=%p descriptor=%p\n", devicePtr, encoderPtr, renderPassDescriptorPtr);
-        std::fflush(stderr);
-        return false;
-    }
-
-    id<MTLTexture> colorTexture = renderPassDescriptor.colorAttachments[0].texture;
-    if (!colorTexture)
-    {
-        std::fprintf(stderr, "IMM_UNITY_METAL_TEST_TRIANGLE missing-color-texture\n");
-        std::fflush(stderr);
-        return false;
-    }
-
-    static id<MTLRenderPipelineState> sPipeline = nil;
-    static MTLPixelFormat sColorFormat = MTLPixelFormatInvalid;
-    static MTLPixelFormat sDepthFormat = MTLPixelFormatInvalid;
-
-    const MTLPixelFormat colorFormat = colorTexture.pixelFormat;
-    const MTLPixelFormat depthFormat = renderPassDescriptor.depthAttachment.texture ? renderPassDescriptor.depthAttachment.texture.pixelFormat : MTLPixelFormatInvalid;
-    if (!sPipeline || sColorFormat != colorFormat || sDepthFormat != depthFormat)
-    {
-        NSString *source =
-            @"#include <metal_stdlib>\n"
-             "using namespace metal;\n"
-             "struct VSOut { float4 position [[position]]; float4 color; };\n"
-             "vertex VSOut vs_main(uint vid [[vertex_id]]) {\n"
-             "    float2 p[3] = { float2(-0.75, -0.60), float2(0.75, -0.60), float2(0.0, 0.65) };\n"
-             "    float4 c[3] = { float4(1, 0, 0, 1), float4(0, 1, 0, 1), float4(0, 0.35, 1, 1) };\n"
-             "    VSOut o; o.position = float4(p[vid], 0.0, 1.0); o.color = c[vid]; return o;\n"
-             "}\n"
-             "fragment float4 fs_main(VSOut in [[stage_in]]) { return in.color; }\n";
-        NSError *error = nil;
-        id<MTLLibrary> library = [device newLibraryWithSource:source options:nil error:&error];
-        if (!library)
-        {
-            std::fprintf(stderr, "IMM_UNITY_METAL_TEST_TRIANGLE library-failed error=%s\n", error.localizedDescription.UTF8String ?: "unknown");
-            std::fflush(stderr);
-            return false;
-        }
-        MTLRenderPipelineDescriptor *descriptor = [[MTLRenderPipelineDescriptor alloc] init];
-        descriptor.vertexFunction = [library newFunctionWithName:@"vs_main"];
-        descriptor.fragmentFunction = [library newFunctionWithName:@"fs_main"];
-        descriptor.colorAttachments[0].pixelFormat = colorFormat;
-        descriptor.depthAttachmentPixelFormat = depthFormat;
-        descriptor.stencilAttachmentPixelFormat = MTLPixelFormatInvalid;
-        sPipeline = [device newRenderPipelineStateWithDescriptor:descriptor error:&error];
-        if (!sPipeline)
-        {
-            std::fprintf(stderr, "IMM_UNITY_METAL_TEST_TRIANGLE pipeline-failed color=%lu depth=%lu error=%s\n",
-                (unsigned long)colorFormat,
-                (unsigned long)depthFormat,
-                error.localizedDescription.UTF8String ?: "unknown");
-            std::fflush(stderr);
-            return false;
-        }
-        sColorFormat = colorFormat;
-        sDepthFormat = depthFormat;
-    }
-
-    [encoder setRenderPipelineState:sPipeline];
-    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-    std::fprintf(stderr, "IMM_UNITY_METAL_TEST_TRIANGLE submitted color=%lu depth=%lu\n", (unsigned long)colorFormat, (unsigned long)depthFormat);
-    std::fflush(stderr);
-    return true;
-}
-
 static bool iEnsureUnityMetalOffscreenTarget(piRenderer *renderer, int width, int height)
 {
     if (!renderer || width <= 0 || height <= 0)
@@ -603,13 +530,14 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 
 #if defined(__APPLE__)
     const bool isUnityMetal = (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal);
-    void *unityMetalCommandBuffer = nullptr;
-    void *unityMetalCommandEncoder = nullptr;
-    bool unityMetalFrameBegun = false;
+	    void *unityMetalCommandBuffer = nullptr;
+	    void *unityMetalCommandEncoder = nullptr;
+	    void *unityMetalRenderPassDescriptor = nullptr;
+	    bool unityMetalFrameBegun = false;
     const bool useUnityMetalOffscreen = isUnityMetal && iEnvFlagEnabled("IMM_UNITY_METAL_OFFSCREEN");
-    const bool deferUnityMetalFrameBegin = isUnityMetal && iEnvFlagEnabled("IMM_UNITY_METAL_DEFER_BEGIN");
-    const bool useUnityMetalPluginCommandBuffer = isUnityMetal && gImmUnityPlugin.UnityAPI.mMetalV2 && !iEnvFlagEnabled("IMM_UNITY_METAL_USE_UNITY_COMMAND_BUFFER");
-    const bool useUnityMetalOwnedEncoder = isUnityMetal && !useUnityMetalPluginCommandBuffer && !iEnvFlagEnabled("IMM_UNITY_METAL_USE_CURRENT_ENCODER");
+    const bool deferUnityMetalFrameBegin = isUnityMetal && !iEnvFlagEnabled("IMM_UNITY_METAL_BEGIN_BEFORE_GLOBAL");
+    const bool useUnityMetalPluginCommandBuffer = isUnityMetal && gImmUnityPlugin.UnityAPI.mMetalV2 && iEnvFlagEnabled("IMM_UNITY_METAL_USE_PLUGIN_COMMAND_BUFFER");
+    const bool useUnityMetalOwnedEncoder = isUnityMetal && !useUnityMetalPluginCommandBuffer && iEnvFlagEnabled("IMM_UNITY_METAL_USE_OWNED_ENCODER");
     if (isUnityMetal)
     {
         if (sUnityMetalRenderBoundaryReportCount < 16)
@@ -681,8 +609,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         {
             unityMetalCommandBuffer = gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandBuffer();
         }
-        void *unityMetalRenderPassDescriptor = nullptr;
-        void *unityMetalCommandQueue = nullptr;
+	        void *unityMetalCommandQueue = nullptr;
         if (useUnityMetalPluginCommandBuffer)
         {
             unityMetalRenderPassDescriptor = gImmUnityPlugin.UnityAPI.mMetalV2->CurrentRenderPassDescriptor();
@@ -695,10 +622,11 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             unityMetalRenderPassDescriptor = gImmUnityPlugin.UnityAPI.mMetal->CurrentRenderPassDescriptor();
             gImmUnityPlugin.UnityAPI.mMetal->EndCurrentCommandEncoder();
         }
-        else
-        {
-            unityMetalCommandEncoder = gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandEncoder();
-        }
+	        else
+	        {
+	            unityMetalCommandEncoder = gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandEncoder();
+	            unityMetalRenderPassDescriptor = gImmUnityPlugin.UnityAPI.mMetal->CurrentRenderPassDescriptor();
+	        }
         if ((!useUnityMetalPluginCommandBuffer && !unityMetalCommandBuffer) ||
             (!useUnityMetalOwnedEncoder && !useUnityMetalPluginCommandBuffer && !unityMetalCommandEncoder) ||
             (useUnityMetalOwnedEncoder && !unityMetalRenderPassDescriptor) ||
@@ -728,8 +656,8 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             std::fflush(stderr);
             return;
         }
-        if (!deferUnityMetalFrameBegin && !useUnityMetalPluginCommandBuffer && !useUnityMetalOwnedEncoder &&
-            !static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame(unityMetalCommandBuffer, unityMetalCommandEncoder, viewportWidth, viewportHeight))
+	        if (!deferUnityMetalFrameBegin && !useUnityMetalPluginCommandBuffer && !useUnityMetalOwnedEncoder &&
+	            !static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame(unityMetalCommandBuffer, unityMetalCommandEncoder, unityMetalRenderPassDescriptor, viewportWidth, viewportHeight))
         {
             std::fprintf(stderr, "IMM_UNITY_METAL_EVENT_NATIVE_RETURN begin-current-encoder-failed\n");
             std::fflush(stderr);
@@ -761,25 +689,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         oldVp[2] = static_cast<float>((viewportWidth > 0) ? viewportWidth : 1);
         oldVp[3] = static_cast<float>((viewportHeight > 0) ? viewportHeight : 1);
-        if (iEnvFlagEnabled("IMM_UNITY_METAL_TEST_TRIANGLE_ONLY"))
-        {
-            if (!unityMetalCommandEncoder && gImmUnityPlugin.UnityAPI.mMetal && gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandEncoder)
-            {
-                unityMetalCommandEncoder = gImmUnityPlugin.UnityAPI.mMetal->CurrentCommandEncoder();
-            }
-            if (!unityMetalRenderPassDescriptor && gImmUnityPlugin.UnityAPI.mMetal && gImmUnityPlugin.UnityAPI.mMetal->CurrentRenderPassDescriptor)
-            {
-                unityMetalRenderPassDescriptor = gImmUnityPlugin.UnityAPI.mMetal->CurrentRenderPassDescriptor();
-            }
-            iDrawUnityMetalTestTriangle(gImmUnityPlugin.UnityAPI.mDevice, unityMetalCommandEncoder, unityMetalRenderPassDescriptor);
-            gImmUnityPlugin.IMM.mRenderer->SwapBuffers();
-            if (sUnityMetalRenderBoundaryReportCount < 16)
-            {
-                gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"Unity Metal render boundary: test-triangle-only camera=%d", cameraID);
-                ++sUnityMetalRenderBoundaryReportCount;
-            }
-            return;
-        }
         }
     }
     else
@@ -824,7 +733,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
     if (stereoType == 0) // mono
     {
         gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-                   fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
+	                   fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
             gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::None);
 #if defined(__APPLE__)
         if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal && iEnvFlagEnabled("IMM_UNITY_METAL_GLOBAL_ONLY_RETURN"))
@@ -840,7 +749,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         {
             if (!unityMetalFrameBegun)
             {
-                if (!static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame(unityMetalCommandBuffer, unityMetalCommandEncoder, res.x, res.y))
+	                if (!static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame(unityMetalCommandBuffer, unityMetalCommandEncoder, unityMetalRenderPassDescriptor, res.x, res.y))
                 {
                     return;
                 }
@@ -860,7 +769,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         if (deferUnityMetalFrameBegin)
         {
-            if (!static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame(unityMetalCommandBuffer, unityMetalCommandEncoder, res.x, res.y))
+            if (!static_cast<piRendererMetal *>(gImmUnityPlugin.IMM.mRenderer)->BeginExternalCommandEncoderFrame(unityMetalCommandBuffer, unityMetalCommandEncoder, unityMetalRenderPassDescriptor, res.x, res.y))
             {
                 return;
             }
@@ -890,7 +799,7 @@ else if (stereoType == 1) // two pass stereo
 		}
 
         	gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
-             fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
+	             fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)),
              gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Fallback);
 
 		if (eyeID == 0) // left eye
@@ -938,7 +847,7 @@ else if (stereoType == 1) // two pass stereo
 
 		//const mat4x4d flz = mat4x4d(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
 
-		gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Preferred);
+			gImmUnityPlugin.IMM.mPlayer.GlobalRender(fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), fromMatrix(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head)), gImmUnityPlugin.FromUnity.mCamera[cameraID].mHeadProjection, StereoMode::Preferred);
 		const mat4x4d head_to_lEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2LEye) * invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
 		const mat4x4d head_to_rEye = f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2REye) * invert(f2d(gImmUnityPlugin.FromUnity.mCamera[cameraID].mWorld2Head));
 		gImmUnityPlugin.IMM.mPlayer.RenderStereoSinglePass( res, head_to_lEye, gImmUnityPlugin.FromUnity.mCamera[cameraID].mLEyeProjection,
@@ -981,14 +890,14 @@ else if (stereoType == 1) // two pass stereo
     }
 #endif
 
-    gImmUnityPlugin.IMM.mSoundBackend->Tick();
-#if defined(__APPLE__)
-    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal)
-    {
-        if (sUnityMetalRenderBoundaryReportCount < 16)
-        {
-            gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"Unity Metal render boundary: before-swap camera=%d", cameraID);
-        }
+	    gImmUnityPlugin.IMM.mSoundBackend->Tick();
+	#if defined(__APPLE__)
+	    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal)
+	    {
+	        if (sUnityMetalRenderBoundaryReportCount < 16)
+	        {
+	            gImmUnityPlugin.IMM.mLog.Printf(LT_MESSAGE, L"Unity Metal render boundary: before-swap camera=%d", cameraID);
+	        }
         gImmUnityPlugin.IMM.mRenderer->SwapBuffers();
         if (sUnityMetalRenderBoundaryReportCount < 16)
         {
@@ -1049,7 +958,6 @@ static trans3d iUnityToTrans3d(const float *m)
 {
     return fromMatrix(f2d(iUnityToPilibs(m)) * mat4x4d::flipZ());
 }
-
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWork(int enabled)
 {
@@ -1225,9 +1133,9 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 
     conf.multisamplingLevel = antialiasing;
     // NOTE. THESE SHOULD BE PASSED IN THE INIT OF THE DLL. But for now we hardcode it her since our only clients are Unity in DX or GLES modes
-    conf.depthBuffer      = (api == piRenderer::API::DX) ? DepthBuffer::Linear10         : DepthBuffer::Linear01;
+    conf.depthBuffer      = (api == piRenderer::API::DX || api == piRenderer::API::Metal) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
     conf.clipDepth        = (api == piRenderer::API::DX || api == piRenderer::API::Metal) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-    conf.projectionMatrix = (api == piRenderer::API::DX) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+    conf.projectionMatrix = (api == piRenderer::API::DX || api == piRenderer::API::Metal) ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
     conf.frontIsCCW       = (api == piRenderer::API::DX) ? false                         : true;
     conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
     gImmUnityPlugin.IMM.mLog.Printf(LT_DEBUG, L"Rending in Static mode");
