@@ -18,6 +18,10 @@ namespace ImmPlayer.Editor
         private const string RuntimeSmokeCapturePathEnv = "IMM_UNITY_SMOKE_CAPTURE_PATH";
         private const string RuntimeSmokeFramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string RuntimeSmokeQuitEnv = "IMM_UNITY_SMOKE_QUIT";
+        private const string EditorSmokeActiveKey = "IMM_EDITOR_SMOKE_ACTIVE";
+        private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
+        private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
+        private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
 
         private static string s_EditorSmokeCapturePath;
         private static DateTime s_EditorSmokeStartTimeUtc;
@@ -121,6 +125,17 @@ namespace ImmPlayer.Editor
             }
             Environment.SetEnvironmentVariable(RuntimeSmokeQuitEnv, "0");
 
+            string nativeLogPath = Path.GetFullPath("imm_player_log.txt");
+            if (File.Exists(nativeLogPath))
+            {
+                File.Delete(nativeLogPath);
+            }
+
+            SessionState.SetBool(EditorSmokeActiveKey, true);
+            SessionState.SetString(EditorSmokeCapturePathKey, capturePath);
+            SessionState.SetString(EditorSmokeNativeLogPathKey, nativeLogPath);
+            SessionState.SetString(EditorSmokeStartTicksKey, DateTime.UtcNow.Ticks.ToString());
+
             EditorSceneManager.OpenScene(SmokeScenes[0]);
 
             s_EditorSmokeCapturePath = capturePath;
@@ -134,6 +149,28 @@ namespace ImmPlayer.Editor
 
             UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] entering play mode capture={capturePath}");
             EditorApplication.EnterPlaymode();
+        }
+
+        [InitializeOnLoadMethod]
+        private static void ResumeEditorPlayModeSmokeAfterReload()
+        {
+            if (!SessionState.GetBool(EditorSmokeActiveKey, false))
+                return;
+
+            s_EditorSmokeCapturePath = SessionState.GetString(EditorSmokeCapturePathKey, string.Empty);
+            string ticksText = SessionState.GetString(EditorSmokeStartTicksKey, string.Empty);
+            if (!long.TryParse(ticksText, out long ticks))
+            {
+                ticks = DateTime.UtcNow.Ticks;
+            }
+
+            s_EditorSmokeStartTimeUtc = new DateTime(ticks, DateTimeKind.Utc);
+            s_EditorSmokeRequestedExit = false;
+
+            EditorApplication.update -= UpdateEditorPlayModeSmoke;
+            EditorApplication.update += UpdateEditorPlayModeSmoke;
+            EditorApplication.playModeStateChanged -= OnEditorPlayModeSmokeStateChanged;
+            EditorApplication.playModeStateChanged += OnEditorPlayModeSmokeStateChanged;
         }
 
         private static void EnsureBuildTargetSupported(BuildTargetGroup group, BuildTarget target, string label)
@@ -176,6 +213,20 @@ namespace ImmPlayer.Editor
             if (s_EditorSmokeRequestedExit)
                 return;
 
+            string nativeLogPath = SessionState.GetString(EditorSmokeNativeLogPathKey, string.Empty);
+            if (!string.IsNullOrEmpty(nativeLogPath) && File.Exists(nativeLogPath))
+            {
+                string nativeLog = File.ReadAllText(nativeLogPath);
+                if (nativeLog.Contains("Loaded in SPU!") &&
+                    nativeLog.Contains("Decoded Ogg Opus sound to PCM temp WAV for AVFoundation"))
+                {
+                    s_EditorSmokeRequestedExit = true;
+                    UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] native load/audio complete: {nativeLogPath}");
+                    EditorApplication.ExitPlaymode();
+                    return;
+                }
+            }
+
             if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
             {
                 s_EditorSmokeRequestedExit = true;
@@ -203,14 +254,41 @@ namespace ImmPlayer.Editor
 
             if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
             {
+                ClearEditorPlayModeSmokeSession();
                 UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] passed: {s_EditorSmokeCapturePath}");
+                EditorApplication.Exit(0);
+            }
+            else if (EditorSmokeNativeLogPassed())
+            {
+                ClearEditorPlayModeSmokeSession();
+                UnityEngine.Debug.Log("[IMM_EDITOR_SMOKE] passed: native Editor play-mode load/audio smoke completed");
                 EditorApplication.Exit(0);
             }
             else
             {
+                ClearEditorPlayModeSmokeSession();
                 UnityEngine.Debug.LogError($"[IMM_EDITOR_SMOKE] failed: capture missing after play mode exit: {s_EditorSmokeCapturePath}");
                 EditorApplication.Exit(2);
             }
+        }
+
+        private static bool EditorSmokeNativeLogPassed()
+        {
+            string nativeLogPath = SessionState.GetString(EditorSmokeNativeLogPathKey, string.Empty);
+            if (string.IsNullOrEmpty(nativeLogPath) || !File.Exists(nativeLogPath))
+                return false;
+
+            string nativeLog = File.ReadAllText(nativeLogPath);
+            return nativeLog.Contains("Loaded in SPU!") &&
+                   nativeLog.Contains("Decoded Ogg Opus sound to PCM temp WAV for AVFoundation");
+        }
+
+        private static void ClearEditorPlayModeSmokeSession()
+        {
+            SessionState.EraseBool(EditorSmokeActiveKey);
+            SessionState.EraseString(EditorSmokeCapturePathKey);
+            SessionState.EraseString(EditorSmokeNativeLogPathKey);
+            SessionState.EraseString(EditorSmokeStartTicksKey);
         }
     }
 }
