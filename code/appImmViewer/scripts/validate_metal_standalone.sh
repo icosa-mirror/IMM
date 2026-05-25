@@ -508,6 +508,16 @@ run_case() {
     fi
 
     if [ "${IMM_METAL_VALIDATE_HELPER_DRAWS:-1}" != "0" ]; then
+        if ! grep -q "IMM Metal pipeline sanity: singleTriangle=1" "$log_path"; then
+            echo "$name did not pass the Metal single-triangle pipeline sanity check" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+        if ! grep -q "IMM Metal pipeline sanity: indexedBaseVertexTriangle=1" "$log_path"; then
+            echo "$name did not pass the Metal indexed base-vertex triangle pipeline sanity check" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
         if ! grep -q "IMM Metal helper validation: unitQuad=1 blendQuad=1 indirectQuad=1 indirectIndexedTriangle=1 unitCubeXYZ=1 unitCubeXYZNOR=1 fixedStateHints=1 memoryBarrier=1 drawable=1280x720" "$log_path"; then
             echo "$name did not exercise Metal helper draws" >&2
             tail -n 80 "$log_path" >&2
@@ -611,7 +621,7 @@ run_repeat_contract_check() {
 
     i=1
     while [ "$i" -le "$repeat_count" ]; do
-        run_case "repeat_$i" 17436244883086101860 38 645802 921600 921600 "" "" "$static_settings_path" "$content_path"
+        run_case "repeat_$i" 15781045072442920602 38 645802 921600 921600 "" "" "$static_settings_path" "$content_path"
         i=$((i + 1))
     done
 
@@ -623,8 +633,8 @@ if [ "$check_repeat_contract" -eq 1 ]; then
     exit 0
 fi
 
-run_case static 17436244883086101860 38 645802 921600 921600 "" "" "$static_settings_path" "$content_path"
-run_case pretessellated 15688240155497491850 38 645802 921600 921600 "" "" "$pretessellated_settings_path" "$content_path"
+run_case static 15781045072442920602 38 645802 921600 921600 "" "" "$static_settings_path" "$content_path"
+run_case pretessellated 17258452306413009819 38 645802 921600 921600 "" "" "$pretessellated_settings_path" "$content_path"
 
 IMM_METAL_VALIDATE_FRAME=12 \
 IMM_METAL_VALIDATE_RESIZE_FRAME=2 \

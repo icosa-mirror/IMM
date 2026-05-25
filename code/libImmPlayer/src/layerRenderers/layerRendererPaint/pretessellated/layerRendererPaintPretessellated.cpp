@@ -8,6 +8,8 @@
 
 #define CUSTOM_ALPHA_TO_COVERAGE 1
 
+#include <cstdlib>
+
 #include "libImmCore/src/libBasics/piArray.h"
 #include "libImmCore/src/libBasics/piPool.h"
 #include "libImmCore/src/libBasics/piString.h"
@@ -45,6 +47,12 @@ namespace ImmPlayer
 	{
 		uint32_t dummy;
 	}ChunkData;
+
+    static int iForcedPaintBrushType()
+    {
+        const char *value = std::getenv("IMM_FORCE_PAINT_BRUSH_TYPE");
+        return (value && value[0]) ? atoi(value) : -1;
+    }
 
 	
 	struct iSLayerDrawInfoPretessellated
@@ -299,10 +307,11 @@ namespace ImmPlayer
 			dindex++;
 		}
 
-        mRasterState[0] = renderer->CreateRasterState(false, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip NO
-        mRasterState[1] = renderer->CreateRasterState(false, frontIsCCW, piRenderer::CullMode::BACK, true, false);  // single sided, flip NO
-        mRasterState[2] = renderer->CreateRasterState(false, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
-        mRasterState[3] = renderer->CreateRasterState(false, frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
+        const bool forcePaintWireframe = std::getenv("IMM_FORCE_PAINT_WIREFRAME") != nullptr;
+        mRasterState[0] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip NO
+        mRasterState[1] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::BACK, true, false);  // single sided, flip NO
+        mRasterState[2] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
+        mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
 
 		if (!mRasterState[0]) return false;
 		if (!mRasterState[1]) return false;
@@ -585,6 +594,7 @@ namespace ImmPlayer
 		if (num < 1) return;
 
 
+        const int forcedBrushType = iForcedPaintBrushType();
 		int lastShaderID = -1;
 		int lastStateID = -1;
 
@@ -646,6 +656,7 @@ namespace ImmPlayer
 			// for each chunk in that layer
 			for (uint32_t chunkType = 0; chunkType < kNumChunkTypes; chunkType++)
 			{
+                if (forcedBrushType >= 0 && static_cast<int>(chunkType) != forcedBrushType) continue;
                 const iSLayerDrawInfoPretessellated::BufferData *info = me->mBuffers + chunkType;
                 const uint64_t numChunks = info->mChunks.GetLength();
                 if (numChunks == 0) continue;

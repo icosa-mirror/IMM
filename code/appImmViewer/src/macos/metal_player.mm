@@ -327,7 +327,10 @@ public:
     ImmCore::piWindowEvents _events;
     ImmCore::piRendererMetal *_renderer;
     ImmCore::piShader _shader;
+    ImmCore::piShader _pipelineSanityShader;
     ImmCore::piBuffer _vertexBuffer;
+    ImmCore::piBuffer _pipelineSanityIndexBuffer;
+    ImmCore::piVertexArray _pipelineSanityIndexedVertexArray;
     ImmCore::piVertexArray _vertexArray;
     ImmMetalReporter _reporter;
     ImmCore::piLog _log;
@@ -363,6 +366,7 @@ public:
     bool _validationResizeDone;
     bool _validationHelperDraws;
     bool _validationHelperDrawsDone;
+    bool _validationPipelineSanityDone;
     bool _validationForceNativeFrameFailure;
     bool _didCleanup;
     bool _isStopping;
@@ -373,6 +377,7 @@ public:
 - (void)handleScrollEvent:(NSEvent *)event;
 - (CGSize)initialDrawableSizeForView:(MTKView *)view fallbackFrame:(NSRect)frame;
 - (void)handleNativeFrameFailure:(const char *)reason;
+- (BOOL)runValidationPipelineSanity;
 - (IBAction)openDocument:(id)sender;
 - (BOOL)loadContentFile:(NSString *)filename;
 - (void)performCleanup;
@@ -654,6 +659,7 @@ struct ImmMetalDebugVertex
     const char *helperDraws = getenv("IMM_METAL_VALIDATE_HELPER_DRAWS");
     _validationHelperDraws = helperDraws && helperDraws[0] && strcmp(helperDraws, "0") != 0;
     _validationHelperDrawsDone = false;
+    _validationPipelineSanityDone = false;
     const char *forceNativeFrameFailure = getenv("IMM_METAL_VALIDATE_FORCE_NATIVE_FRAME_FAILURE");
     _validationForceNativeFrameFailure = forceNativeFrameFailure &&
                                          forceNativeFrameFailure[0] &&
@@ -741,6 +747,133 @@ struct ImmMetalDebugVertex
             [self terminateWithExitCode:2];
         }
     }
+}
+
+- (BOOL)runValidationPipelineSanity
+{
+    if (!_renderer || !_renderTarget || !_colorTexture || !_pipelineSanityShader || _renderSize.x <= 0 || _renderSize.y <= 0)
+    {
+        NSLog(@"IMM Metal validation failed: pipeline sanity missing renderer resources");
+        return NO;
+    }
+
+    const int viewport[4] = { 0, 0, _renderSize.x, _renderSize.y };
+    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    _renderer->SetRenderTarget(_renderTarget);
+    _renderer->SetViewport(0, viewport);
+    _renderer->SetWriteMask(true, false, false, false, true);
+    _renderer->SetState(ImmCore::piSTATE_DEPTH_TEST, false);
+    _renderer->SetState(ImmCore::piSTATE_CULL_FACE, false);
+    _renderer->Clear(clearColor, nullptr, nullptr, nullptr, true);
+    _renderer->AttachShader(_pipelineSanityShader);
+    _renderer->DrawPrimitiveNotIndexed(ImmCore::piRenderer::PrimitiveType::Triangle, 0, 3, 1);
+    _renderer->DettachShader();
+
+    const size_t pixelCount = (size_t)_renderSize.x * (size_t)_renderSize.y;
+    uint32_t *pixels = (uint32_t *)malloc(pixelCount * sizeof(uint32_t));
+    if (!pixels)
+    {
+        NSLog(@"IMM Metal validation failed: pipeline sanity could not allocate readback buffer");
+        return NO;
+    }
+
+    memset(pixels, 0, pixelCount * sizeof(uint32_t));
+    _renderer->GetTextureContent(_colorTexture, pixels, ImmCore::piRenderer::Format::C3_11_11_10_FLOAT);
+
+    const size_t centerIndex = (size_t)(_renderSize.y / 2) * (size_t)_renderSize.x + (size_t)(_renderSize.x / 2);
+    const size_t cornerIndex = 4u * (size_t)_renderSize.x + 4u;
+    const size_t oppositeCornerIndex = ((size_t)_renderSize.y - 5u) * (size_t)_renderSize.x + ((size_t)_renderSize.x - 5u);
+    uint64_t nonZeroPixels = 0;
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        if (pixels[i] != 0)
+        {
+            ++nonZeroPixels;
+        }
+    }
+
+    const uint32_t center = pixels[centerIndex];
+    const uint32_t corner = pixels[cornerIndex];
+    const uint32_t oppositeCorner = pixels[oppositeCornerIndex];
+    free(pixels);
+
+    if (center == 0 || corner != 0 || oppositeCorner != 0 || nonZeroPixels < (pixelCount / 20) || nonZeroPixels > (pixelCount / 2))
+    {
+        NSLog(@"IMM Metal validation failed: pipeline sanity unexpected triangle readback center=%u corner=%u oppositeCorner=%u nonZero=%llu pixels=%zu",
+              center,
+              corner,
+              oppositeCorner,
+              (unsigned long long)nonZeroPixels,
+              pixelCount);
+        return NO;
+    }
+
+    _validationPipelineSanityDone = true;
+    NSLog(@"IMM Metal pipeline sanity: singleTriangle=1 center=%u corner=%u oppositeCorner=%u nonZero=%llu pixels=%zu",
+          center,
+          corner,
+          oppositeCorner,
+          (unsigned long long)nonZeroPixels,
+          pixelCount);
+
+    if (_pipelineSanityIndexBuffer && _pipelineSanityIndexedVertexArray)
+    {
+        _renderer->SetRenderTarget(_renderTarget);
+        _renderer->SetViewport(0, viewport);
+        _renderer->SetWriteMask(true, false, false, false, true);
+        _renderer->SetState(ImmCore::piSTATE_DEPTH_TEST, false);
+        _renderer->SetState(ImmCore::piSTATE_CULL_FACE, false);
+        _renderer->Clear(clearColor, nullptr, nullptr, nullptr, true);
+        _renderer->AttachShader(_pipelineSanityShader);
+        _renderer->AttachVertexArray(_pipelineSanityIndexedVertexArray);
+        _renderer->DrawPrimitiveIndexed(ImmCore::piRenderer::PrimitiveType::Triangle, 3, 1, 3, 0, 0);
+        _renderer->DettachVertexArray();
+        _renderer->DettachShader();
+
+        pixels = (uint32_t *)malloc(pixelCount * sizeof(uint32_t));
+        if (!pixels)
+        {
+            NSLog(@"IMM Metal validation failed: indexed pipeline sanity could not allocate readback buffer");
+            return NO;
+        }
+        memset(pixels, 0, pixelCount * sizeof(uint32_t));
+        _renderer->GetTextureContent(_colorTexture, pixels, ImmCore::piRenderer::Format::C3_11_11_10_FLOAT);
+
+        const size_t indexedCenterIndex = centerIndex;
+        const size_t indexedProbeA = (size_t)(_renderSize.y / 8) * (size_t)_renderSize.x + (size_t)(_renderSize.x / 8);
+        const size_t indexedProbeB = (size_t)((_renderSize.y * 7) / 8) * (size_t)_renderSize.x + (size_t)(_renderSize.x / 8);
+        const uint32_t indexedCenter = pixels[indexedCenterIndex];
+        const uint32_t indexedA = pixels[indexedProbeA];
+        const uint32_t indexedB = pixels[indexedProbeB];
+        uint64_t indexedNonZeroPixels = 0;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            if (pixels[i] != 0)
+            {
+                ++indexedNonZeroPixels;
+            }
+        }
+        free(pixels);
+
+        if (indexedCenter != 0 || (indexedA == 0 && indexedB == 0) || indexedNonZeroPixels < (pixelCount / 200) || indexedNonZeroPixels > (pixelCount / 8))
+        {
+            NSLog(@"IMM Metal validation failed: indexed base-vertex pipeline sanity unexpected readback center=%u probeA=%u probeB=%u nonZero=%llu pixels=%zu",
+                  indexedCenter,
+                  indexedA,
+                  indexedB,
+                  (unsigned long long)indexedNonZeroPixels,
+                  pixelCount);
+            return NO;
+        }
+
+        NSLog(@"IMM Metal pipeline sanity: indexedBaseVertexTriangle=1 center=%u probeA=%u probeB=%u nonZero=%llu pixels=%zu",
+              indexedCenter,
+              indexedA,
+              indexedB,
+              (unsigned long long)indexedNonZeroPixels,
+              pixelCount);
+    }
+    return YES;
 }
 
 - (void)applyValidationResizeIfRequested
@@ -1012,6 +1145,25 @@ struct ImmMetalDebugVertex
         return;
     }
 
+    _pipelineSanityShader = _renderer->CreateShaderBinary(nullptr,
+                                                          nullptr,
+                                                          0,
+                                                          nullptr,
+                                                          0,
+                                                          nullptr,
+                                                          0,
+                                                          nullptr,
+                                                          0,
+                                                          nullptr,
+                                                          0,
+                                                          shaderError);
+    if (!_pipelineSanityShader)
+    {
+        NSLog(@"IMM Metal player: pipeline sanity shader creation failed: %s", shaderError);
+        [self terminateWithExitCode:1];
+        return;
+    }
+
     const ImmMetalDebugVertex vertices[3] = {
         {{-0.65f, -0.55f}, {0.95f, 0.25f, 0.18f, 1.0f}},
         {{ 0.65f, -0.55f}, {0.18f, 0.75f, 0.95f, 1.0f}},
@@ -1039,6 +1191,22 @@ struct ImmMetalDebugVertex
     if (!_vertexArray)
     {
         NSLog(@"IMM Metal player: vertex array creation failed");
+        [self terminateWithExitCode:1];
+        return;
+    }
+
+    const uint16_t sanityIndices[3] = { 0, 1, 2 };
+    _pipelineSanityIndexBuffer = _renderer->CreateBuffer(sanityIndices, sizeof(sanityIndices), ImmCore::piRenderer::BufferType::Static, ImmCore::piRenderer::BufferUse::Index);
+    if (!_pipelineSanityIndexBuffer)
+    {
+        NSLog(@"IMM Metal player: indexed pipeline sanity index buffer creation failed");
+        [self terminateWithExitCode:1];
+        return;
+    }
+    _pipelineSanityIndexedVertexArray = _renderer->CreateVertexArray(0, nullptr, nullptr, nullptr, nullptr, _pipelineSanityIndexBuffer, ImmCore::piRenderer::IndexArrayFormat::UINT_16);
+    if (!_pipelineSanityIndexedVertexArray)
+    {
+        NSLog(@"IMM Metal player: indexed pipeline sanity vertex array creation failed");
         [self terminateWithExitCode:1];
         return;
     }
@@ -1298,6 +1466,16 @@ struct ImmMetalDebugVertex
             _renderer->DestroyVertexArray(_vertexArray);
             _vertexArray = nullptr;
         }
+        if (_pipelineSanityIndexedVertexArray)
+        {
+            _renderer->DestroyVertexArray(_pipelineSanityIndexedVertexArray);
+            _pipelineSanityIndexedVertexArray = nullptr;
+        }
+        if (_pipelineSanityIndexBuffer)
+        {
+            _renderer->DestroyBuffer(_pipelineSanityIndexBuffer);
+            _pipelineSanityIndexBuffer = nullptr;
+        }
         if (_vertexBuffer)
         {
             _renderer->DestroyBuffer(_vertexBuffer);
@@ -1307,6 +1485,11 @@ struct ImmMetalDebugVertex
         {
             _renderer->DestroyShader(_shader);
             _shader = nullptr;
+        }
+        if (_pipelineSanityShader)
+        {
+            _renderer->DestroyShader(_pipelineSanityShader);
+            _pipelineSanityShader = nullptr;
         }
         _renderer->Deinitialize();
         delete _renderer;
@@ -1364,6 +1547,19 @@ struct ImmMetalDebugVertex
     const float clearColor[4] = { 0.08f, 0.10f, 0.13f, 1.0f };
     if (_viewerReady)
     {
+        if (_validationHelperDraws && !_validationPipelineSanityDone)
+        {
+            if (![self runValidationPipelineSanity])
+            {
+                if (_validationEnabled)
+                {
+                    _validationDone = true;
+                    gExitCode = 2;
+                }
+                return;
+            }
+        }
+
         if (_validationHelperDraws && !_validationHelperDrawsDone)
         {
             const int drawableWidth = (int)view.drawableSize.width;

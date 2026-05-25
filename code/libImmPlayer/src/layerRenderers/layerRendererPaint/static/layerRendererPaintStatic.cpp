@@ -3,6 +3,7 @@
 
 // IQ-TODO: check if Quest support glDrawIndirect, and if so, add it! 
 
+#include <cstdlib>
 #ifdef RENDER_BUDGET
 #include <algorithm>
 #endif
@@ -41,6 +42,12 @@ namespace ImmPlayer
         uint32_t mVertexOffset;
         float    mBiggestStroke;
     }ChunkData;
+
+    static int iForcedPaintBrushType()
+    {
+        const char *value = std::getenv("IMM_FORCE_PAINT_BRUSH_TYPE");
+        return (value && value[0]) ? atoi(value) : -1;
+    }
 
     
     struct iSLayerDrawInfoStatic
@@ -283,10 +290,11 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
             dindex++;
         }
 
-        mRasterState[0] = renderer->CreateRasterState(false, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip NO
-        mRasterState[1] = renderer->CreateRasterState(false, frontIsCCW, piRenderer::CullMode::BACK, true, false);  // single sided, flip NO
-        mRasterState[2] = renderer->CreateRasterState(false,!frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
-        mRasterState[3] = renderer->CreateRasterState(false,!frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
+        const bool forcePaintWireframe = std::getenv("IMM_FORCE_PAINT_WIREFRAME") != nullptr;
+        mRasterState[0] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip NO
+        mRasterState[1] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::BACK, true, false);  // single sided, flip NO
+        mRasterState[2] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
+        mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
 
         if (!mRasterState[0]) return false;
         if (!mRasterState[1]) return false;
@@ -613,6 +621,7 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
         if (num < 1) return;
 
 
+        const int forcedBrushType = iForcedPaintBrushType();
         int lastShaderID = -1;
         int lastStateID = -1;
 
@@ -680,6 +689,7 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
             // for each chunk in that layer
             for (int chunkType = 0; chunkType < kNumChunkTypes; chunkType++)
             {
+                if (forcedBrushType >= 0 && chunkType != forcedBrushType) continue;
                 const iSLayerDrawInfoStatic::BufferData *info = me->mBuffers + chunkType;
                 const uint64_t numChunks = info->mChunks.GetLength();
                 if (numChunks == 0) continue;

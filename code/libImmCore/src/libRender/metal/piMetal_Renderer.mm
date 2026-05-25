@@ -44,6 +44,7 @@ struct piRasterStateS
     MTLWinding frontWinding = MTLWindingCounterClockwise;
     MTLCullMode cullMode = MTLCullModeNone;
     bool wireframe = false;
+    bool depthClamp = false;
 };
 struct piBlendStateS
 {
@@ -76,6 +77,8 @@ struct piBufferS
 {
     id<MTLBuffer> buffer = nil;
     unsigned int size = 0;
+    piRenderer::BufferType type = piRenderer::BufferType::Static;
+    piRenderer::BufferUse use = piRenderer::BufferUse::Vertex;
 };
 
 static constexpr NSUInteger kImmediateConstantBufferBase = 16;
@@ -123,6 +126,7 @@ struct piMetalState
     piBuffer unitCubePositionNormalBuffer = nullptr;
     piVertexArray unitCubePositionNormalVertexArray = nullptr;
     piQuery perfQueries[2] = { nullptr, nullptr };
+    NSMutableArray<id<MTLBuffer>> *retainedBuffers = nil;
     int currentPerformanceQuery = 0;
     bool frameActive = false;
     bool passTouched = false;
@@ -136,6 +140,20 @@ struct piMetalState
     int numViewports = 1;
     float viewports[6 * 16] = {};
 };
+
+static void iAttachRetainedBufferCleanup(piMetalState *state)
+{
+    if (!state || !state->commandBuffer || !state->retainedBuffers || state->retainedBuffers.count == 0)
+    {
+        return;
+    }
+
+    NSArray<id<MTLBuffer>> *buffers = [state->retainedBuffers copy];
+    [state->commandBuffer addCompletedHandler:^(__unused id<MTLCommandBuffer> commandBuffer) {
+        [buffers release];
+    }];
+    [state->retainedBuffers removeAllObjects];
+}
 
 static void iReport(piRenderer::piReporter *reporter, const char *message)
 {
@@ -254,6 +272,7 @@ static void iApplyEncoderState(piMetalState *state)
         [state->encoder setFrontFacingWinding:state->frontFaceCCW ? MTLWindingCounterClockwise : MTLWindingClockwise];
         [state->encoder setCullMode:state->cullFaceEnabled ? state->currentRasterState->cullMode : MTLCullModeNone];
         [state->encoder setTriangleFillMode:state->currentRasterState->wireframe ? MTLTriangleFillModeLines : MTLTriangleFillModeFill];
+        [state->encoder setDepthClipMode:state->currentRasterState->depthClamp ? MTLDepthClipModeClamp : MTLDepthClipModeClip];
     }
 }
 
@@ -307,6 +326,11 @@ static void iBindCommonDrawResources(piMetalState *state)
         {
             [state->encoder setVertexBuffer:state->constantBuffers[i]->buffer offset:0 atIndex:(NSUInteger)i];
             [state->encoder setFragmentBuffer:state->constantBuffers[i]->buffer offset:0 atIndex:(NSUInteger)i];
+            if (i == 0)
+            {
+                [state->encoder setVertexBuffer:state->constantBuffers[i]->buffer offset:0 atIndex:6];
+                [state->encoder setFragmentBuffer:state->constantBuffers[i]->buffer offset:0 atIndex:6];
+            }
         }
         if (state->shaderBuffers[i] && state->shaderBuffers[i]->buffer)
         {
@@ -486,12 +510,15 @@ static const float kUnitCubePositionNormalVertices[] = {
 piRendererMetal::piRendererMetal()
 {
     mState = new piMetalState();
+    mState->retainedBuffers = [[NSMutableArray alloc] init];
     mReporter = nullptr;
 }
 
 piRendererMetal::~piRendererMetal()
 {
     Deinitialize();
+    [mState->retainedBuffers release];
+    mState->retainedBuffers = nil;
     delete mState;
 }
 
@@ -690,6 +717,7 @@ void piRendererMetal::EndNativeFrame(void)
     {
         [mState->commandBuffer presentDrawable:mState->nativeDrawable];
     }
+    iAttachRetainedBufferCleanup(mState);
     [mState->commandBuffer commit];
 
     mState->commandBuffer = nil;
@@ -963,10 +991,11 @@ void piRendererMetal::GetViewports(int *num, float *viewports)
     if (viewports) memcpy(viewports, mState->viewports, sizeof(float) * 6 * mState->numViewports);
 }
 
-piRasterState piRendererMetal::CreateRasterState(bool wireframe, bool frontIsCounterClockWise, CullMode cullMode, bool, bool)
+piRasterState piRendererMetal::CreateRasterState(bool wireframe, bool frontIsCounterClockWise, CullMode cullMode, bool depthClamp, bool)
 {
     piRasterStateS *state = new piRasterStateS();
     state->wireframe = wireframe;
+    state->depthClamp = depthClamp;
     state->frontWinding = frontIsCounterClockWise ? MTLWindingCounterClockwise : MTLWindingClockwise;
     switch (cullMode)
     {
@@ -1213,6 +1242,7 @@ void piRendererMetal::GetTextureContent(piTexture vme, void *data, int x, int y,
     if (mState->frameActive && mState->commandBuffer)
     {
         iEndEncoder(mState);
+        iAttachRetainedBufferCleanup(mState);
         [mState->commandBuffer commit];
         [mState->commandBuffer waitUntilCompleted];
         mState->commandBuffer = nil;
@@ -1427,10 +1457,13 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
     if (isStaticPaintShader)
     {
         source = [NSString stringWithFormat:
-            @"#include <metal_stdlib>\n"
+             @"#include <metal_stdlib>\n"
              "using namespace metal;\n"
              "constant uint kBrushType = %d;\n"
              "constant uint kColorCompressed = %d;\n"
+             "constant uint kWiggle = %d;\n"
+             "constant uint kDrawIn = %d;\n"
+             "struct FrameState { float mTime; int mFrame; int mDummy1; int mDummy2; };\n"
              "struct VertexData {\n"
              "    packed_float3 mPos;\n"
              "    uint mWid;\n"
@@ -1477,6 +1510,7 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    return normalize(nor);\n"
              "}\n"
              "vertex VSOut imm_static_paint_vertex(uint vid [[vertex_id]],\n"
+             "                                      constant FrameState &frame [[buffer(6)]],\n"
              "                                      constant LayerState &layer [[buffer(3)]],\n"
              "                                      constant DisplayState &display [[buffer(4)]],\n"
              "                                      const device VertexData *data [[buffer(8)]],\n"
@@ -1490,12 +1524,17 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    VertexData vtx = data[bid];\n"
              "    float3 inVertex = float3(vtx.mPos);\n"
              "    uint inInfo = vtx.mDirInf >> 24u;\n"
+             "    float inTime = vtx.mTim;\n"
              "    float inWid = 1.7 * chunkData.mData[0].mBiggestStroke * float(vtx.mWid & 0x7fffu) / 32767.0;\n"
              "    float4 inColAlpha = unpack4(vtx.mColAlp);\n"
              "    float3 inOri = normalize(-1.0 + 2.0 * unpack3(vtx.mDirInf));\n"
              "    float3 inAxU = decode_unit_vector(vtx.mAxUUn2);\n"
              "    float3 inAxV = decode_unit_vector(vtx.mAxVUn3);\n"
-             "    float3 cpos = mul_row_major(layer.mLayerToViewer, float4(inVertex, 1.0)).xyz;\n"
+             "    float3 pos = inVertex;\n"
+             "    if (kWiggle == 1u) {\n"
+             "        pos += layer.mKeepAlive[0].z * sin(layer.mKeepAlive[0].x * inVertex.yzx + layer.mKeepAlive[0].y * frame.mTime);\n"
+             "    }\n"
+             "    float3 cpos = mul_row_major(layer.mLayerToViewer, float4(pos, 1.0)).xyz;\n"
              "    float f = 1.0;\n"
              "    if (((inInfo >> 7u) & 1u) == 0u) {\n"
              "        float3 wori = normalize(transform_dir_row_major(layer.mLayerToViewer, inOri));\n"
@@ -1504,6 +1543,10 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    }\n"
              "    float3 col = (kColorCompressed == 0u) ? inColAlpha.xyz * inColAlpha.xyz : inColAlpha.xyz;\n"
              "    float alpha = inColAlpha.w * f * layer.mOpacity;\n"
+             "    if (kDrawIn == 1u) {\n"
+             "        float drawingT = 2.0 * layer.mDrawInTime - inTime;\n"
+             "        alpha *= smoothstep(layer.mAnimParams.z, layer.mAnimParams.z + layer.mAnimParams.w, drawingT);\n"
+             "    }\n"
              "    float3 bU = normalize(transform_dir_row_major(layer.mLayerToViewer, inAxU));\n"
              "    float3 bV = normalize(transform_dir_row_major(layer.mLayerToViewer, inAxV));\n"
              "    float3 bWPos = cpos;\n"
@@ -1532,7 +1575,9 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "}\n"
              "fragment float4 imm_static_paint_fragment(VSOut in [[stage_in]]) { return float4(in.color.rgb, 1.0); }\n",
              brushType < 0 ? 0 : brushType,
-             colorCompressed ? 1 : 0];
+             colorCompressed ? 1 : 0,
+             wiggle ? 1 : 0,
+             drawIn ? 1 : 0];
         vertexFunctionName = "imm_static_paint_vertex";
         fragmentFunctionName = "imm_static_paint_fragment";
         colorFormat = MTLPixelFormatRG11B10Float;
@@ -1547,6 +1592,7 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "constant uint kColorCompressed = %d;\n"
              "constant uint kWiggle = %d;\n"
              "constant uint kDrawIn = %d;\n"
+             "struct FrameState { float mTime; int mFrame; int mDummy1; int mDummy2; };\n"
              "struct VertexData {\n"
              "    packed_float3 mPos;\n"
              "    uchar4 mColAlp;\n"
@@ -1565,7 +1611,7 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "};\n"
              "struct DisplayEye { float4 mViewerToEyePrj[4]; };\n"
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
-             "struct VSOut { float4 position [[position]]; float4 color; uint mask [[flat]]; };\n"
+             "struct VSOut { float4 position [[position]]; float4 color; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
              "}\n"
@@ -1574,12 +1620,13 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "}\n"
              "vertex VSOut imm_pretessellated_paint_vertex(uint vid [[vertex_id]],\n"
              "                                             const device VertexData *vertices [[buffer(0)]],\n"
+             "                                             constant FrameState &frame [[buffer(6)]],\n"
              "                                             constant LayerState &layer [[buffer(3)]],\n"
              "                                             constant DisplayState &display [[buffer(4)]]) {\n"
              "    VertexData vtx = vertices[vid];\n"
              "    float3 pos = float3(vtx.mPos);\n"
              "    if (kWiggle == 1u) {\n"
-             "        pos += layer.mKeepAlive[0].z * sin(layer.mKeepAlive[0].x * pos.yzx + layer.mKeepAlive[0].y);\n"
+             "        pos += layer.mKeepAlive[0].z * sin(layer.mKeepAlive[0].x * pos.yzx + layer.mKeepAlive[0].y * frame.mTime);\n"
              "    }\n"
              "    float3 cpos = mul_row_major(layer.mLayerToViewer, float4(pos, 1.0)).xyz;\n"
              "    float3 ori = float3(vtx.mDirInfo.xyz) / 127.5 - 1.0;\n"
@@ -1601,12 +1648,9 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    VSOut out;\n"
              "    out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0));\n"
              "    out.color = float4(col, alpha);\n"
-             "    out.mask = (colAlpha.a > 0.999) ? layer.mID : info;\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_pretessellated_paint_fragment(VSOut in [[stage_in]]) {\n"
-             "    return float4(in.color.rgb, 1.0);\n"
-             "}\n",
+             "fragment float4 imm_pretessellated_paint_fragment(VSOut in [[stage_in]]) { return float4(in.color.rgb, 1.0); }\n",
              colorCompressed ? 1 : 0,
              wiggle ? 1 : 0,
              drawIn ? 1 : 0];
@@ -1698,6 +1742,8 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    uint eye = min(display.mEyeIndex, 1u);\n"
              "    VSOut out;\n"
              "    out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0));\n"
+             "    // 360 pictures are backdrops; keep them at far depth so they do not cover paint.\n"
+             "    out.position.z = out.position.w;\n"
              "    out.direction = normalize(vtx.position);\n"
              "    out.scaleOffset = kFormatIsStereo == 1u ? float4(1.0, 0.5, 0.0, 0.5 * float(eye)) : float4(1.0, 1.0, 0.0, 0.0);\n"
              "    return out;\n"
@@ -1751,6 +1797,8 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    uint eye = min(display.mEyeIndex, 1u);\n"
              "    VSOut out;\n"
              "    out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0));\n"
+             "    // 360 pictures are backdrops; keep them at far depth so they do not cover paint.\n"
+             "    out.position.z = out.position.w;\n"
              "    out.direction = vtx.position;\n"
              "    return out;\n"
              "}\n"
@@ -1923,14 +1971,14 @@ piShader piRendererMetal::CreateShaderBinary(const piShaderOptions *, const uint
     else
     {
         source =
-            @"#include <metal_stdlib>\n"
+             @"#include <metal_stdlib>\n"
              "using namespace metal;\n"
              "struct VSOut { float4 position [[position]]; float4 color; };\n"
              "vertex VSOut imm_placeholder_vertex(uint vid [[vertex_id]]) {\n"
-             "    constexpr float2 p[3] = { float2(-0.75, -0.65), float2(0.75, -0.65), float2(0.0, 0.70) };\n"
-             "    constexpr float4 c[3] = { float4(0.9, 0.2, 0.15, 1.0), float4(0.15, 0.65, 0.95, 1.0), float4(0.95, 0.85, 0.2, 1.0) };\n"
+             "    constexpr float2 p[6] = { float2(-0.75, -0.65), float2(0.75, -0.65), float2(0.0, 0.70), float2(-0.85, 0.80), float2(-0.35, 0.80), float2(-0.85, 0.30) };\n"
+             "    constexpr float4 c[6] = { float4(0.9, 0.2, 0.15, 1.0), float4(0.15, 0.65, 0.95, 1.0), float4(0.95, 0.85, 0.2, 1.0), float4(0.1, 0.95, 0.2, 1.0), float4(0.1, 0.95, 0.2, 1.0), float4(0.1, 0.95, 0.2, 1.0) };\n"
              "    VSOut out;\n"
-             "    uint i = vid % 3;\n"
+             "    uint i = vid % 6;\n"
              "    out.position = float4(p[i], 0.0, 1.0);\n"
              "    out.color = c[i];\n"
              "    return out;\n"
@@ -2043,7 +2091,7 @@ void piRendererMetal::DettachAtomicsBuffer(int)
     iUnsupported(mState, mReporter, piMetalUnsupportedFeature::Atomics, "Metal renderer does not support atomic buffer bindings yet");
 }
 
-piBuffer piRendererMetal::CreateBuffer(const void *data, unsigned int amount, BufferType, BufferUse)
+piBuffer piRendererMetal::CreateBuffer(const void *data, unsigned int amount, BufferType mode, BufferUse use)
 {
     if (!mState->device || amount == 0)
     {
@@ -2052,6 +2100,8 @@ piBuffer piRendererMetal::CreateBuffer(const void *data, unsigned int amount, Bu
 
     piBufferS *buffer = new piBufferS();
     buffer->size = amount;
+    buffer->type = mode;
+    buffer->use = use;
     if (data)
     {
         buffer->buffer = [mState->device newBufferWithBytes:data length:amount options:MTLResourceStorageModeShared];
@@ -2089,6 +2139,20 @@ void piRendererMetal::UpdateBuffer(piBuffer obj, const void *data, int offset, i
 {
     if (!obj || !obj->buffer || !data || offset < 0 || len < 0) return;
     if ((unsigned int)(offset + len) > obj->size) return;
+
+    if (mState->frameActive && mState->commandBuffer && obj->type == BufferType::Dynamic)
+    {
+        id<MTLBuffer> replacement = [mState->device newBufferWithLength:obj->size options:MTLResourceStorageModeShared];
+        if (!replacement) return;
+
+        memcpy([replacement contents], [obj->buffer contents], (size_t)obj->size);
+        if (mState->retainedBuffers)
+        {
+            [mState->retainedBuffers addObject:obj->buffer];
+        }
+        obj->buffer = replacement;
+    }
+
     memcpy((char *)[obj->buffer contents] + offset, data, (size_t)len);
 }
 void piRendererMetal::AttachPixelPackBuffer(piBuffer)
