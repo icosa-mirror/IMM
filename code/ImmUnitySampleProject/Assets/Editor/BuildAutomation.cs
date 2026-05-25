@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
+using UnityEditor.SceneManagement;
 using UnityEngine.Rendering;
 
 namespace ImmPlayer.Editor
@@ -13,6 +14,14 @@ namespace ImmPlayer.Editor
         {
             "Assets/Scenes/SampleScene.unity"
         };
+        private const string EditorSmokeCapturePathEnv = "IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH";
+        private const string RuntimeSmokeCapturePathEnv = "IMM_UNITY_SMOKE_CAPTURE_PATH";
+        private const string RuntimeSmokeFramesEnv = "IMM_UNITY_SMOKE_FRAMES";
+        private const string RuntimeSmokeQuitEnv = "IMM_UNITY_SMOKE_QUIT";
+
+        private static string s_EditorSmokeCapturePath;
+        private static DateTime s_EditorSmokeStartTimeUtc;
+        private static bool s_EditorSmokeRequestedExit;
 
         public static void BuildAndroidDebug()
         {
@@ -77,6 +86,56 @@ namespace ImmPlayer.Editor
             BuildPlayer(BuildTarget.iOS, outputDir, BuildOptions.Development, "iOS");
         }
 
+        public static void RunMacOSEditorPlayModeSmoke()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneOSX, "macOS");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneOSX, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneOSX, new[] { GraphicsDeviceType.Metal });
+
+            string capturePath = Environment.GetEnvironmentVariable(EditorSmokeCapturePathEnv);
+            if (string.IsNullOrEmpty(capturePath))
+            {
+                capturePath = Path.GetFullPath(Path.Combine("..", "build", "unity-smoke", "macos-editor-playmode.png"));
+            }
+            else
+            {
+                capturePath = Path.GetFullPath(capturePath);
+            }
+
+            string captureDir = Path.GetDirectoryName(capturePath);
+            if (!string.IsNullOrEmpty(captureDir))
+            {
+                Directory.CreateDirectory(captureDir);
+            }
+
+            if (File.Exists(capturePath))
+            {
+                File.Delete(capturePath);
+            }
+
+            Environment.SetEnvironmentVariable(RuntimeSmokeCapturePathEnv, capturePath);
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(RuntimeSmokeFramesEnv)))
+            {
+                Environment.SetEnvironmentVariable(RuntimeSmokeFramesEnv, "360");
+            }
+            Environment.SetEnvironmentVariable(RuntimeSmokeQuitEnv, "0");
+
+            EditorSceneManager.OpenScene(SmokeScenes[0]);
+
+            s_EditorSmokeCapturePath = capturePath;
+            s_EditorSmokeStartTimeUtc = DateTime.UtcNow;
+            s_EditorSmokeRequestedExit = false;
+
+            EditorApplication.update -= UpdateEditorPlayModeSmoke;
+            EditorApplication.update += UpdateEditorPlayModeSmoke;
+            EditorApplication.playModeStateChanged -= OnEditorPlayModeSmokeStateChanged;
+            EditorApplication.playModeStateChanged += OnEditorPlayModeSmokeStateChanged;
+
+            UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] entering play mode capture={capturePath}");
+            EditorApplication.EnterPlaymode();
+        }
+
         private static void EnsureBuildTargetSupported(BuildTargetGroup group, BuildTarget target, string label)
         {
             if (!BuildPipeline.IsBuildTargetSupported(group, target))
@@ -110,6 +169,48 @@ namespace ImmPlayer.Editor
             }
 
             UnityEngine.Debug.Log($"[IMM_AUTOBUILD] {label} build succeeded: {outputPath}");
+        }
+
+        private static void UpdateEditorPlayModeSmoke()
+        {
+            if (s_EditorSmokeRequestedExit)
+                return;
+
+            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
+            {
+                s_EditorSmokeRequestedExit = true;
+                UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] capture complete: {s_EditorSmokeCapturePath}");
+                EditorApplication.ExitPlaymode();
+                return;
+            }
+
+            TimeSpan elapsed = DateTime.UtcNow - s_EditorSmokeStartTimeUtc;
+            if (elapsed.TotalSeconds > 90.0)
+            {
+                s_EditorSmokeRequestedExit = true;
+                UnityEngine.Debug.LogError($"[IMM_EDITOR_SMOKE] timed out waiting for capture: {s_EditorSmokeCapturePath}");
+                EditorApplication.Exit(2);
+            }
+        }
+
+        private static void OnEditorPlayModeSmokeStateChanged(PlayModeStateChange state)
+        {
+            if (state != PlayModeStateChange.EnteredEditMode || !s_EditorSmokeRequestedExit)
+                return;
+
+            EditorApplication.update -= UpdateEditorPlayModeSmoke;
+            EditorApplication.playModeStateChanged -= OnEditorPlayModeSmokeStateChanged;
+
+            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
+            {
+                UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] passed: {s_EditorSmokeCapturePath}");
+                EditorApplication.Exit(0);
+            }
+            else
+            {
+                UnityEngine.Debug.LogError($"[IMM_EDITOR_SMOKE] failed: capture missing after play mode exit: {s_EditorSmokeCapturePath}");
+                EditorApplication.Exit(2);
+            }
         }
     }
 }
