@@ -653,7 +653,7 @@ void Viewer::TogglePlaybackState(int docID)
     }
 }
 
-bool Viewer::GetVolume(int docID)
+float Viewer::GetVolume(int docID)
 {
     return mPlayer.GetDocumentVolume(docID);
 }

@@ -163,7 +163,7 @@ namespace ExePlayer
         void EnablePerformanceMeasurement(bool enabled) { mPlayer.EnablePerformanceMeasurement(enabled); }
 
         void SetVolume(int docID, float volume);
-        bool GetVolume(int docID);
+        float GetVolume(int docID);
 
         // Touch control methods for non-VR Android
         void RotateCamera(float deltaYaw, float deltaPitch);

@@ -10,6 +10,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libMesh/piMesh.h"
 #include "libImmCore/src/libMesh/piRenderMesh.h"
+#include "../../blue_noise.h"
 
 
 #include "layerRendererModel.h"
@@ -129,6 +130,12 @@ namespace ImmPlayer
 		mRasterState = renderer->CreateRasterState(false, true, piRenderer::CullMode::NONE, true, false);
 		if (!mRasterState) return false;
 
+        if (renderer->GetAPI() == piRenderer::API::Metal)
+        {
+            const piRenderer::TextureInfo infob = { piRenderer::TextureType::T2D_ARRAY, piRenderer::Format::C1_8_UNORM, 64, 64, 64, 1 };
+            mBlueNoise = renderer->CreateTexture(0, &infob, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::REPEAT, 1.0f, (void*)GetBlueNoise_64x64x64());
+            if (!mBlueNoise) return false;
+        }
 
 		return true;
 	}
@@ -139,6 +146,11 @@ namespace ImmPlayer
         mLayerInfo.End();
 
 		renderer->DestroyRasterState(mRasterState);
+        if (mBlueNoise)
+        {
+            renderer->DestroyTexture(mBlueNoise);
+            mBlueNoise = nullptr;
+        }
 
 		if (renderer->GetAPI() == piRenderer::API::DX) return;
 		for (int i = 0; i < 3; i++)
@@ -306,9 +318,17 @@ namespace ImmPlayer
 
 
 			renderer->AttachShader(mShaders[idStereo]);
+            if (mBlueNoise)
+            {
+                renderer->AttachTextures(1, &mBlueNoise, 7);
+            }
 			++mDrawCallInfo.numDrawCalls;
             mDrawCallInfo.numTriangles += me->mRenderMesh.GetNumTriangles(0) * numInstances;
 			me->mRenderMesh.Render( renderer, 0, 0, numInstances);
+            if (mBlueNoise)
+            {
+                renderer->DettachTextures();
+            }
 			renderer->DettachShader();
 		}
 		renderer->SetState(piSTATE_CULL_FACE, true);

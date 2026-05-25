@@ -741,6 +741,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     uint64_t validationMinDrawCalls = 1;
     uint64_t validationMinPictureDrawCalls = 1;
     uint64_t validationMinPicture360DrawCalls = 1;
+    uint64_t validationMinPicture360EquirectDrawCalls = 0;
+    uint64_t validationMinPicture360CubemapDrawCalls = 0;
     uint64_t validationMinTriangles = 1;
     bool validationDone = false;
     int validationExitCode = 0;
@@ -770,6 +772,16 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     if (validationMinPicture360DrawCallsEnv && validationMinPicture360DrawCallsEnv[0])
     {
         validationMinPicture360DrawCalls = strtoull(validationMinPicture360DrawCallsEnv, nullptr, 10);
+    }
+    const char *validationMinPicture360EquirectDrawCallsEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS", "IMM_GL_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS");
+    if (validationMinPicture360EquirectDrawCallsEnv && validationMinPicture360EquirectDrawCallsEnv[0])
+    {
+        validationMinPicture360EquirectDrawCalls = strtoull(validationMinPicture360EquirectDrawCallsEnv, nullptr, 10);
+    }
+    const char *validationMinPicture360CubemapDrawCallsEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MIN_PICTURE360_CUBEMAP_DRAWCALLS", "IMM_GL_VALIDATE_MIN_PICTURE360_CUBEMAP_DRAWCALLS");
+    if (validationMinPicture360CubemapDrawCallsEnv && validationMinPicture360CubemapDrawCallsEnv[0])
+    {
+        validationMinPicture360CubemapDrawCalls = strtoull(validationMinPicture360CubemapDrawCallsEnv, nullptr, 10);
     }
     const char *validationMinTrianglesEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MIN_TRIANGLES", "IMM_GL_VALIDATE_MIN_TRIANGLES");
     if (validationMinTrianglesEnv && validationMinTrianglesEnv[0])
@@ -938,6 +950,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         (uint64_t)perf.numDrawCalls >= validationMinDrawCalls &&
                         (uint64_t)perf.numPictureDrawCalls >= validationMinPictureDrawCalls &&
                         (uint64_t)perf.numPicture360DrawCalls >= validationMinPicture360DrawCalls &&
+                        (uint64_t)perf.numPicture360EquirectDrawCalls >= validationMinPicture360EquirectDrawCalls &&
+                        (uint64_t)perf.numPicture360CubemapDrawCalls >= validationMinPicture360CubemapDrawCalls &&
                         (uint64_t)perf.numTriangles >= validationMinTriangles;
 
                     if (!passed && (uint64_t)frameid < validationMaxFrame)
@@ -950,7 +964,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         if (!passed)
                         {
                             mLog.Printf(LT_ERROR,
-                                        L"IMM GL validation failed: frame=%d pixels=%llu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu culledCalls=%d",
+                                        L"IMM GL validation failed: frame=%d pixels=%llu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu picture360EquirectDrawCalls=%d minPicture360EquirectDrawCalls=%llu picture360CubemapDrawCalls=%d minPicture360CubemapDrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu culledCalls=%d",
                                         frameid,
                                         (unsigned long long)pixelCount,
                                         (unsigned long long)nonZeroPixels,
@@ -964,6 +978,10 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numPicture2DDrawCalls,
                                         perf.numPicture360DrawCalls,
                                         (unsigned long long)validationMinPicture360DrawCalls,
+                                        perf.numPicture360EquirectDrawCalls,
+                                        (unsigned long long)validationMinPicture360EquirectDrawCalls,
+                                        perf.numPicture360CubemapDrawCalls,
+                                        (unsigned long long)validationMinPicture360CubemapDrawCalls,
                                         perf.numModelDrawCalls,
                                         perf.numTriangles,
                                         (unsigned long long)validationMinTriangles,
@@ -973,7 +991,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         else
                         {
                             mLog.Printf(LT_MESSAGE,
-                                        L"IMM GL validation: frame=%d pixels=%llu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d modelDrawCalls=%d triangles=%d culledCalls=%d",
+                                        L"IMM GL validation: frame=%d pixels=%llu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d picture360EquirectDrawCalls=%d picture360CubemapDrawCalls=%d modelDrawCalls=%d triangles=%d culledCalls=%d",
                                         frameid,
                                         (unsigned long long)pixelCount,
                                         (unsigned long long)nonZeroPixels,
@@ -983,6 +1001,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numPictureDrawCalls,
                                         perf.numPicture2DDrawCalls,
                                         perf.numPicture360DrawCalls,
+                                        perf.numPicture360EquirectDrawCalls,
+                                        perf.numPicture360CubemapDrawCalls,
                                         perf.numModelDrawCalls,
                                         perf.numTriangles,
                                         perf.numDrawCallsCulled);

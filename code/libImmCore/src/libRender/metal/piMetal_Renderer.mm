@@ -127,6 +127,16 @@ struct piMetalState
     piVertexArray unitCubePositionNormalVertexArray = nullptr;
     piQuery perfQueries[2] = { nullptr, nullptr };
     NSMutableArray<id<MTLBuffer>> *retainedBuffers = nil;
+    uint64_t liveRenderTargets = 0;
+    uint64_t liveRasterStates = 0;
+    uint64_t liveBlendStates = 0;
+    uint64_t liveDepthStates = 0;
+    uint64_t liveTextures = 0;
+    uint64_t liveSamplers = 0;
+    uint64_t liveShaders = 0;
+    uint64_t liveBuffers = 0;
+    uint64_t liveVertexArrays = 0;
+    uint64_t liveQueries = 0;
     int currentPerformanceQuery = 0;
     bool frameActive = false;
     bool passTouched = false;
@@ -663,6 +673,22 @@ void piRendererMetal::Deinitialize(void)
         DestroyBuffer(mState->unitQuadBuffer);
         mState->unitQuadBuffer = nullptr;
     }
+    char resourceSummary[512];
+    snprintf(resourceSummary,
+             sizeof(resourceSummary),
+             "Metal renderer resource cleanup: renderTargets=%llu rasterStates=%llu blendStates=%llu depthStates=%llu textures=%llu samplers=%llu shaders=%llu buffers=%llu vertexArrays=%llu queries=%llu retainedBuffers=%lu",
+             (unsigned long long)mState->liveRenderTargets,
+             (unsigned long long)mState->liveRasterStates,
+             (unsigned long long)mState->liveBlendStates,
+             (unsigned long long)mState->liveDepthStates,
+             (unsigned long long)mState->liveTextures,
+             (unsigned long long)mState->liveSamplers,
+             (unsigned long long)mState->liveShaders,
+             (unsigned long long)mState->liveBuffers,
+             (unsigned long long)mState->liveVertexArrays,
+             (unsigned long long)mState->liveQueries,
+             (unsigned long)(mState->retainedBuffers ? mState->retainedBuffers.count : 0));
+    iReport(mReporter, resourceSummary);
     mState->commandQueue = nil;
     mState->disabledDepthState = nil;
     mState->device = nil;
@@ -751,7 +777,8 @@ piRenderer::API piRendererMetal::GetAPI(void)
 
 void piRendererMetal::Report(void)
 {
-    iReport(mReporter, "Metal renderer report: full resource tracking is not implemented yet");
+    iReport(mReporter, "Metal renderer report: standaloneProven=nativeFrame,offscreenRenderTarget,clear,viewport,depthTest,depthWrite,colorWriteMask,culling,sourceAlphaBlend,staticBuffers,dynamicBufferUpdate,immediateConstants,textures2D,texturesCube,samplers,renderShaders,staticPaint,pretessellatedPaint,picture2D,picture360Equirect,picture360CubemapShaderSmoke,indexedDraw,nonIndexedDraw,indirectDrawCpuFallback,unitQuad,unitCube,textureReadback,pngCapture,cpuTiming");
+    iReport(mReporter, "Metal renderer report: standaloneUnsupported=externalTextureWrapping,imageLoadStore,computeShaders,atomicBuffers,pixelPackBuffers,nonDefaultPointSize,nonDefaultLineWidth,polygonOffset,multiRenderTargetBlend,multiRenderTargetColorMask,gpuTimestampQueries");
 }
 
 void piRendererMetal::SetActiveWindow(int) {}
@@ -782,9 +809,15 @@ piRTarget piRendererMetal::CreateRenderTarget(piTexture vtex0, piTexture vtex1, 
     target->color[2] = vtex2;
     target->color[3] = vtex3;
     target->depth = zbuf;
+    ++mState->liveRenderTargets;
     return target;
 }
-void piRendererMetal::DestroyRenderTarget(piRTarget obj) { delete obj; }
+void piRendererMetal::DestroyRenderTarget(piRTarget obj)
+{
+    if (!obj) return;
+    if (mState->liveRenderTargets > 0) --mState->liveRenderTargets;
+    delete obj;
+}
 bool piRendererMetal::SetRenderTarget(piRTarget obj)
 {
     if (!mState->commandBuffer)
@@ -1004,6 +1037,7 @@ piRasterState piRendererMetal::CreateRasterState(bool wireframe, bool frontIsCou
         case CullMode::NONE:
         default: state->cullMode = MTLCullModeNone; break;
     }
+    ++mState->liveRasterStates;
     return state;
 }
 void piRendererMetal::SetRasterState(const piRasterState vme)
@@ -1015,16 +1049,27 @@ void piRendererMetal::SetRasterState(const piRasterState vme)
     }
     iApplyEncoderState(mState);
 }
-void piRendererMetal::DestroyRasterState(piRasterState vme) { delete vme; }
+void piRendererMetal::DestroyRasterState(piRasterState vme)
+{
+    if (!vme) return;
+    if (mState->liveRasterStates > 0) --mState->liveRasterStates;
+    delete vme;
+}
 piBlendState piRendererMetal::CreateBlendState(bool alphaToCoverage, bool enabled0)
 {
     piBlendStateS *state = new piBlendStateS();
     state->alphaToCoverage = alphaToCoverage;
     state->enabled0 = enabled0;
+    ++mState->liveBlendStates;
     return state;
 }
 void piRendererMetal::SetBlendState(const piBlendState vme) { mState->currentBlendState = vme; }
-void piRendererMetal::DestroyBlendState(piBlendState vme) { delete vme; }
+void piRendererMetal::DestroyBlendState(piBlendState vme)
+{
+    if (!vme) return;
+    if (mState->liveBlendStates > 0) --mState->liveBlendStates;
+    delete vme;
+}
 piDepthState piRendererMetal::CreateDepthState(bool depthEnable, bool lessEqual)
 {
     if (!mState->device)
@@ -1045,6 +1090,7 @@ piDepthState piRendererMetal::CreateDepthState(bool depthEnable, bool lessEqual)
         delete state;
         return nullptr;
     }
+    ++mState->liveDepthStates;
     return state;
 }
 void piRendererMetal::SetDepthState(const piDepthState vme)
@@ -1058,6 +1104,7 @@ void piRendererMetal::DestroyDepthState(piDepthState vme)
     if (!vme) return;
     vme->depthWriteState = nil;
     vme->depthNoWriteState = nil;
+    if (mState->liveDepthStates > 0) --mState->liveDepthStates;
     delete vme;
 }
 
@@ -1127,6 +1174,7 @@ piTexture piRendererMetal::CreateTexture(const wchar_t *, const TextureInfo *inf
         const int slices = (info->mType == TextureType::T2D_ARRAY) ? info->mZres : (info->mType == TextureType::TCUBE ? 6 : 1);
         UpdateTexture(texture, 0, 0, 0, info->mXres, info->mYres, slices, buffer);
     }
+    ++mState->liveTextures;
     return texture;
 }
 
@@ -1139,6 +1187,7 @@ void piRendererMetal::DestroyTexture(piTexture obj)
 {
     if (!obj) return;
     obj->texture = nil;
+    if (mState->liveTextures > 0) --mState->liveTextures;
     delete obj;
 }
 void piRendererMetal::ClearTexture(piTexture vme, int level, const void *data)
@@ -1392,6 +1441,7 @@ piSampler piRendererMetal::CreateSampler(TextureFilter filter, TextureWrap wrap,
         delete sampler;
         return nullptr;
     }
+    ++mState->liveSamplers;
     return sampler;
 }
 
@@ -1399,6 +1449,7 @@ void piRendererMetal::DestroySampler(piSampler obj)
 {
     if (!obj) return;
     obj->sampler = nil;
+    if (mState->liveSamplers > 0) --mState->liveSamplers;
     delete obj;
 }
 
@@ -1487,7 +1538,8 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
              "struct Chunk { uint mVertexOffset; float mBiggestStroke; };\n"
              "struct ChunkData { Chunk mData[128]; };\n"
-             "struct VSOut { float4 position [[position]]; float4 color; };\n"
+             "struct VSOut { float4 position [[position]]; float4 color; uint mask [[flat]]; };\n"
+             "struct FSOut { float4 color [[color(0)]]; uint sampleMask [[sample_mask]]; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
              "}\n"
@@ -1571,9 +1623,28 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    VSOut out;\n"
              "    out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0));\n"
              "    out.color = float4(col, alpha);\n"
+             "    out.mask = (alpha > 0.999) ? layer.mID : inInfo;\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_static_paint_fragment(VSOut in [[stage_in]]) { return float4(in.color.rgb, 1.0); }\n",
+             "uint imm_alpha_to_coverage(float alpha, float4 position, uint frameID, uint primitiveID, texture2d_array<float> blueNoise) {\n"
+             "    const float MSAASampleCount = 8.0;\n"
+             "    uint2 pixel = uint2(uint(position.x) & 63u, uint(position.y) & 63u);\n"
+             "    uint slice = frameID & 63u;\n"
+             "    float ran = blueNoise.read(pixel, slice, 0).x;\n"
+             "    alpha = clamp(alpha + 0.99 * (ran - 0.5) / MSAASampleCount, 0.0, 1.0);\n"
+             "    uint mask = (0xff00u >> uint(alpha * MSAASampleCount + 0.5)) & 0xffu;\n"
+             "    uint shift = (uint(ran * 7.0) + primitiveID) & 7u;\n"
+             "    uint barrel = (mask << 8u) | mask;\n"
+             "    return (barrel >> shift) & 0xffu;\n"
+             "}\n"
+             "fragment FSOut imm_static_paint_fragment(VSOut in [[stage_in]],\n"
+             "                                         constant FrameState &frame [[buffer(6)]],\n"
+             "                                         texture2d_array<float> blueNoise [[texture(7)]]) {\n"
+             "    FSOut out;\n"
+             "    out.color = float4(in.color.rgb, 1.0);\n"
+             "    out.sampleMask = imm_alpha_to_coverage(in.color.a, in.position, uint(frame.mFrame), in.mask, blueNoise);\n"
+             "    return out;\n"
+             "}\n",
              brushType < 0 ? 0 : brushType,
              colorCompressed ? 1 : 0,
              wiggle ? 1 : 0,
@@ -1611,7 +1682,8 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "};\n"
              "struct DisplayEye { float4 mViewerToEyePrj[4]; };\n"
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
-             "struct VSOut { float4 position [[position]]; float4 color; };\n"
+             "struct VSOut { float4 position [[position]]; float4 color; uint mask [[flat]]; };\n"
+             "struct FSOut { float4 color [[color(0)]]; uint sampleMask [[sample_mask]]; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
              "}\n"
@@ -1648,9 +1720,28 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    VSOut out;\n"
              "    out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0));\n"
              "    out.color = float4(col, alpha);\n"
+             "    out.mask = (alpha > 0.999) ? layer.mID : info;\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_pretessellated_paint_fragment(VSOut in [[stage_in]]) { return float4(in.color.rgb, 1.0); }\n",
+             "uint imm_alpha_to_coverage(float alpha, float4 position, uint frameID, uint primitiveID, texture2d_array<float> blueNoise) {\n"
+             "    const float MSAASampleCount = 8.0;\n"
+             "    uint2 pixel = uint2(uint(position.x) & 63u, uint(position.y) & 63u);\n"
+             "    uint slice = frameID & 63u;\n"
+             "    float ran = blueNoise.read(pixel, slice, 0).x;\n"
+             "    alpha = clamp(alpha + 0.99 * (ran - 0.5) / MSAASampleCount, 0.0, 1.0);\n"
+             "    uint mask = (0xff00u >> uint(alpha * MSAASampleCount + 0.5)) & 0xffu;\n"
+             "    uint shift = (uint(ran * 7.0) + primitiveID) & 7u;\n"
+             "    uint barrel = (mask << 8u) | mask;\n"
+             "    return (barrel >> shift) & 0xffu;\n"
+             "}\n"
+             "fragment FSOut imm_pretessellated_paint_fragment(VSOut in [[stage_in]],\n"
+             "                                                   constant FrameState &frame [[buffer(6)]],\n"
+             "                                                   texture2d_array<float> blueNoise [[texture(7)]]) {\n"
+             "    FSOut out;\n"
+             "    out.color = float4(in.color.rgb, 1.0);\n"
+             "    out.sampleMask = imm_alpha_to_coverage(in.color.a, in.position, uint(frame.mFrame), in.mask, blueNoise);\n"
+             "    return out;\n"
+             "}\n",
              colorCompressed ? 1 : 0,
              wiggle ? 1 : 0,
              drawIn ? 1 : 0];
@@ -1680,8 +1771,20 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
              "struct PictureConstants { float4 size; };\n"
              "struct VSOut { float4 position [[position]]; float2 uv; };\n"
+             "struct FSOut { float4 color [[color(0)]]; uint sampleMask [[sample_mask]]; };\n"
+             "struct FrameState { float mTime; int mFrame; int mDummy1; int mDummy2; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
+             "}\n"
+             "uint imm_alpha_to_coverage(float alpha, float4 position, uint frameID, texture2d_array<float> blueNoise) {\n"
+             "    const float MSAASampleCount = 8.0;\n"
+             "    uint2 pixel = uint2(uint(position.x) & 63u, uint(position.y) & 63u);\n"
+             "    float ran = blueNoise.read(pixel, frameID & 63u, 0).x;\n"
+             "    alpha = clamp(alpha + 0.99 * (ran - 0.5) / MSAASampleCount, 0.0, 1.0);\n"
+             "    uint mask = (0xff00u >> uint(alpha * MSAASampleCount + 0.5)) & 0xffu;\n"
+             "    uint shift = uint(ran * 7.0) & 7u;\n"
+             "    uint barrel = (mask << 8u) | mask;\n"
+             "    return (barrel >> shift) & 0xffu;\n"
              "}\n"
              "vertex VSOut imm_picture2d_vertex(uint vid [[vertex_id]],\n"
              "                                  const device VertexIn *vertices [[buffer(0)]],\n"
@@ -1697,18 +1800,23 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    out.uv = 0.5 + 0.5 * p * float2(1.0, -1.0);\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_picture2d_fragment(VSOut in [[stage_in]],\n"
-             "                                      texture2d<float> tex [[texture(0)]],\n"
-             "                                      sampler texSampler [[sampler(0)]],\n"
-             "                                      constant LayerState &layer [[buffer(3)]]) {\n"
+             "fragment FSOut imm_picture2d_fragment(VSOut in [[stage_in]],\n"
+             "                                    texture2d<float> tex [[texture(0)]],\n"
+             "                                    texture2d_array<float> blueNoise [[texture(7)]],\n"
+             "                                    sampler texSampler [[sampler(0)]],\n"
+             "                                    constant FrameState &frame [[buffer(6)]],\n"
+             "                                    constant LayerState &layer [[buffer(3)]]) {\n"
              "    float4 te = tex.sample(texSampler, in.uv);\n"
-             "    return float4(te.rgb * te.rgb, te.a * layer.mOpacity);\n"
+             "    FSOut out;\n"
+             "    out.color = float4(te.rgb * te.rgb, 1.0);\n"
+             "    out.sampleMask = imm_alpha_to_coverage(te.a * layer.mOpacity, in.position, uint(frame.mFrame), blueNoise);\n"
+             "    return out;\n"
              "}\n";
         vertexFunctionName = "imm_picture2d_vertex";
         fragmentFunctionName = "imm_picture2d_fragment";
         colorFormat = MTLPixelFormatRG11B10Float;
         requiresVertexBuffer = true;
-        enableSourceAlphaBlending = true;
+        enableSourceAlphaBlending = false;
     }
     else if (isPicture360EquirectShader)
     {
@@ -1730,8 +1838,20 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "struct DisplayEye { float4 mViewerToEyePrj[4]; };\n"
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
              "struct VSOut { float4 position [[position]]; float3 direction; float4 scaleOffset; };\n"
+             "struct FSOut { float4 color [[color(0)]]; uint sampleMask [[sample_mask]]; };\n"
+             "struct FrameState { float mTime; int mFrame; int mDummy1; int mDummy2; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
+             "}\n"
+             "uint imm_alpha_to_coverage(float alpha, float4 position, uint frameID, texture2d_array<float> blueNoise) {\n"
+             "    const float MSAASampleCount = 8.0;\n"
+             "    uint2 pixel = uint2(uint(position.x) & 63u, uint(position.y) & 63u);\n"
+             "    float ran = blueNoise.read(pixel, frameID & 63u, 0).x;\n"
+             "    alpha = clamp(alpha + 0.99 * (ran - 0.5) / MSAASampleCount, 0.0, 1.0);\n"
+             "    uint mask = (0xff00u >> uint(alpha * MSAASampleCount + 0.5)) & 0xffu;\n"
+             "    uint shift = uint(ran * 7.0) & 7u;\n"
+             "    uint barrel = (mask << 8u) | mask;\n"
+             "    return (barrel >> shift) & 0xffu;\n"
              "}\n"
              "vertex VSOut imm_picture360_equirect_vertex(uint vid [[vertex_id]],\n"
              "                                           const device VertexIn *vertices [[buffer(0)]],\n"
@@ -1748,23 +1868,28 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    out.scaleOffset = kFormatIsStereo == 1u ? float4(1.0, 0.5, 0.0, 0.5 * float(eye)) : float4(1.0, 1.0, 0.0, 0.0);\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_picture360_equirect_fragment(VSOut in [[stage_in]],\n"
-             "                                                 texture2d<float> tex [[texture(0)]],\n"
-             "                                                 sampler texSampler [[sampler(0)]],\n"
-             "                                                 constant LayerState &layer [[buffer(3)]]) {\n"
+             "fragment FSOut imm_picture360_equirect_fragment(VSOut in [[stage_in]],\n"
+             "                                               texture2d<float> tex [[texture(0)]],\n"
+             "                                               texture2d_array<float> blueNoise [[texture(7)]],\n"
+             "                                               sampler texSampler [[sampler(0)]],\n"
+             "                                               constant FrameState &frame [[buffer(6)]],\n"
+             "                                               constant LayerState &layer [[buffer(3)]]) {\n"
              "    constexpr float pi = 3.14159265358979323846;\n"
              "    float3 nor = normalize(in.direction);\n"
              "    float2 uv = float2(0.5 + 0.5 * atan2(nor.x, -nor.z) / pi, acos(clamp(nor.y, -1.0, 1.0)) / pi);\n"
              "    uv = clamp(uv * in.scaleOffset.xy, float2(0.0), in.scaleOffset.xy) + in.scaleOffset.zw;\n"
              "    float4 te = tex.sample(texSampler, uv);\n"
-             "    return float4(te.rgb * te.rgb, te.a * layer.mOpacity);\n"
+             "    FSOut out;\n"
+             "    out.color = float4(te.rgb * te.rgb, 1.0);\n"
+             "    out.sampleMask = imm_alpha_to_coverage(te.a * layer.mOpacity, in.position, uint(frame.mFrame), blueNoise);\n"
+             "    return out;\n"
              "}\n",
              formatIsStereo == 1 ? 1 : 0];
         vertexFunctionName = "imm_picture360_equirect_vertex";
         fragmentFunctionName = "imm_picture360_equirect_fragment";
         colorFormat = MTLPixelFormatRG11B10Float;
         requiresVertexBuffer = true;
-        enableSourceAlphaBlending = true;
+        enableSourceAlphaBlending = false;
     }
     else if (isPicture360CubemapShader)
     {
@@ -1785,8 +1910,20 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "struct DisplayEye { float4 mViewerToEyePrj[4]; };\n"
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
              "struct VSOut { float4 position [[position]]; float3 direction; };\n"
+             "struct FSOut { float4 color [[color(0)]]; uint sampleMask [[sample_mask]]; };\n"
+             "struct FrameState { float mTime; int mFrame; int mDummy1; int mDummy2; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
+             "}\n"
+             "uint imm_alpha_to_coverage(float alpha, float4 position, uint frameID, texture2d_array<float> blueNoise) {\n"
+             "    const float MSAASampleCount = 8.0;\n"
+             "    uint2 pixel = uint2(uint(position.x) & 63u, uint(position.y) & 63u);\n"
+             "    float ran = blueNoise.read(pixel, frameID & 63u, 0).x;\n"
+             "    alpha = clamp(alpha + 0.99 * (ran - 0.5) / MSAASampleCount, 0.0, 1.0);\n"
+             "    uint mask = (0xff00u >> uint(alpha * MSAASampleCount + 0.5)) & 0xffu;\n"
+             "    uint shift = uint(ran * 7.0) & 7u;\n"
+             "    uint barrel = (mask << 8u) | mask;\n"
+             "    return (barrel >> shift) & 0xffu;\n"
              "}\n"
              "vertex VSOut imm_picture360_cubemap_vertex(uint vid [[vertex_id]],\n"
              "                                          const device VertexIn *vertices [[buffer(0)]],\n"
@@ -1802,18 +1939,23 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    out.direction = vtx.position;\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_picture360_cubemap_fragment(VSOut in [[stage_in]],\n"
-             "                                                texturecube<float> tex [[texture(0)]],\n"
-             "                                                sampler texSampler [[sampler(0)]],\n"
-             "                                                constant LayerState &layer [[buffer(3)]]) {\n"
+             "fragment FSOut imm_picture360_cubemap_fragment(VSOut in [[stage_in]],\n"
+             "                                              texturecube<float> tex [[texture(0)]],\n"
+             "                                              texture2d_array<float> blueNoise [[texture(7)]],\n"
+             "                                              sampler texSampler [[sampler(0)]],\n"
+             "                                              constant FrameState &frame [[buffer(6)]],\n"
+             "                                              constant LayerState &layer [[buffer(3)]]) {\n"
              "    float4 te = tex.sample(texSampler, normalize(in.direction));\n"
-             "    return float4(te.rgb * te.rgb, te.a * layer.mOpacity);\n"
+             "    FSOut out;\n"
+             "    out.color = float4(te.rgb * te.rgb, 1.0);\n"
+             "    out.sampleMask = imm_alpha_to_coverage(te.a * layer.mOpacity, in.position, uint(frame.mFrame), blueNoise);\n"
+             "    return out;\n"
              "}\n";
         vertexFunctionName = "imm_picture360_cubemap_vertex";
         fragmentFunctionName = "imm_picture360_cubemap_fragment";
         colorFormat = MTLPixelFormatRG11B10Float;
         requiresVertexBuffer = true;
-        enableSourceAlphaBlending = true;
+        enableSourceAlphaBlending = false;
     }
     else if (isModelShader)
     {
@@ -1834,8 +1976,20 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "struct DisplayEye { float4 mViewerToEyePrj[4]; };\n"
              "struct DisplayState { DisplayEye mEye[2]; float2 mResolution; uint mEyeIndex; };\n"
              "struct VSOut { float4 position [[position]]; float3 color; };\n"
+             "struct FSOut { float4 color [[color(0)]]; uint sampleMask [[sample_mask]]; };\n"
+             "struct FrameState { float mTime; int mFrame; int mDummy1; int mDummy2; };\n"
              "float4 mul_row_major(constant float4 *m, float4 v) {\n"
              "    return float4(dot(m[0], v), dot(m[1], v), dot(m[2], v), dot(m[3], v));\n"
+             "}\n"
+             "uint imm_alpha_to_coverage(float alpha, float4 position, uint frameID, texture2d_array<float> blueNoise) {\n"
+             "    const float MSAASampleCount = 8.0;\n"
+             "    uint2 pixel = uint2(uint(position.x) & 63u, uint(position.y) & 63u);\n"
+             "    float ran = blueNoise.read(pixel, frameID & 63u, 0).x;\n"
+             "    alpha = clamp(alpha + 0.99 * (ran - 0.5) / MSAASampleCount, 0.0, 1.0);\n"
+             "    uint mask = (0xff00u >> uint(alpha * MSAASampleCount + 0.5)) & 0xffu;\n"
+             "    uint shift = uint(ran * 7.0) & 7u;\n"
+             "    uint barrel = (mask << 8u) | mask;\n"
+             "    return (barrel >> shift) & 0xffu;\n"
              "}\n"
              "vertex VSOut imm_model_vertex(uint vid [[vertex_id]],\n"
              "                              const device VertexIn *vertices [[buffer(0)]],\n"
@@ -1849,14 +2003,20 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
              "    out.color = vtx.color;\n"
              "    return out;\n"
              "}\n"
-             "fragment float4 imm_model_fragment(VSOut in [[stage_in]], constant LayerState &layer [[buffer(3)]]) {\n"
-             "    return float4(in.color, layer.mOpacity);\n"
+             "fragment FSOut imm_model_fragment(VSOut in [[stage_in]],\n"
+             "                                  texture2d_array<float> blueNoise [[texture(7)]],\n"
+             "                                  constant FrameState &frame [[buffer(6)]],\n"
+             "                                  constant LayerState &layer [[buffer(3)]]) {\n"
+             "    FSOut out;\n"
+             "    out.color = float4(in.color, 1.0);\n"
+             "    out.sampleMask = imm_alpha_to_coverage(layer.mOpacity, in.position, uint(frame.mFrame), blueNoise);\n"
+             "    return out;\n"
              "}\n";
         vertexFunctionName = "imm_model_vertex";
         fragmentFunctionName = "imm_model_fragment";
         colorFormat = MTLPixelFormatRG11B10Float;
         requiresVertexBuffer = true;
-        enableSourceAlphaBlending = true;
+        enableSourceAlphaBlending = false;
     }
     else
     {
@@ -1923,6 +2083,7 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
     shader->pipelineColorWrite = pipeline;
     shader->requiresVertexBuffer = requiresVertexBuffer;
     if (error) error[0] = 0;
+    ++mState->liveShaders;
     return shader;
 }
 piShader piRendererMetal::CreateShaderBinary(const piShaderOptions *, const uint8_t *vs, const int vs_len, const uint8_t *, const int, const uint8_t *, const int, const uint8_t *, const int, const uint8_t *fs, const int fs_len, char *error)
@@ -2029,6 +2190,7 @@ piShader piRendererMetal::CreateShaderBinary(const piShaderOptions *, const uint
     shader->pipelineColorWrite = pipeline;
     shader->requiresVertexBuffer = requiresVertexBuffer;
     if (error) error[0] = 0;
+    ++mState->liveShaders;
     return shader;
 }
 void piRendererMetal::DestroyShader(piShader obj)
@@ -2038,6 +2200,7 @@ void piRendererMetal::DestroyShader(piShader obj)
     obj->pipelineColorWrite = nil;
     obj->pipelineNoColorWrite = nil;
     obj->pipelineSourceAlphaBlend = nil;
+    if (mState->liveShaders > 0) --mState->liveShaders;
     delete obj;
 }
 void piRendererMetal::AttachShader(piShader obj) { mState->currentShader = obj; }
@@ -2116,6 +2279,7 @@ piBuffer piRendererMetal::CreateBuffer(const void *data, unsigned int amount, Bu
         delete buffer;
         return nullptr;
     }
+    ++mState->liveBuffers;
     return buffer;
 }
 piBuffer piRendererMetal::CreateStructuredBuffer(const void *data, unsigned int numElements, unsigned int elementSize, BufferType mode, BufferUse use)
@@ -2133,6 +2297,7 @@ void piRendererMetal::DestroyBuffer(piBuffer obj)
 {
     if (!obj) return;
     obj->buffer = nil;
+    if (mState->liveBuffers > 0) --mState->liveBuffers;
     delete obj;
 }
 void piRendererMetal::UpdateBuffer(piBuffer obj, const void *data, int offset, int len, bool)
@@ -2171,9 +2336,15 @@ piVertexArray piRendererMetal::CreateVertexArray(int, piBuffer vb0, const piRArr
     vertexArray->vertexBuffer[1] = vb1;
     vertexArray->indexBuffer = eb;
     vertexArray->indexFormat = ebFormat;
+    ++mState->liveVertexArrays;
     return vertexArray;
 }
-void piRendererMetal::DestroyVertexArray(piVertexArray obj) { delete obj; }
+void piRendererMetal::DestroyVertexArray(piVertexArray obj)
+{
+    if (!obj) return;
+    if (mState->liveVertexArrays > 0) --mState->liveVertexArrays;
+    delete obj;
+}
 void piRendererMetal::AttachVertexArray(piVertexArray obj) { mState->currentVertexArray = obj; }
 void piRendererMetal::DettachVertexArray(void) { mState->currentVertexArray = nullptr; }
 piVertexArray piRendererMetal::CreateVertexArray2(int, piBuffer vb0, const ArrayLayout2 *, piBuffer vb1, const ArrayLayout2 *, const void *, size_t, piBuffer ib, const IndexArrayFormat ebFormat)
@@ -2181,15 +2352,26 @@ piVertexArray piRendererMetal::CreateVertexArray2(int, piBuffer vb0, const Array
     return CreateVertexArray(0, vb0, nullptr, vb1, nullptr, ib, ebFormat);
 }
 void piRendererMetal::AttachVertexArray2(piVertexArray vme) { AttachVertexArray(vme); }
-void piRendererMetal::DestroyVertexArray2(piVertexArray vme) { delete vme; }
+void piRendererMetal::DestroyVertexArray2(piVertexArray vme)
+{
+    if (!vme) return;
+    if (mState->liveVertexArrays > 0) --mState->liveVertexArrays;
+    delete vme;
+}
 
 piQuery piRendererMetal::CreateQuery(piRenderer::QueryType type)
 {
     piQueryS *query = new piQueryS();
     query->type = type;
+    ++mState->liveQueries;
     return query;
 }
-void piRendererMetal::DestroyQuery(piQuery vme) { delete vme; }
+void piRendererMetal::DestroyQuery(piQuery vme)
+{
+    if (!vme) return;
+    if (mState->liveQueries > 0) --mState->liveQueries;
+    delete vme;
+}
 void piRendererMetal::BeginQuery(piQuery vme)
 {
     if (!vme)

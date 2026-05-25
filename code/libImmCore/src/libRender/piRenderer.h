@@ -309,7 +309,7 @@ public:
     {
     public:
         piReporter() {}
-        ~piReporter() {}
+        virtual ~piReporter() {}
 
         virtual void Info(const char *str) = 0;
         //-----------

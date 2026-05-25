@@ -99,12 +99,6 @@ jobs:
         name: ImmViewer-Windows-VR
         path: viewer_artifact_vr
         if-no-files-found: error
-    - name: Upload Sample IMM
-      uses: actions/upload-artifact@v4
-      with:
-        name: sample1-imm
-        path: exampleImmFiles/sample1.imm
-        if-no-files-found: error
 
     - name: Generate Windows DirectX Baseline Capture
       continue-on-error: true
@@ -254,42 +248,30 @@ jobs:
       run: cmake --build build/macos --target appImmViewerMetal --config Release
 
     - name: Validate macOS Metal standalone viewer
-      run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 ctest --test-dir build/macos -R appImmViewerMetal --output-on-failure
+      run: ctest --test-dir build/macos -R appImmViewerMetal --output-on-failure
 
     - name: Generate macOS Metal Baseline Capture
       shell: bash
       run: |
         set -euo pipefail
         mkdir -p build/macos/metal-baseline-captures
-        IMM_METAL_VALIDATE_FRAME=1 \
-        IMM_METAL_VALIDATE_MAX_FRAME=240 \
-        IMM_METAL_VALIDATE_MIN_NONZERO=16 \
-        IMM_METAL_VALIDATE_MIN_DRAWCALLS=1 \
-        IMM_METAL_VALIDATE_MIN_PICTURE_DRAWCALLS=1 \
-        IMM_METAL_VALIDATE_MIN_PICTURE360_DRAWCALLS=1 \
-        IMM_METAL_VALIDATE_MIN_TRIANGLES=1 \
-        IMM_METAL_VALIDATE_CAPTURE_PATH="$PWD/build/macos/metal-baseline-captures/metal-static.png" \
-        IMM_METAL_EXIT_AFTER_VALIDATE=1 \
-        IMM_METAL_LOG_PATH="$PWD/build/macos/metal-baseline-captures/metal-static.player.log" \
-        build/macos/viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal \
-          code/projects/macos/appImmViewerMetal-settings.json \
+        IMM_METAL_VALIDATE_CAPTURE_DIR="$PWD/build/macos/metal-baseline-captures" \
+        IMM_METAL_VALIDATE_CAPTURE_FORMAT=png \
+          code/appImmViewer/scripts/validate_metal_standalone.sh \
+          build/macos/viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal \
           exampleImmFiles/sample1.imm \
           2>&1 | tee build/macos/metal-baseline-captures/metal-static.log
-
-    - name: Upload macOS Metal Baseline Capture
-      uses: actions/upload-artifact@v4
-      with:
-        name: ImmViewerMetal-macOS-Baseline
-        path: |
+        cp build/macos/metal-baseline-captures/static.png \
           build/macos/metal-baseline-captures/metal-static.png
-          build/macos/metal-baseline-captures/metal-static*.log
-        if-no-files-found: error
 
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewerMetal-macOS
-        path: build/macos/viewer/appImmViewerMetal.app
+        path: |
+          build/macos/viewer/appImmViewerMetal.app
+          build/macos/metal-baseline-captures/metal-static.png
+          build/macos/metal-baseline-captures/metal-static*.log
         if-no-files-found: error
 
     - name: Build macOS Stroke Reader plugin
@@ -538,12 +520,6 @@ jobs:
         name: ImmViewer-Android-VR
         path: release-assets/ImmViewer-Android-VR
 
-    - name: Download sample IMM
-      uses: actions/download-artifact@v4
-      with:
-        name: sample1-imm
-        path: release-assets/sample1-imm
-
     - name: Zip Windows viewer artifacts
       shell: bash
       run: |
@@ -607,7 +583,7 @@ jobs:
           release-assets/ImmViewer-Windows-VR.zip \
           release-assets/ImmViewer-Android.apk \
           release-assets/ImmViewer-Android-VR.apk \
-          release-assets/sample1-imm/sample1.imm
+          release-assets/ImmViewer-Windows/sample1.imm
 
   publish-upm:
     name: Publish UPM Branch

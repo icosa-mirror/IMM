@@ -157,7 +157,11 @@ namespace ExePlayer
     void Resolve::DeInit(piRenderer* renderer)
     {
         renderer->DestroyRasterState(mRenderStateResolve);
+        mRenderStateResolve = nullptr;
         renderer->DestroyBlendState(mBlendStateNone);
+        mBlendStateNone = nullptr;
+        renderer->DestroyShader(mAAResolveShader);
+        mAAResolveShader = nullptr;
     }
 
     void Resolve::Do(piRenderer* renderer, piRTarget target, const int *vp, const int unXOffset, const float fade, piTexture colorTextureM)

@@ -43,6 +43,7 @@ namespace ImmPlayer
         ImmCore::piArray     mVisibleLayerInfos;
         ImmCore::piShader    mShaders[3];
         ImmCore::piRasterState mRasterState;
+        ImmCore::piTexture   mBlueNoise = nullptr;
         DrawCallInfo mDrawCallInfo {};
     };
 

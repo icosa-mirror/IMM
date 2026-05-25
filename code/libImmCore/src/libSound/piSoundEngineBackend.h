@@ -14,9 +14,10 @@ public:
 	enum class API : int
 	{
 		Null = 0,
-		DirectSound = 1,
-		DirectSoundOVR = 2,
-		Android = 3
+			DirectSound = 1,
+			DirectSoundOVR = 2,
+			Android = 3,
+			AVFoundation = 4
 	};
 
     struct Configuration

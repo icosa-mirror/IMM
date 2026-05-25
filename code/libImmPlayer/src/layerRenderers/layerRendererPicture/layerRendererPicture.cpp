@@ -836,6 +836,7 @@ namespace ImmPlayer
             case LayerPicture::Image360EquirectMono:
                 ++mDrawCallInfo.numDrawCalls;
                 ++mDrawCallInfo.numPicture360DrawCalls;
+                ++mDrawCallInfo.numPicture360EquirectDrawCalls;
                 mDrawCallInfo.numTriangles += m360SphereRenderMesh.GetNumTriangles(0) * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image360EquirectMono]);
                 renderer->AttachTextures(1, me->mTexture);
@@ -848,9 +849,12 @@ namespace ImmPlayer
             case LayerPicture::Image360EquirectStereo:
                 ++mDrawCallInfo.numDrawCalls;
                 ++mDrawCallInfo.numPicture360DrawCalls;
+                ++mDrawCallInfo.numPicture360EquirectDrawCalls;
                 mDrawCallInfo.numTriangles += m360SphereRenderMesh.GetNumTriangles(0) * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image360EquirectStereo]);
                 renderer->AttachTextures(1, me->mTexture);
+                renderer->AttachTextures(1, &mBlueNoise, 7);
+                renderer->AttachSamplers(1, me->mSampler);
                 m360SphereRenderMesh.Render(renderer, 0, 0, numInstances);
                 renderer->DettachTextures();
                 renderer->DettachShader();
@@ -859,9 +863,12 @@ namespace ImmPlayer
             case LayerPicture::Image360CubemapVstripMono:
                 ++mDrawCallInfo.numDrawCalls;
                 ++mDrawCallInfo.numPicture360DrawCalls;
+                ++mDrawCallInfo.numPicture360CubemapDrawCalls;
                 mDrawCallInfo.numTriangles += m360CubemapRenderMesh.GetNumTriangles(0) * numInstances;
                 renderer->AttachShader(mShaders[shaderID][LayerPicture::Image360CubemapCrossMono]);
                 renderer->AttachTextures(1, me->mTexture);
+                renderer->AttachTextures(1, &mBlueNoise, 7);
+                renderer->AttachSamplers(1, me->mSampler);
                 m360CubemapRenderMesh.Render(renderer, 0, 0, numInstances);
                 renderer->DettachTextures();
                 renderer->DettachShader();

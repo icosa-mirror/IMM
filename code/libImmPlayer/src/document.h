@@ -115,6 +115,17 @@ namespace ImmPlayer {
             ImmCore::piSoundEngine* soundEngine, ImmCore::piLog *log, const ImmCore::piTick time, const Command * command);
         bool UpdateStateGPU(LayerRendererPaint *layerPaintRender, LayerRendererPicture *layerRenderPicture, LayerRendererModel *layerRenderModel,
             ImmCore::piRenderer* renderer, ImmCore::piLog *log, ImmImporter::Drawing::ColorSpace colorSpace);
+        void UnloadSync(
+            LayerRendererSound *layerRenderSound,
+            LayerRendererPaint *layerPaintRender,
+            LayerRendererPicture *layerRenderPicture,
+            LayerRendererModel *layerRendererModel,
+            ImmImporter::Drawing::ColorSpace colorSpace,
+            ImmImporter::Drawing::PaintRenderingTechnique renderingTechnique,
+            ImmCore::piSoundEngine *soundEngine,
+            ImmCore::piRenderer *renderer,
+            ImmCore::piLog *log,
+            const ImmCore::piTick now);
 
         int GetChapterCount(void) const;
         int GetCurrentChapter(void) const;

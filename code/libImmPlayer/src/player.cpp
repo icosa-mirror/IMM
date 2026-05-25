@@ -232,6 +232,16 @@ namespace ImmPlayer
         mRenderer->DestroyBuffer(mDisplayStateShaderConstans);
         mRenderer->DestroyBuffer(mPassStateShaderConstans);
 
+        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::Metal)
+        {
+            mRenderer->DestroyRasterState(mRasterState);
+            mRasterState = nullptr;
+            mRenderer->DestroyBlendState(mBlendState);
+            mBlendState = nullptr;
+            mRenderer->DestroyDepthState(mDepthState);
+            mDepthState = nullptr;
+        }
+
         mCommandList.End();
         mSynced.End();
 
@@ -1187,6 +1197,8 @@ namespace ImmPlayer
         mCurrentPerfInfo.numPictureDrawCalls = pictureInfo.numDrawCalls;
         mCurrentPerfInfo.numPicture2DDrawCalls = pictureInfo.numPicture2DDrawCalls;
         mCurrentPerfInfo.numPicture360DrawCalls = pictureInfo.numPicture360DrawCalls;
+        mCurrentPerfInfo.numPicture360EquirectDrawCalls = pictureInfo.numPicture360EquirectDrawCalls;
+        mCurrentPerfInfo.numPicture360CubemapDrawCalls = pictureInfo.numPicture360CubemapDrawCalls;
         mCurrentPerfInfo.numModelDrawCalls = modelInfo.numDrawCalls;
         mCurrentPerfInfo.numTriangles = totalTriangles;
 
@@ -1542,24 +1554,22 @@ namespace ImmPlayer
 
         if (numUsed == 0) return;
 
-        bool allUnloaded = false;
-        while (allUnloaded == false)
+        const piTick now = piTick(static_cast<int64_t>(mTimer->GetTimeTicks()));
+        for (int i = 0; i < numDocs; i++)
         {
-            GlobalWork(true, 9000);
-            GlobalRender(mViewerInfo.mVRToHead, mViewerInfo.mWorldToHead, mViewerInfo.mProjection, StereoMode::None);
-
-            allUnloaded = true;
-            for (int i = 0; i < numDocs; i++)
-            {
-                if (!mDocuments.IsUsed(i)) continue;
-                Document *doc = (Document *)mDocuments.GetAddress(i);
-                if (!doc) continue;
-                if (doc->GetLoadingState() != Document::LoadingState::UnloadingCompleted)
-                {
-                    allUnloaded = false;
-                    break;
-                }
-            }
+            if (!mDocuments.IsUsed(i)) continue;
+            Document *doc = (Document *)mDocuments.GetAddress(i);
+            if (!doc) continue;
+            doc->UnloadSync(&mLayerRenderSound,
+                            mLayerPaintRender,
+                            &mLayerRenderPicture,
+                            &mLayerRenderModel,
+                            mColorSpace,
+                            mPaintRenderingTechnique,
+                            mSoundEngine,
+                            mRenderer,
+                            mLog,
+                            now);
         }
     }
 

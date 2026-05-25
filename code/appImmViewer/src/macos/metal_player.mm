@@ -9,6 +9,7 @@
 #include "appImmViewer/src/settings.h"
 #include "appImmViewer/src/resolve.h"
 #include "appImmViewer/src/viewer/viewer.h"
+#include "libImmPlayer/src/blue_noise.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -26,6 +27,8 @@ static wchar_t gSettingsPath[PATH_MAX] = L"code/appImmViewer/exe/settings.json";
 static wchar_t gContentPath[PATH_MAX] = {};
 static int gContentPathCount = 0;
 static int gExitCode = 0;
+static const NSInteger kOpenRecentMenuItemTag = 43001;
+static NSString *const kRecentImmFilesDefaultsKey = @"IMMRecentDocumentURLs";
 
 static bool iSetSettingsPath(const char *path)
 {
@@ -151,6 +154,13 @@ static NSString *iWindowTitleForSettings(const ExePlayer::Settings &settings)
     return [NSString stringWithFormat:@"%@ - IMM Metal Player", fileName];
 }
 
+static float iClamp01(float value)
+{
+    if (value < 0.0f) return 0.0f;
+    if (value > 1.0f) return 1.0f;
+    return value;
+}
+
 static void iInstallApplicationMenu(void)
 {
     NSString *appName = [[NSProcessInfo processInfo] processName];
@@ -185,9 +195,49 @@ static void iInstallApplicationMenu(void)
     [mainMenu addItem:fileMenuItem];
     NSMenu *fileMenu = [[NSMenu alloc] initWithTitle:@"File"];
     [fileMenu addItemWithTitle:@"Open..." action:@selector(openDocument:) keyEquivalent:@"o"];
+    NSMenuItem *openRecentItem = [[NSMenuItem alloc] initWithTitle:@"Open Recent" action:nil keyEquivalent:@""];
+    [openRecentItem setTag:kOpenRecentMenuItemTag];
+    NSMenu *openRecentMenu = [[NSMenu alloc] initWithTitle:@"Open Recent"];
+    [openRecentItem setSubmenu:openRecentMenu];
+    [fileMenu addItem:openRecentItem];
     [fileMenuItem setSubmenu:fileMenu];
 
+    NSMenuItem *playbackMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    [mainMenu addItem:playbackMenuItem];
+    NSMenu *playbackMenu = [[NSMenu alloc] initWithTitle:@"Playback"];
+    [playbackMenu addItemWithTitle:@"Play/Pause" action:@selector(togglePlayback:) keyEquivalent:@" "];
+    [playbackMenu addItemWithTitle:@"Restart" action:@selector(restartPlayback:) keyEquivalent:@"c"];
+    [playbackMenu addItem:[NSMenuItem separatorItem]];
+    [playbackMenu addItemWithTitle:@"Previous" action:@selector(previousChapter:) keyEquivalent:@"z"];
+    [playbackMenu addItemWithTitle:@"Next" action:@selector(nextChapter:) keyEquivalent:@"x"];
+    [playbackMenuItem setSubmenu:playbackMenu];
+
+    NSMenuItem *audioMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    [mainMenu addItem:audioMenuItem];
+    NSMenu *audioMenu = [[NSMenu alloc] initWithTitle:@"Audio"];
+    [audioMenu addItemWithTitle:@"Mute" action:@selector(toggleMute:) keyEquivalent:@"m"];
+    [audioMenu addItemWithTitle:@"Volume Up" action:@selector(volumeUp:) keyEquivalent:@"="];
+    [audioMenu addItemWithTitle:@"Volume Down" action:@selector(volumeDown:) keyEquivalent:@"-"];
+    [audioMenuItem setSubmenu:audioMenu];
+
     [NSApp setMainMenu:mainMenu];
+}
+
+static NSMenuItem *iFindMenuItemWithTag(NSMenu *menu, NSInteger tag)
+{
+    for (NSMenuItem *item in [menu itemArray])
+    {
+        if ([item tag] == tag)
+        {
+            return item;
+        }
+        NSMenuItem *subitem = iFindMenuItemWithTag([item submenu], tag);
+        if (subitem)
+        {
+            return subitem;
+        }
+    }
+    return nil;
 }
 
 static float iDecodeUnsignedFloat(uint32_t bits, int mantissaBits)
@@ -328,10 +378,19 @@ public:
     ImmCore::piRendererMetal *_renderer;
     ImmCore::piShader _shader;
     ImmCore::piShader _pipelineSanityShader;
+    ImmCore::piShader _smokePictureShader;
+    ImmCore::piShader _smokeCubemapShader;
     ImmCore::piBuffer _vertexBuffer;
     ImmCore::piBuffer _pipelineSanityIndexBuffer;
+    ImmCore::piBuffer _smokeFrameBuffer;
+    ImmCore::piBuffer _smokeLayerBuffer;
+    ImmCore::piBuffer _smokeDisplayBuffer;
     ImmCore::piVertexArray _pipelineSanityIndexedVertexArray;
     ImmCore::piVertexArray _vertexArray;
+    ImmCore::piTexture _smokePictureTexture;
+    ImmCore::piTexture _smokeCubemapTexture;
+    ImmCore::piTexture _smokeBlueNoiseTexture;
+    ImmCore::piSampler _smokePictureSampler;
     ImmMetalReporter _reporter;
     ImmCore::piLog _log;
     ImmCore::piTimer _timer;
@@ -345,6 +404,7 @@ public:
     ImmCore::ivec2 _renderSize;
     double _timeBase;
     double _lastTime;
+    double _smokeExitAfterSeconds;
     uint64_t _frameIndex;
     int _nativeFrameFailureCount;
     uint64_t _validationFrame;
@@ -352,24 +412,38 @@ public:
     uint64_t _validationMinNonZeroPixels;
     uint64_t _validationMinDrawCalls;
     uint64_t _validationMinPictureDrawCalls;
+    uint64_t _validationMinPicture2DDrawCalls;
     uint64_t _validationMinPicture360DrawCalls;
+    uint64_t _validationMinPicture360EquirectDrawCalls;
+    uint64_t _validationMinPicture360CubemapDrawCalls;
     uint64_t _validationMinTriangles;
     uint64_t _validationResizeFrame;
+    uint64_t _validationReloadFrame;
     int _validationResizeWidth;
     int _validationResizeHeight;
     char _validationCapturePath[PATH_MAX];
+    char _validationReloadPath[PATH_MAX];
     bool _viewerReady;
     bool _firstFrame;
     bool _validationEnabled;
     bool _validationDone;
     bool _exitAfterValidation;
     bool _validationResizeDone;
+    bool _validationReloadDone;
+    bool _validationReloadPending;
     bool _validationHelperDraws;
     bool _validationHelperDrawsDone;
     bool _validationPipelineSanityDone;
     bool _validationForceNativeFrameFailure;
     bool _didCleanup;
     bool _isStopping;
+    bool _muted;
+    bool _volumeSmokeDone;
+    bool _recentDocumentSmokeDone;
+    bool _playbackControlSmokeDone;
+    bool _openFailureRestoreSmokeDone;
+    float _documentVolume;
+    float _volumeBeforeMute;
 }
 - (void)handleKeyEvent:(NSEvent *)event down:(BOOL)down;
 - (void)handleFlagsChanged:(NSEvent *)event;
@@ -378,11 +452,35 @@ public:
 - (CGSize)initialDrawableSizeForView:(MTKView *)view fallbackFrame:(NSRect)frame;
 - (void)handleNativeFrameFailure:(const char *)reason;
 - (BOOL)runValidationPipelineSanity;
+- (BOOL)runValidationShaderPathSanity;
 - (IBAction)openDocument:(id)sender;
+- (IBAction)openRecentDocumentFromMenu:(id)sender;
+- (IBAction)clearRecentDocumentsFromMenu:(id)sender;
+- (IBAction)togglePlayback:(id)sender;
+- (IBAction)restartPlayback:(id)sender;
+- (IBAction)previousChapter:(id)sender;
+- (IBAction)nextChapter:(id)sender;
+- (IBAction)toggleMute:(id)sender;
+- (IBAction)volumeUp:(id)sender;
+- (IBAction)volumeDown:(id)sender;
 - (BOOL)loadContentFile:(NSString *)filename;
+- (BOOL)loadContentFile:(NSString *)filename allowValidationReload:(BOOL)allowValidationReload;
+- (BOOL)initializeSoundBackend;
+- (void)presentOpenFailureForPath:(NSString *)path message:(NSString *)message;
+- (void)setDocumentVolume:(float)volume muted:(BOOL)muted reason:(NSString *)reason;
+- (void)runVolumeControlSmokeIfRequested;
+- (void)runPlaybackControlSmokeIfRequested;
+- (void)runOpenFailureRestoreSmokeIfRequested;
+- (void)runRecentDocumentSmokeIfRequested;
+- (void)updateRecentDocumentsMenu;
+- (NSArray<NSURL *> *)recentImmDocumentURLs;
+- (void)noteCurrentDocumentAsRecentWithReason:(NSString *)reason;
+- (void)applyValidationReloadIfRequested;
+- (void)validationReloadContent;
 - (void)performCleanup;
 - (void)terminateWithExitCode:(int)exitCode;
 - (void)validationDrawTick;
+- (void)interactiveSmokeDrawTick;
 @end
 
 @interface ImmMetalView : MTKView
@@ -491,6 +589,58 @@ struct ImmMetalDebugVertex
     float color[4];
 };
 
+struct ImmMetalSmokeFrameState
+{
+    float mTime;
+    int mFrame;
+    int mDummy1;
+    int mDummy2;
+};
+
+struct ImmMetalSmokeLayerState
+{
+    float mLayerToViewer[16];
+    float mLayerToViewerScale;
+    float mOpacity;
+    float mFlipSign;
+    float mDrawInTime;
+    float mAnimParams[4];
+    float mKeepAlive[8];
+    uint32_t mID;
+};
+
+struct ImmMetalSmokeDisplayState
+{
+    struct
+    {
+        float mViewerToEyePrj[16];
+    } mEye[2];
+    float mResolution[2];
+    uint32_t mEyeIndex;
+};
+
+static void iSetIdentity4x4(float *matrix)
+{
+    memset(matrix, 0, sizeof(float) * 16);
+    matrix[0] = 1.0f;
+    matrix[5] = 1.0f;
+    matrix[10] = 1.0f;
+    matrix[15] = 1.0f;
+}
+
+static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
+{
+    uint64_t nonZeroPixels = 0;
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        if (pixels[i] != 0)
+        {
+            ++nonZeroPixels;
+        }
+    }
+    return nonZeroPixels;
+}
+
 @implementation ImmMetalPlayerDelegate
 
 - (int)keyCodeForEvent:(NSEvent *)event
@@ -537,6 +687,33 @@ struct ImmMetalDebugVertex
 - (void)handleKeyEvent:(NSEvent *)event down:(BOOL)down
 {
     const int key = [self keyCodeForEvent:event];
+    if (down && !_validationEnabled)
+    {
+        if (key == 'M')
+        {
+            [self toggleMute:nil];
+            [self handleFlagsChanged:event];
+            return;
+        }
+        if (key == KEY_SPACE)
+        {
+            [self togglePlayback:nil];
+            [self handleFlagsChanged:event];
+            return;
+        }
+        if (key == '-' || key == '_')
+        {
+            [self volumeDown:nil];
+            [self handleFlagsChanged:event];
+            return;
+        }
+        if (key == '=' || key == '+')
+        {
+            [self volumeUp:nil];
+            [self handleFlagsChanged:event];
+            return;
+        }
+    }
     if (key >= 0 && key < 256)
     {
         _events.keyb.state[key] = down ? 1 : 0;
@@ -647,15 +824,22 @@ struct ImmMetalDebugVertex
     _validationMinNonZeroPixels = 16;
     _validationMinDrawCalls = 0;
     _validationMinPictureDrawCalls = 0;
+    _validationMinPicture2DDrawCalls = 0;
     _validationMinPicture360DrawCalls = 0;
+    _validationMinPicture360EquirectDrawCalls = 0;
+    _validationMinPicture360CubemapDrawCalls = 0;
     _validationMinTriangles = 0;
     _validationResizeFrame = 0;
+    _validationReloadFrame = 0;
     _validationResizeWidth = 0;
     _validationResizeHeight = 0;
     _validationCapturePath[0] = 0;
+    _validationReloadPath[0] = 0;
     _exitAfterValidation = false;
     _validationDone = false;
     _validationResizeDone = false;
+    _validationReloadDone = false;
+    _validationReloadPending = false;
     const char *helperDraws = getenv("IMM_METAL_VALIDATE_HELPER_DRAWS");
     _validationHelperDraws = helperDraws && helperDraws[0] && strcmp(helperDraws, "0") != 0;
     _validationHelperDrawsDone = false;
@@ -664,6 +848,16 @@ struct ImmMetalDebugVertex
     _validationForceNativeFrameFailure = forceNativeFrameFailure &&
                                          forceNativeFrameFailure[0] &&
                                          strcmp(forceNativeFrameFailure, "0") != 0;
+    _smokeExitAfterSeconds = 0.0;
+    const char *smokeExitAfterSeconds = getenv("IMM_METAL_INTERACTIVE_SMOKE_EXIT_AFTER_SECONDS");
+    if (smokeExitAfterSeconds && smokeExitAfterSeconds[0])
+    {
+        _smokeExitAfterSeconds = strtod(smokeExitAfterSeconds, nullptr);
+        if (_smokeExitAfterSeconds < 0.0)
+        {
+            _smokeExitAfterSeconds = 0.0;
+        }
+    }
 
     const char *threshold = getenv("IMM_METAL_VALIDATE_MIN_NONZERO");
     if (threshold && threshold[0])
@@ -685,10 +879,25 @@ struct ImmMetalDebugVertex
     {
         _validationMinPictureDrawCalls = strtoull(minPictureDrawCalls, nullptr, 10);
     }
+    const char *minPicture2DDrawCalls = getenv("IMM_METAL_VALIDATE_MIN_PICTURE2D_DRAWCALLS");
+    if (minPicture2DDrawCalls && minPicture2DDrawCalls[0])
+    {
+        _validationMinPicture2DDrawCalls = strtoull(minPicture2DDrawCalls, nullptr, 10);
+    }
     const char *minPicture360DrawCalls = getenv("IMM_METAL_VALIDATE_MIN_PICTURE360_DRAWCALLS");
     if (minPicture360DrawCalls && minPicture360DrawCalls[0])
     {
         _validationMinPicture360DrawCalls = strtoull(minPicture360DrawCalls, nullptr, 10);
+    }
+    const char *minPicture360EquirectDrawCalls = getenv("IMM_METAL_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS");
+    if (minPicture360EquirectDrawCalls && minPicture360EquirectDrawCalls[0])
+    {
+        _validationMinPicture360EquirectDrawCalls = strtoull(minPicture360EquirectDrawCalls, nullptr, 10);
+    }
+    const char *minPicture360CubemapDrawCalls = getenv("IMM_METAL_VALIDATE_MIN_PICTURE360_CUBEMAP_DRAWCALLS");
+    if (minPicture360CubemapDrawCalls && minPicture360CubemapDrawCalls[0])
+    {
+        _validationMinPicture360CubemapDrawCalls = strtoull(minPicture360CubemapDrawCalls, nullptr, 10);
     }
     const char *minTriangles = getenv("IMM_METAL_VALIDATE_MIN_TRIANGLES");
     if (minTriangles && minTriangles[0])
@@ -699,6 +908,11 @@ struct ImmMetalDebugVertex
     if (resizeFrame && resizeFrame[0])
     {
         _validationResizeFrame = strtoull(resizeFrame, nullptr, 10);
+    }
+    const char *reloadFrame = getenv("IMM_METAL_VALIDATE_RELOAD_FRAME");
+    if (reloadFrame && reloadFrame[0])
+    {
+        _validationReloadFrame = strtoull(reloadFrame, nullptr, 10);
     }
     const char *resizeWidth = getenv("IMM_METAL_VALIDATE_RESIZE_WIDTH");
     if (resizeWidth && resizeWidth[0])
@@ -717,6 +931,12 @@ struct ImmMetalDebugVertex
     {
         strncpy(_validationCapturePath, capturePath, sizeof(_validationCapturePath) - 1);
         _validationCapturePath[sizeof(_validationCapturePath) - 1] = 0;
+    }
+    const char *reloadPath = getenv("IMM_METAL_VALIDATE_RELOAD_PATH");
+    if (reloadPath && reloadPath[0])
+    {
+        strncpy(_validationReloadPath, reloadPath, sizeof(_validationReloadPath) - 1);
+        _validationReloadPath[sizeof(_validationReloadPath) - 1] = 0;
     }
 }
 
@@ -876,6 +1096,256 @@ struct ImmMetalDebugVertex
     return YES;
 }
 
+- (BOOL)runValidationShaderPathSanity
+{
+    if (!_renderer || !_renderTarget || !_colorTexture || _renderSize.x <= 0 || _renderSize.y <= 0)
+    {
+        NSLog(@"IMM Metal validation failed: shader-path sanity missing renderer resources");
+        return NO;
+    }
+
+    char shaderError[2048] = {};
+    ImmCore::piShaderOptions pictureOptions = {};
+    pictureOptions.mNum = 3;
+    snprintf(pictureOptions.mOption[0].mName, sizeof(pictureOptions.mOption[0].mName), "%s", "COLOR_SPACE");
+    snprintf(pictureOptions.mOption[1].mName, sizeof(pictureOptions.mOption[1].mName), "%s", "STEREOMODE");
+    snprintf(pictureOptions.mOption[2].mName, sizeof(pictureOptions.mOption[2].mName), "%s", "DEBUG_RENDER_MODE");
+    pictureOptions.mOption[0].mValue = 0;
+    pictureOptions.mOption[1].mValue = 0;
+    pictureOptions.mOption[2].mValue = 0;
+
+    if (!_smokePictureShader)
+    {
+        _smokePictureShader = _renderer->CreateShader(&pictureOptions, nullptr, nullptr, nullptr, nullptr, nullptr, shaderError);
+    }
+    if (!_smokePictureShader)
+    {
+        NSLog(@"IMM Metal validation failed: picture2D shader-path sanity shader creation failed: %s", shaderError);
+        return NO;
+    }
+
+    ImmCore::piShaderOptions cubemapOptions = {};
+    cubemapOptions.mNum = 3;
+    snprintf(cubemapOptions.mOption[0].mName, sizeof(cubemapOptions.mOption[0].mName), "%s", "COLOR_SPACE");
+    snprintf(cubemapOptions.mOption[1].mName, sizeof(cubemapOptions.mOption[1].mName), "%s", "STEREOMODE");
+    snprintf(cubemapOptions.mOption[2].mName, sizeof(cubemapOptions.mOption[2].mName), "%s", "CUBEMAP");
+    cubemapOptions.mOption[0].mValue = 0;
+    cubemapOptions.mOption[1].mValue = 0;
+    cubemapOptions.mOption[2].mValue = 1;
+
+    if (!_smokeCubemapShader)
+    {
+        shaderError[0] = 0;
+        _smokeCubemapShader = _renderer->CreateShader(&cubemapOptions, nullptr, nullptr, nullptr, nullptr, nullptr, shaderError);
+    }
+    if (!_smokeCubemapShader)
+    {
+        NSLog(@"IMM Metal validation failed: picture360 cubemap shader-path sanity shader creation failed: %s", shaderError);
+        return NO;
+    }
+
+    ImmMetalSmokeFrameState frameState = { 0.0f, 17, 0, 0 };
+    ImmMetalSmokeLayerState layerState = {};
+    iSetIdentity4x4(layerState.mLayerToViewer);
+    layerState.mLayerToViewerScale = 1.0f;
+    layerState.mOpacity = 1.0f;
+    layerState.mFlipSign = 1.0f;
+    layerState.mDrawInTime = 1.0f;
+
+    ImmMetalSmokeDisplayState displayState = {};
+    iSetIdentity4x4(displayState.mEye[0].mViewerToEyePrj);
+    iSetIdentity4x4(displayState.mEye[1].mViewerToEyePrj);
+    displayState.mResolution[0] = (float)_renderSize.x;
+    displayState.mResolution[1] = (float)_renderSize.y;
+    displayState.mEyeIndex = 0;
+
+    if (!_smokeFrameBuffer)
+    {
+        _smokeFrameBuffer = _renderer->CreateBuffer(&frameState, sizeof(frameState), ImmCore::piRenderer::BufferType::Static, ImmCore::piRenderer::BufferUse::Constant);
+    }
+    if (!_smokeLayerBuffer)
+    {
+        _smokeLayerBuffer = _renderer->CreateBuffer(&layerState, sizeof(layerState), ImmCore::piRenderer::BufferType::Static, ImmCore::piRenderer::BufferUse::Constant);
+    }
+    if (!_smokeDisplayBuffer)
+    {
+        _smokeDisplayBuffer = _renderer->CreateBuffer(&displayState, sizeof(displayState), ImmCore::piRenderer::BufferType::Static, ImmCore::piRenderer::BufferUse::Constant);
+    }
+
+    const uint8_t picturePixels[16] = {
+        255, 64, 64, 255,
+        64, 255, 64, 255,
+        64, 64, 255, 255,
+        255, 255, 64, 255,
+    };
+    const ImmCore::piRenderer::TextureInfo pictureInfo = {
+        ImmCore::piRenderer::TextureType::T2D,
+        ImmCore::piRenderer::Format::C4_8_UNORM,
+        2,
+        2,
+        1,
+        1,
+        1,
+        0
+    };
+    if (!_smokePictureTexture)
+    {
+        _smokePictureTexture = _renderer->CreateTexture(nullptr, &pictureInfo, false, ImmCore::piRenderer::TextureFilter::NONE, ImmCore::piRenderer::TextureWrap::CLAMP, 1.0f, picturePixels);
+    }
+
+    const uint8_t cubemapPixels[96] = {
+        255, 0, 0, 255, 255, 32, 32, 255, 255, 64, 64, 255, 255, 96, 96, 255,
+        0, 255, 0, 255, 32, 255, 32, 255, 64, 255, 64, 255, 96, 255, 96, 255,
+        0, 0, 255, 255, 32, 32, 255, 255, 64, 64, 255, 255, 96, 96, 255, 255,
+        255, 255, 0, 255, 255, 255, 32, 255, 255, 255, 64, 255, 255, 255, 96, 255,
+        255, 0, 255, 255, 255, 32, 255, 255, 255, 64, 255, 255, 255, 96, 255, 255,
+        0, 255, 255, 255, 32, 255, 255, 255, 64, 255, 255, 255, 96, 255, 255, 255,
+    };
+    const ImmCore::piRenderer::TextureInfo cubemapInfo = {
+        ImmCore::piRenderer::TextureType::TCUBE,
+        ImmCore::piRenderer::Format::C4_8_UNORM,
+        2,
+        2,
+        1,
+        1,
+        1,
+        0
+    };
+    if (!_smokeCubemapTexture)
+    {
+        _smokeCubemapTexture = _renderer->CreateTexture(nullptr, &cubemapInfo, false, ImmCore::piRenderer::TextureFilter::NONE, ImmCore::piRenderer::TextureWrap::CLAMP, 1.0f, cubemapPixels);
+    }
+
+    const ImmCore::piRenderer::TextureInfo blueNoiseInfo = {
+        ImmCore::piRenderer::TextureType::T2D_ARRAY,
+        ImmCore::piRenderer::Format::C1_8_UNORM,
+        64,
+        64,
+        64,
+        1,
+        1,
+        0
+    };
+    if (!_smokeBlueNoiseTexture)
+    {
+        _smokeBlueNoiseTexture = _renderer->CreateTexture(nullptr, &blueNoiseInfo, false, ImmCore::piRenderer::TextureFilter::NONE, ImmCore::piRenderer::TextureWrap::REPEAT, 1.0f, GetBlueNoise_64x64x64());
+    }
+    if (!_smokePictureSampler)
+    {
+        _smokePictureSampler = _renderer->CreateSampler(ImmCore::piRenderer::TextureFilter::NONE, ImmCore::piRenderer::TextureWrap::CLAMP, 1.0f);
+    }
+
+    BOOL ok = YES;
+    if (!_smokeFrameBuffer || !_smokeLayerBuffer || !_smokeDisplayBuffer || !_smokePictureTexture || !_smokeCubemapTexture || !_smokeBlueNoiseTexture || !_smokePictureSampler)
+    {
+        NSLog(@"IMM Metal validation failed: shader-path sanity resource creation failed frame=%p layer=%p display=%p picture=%p cubemap=%p blueNoise=%p sampler=%p",
+              _smokeFrameBuffer, _smokeLayerBuffer, _smokeDisplayBuffer, _smokePictureTexture, _smokeCubemapTexture, _smokeBlueNoiseTexture, _smokePictureSampler);
+        ok = NO;
+    }
+
+    const size_t pixelCount = (size_t)_renderSize.x * (size_t)_renderSize.y;
+    uint32_t *pixels = ok ? (uint32_t *)malloc(pixelCount * sizeof(uint32_t)) : nullptr;
+    if (ok && !pixels)
+    {
+        NSLog(@"IMM Metal validation failed: shader-path sanity could not allocate readback buffer");
+        ok = NO;
+    }
+
+    const int viewport[4] = { 0, 0, _renderSize.x, _renderSize.y };
+    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    const size_t centerIndex = (size_t)(_renderSize.y / 2) * (size_t)_renderSize.x + (size_t)(_renderSize.x / 2);
+
+    if (ok)
+    {
+        const float pictureSize[4] = { 0.8f, 0.8f, 0.0f, 0.0f };
+        _renderer->SetRenderTarget(_renderTarget);
+        _renderer->SetViewport(0, viewport);
+        _renderer->SetWriteMask(true, false, false, false, true);
+        _renderer->SetState(ImmCore::piSTATE_DEPTH_TEST, false);
+        _renderer->SetState(ImmCore::piSTATE_CULL_FACE, false);
+        _renderer->SetBlending(0,
+                               ImmCore::piRenderer::BlendEquation::piBLEND_ADD,
+                               ImmCore::piRenderer::BlendOperations::piBLEND_ONE,
+                               ImmCore::piRenderer::BlendOperations::piBLEND_ZERO,
+                               ImmCore::piRenderer::BlendEquation::piBLEND_ADD,
+                               ImmCore::piRenderer::BlendOperations::piBLEND_ONE,
+                               ImmCore::piRenderer::BlendOperations::piBLEND_ZERO);
+        _renderer->Clear(clearColor, nullptr, nullptr, nullptr, true);
+        _renderer->AttachShaderConstants(_smokeFrameBuffer, 0);
+        _renderer->AttachShaderConstants(_smokeLayerBuffer, 3);
+        _renderer->AttachShaderConstants(_smokeDisplayBuffer, 4);
+        _renderer->SetShaderConstant4F(0, pictureSize, 1);
+        _renderer->AttachTextures(1, _smokePictureTexture);
+        _renderer->AttachTextures(1, &_smokeBlueNoiseTexture, 7);
+        _renderer->AttachSamplers(1, _smokePictureSampler);
+        _renderer->AttachShader(_smokePictureShader);
+        _renderer->DrawUnitQuad_XY(1);
+        _renderer->DettachShader();
+        _renderer->DettachTextures();
+
+        memset(pixels, 0, pixelCount * sizeof(uint32_t));
+        _renderer->GetTextureContent(_colorTexture, pixels, ImmCore::piRenderer::Format::C3_11_11_10_FLOAT);
+        const uint32_t center = pixels[centerIndex];
+        const uint64_t nonZeroPixels = iCountNonZeroPixels(pixels, pixelCount);
+        if (center == 0 || nonZeroPixels < (pixelCount / 12))
+        {
+            NSLog(@"IMM Metal validation failed: picture2D shader-path sanity unexpected readback center=%u nonZero=%llu pixels=%zu",
+                  center,
+                  (unsigned long long)nonZeroPixels,
+                  pixelCount);
+            ok = NO;
+        }
+        else
+        {
+            NSLog(@"IMM Metal pipeline sanity: picture2DShader=1 center=%u nonZero=%llu pixels=%zu",
+                  center,
+                  (unsigned long long)nonZeroPixels,
+                  pixelCount);
+        }
+
+        _renderer->SetWriteMask(true, false, false, false, true);
+        _renderer->SetState(ImmCore::piSTATE_DEPTH_TEST, false);
+        _renderer->SetState(ImmCore::piSTATE_CULL_FACE, false);
+        _renderer->Clear(clearColor, nullptr, nullptr, nullptr, true);
+        _renderer->AttachShaderConstants(_smokeFrameBuffer, 0);
+        _renderer->AttachShaderConstants(_smokeLayerBuffer, 3);
+        _renderer->AttachShaderConstants(_smokeDisplayBuffer, 4);
+        _renderer->AttachTextures(1, _smokeCubemapTexture);
+        _renderer->AttachTextures(1, &_smokeBlueNoiseTexture, 7);
+        _renderer->AttachSamplers(1, _smokePictureSampler);
+        _renderer->AttachShader(_smokeCubemapShader);
+        _renderer->DrawUnitCube_XYZ_NOR(1);
+        _renderer->DettachShader();
+        _renderer->DettachTextures();
+
+        memset(pixels, 0, pixelCount * sizeof(uint32_t));
+        _renderer->GetTextureContent(_colorTexture, pixels, ImmCore::piRenderer::Format::C3_11_11_10_FLOAT);
+        const uint32_t cubemapCenter = pixels[centerIndex];
+        const uint64_t cubemapNonZeroPixels = iCountNonZeroPixels(pixels, pixelCount);
+        if (cubemapCenter == 0 || cubemapNonZeroPixels < (pixelCount / 20))
+        {
+            NSLog(@"IMM Metal validation failed: picture360 cubemap shader-path sanity unexpected readback center=%u nonZero=%llu pixels=%zu",
+                  cubemapCenter,
+                  (unsigned long long)cubemapNonZeroPixels,
+                  pixelCount);
+            ok = NO;
+        }
+        else
+        {
+            NSLog(@"IMM Metal pipeline sanity: picture360CubemapShader=1 center=%u nonZero=%llu pixels=%zu",
+                  cubemapCenter,
+                  (unsigned long long)cubemapNonZeroPixels,
+                  pixelCount);
+        }
+    }
+
+    if (pixels)
+    {
+        free(pixels);
+    }
+    return ok;
+}
+
 - (void)applyValidationResizeIfRequested
 {
     if (!_validationEnabled ||
@@ -901,6 +1371,11 @@ struct ImmMetalDebugVertex
 - (void)validateOffscreenFrameIfRequested
 {
     if (!_validationEnabled || _validationDone || _frameIndex < _validationFrame || !_colorTexture || _renderSize.x <= 0 || _renderSize.y <= 0)
+    {
+        return;
+    }
+
+    if (_validationReloadFrame != 0 && !_validationReloadDone)
     {
         return;
     }
@@ -939,7 +1414,10 @@ struct ImmMetalDebugVertex
         perf.numTriangles >= 0 &&
         (uint64_t)perf.numDrawCalls >= _validationMinDrawCalls &&
         (uint64_t)perf.numPictureDrawCalls >= _validationMinPictureDrawCalls &&
+        (uint64_t)perf.numPicture2DDrawCalls >= _validationMinPicture2DDrawCalls &&
         (uint64_t)perf.numPicture360DrawCalls >= _validationMinPicture360DrawCalls &&
+        (uint64_t)perf.numPicture360EquirectDrawCalls >= _validationMinPicture360EquirectDrawCalls &&
+        (uint64_t)perf.numPicture360CubemapDrawCalls >= _validationMinPicture360CubemapDrawCalls &&
         (uint64_t)perf.numTriangles >= _validationMinTriangles;
 
     if (!passed)
@@ -950,7 +1428,7 @@ struct ImmMetalDebugVertex
             return;
         }
         _validationDone = true;
-        NSLog(@"IMM Metal validation failed: frame=%llu pixels=%zu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu culledCalls=%d",
+        NSLog(@"IMM Metal validation failed: frame=%llu pixels=%zu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d minPicture2DDrawCalls=%llu picture360DrawCalls=%d minPicture360DrawCalls=%llu picture360EquirectDrawCalls=%d minPicture360EquirectDrawCalls=%llu picture360CubemapDrawCalls=%d minPicture360CubemapDrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu culledCalls=%d",
               (unsigned long long)_frameIndex,
               pixelCount,
               (unsigned long long)nonZeroPixels,
@@ -962,8 +1440,13 @@ struct ImmMetalDebugVertex
               perf.numPictureDrawCalls,
               (unsigned long long)_validationMinPictureDrawCalls,
               perf.numPicture2DDrawCalls,
+              (unsigned long long)_validationMinPicture2DDrawCalls,
               perf.numPicture360DrawCalls,
               (unsigned long long)_validationMinPicture360DrawCalls,
+              perf.numPicture360EquirectDrawCalls,
+              (unsigned long long)_validationMinPicture360EquirectDrawCalls,
+              perf.numPicture360CubemapDrawCalls,
+              (unsigned long long)_validationMinPicture360CubemapDrawCalls,
               perf.numModelDrawCalls,
               perf.numTriangles,
               (unsigned long long)_validationMinTriangles,
@@ -977,7 +1460,7 @@ struct ImmMetalDebugVertex
     }
 
     _validationDone = true;
-    NSLog(@"IMM Metal validation: frame=%llu pixels=%zu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d modelDrawCalls=%d triangles=%d culledCalls=%d",
+    NSLog(@"IMM Metal validation: frame=%llu pixels=%zu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d picture360EquirectDrawCalls=%d picture360CubemapDrawCalls=%d modelDrawCalls=%d triangles=%d culledCalls=%d",
           (unsigned long long)_frameIndex,
           pixelCount,
           (unsigned long long)nonZeroPixels,
@@ -987,6 +1470,8 @@ struct ImmMetalDebugVertex
           perf.numPictureDrawCalls,
           perf.numPicture2DDrawCalls,
           perf.numPicture360DrawCalls,
+          perf.numPicture360EquirectDrawCalls,
+          perf.numPicture360CubemapDrawCalls,
           perf.numModelDrawCalls,
           perf.numTriangles,
           perf.numDrawCallsCulled);
@@ -1075,6 +1560,7 @@ struct ImmMetalDebugVertex
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
     (void)notification;
+    [self updateRecentDocumentsMenu];
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     if (!device)
@@ -1265,8 +1751,7 @@ struct ImmMetalDebugVertex
         return;
     }
 
-    _soundBackend = ImmCore::piCreateSoundEngineBackend(ImmCore::piSoundEngineBackend::API::Null, &_log);
-    if (!_soundBackend || !_soundBackend->Init(nullptr, -1, nullptr))
+    if (![self initializeSoundBackend])
     {
         NSLog(@"IMM Metal player: sound backend initialization failed");
         [self terminateWithExitCode:1];
@@ -1285,6 +1770,20 @@ struct ImmMetalDebugVertex
     _lastTime = 0.0;
     _frameIndex = 0;
     _nativeFrameFailureCount = 0;
+    _documentVolume = _viewer.GetVolume(0);
+    if (_documentVolume <= 0.0f)
+    {
+        _documentVolume = 1.0f;
+    }
+    _volumeBeforeMute = _documentVolume;
+    _muted = false;
+    _volumeSmokeDone = false;
+    _recentDocumentSmokeDone = false;
+    _playbackControlSmokeDone = false;
+    _openFailureRestoreSmokeDone = false;
+    [self runVolumeControlSmokeIfRequested];
+    [self noteCurrentDocumentAsRecentWithReason:@"initial-load"];
+    [self runRecentDocumentSmokeIfRequested];
 
     [_window setContentView:_view];
     [_window makeKeyAndOrderFront:nil];
@@ -1303,6 +1802,12 @@ struct ImmMetalDebugVertex
         [_view setPaused:YES];
         [_view setEnableSetNeedsDisplay:YES];
         [self performSelector:@selector(validationDrawTick) withObject:nil afterDelay:0.0];
+    }
+    else if (_smokeExitAfterSeconds > 0.0)
+    {
+        [_view setPaused:YES];
+        [_view setEnableSetNeedsDisplay:YES];
+        [self performSelector:@selector(interactiveSmokeDrawTick) withObject:nil afterDelay:0.0];
     }
 }
 
@@ -1366,9 +1871,480 @@ struct ImmMetalDebugVertex
     }
 }
 
+- (IBAction)openRecentDocumentFromMenu:(id)sender
+{
+    if (_validationEnabled)
+    {
+        return;
+    }
+
+    NSURL *url = nil;
+    if ([sender respondsToSelector:@selector(representedObject)])
+    {
+        id represented = [sender representedObject];
+        if ([represented isKindOfClass:[NSURL class]])
+        {
+            url = (NSURL *)represented;
+        }
+    }
+
+    if (!url || ![url isFileURL])
+    {
+        return;
+    }
+
+    NSString *path = [url path];
+    if (![path length])
+    {
+        return;
+    }
+
+    if (_viewerReady)
+    {
+        [self loadContentFile:path];
+    }
+    else
+    {
+        iAddContentPath([path fileSystemRepresentation]);
+    }
+}
+
+- (IBAction)clearRecentDocumentsFromMenu:(id)sender
+{
+    (void)sender;
+    [[NSDocumentController sharedDocumentController] clearRecentDocuments:nil];
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:kRecentImmFilesDefaultsKey];
+    [self updateRecentDocumentsMenu];
+}
+
+- (IBAction)togglePlayback:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    const bool wasPaused = _viewer.IsPaused(0);
+    if (wasPaused)
+    {
+        _viewer.Resume(0);
+    }
+    else
+    {
+        _viewer.Pause(0);
+    }
+    NSLog(@"IMM Metal player playback control: action=%@ previousPaused=%d",
+          wasPaused ? @"resume" : @"pause",
+          wasPaused ? 1 : 0);
+}
+
+- (IBAction)restartPlayback:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    _viewer.Restart(0);
+    NSLog(@"IMM Metal player playback control: action=restart");
+}
+
+- (IBAction)previousChapter:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    _viewer.Prev(0);
+    NSLog(@"IMM Metal player playback control: action=previous");
+}
+
+- (IBAction)nextChapter:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    _viewer.Next(0);
+    NSLog(@"IMM Metal player playback control: action=next");
+}
+
+- (void)setDocumentVolume:(float)volume muted:(BOOL)muted reason:(NSString *)reason
+{
+    if (!_viewerReady)
+    {
+        return;
+    }
+
+    _documentVolume = iClamp01(volume);
+    _muted = muted;
+    if (!_muted && _documentVolume > 0.0f)
+    {
+        _volumeBeforeMute = _documentVolume;
+    }
+    _viewer.SetVolume(0, _muted ? 0.0f : _documentVolume);
+    NSLog(@"IMM Metal player audio volume: reason=%@ volume=%.2f muted=%d applied=%.2f",
+          reason ? reason : @"unknown",
+          _documentVolume,
+          _muted ? 1 : 0,
+          _muted ? 0.0f : _documentVolume);
+}
+
+- (IBAction)toggleMute:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    if (_muted)
+    {
+        [self setDocumentVolume:(_volumeBeforeMute > 0.0f ? _volumeBeforeMute : 1.0f) muted:NO reason:@"mute-off"];
+    }
+    else
+    {
+        _volumeBeforeMute = (_documentVolume > 0.0f ? _documentVolume : 1.0f);
+        [self setDocumentVolume:_volumeBeforeMute muted:YES reason:@"mute-on"];
+    }
+}
+
+- (IBAction)volumeUp:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    [self setDocumentVolume:iClamp01((_muted ? _volumeBeforeMute : _documentVolume) + 0.1f) muted:NO reason:@"volume-up"];
+}
+
+- (IBAction)volumeDown:(id)sender
+{
+    (void)sender;
+    if (!_viewerReady || _validationEnabled)
+    {
+        return;
+    }
+
+    [self setDocumentVolume:iClamp01((_muted ? _volumeBeforeMute : _documentVolume) - 0.1f) muted:NO reason:@"volume-down"];
+}
+
+- (void)runVolumeControlSmokeIfRequested
+{
+    if (_volumeSmokeDone)
+    {
+        return;
+    }
+
+    const char *smoke = getenv("IMM_METAL_VALIDATE_VOLUME_CONTROLS");
+    if (!smoke || !smoke[0] || strcmp(smoke, "0") == 0)
+    {
+        return;
+    }
+
+    _volumeSmokeDone = true;
+    [self setDocumentVolume:0.5f muted:NO reason:@"volume-smoke-set-half"];
+    [self setDocumentVolume:0.5f muted:YES reason:@"volume-smoke-mute"];
+    [self setDocumentVolume:0.75f muted:NO reason:@"volume-smoke-restore"];
+    NSLog(@"IMM Metal player audio volume smoke: done=1 final=%.2f muted=%d",
+          _documentVolume,
+          _muted ? 1 : 0);
+}
+
+- (void)runPlaybackControlSmokeIfRequested
+{
+    if (_playbackControlSmokeDone)
+    {
+        return;
+    }
+
+    const char *smoke = getenv("IMM_METAL_VALIDATE_PLAYBACK_CONTROLS");
+    if (!smoke || !smoke[0] || strcmp(smoke, "0") == 0)
+    {
+        return;
+    }
+
+    _playbackControlSmokeDone = true;
+    _viewer.Pause(0);
+    NSLog(@"IMM Metal player playback control: action=pause smoke=1");
+    _viewer.Resume(0);
+    NSLog(@"IMM Metal player playback control: action=resume smoke=1");
+    _viewer.Restart(0);
+    NSLog(@"IMM Metal player playback control: action=restart smoke=1");
+    NSLog(@"IMM Metal player playback control smoke: done=1 pauseResume=1 restart=1");
+}
+
+- (void)runOpenFailureRestoreSmokeIfRequested
+{
+    if (_openFailureRestoreSmokeDone)
+    {
+        return;
+    }
+
+    const char *smoke = getenv("IMM_METAL_VALIDATE_OPEN_FAILURE_RESTORE");
+    if (!smoke || !smoke[0] || strcmp(smoke, "0") == 0)
+    {
+        return;
+    }
+
+    _openFailureRestoreSmokeDone = true;
+    NSString *badPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"imm-metal-open-failure-does-not-exist.imm"];
+    setenv("IMM_METAL_FORCE_NEXT_OPEN_FAILURE", "1", 1);
+    (void)[self loadContentFile:badPath];
+    unsetenv("IMM_METAL_FORCE_NEXT_OPEN_FAILURE");
+    NSLog(@"IMM Metal player open failure restore smoke: done=1 viewerReady=%d",
+          _viewerReady ? 1 : 0);
+}
+
+- (void)updateRecentDocumentsMenu
+{
+    NSMenuItem *openRecentItem = iFindMenuItemWithTag([NSApp mainMenu], kOpenRecentMenuItemTag);
+    NSMenu *menu = [openRecentItem submenu];
+    if (!menu)
+    {
+        return;
+    }
+
+    [menu removeAllItems];
+
+    NSArray<NSURL *> *urls = [self recentImmDocumentURLs];
+    NSUInteger added = 0;
+    for (NSURL *url in urls)
+    {
+        NSString *path = [url path];
+        NSString *title = [[path lastPathComponent] length] ? [path lastPathComponent] : path;
+        NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title
+                                                      action:@selector(openRecentDocumentFromMenu:)
+                                               keyEquivalent:@""];
+        [item setTarget:self];
+        [item setRepresentedObject:url];
+        [menu addItem:item];
+        ++added;
+    }
+
+    if (added == 0)
+    {
+        NSMenuItem *empty = [[NSMenuItem alloc] initWithTitle:@"No Recent IMM Files" action:nil keyEquivalent:@""];
+        [empty setEnabled:NO];
+        [menu addItem:empty];
+    }
+
+    [menu addItem:[NSMenuItem separatorItem]];
+    NSMenuItem *clearItem = [[NSMenuItem alloc] initWithTitle:@"Clear Menu"
+                                                       action:@selector(clearRecentDocumentsFromMenu:)
+                                                keyEquivalent:@""];
+    [clearItem setTarget:self];
+    [clearItem setEnabled:(added > 0)];
+    [menu addItem:clearItem];
+}
+
+- (NSArray<NSURL *> *)recentImmDocumentURLs
+{
+    NSMutableArray<NSURL *> *urls = [NSMutableArray array];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    NSArray *storedPaths = [[NSUserDefaults standardUserDefaults] arrayForKey:kRecentImmFilesDefaultsKey];
+    if ([storedPaths isKindOfClass:[NSArray class]])
+    {
+        for (id value in storedPaths)
+        {
+            if (![value isKindOfClass:[NSString class]])
+            {
+                continue;
+            }
+            NSString *path = (NSString *)value;
+            if (![path length] ||
+                ![[[path pathExtension] lowercaseString] isEqualToString:@"imm"] ||
+                [seen containsObject:path])
+            {
+                continue;
+            }
+            NSURL *url = [NSURL fileURLWithPath:path];
+            if (!url)
+            {
+                continue;
+            }
+            [urls addObject:url];
+            [seen addObject:path];
+        }
+    }
+
+    for (NSURL *url in [[NSDocumentController sharedDocumentController] recentDocumentURLs])
+    {
+        if (![url isFileURL])
+        {
+            continue;
+        }
+        NSString *path = [url path];
+        if (![path length] ||
+            ![[[path pathExtension] lowercaseString] isEqualToString:@"imm"] ||
+            [seen containsObject:path])
+        {
+            continue;
+        }
+        [urls addObject:url];
+        [seen addObject:path];
+    }
+    return urls;
+}
+
+- (void)runRecentDocumentSmokeIfRequested
+{
+    if (_recentDocumentSmokeDone)
+    {
+        return;
+    }
+
+    const char *smoke = getenv("IMM_METAL_VALIDATE_RECENT_DOCUMENTS");
+    if (!smoke || !smoke[0] || strcmp(smoke, "0") == 0)
+    {
+        return;
+    }
+
+    _recentDocumentSmokeDone = true;
+    [self noteCurrentDocumentAsRecentWithReason:@"recent-smoke"];
+
+    NSMenuItem *openRecentItem = iFindMenuItemWithTag([NSApp mainMenu], kOpenRecentMenuItemTag);
+    NSMenu *menu = [openRecentItem submenu];
+    NSUInteger enabledRecentItems = 0;
+    for (NSMenuItem *item in [menu itemArray])
+    {
+        if ([item action] == @selector(openRecentDocumentFromMenu:) && [item isEnabled])
+        {
+            ++enabledRecentItems;
+        }
+    }
+
+    NSUInteger recentImmURLs = [[self recentImmDocumentURLs] count];
+
+    NSLog(@"IMM Metal player recent document smoke: done=1 recentImmURLs=%lu menuItems=%lu",
+          (unsigned long)recentImmURLs,
+          (unsigned long)enabledRecentItems);
+
+    [[NSDocumentController sharedDocumentController] clearRecentDocuments:nil];
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:kRecentImmFilesDefaultsKey];
+    [self updateRecentDocumentsMenu];
+}
+
+- (void)noteCurrentDocumentAsRecentWithReason:(NSString *)reason
+{
+    const char *recentSmoke = getenv("IMM_METAL_VALIDATE_RECENT_DOCUMENTS");
+    const bool allowSmokeRecent = recentSmoke && recentSmoke[0] && strcmp(recentSmoke, "0") != 0;
+    if (_validationEnabled ||
+        (_smokeExitAfterSeconds > 0.0 && !allowSmokeRecent) ||
+        _settings.mFiles.mLoad.GetLength() < 1)
+    {
+        return;
+    }
+
+    const wchar_t *pathW = _settings.mFiles.mLoad[0].GetS();
+    if (!pathW || !pathW[0])
+    {
+        return;
+    }
+
+    char pathUtf8[PATH_MAX] = {};
+    const size_t pathLen = wcstombs(pathUtf8, pathW, sizeof(pathUtf8) - 1);
+    if (pathLen == (size_t)-1)
+    {
+        return;
+    }
+    pathUtf8[pathLen] = 0;
+
+    NSString *path = [NSString stringWithUTF8String:pathUtf8];
+    if (![path length])
+    {
+        return;
+    }
+
+    NSURL *url = [NSURL fileURLWithPath:path];
+    if (!url)
+    {
+        return;
+    }
+
+    NSMutableArray<NSString *> *paths = [NSMutableArray arrayWithObject:path];
+    NSArray *storedPaths = [[NSUserDefaults standardUserDefaults] arrayForKey:kRecentImmFilesDefaultsKey];
+    if ([storedPaths isKindOfClass:[NSArray class]])
+    {
+        for (id value in storedPaths)
+        {
+            if (![value isKindOfClass:[NSString class]])
+            {
+                continue;
+            }
+            NSString *storedPath = (NSString *)value;
+            if (![storedPath length] ||
+                [storedPath isEqualToString:path] ||
+                ![[[storedPath pathExtension] lowercaseString] isEqualToString:@"imm"])
+            {
+                continue;
+            }
+            [paths addObject:storedPath];
+            if ([paths count] >= 10)
+            {
+                break;
+            }
+        }
+    }
+
+    [[NSUserDefaults standardUserDefaults] setObject:paths forKey:kRecentImmFilesDefaultsKey];
+    [[NSDocumentController sharedDocumentController] noteNewRecentDocumentURL:url];
+    [self updateRecentDocumentsMenu];
+    NSLog(@"IMM Metal player recent document: reason=%@ path=%@",
+          reason ? reason : @"unknown",
+          path);
+}
+
 - (BOOL)loadContentFile:(NSString *)filename
 {
-    if (!filename || !_viewerReady || _validationEnabled)
+    return [self loadContentFile:filename allowValidationReload:NO];
+}
+
+- (BOOL)initializeSoundBackend
+{
+    const char *disableAudioForValidation = getenv("IMM_VIEWER_VALIDATE_DISABLE_AUDIO");
+    const bool useNullSoundBackend = (_validationEnabled && (!disableAudioForValidation || disableAudioForValidation[0] != '0')) ||
+                                     (disableAudioForValidation && disableAudioForValidation[0] && disableAudioForValidation[0] != '0');
+    NSLog(@"IMM Metal player sound backend: %s", useNullSoundBackend ? "Null" : "AVFoundation");
+    _soundBackend = ImmCore::piCreateSoundEngineBackend(useNullSoundBackend ? ImmCore::piSoundEngineBackend::API::Null
+                                                                            : ImmCore::piSoundEngineBackend::API::AVFoundation,
+                                                        &_log);
+    ImmCore::piSoundEngineBackend::Configuration soundConfig;
+    soundConfig.mTempPath = NSTemporaryDirectory().UTF8String;
+    return _soundBackend && _soundBackend->Init(nullptr, -1, &soundConfig);
+}
+
+- (void)presentOpenFailureForPath:(NSString *)path message:(NSString *)message
+{
+    if (_validationEnabled)
+    {
+        return;
+    }
+    const char *suppressAlert = getenv("IMM_METAL_SUPPRESS_OPEN_FAILURE_ALERT");
+    if (suppressAlert && suppressAlert[0] && strcmp(suppressAlert, "0") != 0)
+    {
+        return;
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    [alert setAlertStyle:NSAlertStyleWarning];
+    [alert setMessageText:@"Could not open IMM file"];
+    [alert setInformativeText:[NSString stringWithFormat:@"%@\n\n%@", message ? message : @"The selected file could not be loaded.", path ? path : @""]];
+    [alert addButtonWithTitle:@"OK"];
+    [alert runModal];
+}
+
+- (BOOL)loadContentFile:(NSString *)filename allowValidationReload:(BOOL)allowValidationReload
+{
+    if (!filename || !_viewerReady || (_validationEnabled && !allowValidationReload))
     {
         return NO;
     }
@@ -1377,6 +2353,7 @@ struct ImmMetalDebugVertex
     if (!path || !path[0])
     {
         NSLog(@"IMM Metal player: invalid opened IMM file path");
+        [self presentOpenFailureForPath:filename message:@"The selected file path is empty or invalid."];
         return NO;
     }
 
@@ -1385,26 +2362,115 @@ struct ImmMetalDebugVertex
     if (pathLen == (size_t)-1)
     {
         NSLog(@"IMM Metal player: invalid opened IMM file path encoding");
+        [self presentOpenFailureForPath:filename message:@"The selected file path could not be converted to the player path encoding."];
         return NO;
     }
     pathW[pathLen] = 0;
 
+    wchar_t previousPathW[PATH_MAX] = {};
+    bool hasPreviousPath = false;
+    if (_settings.mFiles.mLoad.GetLength() > 0)
+    {
+        const wchar_t *loadedPath = _settings.mFiles.mLoad[0].GetS();
+        if (loadedPath && loadedPath[0])
+        {
+            wcsncpy(previousPathW, loadedPath, PATH_MAX - 1);
+            previousPathW[PATH_MAX - 1] = 0;
+            hasPreviousPath = true;
+        }
+    }
+
+    auto failReload = [&](NSString *message) -> BOOL {
+        NSLog(@"IMM Metal player: opened IMM file failed: %@ (%@)", filename, message);
+        if (_validationEnabled)
+        {
+            [self terminateWithExitCode:1];
+            return NO;
+        }
+
+        if (_soundBackend)
+        {
+            _soundBackend->Deinit();
+            ImmCore::piDestroySoundEngineBackend(_soundBackend);
+            _soundBackend = nullptr;
+        }
+
+        bool restored = false;
+        if (hasPreviousPath && iSetSingleLoadedFile(&_settings, previousPathW) && [self initializeSoundBackend])
+        {
+            restored = _viewer.Init(nullptr, _renderer, _soundBackend->GetEngine(), &_log, &_timer, ImmPlayer::StereoMode::None, &_settings);
+        }
+
+        if (restored)
+        {
+            _viewerReady = true;
+            _firstFrame = true;
+            _timeBase = _timer.GetTime();
+            _lastTime = 0.0;
+            _frameIndex = 0;
+            _nativeFrameFailureCount = 0;
+            memset(&_events, 0, sizeof(_events));
+            _documentVolume = _viewer.GetVolume(0);
+            if (_documentVolume <= 0.0f)
+            {
+                _documentVolume = 1.0f;
+            }
+            _volumeBeforeMute = _documentVolume;
+            _muted = false;
+            [_window setTitle:iWindowTitleForSettings(_settings)];
+            [_view setPaused:NO];
+            [_view setEnableSetNeedsDisplay:NO];
+            if (getenv("IMM_METAL_VALIDATE_OPEN_FAILURE_RESTORE"))
+            {
+                NSLog(@"IMM Metal player open failure restore: restored=1 failedPath=%@", filename);
+            }
+            [self presentOpenFailureForPath:filename message:[message stringByAppendingString:@"\n\nThe previous IMM file was restored."]];
+        }
+        else
+        {
+            if (getenv("IMM_METAL_VALIDATE_OPEN_FAILURE_RESTORE"))
+            {
+                NSLog(@"IMM Metal player open failure restore: restored=0 failedPath=%@", filename);
+            }
+            [self presentOpenFailureForPath:filename message:[message stringByAppendingString:@"\n\nThe previous IMM file could not be restored, so the player will close."]];
+            [self terminateWithExitCode:1];
+        }
+        return NO;
+    };
+
     [_view setPaused:YES];
     _viewer.Deinit();
     _viewerReady = false;
+    if (_soundBackend)
+    {
+        _soundBackend->Deinit();
+        ImmCore::piDestroySoundEngineBackend(_soundBackend);
+        _soundBackend = nullptr;
+    }
+
+    const char *forceOpenFailure = getenv("IMM_METAL_FORCE_NEXT_OPEN_FAILURE");
+    if (forceOpenFailure && forceOpenFailure[0] && strcmp(forceOpenFailure, "0") != 0)
+    {
+        unsetenv("IMM_METAL_FORCE_NEXT_OPEN_FAILURE");
+        return failReload(@"Forced failed-open restore validation.");
+    }
 
     if (!iSetSingleLoadedFile(&_settings, pathW))
     {
         NSLog(@"IMM Metal player: could not apply opened IMM file path");
-        [self terminateWithExitCode:1];
-        return NO;
+        return failReload(@"The selected file path could not be applied to the player settings.");
+    }
+
+    if (![self initializeSoundBackend])
+    {
+        NSLog(@"IMM Metal player: sound backend reinitialization failed for opened IMM file");
+        return failReload(@"The audio backend could not be initialized for the selected file.");
     }
 
     if (!_viewer.Init(nullptr, _renderer, _soundBackend->GetEngine(), &_log, &_timer, ImmPlayer::StereoMode::None, &_settings))
     {
         NSLog(@"IMM Metal player: viewer reinitialization failed for opened IMM file");
-        [self terminateWithExitCode:1];
-        return NO;
+        return failReload(@"The selected IMM file could not be loaded.");
     }
 
     _viewerReady = true;
@@ -1414,15 +2480,125 @@ struct ImmMetalDebugVertex
     _frameIndex = 0;
     _nativeFrameFailureCount = 0;
     memset(&_events, 0, sizeof(_events));
+    _documentVolume = _viewer.GetVolume(0);
+    if (_documentVolume <= 0.0f)
+    {
+        _documentVolume = 1.0f;
+    }
+    _volumeBeforeMute = _documentVolume;
+    _muted = false;
+    _volumeSmokeDone = false;
+    _recentDocumentSmokeDone = false;
+    _playbackControlSmokeDone = false;
+    _openFailureRestoreSmokeDone = false;
+    [self runVolumeControlSmokeIfRequested];
+    [self noteCurrentDocumentAsRecentWithReason:@"opened-file"];
+    [self runRecentDocumentSmokeIfRequested];
 
     [_window setTitle:iWindowTitleForSettings(_settings)];
     [_window makeKeyAndOrderFront:nil];
     [_window makeFirstResponder:_view];
-    [NSApp activateIgnoringOtherApps:YES];
-    [_view setPaused:NO];
+    if (!_validationEnabled)
+    {
+        [NSApp activateIgnoringOtherApps:YES];
+    }
+    [_view setPaused:_validationEnabled ? YES : NO];
+    [_view setEnableSetNeedsDisplay:_validationEnabled ? YES : NO];
 
     NSLog(@"IMM Metal player: opened IMM file %@", filename);
+    if (_validationEnabled)
+    {
+        NSLog(@"IMM Metal validation window title: %@", [_window title]);
+    }
     return YES;
+}
+
+- (void)applyValidationReloadIfRequested
+{
+    if (!_validationEnabled ||
+        _validationReloadDone ||
+        _validationReloadPending ||
+        _validationReloadFrame == 0 ||
+        _frameIndex < _validationReloadFrame)
+    {
+        return;
+    }
+
+    if (!_viewerReady || !_viewer.IsDocumentLoaded(0))
+    {
+        return;
+    }
+
+    _validationReloadPending = true;
+    [self performSelector:@selector(validationReloadContent) withObject:nil afterDelay:0.0];
+    NSLog(@"IMM Metal validation reload scheduled: frame=%llu", (unsigned long long)_frameIndex);
+}
+
+- (void)validationReloadContent
+{
+    if (!_validationEnabled || _validationReloadDone)
+    {
+        return;
+    }
+
+    NSString *reloadPath = nil;
+    if (_validationReloadPath[0])
+    {
+        reloadPath = [NSString stringWithUTF8String:_validationReloadPath];
+    }
+
+    if (!reloadPath && _settings.mFiles.mLoad.GetLength() < 1)
+    {
+        NSLog(@"IMM Metal validation failed: reload requested but no loaded IMM path is available");
+        _validationDone = true;
+        gExitCode = 2;
+        return;
+    }
+
+    if (!reloadPath)
+    {
+        const wchar_t *pathW = _settings.mFiles.mLoad[0].GetS();
+        if (!pathW || !pathW[0])
+        {
+            NSLog(@"IMM Metal validation failed: reload requested but loaded IMM path is empty");
+            _validationDone = true;
+            gExitCode = 2;
+            return;
+        }
+
+        char pathUtf8[PATH_MAX] = {};
+        const size_t pathLen = wcstombs(pathUtf8, pathW, sizeof(pathUtf8) - 1);
+        if (pathLen == (size_t)-1)
+        {
+            NSLog(@"IMM Metal validation failed: reload requested but loaded IMM path is not UTF-8 encodable");
+            _validationDone = true;
+            gExitCode = 2;
+            return;
+        }
+        pathUtf8[pathLen] = 0;
+
+        reloadPath = [NSString stringWithUTF8String:pathUtf8];
+    }
+    if (!reloadPath)
+    {
+        NSLog(@"IMM Metal validation failed: reload requested but loaded IMM path could not create NSString");
+        _validationDone = true;
+        gExitCode = 2;
+        return;
+    }
+
+    const uint64_t reloadFrame = _validationReloadFrame;
+    _validationReloadDone = true;
+    _validationReloadPending = false;
+    if (![self loadContentFile:reloadPath allowValidationReload:YES])
+    {
+        NSLog(@"IMM Metal validation failed: in-process reload failed for %@", reloadPath);
+        _validationDone = true;
+        gExitCode = 2;
+        return;
+    }
+
+    NSLog(@"IMM Metal validation reload: frame=%llu path=%@", (unsigned long long)reloadFrame, reloadPath);
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification
@@ -1476,10 +2652,45 @@ struct ImmMetalDebugVertex
             _renderer->DestroyBuffer(_pipelineSanityIndexBuffer);
             _pipelineSanityIndexBuffer = nullptr;
         }
+        if (_smokeDisplayBuffer)
+        {
+            _renderer->DestroyBuffer(_smokeDisplayBuffer);
+            _smokeDisplayBuffer = nullptr;
+        }
+        if (_smokeLayerBuffer)
+        {
+            _renderer->DestroyBuffer(_smokeLayerBuffer);
+            _smokeLayerBuffer = nullptr;
+        }
+        if (_smokeFrameBuffer)
+        {
+            _renderer->DestroyBuffer(_smokeFrameBuffer);
+            _smokeFrameBuffer = nullptr;
+        }
         if (_vertexBuffer)
         {
             _renderer->DestroyBuffer(_vertexBuffer);
             _vertexBuffer = nullptr;
+        }
+        if (_smokePictureSampler)
+        {
+            _renderer->DestroySampler(_smokePictureSampler);
+            _smokePictureSampler = nullptr;
+        }
+        if (_smokeBlueNoiseTexture)
+        {
+            _renderer->DestroyTexture(_smokeBlueNoiseTexture);
+            _smokeBlueNoiseTexture = nullptr;
+        }
+        if (_smokePictureTexture)
+        {
+            _renderer->DestroyTexture(_smokePictureTexture);
+            _smokePictureTexture = nullptr;
+        }
+        if (_smokeCubemapTexture)
+        {
+            _renderer->DestroyTexture(_smokeCubemapTexture);
+            _smokeCubemapTexture = nullptr;
         }
         if (_shader)
         {
@@ -1491,6 +2702,16 @@ struct ImmMetalDebugVertex
             _renderer->DestroyShader(_pipelineSanityShader);
             _pipelineSanityShader = nullptr;
         }
+        if (_smokePictureShader)
+        {
+            _renderer->DestroyShader(_smokePictureShader);
+            _smokePictureShader = nullptr;
+        }
+        if (_smokeCubemapShader)
+        {
+            _renderer->DestroyShader(_smokeCubemapShader);
+            _smokeCubemapShader = nullptr;
+        }
         _renderer->Deinitialize();
         delete _renderer;
         _renderer = nullptr;
@@ -1498,6 +2719,10 @@ struct ImmMetalDebugVertex
     if (validationWasEnabled)
     {
         NSLog(@"IMM Metal validation cleanup: done=%d exitCode=%d", validationWasDone ? 1 : 0, gExitCode);
+    }
+    else
+    {
+        NSLog(@"IMM Metal player cleanup: exitCode=%d", gExitCode);
     }
     _settings.End();
     _timer.End();
@@ -1524,6 +2749,16 @@ struct ImmMetalDebugVertex
         return;
     }
 
+    [self applyValidationReloadIfRequested];
+    if (_validationDone)
+    {
+        if (_exitAfterValidation)
+        {
+            [self terminateWithExitCode:gExitCode];
+        }
+        return;
+    }
+
     MTLRenderPassDescriptor *pass = view.currentRenderPassDescriptor;
     id<CAMetalDrawable> drawable = view.currentDrawable;
     if (!pass || !drawable)
@@ -1545,11 +2780,21 @@ struct ImmMetalDebugVertex
     _nativeFrameFailureCount = 0;
 
     const float clearColor[4] = { 0.08f, 0.10f, 0.13f, 1.0f };
+    bool exitAfterSmokeFrame = false;
     if (_viewerReady)
     {
         if (_validationHelperDraws && !_validationPipelineSanityDone)
         {
             if (![self runValidationPipelineSanity])
+            {
+                if (_validationEnabled)
+                {
+                    _validationDone = true;
+                    gExitCode = 2;
+                }
+                return;
+            }
+            if (![self runValidationShaderPathSanity])
             {
                 if (_validationEnabled)
                 {
@@ -1660,6 +2905,7 @@ struct ImmMetalDebugVertex
                   drawableHeight,
                   (unsigned long long)validationTextureHandle,
                   (unsigned long long)helperDrawTimeNs);
+            _renderer->Report();
         }
 
         const double now = _timer.GetTime() - _timeBase;
@@ -1683,6 +2929,13 @@ struct ImmMetalDebugVertex
         _resolve.Do(_renderer, nullptr, vp, 0, 1.0f, _colorTexture);
         _soundBackend->Tick();
         ++_frameIndex;
+        if (!_validationEnabled && _smokeExitAfterSeconds > 0.0 && now >= _smokeExitAfterSeconds)
+        {
+            [self runPlaybackControlSmokeIfRequested];
+            [self runOpenFailureRestoreSmokeIfRequested];
+            NSLog(@"IMM Metal interactive smoke: elapsed=%.3f seconds, exiting", now);
+            exitAfterSmokeFrame = true;
+        }
     }
     else
     {
@@ -1696,6 +2949,10 @@ struct ImmMetalDebugVertex
     _renderer->EndNativeFrame();
 
     if (_exitAfterValidation && _validationDone)
+    {
+        [self terminateWithExitCode:gExitCode];
+    }
+    else if (exitAfterSmokeFrame)
     {
         [self terminateWithExitCode:gExitCode];
     }
@@ -1713,6 +2970,21 @@ struct ImmMetalDebugVertex
     if (!_validationDone)
     {
         [self performSelector:@selector(validationDrawTick) withObject:nil afterDelay:(1.0 / 60.0)];
+    }
+}
+
+- (void)interactiveSmokeDrawTick
+{
+    if (_validationEnabled || _didCleanup || !_view)
+    {
+        return;
+    }
+
+    [_view draw];
+
+    if (!_didCleanup)
+    {
+        [self performSelector:@selector(interactiveSmokeDrawTick) withObject:nil afterDelay:(1.0 / 60.0)];
     }
 }
 

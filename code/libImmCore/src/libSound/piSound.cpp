@@ -7,6 +7,8 @@
 #include "windows/piSoundEngineAudioSDKBackend.h"
 #elif defined(ANDROID) || defined(__ANDROID__)
 #include "android/piSoundEngineAndroid.h"
+#elif defined(__APPLE__)
+#include "macos/piSoundEngineAVFoundation.h"
 #endif
 
 namespace ImmCore
@@ -19,7 +21,9 @@ namespace ImmCore
 		else if (api == piSoundEngineBackend::API::DirectSound)    me = new piSoundEngineBackendDS();
 		else if (api == piSoundEngineBackend::API::DirectSoundOVR) me = new piSoundEngineAudioSDKBackend();
 #elif defined(ANDROID) || defined(__ANDROID__)
-		else if (api == piSoundEngineBackend::API::Android)        me = new piSoundEngineBackendAndroid();
+			else if (api == piSoundEngineBackend::API::Android)        me = new piSoundEngineBackendAndroid();
+#elif defined(__APPLE__)
+			else if (api == piSoundEngineBackend::API::AVFoundation)  me = new piSoundEngineBackendAVFoundation();
 #endif
 		else return nullptr;
 

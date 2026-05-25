@@ -10,9 +10,9 @@ namespace ExePlayer
     class Resolve
     {
     private:
-        ImmCore::piRasterState mRenderStateResolve;
-        ImmCore::piShader mAAResolveShader;
-        ImmCore::piBlendState mBlendStateNone;
+        ImmCore::piRasterState mRenderStateResolve = nullptr;
+        ImmCore::piShader mAAResolveShader = nullptr;
+        ImmCore::piBlendState mBlendStateNone = nullptr;
         int mFadeLoc = 0;
         int mOffsetLoc = 1;
         int mTexLoc = 0;
