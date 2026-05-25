@@ -34,6 +34,16 @@ add_subdirectory(${THIRDPARTY_DIR}/lpng1637 ${CMAKE_BINARY_DIR}/libpng-build)
 
 add_subdirectory(${THIRDPARTY_DIR}/ogg ${CMAKE_BINARY_DIR}/ogg-build)
 
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
+set(OPUS_MAY_HAVE_NEON OFF CACHE BOOL "" FORCE)
+set(OPUS_PRESUME_NEON OFF CACHE BOOL "" FORCE)
+add_subdirectory(${THIRDPARTY_DIR}/opus-src ${CMAKE_BINARY_DIR}/opus-build)
+
 set(ENABLE_SHARED OFF CACHE BOOL "" FORCE)
 set(ENABLE_STATIC ON CACHE BOOL "" FORCE)
 set(WITH_TURBOJPEG ON CACHE BOOL "" FORCE)
@@ -75,6 +85,7 @@ set(IMMCORE_UNITY_SOURCES
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSound.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSoundEngineNULL.cpp
+    ${CODE_DIR}/libImmCore/src/libSound/macos/piSoundEngineAVFoundation.mm
 )
 
 add_library(libImmCoreUnity STATIC ${IMMCORE_UNITY_SOURCES})
@@ -83,6 +94,7 @@ target_include_directories(libImmCoreUnity
     PUBLIC
         ${CODE_DIR}
         ${THIRDPARTY_DIR}/ogg/include
+        ${THIRDPARTY_DIR}/opus-src/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include/vorbis
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/lib
@@ -96,12 +108,14 @@ target_link_libraries(libImmCoreUnity
     PUBLIC
         ogg
         vorbis
+        opus
         png_static
         turbojpeg-static
         ZLIB::ZLIB
         "-framework Metal"
         "-framework QuartzCore"
         "-framework Foundation"
+        "-framework AVFoundation"
 )
 
 set(IMMCORE_MIN_SOURCES
@@ -239,6 +253,7 @@ add_custom_command(TARGET ImmUnity POST_BUILD
         "$<TARGET_FILE:libImmCoreUnity>"
         "$<TARGET_FILE:ogg>"
         "$<TARGET_FILE:vorbis>"
+        "$<TARGET_FILE:opus>"
         "$<TARGET_FILE:png_static>"
         "$<TARGET_FILE:turbojpeg-static>"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_UPM_IOS_DIR}"
@@ -257,6 +272,7 @@ target_link_libraries(ImmUnityIOSLinkSmoke PRIVATE
     "-framework Metal"
     "-framework QuartzCore"
     "-framework Foundation"
+    "-framework AVFoundation"
     ZLIB::ZLIB
 )
 set_target_properties(ImmUnityIOSLinkSmoke PROPERTIES

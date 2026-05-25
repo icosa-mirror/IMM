@@ -1031,7 +1031,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Sound backend created (Android)");
 #elif defined(WINDOWS)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::DirectSoundOVR,&gImmUnityPlugin.IMM.mLog);
-#elif defined(__APPLE__) && !defined(IMM_IOS)
+#elif defined(__APPLE__)
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::AVFoundation,&gImmUnityPlugin.IMM.mLog);
 #else
     gImmUnityPlugin.IMM.mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null,&gImmUnityPlugin.IMM.mLog);
