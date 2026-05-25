@@ -140,7 +140,6 @@ namespace godot
         PackedFloat32Array transform_to_matrix_array(const Transform3D &transform) const;
         PackedFloat32Array make_perspective_projection(float fov_degrees, float aspect, float z_near, float z_far) const;
         void update_auto_render_camera();
-        void render_last_camera_on_render_thread();
         static int render_adapter_before_camera(void *user_data, int camera_id, int eye_id, const ImmGodotViewport *viewport);
         static void render_adapter_after_camera(void *user_data, int camera_id, int eye_id, const ImmGodotViewport *viewport, int render_result);
         static void render_adapter_graphics_initialized(void *user_data);
@@ -171,6 +170,8 @@ namespace godot
         float _volume = 1.0f;
         int _document_id = -1;
         bool _is_playing = false;
+        bool _pending_show_after_load = false;
+        bool _sequence_ready_seen = false;
         Color _background_color = Color(0.0f, 0.0f, 0.0f, 1.0f);
         PackedInt32Array _spawn_area_ids;
         int _active_spawn_area_index = -1;
@@ -181,7 +182,6 @@ namespace godot
         RenderRequest _pending_render_request;
         mutable std::mutex _render_request_mutex;
         PackedInt32Array _registered_render_camera_ids;
-        std::atomic_bool _render_callback_queued = false;
         std::atomic_int _adapter_before_render_count = 0;
         std::atomic_int _adapter_after_render_count = 0;
         std::atomic_int _adapter_graphics_initialized_count = 0;

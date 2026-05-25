@@ -213,9 +213,9 @@ if ($GodotCppLib) {
 else {
     $shortTarget = if ($target.EndsWith("debug")) { "debug" } else { "release" }
     $candidateLibs = @(
-        Join-Path $godotCpp "bin\libgodot-cpp.windows.$target.x86_64.lib",
-        Join-Path $godotCpp "bin\libgodot-cpp.windows.$target.dev.x86_64.lib",
-        Join-Path $godotCpp "bin\libgodot-cpp.windows.$shortTarget.x86_64.lib"
+        (Join-Path $godotCpp "bin\libgodot-cpp.windows.$target.x86_64.lib"),
+        (Join-Path $godotCpp "bin\libgodot-cpp.windows.$target.dev.x86_64.lib"),
+        (Join-Path $godotCpp "bin\libgodot-cpp.windows.$shortTarget.x86_64.lib")
     )
     $foundLib = $candidateLibs | Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($foundLib) {

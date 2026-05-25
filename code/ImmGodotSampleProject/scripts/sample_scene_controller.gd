@@ -9,6 +9,8 @@ const BOOST_MULTIPLIER := 3.0
 @onready var status_label: Label3D = $StatusLabel
 
 var _first_layer_hidden := false
+var _has_applied_background_color := false
+var _last_background_color := Color.BLACK
 
 func _ready() -> void:
     viewer.document_loaded.connect(_update_status)
@@ -53,8 +55,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
     match event.keycode:
         KEY_L:
             viewer.load_document()
+            _apply_background_color()
         KEY_U:
             viewer.unload_document()
+            _apply_background_color()
         KEY_SPACE:
             viewer.toggle_pause()
         KEY_R:
@@ -79,7 +83,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
             _jump_to_active_spawn_area()
         KEY_BACKSLASH:
             var result: int = int(viewer.queue_render_last_camera())
-            print("IMM fixed-viewport render-thread queue result: %d" % result)
+            print("IMM fixed-viewport diagnostic render request result: %d" % result)
             _update_status()
 
 func _on_playback_changed(_is_playing: bool) -> void:
@@ -132,6 +136,8 @@ func _toggle_first_layer_visibility() -> void:
     _update_status()
 
 func _update_status(_unused: Variant = null) -> void:
+    _apply_background_color()
+
     var lines := PackedStringArray()
     var state: Dictionary = viewer.get_document_state()
     var bounds: Dictionary = viewer.get_bounding_box()
@@ -141,7 +147,7 @@ func _update_status(_unused: Variant = null) -> void:
         spawn_name = str(spawn_info.get("name", spawn_info.get("id", "unknown")))
     lines.append("IMM Godot Sample")
     lines.append("L load | U unload | Space play/pause | R restart")
-    lines.append(", / . seek | [ / ] chapter | ; / ' spawn area | V layer | \\ fixed render | WASDQE move")
+    lines.append(", / . seek | [ / ] chapter | ; / ' spawn area | V layer | \\ diagnostic render | WASDQE move")
     lines.append("")
     lines.append("Document: %s" % ("loaded" if viewer.is_loaded() else "not loaded"))
     lines.append("Playback: %s" % ("playing" if viewer.is_playing() else "paused"))
@@ -171,3 +177,13 @@ func _update_status(_unused: Variant = null) -> void:
     lines.append("Spawn Area Index: %d" % viewer.get_active_spawn_area_index())
     lines.append("Spawn Area: %s" % spawn_name)
     status_label.text = "\n".join(lines)
+
+func _apply_background_color() -> void:
+    var color: Color = viewer.get_background_color()
+    if color.a <= 0.0:
+        color.a = 1.0
+    if _has_applied_background_color and color == _last_background_color:
+        return
+    RenderingServer.set_default_clear_color(color)
+    _last_background_color = color
+    _has_applied_background_color = true

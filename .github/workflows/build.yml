@@ -83,7 +83,7 @@ jobs:
 
     - name: Run Godot native smoke test
       shell: pwsh
-      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -LogDir artifacts\godot-smoke-native
+      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\godot-smoke-native
 
     - name: Upload Godot smoke logs
       if: always()

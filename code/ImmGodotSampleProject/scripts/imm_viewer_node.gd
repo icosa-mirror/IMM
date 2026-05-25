@@ -37,7 +37,6 @@ var _last_render_camera_id := 0
 var _last_render_viewport_width := 1280
 var _last_render_viewport_height := 720
 var _registered_render_camera_ids: Array[int] = []
-var _render_callback_queued := false
 var _adapter_before_render_count := 0
 var _adapter_after_render_count := 0
 var _adapter_graphics_initialized_count := 0
@@ -209,11 +208,7 @@ func queue_render_last_camera() -> int:
     _last_render_camera_id = smoke_camera_id
     _last_render_viewport_width = smoke_viewport_width
     _last_render_viewport_height = smoke_viewport_height
-    if _render_callback_queued:
-        return 1
-    _render_callback_queued = true
-    RenderingServer.call_on_render_thread(Callable(self, "_render_last_camera_on_render_thread"))
-    return 0
+    return smoke_render_last_camera()
 
 func queue_render_camera_transform(camera_transform: Transform3D, width: int, height: int, fov_degrees: float, camera_id: int) -> int:
     if width <= 0 or height <= 0:
@@ -227,11 +222,7 @@ func queue_render_camera_transform(camera_transform: Transform3D, width: int, he
     _last_camera_projection = make_perspective_projection(fov_degrees, float(width) / float(height), 0.05, 1000.0)
     if not submit_mono_camera_matrices(camera_id, transform_to_matrix_array(camera_transform.affine_inverse()), _last_camera_projection):
         return -1
-    if _render_callback_queued:
-        return 1
-    _render_callback_queued = true
-    RenderingServer.call_on_render_thread(Callable(self, "_render_last_camera_on_render_thread"))
-    return 0
+    return smoke_render_camera(camera_id, width, height)
 
 func register_render_camera(camera_id: int) -> bool:
     if camera_id < 0 or camera_id >= 256:
@@ -260,7 +251,7 @@ func get_render_diagnostics() -> Dictionary:
         "last_viewport_width": _last_render_viewport_width,
         "last_viewport_height": _last_render_viewport_height,
         "registered_camera_ids": get_registered_render_camera_ids(),
-        "render_callback_queued": _render_callback_queued,
+        "render_callback_queued": false,
         "auto_queue_render": auto_queue_render,
         "render_camera_path": render_camera_path,
         "has_last_projection": not _last_camera_projection.is_empty(),
@@ -280,10 +271,14 @@ func get_render_diagnostics() -> Dictionary:
 func get_render_backend_diagnostics() -> Dictionary:
     var rendering_method := str(ProjectSettings.get_setting("rendering/renderer/rendering_method", ""))
     var rendering_driver := str(ProjectSettings.get_setting("rendering/rendering_device/driver", ""))
+    var actual_rendering_method := RenderingServer.get_current_rendering_method()
+    var actual_rendering_driver := RenderingServer.get_current_rendering_driver_name()
     var rendering_device := RenderingServer.get_rendering_device()
-    var is_compatibility := rendering_method == "gl_compatibility"
+    var effective_rendering_method := actual_rendering_method if not actual_rendering_method.is_empty() else rendering_method
+    var effective_rendering_driver := actual_rendering_driver if not actual_rendering_driver.is_empty() else rendering_driver
+    var is_compatibility := effective_rendering_method == "gl_compatibility"
     var wants_metal := renderer_api == 0 or renderer_api == 4
-    var driver_is_metal := rendering_driver == "metal"
+    var driver_is_metal := effective_rendering_driver == "metal"
     var has_generic_driver_resources := true
     var has_compositor_effect_path := true
     return {
@@ -291,6 +286,8 @@ func get_render_backend_diagnostics() -> Dictionary:
         "renderer_api": renderer_api,
         "project_rendering_method": rendering_method,
         "project_rendering_driver": rendering_driver,
+        "actual_rendering_method": actual_rendering_method,
+        "actual_rendering_driver": actual_rendering_driver,
         "has_rendering_device": rendering_device != null,
         "is_compatibility_renderer": is_compatibility,
         "wants_metal_renderer": wants_metal,
@@ -298,10 +295,6 @@ func get_render_backend_diagnostics() -> Dictionary:
         "has_compositor_effect_path": has_compositor_effect_path,
         "metal_adapter_candidate": rendering_device != null and not is_compatibility and wants_metal and driver_is_metal and has_generic_driver_resources and has_compositor_effect_path,
     }
-
-func _render_last_camera_on_render_thread() -> void:
-    _render_callback_queued = false
-    smoke_render_camera(_last_render_camera_id, _last_render_viewport_width, _last_render_viewport_height)
 
 func _update_auto_render_camera() -> void:
     if not auto_queue_render or render_camera_path.is_empty():
@@ -387,10 +380,10 @@ func transform_to_matrix_array(transform: Transform3D) -> PackedFloat32Array:
     var basis := transform.basis
     var origin := transform.origin
     return PackedFloat32Array([
-        basis.x.x, basis.y.x, basis.z.x, origin.x,
-        basis.x.y, basis.y.y, basis.z.y, origin.y,
-        basis.x.z, basis.y.z, basis.z.z, origin.z,
-        0.0, 0.0, 0.0, 1.0,
+        basis.x.x, basis.y.x, basis.z.x, 0.0,
+        basis.x.y, basis.y.y, basis.z.y, 0.0,
+        basis.x.z, basis.y.z, basis.z.z, 0.0,
+        origin.x, origin.y, origin.z, 1.0,
     ])
 
 func make_perspective_projection(fov_degrees: float, aspect: float, z_near: float, z_far: float) -> PackedFloat32Array:
@@ -399,8 +392,8 @@ func make_perspective_projection(fov_degrees: float, aspect: float, z_near: floa
     return PackedFloat32Array([
         f / aspect, 0.0, 0.0, 0.0,
         0.0, f, 0.0, 0.0,
-        0.0, 0.0, (z_far + z_near) / depth, (2.0 * z_far * z_near) / depth,
-        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, (z_far + z_near) / depth, -1.0,
+        0.0, 0.0, (2.0 * z_far * z_near) / depth, 0.0,
     ])
 
 func _cycle_spawn_area(offset: int) -> void:

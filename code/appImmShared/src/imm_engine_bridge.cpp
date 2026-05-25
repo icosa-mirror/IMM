@@ -237,6 +237,20 @@ namespace ImmShared
         }
 
         const CameraState &camera = mCamera[cameraID];
+        if (mLogInitialized && std::getenv("IMM_GODOT_DEBUG_CAMERA") != nullptr)
+        {
+            const mat4x4d headToWorld = invert(f2d(camera.world2Head));
+            const vec3d cameraPosition = (headToWorld * vec4d(0.0, 0.0, 0.0, 1.0)).xyz();
+            const vec3d cameraDirection = normalize((headToWorld * vec4d(0.0, 0.0, -1.0, 0.0)).xyz());
+            mLog.Printf(LT_MESSAGE,
+                        L"ImmGodot camera derived position=(%f,%f,%f) direction=(%f,%f,%f)",
+                        cameraPosition.x,
+                        cameraPosition.y,
+                        cameraPosition.z,
+                        cameraDirection.x,
+                        cameraDirection.y,
+                        cameraDirection.z);
+        }
         if (camera.stereoType == 0)
         {
             mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
@@ -489,7 +503,7 @@ namespace ImmShared
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
         const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal);
-        conf.depthBuffer = usesZeroToOneDepth ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
+        conf.depthBuffer = DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;

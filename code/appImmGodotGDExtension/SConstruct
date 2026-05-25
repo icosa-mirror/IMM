@@ -88,27 +88,39 @@ if platform == "windows":
     ])
     env.Append(LINKFLAGS=["/DLL"])
 else:
+    env.Append(CPPDEFINES=["MACOS_ENABLED"])
+    if target != "template_release":
+        env.Append(CPPDEFINES=["HOT_RELOAD_ENABLED"])
     env.Append(CXXFLAGS=["-std=c++17", "-fPIC"])
+    env.Append(FRAMEWORKS=["Metal", "Foundation"])
+    env.Append(LIBS=[
+        File(str(godot_cpp_lib)),
+        File(str(imm_godot_lib)),
+    ])
     env.Append(LINKFLAGS=[
-        str(godot_cpp_lib),
-        str(imm_godot_lib),
         "-Wl,-rpath,@loader_path",
     ])
     env["SHLIBPREFIX"] = "lib"
 
 if variant == "debug":
     env.Append(CPPDEFINES=["DEBUG_ENABLED", "DEBUG_METHODS_ENABLED"])
-    env.Append(CCFLAGS=["/Zi", "/Od"])
-    env.Append(LINKFLAGS=["/DEBUG"])
+    if platform == "windows":
+        env.Append(CCFLAGS=["/Zi", "/Od"])
+        env.Append(LINKFLAGS=["/DEBUG"])
+    else:
+        env.Append(CCFLAGS=["-g", "-O0"])
 else:
     env.Append(CPPDEFINES=["NDEBUG"])
-    env.Append(CCFLAGS=["/O2"])
+    env.Append(CCFLAGS=["/O2" if platform == "windows" else "-O2"])
 
 sources = [
     "src/imm_viewer_compositor_effect.cpp",
+    "src/imm_viewer_metal_frame.mm",
     "src/imm_viewer_node.cpp",
     "src/register_types.cpp",
 ]
+if platform == "windows":
+    sources.remove("src/imm_viewer_metal_frame.mm")
 
 library = env.SharedLibrary(target=str(target_path), source=sources)
 runtime_dll = env.Command(

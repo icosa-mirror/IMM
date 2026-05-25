@@ -11,6 +11,9 @@ run/main_scene="res://scenes/SampleScene.tscn"
 window/size/viewport_width=1600
 window/size/viewport_height=900
 
+[native_extensions]
+paths=["res://addons/imm_viewer/imm_viewer.gdextension"]
+
 [rendering]
 renderer/rendering_method="gl_compatibility"
 environment/defaults/default_clear_color=Color(0.04, 0.05, 0.08, 1)

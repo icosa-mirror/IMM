@@ -1,9 +1,11 @@
 extends SceneTree
 
 const EXPECTED_RENDERER := "gl_compatibility"
+const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_SCENE := "res://scenes/SampleScene.tscn"
 const NATIVE_SCENE := "res://scenes/NativeSmokeScene.tscn"
 const CAMERA_ID := 0
+const MAX_READY_SECONDS := 12.0
 
 func _initialize() -> void:
     call_deferred("_run")
@@ -16,6 +18,11 @@ func _run() -> void:
         failures.append("Expected renderer %s, got %s" % [EXPECTED_RENDERER, renderer])
 
     var expected_native := OS.get_environment("IMM_GODOT_EXPECT_NATIVE") == "1"
+    if expected_native and not ClassDB.class_exists("ImmViewerNode"):
+        var extension_status := GDExtensionManager.load_extension(EXTENSION_PATH)
+        if extension_status != OK and extension_status != ERR_ALREADY_EXISTS:
+            failures.append("Failed to load %s: %d" % [EXTENSION_PATH, int(extension_status)])
+
     var scene_path := OS.get_environment("IMM_GODOT_SMOKE_SCENE")
     if scene_path.is_empty():
         scene_path = NATIVE_SCENE if expected_native else SAMPLE_SCENE
@@ -115,6 +122,14 @@ func _run() -> void:
     var background_color: Color = viewer.get_background_color()
     if background_color.a <= 0.0:
         failures.append("get_background_color returned a fully transparent color")
+        background_color.a = 1.0
+    RenderingServer.set_default_clear_color(background_color)
+    var clear_color: Color = RenderingServer.get_default_clear_color()
+    if not _colors_close(clear_color, background_color):
+        failures.append("Godot default clear color %s did not match IMM background color %s" % [
+            clear_color.to_html(false),
+            background_color.to_html(false),
+        ])
 
     var chapter_count: int = int(viewer.get_chapter_count())
     var current_chapter: int = int(viewer.get_current_chapter())
@@ -180,6 +195,10 @@ func _run() -> void:
     var queue_result: int = int(viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID))
     if queue_result < 0:
         failures.append("queue_render_camera_transform returned %d" % queue_result)
+    if expected_native:
+        var direct_render_result: int = int(viewer.smoke_render_camera(CAMERA_ID, width, height))
+        if direct_render_result < 0:
+            failures.append("smoke_render_camera returned %d" % direct_render_result)
     var render_diagnostics: Dictionary = viewer.get_render_diagnostics()
     if render_diagnostics.is_empty():
         failures.append("get_render_diagnostics returned an empty Dictionary")
@@ -219,9 +238,76 @@ func _run() -> void:
             height,
         ])
 
+    var load_unload_cycles := _get_env_int("IMM_GODOT_LOAD_UNLOAD_CYCLES", 0)
+    if load_unload_cycles > 0:
+        await _exercise_load_unload_cycles(viewer, camera, load_unload_cycles, expected_native, failures)
+
     scene.queue_free()
     await process_frame
     _finish(failures)
+
+func _exercise_load_unload_cycles(viewer: Node, camera: Camera3D, cycle_count: int, expected_native: bool, failures: Array[String]) -> void:
+    var viewport_size: Vector2 = root.get_visible_rect().size
+    var width: int = max(int(viewport_size.x), 1)
+    var height: int = max(int(viewport_size.y), 1)
+
+    var ready_before_cycles := await _wait_for_sequence_ready(viewer)
+    if expected_native and not ready_before_cycles:
+        failures.append("ImmViewer sequence was not ready before repeated load/unload smoke")
+        return
+
+    for cycle_index in range(cycle_count):
+        if viewer.is_loaded():
+            viewer.unload_document()
+            await process_frame
+        if viewer.is_loaded():
+            failures.append("load/unload cycle %d did not unload the document" % [cycle_index + 1])
+
+        var unloaded_queue_result: int = int(viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID))
+        if unloaded_queue_result < 0:
+            failures.append("load/unload cycle %d queue while unloaded returned %d" % [cycle_index + 1, unloaded_queue_result])
+
+        var load_result: int = int(viewer.load_document())
+        await process_frame
+        await process_frame
+        if load_result < 0:
+            failures.append("load/unload cycle %d load_document returned %d" % [cycle_index + 1, load_result])
+            continue
+        if not viewer.is_loaded():
+            failures.append("load/unload cycle %d did not reload the document" % [cycle_index + 1])
+            continue
+
+        var ready_after_reload := await _wait_for_sequence_ready(viewer)
+        if expected_native and not ready_after_reload:
+            failures.append("load/unload cycle %d sequence did not become ready" % [cycle_index + 1])
+            continue
+
+        RenderingServer.set_default_clear_color(viewer.get_background_color())
+        var queue_result: int = int(viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID))
+        if queue_result < 0:
+            failures.append("load/unload cycle %d queue after reload returned %d" % [cycle_index + 1, queue_result])
+        if expected_native:
+            var direct_render_result: int = int(viewer.smoke_render_camera(CAMERA_ID, width, height))
+            if direct_render_result < 0:
+                failures.append("load/unload cycle %d smoke_render_camera returned %d" % [cycle_index + 1, direct_render_result])
+        await process_frame
+
+    var final_diagnostics: Dictionary = viewer.get_render_diagnostics()
+    if int(final_diagnostics.get("last_camera_id", -1)) != CAMERA_ID:
+        failures.append("load/unload smoke ended with camera %d instead of %d" % [
+            int(final_diagnostics.get("last_camera_id", -1)),
+            CAMERA_ID,
+        ])
+    if bool(final_diagnostics.get("render_callback_queued", false)):
+        failures.append("load/unload smoke ended with a queued render callback")
+
+func _wait_for_sequence_ready(viewer: Node) -> bool:
+    var ready_deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
+    while Time.get_ticks_msec() < ready_deadline_msec:
+        if viewer.is_loaded() and viewer.is_sequence_ready():
+            return true
+        await create_timer(0.05).timeout
+    return false
 
 func _finish(failures: Array[String]) -> void:
     if failures.is_empty():
@@ -232,3 +318,17 @@ func _finish(failures: Array[String]) -> void:
     for failure in failures:
         push_error(failure)
     quit(1)
+
+func _colors_close(left: Color, right: Color, epsilon := 0.002) -> bool:
+    return abs(left.r - right.r) <= epsilon \
+        and abs(left.g - right.g) <= epsilon \
+        and abs(left.b - right.b) <= epsilon \
+        and abs(left.a - right.a) <= epsilon
+
+func _get_env_int(name: String, default_value: int) -> int:
+    var value := OS.get_environment(name)
+    if value.is_empty():
+        return default_value
+    if not value.is_valid_int():
+        return default_value
+    return max(int(value), 0)

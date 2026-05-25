@@ -5,10 +5,10 @@ This project mirrors the intent of the Unity sample project while the native God
 ## Current status
 
 - The scene and controls are in place.
-- The `ImmViewerNode` script mirrors the runtime API shape the future GDExtension will expose.
-- The native `appImmGodot` DLL exists in the C++ solution, and the GDExtension source now owns native init/shutdown, camera registration, matrix submission, and render-thread queueing.
-- A `.gdextension` manifest is present under `addons/imm_viewer/`, ready for the future extension binary.
-- The final `godot-cpp` build and real Godot Compatibility renderer validation are still pending.
+- The `ImmViewerNode` script mirrors the runtime API shape the native GDExtension exposes.
+- The native `appImmGodot` plugin and GDExtension own native init/shutdown, camera registration, matrix submission, and compositor render request publishing.
+- A `.gdextension` manifest is present under `addons/imm_viewer/`.
+- The native Compatibility smoke and macOS Forward+/Metal visual smoke pass locally with the staged debug extension.
 
 ## Open in Godot
 
@@ -29,7 +29,7 @@ This project mirrors the intent of the Unity sample project while the native God
 - `[`: previous chapter
 - `'`: next spawn area
 - `;`: previous spawn area
-- `\`: queue a fixed-viewport render-thread smoke hook
+- `\`: queue a fixed-viewport diagnostic render request
 - `W/A/S/D/Q/E`: move camera
 
 ## Document path
@@ -48,13 +48,13 @@ If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` 
 
 With Godot installed, add `IMM_GODOT_RUN_LOCAL_SMOKE=1` to `verify_local.py` to run the script-stub smoke scene headlessly. This validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, `load_document()`, `is_loaded()`, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, the camera/viewport queue, and render diagnostics before the native Windows extension is available.
 
-The `ImmViewer` node has `auto_queue_render = true` and `render_camera_path = ../CameraRig/Camera3D`. That makes `ImmViewerNode` register camera 0 and queue the active camera transform, field of view, and viewport dimensions each frame while a document is loaded. Press `\` to schedule the older fixed-viewport smoke render call through `RenderingServer.call_on_render_thread`; this remains a Phase 1 fallback hook.
+The `ImmViewer` node has `auto_queue_render = true` and `render_camera_path = ../CameraRig/Camera3D`. That makes `ImmViewerNode` register camera 0 and queue the active camera transform, field of view, and viewport dimensions each frame while a document is loaded. In the Metal visual scene, queued work is consumed by `ImmViewerCompositorEffect` and rendered into Godot-owned render resources. Press `\` to queue a fixed-viewport diagnostic render request.
 
-With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` first verifies that the GDExtension DLL, `ImmGodotPlugin.dll`, and staged IMM runtime dependency DLLs exist, then runs the headless smoke script against `NativeSmokeScene.tscn`. It asserts `ImmViewer` is the native `ImmViewerNode`, verifies camera 0 was auto-registered by `auto_queue_render`, loads the sample document, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, exercises playback controls, exercises the registered camera/viewport queue, validates render diagnostics including adapter graphics/before/after callback counts, and requires the `IMM Godot smoke test passed` output marker. Add `-LogDir artifacts\godot-smoke` to save smoke output, run metadata, and the native staged-DLL inventory. Without `-RequireExtension`, the smoke script uses the script-stub `SampleScene.tscn`.
+With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` first verifies that the GDExtension DLL, `ImmGodotPlugin.dll`, and staged IMM runtime dependency DLLs exist, then runs the headless smoke script against `NativeSmokeScene.tscn`. It asserts `ImmViewer` is the native `ImmViewerNode`, verifies camera 0 was auto-registered by `auto_queue_render`, loads the sample document, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, exercises playback controls, exercises the registered camera/viewport queue, validates render diagnostics including adapter graphics/before/after callback counts, and requires the `IMM Godot smoke test passed` output marker. Add `-LoadUnloadCycles 2` to repeatedly unload/reload the document while the render queue remains active, and add `-LogDir artifacts\godot-smoke` to save smoke output, run metadata, and the native staged-DLL inventory. Without `-RequireExtension`, the smoke script uses the script-stub `SampleScene.tscn`.
 
 The Windows workflow runs both forms: script-stub smoke before the native build and native-extension smoke after the GDExtension build.
 
-The status label also displays the current IMM background color reported by `get_background_color()`, which is the first parity hook for matching Unity camera clear-color behavior.
+The sample and smoke scenes apply the current IMM background color from `get_background_color()` to `RenderingServer.set_default_clear_color(...)` before camera rendering. The status label also displays that color for quick diagnostics.
 
 The status label displays playback time from `get_play_time_seconds()`, and `,` / `.` call `seek_relative_seconds()` to exercise the native `piTick` time API.
 

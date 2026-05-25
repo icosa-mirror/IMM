@@ -80,7 +80,7 @@ Prerequisites:
 - Spawn-area metadata is copied through caller-owned ABI structs; names use fixed-size buffers so GDExtension callers do not own native allocations.
 - It is the handoff point for render-thread camera capture and draw callbacks in Phase 2.
 - The native backend now exposes `ImmGodot_InitEx(..., rendererApi)` plus `ImmGodot_BeginMetalFrame` / `ImmGodot_EndMetalFrame`, so the production macOS path can attach IMM's existing Metal renderer to Godot-owned Metal render resources instead of relying on the OpenGL smoke path.
-- `ImmViewerCompositorEffect` is the production render-pipeline entry point. Its render callback currently records `RenderSceneBuffersRD`, color texture RID, target/internal size, view count, and native command-queue/color-texture handles through `RenderingDevice.get_driver_resource`; the next macOS step is to turn those handles into the Metal render pass passed to `ImmGodot_BeginMetalFrame`.
+- `ImmViewerCompositorEffect` is the production render-pipeline entry point. Its render callback records `RenderSceneBuffersRD`, color texture RID, target/internal size, view count, and native command-queue/color-texture handles through `RenderingDevice.get_driver_resource`. On macOS it now attempts to build an `MTLRenderPassDescriptor` for the Godot-owned color texture, call `ImmGodot_BeginMetalFrame`, render the queued IMM camera, and close with `ImmGodot_EndMetalFrame`.
 
 ## Smoke API
 
@@ -99,8 +99,8 @@ The native class exposes these Phase 1 test hooks for the future render callback
 - `debug_logging` or `IMM_GODOT_DEBUG=1` enables native log messages for init, matrix submission, and render calls.
 - `ImmGodotRenderAdapter` brackets graphics init/shutdown and render-camera calls so the real Godot render integration has a stable handoff point.
 - `get_render_diagnostics()` reports the last queued camera/viewport, queued callback state, registered camera IDs, and render-adapter callback counts used by the smoke test.
-- `get_render_backend_diagnostics()` reports the active Godot rendering method, configured rendering-device driver, RenderingDevice availability, selected IMM renderer API, and whether the current project state is a macOS Metal adapter candidate.
-- `ImmViewerCompositorEffect.get_diagnostics()` reports whether Godot called the compositor render callback and whether RD scene buffers, color texture RID, command queue handle, and color texture handle were available.
+- `get_render_backend_diagnostics()` reports the configured and actual Godot rendering method/driver, RenderingDevice availability, selected IMM renderer API, and whether the current runtime state is a macOS Metal adapter candidate.
+- `ImmViewerCompositorEffect.get_diagnostics()` reports whether Godot called the compositor render callback, whether RD scene buffers, color texture RID, command queue handle, and color texture handle were available, and whether the macOS Metal frame/render attempt started.
 
 These calls are not a replacement for the final viewport/camera integration. The `ImmViewerNode`-owned per-frame queue still proves scheduling only; visible production rendering must target Godot-owned render resources.
 The production direction is now macOS Metal first: the compositor render callback should obtain Godot-owned Metal command/render resources on the render thread, call `ImmGodot_BeginMetalFrame`, invoke `ImmGodot_RenderCamera`, and then call `ImmGodot_EndMetalFrame`. OpenGL Compatibility remains a bootstrap/smoke path unless a clean Godot-owned OpenGL render-target hook is proven.
@@ -141,8 +141,25 @@ After building the extension and installing Godot 4.5 or newer, run the sample s
 .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
 ```
 
-The smoke test runs `res://scripts/smoke_test_runner.gd` headlessly, checks the Compatibility renderer setting, instantiates the sample scene, verifies native-class loading when requested, asserts that `auto_queue_render` auto-registers camera 0, calls `load_document()`, requires `is_loaded()`, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, exercises pause/play/toggle/restart, exercises the registered camera/viewport render queue, and validates render-adapter graphics/before/after callback diagnostics. The wrapper requires both a zero Godot exit code and the `IMM Godot smoke test passed` marker in output. With `-RequireExtension`, the wrapper first verifies that `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the staged IMM runtime dependency DLLs exist, then loads `res://scenes/NativeSmokeScene.tscn` and asserts the `ImmViewer` node is the native `ImmViewerNode` class rather than the script stub.
+The smoke test runs `res://scripts/smoke_test_runner.gd` headlessly, checks the Compatibility renderer setting, instantiates the sample scene, verifies native-class loading when requested, asserts that `auto_queue_render` auto-registers camera 0, calls `load_document()`, requires `is_loaded()`, checks document state/background color, applies that color to Godot's default clear color, exercises chapter/bounds/layer/spawn-area query APIs, exercises pause/play/toggle/restart, exercises the registered camera/viewport render queue, and validates render-adapter graphics/before/after callback diagnostics. The wrapper requires both a zero Godot exit code and the `IMM Godot smoke test passed` marker in output. With `-RequireExtension`, the wrapper first verifies that `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the staged IMM runtime dependency DLLs exist, then loads `res://scenes/NativeSmokeScene.tscn` and asserts the `ImmViewer` node is the native `ImmViewerNode` class rather than the script stub. Passing `-LoadUnloadCycles N` additionally unloads and reloads the document `N` times while the camera/render queue remains active, then verifies the final render diagnostics.
 
-Add `-LogDir artifacts\godot-smoke` to save `godot-smoke-output.log` and `godot-smoke-summary.txt`. For native smoke runs, the wrapper also writes `godot-extension-dlls.txt` with the expected staged DLLs, found/missing status, byte size, and UTC timestamp. The Windows GitHub Actions job caches `thirdparty/godot-cpp` by `GODOT_CPP_REF`, runs script-stub smoke before the native build, then native-extension smoke after the GDExtension build, uploads both log directories as `ImmGodotSmokeLogs-Windows`, and includes the staged `godot-extension-dlls.txt` manifest in `ImmGodotGDExtension-Windows`.
+On macOS, the local debug path is:
+
+```bash
+/tmp/imm-godot-scons-venv/bin/python -m SCons platform=macos target=template_debug arch=arm64 godot_cpp=/tmp/godot-cpp-4.5-check imm_config=Debug
+IMM_GODOT_EXPECT_NATIVE=1 IMM_GODOT_SMOKE_SCENE=res://scenes/NativeSmokeScene.tscn /Applications/Godot.app/Contents/MacOS/Godot --headless --path code/ImmGodotSampleProject --script res://scripts/smoke_test_runner.gd
+```
+
+That path currently builds and loads the native extension, instantiates `ImmViewerNode`, loads the sample IMM document, and passes the native Compatibility/headless smoke on Godot 4.6.1. It still does not prove visible Metal rendering.
+
+For the macOS Forward+/Metal visual harness, run:
+
+```bash
+IMM_GODOT_VISUAL_SMOKE=1 IMM_GODOT_VISUAL_SMOKE_PNG=/tmp/imm-godot-metal-visual-smoke.png /Applications/Godot.app/Contents/MacOS/Godot --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/MetalVisualSmokeScene.tscn --fixed-fps 30
+```
+
+This path explicitly loads the GDExtension, creates a native `ImmViewerNode`, attaches `ImmViewerCompositorEffect` to the active camera, loads `sample1.imm`, queues camera renders, saves a PNG, and requires valid Godot-owned Metal command queue/color texture handles plus a successful `ImmGodot_RenderCamera` result.
+
+Add `-LogDir artifacts\godot-smoke` to save `godot-smoke-output.log` and `godot-smoke-summary.txt`. For native smoke runs, the wrapper also writes `godot-extension-dlls.txt` with the expected staged DLLs, found/missing status, byte size, and UTC timestamp. The Windows GitHub Actions job caches `thirdparty/godot-cpp` by `GODOT_CPP_REF`, runs script-stub smoke before the native build, then native-extension smoke with `-LoadUnloadCycles 2` after the GDExtension build, uploads both log directories as `ImmGodotSmokeLogs-Windows`, and includes the staged `godot-extension-dlls.txt` manifest in `ImmGodotGDExtension-Windows`.
 
 Use `-PreflightOnly` on `run-godot-smoke.ps1` to check Godot executable resolution, extension DLL path selection, and scene selection without launching the project.

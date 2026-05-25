@@ -1,5 +1,7 @@
 #include "imm_viewer_node.h"
 
+#include "imm_viewer_compositor_effect.h"
+
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -102,8 +104,6 @@ void ImmViewerNode::_bind_methods()
     ClassDB::bind_method(D_METHOD("get_registered_render_camera_ids"), &ImmViewerNode::get_registered_render_camera_ids);
     ClassDB::bind_method(D_METHOD("get_render_diagnostics"), &ImmViewerNode::get_render_diagnostics);
     ClassDB::bind_method(D_METHOD("get_render_backend_diagnostics"), &ImmViewerNode::get_render_backend_diagnostics);
-    ClassDB::bind_method(D_METHOD("render_last_camera_on_render_thread"), &ImmViewerNode::render_last_camera_on_render_thread);
-
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "document_path"), "set_document_path", "get_document_path");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "load_on_ready"), "set_load_on_ready", "get_load_on_ready");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_play"), "set_auto_play", "get_auto_play");
@@ -130,6 +130,8 @@ void ImmViewerNode::_bind_methods()
 
 void ImmViewerNode::_ready()
 {
+    set_process(true);
+
     if (!initialize_native_backend())
     {
         return;
@@ -153,7 +155,6 @@ void ImmViewerNode::_exit_tree()
         unregister_render_camera(_smoke_camera_id);
     }
     shutdown_native_backend();
-    _render_callback_queued = false;
 }
 
 void ImmViewerNode::_process(double)
@@ -161,6 +162,20 @@ void ImmViewerNode::_process(double)
     if (_native_initialized && _document_id >= 0)
     {
         ImmGodot_GlobalWork(1);
+        if (is_sequence_ready())
+        {
+            if (!_sequence_ready_seen)
+            {
+                refresh_spawn_areas();
+                _sequence_ready_seen = true;
+            }
+            if (_pending_show_after_load && _is_playing)
+            {
+                ImmGodot_Resume(_document_id);
+                ImmGodot_Show(_document_id);
+                _pending_show_after_load = false;
+            }
+        }
     }
 
     update_auto_render_camera();
@@ -374,6 +389,8 @@ int ImmViewerNode::load_document(const String &path)
 
     ImmGodot_SetVolume(_document_id, _volume);
     set_document_transform(_document_transform);
+    _sequence_ready_seen = false;
+    _pending_show_after_load = _auto_play;
     ImmGodotPlayerInfo player_info = {};
     if (ImmGodot_GetPlayerInfo(&player_info) == 0)
     {
@@ -384,18 +401,17 @@ int ImmViewerNode::load_document(const String &path)
     }
     if (_auto_play)
     {
-        play();
-        ImmGodot_Show(_document_id);
+        _is_playing = true;
+        emit_signal("playback_changed", true);
     }
 
-    refresh_spawn_areas();
     emit_signal("document_loaded", _document_path);
     return _document_id;
 }
 
 void ImmViewerNode::unload_document()
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || !is_sequence_ready())
     {
         return;
     }
@@ -403,6 +419,8 @@ void ImmViewerNode::unload_document()
     ImmGodot_Unload(_document_id);
     _document_id = -1;
     _is_playing = false;
+    _pending_show_after_load = false;
+    _sequence_ready_seen = false;
     _spawn_area_ids.clear();
     _active_spawn_area_index = -1;
     emit_signal("document_unloaded");
@@ -416,8 +434,16 @@ void ImmViewerNode::play()
         return;
     }
 
-    ImmGodot_Resume(_document_id);
-    ImmGodot_Show(_document_id);
+    if (is_sequence_ready())
+    {
+        ImmGodot_Resume(_document_id);
+        ImmGodot_Show(_document_id);
+        _pending_show_after_load = false;
+    }
+    else
+    {
+        _pending_show_after_load = true;
+    }
     _is_playing = true;
     emit_signal("playback_changed", true);
 }
@@ -429,7 +455,11 @@ void ImmViewerNode::pause()
         return;
     }
 
-    ImmGodot_Pause(_document_id);
+    if (is_sequence_ready())
+    {
+        ImmGodot_Pause(_document_id);
+    }
+    _pending_show_after_load = false;
     _is_playing = false;
     emit_signal("playback_changed", false);
 }
@@ -496,7 +526,7 @@ void ImmViewerNode::previous_chapter()
 
 void ImmViewerNode::set_chapter(int chapter_index)
 {
-    if (!_native_initialized || _document_id < 0 || chapter_index < 0)
+    if (!_native_initialized || _document_id < 0 || !is_sequence_ready() || chapter_index < 0)
     {
         return;
     }
@@ -512,7 +542,7 @@ void ImmViewerNode::set_chapter(int chapter_index)
 
 int ImmViewerNode::get_chapter_count() const
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || !is_sequence_ready())
     {
         return 0;
     }
@@ -522,7 +552,7 @@ int ImmViewerNode::get_chapter_count() const
 
 int ImmViewerNode::get_current_chapter() const
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || !is_sequence_ready())
     {
         return 0;
     }
@@ -545,7 +575,7 @@ void ImmViewerNode::set_time(int64_t time_since_start, int64_t time_since_stop)
 Dictionary ImmViewerNode::get_time() const
 {
     Dictionary result;
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || ImmGodot_IsSequenceReady(_document_id) == 0)
     {
         result["time_since_start"] = static_cast<int64_t>(0);
         result["time_since_stop"] = static_cast<int64_t>(0);
@@ -569,7 +599,7 @@ Dictionary ImmViewerNode::get_time() const
 
 int64_t ImmViewerNode::get_play_time() const
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || ImmGodot_IsSequenceReady(_document_id) == 0)
     {
         return 0;
     }
@@ -584,7 +614,7 @@ double ImmViewerNode::get_play_time_seconds() const
 
 void ImmViewerNode::seek_relative_seconds(double seconds)
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || ImmGodot_IsSequenceReady(_document_id) == 0)
     {
         return;
     }
@@ -689,7 +719,7 @@ void ImmViewerNode::set_camera_transform(const Transform3D &camera_transform)
 {
     _last_camera_transform = camera_transform;
     const float aspect = static_cast<float>(_smoke_viewport_width) / static_cast<float>(_smoke_viewport_height);
-    _last_camera_projection = make_perspective_projection(70.0f, aspect, 0.05f, 1000.0f);
+    _last_camera_projection = make_perspective_projection(70.0f, aspect, 0.05f, 10000.0f);
     submit_mono_camera_matrices(_smoke_camera_id,
                                 transform_to_matrix_array(camera_transform.affine_inverse()),
                                 _last_camera_projection);
@@ -722,20 +752,7 @@ int ImmViewerNode::queue_render_last_camera()
         _pending_render_request.viewportWidth = _smoke_viewport_width;
         _pending_render_request.viewportHeight = _smoke_viewport_height;
     }
-    if (_render_callback_queued.exchange(true))
-    {
-        return 1;
-    }
-
-    RenderingServer *rendering_server = RenderingServer::get_singleton();
-    if (rendering_server == nullptr)
-    {
-        _render_callback_queued = false;
-        UtilityFunctions::push_error("ImmViewerNode could not access RenderingServer for render-thread queue.");
-        return -1;
-    }
-
-    rendering_server->call_on_render_thread(Callable(this, StringName("render_last_camera_on_render_thread")));
+    ImmViewerCompositorEffect::queue_render_request(_smoke_camera_id, _smoke_viewport_width, _smoke_viewport_height);
     return 0;
 }
 
@@ -761,7 +778,7 @@ int ImmViewerNode::queue_render_camera_transform(const Transform3D &camera_trans
 
     _last_camera_transform = camera_transform;
     const float aspect = static_cast<float>(width) / static_cast<float>(height);
-    _last_camera_projection = make_perspective_projection(fov_degrees, aspect, 0.05f, 1000.0f);
+    _last_camera_projection = make_perspective_projection(fov_degrees, aspect, 0.05f, 10000.0f);
     if (!submit_mono_camera_matrices(camera_id,
                                      transform_to_matrix_array(camera_transform.affine_inverse()),
                                      _last_camera_projection))
@@ -775,20 +792,7 @@ int ImmViewerNode::queue_render_camera_transform(const Transform3D &camera_trans
         _pending_render_request.viewportWidth = width;
         _pending_render_request.viewportHeight = height;
     }
-    if (_render_callback_queued.exchange(true))
-    {
-        return 1;
-    }
-
-    RenderingServer *rendering_server = RenderingServer::get_singleton();
-    if (rendering_server == nullptr)
-    {
-        _render_callback_queued = false;
-        UtilityFunctions::push_error("ImmViewerNode could not access RenderingServer for render-thread queue.");
-        return -1;
-    }
-
-    rendering_server->call_on_render_thread(Callable(this, StringName("render_last_camera_on_render_thread")));
+    ImmViewerCompositorEffect::queue_render_request(camera_id, width, height);
     return 0;
 }
 
@@ -861,7 +865,7 @@ Dictionary ImmViewerNode::get_render_diagnostics() const
     result["last_viewport_width"] = request.viewportWidth;
     result["last_viewport_height"] = request.viewportHeight;
     result["registered_camera_ids"] = _registered_render_camera_ids;
-    result["render_callback_queued"] = _render_callback_queued.load();
+    result["render_callback_queued"] = false;
     result["auto_queue_render"] = _auto_queue_render;
     result["render_camera_path"] = _render_camera_path;
     result["has_last_projection"] = !_last_camera_projection.is_empty();
@@ -887,15 +891,24 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
 
     String rendering_method;
     String rendering_driver;
+    String actual_rendering_method;
+    String actual_rendering_driver;
     if (project_settings != nullptr)
     {
         rendering_method = project_settings->get_setting("rendering/renderer/rendering_method");
         rendering_driver = project_settings->get_setting("rendering/rendering_device/driver");
     }
+    if (rendering_server != nullptr)
+    {
+        actual_rendering_method = rendering_server->get_current_rendering_method();
+        actual_rendering_driver = rendering_server->get_current_rendering_driver_name();
+    }
 
-    const bool is_compatibility = rendering_method == "gl_compatibility";
+    const String effective_rendering_method = actual_rendering_method.is_empty() ? rendering_method : actual_rendering_method;
+    const String effective_rendering_driver = actual_rendering_driver.is_empty() ? rendering_driver : actual_rendering_driver;
+    const bool is_compatibility = effective_rendering_method == "gl_compatibility";
     const bool wants_metal = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
-    const bool driver_is_metal = rendering_driver == "metal";
+    const bool driver_is_metal = effective_rendering_driver == "metal";
     const bool has_generic_driver_resources = true;
     const bool has_compositor_effect_path = true;
     const bool metal_adapter_candidate = rendering_device != nullptr && !is_compatibility && wants_metal && driver_is_metal && has_generic_driver_resources && has_compositor_effect_path;
@@ -905,6 +918,8 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     result["renderer_api"] = _renderer_api;
     result["project_rendering_method"] = rendering_method;
     result["project_rendering_driver"] = rendering_driver;
+    result["actual_rendering_method"] = actual_rendering_method;
+    result["actual_rendering_driver"] = actual_rendering_driver;
     result["has_rendering_device"] = rendering_device != nullptr;
     result["is_compatibility_renderer"] = is_compatibility;
     result["wants_metal_renderer"] = wants_metal;
@@ -912,18 +927,6 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     result["has_compositor_effect_path"] = has_compositor_effect_path;
     result["metal_adapter_candidate"] = metal_adapter_candidate;
     return result;
-}
-
-void ImmViewerNode::render_last_camera_on_render_thread()
-{
-    RenderRequest request;
-    {
-        std::lock_guard<std::mutex> lock(_render_request_mutex);
-        request = _pending_render_request;
-    }
-
-    smoke_render_camera(request.cameraId, request.viewportWidth, request.viewportHeight);
-    _render_callback_queued = false;
 }
 
 void ImmViewerNode::update_auto_render_camera()
@@ -1081,7 +1084,7 @@ int ImmViewerNode::get_document_info_flags() const
 
 Dictionary ImmViewerNode::get_bounding_box() const
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || !is_sequence_ready())
     {
         return Dictionary();
     }
@@ -1206,7 +1209,7 @@ int ImmViewerNode::get_active_spawn_area_index() const
 
 Dictionary ImmViewerNode::get_spawn_area_info(int spawn_area_id) const
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || _document_id < 0 || !is_sequence_ready())
     {
         return Dictionary();
     }
@@ -1284,6 +1287,8 @@ void ImmViewerNode::shutdown_native_backend()
     ImmGodot_SetRenderAdapter(nullptr);
     _native_initialized = false;
     _is_playing = false;
+    _pending_show_after_load = false;
+    _sequence_ready_seen = false;
     _spawn_area_ids.clear();
     _active_spawn_area_index = -1;
     _registered_render_camera_ids.clear();
@@ -1461,21 +1466,22 @@ PackedFloat32Array ImmViewerNode::transform_to_matrix_array(const Transform3D &t
     PackedFloat32Array result;
     result.resize(16);
 
+    // The native C ABI consumes Unity-style column-major Matrix4x4 float arrays.
     result[0] = transform.basis.rows[0].x;
-    result[1] = transform.basis.rows[0].y;
-    result[2] = transform.basis.rows[0].z;
-    result[3] = transform.origin.x;
-    result[4] = transform.basis.rows[1].x;
+    result[1] = transform.basis.rows[1].x;
+    result[2] = transform.basis.rows[2].x;
+    result[3] = 0.0f;
+    result[4] = transform.basis.rows[0].y;
     result[5] = transform.basis.rows[1].y;
-    result[6] = transform.basis.rows[1].z;
-    result[7] = transform.origin.y;
-    result[8] = transform.basis.rows[2].x;
-    result[9] = transform.basis.rows[2].y;
+    result[6] = transform.basis.rows[2].y;
+    result[7] = 0.0f;
+    result[8] = transform.basis.rows[0].z;
+    result[9] = transform.basis.rows[1].z;
     result[10] = transform.basis.rows[2].z;
-    result[11] = transform.origin.z;
-    result[12] = 0.0f;
-    result[13] = 0.0f;
-    result[14] = 0.0f;
+    result[11] = 0.0f;
+    result[12] = transform.origin.x;
+    result[13] = transform.origin.y;
+    result[14] = transform.origin.z;
     result[15] = 1.0f;
     return result;
 }
@@ -1484,6 +1490,11 @@ PackedFloat32Array ImmViewerNode::make_perspective_projection(float fov_degrees,
 {
     const float f = 1.0f / std::tan((fov_degrees * 0.017453292519943295769f) * 0.5f);
     const float depth = z_near - z_far;
+#if defined(__APPLE__)
+    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
+#else
+    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Metal || _renderer_api == ImmGodotRendererApi_Direct3D;
+#endif
 
     PackedFloat32Array result;
     result.resize(16);
@@ -1497,11 +1508,11 @@ PackedFloat32Array ImmViewerNode::make_perspective_projection(float fov_degrees,
     result[7] = 0.0f;
     result[8] = 0.0f;
     result[9] = 0.0f;
-    result[10] = (z_far + z_near) / depth;
-    result[11] = (2.0f * z_far * z_near) / depth;
+    result[10] = uses_zero_to_one_depth ? z_far / depth : (z_far + z_near) / depth;
+    result[11] = -1.0f;
     result[12] = 0.0f;
     result[13] = 0.0f;
-    result[14] = -1.0f;
+    result[14] = uses_zero_to_one_depth ? (z_far * z_near) / depth : (2.0f * z_far * z_near) / depth;
     result[15] = 0.0f;
     return result;
 }

@@ -8,6 +8,8 @@ param(
 
     [string]$LogDir = $env:IMM_GODOT_SMOKE_LOG_DIR,
 
+    [int]$LoadUnloadCycles = 0,
+
     [switch]$RequireExtension,
 
     [switch]$PreflightOnly
@@ -91,6 +93,7 @@ Write-Host "Using Godot: $godot"
 Write-Host "Running smoke script: $smokeScript"
 Write-Host "Smoke scene: $SmokeScene"
 Write-Host "GDExtension configuration: $Configuration"
+Write-Host "Load/unload cycles: $LoadUnloadCycles"
 if ($RequireExtension) {
     Write-Host "GDExtension directory: $extensionDir"
 }
@@ -105,6 +108,7 @@ if ($PreflightOnly) {
 
 $env:IMM_GODOT_SMOKE_SCENE = $SmokeScene
 $env:IMM_GODOT_EXPECT_NATIVE = if ($RequireExtension) { "1" } else { "0" }
+$env:IMM_GODOT_LOAD_UNLOAD_CYCLES = "$LoadUnloadCycles"
 $output = & $godot --headless --path $sampleProject --script $smokeScript 2>&1
 $exitCode = $LASTEXITCODE
 $output | ForEach-Object { Write-Host $_ }
@@ -119,6 +123,7 @@ if ($LogDir) {
         "SmokeScene=$SmokeScene",
         "Configuration=$Configuration",
         "RequireExtension=$($RequireExtension.IsPresent)",
+        "LoadUnloadCycles=$LoadUnloadCycles",
         "ExtensionDir=$extensionDir",
         "ExtensionDll=$extensionDll",
         "SuccessMarker=$successMarker",
