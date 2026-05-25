@@ -244,7 +244,10 @@ add_custom_target(
 add_dependencies(libImmPlayer ShadersModel ShadersPretessellated)
 
 set_source_files_properties(${CODE_DIR}/appImmUnity/src/main.cpp PROPERTIES LANGUAGE OBJCXX)
-add_library(ImmUnity MODULE ${CODE_DIR}/appImmUnity/src/main.cpp)
+add_library(ImmUnity MODULE
+    ${CODE_DIR}/appImmUnity/src/main.cpp
+    ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
+)
 target_include_directories(ImmUnity PUBLIC ${CODE_DIR})
 target_link_libraries(ImmUnity PRIVATE libImmPlayer libImmImporter libImmCore)
 set_target_properties(ImmUnity PROPERTIES
