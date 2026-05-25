@@ -7,6 +7,14 @@ const NATIVE_SCENE := "res://scenes/NativeSmokeScene.tscn"
 const CAMERA_ID := 0
 const MAX_READY_SECONDS := 12.0
 
+var _signal_document_loaded_count := 0
+var _signal_document_unloaded_count := 0
+var _signal_playback_changed_count := 0
+var _signal_spawn_area_changed_count := 0
+var _signal_last_document_loaded_path := ""
+var _signal_last_playback_state := false
+var _signal_last_spawn_area_index := -1
+
 func _initialize() -> void:
     call_deferred("_run")
 
@@ -68,6 +76,11 @@ func _run() -> void:
         "restart",
         "skip_forward",
         "skip_back",
+        "set_time",
+        "get_time",
+        "get_play_time",
+        "get_play_time_seconds",
+        "seek_relative_seconds",
         "set_volume",
         "get_volume",
         "set_document_transform",
@@ -88,12 +101,20 @@ func _run() -> void:
         "clear_layer_transform_override",
         "get_spawn_area_ids",
         "get_active_spawn_area_index",
+        "get_spawn_area_info",
         "get_active_spawn_area_info",
+        "next_spawn_area",
+        "previous_spawn_area",
     ]
     for method_name in required_methods:
         if not viewer.has_method(method_name):
             failures.append("ImmViewer is missing method %s" % method_name)
 
+    if not failures.is_empty():
+        _finish(failures)
+        return
+
+    _connect_viewer_signals(viewer, failures)
     if not failures.is_empty():
         _finish(failures)
         return
@@ -114,6 +135,11 @@ func _run() -> void:
         failures.append("Compatibility smoke path should not report a Metal adapter candidate")
     if int(backend_diagnostics.get("renderer_api", -1)) < 0:
         failures.append("render backend diagnostics did not report renderer_api")
+    if bool(backend_diagnostics.get("native_backend_initialized", false)) != expected_native:
+        failures.append("render backend diagnostics native_backend_initialized=%s did not match expected_native=%s" % [
+            str(backend_diagnostics.get("native_backend_initialized", false)),
+            str(expected_native),
+        ])
 
     if not viewer.is_loaded():
         var load_result: int = int(viewer.load_document())
@@ -123,12 +149,22 @@ func _run() -> void:
             failures.append("load_document returned %d" % load_result)
     if not viewer.is_loaded():
         failures.append("ImmViewer did not load %s" % str(viewer.get("document_path")))
+    if _signal_document_loaded_count <= 0:
+        failures.append("document_loaded signal was not emitted by load_document")
+    elif _signal_last_document_loaded_path != str(viewer.get("document_path")):
+        failures.append("document_loaded path %s did not match document_path %s" % [
+            _signal_last_document_loaded_path,
+            str(viewer.get("document_path")),
+        ])
+    if bool(viewer.get("auto_play")) and _signal_playback_changed_count <= 0:
+        failures.append("playback_changed signal was not emitted by auto-play load")
 
     var document_state: Dictionary = viewer.get_document_state()
     if document_state.is_empty():
         failures.append("get_document_state returned an empty Dictionary")
     if not document_state.has("loading_state") or not document_state.has("playback_state"):
         failures.append("get_document_state is missing loading/playback state keys")
+    var timeline_ready := await _wait_for_timeline_ready(viewer, expected_native)
 
     var test_document_transform := Transform3D(Basis.IDENTITY, Vector3(1.25, -0.5, 2.0))
     viewer.set_document_transform(test_document_transform)
@@ -213,11 +249,96 @@ func _run() -> void:
     if active_spawn_area_index < -1:
         failures.append("get_active_spawn_area_index returned %d" % active_spawn_area_index)
     if not spawn_area_ids.is_empty():
+        if active_spawn_area_index < 0 or active_spawn_area_index >= spawn_area_ids.size():
+            failures.append("get_active_spawn_area_index %d was outside %d authored spawn areas" % [
+                active_spawn_area_index,
+                spawn_area_ids.size(),
+            ])
+        for spawn_area_id in spawn_area_ids:
+            var spawn_area_info: Dictionary = viewer.get_spawn_area_info(spawn_area_id)
+            if spawn_area_info.is_empty():
+                failures.append("get_spawn_area_info(%d) returned an empty Dictionary" % spawn_area_id)
+            else:
+                _validate_spawn_area_info(spawn_area_info, "get_spawn_area_info(%d)" % spawn_area_id, failures)
         var active_spawn_area: Dictionary = viewer.get_active_spawn_area_info()
         if active_spawn_area.is_empty():
             failures.append("get_active_spawn_area_info returned an empty Dictionary")
+        else:
+            _validate_spawn_area_info(active_spawn_area, "get_active_spawn_area_info", failures)
+            var expected_active_id: int = int(spawn_area_ids[active_spawn_area_index])
+            if int(active_spawn_area.get("id", -1)) != expected_active_id:
+                failures.append("get_active_spawn_area_info id %d did not match active spawn id %d" % [
+                    int(active_spawn_area.get("id", -1)),
+                    expected_active_id,
+                ])
+
+        var original_spawn_area_index := active_spawn_area_index
+        viewer.next_spawn_area()
+        await process_frame
+        var next_spawn_area_index: int = int(viewer.get_active_spawn_area_index())
+        var expected_next_spawn_area_index: int = posmod(original_spawn_area_index + 1, spawn_area_ids.size())
+        if next_spawn_area_index != expected_next_spawn_area_index:
+            failures.append("next_spawn_area moved active index to %d instead of %d" % [
+                next_spawn_area_index,
+                expected_next_spawn_area_index,
+            ])
+        viewer.previous_spawn_area()
+        await process_frame
+        var restored_spawn_area_index: int = int(viewer.get_active_spawn_area_index())
+        if restored_spawn_area_index != original_spawn_area_index:
+            failures.append("previous_spawn_area restored active index to %d instead of %d" % [
+                restored_spawn_area_index,
+                original_spawn_area_index,
+            ])
+        if _signal_spawn_area_changed_count < 2:
+            failures.append("spawn_area_changed signal was not emitted by next/previous spawn-area navigation")
+        if _signal_last_spawn_area_index != original_spawn_area_index:
+            failures.append("spawn_area_changed final index %d did not match restored active index %d" % [
+                _signal_last_spawn_area_index,
+                original_spawn_area_index,
+            ])
 
     if viewer.is_loaded():
+        viewer.set_time(-10, -20)
+        await process_frame
+        var clamped_time: Dictionary = viewer.get_time()
+        for key in ["time_since_start", "time_since_stop", "play_time", "play_time_seconds"]:
+            if not clamped_time.has(key):
+                failures.append("get_time result is missing %s" % key)
+        if int(clamped_time.get("time_since_start", -1)) < 0 or int(clamped_time.get("time_since_stop", -1)) < 0:
+            failures.append("set_time should clamp negative values, got %s" % str(clamped_time))
+
+        if timeline_ready:
+            viewer.seek_relative_seconds(0.5)
+            await process_frame
+            var seek_time: Dictionary = viewer.get_time()
+            var seek_play_time_seconds: float = float(viewer.get_play_time_seconds())
+            if int(viewer.get_play_time()) <= 0:
+                failures.append("seek_relative_seconds(0.5) did not advance get_play_time()")
+            if seek_play_time_seconds < 0.45 or seek_play_time_seconds > 0.75:
+                failures.append("seek_relative_seconds(0.5) produced play time %.3fs" % seek_play_time_seconds)
+            if abs(float(seek_time.get("play_time_seconds", -1.0)) - seek_play_time_seconds) > 0.002:
+                failures.append("get_time play_time_seconds %.3f did not match get_play_time_seconds %.3f" % [
+                    float(seek_time.get("play_time_seconds", -1.0)),
+                    seek_play_time_seconds,
+                ])
+
+            viewer.seek_relative_seconds(-999.0)
+            await process_frame
+            if int(viewer.get_play_time()) < 0 or float(viewer.get_play_time_seconds()) < -0.002:
+                failures.append("seek_relative_seconds should clamp below zero, got %d / %.3fs" % [
+                    int(viewer.get_play_time()),
+                    float(viewer.get_play_time_seconds()),
+                ])
+        else:
+            viewer.seek_relative_seconds(0.5)
+            await process_frame
+            if int(viewer.get_play_time()) != 0 or abs(float(viewer.get_play_time_seconds())) > 0.002:
+                failures.append("timeline APIs should remain at zero before IMM Loaded state, got %d / %.3fs" % [
+                    int(viewer.get_play_time()),
+                    float(viewer.get_play_time_seconds()),
+                ])
+
         var original_volume: float = float(viewer.get_volume())
         viewer.set_volume(0.42)
         await process_frame
@@ -234,22 +355,32 @@ func _run() -> void:
         await process_frame
         if viewer.is_playing():
             failures.append("pause() did not stop playback")
+        if _signal_last_playback_state:
+            failures.append("playback_changed did not report paused state after pause()")
         viewer.play()
         await process_frame
         if not viewer.is_playing():
             failures.append("play() did not start playback")
+        if not _signal_last_playback_state:
+            failures.append("playback_changed did not report playing state after play()")
         viewer.toggle_pause()
         await process_frame
         if viewer.is_playing():
             failures.append("toggle_pause() did not pause playback")
+        if _signal_last_playback_state:
+            failures.append("playback_changed did not report paused state after toggle_pause()")
         viewer.toggle_pause()
         await process_frame
         if not viewer.is_playing():
             failures.append("toggle_pause() did not resume playback")
+        if not _signal_last_playback_state:
+            failures.append("playback_changed did not report playing state after second toggle_pause()")
         viewer.restart()
         await process_frame
         if not viewer.is_playing():
             failures.append("restart() did not leave playback running")
+        if not _signal_last_playback_state:
+            failures.append("playback_changed did not report playing state after restart()")
         viewer.skip_forward()
         await process_frame
         viewer.skip_back()
@@ -308,9 +439,55 @@ func _run() -> void:
     if load_unload_cycles > 0:
         await _exercise_load_unload_cycles(viewer, camera, load_unload_cycles, expected_native, failures)
 
+    if viewer.is_loaded():
+        var document_unloaded_count_before := _signal_document_unloaded_count
+        viewer.unload_document()
+        await process_frame
+        if viewer.is_loaded():
+            failures.append("unload_document() did not clear loaded state")
+        if _signal_document_unloaded_count <= document_unloaded_count_before:
+            failures.append("document_unloaded signal was not emitted by unload_document")
+        if _signal_last_playback_state:
+            failures.append("playback_changed did not report paused state after unload_document")
+
     scene.queue_free()
     await process_frame
     _finish(failures)
+
+func _connect_viewer_signals(viewer: Node, failures: Array[String]) -> void:
+    for signal_name in ["document_loaded", "document_unloaded", "playback_changed", "spawn_area_changed", "native_backend_initialized", "native_backend_failed"]:
+        if not viewer.has_signal(signal_name):
+            failures.append("ImmViewer is missing signal %s" % signal_name)
+
+    if not viewer.has_signal("document_loaded") or not viewer.has_signal("document_unloaded") \
+        or not viewer.has_signal("playback_changed") or not viewer.has_signal("spawn_area_changed"):
+        return
+
+    var connection_results := {
+        "document_loaded": viewer.connect("document_loaded", Callable(self, "_on_document_loaded")),
+        "document_unloaded": viewer.connect("document_unloaded", Callable(self, "_on_document_unloaded")),
+        "playback_changed": viewer.connect("playback_changed", Callable(self, "_on_playback_changed")),
+        "spawn_area_changed": viewer.connect("spawn_area_changed", Callable(self, "_on_spawn_area_changed")),
+    }
+    for signal_name in connection_results.keys():
+        var result: int = int(connection_results[signal_name])
+        if result != OK and result != ERR_INVALID_PARAMETER:
+            failures.append("Failed to connect %s signal: %d" % [signal_name, result])
+
+func _on_document_loaded(path: String) -> void:
+    _signal_document_loaded_count += 1
+    _signal_last_document_loaded_path = path
+
+func _on_document_unloaded() -> void:
+    _signal_document_unloaded_count += 1
+
+func _on_playback_changed(is_playing: bool) -> void:
+    _signal_playback_changed_count += 1
+    _signal_last_playback_state = is_playing
+
+func _on_spawn_area_changed(active_index: int) -> void:
+    _signal_spawn_area_changed_count += 1
+    _signal_last_spawn_area_index = active_index
 
 func _exercise_load_unload_cycles(viewer: Node, camera: Camera3D, cycle_count: int, expected_native: bool, failures: Array[String]) -> void:
     var viewport_size: Vector2 = root.get_visible_rect().size
@@ -365,6 +542,16 @@ func _wait_for_document_loaded(viewer: Node) -> bool:
         await create_timer(0.05).timeout
     return false
 
+func _wait_for_timeline_ready(viewer: Node, expected_native: bool) -> bool:
+    var ready_deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
+    while Time.get_ticks_msec() < ready_deadline_msec:
+        var document_state: Dictionary = viewer.get_document_state()
+        var loaded_state := 3 if expected_native else 2
+        if viewer.is_sequence_ready() and int(document_state.get("loading_state", -1)) == loaded_state:
+            return true
+        await create_timer(0.05).timeout
+    return false
+
 func _finish(failures: Array[String]) -> void:
     if failures.is_empty():
         print("IMM Godot smoke test passed")
@@ -385,6 +572,75 @@ func _vectors_close(left: Vector3, right: Vector3, epsilon := 0.002) -> bool:
     return abs(left.x - right.x) <= epsilon \
         and abs(left.y - right.y) <= epsilon \
         and abs(left.z - right.z) <= epsilon
+
+func _validate_spawn_area_info(info: Dictionary, source: String, failures: Array[String]) -> void:
+    for key in ["id", "name", "type", "animated", "locomotion", "transform", "volume"]:
+        if not info.has(key):
+            failures.append("%s result is missing %s" % [source, key])
+
+    var transform: Dictionary = info.get("transform", {})
+    if transform.is_empty():
+        failures.append("%s transform was empty" % source)
+    for key in ["position", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale"]:
+        if not transform.has(key):
+            failures.append("%s transform is missing %s" % [source, key])
+
+    for key in ["position", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation"]:
+        var value: Variant = transform.get(key, Vector3.ZERO)
+        if not value is Vector3:
+            failures.append("%s transform %s was not a Vector3" % [source, key])
+            continue
+        if not _vector_is_finite(value):
+            failures.append("%s transform %s was not finite: %s" % [source, key, str(value)])
+
+    for key in ["basis_x", "basis_y", "basis_z"]:
+        var axis: Vector3 = transform.get(key, Vector3.ZERO)
+        if axis.length() < 0.01:
+            failures.append("%s transform %s was too small: %s" % [source, key, str(axis)])
+
+    var basis_x: Vector3 = transform.get("basis_x", Vector3.ZERO)
+    var basis_y: Vector3 = transform.get("basis_y", Vector3.ZERO)
+    var basis_z: Vector3 = transform.get("basis_z", Vector3.ZERO)
+    if basis_x.length() >= 0.01 and basis_y.length() >= 0.01 and basis_z.length() >= 0.01:
+        var normalized_x := basis_x.normalized()
+        var normalized_y := basis_y.normalized()
+        var normalized_z := basis_z.normalized()
+        if abs(normalized_x.dot(normalized_y)) > 0.05:
+            failures.append("%s basis_x/basis_y were not orthogonal: %.3f" % [source, normalized_x.dot(normalized_y)])
+        if abs(normalized_x.dot(normalized_z)) > 0.05:
+            failures.append("%s basis_x/basis_z were not orthogonal: %.3f" % [source, normalized_x.dot(normalized_z)])
+        if abs(normalized_y.dot(normalized_z)) > 0.05:
+            failures.append("%s basis_y/basis_z were not orthogonal: %.3f" % [source, normalized_y.dot(normalized_z)])
+        if normalized_x.cross(normalized_y).dot(normalized_z) < 0.5:
+            failures.append("%s converted basis did not preserve right-handed orientation" % source)
+
+    for key in ["raw_rotation_w", "scale"]:
+        var scalar: float = float(transform.get(key, 0.0))
+        if scalar != scalar or abs(scalar) > 1.0e20:
+            failures.append("%s transform %s was not finite: %.3f" % [source, key, scalar])
+    if float(transform.get("scale", 0.0)) <= 0.0:
+        failures.append("%s transform scale was not positive: %.3f" % [source, float(transform.get("scale", 0.0))])
+
+    var volume: Dictionary = info.get("volume", {})
+    if volume.is_empty():
+        failures.append("%s volume was empty" % source)
+    for key in ["type", "offset", "sphere_radius", "box_extent", "allow_translation"]:
+        if not volume.has(key):
+            failures.append("%s volume is missing %s" % [source, key])
+    for key in ["offset", "box_extent"]:
+        var value: Variant = volume.get(key, Vector3.ZERO)
+        if not value is Vector3:
+            failures.append("%s volume %s was not a Vector3" % [source, key])
+        elif not _vector_is_finite(value):
+            failures.append("%s volume %s was not finite: %s" % [source, key, str(value)])
+
+func _vector_is_finite(value: Vector3) -> bool:
+    return value.x == value.x \
+        and value.y == value.y \
+        and value.z == value.z \
+        and abs(value.x) < 1.0e20 \
+        and abs(value.y) < 1.0e20 \
+        and abs(value.z) < 1.0e20
 
 func _get_env_int(name: String, default_value: int) -> int:
     var value := OS.get_environment(name)

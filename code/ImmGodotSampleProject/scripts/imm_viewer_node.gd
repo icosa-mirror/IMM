@@ -6,6 +6,8 @@ signal document_loaded(path: String)
 signal document_unloaded()
 signal playback_changed(is_playing: bool)
 signal spawn_area_changed(active_index: int)
+signal native_backend_initialized()
+signal native_backend_failed(error_code: int)
 
 @export var document_path: String = "../../../exampleImmFiles/sample1.imm"
 @export var load_on_ready: bool = false

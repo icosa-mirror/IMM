@@ -17,6 +17,23 @@
 
 using namespace godot;
 
+namespace
+{
+    constexpr int kImmDocumentLoadingStateLoaded = 3;
+
+    bool is_document_timeline_ready(int document_id)
+    {
+        if (document_id < 0 || ImmGodot_IsSequenceReady(document_id) == 0)
+        {
+            return false;
+        }
+
+        ImmGodotDocumentState state = {};
+        return ImmGodot_GetDocumentState(document_id, &state) == 0 &&
+               state.loadingState == kImmDocumentLoadingStateLoaded;
+    }
+}
+
 ImmViewerNode::ImmViewerNode() = default;
 
 ImmViewerNode::~ImmViewerNode() = default;
@@ -585,7 +602,7 @@ int ImmViewerNode::get_current_chapter() const
 
 void ImmViewerNode::set_time(int64_t time_since_start, int64_t time_since_stop)
 {
-    if (!_native_initialized || _document_id < 0)
+    if (!_native_initialized || !is_document_timeline_ready(_document_id))
     {
         return;
     }
@@ -598,7 +615,7 @@ void ImmViewerNode::set_time(int64_t time_since_start, int64_t time_since_stop)
 Dictionary ImmViewerNode::get_time() const
 {
     Dictionary result;
-    if (!_native_initialized || _document_id < 0 || ImmGodot_IsSequenceReady(_document_id) == 0)
+    if (!_native_initialized || !is_document_timeline_ready(_document_id))
     {
         result["time_since_start"] = static_cast<int64_t>(0);
         result["time_since_stop"] = static_cast<int64_t>(0);
@@ -622,7 +639,7 @@ Dictionary ImmViewerNode::get_time() const
 
 int64_t ImmViewerNode::get_play_time() const
 {
-    if (!_native_initialized || _document_id < 0 || ImmGodot_IsSequenceReady(_document_id) == 0)
+    if (!_native_initialized || !is_document_timeline_ready(_document_id))
     {
         return 0;
     }
@@ -637,7 +654,7 @@ double ImmViewerNode::get_play_time_seconds() const
 
 void ImmViewerNode::seek_relative_seconds(double seconds)
 {
-    if (!_native_initialized || _document_id < 0 || ImmGodot_IsSequenceReady(_document_id) == 0)
+    if (!_native_initialized || !is_document_timeline_ready(_document_id))
     {
         return;
     }

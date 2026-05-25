@@ -27,7 +27,7 @@ def read(path: Path) -> str:
 def public_native_methods(header: str) -> set[str]:
     return set(
         re.findall(
-            r"\b(?:void|bool|int|int64_t|double|float|String|NodePath|Color|Dictionary|PackedInt32Array)"
+            r"\b(?:void|bool|int|int64_t|double|float|String|NodePath|Color|Dictionary|Transform3D|PackedFloat32Array|PackedInt32Array)"
             r"\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
             header,
         )
@@ -87,6 +87,11 @@ def main() -> int:
     stub_sigs = script_signals(script)
 
     failures: list[str] = []
+
+    for name in sorted(native_sigs - stub_sigs):
+        failures.append(f"native class exposes signal {name}, but script stub does not define it")
+    for name in sorted(stub_sigs - native_sigs):
+        failures.append(f"script stub defines signal {name}, but native class does not expose it")
 
     for name in sorted(calls - native_methods):
         failures.append(f"sample calls viewer.{name}(), but native header does not declare it")

@@ -1,6 +1,6 @@
 # IMM Godot Sample Project
 
-This project mirrors the intent of the Unity sample project while the native Godot integration is still being built.
+This project mirrors the intent of the Unity sample project and exercises the native Godot integration.
 
 ## Current status
 
@@ -36,9 +36,9 @@ This project mirrors the intent of the Unity sample project while the native God
 
 The default document path is set to `../../../exampleImmFiles/sample1.imm`, which points at the repository sample from this project directory.
 
-## Next integration step
+## Native build and validation
 
-Build the GDExtension with `godot-cpp`, open `NativeSmokeScene.tscn`, then validate the `ImmViewerNode`-owned per-frame camera/viewport queue in a real Godot Compatibility renderer context. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
+Build the GDExtension with `godot-cpp`, run the native Compatibility smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
 
 Add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build.
 
@@ -46,11 +46,11 @@ The native build scaffold writes the GDExtension DLL to `bin/windows/{debug,rele
 
 If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` checks the sample/native API boundary, `.gdextension` manifest paths, Compatibility renderer setting, script-stub/native scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI/smoke wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the `appImmGodot` syntax-only compile when `clang++` is available. If `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a Godot 4.5 `godot-cpp` checkout with generated bindings, it also syntax-checks the GDExtension sources against the real Godot C++ headers. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -VerifyOnly` runs the same local verification without requiring MSBuild, SCons, or `godot-cpp`.
 
-With Godot installed, add `IMM_GODOT_RUN_LOCAL_SMOKE=1` to `verify_local.py` to run the script-stub smoke scene headlessly. This validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, `load_document()`, `is_loaded()`, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, the camera/viewport queue, and render diagnostics before the native Windows extension is available.
+With Godot installed, add `IMM_GODOT_RUN_LOCAL_SMOKE=1` to `verify_local.py` to run the script-stub smoke scene headlessly. This validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, `load_document()`, `is_loaded()`, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, playback time snapshots/seek math, document/playback/spawn-area signals, native backend signal parity, the camera/viewport queue, and render diagnostics before the native Windows extension is available.
 
 The `ImmViewer` node has `auto_queue_render = true` and `render_camera_path = ../CameraRig/Camera3D`. That makes `ImmViewerNode` register camera 0 and queue the active camera transform, field of view, and viewport dimensions each frame while a document is loaded. In the Metal visual scene, queued work is consumed by `ImmViewerCompositorEffect` and rendered into Godot-owned render resources. Press `\` to queue a fixed-viewport diagnostic render request.
 
-With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` first verifies that the GDExtension DLL, `ImmGodotPlugin.dll`, and staged IMM runtime dependency DLLs exist, then runs the headless smoke script against `NativeSmokeScene.tscn`. It asserts `ImmViewer` is the native `ImmViewerNode`, verifies camera 0 was auto-registered by `auto_queue_render`, loads the sample document, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, exercises playback controls, exercises the registered camera/viewport queue, validates render diagnostics including adapter graphics/before/after callback counts, and requires the `IMM Godot smoke test passed` output marker. Add `-LoadUnloadCycles 2` to repeatedly unload/reload the document while the render queue remains active, and add `-LogDir artifacts\godot-smoke` to save smoke output, run metadata, and the native staged-DLL inventory. Without `-RequireExtension`, the smoke script uses the script-stub `SampleScene.tscn`.
+With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` first verifies that the GDExtension DLL, `ImmGodotPlugin.dll`, and staged IMM runtime dependency DLLs exist, then runs the headless smoke script against `NativeSmokeScene.tscn`. It asserts `ImmViewer` is the native `ImmViewerNode`, verifies camera 0 was auto-registered by `auto_queue_render`, loads the sample document, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, validates every authored spawn-area dictionary, exercises playback controls and signal emissions, verifies playback time APIs remain safe before the native timeline-ready state, exercises the registered camera/viewport queue, validates render diagnostics including adapter graphics/before/after callback counts, and requires the `IMM Godot smoke test passed` output marker. Add `-LoadUnloadCycles 2` to repeatedly unload/reload the document while the render queue remains active, and add `-LogDir artifacts\godot-smoke` to save smoke output, run metadata, and the native staged-DLL inventory. Without `-RequireExtension`, the smoke script uses the script-stub `SampleScene.tscn`.
 
 The Windows workflow runs both forms: script-stub smoke before the native build and native-extension smoke after the GDExtension build.
 

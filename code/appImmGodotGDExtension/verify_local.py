@@ -144,7 +144,11 @@ def verify_native_method_bindings() -> None:
         "_exit_tree",
         "_process",
     }
-    public_methods = set(method_pattern.findall(public_section)) - ignored_methods
+    public_method_list = [name for name in method_pattern.findall(public_section) if name not in ignored_methods]
+    duplicate_methods = sorted({name for name in public_method_list if public_method_list.count(name) > 1})
+    if duplicate_methods:
+        raise RuntimeError("ImmViewerNode public method declarations are duplicated: " + ", ".join(duplicate_methods))
+    public_methods = set(public_method_list)
     bound_methods = set(re.findall(r'ClassDB::bind_method\s*\(\s*D_METHOD\s*\(\s*"([^"]+)"', source))
     missing_bindings = sorted(public_methods - bound_methods)
     stale_bindings = sorted(bound_methods - public_methods)
@@ -155,6 +159,9 @@ def verify_native_method_bindings() -> None:
         if stale_bindings:
             details.append("stale bindings: " + ", ".join(stale_bindings))
         raise RuntimeError("ImmViewerNode method binding mismatch; " + "; ".join(details))
+    for token in ["is_document_timeline_ready", "ImmGodot_GetDocumentState", "set_time", "seek_relative_seconds"]:
+        if token not in source:
+            raise RuntimeError(f"ImmViewerNode timeline safety token is missing: {token}")
 
     print(f"ImmViewerNode method bindings ok ({len(public_methods)} methods)", flush=True)
 
@@ -215,8 +222,10 @@ def verify_render_thread_queue() -> None:
     for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "last_metal_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
         if token not in compositor_source and token not in compositor_header:
             raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
-    if "1.0 - ((pos.y + 1.0) * 0.5)" in compositor_source:
-        raise RuntimeError("ImmViewerCompositorEffect composite shader should not vertically flip Metal intermediate texture sampling")
+    if "texture(source_color, uv_interp)" not in compositor_source:
+        raise RuntimeError("ImmViewerCompositorEffect composite shader must sample the Metal intermediate texture without an extra vertical flip")
+    if "1.0 - uv_interp.y" in compositor_source:
+        raise RuntimeError("ImmViewerCompositorEffect composite shader should not vertically flip the Godot-owned intermediate texture")
     if "register_class<ImmViewerCompositorEffect>" not in register_types:
         raise RuntimeError("ImmViewerCompositorEffect is not registered with ClassDB")
     for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
@@ -344,7 +353,7 @@ def verify_windows_build_wiring() -> None:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
-    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "opacity_override_enabled", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_active_spawn_area_info", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
+    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "document_loaded signal was not emitted by load_document", "document_unloaded signal was not emitted by unload_document", "playback_changed signal was not emitted by auto-play load", "spawn_area_changed signal was not emitted by next/previous spawn-area navigation", "native_backend_initialized", "native_backend_failed", "did not match expected_native", "_connect_viewer_signals", "_wait_for_timeline_ready", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "set_time", "get_time", "get_play_time", "get_play_time_seconds", "seek_relative_seconds", "seek_relative_seconds(0.5) did not advance get_play_time()", "seek_relative_seconds should clamp below zero", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "opacity_override_enabled", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_spawn_area_info", "get_active_spawn_area_info", "next_spawn_area", "previous_spawn_area", "get_active_spawn_area_index %d was outside %d authored spawn areas", "get_spawn_area_info(%d) returned an empty Dictionary", "get_active_spawn_area_info id %d did not match active spawn id %d", "next_spawn_area moved active index to %d instead of %d", "previous_spawn_area restored active index to %d instead of %d", "_validate_spawn_area_info", "_vector_is_finite", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale", "basis_x/basis_y were not orthogonal", "converted basis did not preserve right-handed orientation", "transform scale was not positive", "allow_translation", "locomotion", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
         if token not in smoke_runner:
             raise RuntimeError(f"Godot smoke runner is missing token: {token}")
     if "viewer.register_render_camera(CAMERA_ID)" in smoke_runner or "viewer.unregister_render_camera(CAMERA_ID)" in smoke_runner:
@@ -364,6 +373,12 @@ def verify_windows_build_wiring() -> None:
     readme = (ROOT / "code/appImmGodotGDExtension/README.md").read_text(encoding="utf-8")
     if "callbacks are currently no-op placeholders" in readme:
         raise RuntimeError("GDExtension README still describes render adapter callbacks as no-op placeholders")
+    for stale_text in ["not yet buildable", "future binary location", "future render callback", "still does not prove visible Metal rendering", "now attempts to build an `MTLRenderPassDescriptor`", "RenderingServer.call_on_render_thread"]:
+        if stale_text in readme:
+            raise RuntimeError(f"GDExtension README still contains stale status text: {stale_text}")
+    for token in ["builds locally", "Forward+/Metal visual smoke", "Godot-created intermediate texture", "final composite into scene color", "verifies non-background content pixels"]:
+        if token not in readme:
+            raise RuntimeError(f"GDExtension README is missing current status token: {token}")
 
     print("Windows Godot build/smoke wiring ok", flush=True)
 
@@ -378,6 +393,14 @@ def verify_runtime_dependency_sources() -> None:
         raise RuntimeError("Godot runtime dependency sources are missing: " + "; ".join(missing))
 
     print(f"Godot runtime dependency sources ok ({len(GODOT_RUNTIME_DEPENDENCIES)} DLLs)", flush=True)
+
+
+def verify_shared_engine_bridge() -> None:
+    bridge = (ROOT / "code/appImmShared/src/imm_engine_bridge.cpp").read_text()
+    for token in ["Sound backend unavailable; continuing without audio.", "Sound backend init failed; continuing without audio.", "Failed to create fallback null SoundBackend.", "Failed to initialize fallback null SoundBackend.", "piSoundEngineBackend::API::Null"]:
+        if token not in bridge:
+            raise RuntimeError(f"Shared IMM engine bridge is missing audio fallback token: {token}")
+    print("Shared IMM engine bridge audio fallback ok", flush=True)
 
 
 def verify_powershell_syntax() -> None:
@@ -547,6 +570,7 @@ def main() -> int:
     verify_godot_scenes()
     verify_windows_build_wiring()
     verify_runtime_dependency_sources()
+    verify_shared_engine_bridge()
     verify_powershell_syntax()
     run([sys.executable, str(extension_dir / "verify_sample_api.py")])
     run(
@@ -581,6 +605,22 @@ def main() -> int:
             "-Ithirdparty/libjpeg-turbo/libjpeg-turbo/include",
             "-fsyntax-only",
             "code/appImmGodot/src/main.cpp",
+        ]
+    )
+    run(
+        [
+            clang,
+            "-std=c++17",
+            "-Icode",
+            "-Ithirdparty/ogg/include",
+            "-Ithirdparty/ogg/libvorbis-1.3.5/include",
+            "-Ithirdparty/ogg/libvorbis-1.3.5/include/vorbis",
+            "-Ithirdparty/ogg/libvorbis-1.3.5/lib",
+            "-Ithirdparty/lpng1637",
+            "-Ithirdparty/libjpeg-turbo/libjpeg-turbo",
+            "-Ithirdparty/libjpeg-turbo/libjpeg-turbo/include",
+            "-fsyntax-only",
+            "code/appImmShared/src/imm_engine_bridge.cpp",
         ]
     )
     verify_godot_cpp_syntax(clang)

@@ -424,8 +424,13 @@ namespace ImmShared
         mSoundBackend = piCreateSoundEngineBackend(soundApi, &mLog);
         if (mSoundBackend == nullptr)
         {
-            mLog.Printf(LT_ERROR, L"Failed to create SoundBackend.");
-            return false;
+            mLog.Printf(LT_WARNING, L"Sound backend unavailable; continuing without audio.");
+            mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &mLog);
+            if (mSoundBackend == nullptr)
+            {
+                mLog.Printf(LT_ERROR, L"Failed to create fallback null SoundBackend.");
+                return false;
+            }
         }
 
         int deviceID = -1;
@@ -445,8 +450,14 @@ namespace ImmShared
 
         if (!mSoundBackend->Init(nullptr, deviceID, &config))
         {
-            mLog.Printf(LT_ERROR, L"Failed to initialize SoundBackend.");
-            return false;
+            mLog.Printf(LT_WARNING, L"Sound backend init failed; continuing without audio.");
+            piDestroySoundEngineBackend(mSoundBackend);
+            mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &mLog);
+            if (mSoundBackend == nullptr || !mSoundBackend->Init(nullptr, -1, &config))
+            {
+                mLog.Printf(LT_ERROR, L"Failed to initialize fallback null SoundBackend.");
+                return false;
+            }
         }
 
         mSoundInitialized = true;
