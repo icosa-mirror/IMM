@@ -10,6 +10,7 @@ const DEFAULT_RELOAD_CYCLES := 1
 const MIN_CONTENT_PIXELS := 512
 const MIN_CONTENT_BOUNDS_SIZE := 12
 const MIN_LUMA_RANGE := 0.02
+const MIN_ORIENTATION_LUMA_DELTA := 0.05
 const SUCCESS_MARKER := "IMM Godot Metal visual smoke passed"
 
 @onready var camera: Camera3D = $CameraRig/Camera3D
@@ -184,6 +185,8 @@ func _run_visual_smoke() -> void:
                 str(content_diagnostics.get("content_bounds_width", 0)),
                 str(content_diagnostics.get("content_bounds_height", 0)),
             ])
+        if float(content_diagnostics.get("orientation_luma_delta", 0.0)) < MIN_ORIENTATION_LUMA_DELTA:
+            failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % float(content_diagnostics.get("orientation_luma_delta", 0.0)))
         var save_result := image.save_png(screenshot_path)
         if save_result != OK:
             failures.append("Failed to save visual smoke PNG %s: %d" % [screenshot_path, int(save_result)])
@@ -328,6 +331,10 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
     var max_y := -1
     var min_luma := 1.0
     var max_luma := 0.0
+    var upper_luma_sum := 0.0
+    var upper_luma_count := 0
+    var lower_luma_sum := 0.0
+    var lower_luma_count := 0
 
     for y in range(height):
         for x in range(width):
@@ -344,6 +351,26 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
                 max_x = max(max_x, x)
                 max_y = max(max_y, y)
 
+    if content_pixels > 0:
+        var split_y := int(floor(float(min_y + max_y) * 0.5))
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                var color := image.get_pixel(x, y)
+                var rgb := Vector3(color.r, color.g, color.b)
+                var distance := (rgb - background_rgb).length()
+                if distance <= 0.08:
+                    continue
+                var luma := color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+                if y <= split_y:
+                    upper_luma_sum += luma
+                    upper_luma_count += 1
+                else:
+                    lower_luma_sum += luma
+                    lower_luma_count += 1
+
+    var upper_content_luma := upper_luma_sum / float(max(upper_luma_count, 1))
+    var lower_content_luma := lower_luma_sum / float(max(lower_luma_count, 1))
+
     return {
         "width": width,
         "height": height,
@@ -355,6 +382,9 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
         "min_luma": min_luma,
         "max_luma": max_luma,
         "luma_range": max_luma - min_luma,
+        "upper_content_luma": upper_content_luma,
+        "lower_content_luma": lower_content_luma,
+        "orientation_luma_delta": upper_content_luma - lower_content_luma,
     }
 
 func _update_status(message: String) -> void:

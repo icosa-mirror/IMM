@@ -8,7 +8,7 @@ This project mirrors the intent of the Unity sample project and exercises the na
 - The `ImmViewerNode` script mirrors the runtime API shape the native GDExtension exposes.
 - The native `appImmGodot` plugin and GDExtension own native init/shutdown, camera registration, matrix submission, and compositor render request publishing.
 - A `.gdextension` manifest is present under `addons/imm_viewer/`.
-- The native Compatibility smoke and macOS Forward+/Metal visual smoke pass locally with the staged debug extension.
+- The script-stub Compatibility smoke and macOS Forward+/Metal visual smoke pass locally. Windows currently validates GDExtension build/staging in CI, not native rendering.
 
 ## Open in Godot
 
@@ -38,9 +38,9 @@ The default document path is set to `../../../exampleImmFiles/sample1.imm`, whic
 
 ## Native build and validation
 
-Build the GDExtension with `godot-cpp`, run the native Compatibility smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
+Build the GDExtension with `godot-cpp`, run the script-stub Compatibility smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
 
-Add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build.
+For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build. This is not the current Windows CI gate because Windows does not yet have a valid Godot-compatible production renderer backend.
 
 The native build scaffold writes the GDExtension DLL to `bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics.
 
@@ -52,7 +52,7 @@ The `ImmViewer` node has `auto_queue_render = true` and `render_camera_path = ..
 
 With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` first verifies that the GDExtension DLL, `ImmGodotPlugin.dll`, and staged IMM runtime dependency DLLs exist, then runs the headless smoke script against `NativeSmokeScene.tscn`. It asserts `ImmViewer` is the native `ImmViewerNode`, verifies camera 0 was auto-registered by `auto_queue_render`, loads the sample document, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, validates every authored spawn-area dictionary, exercises playback controls and signal emissions, verifies playback time APIs remain safe before the native timeline-ready state, exercises the registered camera/viewport queue, validates render diagnostics including adapter graphics/before/after callback counts, and requires the `IMM Godot smoke test passed` output marker. Add `-LoadUnloadCycles 2` to repeatedly unload/reload the document while the render queue remains active, and add `-LogDir artifacts\godot-smoke` to save smoke output, run metadata, and the native staged-DLL inventory. Without `-RequireExtension`, the smoke script uses the script-stub `SampleScene.tscn`.
 
-The Windows workflow runs both forms: script-stub smoke before the native build and native-extension smoke after the GDExtension build.
+The Windows workflow runs script-stub smoke before the native build and a native-extension preflight after the GDExtension build. The preflight validates staged DLLs and Godot editor lookup paths without launching native IMM rendering, because Windows does not yet have a valid Godot-compatible production renderer backend. Use macOS Forward+/Metal for the current visible-rendering gate.
 
 The sample and smoke scenes apply the current IMM background color from `get_background_color()` to `RenderingServer.set_default_clear_color(...)` before camera rendering. The status label also displays that color for quick diagnostics.
 

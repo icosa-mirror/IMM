@@ -240,7 +240,7 @@ def verify_render_thread_queue() -> None:
     if "src/imm_viewer_compositor_effect.cpp" not in sconstruct:
         raise RuntimeError("SConstruct does not build ImmViewerCompositorEffect")
     visual_controller = GODOT_METAL_VISUAL_CONTROLLER.read_text(encoding="utf-8")
-    for token in ["IMM_GODOT_VISUAL_SMOKE", "IMM_GODOT_VISUAL_SMOKE_PNG", "IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", "_exercise_reload_cycles", "ClassDB.instantiate(\"ImmViewerNode\")", "ClassDB.instantiate(\"ImmViewerCompositorEffect\")", "Compositor.new", "camera.compositor", "renderer_api = IMM_RENDERER_API_METAL", "ProjectSettings.globalize_path", "SAMPLE_DOCUMENT_PATH", "callback_count", "last_command_queue_handle", "last_color_texture_handle", "last_metal_frame_started", "last_render_result", "IMM Godot Metal visual smoke passed"]:
+    for token in ["IMM_GODOT_VISUAL_SMOKE", "IMM_GODOT_VISUAL_SMOKE_PNG", "IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", "_exercise_reload_cycles", "ClassDB.instantiate(\"ImmViewerNode\")", "ClassDB.instantiate(\"ImmViewerCompositorEffect\")", "Compositor.new", "camera.compositor", "renderer_api = IMM_RENDERER_API_METAL", "ProjectSettings.globalize_path", "SAMPLE_DOCUMENT_PATH", "callback_count", "last_command_queue_handle", "last_color_texture_handle", "last_metal_frame_started", "last_render_result", "MIN_ORIENTATION_LUMA_DELTA", "orientation_luma_delta", "visual smoke PNG orientation check failed", "IMM Godot Metal visual smoke passed"]:
         if token not in visual_controller:
             raise RuntimeError(f"Metal visual smoke controller token is missing: {token}")
 
@@ -363,9 +363,12 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Run Godot native smoke test", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\\godot-smoke-native", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "code/ImmGodotSampleProject/bin/windows/release/*.dll", "code/ImmGodotSampleProject/bin/windows/release/godot-extension-dlls.txt", "ImmGodotGDExtension-Windows"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Check Godot GDExtension staging", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "code/ImmGodotSampleProject/bin/windows/release/*.dll", "code/ImmGodotSampleProject/bin/windows/release/godot-extension-dlls.txt", "ImmGodotGDExtension-Windows"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
+    for stale_text in ["Run Godot native smoke test", "-RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\\godot-smoke-native"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Windows workflow still treats native Godot rendering smoke as a CI gate: {stale_text}")
     for token in ["- '**'", "contains(github.event.head_commit.message, '[CI BUILD]')", "Opt-in branch builds must not push generated binaries back", "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing branch opt-in CI token: {token}")
