@@ -167,7 +167,7 @@ function Invoke-Tool([string[]]$command, [string[]]$arguments, [string]$workingD
         $toolArgs += $arguments
         & $command[0] @toolArgs
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code $LASTEXITCODE: $($command -join ' ') $($arguments -join ' ')"
+            throw "Command failed with exit code ${LASTEXITCODE}: $($command -join ' ') $($arguments -join ' ')"
         }
     }
     finally {

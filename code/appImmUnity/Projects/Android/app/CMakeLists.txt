@@ -9,6 +9,7 @@ add_library(
     ImmUnityPlugin
     SHARED
     ${appImmUnity-dir}/src/main.cpp
+    ${appImmUnity-dir}/../appImmShared/src/imm_engine_bridge.cpp
 )
 
 # Add libImmCore dependency

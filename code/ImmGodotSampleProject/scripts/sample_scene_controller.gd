@@ -45,7 +45,7 @@ func _handle_movement(delta: float) -> void:
     camera_rig.translate_object_local(move_input.normalized() * speed * delta)
 
 func _unhandled_key_input(event: InputEvent) -> void:
-    if event is not InputEventKey:
+    if not event is InputEventKey:
         return
     if not event.pressed or event.echo:
         return
