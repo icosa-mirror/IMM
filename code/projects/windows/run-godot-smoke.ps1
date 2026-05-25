@@ -39,6 +39,9 @@ $smokeScript = "res://scripts/smoke_test_runner.gd"
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
 $extensionDir = Join-Path $sampleProject "bin\windows\$variant"
 $extensionDll = Join-Path $extensionDir "imm_godot_extension.dll"
+$editorVariant = if ($Configuration -eq "Release") { "debug" } else { $variant }
+$editorExtensionDir = Join-Path $sampleProject "bin\windows\$editorVariant"
+$editorExtensionDll = Join-Path $editorExtensionDir "imm_godot_extension.dll"
 
 if ($LogDir) {
     $LogDir = (New-Item -ItemType Directory -Force $LogDir).FullName
@@ -82,6 +85,14 @@ if ($RequireExtension) {
     if ($missingDlls.Count -gt 0) {
         throw "Godot GDExtension runtime DLLs are missing:`n  $($missingDlls -join "`n  ")"
     }
+
+    if ($editorExtensionDir -ne $extensionDir) {
+        New-Item -ItemType Directory -Force $editorExtensionDir | Out-Null
+        foreach ($dll in $requiredDlls) {
+            Copy-Item -Force (Join-Path $extensionDir $dll) (Join-Path $editorExtensionDir $dll)
+        }
+        Write-Host "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup: $editorExtensionDir"
+    }
 }
 
 if (-not $SmokeScene) {
@@ -96,6 +107,7 @@ Write-Host "GDExtension configuration: $Configuration"
 Write-Host "Load/unload cycles: $LoadUnloadCycles"
 if ($RequireExtension) {
     Write-Host "GDExtension directory: $extensionDir"
+    Write-Host "Godot editor extension directory: $editorExtensionDir"
 }
 if ($LogDir) {
     Write-Host "Smoke log directory: $LogDir"
@@ -126,6 +138,8 @@ if ($LogDir) {
         "LoadUnloadCycles=$LoadUnloadCycles",
         "ExtensionDir=$extensionDir",
         "ExtensionDll=$extensionDll",
+        "EditorExtensionDir=$editorExtensionDir",
+        "EditorExtensionDll=$editorExtensionDll",
         "SuccessMarker=$successMarker",
         "HasSuccessMarker=$hasSuccessMarker",
         "ExitCode=$exitCode"

@@ -58,6 +58,8 @@ The sample and smoke scenes apply the current IMM background color from `get_bac
 
 The status label displays playback time from `get_play_time_seconds()`, and `,` / `.` call `seek_relative_seconds()` to exercise the native `piTick` time API.
 
+The `-` and `=` keys call `set_volume()` and display `get_volume()`, exercising the same document-volume path used by the Unity wrapper.
+
 The status label displays `get_current_chapter()` and `get_chapter_count()`, while `[`, `]`, and `set_chapter()` share the direct native chapter API.
 
 The status label also reports `get_document_state()`, `is_sequence_ready()`, and document info flags so native loading/playback state can be compared against the Unity wrapper.
@@ -68,6 +70,6 @@ The `V` key exercises the native layer override path by toggling the first layer
 
 The viewer API also mirrors Unity's layer transform override calls with `set_layer_transform()` and `clear_layer_transform_override()`.
 
-The viewer API now includes `set_document_transform()`. In the native GDExtension path this forwards to `ImmGodot_SetDocumentToWorld`; in the script stub it stores the value so sample code can call the same API before the native DLL is present.
+The viewer API now includes `set_document_transform()` and `get_document_transform()`. In the native GDExtension path this forwards to `ImmGodot_SetDocumentToWorld`; in the script stub it stores the value so sample code can call the same API before the native DLL is present.
 
 The spawn-area controls now query `get_active_spawn_area_info()` and move the camera rig to the active authored pose, including the same head-offset compensation used by the Unity sample. In script-stub mode no authored spawn-area data is available, so the keys only update status.

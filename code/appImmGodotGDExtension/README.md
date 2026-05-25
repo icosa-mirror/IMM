@@ -67,7 +67,7 @@ Prerequisites:
 ## Intended runtime shape
 
 - `ImmViewerNode` owns native IMM session lifecycle.
-- It exposes load/unload/playback/spawn-area APIs to Godot scripts, including `toggle_pause()` for parity with the sample script stub.
+- It exposes load/unload/playback/volume/spawn-area APIs to Godot scripts, including `toggle_pause()` for parity with the sample script stub.
 - It exposes `get_chapter_count()`, `get_current_chapter()`, and `set_chapter()` in addition to next/previous chapter shortcuts.
 - It exposes `set_time()`, `get_time()`, `get_play_time()`, and `seek_relative_seconds()` for Unity-style timeline control over native `piTick` playback time.
 - It exposes `get_document_state()`, `get_document_info_flags()`, and `is_sequence_ready()` for Unity-style document state/status checks.
@@ -75,7 +75,7 @@ Prerequisites:
 - It exposes `set_layer_visible()`, `clear_layer_visibility_override()`, `set_layer_opacity()`, and `get_layer_diagnostics()` for the same runtime layer visibility/opacity override path used by the Unity wrapper.
 - It exposes `set_layer_transform()` and `clear_layer_transform_override()` using the same matrix conversion path as document transforms.
 - It exposes `get_background_color()` through a C-safe player-info ABI for sample background parity checks.
-- It exposes `set_document_transform()` and forwards loaded documents through the native `ImmGodot_SetDocumentToWorld` path, including the existing IMM handedness adjustment.
+- It exposes `set_document_transform()` / `get_document_transform()` and forwards loaded documents through the native `ImmGodot_SetDocumentToWorld` path, including the existing IMM handedness adjustment.
 - It exposes `get_spawn_area_info()` / `get_active_spawn_area_info()` dictionaries with converted Godot pose basis vectors for camera-rig jump tests.
 - Spawn-area metadata is copied through caller-owned ABI structs; names use fixed-size buffers so GDExtension callers do not own native allocations.
 - It is the handoff point for render-thread camera capture and draw callbacks in Phase 2.
@@ -91,7 +91,7 @@ The native class exposes these Phase 1 test hooks for the future render callback
 - `set_camera_transform(camera_transform)` generates a temporary mono camera matrix/projection feed for sample-scene smoke testing.
 - `queue_render_camera_transform(camera_transform, width, height, fov_degrees, camera_id)` captures camera matrices and queues the render-thread callback using the active viewport dimensions.
 - `register_render_camera(camera_id)` / `unregister_render_camera(camera_id)` define which camera IDs may submit queued render work.
-- `set_document_transform(document_transform)` stores a Godot document transform and applies it after load when the native backend is active.
+- `set_document_transform(document_transform)` stores a Godot document transform and applies it after load when the native backend is active. `get_document_transform()` exposes the stored transform for script and smoke parity checks.
 - `smoke_render_last_camera()` invokes the smoke render hook for the last submitted camera.
 - `queue_render_last_camera()` schedules that hook through `RenderingServer.call_on_render_thread` so smoke draws execute from Godot's render-thread handoff rather than the input/update path.
 - The native queued render callback copies camera id and viewport size from a mutex-protected request snapshot before calling into `ImmGodot_RenderCamera`, and keeps the queue occupied until the render call returns.
@@ -141,7 +141,7 @@ After building the extension and installing Godot 4.5 or newer, run the sample s
 .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
 ```
 
-The smoke test runs `res://scripts/smoke_test_runner.gd` headlessly, checks the Compatibility renderer setting, instantiates the sample scene, verifies native-class loading when requested, asserts that `auto_queue_render` auto-registers camera 0, calls `load_document()`, requires `is_loaded()`, checks document state/background color, applies that color to Godot's default clear color, exercises chapter/bounds/layer/spawn-area query APIs, exercises pause/play/toggle/restart, exercises the registered camera/viewport render queue, and validates render-adapter graphics/before/after callback diagnostics. The wrapper requires both a zero Godot exit code and the `IMM Godot smoke test passed` marker in output. With `-RequireExtension`, the wrapper first verifies that `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the staged IMM runtime dependency DLLs exist, then loads `res://scenes/NativeSmokeScene.tscn` and asserts the `ImmViewer` node is the native `ImmViewerNode` class rather than the script stub. Passing `-LoadUnloadCycles N` additionally unloads and reloads the document `N` times while the camera/render queue remains active, then verifies the final render diagnostics.
+The smoke test runs `res://scripts/smoke_test_runner.gd` headlessly, checks the Compatibility renderer setting, instantiates the sample scene, verifies native-class loading when requested, asserts that `auto_queue_render` auto-registers camera 0, calls `load_document()`, requires `is_loaded()`, checks document state/background color, applies that color to Godot's default clear color, exercises chapter/bounds/layer/spawn-area query APIs, exercises layer visibility/opacity/transform overrides when authored layers exist, exercises volume and pause/play/toggle/restart controls, exercises the registered camera/viewport render queue, and validates render-adapter graphics/before/after callback diagnostics. The wrapper requires both a zero Godot exit code and the `IMM Godot smoke test passed` marker in output. With `-RequireExtension`, the wrapper first verifies that `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the staged IMM runtime dependency DLLs exist, then loads `res://scenes/NativeSmokeScene.tscn` and asserts the `ImmViewer` node is the native `ImmViewerNode` class rather than the script stub. Passing `-LoadUnloadCycles N` additionally unloads and reloads the document `N` times while the camera/render queue remains active, then verifies the final render diagnostics.
 
 On macOS, the local debug path is:
 

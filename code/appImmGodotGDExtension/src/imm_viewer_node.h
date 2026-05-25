@@ -75,6 +75,8 @@ namespace godot
         void pause();
         void toggle_pause();
         void restart();
+        void skip_forward();
+        void skip_back();
         void next_chapter();
         void previous_chapter();
         void set_chapter(int chapter_index);
@@ -92,6 +94,7 @@ namespace godot
                                          const PackedFloat32Array &projection);
         int smoke_render_camera(int camera_id, int width, int height);
         void set_document_transform(const Transform3D &document_transform);
+        Transform3D get_document_transform() const;
         void set_camera_transform(const Transform3D &camera_transform);
         int smoke_render_last_camera();
         int queue_render_last_camera();

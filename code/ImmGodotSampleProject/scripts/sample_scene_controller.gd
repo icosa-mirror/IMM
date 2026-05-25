@@ -2,6 +2,7 @@ extends Node3D
 
 const MOVE_SPEED := 4.0
 const BOOST_MULTIPLIER := 3.0
+const VOLUME_STEP := 0.1
 
 @onready var viewer := $ImmViewer
 @onready var camera_rig: Node3D = $CameraRig
@@ -64,11 +65,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
         KEY_R:
             viewer.restart()
         KEY_COMMA:
-            viewer.seek_relative_seconds(-1.0)
+            viewer.skip_back()
             _update_status()
         KEY_PERIOD:
-            viewer.seek_relative_seconds(1.0)
+            viewer.skip_forward()
             _update_status()
+        KEY_MINUS:
+            _adjust_volume(-VOLUME_STEP)
+        KEY_EQUAL:
+            _adjust_volume(VOLUME_STEP)
         KEY_V:
             _toggle_first_layer_visibility()
         KEY_BRACKETRIGHT:
@@ -147,7 +152,7 @@ func _update_status(_unused: Variant = null) -> void:
         spawn_name = str(spawn_info.get("name", spawn_info.get("id", "unknown")))
     lines.append("IMM Godot Sample")
     lines.append("L load | U unload | Space play/pause | R restart")
-    lines.append(", / . seek | [ / ] chapter | ; / ' spawn area | V layer | \\ diagnostic render | WASDQE move")
+    lines.append(", / . skip | [ / ] chapter | ; / ' spawn area | V layer | \\ diagnostic render | WASDQE move")
     lines.append("")
     lines.append("Document: %s" % ("loaded" if viewer.is_loaded() else "not loaded"))
     lines.append("Playback: %s" % ("playing" if viewer.is_playing() else "paused"))
@@ -159,6 +164,7 @@ func _update_status(_unused: Variant = null) -> void:
     ])
     lines.append("Chapter: %d / %d" % [viewer.get_current_chapter(), viewer.get_chapter_count()])
     lines.append("Time: %.2fs" % viewer.get_play_time_seconds())
+    lines.append("Volume: %d%%" % int(round(viewer.get_volume() * 100.0)))
     lines.append("Render Cameras: %s" % str(viewer.get_registered_render_camera_ids()))
     lines.append("Layers: %d" % viewer.get_layer_count())
     if viewer.get_layer_count() > 0:
@@ -187,3 +193,7 @@ func _apply_background_color() -> void:
     RenderingServer.set_default_clear_color(color)
     _last_background_color = color
     _has_applied_background_color = true
+
+func _adjust_volume(delta: float) -> void:
+    viewer.set_volume(viewer.get_volume() + delta)
+    _update_status()

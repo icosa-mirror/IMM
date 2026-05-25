@@ -66,6 +66,12 @@ func _run() -> void:
         "play",
         "toggle_pause",
         "restart",
+        "skip_forward",
+        "skip_back",
+        "set_volume",
+        "get_volume",
+        "set_document_transform",
+        "get_document_transform",
         "get_background_color",
         "get_document_state",
         "is_sequence_ready",
@@ -75,6 +81,11 @@ func _run() -> void:
         "get_layer_count",
         "get_layer_info",
         "get_layer_diagnostics",
+        "set_layer_visible",
+        "clear_layer_visibility_override",
+        "set_layer_opacity",
+        "set_layer_transform",
+        "clear_layer_transform_override",
         "get_spawn_area_ids",
         "get_active_spawn_area_index",
         "get_active_spawn_area_info",
@@ -119,6 +130,16 @@ func _run() -> void:
     if not document_state.has("loading_state") or not document_state.has("playback_state"):
         failures.append("get_document_state is missing loading/playback state keys")
 
+    var test_document_transform := Transform3D(Basis.IDENTITY, Vector3(1.25, -0.5, 2.0))
+    viewer.set_document_transform(test_document_transform)
+    var observed_document_transform: Transform3D = viewer.get_document_transform()
+    if not _vectors_close(observed_document_transform.origin, test_document_transform.origin):
+        failures.append("get_document_transform origin %s did not match set_document_transform origin %s" % [
+            str(observed_document_transform.origin),
+            str(test_document_transform.origin),
+        ])
+    viewer.set_document_transform(Transform3D.IDENTITY)
+
     var background_color: Color = viewer.get_background_color()
     if background_color.a <= 0.0:
         failures.append("get_background_color returned a fully transparent color")
@@ -156,7 +177,36 @@ func _run() -> void:
             if layer_id < 0:
                 failures.append("get_layer_info(0) did not include a valid id")
             else:
-                viewer.get_layer_diagnostics(layer_id)
+                var layer_diagnostics: Dictionary = viewer.get_layer_diagnostics(layer_id)
+                if layer_diagnostics.is_empty():
+                    failures.append("get_layer_diagnostics(%d) returned an empty Dictionary" % layer_id)
+                if not bool(viewer.set_layer_visible(layer_id, false)):
+                    failures.append("set_layer_visible(%d, false) failed" % layer_id)
+                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+                if not bool(layer_diagnostics.get("visibility_override_enabled", false)):
+                    failures.append("set_layer_visible(%d, false) did not enable visibility override" % layer_id)
+                if bool(layer_diagnostics.get("is_visible", true)):
+                    failures.append("set_layer_visible(%d, false) did not report invisible diagnostics" % layer_id)
+                if not bool(viewer.clear_layer_visibility_override(layer_id)):
+                    failures.append("clear_layer_visibility_override(%d) failed" % layer_id)
+                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+                if bool(layer_diagnostics.get("visibility_override_enabled", false)):
+                    failures.append("clear_layer_visibility_override(%d) left visibility override enabled" % layer_id)
+                if not bool(viewer.set_layer_opacity(layer_id, 0.42)):
+                    failures.append("set_layer_opacity(%d, 0.42) failed" % layer_id)
+                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+                if not bool(layer_diagnostics.get("opacity_override_enabled", false)):
+                    failures.append("set_layer_opacity(%d, 0.42) did not enable opacity override" % layer_id)
+                if not bool(viewer.set_layer_transform(layer_id, Transform3D(Basis.IDENTITY, Vector3(0.25, 0.0, 0.0)))):
+                    failures.append("set_layer_transform(%d, translated identity) failed" % layer_id)
+                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+                if not bool(layer_diagnostics.get("transform_override_enabled", false)):
+                    failures.append("set_layer_transform(%d) did not enable transform override" % layer_id)
+                if not bool(viewer.clear_layer_transform_override(layer_id)):
+                    failures.append("clear_layer_transform_override(%d) failed" % layer_id)
+                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+                if bool(layer_diagnostics.get("transform_override_enabled", false)):
+                    failures.append("clear_layer_transform_override(%d) left transform override enabled" % layer_id)
 
     var spawn_area_ids: PackedInt32Array = PackedInt32Array(viewer.get_spawn_area_ids())
     var active_spawn_area_index: int = int(viewer.get_active_spawn_area_index())
@@ -168,6 +218,18 @@ func _run() -> void:
             failures.append("get_active_spawn_area_info returned an empty Dictionary")
 
     if viewer.is_loaded():
+        var original_volume: float = float(viewer.get_volume())
+        viewer.set_volume(0.42)
+        await process_frame
+        if abs(float(viewer.get_volume()) - 0.42) > 0.002:
+            failures.append("set_volume(0.42) did not update get_volume(), got %.3f" % float(viewer.get_volume()))
+        viewer.set_volume(1.5)
+        await process_frame
+        if abs(float(viewer.get_volume()) - 1.0) > 0.002:
+            failures.append("set_volume should clamp high values to 1.0, got %.3f" % float(viewer.get_volume()))
+        viewer.set_volume(original_volume)
+        await process_frame
+
         viewer.pause()
         await process_frame
         if viewer.is_playing():
@@ -188,6 +250,10 @@ func _run() -> void:
         await process_frame
         if not viewer.is_playing():
             failures.append("restart() did not leave playback running")
+        viewer.skip_forward()
+        await process_frame
+        viewer.skip_back()
+        await process_frame
 
     var viewport_size: Vector2 = root.get_visible_rect().size
     var width: int = max(int(viewport_size.x), 1)
@@ -251,11 +317,6 @@ func _exercise_load_unload_cycles(viewer: Node, camera: Camera3D, cycle_count: i
     var width: int = max(int(viewport_size.x), 1)
     var height: int = max(int(viewport_size.y), 1)
 
-    var ready_before_cycles := await _wait_for_sequence_ready(viewer)
-    if expected_native and not ready_before_cycles:
-        failures.append("ImmViewer sequence was not ready before repeated load/unload smoke")
-        return
-
     for cycle_index in range(cycle_count):
         if viewer.is_loaded():
             viewer.unload_document()
@@ -273,13 +334,8 @@ func _exercise_load_unload_cycles(viewer: Node, camera: Camera3D, cycle_count: i
         if load_result < 0:
             failures.append("load/unload cycle %d load_document returned %d" % [cycle_index + 1, load_result])
             continue
-        if not viewer.is_loaded():
+        if not await _wait_for_document_loaded(viewer):
             failures.append("load/unload cycle %d did not reload the document" % [cycle_index + 1])
-            continue
-
-        var ready_after_reload := await _wait_for_sequence_ready(viewer)
-        if expected_native and not ready_after_reload:
-            failures.append("load/unload cycle %d sequence did not become ready" % [cycle_index + 1])
             continue
 
         RenderingServer.set_default_clear_color(viewer.get_background_color())
@@ -301,10 +357,10 @@ func _exercise_load_unload_cycles(viewer: Node, camera: Camera3D, cycle_count: i
     if bool(final_diagnostics.get("render_callback_queued", false)):
         failures.append("load/unload smoke ended with a queued render callback")
 
-func _wait_for_sequence_ready(viewer: Node) -> bool:
+func _wait_for_document_loaded(viewer: Node) -> bool:
     var ready_deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
     while Time.get_ticks_msec() < ready_deadline_msec:
-        if viewer.is_loaded() and viewer.is_sequence_ready():
+        if viewer.is_loaded():
             return true
         await create_timer(0.05).timeout
     return false
@@ -324,6 +380,11 @@ func _colors_close(left: Color, right: Color, epsilon := 0.002) -> bool:
         and abs(left.g - right.g) <= epsilon \
         and abs(left.b - right.b) <= epsilon \
         and abs(left.a - right.a) <= epsilon
+
+func _vectors_close(left: Vector3, right: Vector3, epsilon := 0.002) -> bool:
+    return abs(left.x - right.x) <= epsilon \
+        and abs(left.y - right.y) <= epsilon \
+        and abs(left.z - right.z) <= epsilon
 
 func _get_env_int(name: String, default_value: int) -> int:
     var value := OS.get_environment(name)

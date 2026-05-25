@@ -112,17 +112,29 @@ func restart() -> void:
     _is_playing = true
     playback_changed.emit(true)
 
+func skip_forward() -> void:
+    seek_relative_seconds(1.0)
+
+func skip_back() -> void:
+    seek_relative_seconds(-1.0)
+
+func set_volume(value: float) -> void:
+    volume = clampf(value, 0.0, 1.0)
+
+func get_volume() -> float:
+    return volume
+
 func next_chapter() -> void:
     if _is_loaded and get_chapter_count() > 0:
         set_chapter((get_current_chapter() + 1) % get_chapter_count())
     elif _is_loaded:
-        push_warning("Chapter navigation is not connected until the native Godot backend is bound.")
+        skip_forward()
 
 func previous_chapter() -> void:
     if _is_loaded and get_chapter_count() > 0:
         set_chapter(posmod(get_current_chapter() - 1, get_chapter_count()))
     elif _is_loaded:
-        push_warning("Chapter navigation is not connected until the native Godot backend is bound.")
+        skip_back()
 
 func set_chapter(_chapter_index: int) -> void:
     if _is_loaded:
@@ -191,6 +203,9 @@ func set_document_transform(document_transform: Transform3D) -> void:
     _document_transform = document_transform
     if debug_logging:
         print("IMM stub set_document_transform origin=%s" % _document_transform.origin)
+
+func get_document_transform() -> Transform3D:
+    return _document_transform
 
 func set_camera_transform(camera_transform: Transform3D) -> void:
     _last_camera_transform = camera_transform

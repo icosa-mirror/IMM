@@ -134,7 +134,7 @@ def verify_native_method_bindings() -> None:
 
     public_section = public_section_match.group(1)
     method_pattern = re.compile(
-        r"^\s*(?:static\s+)?(?:void|bool|int|int64_t|double|float|String|NodePath|Color|Dictionary|PackedInt32Array)"
+        r"^\s*(?:static\s+)?(?:void|bool|int|int64_t|double|float|String|NodePath|Color|Dictionary|Transform3D|PackedInt32Array)"
         r"\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(",
         re.MULTILINE,
     )
@@ -215,6 +215,8 @@ def verify_render_thread_queue() -> None:
     for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "last_metal_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
         if token not in compositor_source and token not in compositor_header:
             raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
+    if "1.0 - ((pos.y + 1.0) * 0.5)" in compositor_source:
+        raise RuntimeError("ImmViewerCompositorEffect composite shader should not vertically flip Metal intermediate texture sampling")
     if "register_class<ImmViewerCompositorEffect>" not in register_types:
         raise RuntimeError("ImmViewerCompositorEffect is not registered with ClassDB")
     for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
@@ -338,11 +340,11 @@ def verify_windows_build_wiring() -> None:
     if re.search(r"^\s*class_name\s+ImmViewerNode\b", script_stub, re.MULTILINE):
         raise RuntimeError("Script stub must not claim the native ImmViewerNode class_name")
 
-    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "vorbisenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
+    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
-    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "get_document_state", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "get_spawn_area_ids", "get_active_spawn_area_index", "get_active_spawn_area_info", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
+    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "opacity_override_enabled", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_active_spawn_area_info", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
         if token not in smoke_runner:
             raise RuntimeError(f"Godot smoke runner is missing token: {token}")
     if "viewer.register_render_camera(CAMERA_ID)" in smoke_runner or "viewer.unregister_render_camera(CAMERA_ID)" in smoke_runner:

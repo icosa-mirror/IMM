@@ -29,6 +29,8 @@ void ImmViewerNode::_bind_methods()
     ClassDB::bind_method(D_METHOD("pause"), &ImmViewerNode::pause);
     ClassDB::bind_method(D_METHOD("toggle_pause"), &ImmViewerNode::toggle_pause);
     ClassDB::bind_method(D_METHOD("restart"), &ImmViewerNode::restart);
+    ClassDB::bind_method(D_METHOD("skip_forward"), &ImmViewerNode::skip_forward);
+    ClassDB::bind_method(D_METHOD("skip_back"), &ImmViewerNode::skip_back);
     ClassDB::bind_method(D_METHOD("next_chapter"), &ImmViewerNode::next_chapter);
     ClassDB::bind_method(D_METHOD("previous_chapter"), &ImmViewerNode::previous_chapter);
     ClassDB::bind_method(D_METHOD("set_chapter", "chapter_index"), &ImmViewerNode::set_chapter);
@@ -44,6 +46,7 @@ void ImmViewerNode::_bind_methods()
     ClassDB::bind_method(D_METHOD("submit_mono_camera_matrices", "camera_id", "world_to_camera", "projection"), &ImmViewerNode::submit_mono_camera_matrices);
     ClassDB::bind_method(D_METHOD("smoke_render_camera", "camera_id", "width", "height"), &ImmViewerNode::smoke_render_camera);
     ClassDB::bind_method(D_METHOD("set_document_transform", "document_transform"), &ImmViewerNode::set_document_transform);
+    ClassDB::bind_method(D_METHOD("get_document_transform"), &ImmViewerNode::get_document_transform);
     ClassDB::bind_method(D_METHOD("is_loaded"), &ImmViewerNode::is_loaded);
     ClassDB::bind_method(D_METHOD("is_playing"), &ImmViewerNode::is_playing);
     ClassDB::bind_method(D_METHOD("is_sequence_ready"), &ImmViewerNode::is_sequence_ready);
@@ -411,7 +414,7 @@ int ImmViewerNode::load_document(const String &path)
 
 void ImmViewerNode::unload_document()
 {
-    if (!_native_initialized || _document_id < 0 || !is_sequence_ready())
+    if (!_native_initialized || _document_id < 0)
     {
         return;
     }
@@ -488,6 +491,26 @@ void ImmViewerNode::restart()
     emit_signal("playback_changed", true);
 }
 
+void ImmViewerNode::skip_forward()
+{
+    if (!_native_initialized || _document_id < 0)
+    {
+        return;
+    }
+
+    ImmGodot_SkipForward(_document_id);
+}
+
+void ImmViewerNode::skip_back()
+{
+    if (!_native_initialized || _document_id < 0)
+    {
+        return;
+    }
+
+    ImmGodot_SkipBack(_document_id);
+}
+
 void ImmViewerNode::next_chapter()
 {
     if (!_native_initialized || _document_id < 0)
@@ -498,7 +521,7 @@ void ImmViewerNode::next_chapter()
     const int count = ImmGodot_GetChapterCount(_document_id);
     if (count <= 0)
     {
-        ImmGodot_SkipForward(_document_id);
+        skip_forward();
         return;
     }
 
@@ -516,7 +539,7 @@ void ImmViewerNode::previous_chapter()
     const int count = ImmGodot_GetChapterCount(_document_id);
     if (count <= 0)
     {
-        ImmGodot_SkipBack(_document_id);
+        skip_back();
         return;
     }
 
@@ -713,6 +736,11 @@ void ImmViewerNode::set_document_transform(const Transform3D &document_transform
 
     PackedFloat32Array matrix = transform_to_matrix_array(_document_transform);
     ImmGodot_SetDocumentToWorld(_document_id, matrix.ptrw());
+}
+
+Transform3D ImmViewerNode::get_document_transform() const
+{
+    return _document_transform;
 }
 
 void ImmViewerNode::set_camera_transform(const Transform3D &camera_transform)
