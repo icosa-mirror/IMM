@@ -4,6 +4,7 @@
 #include <thread>
 #include <chrono>
 #include <cwchar>
+#include <cstdio>
 
 
 #include "libImmCore/src/libBasics/piDebug.h"
@@ -34,6 +35,20 @@ namespace ImmPlayer
     static const wchar_t *kNullDocLogPrefix = L"[IMMDBG_NULLDOC_20260211A]";
     static const wchar_t *kBBoxDiagPrefix = L"[IMMDBG_BBOX_20260211D]";
     static int kBBoxDiagCount = 0;
+
+    static bool iEnvFlagEnabled(const char *name)
+    {
+        const char *value = getenv(name);
+        return value != nullptr && value[0] != '\0' && value[0] != '0';
+    }
+
+    static void iTraceUnityGlobalRender(const char *message)
+    {
+        if (!iEnvFlagEnabled("IMM_UNITY_TRACE_GLOBAL_RENDER"))
+            return;
+        std::fprintf(stderr, "IMM_UNITY_TRACE_GLOBAL_RENDER %s\n", message ? message : "");
+        std::fflush(stderr);
+    }
 
     static void iCopyWide(wchar_t *dst, size_t dstCount, const wchar_t *src)
     {
@@ -925,6 +940,7 @@ namespace ImmPlayer
     {
         if (!mEnabled) return;
 
+        iTraceUnityGlobalRender("enter");
         //mLog->Printf(LT_MESSAGE, L"GlobalRender(%d)", mFrameState.mFrameID);
 
         const uint64_t num = mDocuments.GetMaxLength();
@@ -939,7 +955,9 @@ namespace ImmPlayer
 
         //--- upload global info to the GPU --------------------------------------
 
+        iTraceUnityGlobalRender("before-update-frame-state");
         mRenderer->UpdateBuffer(mFrameStateShaderConstans, &mFrameState, 0, sizeof(FrameState));
+        iTraceUnityGlobalRender("after-update-frame-state");
 
         //------------------------------------------------------
         // view independant rendering here
@@ -951,10 +969,12 @@ namespace ImmPlayer
         mRenderer->AttachShaderConstants(mPassStateShaderConstans, 5);
         mRenderer->AttachShaderConstants(mGlobalResourcesConstans, 7);
 
+        iTraceUnityGlobalRender("before-prepare-display");
         mLayerPaintRender->PrepareForDisplay(stereoMode);
         mLayerRenderPicture.PrepareForDisplay(stereoMode);
         mLayerRenderSound.PrepareForDisplay(stereoMode);
         mLayerRenderModel.PrepareForDisplay(stereoMode);
+        iTraceUnityGlobalRender("after-prepare-display");
 
         mCurrentPerfInfo.numDrawCalls = 0;
         mCurrentPerfInfo.numDrawCallsCulled = 0;
@@ -967,6 +987,7 @@ namespace ImmPlayer
         // graph anymore. That allows us to run the scenegraph in parallel to the rendering without further mutex protection
         mMutex.lock();
         {
+            iTraceUnityGlobalRender("locked");
             bool anyDocReady = false;
             for (uint64_t i = 0; i < num; i++)
             {
@@ -974,14 +995,34 @@ namespace ImmPlayer
                 Document *doc = (Document *)mDocuments.GetAddress(i);
 
                 // update loading process ideally this happens only for the first camera. We need to have a frameID counter for that to detect changes in frameID
+                iTraceUnityGlobalRender("before-update-state-gpu");
                 const bool needRender = doc->UpdateStateGPU(mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mRenderer, mLog, mColorSpace);
+                iTraceUnityGlobalRender(needRender ? "after-update-state-gpu-ready" : "after-update-state-gpu-not-ready");
                 anyDocReady |= needRender;
 
                 if (needRender)
                 {
-                    iDisplayPreRenderLayer(doc->GetSequence()->GetRoot(), doc->GetDocumentToWorld(), 1.0f, mViewerInfo.mWorldToHead);
+                    if (!iEnvFlagEnabled("IMM_UNITY_SKIP_DISPLAY_PRERENDER"))
+                    {
+                        iTraceUnityGlobalRender("before-display-prerender-layer");
+                        iDisplayPreRenderLayer(doc->GetSequence()->GetRoot(), doc->GetDocumentToWorld(), 1.0f, mViewerInfo.mWorldToHead);
+                        iTraceUnityGlobalRender("after-display-prerender-layer");
+                    }
+                    else
+                    {
+                        iTraceUnityGlobalRender("skip-display-prerender-layer");
+                    }
 
-                    iUnloadNotInTimeline(doc->GetSequence()->GetRoot(), mTime);
+                    if (!iEnvFlagEnabled("IMM_UNITY_SKIP_UNLOAD_NOT_IN_TIMELINE"))
+                    {
+                        iTraceUnityGlobalRender("before-unload-not-in-timeline");
+                        iUnloadNotInTimeline(doc->GetSequence()->GetRoot(), mTime);
+                        iTraceUnityGlobalRender("after-unload-not-in-timeline");
+                    }
+                    else
+                    {
+                        iTraceUnityGlobalRender("skip-unload-not-in-timeline");
+                    }
                 }
             }
 
@@ -993,6 +1034,7 @@ namespace ImmPlayer
             mAnyDocToRender = anyDocReady;
         }
         mMutex.unlock();
+        iTraceUnityGlobalRender("exit");
 
         //log->Printf(LT_MESSAGE, L"Global Done!");
     }
@@ -1274,10 +1316,10 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND")) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL")) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
         if (mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES)
         {

@@ -10,7 +10,11 @@ namespace ImmPlayer
     /// </summary>
     public static class ImmNativePlugin
     {
+#if UNITY_IOS && !UNITY_EDITOR
+        private const string DllName = "__Internal";
+#else
         private const string DllName = "ImmUnityPlugin";
+#endif
 
         #region Unity Plugin Callbacks
 

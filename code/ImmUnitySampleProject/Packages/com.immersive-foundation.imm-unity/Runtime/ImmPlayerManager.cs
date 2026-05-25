@@ -60,6 +60,14 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private bool _useCommandBufferRendering = false;
+        private bool _useCameraCallbackRendering = false;
+        private int _appleMetalEventLogCount = 0;
+
+        private static bool IsEnvFlagEnabled(string name)
+        {
+            string value = Environment.GetEnvironmentVariable(name);
+            return !string.IsNullOrEmpty(value) && value != "0";
+        }
 
         #endregion
 
@@ -83,18 +91,29 @@ namespace ImmPlayer
 
         private void OnEnable()
         {
-            _useCommandBufferRendering = GraphicsSettings.currentRenderPipeline == null;
-            if (_useCommandBufferRendering)
+            bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
+            bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
+            _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
+            _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
+            if (_useCommandBufferRendering || _useCameraCallbackRendering)
             {
                 Camera.onPreCull += OnCameraPreCull;
+            }
+            if (_useCameraCallbackRendering)
+            {
+                Camera.onPostRender += OnCameraPostRender;
             }
         }
 
         private void OnDisable()
         {
-            if (_useCommandBufferRendering)
+            if (_useCommandBufferRendering || _useCameraCallbackRendering)
             {
                 Camera.onPreCull -= OnCameraPreCull;
+            }
+            if (_useCameraCallbackRendering)
+            {
+                Camera.onPostRender -= OnCameraPostRender;
             }
             CleanupCommandBuffers();
         }
@@ -330,6 +349,24 @@ namespace ImmPlayer
 
         public bool UsesCommandBufferRendering => _useCommandBufferRendering;
 
+        private static bool IsAppleMetalRuntime()
+        {
+#if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
+            return SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Metal;
+#else
+            return false;
+#endif
+        }
+
+        private static bool UseRenderIntoTextureProjection(Camera cam)
+        {
+            if (IsEnvFlagEnabled("IMM_UNITY_FORCE_BACKBUFFER_PROJECTION"))
+                return false;
+            if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
+                return true;
+            return cam != null && cam.cameraType == CameraType.SceneView;
+        }
+
         private void CleanupCommandBuffers()
         {
             foreach (var kvp in _cameras)
@@ -346,16 +383,10 @@ namespace ImmPlayer
         {
             if (!_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
                 return;
+            if (!HasRenderableDocument())
+                return;
 
-            PerCameraInfo info;
-            if (!_cameras.TryGetValue(cam, out info))
-            {
-                info = new PerCameraInfo();
-                info.CameraId = _cameras.Count;
-                info.CommandBuffer.name = "Render IMM Content";
-                _cameras[cam] = info;
-                cam.AddCommandBuffer(CameraEvent.AfterImageEffectsOpaque, info.CommandBuffer);
-            }
+            PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
 
             int stereoMode = (int)StereoMode.Mono;
             if (cam.stereoEnabled)
@@ -376,7 +407,7 @@ namespace ImmPlayer
             }
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
-            bool renderIntoTexture = true; // TEST: was cam.cameraType == CameraType.SceneView
+            bool renderIntoTexture = UseRenderIntoTextureProjection(cam);
             Matrix4x4 headProjection = cam.nonJitteredProjectionMatrix;
             ConvertMatrixToArray(info.HeadProj, GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture));
 
@@ -406,6 +437,9 @@ namespace ImmPlayer
                 cam.stereoEnabled ? info.RightProj : null);
             ImmNativePlugin.SetCameraViewport(info.CameraId, cam.pixelWidth, cam.pixelHeight);
 
+            if (_useCameraCallbackRendering)
+                return;
+
             int eyeIndex = 0;
             if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
             {
@@ -415,6 +449,51 @@ namespace ImmPlayer
             int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
             info.CommandBuffer.Clear();
             info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+        }
+
+        private PerCameraInfo GetOrCreateCameraInfo(Camera cam, bool attachCommandBuffer)
+        {
+            if (!_cameras.TryGetValue(cam, out PerCameraInfo info))
+            {
+                info = new PerCameraInfo();
+                info.CameraId = _cameras.Count;
+                info.CommandBuffer.name = "Render IMM Content";
+                _cameras[cam] = info;
+                if (attachCommandBuffer)
+                {
+                    cam.AddCommandBuffer(CameraEvent.AfterImageEffectsOpaque, info.CommandBuffer);
+                }
+            }
+            return info;
+        }
+
+        private void OnCameraPostRender(Camera cam)
+        {
+            if (!_useCameraCallbackRendering || !_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
+                return;
+            if (!HasRenderableDocument())
+                return;
+
+            if (!_cameras.TryGetValue(cam, out PerCameraInfo info))
+                return;
+
+            int eventId = info.CameraId << 8;
+            if (_appleMetalEventLogCount < 8)
+            {
+                Debug.Log($"[IMM_UNITY_METAL_EVENT] camera={info.CameraId} viewport={cam.pixelWidth}x{cam.pixelHeight} eventId={eventId}");
+                _appleMetalEventLogCount++;
+            }
+            GL.IssuePluginEvent(_renderEventFunc, eventId);
+        }
+
+        private bool HasRenderableDocument()
+        {
+            foreach (ImmDocument doc in _loadedDocuments.Values)
+            {
+                if (doc != null && doc.IsSequenceReady())
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -429,7 +508,7 @@ namespace ImmPlayer
                 return;
 
             Matrix4x4 worldToCamera = camera.worldToCameraMatrix;
-            bool renderIntoTexture = true; // TEST: was camera.cameraType == CameraType.SceneView
+            bool renderIntoTexture = UseRenderIntoTextureProjection(camera);
             Matrix4x4 projection = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, renderIntoTexture);
 
             float[] world2head = MatrixToFloatArray(worldToCamera);

@@ -21,6 +21,12 @@ using namespace ImmImporter;
 
 namespace ImmPlayer
 {
+    static bool iEnvFlagEnabled(const char *name)
+    {
+        const char *value = getenv(name);
+        return value != nullptr && value[0] != '\0' && value[0] != '0';
+    }
+
     Document::Document() {}
 
     Document::~Document() {}
@@ -696,6 +702,10 @@ namespace ImmPlayer
             switch (layerType)
             {
             case Layer::Type::Paint:
+                if (iEnvFlagEnabled("IMM_UNITY_SKIP_GPU_LOAD_PAINT"))
+                {
+                    break;
+                }
                 if (!layerPaintRender->LoadInGPU(renderer, nullptr, log, layer))
                 {
                     log->Printf(LT_ERROR, L"Could not load in GPU [%d] Paint layer %s", mID, layer->GetFullName()->GetS());
@@ -703,6 +713,10 @@ namespace ImmPlayer
                 }
                 break;
             case Layer::Type::Picture:
+                if (iEnvFlagEnabled("IMM_UNITY_SKIP_GPU_LOAD_PICTURE"))
+                {
+                    break;
+                }
                 if (!layerRenderPicture->LoadInGPU(renderer, nullptr, log, layer))
                 {
                     log->Printf(LT_ERROR, L"Could not load in GPU [%d] Picture layer %s", mID, layer->GetFullName()->GetS());
@@ -710,6 +724,10 @@ namespace ImmPlayer
                 }
                 break;
             case Layer::Type::Model:
+                if (iEnvFlagEnabled("IMM_UNITY_SKIP_GPU_LOAD_MODEL"))
+                {
+                    break;
+                }
                 if (!layerRenderModel->LoadInGPU(renderer, nullptr, log, layer))
                 {
                     log->Printf(LT_ERROR, L"Could not load in GPU [%d] Model layer %s", mID, layer->GetFullName()->GetS());

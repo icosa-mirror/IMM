@@ -222,8 +222,7 @@ jobs:
       run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
 
     - name: Build macOS Unity plugin
-      if: false
-      run: cmake --build build/macos --config Release
+      run: cmake --build build/macos --target ImmUnity --config Release
 
     - name: Build macOS Metal standalone viewer
       run: cmake --build build/macos --target appImmViewerMetal --config Release
@@ -240,13 +239,13 @@ jobs:
       run: cmake --build build/macos --target ImmStrokeReader --config Release
 
     - name: Upload Unity Plugin Bundle
-      if: false
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewerPlugin-macOS
         path: |
-          code/ImmUnitySampleProject/Assets/Plugins/OSX/ImmUnityPlugin.bundle
+          build/macos/unity/ImmUnityPlugin.bundle
         if-no-files-found: error
+        retention-days: 1
 
     - name: Upload Stroke Reader dylib
       uses: actions/upload-artifact@v4
@@ -280,12 +279,27 @@ jobs:
     - name: Build iOS Stroke Reader
       run: cmake --build build/ios --target ImmStrokeReader --config Release
 
+    - name: Build iOS Unity plugin
+      run: cmake --build build/ios --target ImmUnity --config Release
+
+    - name: Link-check iOS Unity plugin
+      run: cmake --build build/ios --target ImmUnityIOSLinkSmoke --config Release
+
     - name: Upload Stroke Reader (iOS)
       uses: actions/upload-artifact@v4
       with:
         name: ImmStrokeReaderPlugin-iOS
         path: |
           build/ios/stroke-reader/libImmStrokeReader.a
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload Unity Plugin (iOS)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerPlugin-iOS
+        path: |
+          build/ios/unity/libImmUnityPlugin.a
         if-no-files-found: error
         retention-days: 1
 
@@ -342,6 +356,18 @@ jobs:
         name: ImmViewerPlugin-Android
         path: artifacts/ImmViewerPlugin-Android
 
+    - name: Download macOS ImmUnity Plugin
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerPlugin-macOS
+        path: artifacts/ImmViewerPlugin-macOS
+
+    - name: Download iOS ImmUnity Plugin
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerPlugin-iOS
+        path: artifacts/ImmViewerPlugin-iOS
+
     - name: Sync stroke reader package binaries
       shell: bash
       run: |
@@ -364,7 +390,7 @@ jobs:
       run: |
         set -euo pipefail
         unity_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity"
-        mkdir -p "$unity_pkg/Plugins/x86_64" "$unity_pkg/Plugins/Android/libs/arm64-v8a"
+        mkdir -p "$unity_pkg/Plugins/x86_64" "$unity_pkg/Plugins/Android/libs/arm64-v8a" "$unity_pkg/Plugins/OSX" "$unity_pkg/Plugins/iOS"
         cp artifacts/ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
         shopt -s nullglob globstar
         android_unity_so=(artifacts/ImmViewerPlugin-Android/**/libImmUnityPlugin.so)
@@ -373,6 +399,9 @@ jobs:
           exit 1
         fi
         cp "${android_unity_so[0]}" "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+        rm -rf "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
+        cp -R artifacts/ImmViewerPlugin-macOS/ImmUnityPlugin.bundle "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
+        cp artifacts/ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
 
     - name: Archive stroke reader UPM package
       shell: bash
@@ -413,6 +442,8 @@ jobs:
             'ImmStrokeReaderPlugin-iOS',
             'ImmViewerPlugin-Windows',
             'ImmViewerPlugin-Android',
+            'ImmViewerPlugin-macOS',
+            'ImmViewerPlugin-iOS',
           ]);
           const owner = context.repo.owner;
           const repo = context.repo.repo;

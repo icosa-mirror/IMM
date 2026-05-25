@@ -21,6 +21,11 @@ struct piShaderS
     id<MTLRenderPipelineState> pipelineColorWrite = nil;
     id<MTLRenderPipelineState> pipelineNoColorWrite = nil;
     id<MTLRenderPipelineState> pipelineSourceAlphaBlend = nil;
+    id<MTLRenderPipelineState> pipelineTargetColorWrite = nil;
+    id<MTLRenderPipelineState> pipelineTargetNoColorWrite = nil;
+    id<MTLRenderPipelineState> pipelineTargetSourceAlphaBlend = nil;
+    MTLPixelFormat pipelineTargetColorFormat = MTLPixelFormatInvalid;
+    MTLPixelFormat pipelineTargetDepthFormat = MTLPixelFormatInvalid;
     bool requiresVertexBuffer = true;
 };
 struct piVertexArrayS
@@ -108,6 +113,7 @@ struct piMetalState
     id<MTLCommandBuffer> commandBuffer = nil;
     id<MTLRenderCommandEncoder> encoder = nil;
     bool externalCommandEncoder = false;
+    bool externalCommandBuffer = false;
     MTLRenderPassDescriptor *activeRenderPass = nil;
     piRTarget currentRenderTarget = nullptr;
     piShader currentShader = nullptr;
@@ -164,6 +170,58 @@ static void iAttachRetainedBufferCleanup(piMetalState *state)
         [buffers release];
     }];
     [state->retainedBuffers removeAllObjects];
+}
+
+static bool iMetalEnvFlagEnabled(const char *name)
+{
+    const char *value = getenv(name);
+    return value != nullptr && value[0] != '\0' && strcmp(value, "0") != 0;
+}
+
+static int iSuppressDrawCallsLevel(void)
+{
+    static int enabled = -1;
+    if (enabled < 0)
+    {
+        const char *value = getenv("IMM_METAL_SUPPRESS_DRAWS");
+        enabled = (value && value[0]) ? atoi(value) : 0;
+        if (enabled < 0)
+        {
+            enabled = 0;
+        }
+    }
+    return enabled;
+}
+
+static const char *iCommandBufferStatusName(MTLCommandBufferStatus status)
+{
+    switch (status)
+    {
+        case MTLCommandBufferStatusNotEnqueued: return "not-enqueued";
+        case MTLCommandBufferStatusEnqueued: return "enqueued";
+        case MTLCommandBufferStatusCommitted: return "committed";
+        case MTLCommandBufferStatusScheduled: return "scheduled";
+        case MTLCommandBufferStatusCompleted: return "completed";
+        case MTLCommandBufferStatusError: return "error";
+        default: return "unknown";
+    }
+}
+
+static void iReportCommandBufferStatus(const char *label, id<MTLCommandBuffer> commandBuffer)
+{
+    if (!commandBuffer)
+    {
+        return;
+    }
+
+    NSError *error = commandBuffer.error;
+    const char *errorText = error ? (error.localizedDescription.UTF8String ?: "unknown error") : "none";
+    fprintf(stderr,
+            "IMM_METAL_COMMAND_BUFFER %s status=%s error=%s\n",
+            label ? label : "unknown",
+            iCommandBufferStatusName(commandBuffer.status),
+            errorText);
+    fflush(stderr);
 }
 
 static void iReport(piRenderer::piReporter *reporter, const char *message)
@@ -395,11 +453,114 @@ static void iConfigureSourceAlphaBlend(MTLRenderPipelineColorAttachmentDescripto
     color.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
 }
 
+static void iGetActiveRenderPassFormats(piMetalState *state, piShader shader, MTLPixelFormat *colorFormat, MTLPixelFormat *depthFormat)
+{
+    *colorFormat = shader->descriptor.colorAttachments[0].pixelFormat;
+    *depthFormat = shader->descriptor.depthAttachmentPixelFormat;
+    if (!state || !state->activeRenderPass)
+    {
+        return;
+    }
+
+    id<MTLTexture> colorTexture = state->activeRenderPass.colorAttachments[0].texture;
+    if (colorTexture)
+    {
+        *colorFormat = colorTexture.pixelFormat;
+    }
+
+    id<MTLTexture> depthTexture = state->activeRenderPass.depthAttachment.texture;
+    if (depthTexture)
+    {
+        *depthFormat = depthTexture.pixelFormat;
+    }
+    else
+    {
+        *depthFormat = MTLPixelFormatInvalid;
+    }
+}
+
+static id<MTLRenderPipelineState> iCreatePipelineForTarget(piMetalState *state,
+                                                           piShader shader,
+                                                           piRenderer::piReporter *reporter,
+                                                           MTLPixelFormat colorFormat,
+                                                           MTLPixelFormat depthFormat,
+                                                           bool sourceAlphaBlend,
+                                                           bool colorWrite)
+{
+    MTLRenderPipelineDescriptor *descriptor = [shader->descriptor copy];
+    descriptor.colorAttachments[0].pixelFormat = colorFormat;
+    descriptor.depthAttachmentPixelFormat = depthFormat;
+    if (sourceAlphaBlend)
+    {
+        iConfigureSourceAlphaBlend(descriptor.colorAttachments[0]);
+    }
+    if (!colorWrite)
+    {
+        descriptor.colorAttachments[0].writeMask = MTLColorWriteMaskNone;
+    }
+
+    NSError *pipelineError = nil;
+    id<MTLRenderPipelineState> pipeline = [state->device newRenderPipelineStateWithDescriptor:descriptor error:&pipelineError];
+    if (!pipeline)
+    {
+        const char *message = pipelineError.localizedDescription.UTF8String ?: "unknown error";
+        fprintf(stderr,
+                "Metal target pipeline creation failed: color=%lu depth=%lu sourceAlpha=%d colorWrite=%d error=%s\n",
+                (unsigned long)colorFormat,
+                (unsigned long)depthFormat,
+                sourceAlphaBlend ? 1 : 0,
+                colorWrite ? 1 : 0,
+                message);
+        iError(reporter, message);
+    }
+    return pipeline;
+}
+
 static id<MTLRenderPipelineState> iGetPipelineForCurrentState(piMetalState *state, piShader shader, piRenderer::piReporter *reporter)
 {
     if (!state || !state->device || !shader)
     {
         return nil;
+    }
+
+    MTLPixelFormat targetColorFormat = MTLPixelFormatInvalid;
+    MTLPixelFormat targetDepthFormat = MTLPixelFormatInvalid;
+    iGetActiveRenderPassFormats(state, shader, &targetColorFormat, &targetDepthFormat);
+    const bool targetFormatDiffers =
+        targetColorFormat != shader->descriptor.colorAttachments[0].pixelFormat ||
+        targetDepthFormat != shader->descriptor.depthAttachmentPixelFormat;
+    if (targetFormatDiffers)
+    {
+        if (shader->pipelineTargetColorFormat != targetColorFormat || shader->pipelineTargetDepthFormat != targetDepthFormat)
+        {
+            shader->pipelineTargetColorWrite = nil;
+            shader->pipelineTargetNoColorWrite = nil;
+            shader->pipelineTargetSourceAlphaBlend = nil;
+            shader->pipelineTargetColorFormat = targetColorFormat;
+            shader->pipelineTargetDepthFormat = targetDepthFormat;
+        }
+        if (state->color0WriteEnabled)
+        {
+            if (state->dynamicSourceAlphaBlendEnabled)
+            {
+                if (!shader->pipelineTargetSourceAlphaBlend)
+                {
+                    shader->pipelineTargetSourceAlphaBlend = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, true, true);
+                }
+                return shader->pipelineTargetSourceAlphaBlend;
+            }
+            if (!shader->pipelineTargetColorWrite)
+            {
+                shader->pipelineTargetColorWrite = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, false, true);
+            }
+            return shader->pipelineTargetColorWrite;
+        }
+
+        if (!shader->pipelineTargetNoColorWrite)
+        {
+            shader->pipelineTargetNoColorWrite = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, false, false);
+        }
+        return shader->pipelineTargetNoColorWrite;
     }
 
     if (state->color0WriteEnabled)
@@ -720,6 +881,7 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
 
     mState->frameActive = true;
     mState->externalCommandEncoder = false;
+    mState->externalCommandBuffer = false;
     mState->passTouched = false;
     mState->activeRenderPass = mState->nativeRenderPass;
     mState->currentRenderTarget = nullptr;
@@ -742,8 +904,96 @@ bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void
 
     mState->frameActive = true;
     mState->externalCommandEncoder = true;
+    mState->externalCommandBuffer = true;
     mState->passTouched = true;
     mState->activeRenderPass = nil;
+    mState->currentRenderTarget = nullptr;
+    mState->nativeDrawable = nil;
+    mState->nativeRenderPass = nil;
+    mState->viewports[0] = 0.0f;
+    mState->viewports[1] = 0.0f;
+    mState->viewports[2] = (float)((width > 0) ? width : 1);
+    mState->viewports[3] = (float)((height > 0) ? height : 1);
+    mState->viewports[4] = 0.0f;
+    mState->viewports[5] = 1.0f;
+    iApplyEncoderState(mState);
+    return true;
+}
+
+bool piRendererMetal::BeginExternalRenderPassFrame(void *commandBuffer, void *renderPassDescriptor, int width, int height)
+{
+    EndNativeFrame();
+
+    mState->commandBuffer = (__bridge id<MTLCommandBuffer>)commandBuffer;
+    mState->activeRenderPass = (__bridge MTLRenderPassDescriptor *)renderPassDescriptor;
+    if (!mState->commandBuffer || !mState->activeRenderPass)
+    {
+        iError(mReporter, "Metal external frame is missing Unity command buffer or render pass descriptor");
+        mState->commandBuffer = nil;
+        mState->activeRenderPass = nil;
+        return false;
+    }
+
+    mState->encoder = [mState->commandBuffer renderCommandEncoderWithDescriptor:mState->activeRenderPass];
+    if (!mState->encoder)
+    {
+        iError(mReporter, "Metal external frame failed to create a render command encoder");
+        mState->commandBuffer = nil;
+        mState->activeRenderPass = nil;
+        return false;
+    }
+
+    mState->frameActive = true;
+    mState->externalCommandEncoder = false;
+    mState->externalCommandBuffer = true;
+    mState->passTouched = true;
+    mState->currentRenderTarget = nullptr;
+    mState->nativeDrawable = nil;
+    mState->nativeRenderPass = nil;
+    mState->viewports[0] = 0.0f;
+    mState->viewports[1] = 0.0f;
+    mState->viewports[2] = (float)((width > 0) ? width : 1);
+    mState->viewports[3] = (float)((height > 0) ? height : 1);
+    mState->viewports[4] = 0.0f;
+    mState->viewports[5] = 1.0f;
+    iApplyEncoderState(mState);
+    return true;
+}
+
+bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueue, void *renderPassDescriptor, int width, int height)
+{
+    EndNativeFrame();
+
+    id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)commandQueue;
+    mState->activeRenderPass = (__bridge MTLRenderPassDescriptor *)renderPassDescriptor;
+    if (!queue || !mState->activeRenderPass)
+    {
+        iError(mReporter, "Metal external frame is missing Unity command queue or render pass descriptor");
+        mState->activeRenderPass = nil;
+        return false;
+    }
+
+    mState->commandBuffer = [queue commandBuffer];
+    if (!mState->commandBuffer)
+    {
+        iError(mReporter, "Metal external frame failed to create a plugin command buffer");
+        mState->activeRenderPass = nil;
+        return false;
+    }
+
+    mState->encoder = [mState->commandBuffer renderCommandEncoderWithDescriptor:mState->activeRenderPass];
+    if (!mState->encoder)
+    {
+        iError(mReporter, "Metal external frame failed to create a render command encoder");
+        mState->commandBuffer = nil;
+        mState->activeRenderPass = nil;
+        return false;
+    }
+
+    mState->frameActive = true;
+    mState->externalCommandEncoder = false;
+    mState->externalCommandBuffer = false;
+    mState->passTouched = true;
     mState->currentRenderTarget = nullptr;
     mState->nativeDrawable = nil;
     mState->nativeRenderPass = nil;
@@ -779,14 +1029,32 @@ void piRendererMetal::EndNativeFrame(void)
         iEndEncoder(mState);
     }
 
-    if (!mState->externalCommandEncoder && mState->nativeDrawable)
+    if (!mState->externalCommandBuffer && !mState->externalCommandEncoder && mState->nativeDrawable)
     {
         [mState->commandBuffer presentDrawable:mState->nativeDrawable];
     }
-    iAttachRetainedBufferCleanup(mState);
-    if (!mState->externalCommandEncoder)
+    if (!mState->externalCommandBuffer)
     {
-        [mState->commandBuffer commit];
+        iAttachRetainedBufferCleanup(mState);
+    }
+    if (!mState->externalCommandBuffer && !mState->externalCommandEncoder)
+    {
+        id<MTLCommandBuffer> commandBuffer = mState->commandBuffer;
+        const bool logCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_LOG_COMMAND_BUFFER");
+        const bool waitCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_WAIT_COMMAND_BUFFER");
+        if (logCommandBuffer)
+        {
+            [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedCommandBuffer) {
+                iReportCommandBufferStatus("completed-handler", completedCommandBuffer);
+            }];
+            iReportCommandBufferStatus("before-commit", commandBuffer);
+        }
+        [commandBuffer commit];
+        if (waitCommandBuffer)
+        {
+            [commandBuffer waitUntilCompleted];
+            iReportCommandBufferStatus("after-wait", commandBuffer);
+        }
     }
 
     mState->commandBuffer = nil;
@@ -806,6 +1074,7 @@ void piRendererMetal::EndNativeFrame(void)
     memset(mState->shaderBuffers, 0, sizeof(mState->shaderBuffers));
     mState->frameActive = false;
     mState->externalCommandEncoder = false;
+    mState->externalCommandBuffer = false;
     mState->passTouched = false;
 }
 
@@ -2244,6 +2513,9 @@ void piRendererMetal::DestroyShader(piShader obj)
     obj->pipelineColorWrite = nil;
     obj->pipelineNoColorWrite = nil;
     obj->pipelineSourceAlphaBlend = nil;
+    obj->pipelineTargetColorWrite = nil;
+    obj->pipelineTargetNoColorWrite = nil;
+    obj->pipelineTargetSourceAlphaBlend = nil;
     if (mState->liveShaders > 0) --mState->liveShaders;
     delete obj;
 }
@@ -2448,11 +2720,20 @@ void piRendererMetal::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint3
     {
         return;
     }
+    if (iSuppressDrawCallsLevel() >= 3)
+    {
+        return;
+    }
 
     if (!mState->encoder)
     {
         mState->encoder = [mState->commandBuffer renderCommandEncoderWithDescriptor:mState->activeRenderPass];
         iApplyEncoderState(mState);
+    }
+    if (iSuppressDrawCallsLevel() >= 2)
+    {
+        mState->passTouched = true;
+        return;
     }
 
     id<MTLRenderPipelineState> pipeline = iGetPipelineForCurrentState(mState, mState->currentShader, mReporter);
@@ -2471,6 +2752,11 @@ void piRendererMetal::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint3
     if (mState->currentVertexArray->vertexBuffer[0] && mState->currentVertexArray->vertexBuffer[0]->buffer)
     {
         [mState->encoder setVertexBuffer:mState->currentVertexArray->vertexBuffer[0]->buffer offset:0 atIndex:0];
+    }
+    if (iSuppressDrawCallsLevel() >= 1)
+    {
+        mState->passTouched = true;
+        return;
     }
 
     const NSUInteger indexSize = mState->currentVertexArray->indexFormat == IndexArrayFormat::UINT_16 ? 2 : 4;
@@ -2509,11 +2795,20 @@ void piRendererMetal::DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int n
     {
         return;
     }
+    if (iSuppressDrawCallsLevel() >= 3)
+    {
+        return;
+    }
 
     if (!mState->encoder)
     {
         mState->encoder = [mState->commandBuffer renderCommandEncoderWithDescriptor:mState->activeRenderPass];
         iApplyEncoderState(mState);
+    }
+    if (iSuppressDrawCallsLevel() >= 2)
+    {
+        mState->passTouched = true;
+        return;
     }
 
     id<MTLRenderPipelineState> pipeline = iGetPipelineForCurrentState(mState, mState->currentShader, mReporter);
@@ -2532,6 +2827,11 @@ void piRendererMetal::DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int n
     if (mState->currentVertexArray && mState->currentVertexArray->vertexBuffer[0] && mState->currentVertexArray->vertexBuffer[0]->buffer)
     {
         [mState->encoder setVertexBuffer:mState->currentVertexArray->vertexBuffer[0]->buffer offset:0 atIndex:0];
+    }
+    if (iSuppressDrawCallsLevel() >= 1)
+    {
+        mState->passTouched = true;
+        return;
     }
     [mState->encoder drawPrimitives:iPrimitivePiToMetal(pt)
                         vertexStart:(NSUInteger)first

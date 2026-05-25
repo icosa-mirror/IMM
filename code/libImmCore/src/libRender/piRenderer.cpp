@@ -3,7 +3,9 @@
 //
 #include "piRenderer.h"
 
-#if defined(ANDROID)
+#if defined(IMM_IOS)
+#include "metal/piMetal_Renderer.h"
+#elif defined(ANDROID)
 #include "opengles/piGLES_Renderer.h"
 #elif defined(WINDOWS)
 #include "opengl4x/piGL4X_Renderer.h"
@@ -21,7 +23,9 @@ namespace ImmCore {
 
 piRenderer *piRenderer::Create( const API type )
 {
-#if defined(ANDROID)
+#if defined(IMM_IOS)
+	if( type==API::Metal ) return new piRendererMetal();
+#elif defined(ANDROID)
 	if( type==API::GLES ) return new piRendererGLES();
 #elif defined(WINDOWS)
 	if( type==API::GL ) return new piRendererGL4X();

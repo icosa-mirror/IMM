@@ -19,6 +19,30 @@ namespace ImmPlayer
         }
 
         private const string DiagPrefix = "[IMM_DIAG] ";
+        private static bool IsEnvFlagEnabled(string name)
+        {
+            string value = System.Environment.GetEnvironmentVariable(name);
+            return !string.IsNullOrEmpty(value) && value != "0";
+        }
+
+        private static bool ShouldRunPostLoadFeature(string featureName, string disableFlag)
+        {
+            if (IsEnvFlagEnabled("IMM_UNITY_DISABLE_FEATURE_POST_LOAD"))
+            {
+                Debug.Log($"{DiagPrefix}Skipping post-load {featureName}: IMM_UNITY_DISABLE_FEATURE_POST_LOAD=1");
+                return false;
+            }
+
+            if (IsEnvFlagEnabled(disableFlag))
+            {
+                Debug.Log($"{DiagPrefix}Skipping post-load {featureName}: {disableFlag}=1");
+                return false;
+            }
+
+            Debug.Log($"{DiagPrefix}Starting post-load {featureName}");
+            return true;
+        }
+
         [System.Serializable]
         public struct LayerListEntry
         {
@@ -276,9 +300,14 @@ namespace ImmPlayer
                 _doc.Pause();
             }
 
-            StartCoroutine(WaitForSequenceAndRefreshLayers());
-            StartCoroutine(ApplyInitialPlaybackState());
-            StartCoroutine(ApplyInitialSpawnAreaViewpoint());
+            if (ShouldRunPostLoadFeature("layer refresh", "IMM_UNITY_DISABLE_LAYER_REFRESH"))
+                StartCoroutine(WaitForSequenceAndRefreshLayers());
+
+            if (ShouldRunPostLoadFeature("initial playback state", "IMM_UNITY_DISABLE_INITIAL_PLAYBACK_STATE"))
+                StartCoroutine(ApplyInitialPlaybackState());
+
+            if (ShouldRunPostLoadFeature("initial spawn area", "IMM_UNITY_DISABLE_INITIAL_SPAWN_AREA"))
+                StartCoroutine(ApplyInitialSpawnAreaViewpoint());
         }
 
         private IEnumerator LoadFromStreamingAssets(string fileName)

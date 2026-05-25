@@ -258,6 +258,13 @@ set_target_properties(ImmUnity PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/unity
 )
 
+set(IMMUNITY_UPM_OSX_DIR ${CODE_DIR}/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/OSX)
+add_custom_command(TARGET ImmUnity POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_UPM_OSX_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${IMMUNITY_UPM_OSX_DIR}/ImmUnityPlugin.bundle"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "$<TARGET_BUNDLE_DIR:ImmUnity>" "${IMMUNITY_UPM_OSX_DIR}/ImmUnityPlugin.bundle"
+)
+
 # -----------------------------------------------------------------------------
 # ImmStrokeReader Unity plugin (macOS)
 # -----------------------------------------------------------------------------
