@@ -400,7 +400,8 @@ jobs:
         fi
         cp "${android_unity_so[0]}" "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
         rm -rf "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
-        cp -R artifacts/ImmViewerPlugin-macOS/ImmUnityPlugin.bundle "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
+        mkdir -p "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
+        cp -R artifacts/ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
         cp artifacts/ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
 
     - name: Archive stroke reader UPM package
