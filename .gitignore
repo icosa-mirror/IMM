@@ -14,6 +14,9 @@ code/appImmUnity/exe/ImmUnityPlugin.ilk
 code/appImmUnity/exe/ImmUnityPlugin.lib
 code/appImmUnity/exe/ImmUnityPlugin.pdb
 code/appImmUnity/exe/
+code/appImmGodot/exe/
+code/appImmGodotGDExtension/.sconsign.dblite
+code/ImmGodotSampleProject/bin/
 code/appImmViewer/bin
 code/appImmViewer/exe/appImmViewer_Debug.*
 code/appImmViewer/exe/appImmViewer_Release.*
@@ -60,6 +63,8 @@ code/projects/android/appImmViewer/build_vr/
 *.userosscache
 *.sln.docstates
 *.env
+__pycache__/
+*.pyc
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

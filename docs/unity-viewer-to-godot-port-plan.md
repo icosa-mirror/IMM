@@ -139,10 +139,58 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
   - Added Windows `appImmGodot` native plugin skeleton that initializes IMM without Unity headers.
   - Added a Godot sample project scaffold mirroring the Unity sample scene structure and control surface.
   - Added a GDExtension source scaffold and `.gdextension` manifest so the sample project has a defined native integration target.
+  - Added native Godot backend lifecycle wiring in `ImmViewerNode` (`ImmGodot_Init` on ready, `ImmGodot_Shutdown` on exit) with configurable color space, antialiasing, log path, temp path, and debug logging.
+  - Added Godot-native debug hooks (`IMM_GODOT_DEBUG` / `debug_logging`) for matrix submission and render-camera smoke tracing.
+  - Added explicit GDExtension smoke-harness methods: `submit_mono_camera_matrices(camera_id, world_to_camera, projection)` and `smoke_render_camera(camera_id, width, height)`.
+  - Added a versioned `ImmGodotRenderAdapter` callback table around graphics init/shutdown and render-camera begin/end so Godot render-thread/context hooks can be attached without changing the engine-agnostic bridge.
+  - Added a Windows SCons build scaffold for `appImmGodotGDExtension` that links against a prebuilt `godot-cpp` library and `ImmGodotPlugin.lib`, outputting the DLL path expected by the sample `.gdextension` manifest.
+  - Extended the GDExtension SCons build to stage `ImmGodotPlugin.dll` and the IMM runtime dependency DLLs beside `imm_godot_extension.dll`, matching Godot's extension-load directory expectations.
+  - Added Windows build helpers (`build-godot-extension.ps1` / `.bat`) that rebuild `appImmGodot`, optionally build `godot-cpp`, run the GDExtension SCons build, and copy runtime binaries into the sample project.
+  - Added a sample-scene smoke driver: `queue_render_camera_transform(camera_transform, width, height, fov_degrees, camera_id)` now submits mono camera matrices from the active camera and queues render using the active viewport dimensions.
+  - Added a render-camera ID lifecycle (`register_render_camera`, `unregister_render_camera`, `is_render_camera_registered`, `get_registered_render_camera_ids`) so `ImmViewerNode` can own camera 0 registration before queuing per-frame render work.
+  - Moved per-frame camera scheduling into `ImmViewerNode` behind `auto_queue_render` and `render_camera_path`, so the node owns camera registration, viewport-size capture, matrix submission, and render-thread queueing instead of the sample controller.
+  - Kept `\` as a manual fixed-viewport render-thread smoke hook through `queue_render_last_camera()`.
+  - Added a first Godot render-thread scheduling diagnostic through `RenderingServer.call_on_render_thread`, with an internal `render_last_camera_on_render_thread` callback invoking the existing mono smoke render hook. This proves render-thread handoff and native render invocation only; it is not the final viewport presentation path.
+  - Added a mutex-protected render request snapshot for the native queued render path so scene-thread camera/viewport submissions are not read directly by the render-thread callback, and kept the queued flag set until `ImmGodot_RenderCamera` returns.
+  - Added a Godot-facing `get_render_diagnostics()` snapshot so script/native smoke tests can assert the queued camera id, viewport dimensions, registered camera set, projection submission, and render callback queued state without reaching into private render-thread state.
+  - Replaced the initial no-op Godot render adapter callbacks with counted adapter callbacks, and extended smoke diagnostics to verify graphics initialization plus before/after render callback bracketing around queued camera work.
+  - Added `build-godot-extension.ps1 -BootstrapGodotCpp` so Windows local/CI builds can clone the default Godot 4.2-compatible `godot-cpp` bindings into `thirdparty/godot-cpp` instead of requiring a manual checkout first.
+  - Added Windows preflight modes for the Godot extension build and smoke wrapper so tool/dependency/Godot executable resolution can be checked before starting the full native build or launching the project.
+  - Added `build-godot-extension.ps1 -RunSmoke` to run the native Godot smoke scene immediately after a successful Windows GDExtension build.
+  - Extended the Windows GitHub Actions workflow to install SCons, cache the Godot 4.2 `godot-cpp` checkout/build tree, bootstrap/build `godot-cpp` on cache misses, run the Godot GDExtension build helper, and upload the staged GDExtension DLL set.
+  - Updated `build-godot-extension.ps1 -BuildGodotCpp` to reuse a cached `godot-cpp` library plus generated bindings when present, while still rebuilding the bindings on cache misses or incomplete cache restores.
+  - Hardened `run-godot-smoke.ps1 -RequireExtension` so native smoke preflight requires the GDExtension DLL, `ImmGodotPlugin.dll`, and all staged IMM runtime dependency DLLs before launching Godot.
+  - Hardened the Windows Godot smoke wrapper to require the `IMM Godot smoke test passed` marker in Godot output in addition to a zero process exit code, and to record the marker result in smoke summaries.
+  - Added `godot-extension-dlls.txt` smoke-log output for native smoke runs, recording expected staged DLLs with found/missing status, byte size, and UTC timestamp before Godot launches.
+  - Hardened `build-godot-extension.ps1` with a post-SCons staged-output check that requires the GDExtension DLL, `ImmGodotPlugin.dll`, and all runtime dependency DLLs before reporting updated sample binaries or running optional smoke.
+  - Added a staged-output `godot-extension-dlls.txt` manifest beside the GDExtension DLLs and included it in the Windows `ImmGodotGDExtension-Windows` artifact for CI diagnostics.
+  - Added local verification that the source IMM runtime dependency DLLs referenced by the Godot SCons staging step exist in the repository's third-party layout before the Windows build attempts to copy them.
+  - Added a headless Godot smoke runner (`smoke_test_runner.gd`) and Windows wrapper (`run-godot-smoke.ps1`) that instantiate the sample scene, verify the Compatibility renderer setting, verify `ImmViewerNode` auto-registers camera 0 through `auto_queue_render`, load the sample IMM document, require `is_loaded()`, check document state/background color, exercise chapter/bounds/layer/spawn-area query APIs, exercise playback controls, exercise the camera/viewport render queue, and validate the render diagnostics snapshot.
+  - Added Godot smoke log capture through `run-godot-smoke.ps1 -LogDir`, and wired the Windows workflow to upload `ImmGodotSmokeLogs-Windows` so first real project-load/render failures preserve output and run metadata.
+  - Split the Windows workflow smoke gates into script-stub smoke before the native build and native-extension smoke after the GDExtension build, separating Godot project/GDScript regressions from native load/render failures.
+  - Split smoke validation into a script-stub scene (`SampleScene.tscn`) and native-only scene (`NativeSmokeScene.tscn`), and removed the script stub's `class_name ImmViewerNode` so it does not shadow the GDExtension class during native validation.
+  - Added Debug/Release selection to the Godot smoke wrapper so local runs validate the same `bin/windows/{debug,release}` output path used by the `.gdextension` manifest.
+  - Wired the Windows GitHub Actions job to download Godot 4.2.2, run the script-stub smoke before building the GDExtension, and run the native smoke after building the GDExtension.
+  - Added a C-safe `ImmGodotPlayerInfo` API and `ImmViewerNode.get_background_color()` so the Godot sample can observe IMM document background color without exposing C++ player structs across the ABI.
+  - Added a Godot-facing `set_document_transform()` hook that stores a `Transform3D` and applies it through `ImmGodot_SetDocumentToWorld`, preserving the shared native `flipZ` parity path.
+  - Added Godot-facing spawn-area info queries (`get_spawn_area_info`, `get_active_spawn_area_info`) with converted pose basis vectors, plus sample camera-rig jumps that mirror Unity's active-spawn view-target compensation.
+  - Hardened the Godot spawn-area ABI to use caller-owned `ImmGodotSpawnArea` storage and fixed-size name buffers instead of returning allocated C strings across the plugin boundary.
+  - Added Godot playback time controls (`set_time`, `get_time`, `get_play_time`, `get_play_time_seconds`, `seek_relative_seconds`) backed by native `piTick` conversion helpers, plus sample seek/status controls.
+  - Added C-safe Godot document state/info queries (`get_document_state`, `get_document_info_flags`, `is_sequence_ready`) so the sample can report loading/playback state and IMM info flags like the Unity wrapper.
+  - Added C-safe document bounds and layer summary queries (`get_bounding_box`, `get_layer_count`, `get_layer_info`) with sample status output for bounds and layer count.
+  - Added C-safe layer visibility/opacity override and diagnostics hooks (`set_layer_visible`, `clear_layer_visibility_override`, `set_layer_opacity`, `get_layer_diagnostics`) with a sample first-layer visibility toggle.
+  - Added layer transform override parity (`set_layer_transform`, `clear_layer_transform_override`) through the same host-matrix plus `flipZ` native conversion used by document transforms.
+  - Added direct chapter query/selection methods (`get_chapter_count`, `get_current_chapter`, `set_chapter`) and sample chapter status, matching Unity's chapter API beyond next/previous shortcuts.
+  - Aligned the native `ImmViewerNode` surface with the sample controller by adding `toggle_pause()` to the GDExtension class, so the script-backed and native-backed control paths expose the same playback command.
+  - Added `verify_sample_api.py` to catch sample-controller calls that are missing from the native `ImmViewerNode` bindings or the script stub while Godot CLI validation is unavailable.
+  - Added `verify_local.py` and wired `build-godot-extension.ps1 -VerifyOnly` through it so local Godot extension API, `.gdextension` manifest, sample Compatibility renderer setting, native `ImmViewerNode` registration, `ImmViewerNode` method binding coverage, sample/native scene structure, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, `ImmGodot` C ABI export alignment, Python, and native syntax checks can run before MSBuild/SCons/`godot-cpp` are installed.
+  - Added optional PowerShell AST syntax validation for the Windows Godot build/smoke helper scripts when `pwsh` or Windows PowerShell is available, so CI can catch script parse errors before invoking the Windows build path.
+  - Added optional local Godot script-smoke execution through `IMM_GODOT_RUN_LOCAL_SMOKE=1 python code/appImmGodotGDExtension/verify_local.py`, which runs the script-stub sample scene headlessly and validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, sample document load state, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, and the camera/viewport queue before native extension binaries exist.
+  - Added an optional `godot-cpp` syntax-only verification path: when `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a checkout with generated bindings, `verify_local.py` compiles `imm_viewer_node.cpp` and `register_types.cpp` against the actual Godot 4.2 C++ headers. This caught and fixed the Godot 4.2 `class_db.hpp` include path and GDExtension entry-point signature before the Windows build runs.
+  - Updated the Windows build helper to rerun local verification with `GODOT_CPP_PATH` set after `godot-cpp` is built, so generated binding/API drift is checked before the extension SCons build.
 - **Remaining for Phase 1 completion:**
-  - Add adapter interfaces for engine-specific device/context callbacks beyond the current direct entrypoints.
-  - Vendor/configure `godot-cpp` and build the GDExtension binary.
-  - Add matrix/debug logging toggles and a minimal Godot-side smoke harness.
+  - Run the updated Windows CI/local GDExtension build and Godot smoke test with `godot-cpp` bootstrap enabled, then fix any compiler/linker/project-load issues it exposes.
+  - Replace the `ImmViewerNode` `RenderingServer.call_on_render_thread` smoke queue with production render integration that targets Godot-owned render resources on the render thread. Visible rendering must not be implemented by CPU readback/upload of native offscreen pixels.
 
 1. Add new project `appImmGodot` (parallel to `appImmUnity`).
 2. Wrap native player lifecycle behind engine-agnostic functions:
@@ -155,6 +203,11 @@ Keep **existing native IMM core/player logic** mostly intact and replace the **e
 **Deliverable:** IMM runtime can initialize independently from Unity headers.
 
 ## Phase 2 — Godot rendering integration
+### Phase 2 status (in progress)
+- **Current state:** the GDExtension can queue camera matrices and invoke the native mono render smoke path from Godot's render-thread handoff.
+- **Important limitation:** this smoke queue does not yet attach IMM drawing to a Godot viewport render target or Godot-owned texture, so it does not prove visible scene rendering.
+- **Required next step:** use Godot's rendering backend ownership model for presentation: render into a Godot-owned render target, wrap/share a native backend texture through `RenderingDevice`/`RenderingServer`, or add the missing IMM backend support needed for that path. CPU readback followed by upload to a Godot texture is allowed only as a diagnostic capture path, not as the renderer.
+
 1. Implement a GDExtension class (e.g., `ImmViewerNode`) and register it.
 2. Hook render lifecycle using Godot rendering callbacks (render-thread safe):
    - per-frame global work trigger
