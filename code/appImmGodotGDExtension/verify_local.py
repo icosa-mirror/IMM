@@ -85,7 +85,9 @@ def verify_project_renderer() -> None:
         raise RuntimeError("Godot sample project does not list the IMM GDExtension in native_extensions")
 
     rendering_match = re.search(r"^renderer/rendering_method=(.+)$", project, re.MULTILINE)
-    rendering_method = unquote(rendering_match.group(1)) if rendering_match else ""
+    # Godot only writes renderer/rendering_method when it differs from the default,
+    # so an absent key means the sample is using the Forward+ default.
+    rendering_method = unquote(rendering_match.group(1)) if rendering_match else "forward_plus"
     if rendering_method != "forward_plus":
         raise RuntimeError(f"Unexpected sample renderer path: {rendering_method!r}")
     if 'run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"' not in project:
