@@ -14,6 +14,7 @@ code/appImmUnity/exe/ImmUnityPlugin.ilk
 code/appImmUnity/exe/ImmUnityPlugin.lib
 code/appImmUnity/exe/ImmUnityPlugin.pdb
 code/appImmUnity/exe/
+code/appImmGodot/bin
 code/appImmGodot/exe/
 code/appImmGodotGDExtension/.sconsign.dblite
 code/ImmGodotSampleProject/bin/

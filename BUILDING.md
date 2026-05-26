@@ -29,7 +29,12 @@ To build a single plugin, pass `-t:<target>`:
 msbuild "code/projects/windows/imm.sln" -t:appImmStrokeWriter -p:Configuration=Release -p:Platform=x64 -m
 ```
 
-See `README.md` for macOS, iOS, and Android build instructions.
+> **Build the full solution at least once before relying on `-t:`.** On a clean checkout, `-t:appImmUnity` fails with
+> `LNK1181: cannot open input file '...\libImmExporter\bin\x64\Release\libImmExporter.lib'`: `appImmUnity` links `libImmExporter.lib`
+> but does not declare `libImmExporter` as a solution build dependency, so a single-target build never builds it. Run one full-solution
+> build (no `-t:`) first; after that, single-target incremental builds resolve.
+
+See the macOS section below for the standalone viewer, and `code/projects/android/README.md` for Android builds (including the Unity plugin `.so` files). iOS builds follow the CI workflow in `.github/workflows/build.yml`.
 
 ## Quick reference — macOS Metal standalone player
 
