@@ -227,12 +227,24 @@ jobs:
     - name: Build macOS Metal standalone viewer
       run: cmake --build build/macos --target appImmViewerMetal --config Release
 
+    - name: Package macOS Metal standalone viewer app bundle
+      run: |
+        set -euo pipefail
+        staging="artifacts/ImmViewerMetal-macOS"
+        app="build/macos/viewer/appImmViewerMetal.app"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        test -d "$app"
+        ditto "$app" "$staging/appImmViewerMetal.app"
+        test -f "$staging/appImmViewerMetal.app/Contents/Info.plist"
+        test -x "$staging/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
+
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewerMetal-macOS
         path: |
-          build/macos/viewer/appImmViewerMetal.app
+          artifacts/ImmViewerMetal-macOS
         if-no-files-found: error
 
     - name: Build macOS Stroke Reader plugin
