@@ -2,7 +2,9 @@
 
 #include "libImmCore/src/libBasics/piImage.h"
 #include "libImmCore/src/libBasics/piStr.h"
+#if defined(__APPLE__)
 #include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
+#endif
 
 #include <cstdlib>
 #include <vector>
@@ -502,10 +504,12 @@ namespace ImmShared
             return false;
         }
 
+#if defined(__APPLE__)
         if (mConfig.rendererApi == piRenderer::API::Metal && mConfig.metalExternalShaderAdjust)
         {
             static_cast<piRendererMetal *>(mRenderer)->SetExternalShaderAdjust(true);
         }
+#endif
 
         mGraphicsInitialized = true;
         return true;
