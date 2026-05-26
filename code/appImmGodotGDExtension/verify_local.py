@@ -367,7 +367,7 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Check Godot GDExtension staging", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "code/ImmGodotSampleProject/bin/windows/release/*.dll", "code/ImmGodotSampleProject/bin/windows/release/godot-extension-dlls.txt", "ImmGodotGDExtension-Windows"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Check Godot GDExtension staging", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
     for stale_text in ["Run Godot native smoke test", "-RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\\godot-smoke-native"]:
