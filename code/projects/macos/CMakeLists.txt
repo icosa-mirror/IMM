@@ -417,6 +417,7 @@ if(IMM_BUILD_VIEWER)
     add_executable(appImmViewerMetal MACOSX_BUNDLE
         ${CODE_DIR}/appImmViewer/src/macos/metal_player.mm
         ${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json
+        ${CODE_DIR}/../exampleImmFiles/sample1.imm
         ${CODE_DIR}/appImmViewer/src/resolve.cpp
         ${CODE_DIR}/appImmViewer/src/settings.cpp
         ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
@@ -445,6 +446,9 @@ if(IMM_BUILD_VIEWER)
         MACOSX_BUNDLE_BUNDLE_VERSION "0.1.0"
     )
     set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
+    )
+    set_source_files_properties(${CODE_DIR}/../exampleImmFiles/sample1.imm PROPERTIES
         MACOSX_PACKAGE_LOCATION Resources
     )
 
