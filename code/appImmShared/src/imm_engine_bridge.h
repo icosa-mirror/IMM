@@ -17,6 +17,7 @@ namespace ImmShared
             const char *tmpFolderName = nullptr;
             ImmCore::piRenderer::API rendererApi = ImmCore::piRenderer::API::GL;
             void *graphicsDevice = nullptr;
+            bool metalExternalShaderAdjust = false;
             bool initializeRendererOnInit = true;
             int initializeWindow = 0;
             int initializeDisplay = 0;

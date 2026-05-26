@@ -20,7 +20,6 @@
 #include <ctype.h>
 #include <wchar.h>
 #include <math.h>
-#include <dirent.h>
 
 using namespace ImmCore;
 
@@ -126,11 +125,16 @@ static bool iApplyDefaultImmWhenNoLoadConfigured(ExePlayer::Settings *settings)
         return true;
     }
 
-    NSString *candidate = iFirstImmFileInDirectory([[NSBundle mainBundle] resourcePath]);
+    NSString *bundleDirectory = [[[NSBundle mainBundle] bundlePath] stringByDeletingLastPathComponent];
+    NSString *candidate = iFirstImmFileInDirectory(bundleDirectory);
     if (!candidate)
     {
         NSString *executableDirectory = [[[NSBundle mainBundle] executablePath] stringByDeletingLastPathComponent];
         candidate = iFirstImmFileInDirectory(executableDirectory);
+    }
+    if (!candidate)
+    {
+        candidate = iFirstImmFileInDirectory([[NSBundle mainBundle] resourcePath]);
     }
     if (!candidate)
     {

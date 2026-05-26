@@ -2,6 +2,7 @@
 
 #include "libImmCore/src/libBasics/piImage.h"
 #include "libImmCore/src/libBasics/piStr.h"
+#include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
 
 #include <cstdlib>
 #include <vector>
@@ -499,6 +500,11 @@ namespace ImmShared
         {
             mLog.Printf(LT_ERROR, L"Failed to initialize Renderer.");
             return false;
+        }
+
+        if (mConfig.rendererApi == piRenderer::API::Metal && mConfig.metalExternalShaderAdjust)
+        {
+            static_cast<piRendererMetal *>(mRenderer)->SetExternalShaderAdjust(true);
         }
 
         mGraphicsInitialized = true;

@@ -153,7 +153,7 @@ struct piMetalState
     bool dynamicSourceAlphaBlendEnabled = false;
     bool cullFaceEnabled = true;
 	    bool frontFaceCCW = true;
-	    bool usesExternalDevice = false;
+	    bool externalShaderAdjust = false;
     bool unsupportedReported[(int)piMetalUnsupportedFeature::Count] = {};
     int numViewports = 1;
     float viewports[6 * 16] = {};
@@ -745,7 +745,6 @@ piRendererMetal::~piRendererMetal()
 bool piRendererMetal::Initialize(int, const void **, int, bool, bool, piReporter *reporter, bool, void *device)
 {
     mReporter = reporter;
-    mState->usesExternalDevice = device != nullptr;
     mState->device = device ? (__bridge id<MTLDevice>)device : MTLCreateSystemDefaultDevice();
     if (!mState->device)
     {
@@ -936,6 +935,11 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
     mState->currentRenderTarget = nullptr;
     iResetDrawCounters(mState);
     return true;
+}
+
+void piRendererMetal::SetExternalShaderAdjust(bool enabled)
+{
+    mState->externalShaderAdjust = enabled;
 }
 
 bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, void *renderPassDescriptor, int width, int height)
@@ -2410,13 +2414,12 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
 	        requiresVertexBuffer = true;
 	    }
 
-	    if (mState->usesExternalDevice)
+	    if (mState->externalShaderAdjust || iMetalEnvFlagEnabled("IMM_METAL_EXTERNAL_SHADER_ADJUST"))
 	    {
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0)); out.position.y = -out.position.y;"];
-	        source = [source stringByReplacingOccurrencesOfString:@"out.position.z = out.position.w;" withString:@"out.position.z = 0.0;"];
 	    }
 	
 	    NSError *compileError = nil;

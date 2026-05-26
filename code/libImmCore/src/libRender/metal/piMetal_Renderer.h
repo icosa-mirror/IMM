@@ -22,6 +22,7 @@ public:
     bool      BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, void *renderPassDescriptor, int width, int height);
     bool      BeginExternalRenderPassFrame(void *commandBuffer, void *renderPassDescriptor, int width, int height);
     bool      BeginExternalCommandQueueRenderPassFrame(void *commandQueue, void *renderPassDescriptor, int width, int height);
+    void      SetExternalShaderAdjust(bool enabled);
     void      EndNativeFrame(void);
 
     bool      Initialize(int id, const void **hwnd, int num, bool disableVSync, bool disableErrors, piReporter *reporter, bool createDevice, void *device);

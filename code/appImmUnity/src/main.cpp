@@ -845,6 +845,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         }
         config.rendererApi = piRenderer::API::Metal;
         config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
+        config.metalExternalShaderAdjust = true;
     }
     else if (gfx == kUnityGfxRendererOpenGLCore)
     {
