@@ -21,6 +21,8 @@ opts.Add("platform", "Godot platform name", "windows" if os.name == "nt" else "m
 opts.Add("arch", "Target architecture", "x86_64")
 opts.Add("godot_cpp", "Path to godot-cpp checkout", os.environ.get("GODOT_CPP_PATH", str(godot_cpp_default)))
 opts.Add("godot_cpp_lib", "Path to prebuilt godot-cpp library", os.environ.get("GODOT_CPP_LIB", ""))
+opts.Add("imm_godot_lib", "Path to the ImmGodot native plugin link library", os.environ.get("IMM_GODOT_LIB", ""))
+opts.Add("imm_godot_runtime", "Path to the ImmGodot native plugin runtime library", os.environ.get("IMM_GODOT_RUNTIME", ""))
 opts.Add("imm_config", "IMM Visual Studio configuration to link against", "Debug")
 
 env = Environment(ENV=os.environ, variables=opts)
@@ -56,15 +58,28 @@ variant = "debug" if target.endswith("debug") else "release"
 out_dir = sample_dir / "bin" / platform / variant
 target_path = out_dir / "imm_godot_extension"
 if platform == "windows":
-    imm_godot_lib = code_dir / "appImmGodot" / "exe" / "ImmGodotPlugin.lib"
-    imm_godot_runtime = code_dir / "appImmGodot" / "exe" / "ImmGodotPlugin.dll"
+    imm_godot_lib = first_existing([
+        env["imm_godot_lib"],
+        code_dir / "appImmGodot" / "exe" / "ImmGodotPlugin.lib",
+    ])
+    imm_godot_runtime = first_existing([
+        env["imm_godot_runtime"],
+        code_dir / "appImmGodot" / "exe" / "ImmGodotPlugin.dll",
+    ])
 else:
-    imm_godot_lib = repo_root / "build" / "macos-godot-appleclang" / "godot" / "libImmGodotPlugin.dylib"
-    imm_godot_runtime = imm_godot_lib
+    imm_godot_lib = first_existing([
+        env["imm_godot_lib"],
+        repo_root / "build" / "macos" / "godot" / "libImmGodotPlugin.dylib",
+        repo_root / "build" / "macos-godot-appleclang" / "godot" / "libImmGodotPlugin.dylib",
+    ])
+    imm_godot_runtime = first_existing([
+        env["imm_godot_runtime"],
+        imm_godot_lib,
+    ])
 
-if not imm_godot_lib.exists():
+if imm_godot_lib is None:
     Exit("ImmGodotPlugin link library not found at %s. Build appImmGodot first." % imm_godot_lib)
-if not imm_godot_runtime.exists():
+if imm_godot_runtime is None:
     Exit("ImmGodotPlugin runtime library not found at %s. Build appImmGodot first." % imm_godot_runtime)
 
 env.Append(CPPPATH=[
