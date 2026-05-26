@@ -86,8 +86,10 @@ def verify_project_renderer() -> None:
 
     rendering_match = re.search(r"^renderer/rendering_method=(.+)$", project, re.MULTILINE)
     rendering_method = unquote(rendering_match.group(1)) if rendering_match else ""
-    if rendering_method != "gl_compatibility":
+    if rendering_method != "forward_plus":
         raise RuntimeError(f"Unexpected sample renderer path: {rendering_method!r}")
+    if 'run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"' not in project:
+        raise RuntimeError("Godot sample project Run button must launch MetalVisualSmokeScene.tscn")
 
     print("Godot sample renderer path ok", flush=True)
 

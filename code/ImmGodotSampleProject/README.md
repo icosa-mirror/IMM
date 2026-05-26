@@ -8,13 +8,13 @@ This project mirrors the intent of the Unity sample project and exercises the na
 - The `ImmViewerNode` script mirrors the runtime API shape the native GDExtension exposes.
 - The native `appImmGodot` plugin and GDExtension own native init/shutdown, camera registration, matrix submission, and compositor render request publishing.
 - A `.gdextension` manifest is present under `addons/imm_viewer/`.
-- The script-stub Compatibility smoke and macOS Forward+/Metal visual smoke pass locally. Windows currently validates GDExtension build/staging in CI, not native rendering.
+- The project Run button opens the macOS Forward+/Metal scene by default, and the script-stub smoke plus macOS Forward+/Metal visual smoke pass locally. Windows currently validates GDExtension build/staging in CI, not native rendering.
 
 ## Open in Godot
 
 1. Open `code/ImmGodotSampleProject` in Godot 4.5 or newer.
-2. Use the Compatibility renderer path.
-3. Run `scenes/SampleScene.tscn`.
+2. Use Forward+ rendering. On macOS, Godot 4.6.1 selects Metal for the Forward+ path.
+3. Press Run. The project main scene is `scenes/MetalVisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor.
 
 ## Sample controls
 
@@ -38,13 +38,13 @@ The default document path is set to `../../../exampleImmFiles/sample1.imm`, whic
 
 ## Native build and validation
 
-Build the GDExtension with `godot-cpp`, run the script-stub Compatibility smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
+Build the GDExtension with `godot-cpp`, run the script-stub smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
 
 For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build. This is not the current Windows CI gate because Windows does not yet have a valid Godot-compatible production renderer backend.
 
 The native build scaffold writes the GDExtension DLL to `bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics.
 
-If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` checks the sample/native API boundary, `.gdextension` manifest paths, Compatibility renderer setting, script-stub/native scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI/smoke wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the `appImmGodot` syntax-only compile when `clang++` is available. If `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a Godot 4.5 `godot-cpp` checkout with generated bindings, it also syntax-checks the GDExtension sources against the real Godot C++ headers. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -VerifyOnly` runs the same local verification without requiring MSBuild, SCons, or `godot-cpp`.
+If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` checks the sample/native API boundary, `.gdextension` manifest paths, Forward+ project default, Run-button main scene, script-stub/native scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI/smoke wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the `appImmGodot` syntax-only compile when `clang++` is available. If `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a Godot 4.5 `godot-cpp` checkout with generated bindings, it also syntax-checks the GDExtension sources against the real Godot C++ headers. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -VerifyOnly` runs the same local verification without requiring MSBuild, SCons, or `godot-cpp`.
 
 With Godot installed, add `IMM_GODOT_RUN_LOCAL_SMOKE=1` to `verify_local.py` to run the script-stub smoke scene headlessly. This validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, `load_document()`, `is_loaded()`, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, playback time snapshots/seek math, document/playback/spawn-area signals, native backend signal parity, the camera/viewport queue, and render diagnostics before the native Windows extension is available.
 

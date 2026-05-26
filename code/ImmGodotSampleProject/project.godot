@@ -1,19 +1,28 @@
 ; Engine configuration file.
-; Minimal Godot 4 sample project for the IMM bridge bring-up.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
 [application]
+
 config/name="IMM Godot Sample"
-run/main_scene="res://scenes/SampleScene.tscn"
+run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"
+config/features=PackedStringArray("4.6")
 
 [display]
+
 window/size/viewport_width=1600
 window/size/viewport_height=900
 
 [native_extensions]
+
 paths=["res://addons/imm_viewer/imm_viewer.gdextension"]
 
 [rendering]
-renderer/rendering_method="gl_compatibility"
+
 environment/defaults/default_clear_color=Color(0.04, 0.05, 0.08, 1)

@@ -1,6 +1,6 @@
 extends SceneTree
 
-const EXPECTED_RENDERER := "gl_compatibility"
+const EXPECTED_RENDERER := "forward_plus"
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_SCENE := "res://scenes/SampleScene.tscn"
 const NATIVE_SCENE := "res://scenes/NativeSmokeScene.tscn"
@@ -132,7 +132,7 @@ func _run() -> void:
     if str(backend_diagnostics.get("project_rendering_method", "")) != EXPECTED_RENDERER:
         failures.append("render backend diagnostics reported renderer %s" % str(backend_diagnostics.get("project_rendering_method", "")))
     if bool(backend_diagnostics.get("metal_adapter_candidate", true)):
-        failures.append("Compatibility smoke path should not report a Metal adapter candidate")
+        failures.append("script-stub smoke path should not report a Metal adapter candidate")
     if int(backend_diagnostics.get("renderer_api", -1)) < 0:
         failures.append("render backend diagnostics did not report renderer_api")
     if bool(backend_diagnostics.get("native_backend_initialized", false)) != expected_native:
