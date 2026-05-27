@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CODE_ROOT = ROOT / "code"
 SAMPLE_CONTROLLER = CODE_ROOT / "ImmGodotSampleProject/scripts/sample_scene_controller.gd"
-SCRIPT_STUB = CODE_ROOT / "ImmGodotSampleProject/scripts/imm_viewer_node.gd"
+SCRIPT_STUB = CODE_ROOT / "ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
 NATIVE_HEADER = CODE_ROOT / "appImmGodotGDExtension/src/imm_viewer_node.h"
 NATIVE_CPP = CODE_ROOT / "appImmGodotGDExtension/src/imm_viewer_node.cpp"
 
