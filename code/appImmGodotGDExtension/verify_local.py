@@ -28,7 +28,7 @@ WINDOWS_SMOKE_HELPER = ROOT / "code/projects/windows/run-godot-smoke.ps1"
 WORKFLOW = ROOT / ".github/workflows/build.yml"
 SCONSTRUCT = ROOT / "code/appImmGodotGDExtension/SConstruct"
 GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runner.gd"
-GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/scripts/imm_viewer_node.gd"
+GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
 GODOT_METAL_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/metal_visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
 GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
@@ -293,15 +293,15 @@ def verify_godot_scenes() -> None:
 
     if "res://scripts/sample_scene_controller.gd" not in sample_resource_paths:
         raise RuntimeError("SampleScene.tscn does not reference sample_scene_controller.gd")
-    if "res://scripts/imm_viewer_node.gd" not in sample_resource_paths:
+    if "res://addons/imm_viewer/imm_viewer_node.gd" not in sample_resource_paths:
         raise RuntimeError("SampleScene.tscn does not reference the script stub")
-    if "res://scripts/imm_viewer_node.gd" in native_resource_paths:
+    if "res://addons/imm_viewer/imm_viewer_node.gd" in native_resource_paths:
         raise RuntimeError("NativeSmokeScene.tscn must not reference the script stub")
     if "res://scripts/sample_scene_controller.gd" not in native_resource_paths:
         raise RuntimeError("NativeSmokeScene.tscn does not reference sample_scene_controller.gd")
     if "res://scripts/metal_visual_smoke_controller.gd" not in visual_resource_paths:
         raise RuntimeError("MetalVisualSmokeScene.tscn does not reference metal_visual_smoke_controller.gd")
-    if "res://scripts/imm_viewer_node.gd" in visual_resource_paths:
+    if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
         raise RuntimeError("MetalVisualSmokeScene.tscn must not reference the script stub")
 
     if node_by_name(sample_nodes, "ImmViewer").get("type") != "Node":
