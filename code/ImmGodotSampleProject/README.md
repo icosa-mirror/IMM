@@ -16,6 +16,51 @@ This project mirrors the intent of the Unity sample project and exercises the na
 2. Use Forward+ rendering. On macOS, Godot 4.6.1 selects Metal for the Forward+ path.
 3. Press Run. The project main scene is `scenes/MetalVisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor.
 
+## Using the addon in a new project
+
+The CI artifact (`ImmGodotGDExtension-macOS`) is a self-contained `addons/imm_viewer/` folder. Copy it into your Godot project's root so you have `res://addons/imm_viewer/`.
+
+### macOS quarantine (required after downloading from CI)
+
+macOS Gatekeeper quarantines files downloaded from the internet. The dylibs are linker-signed by Apple's toolchain; running `codesign` on them again breaks the signature. The correct fix is to remove the quarantine attribute recursively — **do not** codesign CI-built dylibs manually:
+
+```bash
+xattr -dr com.apple.quarantine addons/imm_viewer/
+```
+
+Run this once from your project root before opening the project in Godot. If you skip this step Godot will crash (SIGABRT) when it tries to load the extension.
+
+### Scene setup
+
+1. **Add an `ImmViewerNode`** to your scene tree. Set its properties in the Inspector:
+   - `document_path`: path to your `.imm` file (e.g. `res://myfile.imm`)
+   - `load_on_ready`: enable to load automatically when the scene starts
+   - `auto_play`: enable to start playback immediately after loading
+   - `auto_queue_render`: enable to let the node submit camera transforms each frame
+   - `render_camera_path`: set to the path of your `Camera3D` node
+
+2. **Attach the compositor effect to your Camera3D.** This is the step that makes rendering actually appear on screen — without it the IMM backend runs but nothing composites into the viewport:
+   1. Select your `Camera3D` in the Scene tree
+   2. In the Inspector, find the **Compositor** property (in the Camera3D section)
+   3. Click the field → **New Compositor**
+   4. Click the new Compositor resource to expand it
+   5. Find **Compositor Effects** → click the array → **Add Element**
+   6. In the new element slot, choose **ImmViewerCompositorEffect**
+
+The scene then needs: a `Camera3D` with `ImmViewerCompositorEffect` in its compositor, and an `ImmViewerNode` pointing at that camera via `render_camera_path`. No `WorldEnvironment` is required.
+
+### Minimum working scene
+
+```
+Node3D (root)
+├── Camera3D          ← compositor → Compositor [ImmViewerCompositorEffect]
+└── ImmViewerNode     ← render_camera_path: ../Camera3D
+                         document_path: res://myfile.imm
+                         load_on_ready: true
+                         auto_play: true
+                         auto_queue_render: true
+```
+
 ## Sample controls
 
 - `L`: load document
