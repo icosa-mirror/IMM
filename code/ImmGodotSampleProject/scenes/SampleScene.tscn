@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/sample_scene_controller.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/imm_viewer_node.gd" id="2"]
+[ext_resource type="Script" path="res://addons/imm_viewer/imm_viewer_node.gd" id="2"]
 
 [node name="SampleScene" type="Node3D"]
 script = ExtResource("1")

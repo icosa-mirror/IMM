@@ -314,12 +314,15 @@ jobs:
         python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
         python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$GITHUB_WORKSPACE/thirdparty/godot-cpp" imm_godot_lib="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib"
 
-    - name: Sign macOS Godot GDExtension dylibs
+    - name: Sign macOS Godot GDExtension dylibs (if unsigned)
       run: |
-        codesign --sign - --force --deep \
-          code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib
-        codesign --sign - --force --deep \
-          code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib
+        for f in \
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib \
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib; do
+          if ! codesign -v "$f" 2>/dev/null; then
+            codesign --sign - --deep "$f"
+          fi
+        done
 
     - name: Stage macOS Godot GDExtension binaries
       run: |
@@ -340,8 +343,11 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
-    - name: Sign macOS Metal viewer app
-      run: codesign --sign - --force --deep build/macos/viewer/appImmViewerMetal.app
+    - name: Sign macOS Metal viewer app (if unsigned)
+      run: |
+        if ! codesign -v build/macos/viewer/appImmViewerMetal.app 2>/dev/null; then
+          codesign --sign - --deep build/macos/viewer/appImmViewerMetal.app
+        fi
 
     - name: Package macOS Metal standalone viewer app bundle
       run: |
@@ -366,11 +372,15 @@ jobs:
     - name: Build macOS Stroke Reader plugin
       run: cmake --build build/macos --target ImmStrokeReader --config Release
 
-    - name: Sign macOS Unity plugin and Stroke Reader dylib
+    - name: Sign macOS Unity plugin and Stroke Reader dylib (if unsigned)
       run: |
-        codesign --sign - --force --deep build/macos/unity/ImmUnityPlugin.bundle
-        codesign --sign - --force --deep \
-          code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
+        for f in \
+          build/macos/unity/ImmUnityPlugin.bundle \
+          code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib; do
+          if ! codesign -v "$f" 2>/dev/null; then
+            codesign --sign - --deep "$f"
+          fi
+        done
 
     - name: Upload Unity Plugin Bundle
       uses: actions/upload-artifact@v4
@@ -634,6 +644,12 @@ jobs:
         cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension "$addon/"
         if [ -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension.uid ]; then
           cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension.uid "$addon/"
+        fi
+        # GDScript stub / API wrapper (ships alongside the native binaries so
+        # users who drop the addon into their project get a working ImmViewerNode).
+        cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd "$addon/"
+        if [ -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd.uid ]; then
+          cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd.uid "$addon/"
         fi
         # Merge whatever platform binaries were produced this run (bin/<platform>/...).
         cp -R artifacts/platform-bins/bin/* "$addon/bin/"
