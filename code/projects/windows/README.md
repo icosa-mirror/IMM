@@ -131,8 +131,8 @@ To check Godot executable resolution, smoke scene selection, and native dependen
 8. Reruns `verify_local.py` with `GODOT_CPP_PATH` set to the resolved `godot-cpp` checkout, so generated Godot C++ header mismatches are caught before linking when generated bindings are present.
 9. Runs `code/appImmGodotGDExtension/SConstruct`.
 10. Writes `imm_godot_extension.dll`, copies `ImmGodotPlugin.dll`, stages the IMM runtime dependency DLLs, verifies the complete staged DLL set, and writes `godot-extension-dlls.txt` in:
-   - `code/ImmGodotSampleProject/bin/windows/debug`
-   - or `code/ImmGodotSampleProject/bin/windows/release`
+   - `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug`
+   - or `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release`
 11. Runs `run-godot-smoke.ps1 -RequireExtension` when `-RunSmoke` is passed.
 
 The GitHub Actions Windows job additionally downloads Godot 4.5, caches `thirdparty\godot-cpp` by `GODOT_CPP_REF`, runs script-stub smoke before the native build with `run-godot-smoke.ps1 -LogDir artifacts\godot-smoke-script`, builds the GDExtension, then runs `run-godot-smoke.ps1 -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight`. That post-build preflight verifies the GDExtension DLL, `ImmGodotPlugin.dll`, staged IMM runtime dependency DLLs, and Godot editor lookup mirroring without launching the native IMM renderer. CI uploads both log directories as `ImmGodotSmokeLogs-Windows` and uploads the full staged DLL set plus `godot-extension-dlls.txt` as `ImmGodotGDExtension-Windows`. The full native Windows smoke remains available for local backend work through `-RunSmoke` or `run-godot-smoke.ps1 -RequireExtension`, but it is not a CI gate until Windows has a valid Godot-compatible production renderer backend. Omit `-RequireExtension` to run the script-stub `SampleScene.tscn` smoke path.

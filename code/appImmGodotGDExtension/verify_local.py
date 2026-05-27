@@ -67,8 +67,8 @@ def verify_manifest() -> str:
         raise RuntimeError(f"Unexpected GDExtension entry symbol: {entry_symbol!r}")
 
     expected_libraries = {
-        "windows.debug.x86_64": "res://bin/windows/debug/imm_godot_extension.dll",
-        "windows.release.x86_64": "res://bin/windows/release/imm_godot_extension.dll",
+        "windows.debug.x86_64": "res://addons/imm_viewer/bin/windows/debug/imm_godot_extension.dll",
+        "windows.release.x86_64": "res://addons/imm_viewer/bin/windows/release/imm_godot_extension.dll",
     }
     for key, expected in expected_libraries.items():
         actual = unquote(parser.get("libraries", key, fallback=""))
@@ -353,7 +353,7 @@ def verify_windows_build_wiring() -> None:
     if re.search(r"^\s*class_name\s+ImmViewerNode\b", script_stub, re.MULTILINE):
         raise RuntimeError("Script stub must not claim the native ImmViewerNode class_name")
 
-    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
+    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 

@@ -2,10 +2,35 @@
 entry_symbol="imm_godot_library_init"
 compatibility_minimum="4.5"
 
+; Self-contained addon: every binary lives under res://addons/imm_viewer/bin/.
+; All target platforms are declared up front so adding Windows/Android later is a
+; drop-in (build the binaries into the matching bin/<platform>/<variant>/ slot --
+; no edits to this manifest or the directory structure are required).
+
 [libraries]
-windows.debug.x86_64="res://bin/windows/debug/imm_godot_extension.dll"
-windows.release.x86_64="res://bin/windows/release/imm_godot_extension.dll"
-macos.debug.arm64="res://bin/macos/debug/libimm_godot_extension.dylib"
-macos.release.arm64="res://bin/macos/release/libimm_godot_extension.dylib"
-macos.debug.x86_64="res://bin/macos/debug/libimm_godot_extension.dylib"
-macos.release.x86_64="res://bin/macos/release/libimm_godot_extension.dylib"
+windows.debug.x86_64="res://addons/imm_viewer/bin/windows/debug/imm_godot_extension.dll"
+windows.release.x86_64="res://addons/imm_viewer/bin/windows/release/imm_godot_extension.dll"
+macos.debug.arm64="res://addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib"
+macos.release.arm64="res://addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib"
+macos.debug.x86_64="res://addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib"
+macos.release.x86_64="res://addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib"
+android.debug.arm64="res://addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so"
+android.release.arm64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.arm64.so"
+android.debug.x86_64="res://addons/imm_viewer/bin/android/debug/libimm_godot_extension.x86_64.so"
+android.release.x86_64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.x86_64.so"
+
+; Backend libraries the extension links against. Declaring them here makes Godot
+; copy them next to the extension when a game is EXPORTED (without this the addon
+; loads in the editor but fails in exported builds). Paths for platforms whose
+; binaries are not present yet are simply ignored on other platforms.
+[dependencies]
+windows.debug.x86_64={"res://addons/imm_viewer/bin/windows/debug/ImmGodotPlugin.dll":"","res://addons/imm_viewer/bin/windows/debug/Audio360.dll":"","res://addons/imm_viewer/bin/windows/debug/opus.dll":"","res://addons/imm_viewer/bin/windows/debug/opusenc.dll":"","res://addons/imm_viewer/bin/windows/debug/vorbisenc.dll":"","res://addons/imm_viewer/bin/windows/debug/zlib1.dll":"","res://addons/imm_viewer/bin/windows/debug/jpeg62.dll":"","res://addons/imm_viewer/bin/windows/debug/libpng16.dll":"","res://addons/imm_viewer/bin/windows/debug/ogg.dll":"","res://addons/imm_viewer/bin/windows/debug/vorbis.dll":""}
+windows.release.x86_64={"res://addons/imm_viewer/bin/windows/release/ImmGodotPlugin.dll":"","res://addons/imm_viewer/bin/windows/release/Audio360.dll":"","res://addons/imm_viewer/bin/windows/release/opus.dll":"","res://addons/imm_viewer/bin/windows/release/opusenc.dll":"","res://addons/imm_viewer/bin/windows/release/vorbisenc.dll":"","res://addons/imm_viewer/bin/windows/release/zlib1.dll":"","res://addons/imm_viewer/bin/windows/release/jpeg62.dll":"","res://addons/imm_viewer/bin/windows/release/libpng16.dll":"","res://addons/imm_viewer/bin/windows/release/ogg.dll":"","res://addons/imm_viewer/bin/windows/release/vorbis.dll":""}
+macos.debug.arm64={"res://addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib":""}
+macos.release.arm64={"res://addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib":""}
+macos.debug.x86_64={"res://addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib":""}
+macos.release.x86_64={"res://addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib":""}
+android.debug.arm64={"res://addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so":""}
+android.release.arm64={"res://addons/imm_viewer/bin/android/release/libImmGodotPlugin.so":""}
+android.debug.x86_64={"res://addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so":""}
+android.release.x86_64={"res://addons/imm_viewer/bin/android/release/libImmGodotPlugin.so":""}

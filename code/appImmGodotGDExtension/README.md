@@ -61,7 +61,7 @@ Prerequisites:
 
 - Build `godot-cpp` first so `libgodot-cpp.windows.*.x86_64.lib` exists under its `bin` folder, or pass `godot_cpp_lib=...`.
 - Build `appImmGodot` first so `code/appImmGodot/exe/ImmGodotPlugin.lib` exists.
-- The output DLL is written to `code/ImmGodotSampleProject/bin/windows/{debug,release}/imm_godot_extension.dll`, matching `addons/imm_viewer/imm_viewer.gdextension`.
+- The output DLL is written to `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/{debug,release}/imm_godot_extension.dll`, matching `addons/imm_viewer/imm_viewer.gdextension`. The addon is self-contained: every binary lives under `addons/imm_viewer/bin/`.
 - `ImmGodotPlugin.dll` and the IMM runtime dependency DLLs are copied beside the GDExtension DLL so the backend dependencies can be found at runtime.
 - The Windows build helper verifies the complete staged DLL set after SCons before reporting success or running `-RunSmoke`, then writes `godot-extension-dlls.txt` beside the DLLs for artifact diagnostics.
 
@@ -134,7 +134,7 @@ python code\appImmGodotGDExtension\verify_local.py
 
 On macOS, `verify_local.py` also checks `/Applications/Godot.app/Contents/MacOS/Godot` and `/Applications/Godot_mono.app/Contents/MacOS/Godot` when the smoke flag is set.
 
-The SCons build stages `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the IMM runtime dependency DLLs in `bin/windows/{debug,release}` so Godot can resolve native dependencies from the extension directory.
+The SCons build stages `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the IMM runtime dependency DLLs in `addons/imm_viewer/bin/windows/{debug,release}` so Godot can resolve native dependencies from the extension directory.
 
 After building the extension and installing Godot 4.5 or newer, run the sample smoke test:
 

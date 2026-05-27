@@ -320,8 +320,8 @@ jobs:
         staging="artifacts/ImmGodotGDExtension-macOS-platform/bin/macos/release"
         rm -rf artifacts/ImmGodotGDExtension-macOS-platform
         mkdir -p "$staging"
-        cp code/ImmGodotSampleProject/bin/macos/release/libimm_godot_extension.dylib "$staging/"
-        cp code/ImmGodotSampleProject/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
+        cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib "$staging/"
+        cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
         test -f "$staging/libimm_godot_extension.dylib"
         test -f "$staging/libImmGodotPlugin.dylib"
 
@@ -597,22 +597,38 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Download macOS Godot GDExtension platform binaries
+    - name: Download Godot GDExtension platform binaries
       uses: actions/download-artifact@v4
       with:
-        name: ImmGodotGDExtension-macOS-platform
-        path: artifacts/ImmGodotGDExtension-macOS-platform
+        pattern: ImmGodotGDExtension-*-platform
+        path: artifacts/platform-bins
+        merge-multiple: true
 
     - name: Assemble Godot addon artifact
       shell: bash
       run: |
         set -euo pipefail
-        addon="artifacts/ImmGodotGDExtension"
-        rm -rf "$addon"
-        mkdir -p "$addon/addons/imm_viewer" "$addon/bin"
-        grep -v '^windows\.' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension > "$addon/addons/imm_viewer/imm_viewer.gdextension"
-        cp -R artifacts/ImmGodotGDExtension-macOS-platform/bin/macos "$addon/bin/"
-        test -f "$addon/addons/imm_viewer/imm_viewer.gdextension"
+        # The packaged asset IS the example project's addon folder: same manifest,
+        # same self-contained layout (addons/imm_viewer/bin/<platform>/<variant>/).
+        addon="artifacts/ImmGodotGDExtension/addons/imm_viewer"
+        rm -rf artifacts/ImmGodotGDExtension
+        mkdir -p "$addon/bin"
+        # Ship the manifest verbatim - it declares every platform up front so
+        # Windows/Android binaries drop in later with no manifest or layout change.
+        cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension "$addon/"
+        if [ -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension.uid ]; then
+          cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension.uid "$addon/"
+        fi
+        # Merge whatever platform binaries were produced this run (bin/<platform>/...).
+        cp -R artifacts/platform-bins/bin/* "$addon/bin/"
+        # Mirror release -> debug for any platform that only built a release binary
+        # so the editor (which selects the debug feature tag) can load the extension.
+        for plat in "$addon"/bin/*/; do
+          if [ -d "${plat}release" ] && [ ! -d "${plat}debug" ]; then
+            cp -R "${plat}release" "${plat}debug"
+          fi
+        done
+        test -f "$addon/imm_viewer.gdextension"
         test -f "$addon/bin/macos/release/libimm_godot_extension.dylib"
         test -f "$addon/bin/macos/release/libImmGodotPlugin.dylib"
 
@@ -627,9 +643,6 @@ jobs:
       uses: actions/github-script@v7
       with:
         script: |
-          const targetNames = new Set([
-            'ImmGodotGDExtension-macOS-platform',
-          ]);
           const owner = context.repo.owner;
           const repo = context.repo.repo;
           const run_id = context.runId;
@@ -639,7 +652,7 @@ jobs:
             run_id,
           });
           for (const artifact of artifacts) {
-            if (targetNames.has(artifact.name)) {
+            if (artifact.name.startsWith('ImmGodotGDExtension-') && artifact.name.endsWith('-platform')) {
               await github.rest.actions.deleteArtifact({
                 owner,
                 repo,
@@ -648,10 +661,12 @@ jobs:
             }
           }
 
-  sync-unity-binaries:
-    name: Sync Unity Binaries to Repo
+  sync-binaries:
+    name: Sync Binaries to Repo
     runs-on: ubuntu-latest
-    needs: package-unity-plugins
+    needs:
+      - package-unity-plugins
+      - package-godot-extension
     # Only on direct pushes to integration branches. Opt-in branch builds must not push generated binaries back.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     permissions:
@@ -674,6 +689,12 @@ jobs:
       with:
         name: ImmViewerPlugin-UPM
         path: upm
+
+    - name: Download Godot GDExtension addon
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmGodotGDExtension
+        path: artifacts/ImmGodotGDExtension
 
     - name: Extract and sync plugin binaries
       shell: bash
@@ -702,16 +723,24 @@ jobs:
         mkdir -p "$unity_dst/iOS"
         cp "$unity_src/iOS/libImmUnityPlugin.a"                     "$unity_dst/iOS/libImmUnityPlugin.a"
 
+    - name: Sync Godot GDExtension binaries
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Copy the freshly built platform binaries into the committed addon so the
+        # sample project runs out of the box from a clean clone.
+        cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/. code/ImmGodotSampleProject/addons/imm_viewer/bin/
+
     - name: Commit and push if changed
       shell: bash
       run: |
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add code/ImmUnitySampleProject/Packages/*/Plugins/
+        git add code/ImmUnitySampleProject/Packages/*/Plugins/ code/ImmGodotSampleProject/addons/imm_viewer/bin/
         if git diff --cached --quiet; then
           echo "No binary changes — nothing to commit"
         else
-          git commit -m "chore: update Unity plugin binaries"
+          git commit -m "chore: update committed plugin binaries (Unity + Godot)"
           git pull --rebase
           git push
         fi

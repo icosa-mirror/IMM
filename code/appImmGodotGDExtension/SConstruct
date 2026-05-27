@@ -55,7 +55,7 @@ if godot_cpp_lib is None:
     Exit("godot-cpp library not found. Build godot-cpp first or pass godot_cpp_lib=...")
 
 variant = "debug" if target.endswith("debug") else "release"
-out_dir = sample_dir / "bin" / platform / variant
+out_dir = sample_dir / "addons" / "imm_viewer" / "bin" / platform / variant
 target_path = out_dir / "imm_godot_extension"
 if platform == "windows":
     imm_godot_lib = first_existing([

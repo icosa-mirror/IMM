@@ -37,10 +37,10 @@ $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
 $sampleProject = Join-Path $repoRoot "code\ImmGodotSampleProject"
 $smokeScript = "res://scripts/smoke_test_runner.gd"
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
-$extensionDir = Join-Path $sampleProject "bin\windows\$variant"
+$extensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$variant"
 $extensionDll = Join-Path $extensionDir "imm_godot_extension.dll"
 $editorVariant = if ($Configuration -eq "Release") { "debug" } else { $variant }
-$editorExtensionDir = Join-Path $sampleProject "bin\windows\$editorVariant"
+$editorExtensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$editorVariant"
 $editorExtensionDll = Join-Path $editorExtensionDir "imm_godot_extension.dll"
 
 if ($LogDir) {

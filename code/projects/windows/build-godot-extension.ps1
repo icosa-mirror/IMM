@@ -278,7 +278,7 @@ if ($GodotCppLib) {
 Invoke-Tool $scons $extensionArgs $extensionDir
 
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
-$outputDir = Join-Path $repoRoot "code\ImmGodotSampleProject\bin\windows\$variant"
+$outputDir = Join-Path $repoRoot "code\ImmGodotSampleProject\addons\imm_viewer\bin\windows\$variant"
 $requiredOutputDlls = @(
     "imm_godot_extension.dll",
     "ImmGodotPlugin.dll",
