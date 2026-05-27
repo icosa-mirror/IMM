@@ -93,6 +93,66 @@ static bool iIsValidationRequested(void)
 
 static bool iSetSingleLoadedFile(ExePlayer::Settings *settings, const wchar_t *path);
 
+static NSString *iFirstImmFileInDirectory(NSString *directory)
+{
+    if (!directory)
+    {
+        return nil;
+    }
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSArray<NSString *> *entries = [fileManager contentsOfDirectoryAtPath:directory error:nil];
+    NSArray<NSString *> *sortedEntries = [entries sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    for (NSString *entry in sortedEntries)
+    {
+        if ([[entry pathExtension] caseInsensitiveCompare:@"imm"] != NSOrderedSame)
+        {
+            continue;
+        }
+        NSString *candidate = [directory stringByAppendingPathComponent:entry];
+        BOOL isDirectory = NO;
+        if ([fileManager fileExistsAtPath:candidate isDirectory:&isDirectory] && !isDirectory)
+        {
+            return candidate;
+        }
+    }
+    return nil;
+}
+
+static bool iApplyDefaultImmWhenNoLoadConfigured(ExePlayer::Settings *settings)
+{
+    if (!settings || settings->mFiles.mLoad.GetLength() > 0)
+    {
+        return true;
+    }
+
+    NSString *bundleDirectory = [[[NSBundle mainBundle] bundlePath] stringByDeletingLastPathComponent];
+    NSString *candidate = iFirstImmFileInDirectory(bundleDirectory);
+    if (!candidate)
+    {
+        NSString *executableDirectory = [[[NSBundle mainBundle] executablePath] stringByDeletingLastPathComponent];
+        candidate = iFirstImmFileInDirectory(executableDirectory);
+    }
+    if (!candidate)
+    {
+        candidate = iFirstImmFileInDirectory([[NSBundle mainBundle] resourcePath]);
+    }
+    if (!candidate)
+    {
+        return true;
+    }
+
+    const char *path = [candidate fileSystemRepresentation];
+    wchar_t widePath[PATH_MAX] = {};
+    const size_t len = mbstowcs(widePath, path, PATH_MAX - 1);
+    if (len == (size_t)-1)
+    {
+        return false;
+    }
+    widePath[len] = 0;
+    NSLog(@"IMM Metal player default document: %@", candidate);
+    return iSetSingleLoadedFile(settings, widePath);
+}
+
 static bool iOverrideLoadedFiles(ExePlayer::Settings *settings)
 {
     if (!settings || gContentPathCount == 0)
@@ -1617,6 +1677,12 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
     if (!iOverrideLoadedFiles(&_settings))
     {
         NSLog(@"IMM Metal player: could not apply content paths");
+        [self terminateWithExitCode:1];
+        return;
+    }
+    if (!iApplyDefaultImmWhenNoLoadConfigured(&_settings))
+    {
+        NSLog(@"IMM Metal player: could not apply default IMM file");
         [self terminateWithExitCode:1];
         return;
     }

@@ -14,6 +14,7 @@ code/appImmUnity/exe/ImmUnityPlugin.ilk
 code/appImmUnity/exe/ImmUnityPlugin.lib
 code/appImmUnity/exe/ImmUnityPlugin.pdb
 code/appImmUnity/exe/
+code/appImmGodot/bin
 code/appImmGodot/exe/
 code/appImmGodotGDExtension/.sconsign.dblite
 code/ImmGodotSampleProject/bin/
@@ -86,3 +87,4 @@ code/ImmUnitySampleProject/imm_player_log.txt
 /code/projects/android/logs
 code/appImmViewer/exe/debug.txt
 /code/ImmGodotSampleProject/.godot
+metal_player_debug.txt

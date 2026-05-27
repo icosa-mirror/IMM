@@ -11,12 +11,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\appImmShared\src\imm_engine_bridge.h" />
     <ClInclude Include="src\IUnityGraphicsD3D11.h" />
     <ClInclude Include="src\IUnityGraphicsD3D12.h" />
     <ClInclude Include="src\IUnityInterface.h" />
     <ClInclude Include="src\IUnityGraphics.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\appImmShared\src\imm_engine_bridge.cpp" />
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

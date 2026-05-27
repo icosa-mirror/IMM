@@ -1311,6 +1311,8 @@ namespace ImmPlayer
         }
         else
         {
+            mRenderer->SetWriteMask(true, false, false, false, true);
+            mRenderer->SetState(piSTATE_DEPTH_TEST, true);
             mRenderer->SetDepthState(mDepthState);
             mRenderer->SetRasterState(mRasterState);
             mRenderer->SetBlendState(mBlendState);

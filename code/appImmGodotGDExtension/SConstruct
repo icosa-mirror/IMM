@@ -1,0 +1,177 @@
+import os
+import glob
+from pathlib import Path
+
+
+def first_existing(paths):
+    for path in paths:
+        if path and Path(path).exists():
+            return str(Path(path))
+    return None
+
+
+repo_root = Path(Dir("#").abspath).parents[1]
+code_dir = repo_root / "code"
+sample_dir = code_dir / "ImmGodotSampleProject"
+godot_cpp_default = repo_root / "thirdparty" / "godot-cpp"
+
+opts = Variables([], ARGUMENTS)
+opts.Add("target", "Build target: template_debug or template_release", "template_debug")
+opts.Add("platform", "Godot platform name", "windows" if os.name == "nt" else "macos")
+opts.Add("arch", "Target architecture", "x86_64")
+opts.Add("godot_cpp", "Path to godot-cpp checkout", os.environ.get("GODOT_CPP_PATH", str(godot_cpp_default)))
+opts.Add("godot_cpp_lib", "Path to prebuilt godot-cpp library", os.environ.get("GODOT_CPP_LIB", ""))
+opts.Add("imm_godot_lib", "Path to the ImmGodot native plugin link library", os.environ.get("IMM_GODOT_LIB", ""))
+opts.Add("imm_godot_runtime", "Path to the ImmGodot native plugin runtime library", os.environ.get("IMM_GODOT_RUNTIME", ""))
+opts.Add("imm_config", "IMM Visual Studio configuration to link against", "Debug")
+
+env = Environment(ENV=os.environ, variables=opts)
+Help(opts.GenerateHelpText(env))
+
+target = env["target"]
+platform = env["platform"]
+arch = env["arch"]
+godot_cpp = Path(env["godot_cpp"]).resolve()
+imm_config = env["imm_config"]
+
+if platform not in ("windows", "macos"):
+    Exit("appImmGodotGDExtension SConstruct supports platform=windows or platform=macos.")
+
+if not godot_cpp.exists():
+    Exit("godot-cpp checkout not found. Set GODOT_CPP_PATH or pass godot_cpp=...")
+
+godot_cpp_lib = first_existing([
+    env["godot_cpp_lib"],
+    godot_cpp / "bin" / ("libgodot-cpp.windows.%s.%s.lib" % (target, arch)),
+    godot_cpp / "bin" / ("libgodot-cpp.windows.%s.dev.%s.lib" % (target, arch)),
+    godot_cpp / "bin" / ("libgodot-cpp.windows.%s.%s.lib" % ("debug" if target.endswith("debug") else "release", arch)),
+])
+if godot_cpp_lib is None and platform == "macos":
+    matches = glob.glob(str(godot_cpp / "bin" / ("libgodot-cpp.macos.%s.%s*.a" % (target, arch))))
+    if not matches:
+        matches = glob.glob(str(godot_cpp / "bin" / ("libgodot-cpp.macos.%s.%s*.a" % ("debug" if target.endswith("debug") else "release", arch))))
+    godot_cpp_lib = matches[0] if matches else None
+if godot_cpp_lib is None:
+    Exit("godot-cpp library not found. Build godot-cpp first or pass godot_cpp_lib=...")
+
+variant = "debug" if target.endswith("debug") else "release"
+out_dir = sample_dir / "bin" / platform / variant
+target_path = out_dir / "imm_godot_extension"
+if platform == "windows":
+    imm_godot_lib = first_existing([
+        env["imm_godot_lib"],
+        code_dir / "appImmGodot" / "exe" / "ImmGodotPlugin.lib",
+    ])
+    imm_godot_runtime = first_existing([
+        env["imm_godot_runtime"],
+        code_dir / "appImmGodot" / "exe" / "ImmGodotPlugin.dll",
+    ])
+else:
+    imm_godot_lib = first_existing([
+        env["imm_godot_lib"],
+        repo_root / "build" / "macos" / "godot" / "libImmGodotPlugin.dylib",
+        repo_root / "build" / "macos-godot-appleclang" / "godot" / "libImmGodotPlugin.dylib",
+    ])
+    imm_godot_runtime = first_existing([
+        env["imm_godot_runtime"],
+        imm_godot_lib,
+    ])
+
+if imm_godot_lib is None:
+    Exit("ImmGodotPlugin link library not found at %s. Build appImmGodot first." % imm_godot_lib)
+if imm_godot_runtime is None:
+    Exit("ImmGodotPlugin runtime library not found at %s. Build appImmGodot first." % imm_godot_runtime)
+
+env.Append(CPPPATH=[
+    str(repo_root),
+    str(code_dir),
+    str(godot_cpp / "include"),
+    str(godot_cpp / "gen" / "include"),
+    str(godot_cpp / "gdextension"),
+])
+env.Append(CPPDEFINES=["TYPED_METHOD_BIND"])
+
+if platform == "windows":
+    env.Append(CPPDEFINES=[
+        "WIN32",
+        "WINDOWS",
+    ])
+    env.Append(CXXFLAGS=["/std:c++17", "/EHsc"])
+    env.Append(LIBS=[
+        str(godot_cpp_lib),
+        str(imm_godot_lib),
+    ])
+    env.Append(LINKFLAGS=["/DLL"])
+else:
+    env.Append(CPPDEFINES=["MACOS_ENABLED"])
+    if target != "template_release":
+        env.Append(CPPDEFINES=["HOT_RELOAD_ENABLED"])
+    env.Append(CXXFLAGS=["-std=c++17", "-fPIC"])
+    env.Append(FRAMEWORKS=["Metal", "Foundation"])
+    env.Append(LIBS=[
+        File(str(godot_cpp_lib)),
+        File(str(imm_godot_lib)),
+    ])
+    env.Append(LINKFLAGS=[
+        "-Wl,-rpath,@loader_path",
+    ])
+    env["SHLIBPREFIX"] = "lib"
+
+if variant == "debug":
+    env.Append(CPPDEFINES=["DEBUG_ENABLED", "DEBUG_METHODS_ENABLED"])
+    if platform == "windows":
+        env.Append(CCFLAGS=["/Zi", "/Od"])
+        env.Append(LINKFLAGS=["/DEBUG"])
+    else:
+        env.Append(CCFLAGS=["-g", "-O0"])
+else:
+    env.Append(CPPDEFINES=["NDEBUG"])
+    env.Append(CCFLAGS=["/O2" if platform == "windows" else "-O2"])
+
+sources = [
+    "src/imm_viewer_compositor_effect.cpp",
+    "src/imm_viewer_metal_frame.mm",
+    "src/imm_viewer_node.cpp",
+    "src/register_types.cpp",
+]
+if platform == "windows":
+    sources.remove("src/imm_viewer_metal_frame.mm")
+
+library = env.SharedLibrary(target=str(target_path), source=sources)
+runtime_dll = env.Command(
+    target=str(out_dir / ("ImmGodotPlugin.dll" if platform == "windows" else "libImmGodotPlugin.dylib")),
+    source=str(imm_godot_runtime),
+    action=Copy("$TARGET", "$SOURCE"),
+)
+
+runtime_dependency_dlls = []
+if platform == "windows":
+    runtime_dependencies = {
+        "Audio360.dll": repo_root / "thirdparty" / "audio360-sdk" / "Audio360" / "Windows" / "x64" / "Audio360.dll",
+        "opus.dll": repo_root / "thirdparty" / "opus" / "bin" / "opus.dll",
+        "opusenc.dll": repo_root / "thirdparty" / "libopusenc" / "bin" / "opusenc.dll",
+        "vorbisenc.dll": repo_root / "thirdparty" / "libvorbis" / "bin" / "vorbisenc.dll",
+        "zlib1.dll": repo_root / "thirdparty" / "zlib" / "bin" / "zlib1.dll",
+        "jpeg62.dll": repo_root / "thirdparty" / "libjpeg-turbo" / "bin" / "jpeg62.dll",
+        "libpng16.dll": repo_root / "thirdparty" / "libpng" / "bin" / "libpng16.dll",
+        "ogg.dll": repo_root / "thirdparty" / "libogg" / "bin" / "ogg.dll",
+        "vorbis.dll": repo_root / "thirdparty" / "libvorbis" / "bin" / "vorbis.dll",
+    }
+    missing_runtime_dependencies = [
+        "%s => %s" % (name, path)
+        for name, path in runtime_dependencies.items()
+        if not path.exists()
+    ]
+    if missing_runtime_dependencies:
+        Exit("Godot runtime dependency DLLs are missing:\n  " + "\n  ".join(missing_runtime_dependencies))
+
+    runtime_dependency_dlls = [
+        env.Command(
+            target=str(out_dir / name),
+            source=str(source),
+            action=Copy("$TARGET", "$SOURCE"),
+        )
+        for name, source in runtime_dependencies.items()
+    ]
+
+Default([library, runtime_dll] + runtime_dependency_dlls)

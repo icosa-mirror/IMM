@@ -4,7 +4,8 @@ name: Build
 
 on:
   push:
-    branches: [ main, develop ]
+    branches:
+      - '**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -12,7 +13,11 @@ on:
 jobs:
   build-windows:
     name: Windows
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: windows-latest
+    env:
+      GODOT_CPP_REF: godot-4.5-stable
+      GODOT_VERSION: 4.5-stable
 
     steps:
     - name: Checkout repository
@@ -36,6 +41,60 @@ jobs:
     - name: Build Solution
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install SCons
+      shell: pwsh
+      run: python -m pip install scons
+
+    - name: Cache godot-cpp
+      uses: actions/cache@v4
+      with:
+        path: thirdparty/godot-cpp
+        key: godot-cpp-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/appImmGodotGDExtension/SConstruct') }}
+        restore-keys: |
+          godot-cpp-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-
+
+    - name: Download Godot
+      shell: pwsh
+      run: |
+        $version = "${env:GODOT_VERSION}"
+        $zipName = "Godot_v$($version)_win64.exe.zip"
+        $url = "https://github.com/godotengine/godot-builds/releases/download/$version/$zipName"
+        Invoke-WebRequest -Uri $url -OutFile $zipName
+        Expand-Archive -Path $zipName -DestinationPath godot
+        $godotExe = Get-ChildItem -Path godot -Filter "Godot*.exe" | Select-Object -First 1
+        if (-not $godotExe) {
+          throw "Godot executable not found after extracting $zipName"
+        }
+        "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Run Godot script smoke test
+      shell: pwsh
+      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -LogDir artifacts\godot-smoke-script
+
+    - name: Build Godot GDExtension
+      shell: pwsh
+      run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
+
+    - name: Check Godot GDExtension staging
+      shell: pwsh
+      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight
+
+    - name: Upload Godot smoke logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotSmokeLogs-Windows
+        path: |
+          artifacts/godot-smoke-script
+          artifacts/godot-extension-preflight
+        if-no-files-found: ignore
+        retention-days: 7
 
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
@@ -100,6 +159,7 @@ jobs:
 
   build-android:
     name: Android
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: ubuntu-latest
 
     steps:
@@ -207,7 +267,10 @@ jobs:
 
   build-macos:
     name: macOS
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: macos-latest
+    env:
+      GODOT_CPP_REF: godot-4.5-stable
 
     steps:
     - name: Checkout repository
@@ -224,8 +287,51 @@ jobs:
     - name: Build macOS Unity plugin
       run: cmake --build build/macos --target ImmUnity --config Release
 
+    - name: Build macOS Godot native plugin
+      run: cmake --build build/macos --target ImmGodotPlugin --config Release
+
     - name: Build macOS Metal standalone viewer
       run: cmake --build build/macos --target appImmViewerMetal --config Release
+
+    - name: Install Godot GDExtension build tools
+      run: python3 -m pip install --break-system-packages scons
+
+    - name: Cache godot-cpp
+      uses: actions/cache@v4
+      with:
+        path: thirdparty/godot-cpp
+        key: godot-cpp-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/appImmGodotGDExtension/SConstruct') }}
+        restore-keys: |
+          godot-cpp-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-
+
+    - name: Build macOS Godot GDExtension
+      run: |
+        set -euo pipefail
+        if [ ! -d thirdparty/godot-cpp ]; then
+          git clone --depth 1 --branch "$GODOT_CPP_REF" https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
+        fi
+        arch="$(uname -m)"
+        python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
+        python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$GITHUB_WORKSPACE/thirdparty/godot-cpp" imm_godot_lib="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib"
+
+    - name: Stage macOS Godot GDExtension binaries
+      run: |
+        set -euo pipefail
+        staging="artifacts/ImmGodotGDExtension-macOS-platform/bin/macos/release"
+        rm -rf artifacts/ImmGodotGDExtension-macOS-platform
+        mkdir -p "$staging"
+        cp code/ImmGodotSampleProject/bin/macos/release/libimm_godot_extension.dylib "$staging/"
+        cp code/ImmGodotSampleProject/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
+        test -f "$staging/libimm_godot_extension.dylib"
+        test -f "$staging/libImmGodotPlugin.dylib"
+
+    - name: Upload macOS Godot GDExtension platform binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotGDExtension-macOS-platform
+        path: artifacts/ImmGodotGDExtension-macOS-platform
+        if-no-files-found: error
+        retention-days: 1
 
     - name: Package macOS Metal standalone viewer app bundle
       run: |
@@ -270,6 +376,7 @@ jobs:
 
   build-ios:
     name: iOS
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: macos-latest
 
     steps:
@@ -317,6 +424,7 @@ jobs:
 
   package-unity-plugins:
     name: Package Unity Plugins
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: ubuntu-latest
     needs:
       - build-windows
@@ -476,12 +584,76 @@ jobs:
             }
           }
 
+  package-godot-extension:
+    name: Package Godot GDExtension
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
+    runs-on: ubuntu-latest
+    needs:
+      - build-macos
+    permissions:
+      actions: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download macOS Godot GDExtension platform binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmGodotGDExtension-macOS-platform
+        path: artifacts/ImmGodotGDExtension-macOS-platform
+
+    - name: Assemble Godot addon artifact
+      shell: bash
+      run: |
+        set -euo pipefail
+        addon="artifacts/ImmGodotGDExtension"
+        rm -rf "$addon"
+        mkdir -p "$addon/addons/imm_viewer" "$addon/bin"
+        grep -v '^windows\.' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension > "$addon/addons/imm_viewer/imm_viewer.gdextension"
+        cp -R artifacts/ImmGodotGDExtension-macOS-platform/bin/macos "$addon/bin/"
+        test -f "$addon/addons/imm_viewer/imm_viewer.gdextension"
+        test -f "$addon/bin/macos/release/libimm_godot_extension.dylib"
+        test -f "$addon/bin/macos/release/libImmGodotPlugin.dylib"
+
+    - name: Upload Godot GDExtension addon
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotGDExtension
+        path: artifacts/ImmGodotGDExtension
+        if-no-files-found: error
+
+    - name: Delete intermediate Godot platform artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const targetNames = new Set([
+            'ImmGodotGDExtension-macOS-platform',
+          ]);
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const run_id = context.runId;
+          const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+            owner,
+            repo,
+            run_id,
+          });
+          for (const artifact of artifacts) {
+            if (targetNames.has(artifact.name)) {
+              await github.rest.actions.deleteArtifact({
+                owner,
+                repo,
+                artifact_id: artifact.id,
+              });
+            }
+          }
+
   sync-unity-binaries:
     name: Sync Unity Binaries to Repo
     runs-on: ubuntu-latest
     needs: package-unity-plugins
-    # Only on direct pushes — PRs can't push back to forks
-    if: github.event_name == 'push'
+    # Only on direct pushes to integration branches. Opt-in branch builds must not push generated binaries back.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     permissions:
       contents: write
 
@@ -550,6 +722,7 @@ jobs:
     needs:
       - build-windows
       - build-android
+      - package-godot-extension
       - publish-upm
       - package-unity-plugins
     if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[RELEASE]')
@@ -594,6 +767,12 @@ jobs:
         name: ImmViewer-Android-VR
         path: release-assets/ImmViewer-Android-VR
 
+    - name: Download Godot GDExtension addon
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmGodotGDExtension
+        path: release-assets/ImmGodotGDExtension
+
     - name: Zip Windows viewer artifacts
       shell: bash
       run: |
@@ -601,6 +780,7 @@ jobs:
         cd release-assets
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
         zip -r ImmViewer-Windows-VR.zip ImmViewer-Windows-VR
+        zip -r ImmGodotGDExtension.zip ImmGodotGDExtension
 
     - name: Normalize Android APK names
       shell: bash
@@ -655,6 +835,7 @@ jobs:
           release-assets/upm/ImmViewerPlugin-UPM.zip \
           release-assets/ImmViewer-Windows.zip \
           release-assets/ImmViewer-Windows-VR.zip \
+          release-assets/ImmGodotGDExtension.zip \
           release-assets/ImmViewer-Android.apk \
           release-assets/ImmViewer-Android-VR.apk \
           release-assets/ImmViewer-Windows/sample1.imm

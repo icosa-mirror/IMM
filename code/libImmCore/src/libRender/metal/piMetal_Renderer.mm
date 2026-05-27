@@ -153,10 +153,14 @@ struct piMetalState
     bool dynamicSourceAlphaBlendEnabled = false;
     bool cullFaceEnabled = true;
 	    bool frontFaceCCW = true;
-	    bool usesExternalDevice = false;
-	    bool unsupportedReported[(int)piMetalUnsupportedFeature::Count] = {};
+	    bool externalShaderAdjust = false;
+    bool unsupportedReported[(int)piMetalUnsupportedFeature::Count] = {};
     int numViewports = 1;
     float viewports[6 * 16] = {};
+    uint64_t debugIndexedDrawCalls = 0;
+    uint64_t debugNonIndexedDrawCalls = 0;
+    uint64_t debugSkippedDrawCalls = 0;
+    uint64_t debugIssuedDrawCalls = 0;
 };
 
 static void iAttachRetainedBufferCleanup(piMetalState *state)
@@ -177,6 +181,49 @@ static bool iMetalEnvFlagEnabled(const char *name)
 {
     const char *value = getenv(name);
     return value != nullptr && value[0] != '\0' && strcmp(value, "0") != 0;
+}
+
+static void iReport(piRenderer::piReporter *reporter, const char *message);
+
+static void iResetDrawCounters(piMetalState *state)
+{
+    if (!state)
+    {
+        return;
+    }
+    state->debugIndexedDrawCalls = 0;
+    state->debugNonIndexedDrawCalls = 0;
+    state->debugSkippedDrawCalls = 0;
+    state->debugIssuedDrawCalls = 0;
+}
+
+static void iReportDrawCounters(piMetalState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || !iMetalEnvFlagEnabled("IMM_METAL_LOG_DRAW_COUNTERS"))
+    {
+        return;
+    }
+    char summary[256];
+    snprintf(summary,
+             sizeof(summary),
+             "Metal draw counters: indexed=%llu nonIndexed=%llu issued=%llu skipped=%llu passTouched=%d",
+             (unsigned long long)state->debugIndexedDrawCalls,
+             (unsigned long long)state->debugNonIndexedDrawCalls,
+             (unsigned long long)state->debugIssuedDrawCalls,
+             (unsigned long long)state->debugSkippedDrawCalls,
+             state->passTouched ? 1 : 0);
+    fprintf(stderr, "%s\n", summary);
+    iReport(reporter, summary);
+}
+
+static id<MTLCommandBuffer> iCreateOwnedCommandBuffer(id<MTLCommandQueue> queue)
+{
+    return queue ? [[queue commandBuffer] retain] : nil;
+}
+
+static void iReleaseOwnedCommandBuffer(id<MTLCommandBuffer> commandBuffer)
+{
+    [commandBuffer release];
 }
 
 static int iSuppressDrawCallsLevel(void)
@@ -698,7 +745,6 @@ piRendererMetal::~piRendererMetal()
 bool piRendererMetal::Initialize(int, const void **, int, bool, bool, piReporter *reporter, bool, void *device)
 {
     mReporter = reporter;
-    mState->usesExternalDevice = device != nullptr;
     mState->device = device ? (__bridge id<MTLDevice>)device : MTLCreateSystemDefaultDevice();
     if (!mState->device)
     {
@@ -872,7 +918,7 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
         return false;
     }
 
-    mState->commandBuffer = [mState->commandQueue commandBuffer];
+    mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
     if (!mState->commandBuffer)
     {
         iError(mReporter, "Metal native frame could not create command buffer");
@@ -887,7 +933,13 @@ bool piRendererMetal::BeginNativeFrame(void *renderPassDescriptor, void *drawabl
     mState->passTouched = false;
     mState->activeRenderPass = mState->nativeRenderPass;
     mState->currentRenderTarget = nullptr;
+    iResetDrawCounters(mState);
     return true;
+}
+
+void piRendererMetal::SetExternalShaderAdjust(bool enabled)
+{
+    mState->externalShaderAdjust = enabled;
 }
 
 bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, void *renderPassDescriptor, int width, int height)
@@ -920,6 +972,7 @@ bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void
     mState->viewports[4] = 0.0f;
     mState->viewports[5] = 1.0f;
     iApplyEncoderState(mState);
+    iResetDrawCounters(mState);
     return true;
 }
 
@@ -960,6 +1013,7 @@ bool piRendererMetal::BeginExternalRenderPassFrame(void *commandBuffer, void *re
     mState->viewports[4] = 0.0f;
     mState->viewports[5] = 1.0f;
     iApplyEncoderState(mState);
+    iResetDrawCounters(mState);
     return true;
 }
 
@@ -976,7 +1030,7 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
         return false;
     }
 
-    mState->commandBuffer = [queue commandBuffer];
+    mState->commandBuffer = iCreateOwnedCommandBuffer(queue);
     if (!mState->commandBuffer)
     {
         iError(mReporter, "Metal external frame failed to create a plugin command buffer");
@@ -988,6 +1042,7 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
     if (!mState->encoder)
     {
         iError(mReporter, "Metal external frame failed to create a render command encoder");
+        iReleaseOwnedCommandBuffer(mState->commandBuffer);
         mState->commandBuffer = nil;
         mState->activeRenderPass = nil;
         return false;
@@ -1007,6 +1062,7 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
     mState->viewports[4] = 0.0f;
     mState->viewports[5] = 1.0f;
     iApplyEncoderState(mState);
+    iResetDrawCounters(mState);
     return true;
 }
 
@@ -1031,6 +1087,8 @@ void piRendererMetal::EndNativeFrame(void)
     {
         iEndEncoder(mState);
     }
+
+    iReportDrawCounters(mState, mReporter);
 
     if (!mState->externalCommandBuffer && !mState->externalCommandEncoder && mState->nativeDrawable)
     {
@@ -1058,6 +1116,7 @@ void piRendererMetal::EndNativeFrame(void)
             [commandBuffer waitUntilCompleted];
             iReportCommandBufferStatus("after-wait", commandBuffer);
         }
+        iReleaseOwnedCommandBuffer(commandBuffer);
     }
 
     mState->commandBuffer = nil;
@@ -1138,7 +1197,7 @@ bool piRendererMetal::SetRenderTarget(piRTarget obj)
 {
     if (!mState->commandBuffer)
     {
-        mState->commandBuffer = [mState->commandQueue commandBuffer];
+        mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
         mState->frameActive = (mState->commandBuffer != nil);
         if (!mState->frameActive)
         {
@@ -1161,7 +1220,7 @@ void piRendererMetal::BlitRenderTarget(piRTarget dst, piRTarget src, bool color,
 
     if (!mState->commandBuffer)
     {
-        mState->commandBuffer = [mState->commandQueue commandBuffer];
+        mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
         mState->frameActive = (mState->commandBuffer != nil);
     }
     if (!mState->commandBuffer)
@@ -1610,6 +1669,7 @@ void piRendererMetal::GetTextureContent(piTexture vme, void *data, int x, int y,
         iAttachRetainedBufferCleanup(mState);
         [mState->commandBuffer commit];
         [mState->commandBuffer waitUntilCompleted];
+        iReleaseOwnedCommandBuffer(mState->commandBuffer);
         mState->commandBuffer = nil;
         mState->activeRenderPass = mState->currentRenderTarget ? iRenderPassForTarget(mState->currentRenderTarget) : mState->nativeRenderPass;
     }
@@ -1672,7 +1732,7 @@ void piRendererMetal::ComputeMipmaps(piTexture me)
 
     if (!mState->commandBuffer)
     {
-        mState->commandBuffer = [mState->commandQueue commandBuffer];
+        mState->commandBuffer = iCreateOwnedCommandBuffer(mState->commandQueue);
         mState->frameActive = (mState->commandBuffer != nil);
     }
     if (!mState->commandBuffer)
@@ -2354,13 +2414,12 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
 	        requiresVertexBuffer = true;
 	    }
 
-	    if (mState->usesExternalDevice)
+	    if (mState->externalShaderAdjust || iMetalEnvFlagEnabled("IMM_METAL_EXTERNAL_SHADER_ADJUST"))
 	    {
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(bWPos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(cpos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0)); out.position.y = -out.position.y;"];
-	        source = [source stringByReplacingOccurrencesOfString:@"out.position.z = out.position.w;" withString:@"out.position.z = 0.0;"];
 	    }
 	
 	    NSError *compileError = nil;
@@ -2726,14 +2785,20 @@ uint64_t piRendererMetal::GetQueryResult(piQuery vme)
 
 void piRendererMetal::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t, uint32_t baseIndex)
 {
+    if (mState)
+    {
+        mState->debugIndexedDrawCalls++;
+    }
     if (!mState->frameActive || !mState->activeRenderPass || !mState->commandBuffer || !mState->currentShader ||
         !mState->currentVertexArray || !mState->currentVertexArray->indexBuffer ||
         !mState->currentVertexArray->indexBuffer->buffer)
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
     if (iSuppressDrawCallsLevel() >= 3)
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
 
@@ -2751,11 +2816,13 @@ void piRendererMetal::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint3
     id<MTLRenderPipelineState> pipeline = iGetPipelineForCurrentState(mState, mState->currentShader, mReporter);
     if (!mState->encoder || !pipeline)
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
     if (mState->currentShader->requiresVertexBuffer &&
         (!mState->currentVertexArray->vertexBuffer[0] || !mState->currentVertexArray->vertexBuffer[0]->buffer))
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
 
@@ -2780,6 +2847,7 @@ void piRendererMetal::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint3
                              instanceCount:(NSUInteger)(numInstances < 1 ? 1 : numInstances)
                                 baseVertex:(NSInteger)baseVertex
                               baseInstance:0];
+    mState->debugIssuedDrawCalls++;
     mState->passTouched = true;
 }
 void piRendererMetal::DrawPrimitiveIndirect(PrimitiveType pt, piBuffer cmds, uint32_t offset, uint32_t num)
@@ -2803,12 +2871,18 @@ void piRendererMetal::DrawPrimitiveIndirect(PrimitiveType pt, piBuffer cmds, uin
 }
 void piRendererMetal::DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int num, int numInstances)
 {
+    if (mState)
+    {
+        mState->debugNonIndexedDrawCalls++;
+    }
     if (!mState->frameActive || !mState->activeRenderPass || !mState->commandBuffer || !mState->currentShader)
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
     if (iSuppressDrawCallsLevel() >= 3)
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
 
@@ -2826,11 +2900,13 @@ void piRendererMetal::DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int n
     id<MTLRenderPipelineState> pipeline = iGetPipelineForCurrentState(mState, mState->currentShader, mReporter);
     if (!mState->encoder || !pipeline)
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
     if (mState->currentShader->requiresVertexBuffer &&
         (!mState->currentVertexArray || !mState->currentVertexArray->vertexBuffer[0] || !mState->currentVertexArray->vertexBuffer[0]->buffer))
     {
+        mState->debugSkippedDrawCalls++;
         return;
     }
 
@@ -2849,6 +2925,7 @@ void piRendererMetal::DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int n
                         vertexStart:(NSUInteger)first
                         vertexCount:(NSUInteger)num
                       instanceCount:(NSUInteger)(numInstances < 1 ? 1 : numInstances)];
+    mState->debugIssuedDrawCalls++;
     mState->passTouched = true;
 }
 void piRendererMetal::DrawPrimitiveNotIndexedMultiple(PrimitiveType pt, const int *firsts, const int *counts, int num)

@@ -2,6 +2,32 @@
 
 All commands run from `code/projects/android`.
 
+## Prerequisites
+
+- **JDK 17** — matches CI and the Android Gradle Plugin (8.5.2) / Kotlin (1.9.22) toolchain. Newer JDKs (21/22) are untested here; the system default `java` may be too new. A Unity-bundled OpenJDK 17 works — point Gradle at it via `JAVA_HOME` (e.g. `JAVA_HOME=".../Unity/Hub/Editor/<ver>/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK" ./gradlew ...`) or `org.gradle.java.home`.
+- **Android SDK** with **NDK `26.1.10909125`** (pinned in `appImmViewer/build.gradle`) and platform `android-34`.
+- Tell Gradle where the SDK is — either export `ANDROID_SDK_ROOT`, or create `code/projects/android/local.properties` (gitignored):
+
+  ```properties
+  sdk.dir=C:\\path\\to\\Android\\Sdk
+  ```
+
+## Build (Unity plugin libraries — .so for the UPM packages)
+
+These produce the committed Android plugin binaries consumed by the Unity packages:
+
+| Gradle task | Output (`arm64-v8a`) | Copied into |
+|-------------|----------------------|-------------|
+| `:appImmUnity:assembleDebug` | `libImmUnityPlugin.so` | `com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/` |
+| `:appImmStrokeReader:assembleDebug` | `libImmStrokeReader.so` | `com.immersive-foundation.imm-stroke-reader/Plugins/Android/arm64-v8a/` |
+
+```bash
+./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug \
+          :appImmUnity:assembleDebug :appImmStrokeReader:assembleDebug
+```
+
+Build the `libImm*` modules first (they are dependencies). Each app module's `copyToUnity` Gradle task copies its `.so` into the matching UPM package automatically, so the committed package binaries are updated in place. Only `arm64-v8a` is built (`abiFilters`).
+
 ## Build (Non-VR — phones, tablets)
 
 ```bash

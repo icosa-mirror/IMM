@@ -18,9 +18,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(WINDOWS)
+#include <windows.h>
+#endif
 #include "libImmCore/src/libBasics/piTimer.h"
 #include "libImmCore/src/libBasics/piWindow.h"
 #include "libImmCore/src/libBasics/piImage.h"
+#include "libImmCore/src/libBasics/piFile.h"
 #if DISABLE_VR==0
 #include "libImmCore/src/libVR/piVR.h"
 #endif
@@ -289,6 +293,97 @@ static const char *iGetValidationEnv(const char *genericName, const char *legacy
     return getenv(legacyName);
 }
 
+static bool iHasImmExtension(const wchar_t *path)
+{
+    if (!path)
+        return false;
+    const wchar_t *dot = wcsrchr(path, L'.');
+#if defined(WINDOWS)
+    return dot && _wcsicmp(dot, L".imm") == 0;
+#else
+    return dot && wcscasecmp(dot, L".imm") == 0;
+#endif
+}
+
+static bool iSetSingleLoadedFile(ExePlayer::Settings *settings, const wchar_t *path)
+{
+    if (!settings || !path || !path[0])
+        return false;
+
+    for (ImmCore::piString &load : settings->mFiles.mLoad)
+    {
+        load.End();
+    }
+    settings->mFiles.mLoad.SetLength(0);
+
+    ImmCore::piString *fileToLoad = settings->mFiles.mLoad.GetAddress(0);
+    new (fileToLoad) ImmCore::piString();
+    settings->mFiles.mLoad.SetLength(1);
+    return fileToLoad && fileToLoad->InitCopyW(path);
+}
+
+static bool iFindFirstImmBesideExecutable(const wchar_t *executablePath, wchar_t *dst, size_t dstLen)
+{
+    if (!executablePath || !dst || dstLen == 0)
+        return false;
+
+    wchar_t directory[PATH_MAX] = {};
+    wcsncpy(directory, executablePath, PATH_MAX - 1);
+    wchar_t *slash = wcsrchr(directory, L'\\');
+    wchar_t *forwardSlash = wcsrchr(directory, L'/');
+    if (!slash || (forwardSlash && forwardSlash > slash))
+        slash = forwardSlash;
+    if (!slash)
+        return false;
+    *slash = 0;
+
+#if defined(WINDOWS)
+    wchar_t pattern[PATH_MAX] = {};
+    swprintf(pattern, PATH_MAX, L"%s\\*.imm", directory);
+    WIN32_FIND_DATAW findData = {};
+    HANDLE findHandle = FindFirstFileW(pattern, &findData);
+    if (findHandle == INVALID_HANDLE_VALUE)
+        return false;
+
+    bool found = false;
+    do
+    {
+        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        {
+            swprintf(dst, dstLen, L"%s\\%s", directory, findData.cFileName);
+            found = true;
+            break;
+        }
+    } while (FindNextFileW(findHandle, &findData));
+    FindClose(findHandle);
+    return found;
+#else
+    (void)iHasImmExtension;
+    return false;
+#endif
+}
+
+static bool iApplyDefaultImmWhenNoLoadConfigured(ExePlayer::Settings *settings, const wchar_t *executablePath, ImmCore::piLog *log)
+{
+    if (!settings || settings->mFiles.mLoad.GetLength() > 0)
+        return true;
+
+    wchar_t defaultImmPath[PATH_MAX] = {};
+    if (!iFindFirstImmBesideExecutable(executablePath, defaultImmPath, PATH_MAX))
+        return true;
+    if (!iSetSingleLoadedFile(settings, defaultImmPath))
+        return false;
+
+#if defined(WINDOWS)
+    if (log)
+        log->Printf(LT_MESSAGE, L"Using default IMM beside executable: %s", defaultImmPath);
+#else
+    if (log)
+        log->Printf(LT_MESSAGE, L"Using default IMM beside executable: %ls", defaultImmPath);
+#endif
+    return true;
+}
+
 #if !defined(ANDROID)
 #if defined(WINDOWS)
 extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
@@ -362,6 +457,11 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
         return false;
     }
     mLog.Printf(LT_MESSAGE, L"Settings loaded");
+    if (!iApplyDefaultImmWhenNoLoadConfigured(&mSettings, path, &mLog))
+    {
+        mLog.Printf(LT_ERROR, L"Failed to apply default IMM file");
+        return false;
+    }
 
     mSuperSample = mSettings.mRendering.mSupersampling;
     if (mSuperSample < 1) { mSuperSample = 1; mLog.Printf(LT_WARNING, L"Supersampling factor must be between 1 and 3 (1 sample per pixel and 3x3 samples per pixel"); }

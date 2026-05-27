@@ -244,7 +244,10 @@ add_custom_target(
 add_dependencies(libImmPlayer ShadersModel ShadersPretessellated)
 
 set_source_files_properties(${CODE_DIR}/appImmUnity/src/main.cpp PROPERTIES LANGUAGE OBJCXX)
-add_library(ImmUnity MODULE ${CODE_DIR}/appImmUnity/src/main.cpp)
+add_library(ImmUnity MODULE
+    ${CODE_DIR}/appImmUnity/src/main.cpp
+    ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
+)
 target_include_directories(ImmUnity PUBLIC ${CODE_DIR})
 target_link_libraries(ImmUnity PRIVATE libImmPlayer libImmImporter libImmCore)
 set_target_properties(ImmUnity PROPERTIES
@@ -290,6 +293,22 @@ target_include_directories(ImmPictureScan PRIVATE ${CODE_DIR}/libImmCore/src/lib
 target_link_libraries(ImmPictureScan PRIVATE libImmImporterMinimal libImmCoreMinimal)
 set_target_properties(ImmPictureScan PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tools
+)
+
+# -----------------------------------------------------------------------------
+# ImmGodot native plugin (macOS)
+# -----------------------------------------------------------------------------
+
+add_library(ImmGodotPlugin SHARED
+    ${CODE_DIR}/appImmGodot/src/main.cpp
+    ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
+)
+target_include_directories(ImmGodotPlugin PUBLIC ${CODE_DIR})
+target_link_libraries(ImmGodotPlugin PRIVATE libImmPlayer libImmImporter libImmCore)
+set_target_properties(ImmGodotPlugin PROPERTIES
+    OUTPUT_NAME "ImmGodotPlugin"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot
 )
 
 option(IMM_BUILD_VIEWER "Build the macOS ImmViewer app" ON)
@@ -398,6 +417,7 @@ if(IMM_BUILD_VIEWER)
     add_executable(appImmViewerMetal MACOSX_BUNDLE
         ${CODE_DIR}/appImmViewer/src/macos/metal_player.mm
         ${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json
+        ${CODE_DIR}/../exampleImmFiles/sample1.imm
         ${CODE_DIR}/appImmViewer/src/resolve.cpp
         ${CODE_DIR}/appImmViewer/src/settings.cpp
         ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
@@ -426,6 +446,9 @@ if(IMM_BUILD_VIEWER)
         MACOSX_BUNDLE_BUNDLE_VERSION "0.1.0"
     )
     set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
+    )
+    set_source_files_properties(${CODE_DIR}/../exampleImmFiles/sample1.imm PROPERTIES
         MACOSX_PACKAGE_LOCATION Resources
     )
 
