@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="IMM Godot Sample"
-run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"
+run/main_scene="uid://dxrq2se1fvtxw"
 config/features=PackedStringArray("4.6")
 
 [display]
