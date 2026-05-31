@@ -1169,6 +1169,8 @@ struct piShaderS
     bool pipelineDepthTest = false;
     bool pipelineDepthWrite = false;
     VkCompareOp pipelineDepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    bool pipelineAlphaToCoverage = false;
+    bool pipelineBlendEnabled = false;
     bool isPicture = false;
     bool isPicture2D = false;
 };
@@ -3147,6 +3149,9 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     const bool depthTest = target->hasDepth && state->currentDepthState && state->currentDepthState->depthEnable;
     const bool depthWrite = depthTest && state->depthWriteEnabled;
     const VkCompareOp depthCompareOp = state->currentDepthState && !state->currentDepthState->lessEqual ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    piBlendState blendState = state->currentBlendState;
+    const bool alphaToCoverage = blendState && blendState->alphaToCoverage;
+    const bool blendEnabled = blendState && blendState->enabled0;
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
         shader->pipelineCullMode == cullMode &&
@@ -3156,7 +3161,9 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         shader->pipelineDepthClamp == depthClamp &&
         shader->pipelineDepthTest == depthTest &&
         shader->pipelineDepthWrite == depthWrite &&
-        shader->pipelineDepthCompareOp == depthCompareOp)
+        shader->pipelineDepthCompareOp == depthCompareOp &&
+        shader->pipelineAlphaToCoverage == alphaToCoverage &&
+        shader->pipelineBlendEnabled == blendEnabled)
     {
         return true;
     }
@@ -3178,6 +3185,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     VkPipelineMultisampleStateCreateInfo multisample = {};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisample.rasterizationSamples = sampleCount;
+    multisample.alphaToCoverageEnable = alphaToCoverage ? 1u : 0u;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil = {};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -3186,7 +3194,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     depthStencil.depthCompareOp = depthCompareOp;
 
     VkPipelineColorBlendAttachmentState blendAttachment = {};
-    blendAttachment.blendEnable = 1;
+    blendAttachment.blendEnable = blendEnabled ? 1u : 0u;
     blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
     blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
@@ -3240,6 +3248,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     shader->pipelineDepthTest = depthTest;
     shader->pipelineDepthWrite = depthWrite;
     shader->pipelineDepthCompareOp = depthCompareOp;
+    shader->pipelineAlphaToCoverage = alphaToCoverage;
+    shader->pipelineBlendEnabled = blendEnabled;
     if (!state->graphicsPipelineReported)
     {
         iReport(reporter, "Vulkan renderer created static paint graphics pipeline");
