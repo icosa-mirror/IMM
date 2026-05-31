@@ -26,6 +26,18 @@ Run the standalone Vulkan `sample1.imm` smoke from the repository root:
 
 The smoke builds the Debug viewer, runs `settings-vulkan-smoke.json`, requires `Loaded in CPU`, `Loaded in GPU [0]`, direct GPU Vulkan swapchain presentation, a Vulkan GPU paint readback, no Vulkan placeholder/failure diagnostics, and a complete 1280x720 PPM capture above the configured visible-pixel thresholds.
 
+To capture and compare against the Windows DirectX baseline:
+
+```powershell
+.\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release
+.\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -SkipBuild -KeepArtifacts
+.\code\appImmViewer\scripts\compare-ppm-captures.ps1 `
+  -ReferencePath .\build\baseline-captures\windows-directx-static.ppm `
+  -CandidatePath .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+```
+
+The DirectX baseline script builds the selected viewer configuration unless `-SkipBuild` is passed. Release is recommended for the baseline capture because Debug can stop on breakpoint-style runtime checks before validation completes.
+
 ## Unity Commands
 
 Batch:

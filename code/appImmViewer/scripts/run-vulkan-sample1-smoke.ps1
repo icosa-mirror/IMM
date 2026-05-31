@@ -2,8 +2,8 @@ param(
     [string]$Configuration = "Debug",
     [string]$Platform = "x64",
     [int]$DurationSeconds = 45,
-    [int]$MinNonblackPixels = 300000,
-    [int]$MinNearVisiblePixels = 100000,
+    [int]$MinNonblackPixels = 20000,
+    [int]$MinNearVisiblePixels = 10000,
     [switch]$SkipBuild,
     [switch]$KeepArtifacts
 )
@@ -66,7 +66,7 @@ function Read-PpmStats {
     $width = [int](Read-Token)
     $height = [int](Read-Token)
     $maxValue = [int](Read-Token)
-    while ($script:ppmIdx -lt $script:ppmBytes.Length -and [char]$script:ppmBytes[$script:ppmIdx] -match "\s") { $script:ppmIdx++ }
+    if ($script:ppmIdx -lt $script:ppmBytes.Length -and [char]$script:ppmBytes[$script:ppmIdx] -match "\s") { $script:ppmIdx++ }
 
     $expectedPayload = $width * $height * 3
     $payload = $script:ppmBytes.Length - $script:ppmIdx

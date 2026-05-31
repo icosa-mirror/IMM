@@ -218,6 +218,7 @@ static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = 0x0
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_WRITE_BIT = 0x00001000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_READ_BIT = 0x00000800;
 static constexpr VkAccessFlags VK_ACCESS_SHADER_READ_BIT = 0x00000020;
+static constexpr VkAccessFlags VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT = 0x00000100;
 static constexpr VkAccessFlags VK_ACCESS_MEMORY_READ_BIT = 0x00008000;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_UNDEFINED = 0;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL = 5;
@@ -1251,6 +1252,7 @@ struct piVulkanState
     bool graphicsPipelineReported = false;
     bool drawSubmittedReported = false;
     bool drawSubmitFailureReported = false;
+    bool clearTextureReported = false;
     bool gpuReadbackReported = false;
     bool gpuReadbackFailureReported = false;
     bool gpuPaintActive = false;
@@ -3250,6 +3252,120 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
     return true;
 }
 
+static bool iClearColorTextureImage(piVulkanState *state, piTexture texture, const float *color, piRenderer::piReporter *reporter)
+{
+    if (!state || !texture || texture->image == 0 || texture->info.mFormat == piRenderer::Format::D1_32_FLOAT ||
+        texture->info.mFormat == piRenderer::Format::D1_16_UNORM || texture->info.mFormat == piRenderer::Format::DS_24_8_UINT ||
+        texture->info.mFormat == piRenderer::Format::DS_32_8_UINT || state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
+        state->frameFence == VK_NULL_FENCE || !state->vkCmdClearColorImage)
+    {
+        return true;
+    }
+
+    const uint64_t timeout = 1000000000ull;
+    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange range = {};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseMipLevel = 0;
+    range.levelCount = 1;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+
+    VkImageMemoryBarrier toTransfer = {};
+    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransfer.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toTransfer.oldLayout = texture->imageLayout;
+    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.image = texture->image;
+    toTransfer.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toTransfer);
+
+    VkClearColorValue clearColor = {};
+    clearColor.float32[0] = color ? color[0] : 0.0f;
+    clearColor.float32[1] = color ? color[1] : 0.0f;
+    clearColor.float32[2] = color ? color[2] : 0.0f;
+    clearColor.float32[3] = color ? color[3] : 1.0f;
+    state->vkCmdClearColorImage(state->commandBuffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &range);
+
+    VkImageMemoryBarrier toColor = {};
+    toColor.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toColor.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toColor.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+    toColor.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    toColor.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColor.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColor.image = texture->image;
+    toColor.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toColor);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    texture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (!state->clearTextureReported)
+    {
+        iReport(reporter, "Vulkan renderer cleared GPU color render target");
+        state->clearTextureReported = true;
+    }
+    return true;
+}
+
 static bool iToVulkanTextureFormat(piRenderer::Format format, VkFormat *outFormat, bool *outDepth)
 {
     if (!outFormat || !outDepth)
@@ -4573,9 +4689,19 @@ void piRendererVulkan::SwapBuffers(void)
         }
         return;
     }
-    if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+    if (directPresentTexture)
     {
-        mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
+        if (!iReadBackTextureImage(mState, presentTexture, mReporter) && !mState->gpuReadbackFailureReported)
+        {
+            mState->gpuReadbackFailureReported = true;
+            iError(mReporter, "Vulkan renderer failed to read back presented GPU target");
+        }
+#if defined(WINDOWS)
+        if (mState->gpuReadbackReported)
+        {
+            iWritePpmCapture(mState, presentTexture);
+        }
+#endif
     }
 
     VkPresentInfoKHR presentInfo = {};
@@ -4715,6 +4841,10 @@ void piRendererVulkan::Clear(const float *color0, const float *color1, const flo
             dst[2] = b;
             dst[3] = 255;
         }
+    }
+    if (!iClearColorTextureImage(mState, texture, color0, mReporter))
+    {
+        iError(mReporter, "Vulkan renderer failed to clear GPU color render target");
     }
 }
 void piRendererVulkan::SetState(piState state, bool value) { (void)state; (void)value; }
@@ -5174,22 +5304,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         mState->gpuPaintActive = true;
         ++mState->gpuPaintDrawCount;
     }
-    const bool presentGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 128u || (mState->gpuPaintDrawCount & 127u) == 0u);
-    const bool readBackGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 1024u || (mState->gpuPaintDrawCount & 1023u) == 0u);
-    if (readBackGpuTarget && !iReadBackTextureImage(mState, target, mReporter) && !mState->gpuReadbackFailureReported)
-    {
-        mState->gpuReadbackFailureReported = true;
-        iError(mReporter, "Vulkan renderer failed to read back static paint GPU target");
-    }
 #if defined(WINDOWS)
-    if (presentGpuTarget)
+    if (hasStaticPaintGpuPath)
     {
         mState->pendingPresentTexture = target;
-        if (readBackGpuTarget && mState->gpuReadbackReported)
-        {
-            iWritePpmCapture(mState, target);
-        }
-        SwapBuffers();
     }
 #endif
     if (hasStaticPaintGpuPath)

@@ -1,8 +1,12 @@
 param(
+    [string]$Configuration = "Debug",
+    [string]$Platform = "x64",
     [string]$ViewerExe = "",
     [string]$SettingsPath = "",
     [string]$SamplePath = "",
-    [string]$OutputPath = ""
+    [string]$OutputPath = "",
+    [int]$TimeoutSeconds = 45,
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,13 +29,58 @@ if (Test-Path -LiteralPath (Join-Path $repoRootCandidate "code\appImmViewer\exe"
     $repoRoot = (Resolve-Path -LiteralPath $repoRootCandidate).Path
 }
 
+function Find-MSBuild {
+    if ($env:MSBUILD_EXE_PATH -and (Test-Path $env:MSBUILD_EXE_PATH)) {
+        return $env:MSBUILD_EXE_PATH
+    }
+
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhere) {
+        $path = & $vswhere -latest -requires Microsoft.Component.MSBuild -find "MSBuild\Current\Bin\amd64\MSBuild.exe" | Select-Object -First 1
+        if ($path -and (Test-Path $path)) {
+            return $path
+        }
+    }
+
+    $knownPath = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe"
+    if (Test-Path $knownPath) {
+        return $knownPath
+    }
+
+    $cmd = Get-Command msbuild.exe -ErrorAction SilentlyContinue
+    if ($cmd) {
+        return $cmd.Source
+    }
+
+    throw "MSBuild.exe was not found. Set MSBUILD_EXE_PATH or install Visual Studio Build Tools."
+}
+
+if (-not $SkipBuild) {
+    if (-not $repoRoot) {
+        throw "Could not resolve repository root for build. Pass -ViewerExe or run from the repository checkout."
+    }
+    $msbuild = Find-MSBuild
+    & $msbuild (Join-Path $repoRoot "code\projects\windows\imm.sln") `
+        -t:appImmViewer `
+        -p:Configuration=$Configuration `
+        -p:Platform=$Platform `
+        -p:TrackFileAccess=false `
+        -p:CL_MPCount=1 `
+        -nr:false `
+        -v:minimal
+    if ($LASTEXITCODE -ne 0) {
+        throw "MSBuild failed with exit code $LASTEXITCODE"
+    }
+}
+
 if (-not $ViewerExe) {
+    $exeName = if ($Configuration -ieq "Debug") { "appImmViewer_Debug.exe" } else { "appImmViewer_Release.exe" }
     if ($repoRoot) {
-        $ViewerExe = Join-Path $repoRoot "code\appImmViewer\exe\appImmViewer_Release.exe"
+        $ViewerExe = Join-Path $repoRoot "code\appImmViewer\exe\$exeName"
     }
     if (-not $ViewerExe -or -not (Test-Path -LiteralPath $ViewerExe -PathType Leaf)) {
-        $artifactViewer = Join-Path $scriptDir "appImmViewer_Release.exe"
-        $cwdViewer = Join-Path (Get-Location) "appImmViewer_Release.exe"
+        $artifactViewer = Join-Path $scriptDir $exeName
+        $cwdViewer = Join-Path (Get-Location) $exeName
         if (Test-Path -LiteralPath $artifactViewer -PathType Leaf) {
             $ViewerExe = $artifactViewer
         } elseif (Test-Path -LiteralPath $cwdViewer -PathType Leaf) {
@@ -72,9 +121,9 @@ if (-not $SamplePath) {
 
 if (-not $OutputPath) {
     if ($repoRoot) {
-        $OutputPath = Join-Path $repoRoot "build\baseline-captures\windows-directx-static.png"
+        $OutputPath = Join-Path $repoRoot "build\baseline-captures\windows-directx-static.ppm"
     } else {
-        $OutputPath = Join-Path $scriptDir "baseline-captures\windows-directx-static.png"
+        $OutputPath = Join-Path $scriptDir "baseline-captures\windows-directx-static.ppm"
     }
 }
 
@@ -140,7 +189,16 @@ Write-Host "Settings: $runtimeSettingsPath"
 Write-Host "Sample:   $SamplePath"
 Write-Host "Output:   $outputFullPath"
 
-$process = Start-Process -FilePath $ViewerExe -ArgumentList @($runtimeSettingsPath) -WorkingDirectory $viewerDir -Wait -PassThru
+$process = Start-Process -FilePath $ViewerExe -ArgumentList @($runtimeSettingsPath) -WorkingDirectory $viewerDir -WindowStyle Hidden -PassThru
+$timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+if ($timedOut) {
+    if (-not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force
+        Start-Sleep -Seconds 1
+    }
+    Copy-ViewerDebugLog
+    throw "Windows DirectX baseline capture timed out after $TimeoutSeconds seconds"
+}
 $exitCode = $process.ExitCode
 if ($exitCode -ne 0) {
     Copy-ViewerDebugLog
