@@ -35,6 +35,9 @@ typedef struct VkCommandPool_T *VkCommandPool;
 typedef struct VkCommandBuffer_T *VkCommandBuffer;
 typedef struct VkSemaphore_T *VkSemaphore;
 typedef struct VkFence_T *VkFence;
+typedef struct VkBuffer_T *VkBuffer;
+typedef struct VkDeviceMemory_T *VkDeviceMemory;
+typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
 typedef uint32_t VkPresentModeKHR;
@@ -51,6 +54,8 @@ typedef uint32_t VkImageLayout;
 typedef uint32_t VkImageAspectFlags;
 typedef uint32_t VkDependencyFlags;
 typedef uint32_t VkFenceCreateFlags;
+typedef uint32_t VkBufferUsageFlags;
+typedef uint32_t VkMemoryPropertyFlags;
 
 static constexpr VkInstance VK_NULL_INSTANCE = nullptr;
 static constexpr VkPhysicalDevice VK_NULL_PHYSICAL_DEVICE = nullptr;
@@ -60,6 +65,8 @@ static constexpr VkCommandPool VK_NULL_COMMAND_POOL = nullptr;
 static constexpr VkCommandBuffer VK_NULL_COMMAND_BUFFER = nullptr;
 static constexpr VkSemaphore VK_NULL_SEMAPHORE = nullptr;
 static constexpr VkFence VK_NULL_FENCE = nullptr;
+static constexpr VkBuffer VK_NULL_BUFFER = nullptr;
+static constexpr VkDeviceMemory VK_NULL_DEVICE_MEMORY = nullptr;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -72,6 +79,8 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO = 3;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SUBMIT_INFO = 4;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_FENCE_CREATE_INFO = 8;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO = 9;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO = 12;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO = 5;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
@@ -88,6 +97,7 @@ static constexpr VkPresentModeKHR VK_PRESENT_MODE_MAILBOX_KHR = 1;
 static constexpr VkPresentModeKHR VK_PRESENT_MODE_FIFO_KHR = 2;
 static constexpr VkImageUsageFlags VK_IMAGE_USAGE_TRANSFER_DST_BIT = 0x00000002;
 static constexpr VkImageUsageFlags VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT = 0x00000010;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_TRANSFER_SRC_BIT = 0x00000001;
 static constexpr VkSharingMode VK_SHARING_MODE_EXCLUSIVE = 0;
 static constexpr VkCompositeAlphaFlagBitsKHR VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR = 0x00000001;
 static constexpr VkCommandPoolCreateFlags VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT = 0x00000002;
@@ -105,6 +115,8 @@ static constexpr VkImageLayout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = 1000001002;
 static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001;
 static constexpr VkFenceCreateFlags VK_FENCE_CREATE_SIGNALED_BIT = 0x00000001;
 static constexpr uint32_t VK_QUEUE_FAMILY_IGNORED = 0xffffffffu;
+static constexpr VkMemoryPropertyFlags VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT = 0x00000001;
+static constexpr VkMemoryPropertyFlags VK_MEMORY_PROPERTY_HOST_COHERENT_BIT = 0x00000002;
 
 #define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 #define IMM_VK_API_VERSION_1_0 IMM_VK_MAKE_VERSION(1, 0, 0)
@@ -217,6 +229,53 @@ struct VkSwapchainCreateInfoKHR
     VkSwapchainKHR oldSwapchain;
 };
 
+struct VkMemoryType
+{
+    VkMemoryPropertyFlags propertyFlags;
+    uint32_t heapIndex;
+};
+
+struct VkMemoryHeap
+{
+    VkDeviceSize size;
+    VkFlags flags;
+};
+
+struct VkPhysicalDeviceMemoryProperties
+{
+    uint32_t memoryTypeCount;
+    VkMemoryType memoryTypes[32];
+    uint32_t memoryHeapCount;
+    VkMemoryHeap memoryHeaps[16];
+};
+
+struct VkBufferCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    VkDeviceSize size;
+    VkBufferUsageFlags usage;
+    VkSharingMode sharingMode;
+    uint32_t queueFamilyIndexCount;
+    const uint32_t *pQueueFamilyIndices;
+};
+
+struct VkMemoryRequirements
+{
+    VkDeviceSize size;
+    VkDeviceSize alignment;
+    uint32_t memoryTypeBits;
+};
+
+struct VkMemoryAllocateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkDeviceSize allocationSize;
+    uint32_t memoryTypeIndex;
+};
+
 struct VkCommandPoolCreateInfo
 {
     VkStructureType sType;
@@ -263,6 +322,38 @@ struct VkImageSubresourceRange
     uint32_t levelCount;
     uint32_t baseArrayLayer;
     uint32_t layerCount;
+};
+
+struct VkImageSubresourceLayers
+{
+    VkImageAspectFlags aspectMask;
+    uint32_t mipLevel;
+    uint32_t baseArrayLayer;
+    uint32_t layerCount;
+};
+
+struct VkOffset3D
+{
+    int32_t x;
+    int32_t y;
+    int32_t z;
+};
+
+struct VkExtent3D
+{
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+};
+
+struct VkBufferImageCopy
+{
+    VkDeviceSize bufferOffset;
+    uint32_t bufferRowLength;
+    uint32_t bufferImageHeight;
+    VkImageSubresourceLayers imageSubresource;
+    VkOffset3D imageOffset;
+    VkExtent3D imageExtent;
 };
 
 struct VkImageMemoryBarrier
@@ -338,6 +429,7 @@ typedef PFN_vkVoidFunction (*PFN_vkGetDeviceProcAddr)(VkDevice device, const cha
 typedef VkResult (*PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR *surfaceCapabilities);
 typedef VkResult (*PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats);
 typedef VkResult (*PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t *presentModeCount, VkPresentModeKHR *presentModes);
+typedef void (*PFN_vkGetPhysicalDeviceMemoryProperties)(VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties *memoryProperties);
 typedef VkResult (*PFN_vkCreateSwapchainKHR)(VkDevice device, const VkSwapchainCreateInfoKHR *createInfo, const void *allocator, VkSwapchainKHR *swapchain);
 typedef void (*PFN_vkDestroySwapchainKHR)(VkDevice device, VkSwapchainKHR swapchain, const void *allocator);
 typedef VkResult (*PFN_vkGetSwapchainImagesKHR)(VkDevice device, VkSwapchainKHR swapchain, uint32_t *swapchainImageCount, VkImage *swapchainImages);
@@ -349,6 +441,15 @@ typedef VkResult (*PFN_vkBeginCommandBuffer)(VkCommandBuffer commandBuffer, cons
 typedef VkResult (*PFN_vkEndCommandBuffer)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const void *memoryBarriers, uint32_t bufferMemoryBarrierCount, const void *bufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *imageMemoryBarriers);
 typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
+typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
+typedef VkResult (*PFN_vkCreateBuffer)(VkDevice device, const VkBufferCreateInfo *createInfo, const void *allocator, VkBuffer *buffer);
+typedef void (*PFN_vkDestroyBuffer)(VkDevice device, VkBuffer buffer, const void *allocator);
+typedef void (*PFN_vkGetBufferMemoryRequirements)(VkDevice device, VkBuffer buffer, VkMemoryRequirements *memoryRequirements);
+typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
+typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
+typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
+typedef VkResult (*PFN_vkMapMemory)(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, VkFlags flags, void **data);
+typedef void (*PFN_vkUnmapMemory)(VkDevice device, VkDeviceMemory memory);
 typedef VkResult (*PFN_vkCreateSemaphore)(VkDevice device, const VkSemaphoreCreateInfo *createInfo, const void *allocator, VkSemaphore *semaphore);
 typedef void (*PFN_vkDestroySemaphore)(VkDevice device, VkSemaphore semaphore, const void *allocator);
 typedef VkResult (*PFN_vkCreateFence)(VkDevice device, const VkFenceCreateInfo *createInfo, const void *allocator, VkFence *fence);
@@ -470,8 +571,13 @@ struct piVulkanState
     VkSemaphore imageAvailableSemaphore = VK_NULL_SEMAPHORE;
     VkSemaphore renderFinishedSemaphore = VK_NULL_SEMAPHORE;
     VkFence frameFence = VK_NULL_FENCE;
+    VkBuffer stagingBuffer = VK_NULL_BUFFER;
+    VkDeviceMemory stagingMemory = VK_NULL_DEVICE_MEMORY;
+    VkDeviceSize stagingSize = 0;
+    piTexture pendingPresentTexture = nullptr;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
+    bool texturePresentReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -496,6 +602,7 @@ struct piVulkanState
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR = nullptr;
     PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR = nullptr;
+    PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties = nullptr;
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR = nullptr;
     PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR = nullptr;
@@ -507,6 +614,15 @@ struct piVulkanState
     PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
     PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
     PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
+    PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
+    PFN_vkCreateBuffer vkCreateBuffer = nullptr;
+    PFN_vkDestroyBuffer vkDestroyBuffer = nullptr;
+    PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = nullptr;
+    PFN_vkAllocateMemory vkAllocateMemory = nullptr;
+    PFN_vkFreeMemory vkFreeMemory = nullptr;
+    PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
+    PFN_vkMapMemory vkMapMemory = nullptr;
+    PFN_vkUnmapMemory vkUnmapMemory = nullptr;
     PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
     PFN_vkDestroySemaphore vkDestroySemaphore = nullptr;
     PFN_vkCreateFence vkCreateFence = nullptr;
@@ -915,11 +1031,13 @@ static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piR
     state->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = (PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
     state->vkGetPhysicalDeviceSurfaceFormatsKHR = (PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfaceFormatsKHR");
     state->vkGetPhysicalDeviceSurfacePresentModesKHR = (PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfacePresentModesKHR");
+    state->vkGetPhysicalDeviceMemoryProperties = (PFN_vkGetPhysicalDeviceMemoryProperties)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceMemoryProperties");
 #if defined(WINDOWS)
     state->vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkCreateWin32SurfaceKHR");
 #endif
     if (!state->vkDestroyInstance || !state->vkEnumeratePhysicalDevices || !state->vkGetPhysicalDeviceQueueFamilyProperties ||
-        !state->vkCreateDevice || !state->vkDestroyDevice || !state->vkGetDeviceQueue || !state->vkDeviceWaitIdle)
+        !state->vkGetPhysicalDeviceMemoryProperties || !state->vkCreateDevice || !state->vkDestroyDevice ||
+        !state->vkGetDeviceQueue || !state->vkDeviceWaitIdle)
     {
         iError(reporter, "Vulkan renderer could not load required Vulkan entry points");
         return false;
@@ -945,6 +1063,15 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkEndCommandBuffer = (PFN_vkEndCommandBuffer)state->vkGetDeviceProcAddr(state->device, "vkEndCommandBuffer");
     state->vkCmdPipelineBarrier = (PFN_vkCmdPipelineBarrier)state->vkGetDeviceProcAddr(state->device, "vkCmdPipelineBarrier");
     state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
+    state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
+    state->vkCreateBuffer = (PFN_vkCreateBuffer)state->vkGetDeviceProcAddr(state->device, "vkCreateBuffer");
+    state->vkDestroyBuffer = (PFN_vkDestroyBuffer)state->vkGetDeviceProcAddr(state->device, "vkDestroyBuffer");
+    state->vkGetBufferMemoryRequirements = (PFN_vkGetBufferMemoryRequirements)state->vkGetDeviceProcAddr(state->device, "vkGetBufferMemoryRequirements");
+    state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
+    state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
+    state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
+    state->vkMapMemory = (PFN_vkMapMemory)state->vkGetDeviceProcAddr(state->device, "vkMapMemory");
+    state->vkUnmapMemory = (PFN_vkUnmapMemory)state->vkGetDeviceProcAddr(state->device, "vkUnmapMemory");
     state->vkCreateSemaphore = (PFN_vkCreateSemaphore)state->vkGetDeviceProcAddr(state->device, "vkCreateSemaphore");
     state->vkDestroySemaphore = (PFN_vkDestroySemaphore)state->vkGetDeviceProcAddr(state->device, "vkDestroySemaphore");
     state->vkCreateFence = (PFN_vkCreateFence)state->vkGetDeviceProcAddr(state->device, "vkCreateFence");
@@ -957,7 +1084,10 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
-        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCreateSemaphore ||
+        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage ||
+        !state->vkCreateBuffer || !state->vkDestroyBuffer || !state->vkGetBufferMemoryRequirements ||
+        !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory ||
+        !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
         !state->vkResetFences || !state->vkQueueSubmit || !state->vkAcquireNextImageKHR || !state->vkQueuePresentKHR)
     {
@@ -1220,6 +1350,132 @@ static bool iCreateVulkanFrameResources(piVulkanState *state, piRenderer::piRepo
     return true;
 }
 
+static bool iFindMemoryType(piVulkanState *state, uint32_t typeBits, VkMemoryPropertyFlags requiredFlags, uint32_t *outTypeIndex)
+{
+    if (!state || !state->vkGetPhysicalDeviceMemoryProperties || !outTypeIndex)
+    {
+        return false;
+    }
+    VkPhysicalDeviceMemoryProperties memoryProperties = {};
+    state->vkGetPhysicalDeviceMemoryProperties(state->physicalDevice, &memoryProperties);
+    for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; ++i)
+    {
+        if ((typeBits & (1u << i)) != 0 && (memoryProperties.memoryTypes[i].propertyFlags & requiredFlags) == requiredFlags)
+        {
+            *outTypeIndex = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool iEnsureStagingBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter)
+{
+    if (!state || size == 0)
+    {
+        return false;
+    }
+    if (state->stagingBuffer != VK_NULL_BUFFER && state->stagingMemory != VK_NULL_DEVICE_MEMORY && state->stagingSize >= size)
+    {
+        return true;
+    }
+    if (state->stagingBuffer != VK_NULL_BUFFER && state->vkDestroyBuffer)
+    {
+        state->vkDestroyBuffer(state->device, state->stagingBuffer, nullptr);
+        state->stagingBuffer = VK_NULL_BUFFER;
+    }
+    if (state->stagingMemory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
+    {
+        state->vkFreeMemory(state->device, state->stagingMemory, nullptr);
+        state->stagingMemory = VK_NULL_DEVICE_MEMORY;
+    }
+    state->stagingSize = 0;
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkResult result = state->vkCreateBuffer(state->device, &bufferInfo, nullptr, &state->stagingBuffer);
+    if (result != VK_SUCCESS || state->stagingBuffer == VK_NULL_BUFFER)
+    {
+        iError(reporter, "Vulkan renderer failed to create staging buffer");
+        return false;
+    }
+
+    VkMemoryRequirements requirements = {};
+    state->vkGetBufferMemoryRequirements(state->device, state->stagingBuffer, &requirements);
+    uint32_t memoryTypeIndex = 0;
+    if (!iFindMemoryType(state, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &memoryTypeIndex))
+    {
+        iError(reporter, "Vulkan renderer failed to find host-visible staging memory");
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex = memoryTypeIndex;
+    result = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, &state->stagingMemory);
+    if (result != VK_SUCCESS || state->stagingMemory == VK_NULL_DEVICE_MEMORY)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate staging memory");
+        return false;
+    }
+    result = state->vkBindBufferMemory(state->device, state->stagingBuffer, state->stagingMemory, 0);
+    if (result != VK_SUCCESS)
+    {
+        iError(reporter, "Vulkan renderer failed to bind staging memory");
+        return false;
+    }
+    state->stagingSize = requirements.size;
+    return true;
+}
+
+static bool iUploadTextureToStaging(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+{
+    if (!state || !texture || !texture->data || texture->info.mXres <= 0 || texture->info.mYres <= 0)
+    {
+        return false;
+    }
+    const VkDeviceSize size = (VkDeviceSize)texture->info.mXres * (VkDeviceSize)texture->info.mYres * 4ull;
+    if (!iEnsureStagingBuffer(state, size, reporter))
+    {
+        return false;
+    }
+    void *mapped = nullptr;
+    VkResult result = state->vkMapMemory(state->device, state->stagingMemory, 0, size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        iError(reporter, "Vulkan renderer failed to map staging memory");
+        return false;
+    }
+    uint8_t *dstBytes = (uint8_t *)mapped;
+    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+    const bool swapRB = state->swapchainFormat == VK_FORMAT_B8G8R8A8_UNORM;
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        const uint8_t *src = texture->data + i * 4u;
+        uint8_t *dst = dstBytes + i * 4u;
+        if (swapRB)
+        {
+            dst[0] = src[2];
+            dst[1] = src[1];
+            dst[2] = src[0];
+            dst[3] = 255;
+        }
+        else
+        {
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+            dst[3] = 255;
+        }
+    }
+    state->vkUnmapMemory(state->device, state->stagingMemory);
+    return true;
+}
+
 static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporter *reporter)
 {
     if (!iLoadVulkanEntryPoints(state, reporter))
@@ -1459,6 +1715,17 @@ void piRendererVulkan::Deinitialize(void)
             mState->commandPool = VK_NULL_COMMAND_POOL;
             mState->commandBuffer = VK_NULL_COMMAND_BUFFER;
         }
+        if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+        {
+            mState->vkDestroyBuffer(mState->device, mState->stagingBuffer, nullptr);
+            mState->stagingBuffer = VK_NULL_BUFFER;
+        }
+        if (mState->stagingMemory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, mState->stagingMemory, nullptr);
+            mState->stagingMemory = VK_NULL_DEVICE_MEMORY;
+            mState->stagingSize = 0;
+        }
         if (mState->swapchain != VK_NULL_SWAPCHAIN_KHR && mState->vkDestroySwapchainKHR)
         {
             mState->vkDestroySwapchainKHR(mState->device, mState->swapchain, nullptr);
@@ -1544,6 +1811,26 @@ void piRendererVulkan::SwapBuffers(void)
     {
         return;
     }
+    piTexture presentTexture = mState->pendingPresentTexture;
+    bool presentTextureHasColor = false;
+    if (presentTexture && presentTexture->data)
+    {
+        const size_t pixelCount = (size_t)presentTexture->info.mXres * (size_t)presentTexture->info.mYres;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t *src = presentTexture->data + i * 4u;
+            if (src[0] != 0 || src[1] != 0 || src[2] != 0)
+            {
+                presentTextureHasColor = true;
+                break;
+            }
+        }
+    }
+    const bool copyTexture =
+        presentTexture && presentTexture->data &&
+        presentTexture->info.mXres == (int)mState->swapchainExtent.width &&
+        presentTexture->info.mYres == (int)mState->swapchainExtent.height &&
+        iUploadTextureToStaging(mState, presentTexture, mReporter);
 
     mState->vkResetCommandBuffer(mState->commandBuffer, 0);
     VkCommandBufferBeginInfo beginInfo = {};
@@ -1583,18 +1870,44 @@ void piRendererVulkan::SwapBuffers(void)
                                  1,
                                  &toTransfer);
 
-    const float phase = (float)((mState->presentFrameIndex % 120u) / 119.0f);
-    VkClearColorValue clearColor = {};
-    clearColor.float32[0] = 0.02f;
-    clearColor.float32[1] = 0.12f + 0.25f * phase;
-    clearColor.float32[2] = 0.08f;
-    clearColor.float32[3] = 1.0f;
-    mState->vkCmdClearColorImage(mState->commandBuffer,
-                                 mState->swapchainImages[imageIndex],
-                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                 &clearColor,
-                                 1,
-                                 &colorRange);
+    if (copyTexture)
+    {
+        VkBufferImageCopy copyRegion = {};
+        copyRegion.bufferOffset = 0;
+        copyRegion.bufferRowLength = 0;
+        copyRegion.bufferImageHeight = 0;
+        copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.imageSubresource.mipLevel = 0;
+        copyRegion.imageSubresource.baseArrayLayer = 0;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageOffset.x = 0;
+        copyRegion.imageOffset.y = 0;
+        copyRegion.imageOffset.z = 0;
+        copyRegion.imageExtent.width = mState->swapchainExtent.width;
+        copyRegion.imageExtent.height = mState->swapchainExtent.height;
+        copyRegion.imageExtent.depth = 1;
+        mState->vkCmdCopyBufferToImage(mState->commandBuffer,
+                                       mState->stagingBuffer,
+                                       mState->swapchainImages[imageIndex],
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                       1,
+                                       &copyRegion);
+    }
+    else
+    {
+        const float phase = (float)((mState->presentFrameIndex % 120u) / 119.0f);
+        VkClearColorValue clearColor = {};
+        clearColor.float32[0] = 0.02f;
+        clearColor.float32[1] = 0.12f + 0.25f * phase;
+        clearColor.float32[2] = 0.08f;
+        clearColor.float32[3] = 1.0f;
+        mState->vkCmdClearColorImage(mState->commandBuffer,
+                                     mState->swapchainImages[imageIndex],
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     &clearColor,
+                                     1,
+                                     &colorRange);
+    }
 
     VkImageMemoryBarrier toPresent = {};
     toPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1650,10 +1963,15 @@ void piRendererVulkan::SwapBuffers(void)
     if (result == VK_SUCCESS)
     {
         ++mState->presentFrameIndex;
-        if (!mState->realPresentReported)
+        if (copyTexture && presentTextureHasColor && !mState->texturePresentReported)
+        {
+            mState->texturePresentReported = true;
+            iReport(mReporter, "Vulkan renderer presented swapchain nonblack texture frame");
+        }
+        else if (!copyTexture && !mState->realPresentReported)
         {
             mState->realPresentReported = true;
-            iReport(mReporter, "Vulkan renderer presented swapchain frame");
+            iReport(mReporter, "Vulkan renderer presented swapchain clear frame");
         }
     }
 }
@@ -2090,9 +2408,11 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     }
 #if defined(WINDOWS)
     ++mState->cpuPaintDrawCount;
-    if (!mState->captureWritten || (mState->cpuPaintDrawCount & 31u) == 0u)
+    if (mState->cpuPaintDrawCount == 1u || (mState->cpuPaintDrawCount & 31u) == 0u)
     {
+        mState->pendingPresentTexture = target;
         iPresentTextureToWindow(mState, target);
+        SwapBuffers();
     }
 #endif
 }
@@ -2110,6 +2430,10 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
     {
         iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet");
         return;
+    }
+    if (!mState->currentRenderTarget)
+    {
+        mState->pendingPresentTexture = mState->textures[0];
     }
 
     if (!mState->cpuPresentDiagnosticReported && mState->textures[0]->data)
