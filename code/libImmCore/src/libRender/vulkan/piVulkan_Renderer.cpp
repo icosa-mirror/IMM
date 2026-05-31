@@ -263,6 +263,7 @@ static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_ED
 static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER = 4;
 static constexpr VkCompareOp VK_COMPARE_OP_ALWAYS = 7;
 static constexpr VkCompareOp VK_COMPARE_OP_LESS_OR_EQUAL = 3;
+static constexpr VkCompareOp VK_COMPARE_OP_GREATER_OR_EQUAL = 6;
 static constexpr VkBorderColor VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = 0;
 static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER = 1;
 static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 6;
@@ -1240,7 +1241,7 @@ struct piBlendStateS
 
 struct piDepthStateS
 {
-    bool alphaToCoverage = false;
+    bool depthEnable = false;
     bool lessEqual = true;
 };
 
@@ -1422,6 +1423,7 @@ struct piVulkanState
     piRasterState currentRasterState = nullptr;
     piBlendState currentBlendState = nullptr;
     piDepthState currentDepthState = nullptr;
+    bool depthWriteEnabled = true;
     piTexture textures[16] = {};
     piSampler samplers[8] = {};
     piBuffer constantBuffers[16] = {};
@@ -3138,7 +3140,9 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
     VkPipelineDepthStencilStateCreateInfo depthStencil = {};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+    depthStencil.depthTestEnable = target->hasDepth && state->currentDepthState && state->currentDepthState->depthEnable ? 1u : 0u;
+    depthStencil.depthWriteEnable = depthStencil.depthTestEnable && state->depthWriteEnabled ? 1u : 0u;
+    depthStencil.depthCompareOp = state->currentDepthState && !state->currentDepthState->lessEqual ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
 
     VkPipelineColorBlendAttachmentState blendAttachment = {};
     blendAttachment.blendEnable = 1;
@@ -5877,7 +5881,7 @@ bool piRendererVulkan::SetRenderTarget(piRTarget obj)
 
 void piRendererVulkan::RenderTargetSampleLocations(piRTarget vdst, const float *locations) { (void)vdst; (void)locations; }
 void piRendererVulkan::BlitRenderTarget(piRTarget dst, piRTarget src, bool color, bool depth) { (void)dst; (void)src; (void)color; (void)depth; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::RenderTargetOperations, "Vulkan render target blit is not implemented yet"); }
-void piRendererVulkan::SetWriteMask(bool c0, bool c1, bool c2, bool c3, bool z) { (void)c0; (void)c1; (void)c2; (void)c3; (void)z; }
+void piRendererVulkan::SetWriteMask(bool c0, bool c1, bool c2, bool c3, bool z) { (void)c0; (void)c1; (void)c2; (void)c3; if (mState) mState->depthWriteEnabled = z; }
 void piRendererVulkan::SetShadingSamples(int shadingSamples) { (void)shadingSamples; }
 void piRendererVulkan::RenderTargetGetDefaultSampleLocation(piRTarget vdst, const int id, float *location) { (void)vdst; (void)id; if (location) { location[0] = 0.5f; location[1] = 0.5f; } }
 void piRendererVulkan::Clear(const float *color0, const float *color1, const float *color2, const float *color3, const bool depth0)
@@ -5961,7 +5965,7 @@ void piRendererVulkan::DestroyRasterState(piRasterState vme) { if (!vme) return;
 piBlendState piRendererVulkan::CreateBlendState(bool alphaToCoverage, bool enabled0) { piBlendStateS *state = new piBlendStateS(); state->alphaToCoverage = alphaToCoverage; state->enabled0 = enabled0; if (mState) ++mState->liveBlendStates; return state; }
 void piRendererVulkan::SetBlendState(const piBlendState vme) { if (mState) mState->currentBlendState = vme; }
 void piRendererVulkan::DestroyBlendState(piBlendState vme) { if (!vme) return; if (mState && mState->liveBlendStates > 0) --mState->liveBlendStates; delete vme; }
-piDepthState piRendererVulkan::CreateDepthState(bool alphaToCoverage, bool lessEqual) { piDepthStateS *state = new piDepthStateS(); state->alphaToCoverage = alphaToCoverage; state->lessEqual = lessEqual; if (mState) ++mState->liveDepthStates; return state; }
+piDepthState piRendererVulkan::CreateDepthState(bool depthEnable, bool lessEqual) { piDepthStateS *state = new piDepthStateS(); state->depthEnable = depthEnable; state->lessEqual = lessEqual; if (mState) ++mState->liveDepthStates; return state; }
 void piRendererVulkan::SetDepthState(const piDepthState vme) { if (mState) mState->currentDepthState = vme; }
 void piRendererVulkan::DestroyDepthState(piDepthState vme) { if (!vme) return; if (mState && mState->liveDepthStates > 0) --mState->liveDepthStates; delete vme; }
 

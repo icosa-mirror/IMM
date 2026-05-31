@@ -841,6 +841,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     bool isFirstFrame = true;
     const bool validationEnabled = validationRequested;
     const uint64_t validationFrame = validationEnabled ? strtoull(validationFrameEnv, nullptr, 10) : 0;
+    double validationFixedDt = -1.0;
     uint64_t validationMaxFrame = validationFrame + 300;
     uint64_t validationMinNonZeroPixels = 16;
     uint64_t validationMinDrawCalls = 1;
@@ -857,6 +858,11 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     if (validationMaxFrameEnv && validationMaxFrameEnv[0])
     {
         validationMaxFrame = strtoull(validationMaxFrameEnv, nullptr, 10);
+    }
+    const char *validationFixedDtEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_FIXED_DT", "IMM_GL_VALIDATE_FIXED_DT");
+    if (validationFixedDtEnv && validationFixedDtEnv[0])
+    {
+        validationFixedDt = atof(validationFixedDtEnv);
     }
     const char *validationMinNonZeroEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MIN_NONZERO", "IMM_GL_VALIDATE_MIN_NONZERO");
     if (validationMinNonZeroEnv && validationMinNonZeroEnv[0])
@@ -904,7 +910,11 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     {
         frameid++;
         const double time = mTimer.GetTime() - to;
-        const float dtime = float(time - oldTime);
+        float dtime = float(time - oldTime);
+        if (validationEnabled && validationFixedDt >= 0.0)
+        {
+            dtime = (float)validationFixedDt;
+        }
         oldTime = time;
 
         float mQuitFade = 1.0f;

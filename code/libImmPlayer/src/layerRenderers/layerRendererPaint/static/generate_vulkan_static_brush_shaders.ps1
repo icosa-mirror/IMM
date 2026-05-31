@@ -41,6 +41,7 @@ function Convert-VertexGlslForVulkan([string]$Source) {
         $source,
         '(?s)layout \(std140, row_major, binding=9\) uniform ChunkData\s*\{.*?\}chunk_data;',
         'layout (std140, row_major, binding=9) uniform ChunkData { ChunkDataEntry mData[128]; } chunk_data;')
+    $source = $source.Replace('uint bid = uint(real_vertexID);', 'uint bid = uint(gl_VertexID);')
     $source = $source.Replace('out V2CData', 'layout(location = 0) out V2CData')
     $source = $source.Replace('gl_VertexID', 'gl_VertexIndex')
     $source = $source.Replace('gl_InstanceID', 'gl_InstanceIndex')

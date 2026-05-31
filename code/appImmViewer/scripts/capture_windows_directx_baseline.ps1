@@ -174,8 +174,9 @@ $runtimeSettingsJson = $runtimeSettings | ConvertTo-Json -Depth 16
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($runtimeSettingsPath, $runtimeSettingsJson, $utf8NoBom)
 
-$env:IMM_VIEWER_VALIDATE_FRAME = "1"
+$env:IMM_VIEWER_VALIDATE_FRAME = "114"
 $env:IMM_VIEWER_VALIDATE_MAX_FRAME = "240"
+$env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
 $env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
 $env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = "1"
 $env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "1"
