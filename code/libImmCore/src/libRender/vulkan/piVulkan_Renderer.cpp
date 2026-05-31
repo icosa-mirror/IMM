@@ -850,30 +850,6 @@ static void iDrawCpuLine(piTexture texture, float x0, float y0, float x1, float 
 }
 
 #if defined(WINDOWS)
-static uint8_t *iBuildBgraCopy(piTexture texture)
-{
-    if (!texture || !texture->data || texture->info.mXres <= 0 || texture->info.mYres <= 0)
-    {
-        return nullptr;
-    }
-    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
-    uint8_t *bgra = (uint8_t *)std::malloc(pixelCount * 4u);
-    if (!bgra)
-    {
-        return nullptr;
-    }
-    for (size_t i = 0; i < pixelCount; ++i)
-    {
-        const uint8_t *src = texture->data + i * 4u;
-        uint8_t *dst = bgra + i * 4u;
-        dst[0] = src[2];
-        dst[1] = src[1];
-        dst[2] = src[0];
-        dst[3] = 255;
-    }
-    return bgra;
-}
-
 static void iWritePpmCapture(piVulkanState *state, piTexture texture)
 {
     if (!state || !texture || !texture->data)
@@ -922,50 +898,6 @@ static void iWritePpmCapture(piVulkanState *state, piTexture texture)
     }
     std::fclose(file);
     state->captureWritten = true;
-}
-
-static void iPresentTextureToWindow(piVulkanState *state, piTexture texture)
-{
-    if (!state || !state->window || !texture || !texture->data)
-    {
-        return;
-    }
-    HDC dc = GetDC(state->window);
-    if (!dc)
-    {
-        return;
-    }
-    RECT rect = {};
-    GetClientRect(state->window, &rect);
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = texture->info.mXres;
-    bmi.bmiHeader.biHeight = -texture->info.mYres;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    uint8_t *bgra = iBuildBgraCopy(texture);
-    if (!bgra)
-    {
-        ReleaseDC(state->window, dc);
-        return;
-    }
-    StretchDIBits(dc,
-                  0,
-                  0,
-                  rect.right - rect.left,
-                  rect.bottom - rect.top,
-                  0,
-                  0,
-                  texture->info.mXres,
-                  texture->info.mYres,
-                  bgra,
-                  &bmi,
-                  DIB_RGB_COLORS,
-                  SRCCOPY);
-    std::free(bgra);
-    iWritePpmCapture(state, texture);
-    ReleaseDC(state->window, dc);
 }
 #endif
 
@@ -2411,7 +2343,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     if (mState->cpuPaintDrawCount == 1u || (mState->cpuPaintDrawCount & 31u) == 0u)
     {
         mState->pendingPresentTexture = target;
-        iPresentTextureToWindow(mState, target);
+        iWritePpmCapture(mState, target);
         SwapBuffers();
     }
 #endif
@@ -2468,7 +2400,11 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
     }
 
 #if defined(WINDOWS)
-    iPresentTextureToWindow(mState, mState->textures[0]);
+    iWritePpmCapture(mState, mState->textures[0]);
+    if (!mState->currentRenderTarget)
+    {
+        SwapBuffers();
+    }
 #endif
 }
 void piRendererVulkan::ExecuteCompute(int ngx, int ngy, int ngz, int gsx, int gsy, int gsz) { (void)ngx; (void)ngy; (void)ngz; (void)gsx; (void)gsy; (void)gsz; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::Compute, "Vulkan compute is not implemented yet"); }
