@@ -149,6 +149,7 @@ namespace ImmPlayer {
                 numModelDrawCalls = info.numModelDrawCalls;
                 numTriangles = info.numTriangles;
                 numTrianglesCulled = info.numTrianglesCulled;
+                validationTimeFrame = info.validationTimeFrame;
                 gpuTimeAverageMs = info.gpuTimeAverageMs;
                 return *this;
             }
@@ -166,6 +167,7 @@ namespace ImmPlayer {
             int numModelDrawCalls = 0;
             int numTriangles = 0;
             int numTrianglesCulled = 0;
+            uint64_t validationTimeFrame = 0;
             float gpuTimeAverageMs = 0;
 
             float totalGPUTimeAcrossFrames = 0;
@@ -321,6 +323,7 @@ namespace ImmPlayer {
         ImmCore::piLog* mLog;
         ImmCore::piTimer *mTimer;
         uint32_t mFrame;
+        uint64_t mValidationTimeFrame;
         bool     mAnyDocToRender;
 
         FrameState mFrameState;

@@ -57,6 +57,7 @@ function Convert-FragmentGlslForVulkan([string]$Source) {
     $source = $source.Replace(
         'texelFetch( sampler2DArray(globalResources.mTexBlueNoise), ivec3(p,frameID)&63, 0 ).x',
         'texelFetch(globalBlueNoise, ivec3(p, int(frameID) & 63), 0).x')
+    $source = $source.Replace('outColor = vec4( col, 1.0 );', 'outColor = vec4( col, al );')
     $source = $source.Replace('in vec4 mpos;', 'layout(location = 2) in vec4 mpos;')
     $source = $source.Replace('in V2CData', 'layout(location = 0) in V2CData')
     return "#version 460`n$source"

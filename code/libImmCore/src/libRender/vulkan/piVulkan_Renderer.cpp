@@ -1161,6 +1161,14 @@ struct piShaderS
     VkPipelineLayout pipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     VkPipeline pipeline = VK_NULL_PIPELINE;
     VkRenderPass pipelineRenderPass = VK_NULL_RENDER_PASS;
+    VkCullModeFlags pipelineCullMode = VK_CULL_MODE_NONE;
+    VkFrontFace pipelineFrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    VkSampleCountFlagBits pipelineSampleCount = VK_SAMPLE_COUNT_1_BIT;
+    bool pipelineWireframe = false;
+    bool pipelineDepthClamp = false;
+    bool pipelineDepthTest = false;
+    bool pipelineDepthWrite = false;
+    VkCompareOp pipelineDepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     bool isPicture = false;
     bool isPicture2D = false;
 };
@@ -3086,16 +3094,6 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     {
         return true;
     }
-    if (shader->pipeline != VK_NULL_PIPELINE && shader->pipelineRenderPass == target->renderPass)
-    {
-        return true;
-    }
-    if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
-    {
-        state->vkDestroyPipeline(state->device, shader->pipeline, nullptr);
-        shader->pipeline = VK_NULL_PIPELINE;
-        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
-    }
     if (shader->vertexModule == VK_NULL_SHADER_MODULE || shader->fragmentModule == VK_NULL_SHADER_MODULE ||
         shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT || target->renderPass == VK_NULL_RENDER_PASS ||
         !state->vkCreateGraphicsPipelines)
@@ -3119,6 +3117,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    inputAssembly.primitiveRestartEnable = 1;
 
     VkPipelineViewportStateCreateInfo viewport = {};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -3126,23 +3125,51 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     viewport.scissorCount = 1;
 
     piRasterState rasterState = state->currentRasterState;
+    const VkCullModeFlags cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
+    const VkFrontFace frontFace = rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+    const bool wireframe = rasterState && rasterState->wireframe;
+    const bool depthClamp = rasterState && rasterState->depthClamp;
+    const bool depthTest = target->hasDepth && state->currentDepthState && state->currentDepthState->depthEnable;
+    const bool depthWrite = depthTest && state->depthWriteEnabled;
+    const VkCompareOp depthCompareOp = state->currentDepthState && !state->currentDepthState->lessEqual ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    if (shader->pipeline != VK_NULL_PIPELINE &&
+        shader->pipelineRenderPass == target->renderPass &&
+        shader->pipelineCullMode == cullMode &&
+        shader->pipelineFrontFace == frontFace &&
+        shader->pipelineSampleCount == sampleCount &&
+        shader->pipelineWireframe == wireframe &&
+        shader->pipelineDepthClamp == depthClamp &&
+        shader->pipelineDepthTest == depthTest &&
+        shader->pipelineDepthWrite == depthWrite &&
+        shader->pipelineDepthCompareOp == depthCompareOp)
+    {
+        return true;
+    }
+    if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+    {
+        state->vkDestroyPipeline(state->device, shader->pipeline, nullptr);
+        shader->pipeline = VK_NULL_PIPELINE;
+        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+    }
+
     VkPipelineRasterizationStateCreateInfo rasterization = {};
     rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterization.depthClampEnable = rasterState && rasterState->depthClamp ? 1u : 0u;
-    rasterization.polygonMode = rasterState && rasterState->wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-    rasterization.cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
-    rasterization.frontFace = rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    rasterization.depthClampEnable = depthClamp ? 1u : 0u;
+    rasterization.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+    rasterization.cullMode = cullMode;
+    rasterization.frontFace = frontFace;
     rasterization.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisample = {};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+    multisample.rasterizationSamples = sampleCount;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil = {};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = target->hasDepth && state->currentDepthState && state->currentDepthState->depthEnable ? 1u : 0u;
-    depthStencil.depthWriteEnable = depthStencil.depthTestEnable && state->depthWriteEnabled ? 1u : 0u;
-    depthStencil.depthCompareOp = state->currentDepthState && !state->currentDepthState->lessEqual ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthTestEnable = depthTest ? 1u : 0u;
+    depthStencil.depthWriteEnable = depthWrite ? 1u : 0u;
+    depthStencil.depthCompareOp = depthCompareOp;
 
     VkPipelineColorBlendAttachmentState blendAttachment = {};
     blendAttachment.blendEnable = 1;
@@ -3191,6 +3218,14 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         return false;
     }
     shader->pipelineRenderPass = target->renderPass;
+    shader->pipelineCullMode = cullMode;
+    shader->pipelineFrontFace = frontFace;
+    shader->pipelineSampleCount = sampleCount;
+    shader->pipelineWireframe = wireframe;
+    shader->pipelineDepthClamp = depthClamp;
+    shader->pipelineDepthTest = depthTest;
+    shader->pipelineDepthWrite = depthWrite;
+    shader->pipelineDepthCompareOp = depthCompareOp;
     if (!state->graphicsPipelineReported)
     {
         iReport(reporter, "Vulkan renderer created static paint graphics pipeline");

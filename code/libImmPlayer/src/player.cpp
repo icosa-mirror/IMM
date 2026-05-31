@@ -42,6 +42,29 @@ namespace ImmPlayer
         return value != nullptr && value[0] != '\0' && value[0] != '0';
     }
 
+    static bool iGetValidationFixedDt(double *fixedDt)
+    {
+        const char *value = getenv("IMM_VIEWER_VALIDATE_FIXED_DT");
+        if (!value || !value[0])
+        {
+            value = getenv("IMM_GL_VALIDATE_FIXED_DT");
+        }
+        if (!value || !value[0])
+        {
+            return false;
+        }
+        const double parsed = atof(value);
+        if (parsed < 0.0)
+        {
+            return false;
+        }
+        if (fixedDt)
+        {
+            *fixedDt = parsed;
+        }
+        return true;
+    }
+
     static void iTraceUnityGlobalRender(const char *message)
     {
         if (!iEnvFlagEnabled("IMM_UNITY_TRACE_GLOBAL_RENDER"))
@@ -103,6 +126,7 @@ namespace ImmPlayer
         mLog = log;
         mTimer = timer;
         mFrame = 0;
+        mValidationTimeFrame = 0;
         mEnabled = true;
 		mAnyDocToRender = false;
         mDetphBufferMode = configuration->depthBuffer;
@@ -831,7 +855,16 @@ namespace ImmPlayer
         //-----------------------------
         // set global info
         //-----------------------------
-        mTime = int64_t(mTimer->GetTimeTicks());
+        double validationFixedDt = 0.0;
+        if (iGetValidationFixedDt(&validationFixedDt))
+        {
+            const uint64_t validationTimeFrame = mAnyDocToRender ? mValidationTimeFrame++ : 0;
+            mTime = int64_t(piTick::CastInt(piTick::FromSeconds(double(validationTimeFrame) * validationFixedDt)));
+        }
+        else
+        {
+            mTime = int64_t(mTimer->GetTimeTicks());
+        }
         mFrameState.mTime = static_cast<float>(piTick::ToSeconds(mTime));
         mFrameState.mFrameID = mFrame++;
 
@@ -1243,6 +1276,7 @@ namespace ImmPlayer
         mCurrentPerfInfo.numPicture360CubemapDrawCalls = pictureInfo.numPicture360CubemapDrawCalls;
         mCurrentPerfInfo.numModelDrawCalls = modelInfo.numDrawCalls;
         mCurrentPerfInfo.numTriangles = totalTriangles;
+        mCurrentPerfInfo.validationTimeFrame = mValidationTimeFrame;
 
 #if defined(RENDER_BUDGET) || defined(MEASURE_GPU_TIME)
         if (mEnablePerformanceMeasurement && mMicrosecondsLastFrame > 0)

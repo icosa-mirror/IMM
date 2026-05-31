@@ -850,6 +850,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     uint64_t validationMinPicture360EquirectDrawCalls = 0;
     uint64_t validationMinPicture360CubemapDrawCalls = 0;
     uint64_t validationMinTriangles = 1;
+    uint64_t validationPlayerFrame = 0;
+    bool validationPlayerFrameEnabled = false;
     bool validationDone = false;
     int validationExitCode = 0;
     char validationCapturePath[PATH_MAX] = {};
@@ -898,6 +900,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     if (validationMinTrianglesEnv && validationMinTrianglesEnv[0])
     {
         validationMinTriangles = strtoull(validationMinTrianglesEnv, nullptr, 10);
+    }
+    const char *validationPlayerFrameEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_PLAYER_FRAME", "IMM_GL_VALIDATE_PLAYER_FRAME");
+    if (validationPlayerFrameEnv && validationPlayerFrameEnv[0])
+    {
+        validationPlayerFrame = strtoull(validationPlayerFrameEnv, nullptr, 10);
+        validationPlayerFrameEnabled = true;
     }
     const char *validationCapturePathEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_CAPTURE_PATH", "IMM_GL_VALIDATE_CAPTURE_PATH");
     if (validationCapturePathEnv && validationCapturePathEnv[0])
@@ -1067,7 +1075,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         (uint64_t)perf.numPicture360DrawCalls >= validationMinPicture360DrawCalls &&
                         (uint64_t)perf.numPicture360EquirectDrawCalls >= validationMinPicture360EquirectDrawCalls &&
                         (uint64_t)perf.numPicture360CubemapDrawCalls >= validationMinPicture360CubemapDrawCalls &&
-                        (uint64_t)perf.numTriangles >= validationMinTriangles;
+                        (uint64_t)perf.numTriangles >= validationMinTriangles &&
+                        (!validationPlayerFrameEnabled || perf.validationTimeFrame >= validationPlayerFrame);
 
                     if (!passed && (uint64_t)frameid < validationMaxFrame)
                     {
@@ -1079,7 +1088,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         if (!passed)
                         {
                             mLog.Printf(LT_ERROR,
-                                        L"IMM GL validation failed: frame=%d pixels=%llu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu picture360EquirectDrawCalls=%d minPicture360EquirectDrawCalls=%llu picture360CubemapDrawCalls=%d minPicture360CubemapDrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu culledCalls=%d",
+                                        L"IMM GL validation failed: frame=%d pixels=%llu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu picture360EquirectDrawCalls=%d minPicture360EquirectDrawCalls=%llu picture360CubemapDrawCalls=%d minPicture360CubemapDrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu playerFrame=%llu culledCalls=%d",
                                         frameid,
                                         (unsigned long long)pixelCount,
                                         (unsigned long long)nonZeroPixels,
@@ -1100,13 +1109,14 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numModelDrawCalls,
                                         perf.numTriangles,
                                         (unsigned long long)validationMinTriangles,
+                                        (unsigned long long)perf.validationTimeFrame,
                                         perf.numDrawCallsCulled);
                             validationExitCode = 2;
                         }
                         else
                         {
                             mLog.Printf(LT_MESSAGE,
-                                        L"IMM GL validation: frame=%d pixels=%llu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d picture360EquirectDrawCalls=%d picture360CubemapDrawCalls=%d modelDrawCalls=%d triangles=%d culledCalls=%d",
+                                        L"IMM GL validation: frame=%d pixels=%llu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d picture360EquirectDrawCalls=%d picture360CubemapDrawCalls=%d modelDrawCalls=%d triangles=%d playerFrame=%llu culledCalls=%d",
                                         frameid,
                                         (unsigned long long)pixelCount,
                                         (unsigned long long)nonZeroPixels,
@@ -1120,6 +1130,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numPicture360CubemapDrawCalls,
                                         perf.numModelDrawCalls,
                                         perf.numTriangles,
+                                        (unsigned long long)perf.validationTimeFrame,
                                         perf.numDrawCallsCulled);
                             if (validationCapturePath[0])
                             {
