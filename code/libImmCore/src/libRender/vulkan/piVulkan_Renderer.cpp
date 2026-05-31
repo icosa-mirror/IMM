@@ -11,6 +11,8 @@
 #if defined(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#elif defined(ANDROID)
+#include <dlfcn.h>
 #endif
 
 namespace ImmCore {
@@ -207,6 +209,8 @@ struct piVulkanState
     VkQueue graphicsQueue = VK_NULL_QUEUE;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
+#elif defined(ANDROID)
+    void *vulkanLibrary = nullptr;
 #endif
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
     PFN_vkCreateInstance vkCreateInstance = nullptr;
@@ -325,6 +329,14 @@ static bool iLoadVulkanEntryPoints(piVulkanState *state, piRenderer::piReporter 
         return false;
     }
     state->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(state->vulkanLibrary, "vkGetInstanceProcAddr");
+#elif defined(ANDROID)
+    state->vulkanLibrary = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+    if (!state->vulkanLibrary)
+    {
+        iError(reporter, "Vulkan renderer could not load libvulkan.so");
+        return false;
+    }
+    state->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(state->vulkanLibrary, "vkGetInstanceProcAddr");
 #else
     iError(reporter, "Vulkan dynamic loading is not implemented for this platform yet");
     return false;
@@ -545,6 +557,11 @@ void piRendererVulkan::Deinitialize(void)
     if (mState->vulkanLibrary)
     {
         FreeLibrary(mState->vulkanLibrary);
+    }
+#elif defined(ANDROID)
+    if (mState->vulkanLibrary)
+    {
+        dlclose(mState->vulkanLibrary);
     }
 #endif
     delete mState;

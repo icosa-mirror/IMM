@@ -35,7 +35,7 @@
 7. [complete] Add Windows standalone viewer selection for Vulkan.
 8. [complete] Update shared bridge/Godot API names so Vulkan can be requested explicitly on Windows and Android while preserving existing defaults.
 9. [complete] Verify with the closest available Windows standalone build.
-10. [pending] Update Android CMake to build the Vulkan source and link `vulkan` after Windows verification.
+10. [complete] Update Android CMake to build the Vulkan source and load `libvulkan.so` dynamically after Windows verification.
 11. [complete] Add a separate Windows standalone Vulkan smoke settings file without changing the default viewer config.
 
 ## Follow-up work after this pass
@@ -52,3 +52,4 @@
 - Windows `appImmViewer` Debug builds successfully with Vulkan selectable from settings.
 - Existing OpenGL standalone smoke reached IMM CPU/GPU load and playback start before manual termination.
 - Vulkan standalone smoke using `code/appImmViewer/exe/settings-vulkan-smoke.json` initialized an owned Vulkan device, reached renderer initialization, loaded `sample1.imm`, and emitted the expected placeholder diagnostics for render target binding and draw submission.
+- Android `:libImmCore:assembleDebug` builds successfully with `piVulkan_Renderer.cpp` included; CMake still emits the pre-existing dev warning about no top-level `project()` command.
