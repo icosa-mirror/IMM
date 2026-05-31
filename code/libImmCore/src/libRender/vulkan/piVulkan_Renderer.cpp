@@ -160,6 +160,10 @@ static constexpr VkMemoryPropertyFlags VK_MEMORY_PROPERTY_HOST_COHERENT_BIT = 0x
 static constexpr VkImageType VK_IMAGE_TYPE_2D = 1;
 static constexpr VkImageTiling VK_IMAGE_TILING_OPTIMAL = 0;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_1_BIT = 0x00000001;
+static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_2_BIT = 0x00000002;
+static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_4_BIT = 0x00000004;
+static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_8_BIT = 0x00000008;
+static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_16_BIT = 0x00000010;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
 static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_LOAD = 0;
@@ -168,6 +172,7 @@ static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_DONT_CARE = 2;
 static constexpr VkAttachmentStoreOp VK_ATTACHMENT_STORE_OP_STORE = 0;
 static constexpr VkAttachmentStoreOp VK_ATTACHMENT_STORE_OP_DONT_CARE = 1;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = 2;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL = 3;
 static constexpr VkPipelineBindPoint VK_PIPELINE_BIND_POINT_GRAPHICS = 0;
 static constexpr VkSubpassContents VK_SUBPASS_CONTENTS_INLINE = 0;
 
@@ -699,6 +704,12 @@ struct piRTargetS
 {
     piTexture color[4] = { nullptr, nullptr, nullptr, nullptr };
     piTexture depth = nullptr;
+    VkRenderPass renderPass = VK_NULL_RENDER_PASS;
+    VkFramebuffer framebuffer = VK_NULL_FRAMEBUFFER;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t colorAttachmentCount = 0;
+    bool hasDepth = false;
 };
 
 struct piSamplerS
@@ -1683,11 +1694,23 @@ static VkImageAspectFlags iTextureAspectMask(piRenderer::Format format)
     }
 }
 
+static VkSampleCountFlagBits iTextureSampleCount(const piRenderer::TextureInfo &info)
+{
+    switch (info.mMultisample)
+    {
+        case 2: return VK_SAMPLE_COUNT_2_BIT;
+        case 4: return VK_SAMPLE_COUNT_4_BIT;
+        case 8: return VK_SAMPLE_COUNT_8_BIT;
+        case 16: return VK_SAMPLE_COUNT_16_BIT;
+        default: return VK_SAMPLE_COUNT_1_BIT;
+    }
+}
+
 static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bindUsage, piRenderer::piReporter *reporter)
 {
     (void)bindUsage;
     if (!state || !texture || state->device == VK_NULL_DEVICE || texture->info.mType != piRenderer::TextureType::T2D ||
-        texture->info.mXres <= 0 || texture->info.mYres <= 0 || texture->info.mMultisample > 1)
+        texture->info.mXres <= 0 || texture->info.mYres <= 0)
     {
         return true;
     }
@@ -1714,9 +1737,9 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     imageInfo.extent.width = (uint32_t)texture->info.mXres;
     imageInfo.extent.height = (uint32_t)texture->info.mYres;
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = texture->info.mNumMips > 0 ? texture->info.mNumMips : 1;
+    imageInfo.mipLevels = texture->info.mMultisample > 1 ? 1 : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1);
     imageInfo.arrayLayers = 1;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = iTextureSampleCount(texture->info);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = usage;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1800,6 +1823,162 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
         iReport(reporter, "Vulkan renderer created VkImage-backed texture view");
         state->textureImageReported = true;
     }
+    return true;
+}
+
+static bool iCreateRenderTargetObjects(piVulkanState *state, piRTarget target, piRenderer::piReporter *reporter)
+{
+    if (!state || !target || state->device == VK_NULL_DEVICE)
+    {
+        return true;
+    }
+    if (!state->vkCreateRenderPass || !state->vkCreateFramebuffer)
+    {
+        return false;
+    }
+
+    VkAttachmentDescription attachments[5] = {};
+    VkAttachmentReference colorReferences[4] = {};
+    VkImageView attachmentViews[5] = {};
+    uint32_t attachmentCount = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        piTexture color = target->color[i];
+        if (!color)
+        {
+            break;
+        }
+        if (color->imageView == VK_NULL_IMAGE_VIEW || color->info.mXres <= 0 || color->info.mYres <= 0)
+        {
+            iError(reporter, "Vulkan render target color texture is missing an image view");
+            return false;
+        }
+        if (width == 0)
+        {
+            width = (uint32_t)color->info.mXres;
+            height = (uint32_t)color->info.mYres;
+            sampleCount = iTextureSampleCount(color->info);
+        }
+        else if (width != (uint32_t)color->info.mXres || height != (uint32_t)color->info.mYres)
+        {
+            iError(reporter, "Vulkan render target color attachment sizes do not match");
+            return false;
+        }
+        if (sampleCount != iTextureSampleCount(color->info))
+        {
+            iError(reporter, "Vulkan render target color attachment sample counts do not match");
+            return false;
+        }
+
+        VkAttachmentDescription &attachment = attachments[attachmentCount];
+        attachment.format = color->vkFormat;
+        attachment.samples = sampleCount;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        colorReferences[target->colorAttachmentCount].attachment = attachmentCount;
+        colorReferences[target->colorAttachmentCount].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        attachmentViews[attachmentCount] = color->imageView;
+        ++attachmentCount;
+        ++target->colorAttachmentCount;
+    }
+
+    VkAttachmentReference depthReference = {};
+    if (target->depth)
+    {
+        piTexture depth = target->depth;
+        if (depth->imageView == VK_NULL_IMAGE_VIEW || depth->info.mXres <= 0 || depth->info.mYres <= 0)
+        {
+            iError(reporter, "Vulkan render target depth texture is missing an image view");
+            return false;
+        }
+        if (width == 0)
+        {
+            width = (uint32_t)depth->info.mXres;
+            height = (uint32_t)depth->info.mYres;
+            sampleCount = iTextureSampleCount(depth->info);
+        }
+        else if (width != (uint32_t)depth->info.mXres || height != (uint32_t)depth->info.mYres)
+        {
+            iError(reporter, "Vulkan render target depth attachment size does not match");
+            return false;
+        }
+        if (sampleCount != iTextureSampleCount(depth->info))
+        {
+            iError(reporter, "Vulkan render target depth attachment sample count does not match");
+            return false;
+        }
+
+        VkAttachmentDescription &attachment = attachments[attachmentCount];
+        attachment.format = depth->vkFormat;
+        attachment.samples = sampleCount;
+        attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+        depthReference.attachment = attachmentCount;
+        depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachmentViews[attachmentCount] = depth->imageView;
+        ++attachmentCount;
+        target->hasDepth = true;
+    }
+
+    if (attachmentCount == 0 || width == 0 || height == 0)
+    {
+        iError(reporter, "Vulkan render target has no usable attachments");
+        return false;
+    }
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = target->colorAttachmentCount;
+    subpass.pColorAttachments = target->colorAttachmentCount > 0 ? colorReferences : nullptr;
+    subpass.pDepthStencilAttachment = target->hasDepth ? &depthReference : nullptr;
+
+    VkRenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = attachmentCount;
+    renderPassInfo.pAttachments = attachments;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    VkResult result = state->vkCreateRenderPass(state->device, &renderPassInfo, nullptr, &target->renderPass);
+    if (result != VK_SUCCESS || target->renderPass == VK_NULL_RENDER_PASS)
+    {
+        iError(reporter, "Vulkan renderer failed to create render target render pass");
+        return false;
+    }
+
+    VkFramebufferCreateInfo framebufferInfo = {};
+    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferInfo.renderPass = target->renderPass;
+    framebufferInfo.attachmentCount = attachmentCount;
+    framebufferInfo.pAttachments = attachmentViews;
+    framebufferInfo.width = width;
+    framebufferInfo.height = height;
+    framebufferInfo.layers = 1;
+    result = state->vkCreateFramebuffer(state->device, &framebufferInfo, nullptr, &target->framebuffer);
+    if (result != VK_SUCCESS || target->framebuffer == VK_NULL_FRAMEBUFFER)
+    {
+        iError(reporter, "Vulkan renderer failed to create render target framebuffer");
+        state->vkDestroyRenderPass(state->device, target->renderPass, nullptr);
+        target->renderPass = VK_NULL_RENDER_PASS;
+        return false;
+    }
+
+    target->width = width;
+    target->height = height;
+    iReport(reporter, "Vulkan renderer created render target framebuffer");
     return true;
 }
 
@@ -2475,6 +2654,11 @@ piRTarget piRendererVulkan::CreateRenderTarget(piTexture vtex0, piTexture vtex1,
     target->color[2] = vtex2;
     target->color[3] = vtex3;
     target->depth = zbuf;
+    if (mState && !iCreateRenderTargetObjects(mState, target, mReporter))
+    {
+        delete target;
+        return nullptr;
+    }
     if (mState) ++mState->liveRenderTargets;
     return target;
 }
@@ -2482,6 +2666,19 @@ piRTarget piRendererVulkan::CreateRenderTarget(piTexture vtex0, piTexture vtex1,
 void piRendererVulkan::DestroyRenderTarget(piRTarget obj)
 {
     if (!obj) return;
+    if (mState && mState->device != VK_NULL_DEVICE)
+    {
+        if (obj->framebuffer != VK_NULL_FRAMEBUFFER && mState->vkDestroyFramebuffer)
+        {
+            mState->vkDestroyFramebuffer(mState->device, obj->framebuffer, nullptr);
+            obj->framebuffer = VK_NULL_FRAMEBUFFER;
+        }
+        if (obj->renderPass != VK_NULL_RENDER_PASS && mState->vkDestroyRenderPass)
+        {
+            mState->vkDestroyRenderPass(mState->device, obj->renderPass, nullptr);
+            obj->renderPass = VK_NULL_RENDER_PASS;
+        }
+    }
     if (mState && mState->liveRenderTargets > 0) --mState->liveRenderTargets;
     delete obj;
 }
@@ -2489,7 +2686,7 @@ void piRendererVulkan::DestroyRenderTarget(piRTarget obj)
 bool piRendererVulkan::SetRenderTarget(piRTarget obj)
 {
     if (mState) mState->currentRenderTarget = obj;
-    return true;
+    return obj == nullptr || obj->framebuffer != VK_NULL_FRAMEBUFFER;
 }
 
 void piRendererVulkan::RenderTargetSampleLocations(piRTarget vdst, const float *locations) { (void)vdst; (void)locations; }
