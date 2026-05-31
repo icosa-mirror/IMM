@@ -29,19 +29,40 @@ typedef struct VkPhysicalDevice_T *VkPhysicalDevice;
 typedef struct VkDevice_T *VkDevice;
 typedef struct VkQueue_T *VkQueue;
 typedef uint64_t VkSurfaceKHR;
+typedef uint64_t VkSwapchainKHR;
+typedef uint64_t VkImage;
+typedef uint32_t VkFormat;
+typedef uint32_t VkColorSpaceKHR;
+typedef uint32_t VkPresentModeKHR;
+typedef uint32_t VkImageUsageFlags;
+typedef uint32_t VkSharingMode;
+typedef uint32_t VkSurfaceTransformFlagBitsKHR;
+typedef uint32_t VkCompositeAlphaFlagBitsKHR;
 
 static constexpr VkInstance VK_NULL_INSTANCE = nullptr;
 static constexpr VkPhysicalDevice VK_NULL_PHYSICAL_DEVICE = nullptr;
 static constexpr VkDevice VK_NULL_DEVICE = nullptr;
 static constexpr VkQueue VK_NULL_QUEUE = nullptr;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
+static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO = 2;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO = 3;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000;
 static constexpr VkQueueFlags VK_QUEUE_GRAPHICS_BIT = 0x00000001;
+static constexpr VkFormat VK_FORMAT_B8G8R8A8_UNORM = 44;
+static constexpr VkFormat VK_FORMAT_R8G8B8A8_UNORM = 37;
+static constexpr VkColorSpaceKHR VK_COLOR_SPACE_SRGB_NONLINEAR_KHR = 0;
+static constexpr VkPresentModeKHR VK_PRESENT_MODE_IMMEDIATE_KHR = 0;
+static constexpr VkPresentModeKHR VK_PRESENT_MODE_MAILBOX_KHR = 1;
+static constexpr VkPresentModeKHR VK_PRESENT_MODE_FIFO_KHR = 2;
+static constexpr VkImageUsageFlags VK_IMAGE_USAGE_TRANSFER_DST_BIT = 0x00000002;
+static constexpr VkImageUsageFlags VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT = 0x00000010;
+static constexpr VkSharingMode VK_SHARING_MODE_EXCLUSIVE = 0;
+static constexpr VkCompositeAlphaFlagBitsKHR VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR = 0x00000001;
 
 #define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 #define IMM_VK_API_VERSION_1_0 IMM_VK_MAKE_VERSION(1, 0, 0)
@@ -106,6 +127,54 @@ struct VkQueueFamilyProperties
     } minImageTransferGranularity;
 };
 
+struct VkExtent2D
+{
+    uint32_t width;
+    uint32_t height;
+};
+
+struct VkSurfaceCapabilitiesKHR
+{
+    uint32_t minImageCount;
+    uint32_t maxImageCount;
+    VkExtent2D currentExtent;
+    VkExtent2D minImageExtent;
+    VkExtent2D maxImageExtent;
+    uint32_t maxImageArrayLayers;
+    VkFlags supportedTransforms;
+    VkSurfaceTransformFlagBitsKHR currentTransform;
+    VkFlags supportedCompositeAlpha;
+    VkImageUsageFlags supportedUsageFlags;
+};
+
+struct VkSurfaceFormatKHR
+{
+    VkFormat format;
+    VkColorSpaceKHR colorSpace;
+};
+
+struct VkSwapchainCreateInfoKHR
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    VkSurfaceKHR surface;
+    uint32_t minImageCount;
+    VkFormat imageFormat;
+    VkColorSpaceKHR imageColorSpace;
+    VkExtent2D imageExtent;
+    uint32_t imageArrayLayers;
+    VkImageUsageFlags imageUsage;
+    VkSharingMode imageSharingMode;
+    uint32_t queueFamilyIndexCount;
+    const uint32_t *pQueueFamilyIndices;
+    VkSurfaceTransformFlagBitsKHR preTransform;
+    VkCompositeAlphaFlagBitsKHR compositeAlpha;
+    VkPresentModeKHR presentMode;
+    VkBool32 clipped;
+    VkSwapchainKHR oldSwapchain;
+};
+
 #if defined(WINDOWS)
 struct VkWin32SurfaceCreateInfoKHR
 {
@@ -129,6 +198,13 @@ typedef void (*PFN_vkGetDeviceQueue)(VkDevice device, uint32_t queueFamilyIndex,
 typedef VkResult (*PFN_vkDeviceWaitIdle)(VkDevice device);
 typedef VkResult (*PFN_vkGetPhysicalDeviceSurfaceSupportKHR)(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32 *supported);
 typedef void (*PFN_vkDestroySurfaceKHR)(VkInstance instance, VkSurfaceKHR surface, const void *allocator);
+typedef PFN_vkVoidFunction (*PFN_vkGetDeviceProcAddr)(VkDevice device, const char *name);
+typedef VkResult (*PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR *surfaceCapabilities);
+typedef VkResult (*PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t *surfaceFormatCount, VkSurfaceFormatKHR *surfaceFormats);
+typedef VkResult (*PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, uint32_t *presentModeCount, VkPresentModeKHR *presentModes);
+typedef VkResult (*PFN_vkCreateSwapchainKHR)(VkDevice device, const VkSwapchainCreateInfoKHR *createInfo, const void *allocator, VkSwapchainKHR *swapchain);
+typedef void (*PFN_vkDestroySwapchainKHR)(VkDevice device, VkSwapchainKHR swapchain, const void *allocator);
+typedef VkResult (*PFN_vkGetSwapchainImagesKHR)(VkDevice device, VkSwapchainKHR swapchain, uint32_t *swapchainImageCount, VkImage *swapchainImages);
 #if defined(WINDOWS)
 typedef VkResult (*PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, const VkWin32SurfaceCreateInfoKHR *createInfo, const void *allocator, VkSurfaceKHR *surface);
 #endif
@@ -231,6 +307,11 @@ struct piVulkanState
     VkDevice device = VK_NULL_DEVICE;
     VkQueue graphicsQueue = VK_NULL_QUEUE;
     VkSurfaceKHR surface = VK_NULL_SURFACE_KHR;
+    VkSwapchainKHR swapchain = VK_NULL_SWAPCHAIN_KHR;
+    VkImage swapchainImages[8] = {};
+    uint32_t swapchainImageCount = 0;
+    VkFormat swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    VkExtent2D swapchainExtent = {};
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -251,6 +332,13 @@ struct piVulkanState
     PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
     PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
     PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = nullptr;
+    PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
+    PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
+    PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR = nullptr;
+    PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR = nullptr;
+    PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
+    PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR = nullptr;
+    PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR = nullptr;
 #if defined(WINDOWS)
     PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR = nullptr;
 #endif
@@ -646,6 +734,10 @@ static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piR
     state->vkGetDeviceQueue = (PFN_vkGetDeviceQueue)state->vkGetInstanceProcAddr(state->instance, "vkGetDeviceQueue");
     state->vkDeviceWaitIdle = (PFN_vkDeviceWaitIdle)state->vkGetInstanceProcAddr(state->instance, "vkDeviceWaitIdle");
     state->vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkDestroySurfaceKHR");
+    state->vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)state->vkGetInstanceProcAddr(state->instance, "vkGetDeviceProcAddr");
+    state->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = (PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR");
+    state->vkGetPhysicalDeviceSurfaceFormatsKHR = (PFN_vkGetPhysicalDeviceSurfaceFormatsKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfaceFormatsKHR");
+    state->vkGetPhysicalDeviceSurfacePresentModesKHR = (PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfacePresentModesKHR");
 #if defined(WINDOWS)
     state->vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkCreateWin32SurfaceKHR");
 #endif
@@ -653,6 +745,24 @@ static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piR
         !state->vkCreateDevice || !state->vkDestroyDevice || !state->vkGetDeviceQueue || !state->vkDeviceWaitIdle)
     {
         iError(reporter, "Vulkan renderer could not load required Vulkan entry points");
+        return false;
+    }
+    return true;
+}
+
+static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || !state->device || !state->vkGetDeviceProcAddr)
+    {
+        iError(reporter, "Vulkan renderer cannot load swapchain entry points without vkGetDeviceProcAddr");
+        return false;
+    }
+    state->vkCreateSwapchainKHR = (PFN_vkCreateSwapchainKHR)state->vkGetDeviceProcAddr(state->device, "vkCreateSwapchainKHR");
+    state->vkDestroySwapchainKHR = (PFN_vkDestroySwapchainKHR)state->vkGetDeviceProcAddr(state->device, "vkDestroySwapchainKHR");
+    state->vkGetSwapchainImagesKHR = (PFN_vkGetSwapchainImagesKHR)state->vkGetDeviceProcAddr(state->device, "vkGetSwapchainImagesKHR");
+    if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR)
+    {
+        iError(reporter, "Vulkan renderer could not load required swapchain entry points");
         return false;
     }
     return true;
@@ -689,6 +799,168 @@ static bool iCreateVulkanSurface(piVulkanState *state, piRenderer::piReporter *r
 #else
     return true;
 #endif
+}
+
+static uint32_t iClampUint32(uint32_t value, uint32_t lo, uint32_t hi)
+{
+    if (value < lo) return lo;
+    if (hi != 0 && value > hi) return hi;
+    return value;
+}
+
+static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->surface == VK_NULL_SURFACE_KHR)
+    {
+        return true;
+    }
+    if (!state->vkGetPhysicalDeviceSurfaceCapabilitiesKHR || !state->vkGetPhysicalDeviceSurfaceFormatsKHR ||
+        !state->vkGetPhysicalDeviceSurfacePresentModesKHR)
+    {
+        iError(reporter, "Vulkan renderer could not load required surface query entry points");
+        return false;
+    }
+    if (!iLoadVulkanSwapchainEntryPoints(state, reporter))
+    {
+        return false;
+    }
+
+    VkSurfaceCapabilitiesKHR capabilities = {};
+    VkResult result = state->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state->physicalDevice, state->surface, &capabilities);
+    if (result != VK_SUCCESS)
+    {
+        iError(reporter, "Vulkan renderer failed to query surface capabilities");
+        return false;
+    }
+
+    uint32_t formatCount = 0;
+    result = state->vkGetPhysicalDeviceSurfaceFormatsKHR(state->physicalDevice, state->surface, &formatCount, nullptr);
+    if (result != VK_SUCCESS || formatCount == 0)
+    {
+        iError(reporter, "Vulkan renderer found no surface formats");
+        return false;
+    }
+    VkSurfaceFormatKHR formats[16] = {};
+    if (formatCount > 16)
+    {
+        formatCount = 16;
+    }
+    result = state->vkGetPhysicalDeviceSurfaceFormatsKHR(state->physicalDevice, state->surface, &formatCount, formats);
+    if (result != VK_SUCCESS || formatCount == 0)
+    {
+        iError(reporter, "Vulkan renderer failed to query surface formats");
+        return false;
+    }
+
+    VkSurfaceFormatKHR selectedFormat = formats[0];
+    for (uint32_t i = 0; i < formatCount; ++i)
+    {
+        if ((formats[i].format == VK_FORMAT_B8G8R8A8_UNORM || formats[i].format == VK_FORMAT_R8G8B8A8_UNORM) &&
+            formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        {
+            selectedFormat = formats[i];
+            break;
+        }
+    }
+
+    uint32_t presentModeCount = 0;
+    result = state->vkGetPhysicalDeviceSurfacePresentModesKHR(state->physicalDevice, state->surface, &presentModeCount, nullptr);
+    if (result != VK_SUCCESS || presentModeCount == 0)
+    {
+        iError(reporter, "Vulkan renderer found no present modes");
+        return false;
+    }
+    VkPresentModeKHR presentModes[16] = {};
+    if (presentModeCount > 16)
+    {
+        presentModeCount = 16;
+    }
+    result = state->vkGetPhysicalDeviceSurfacePresentModesKHR(state->physicalDevice, state->surface, &presentModeCount, presentModes);
+    if (result != VK_SUCCESS || presentModeCount == 0)
+    {
+        iError(reporter, "Vulkan renderer failed to query present modes");
+        return false;
+    }
+    VkPresentModeKHR selectedPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+    for (uint32_t i = 0; i < presentModeCount; ++i)
+    {
+        if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            selectedPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+            break;
+        }
+        if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
+        {
+            selectedPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+        }
+    }
+
+    VkExtent2D extent = capabilities.currentExtent;
+    if (extent.width == 0xffffffffu || extent.height == 0xffffffffu)
+    {
+        extent.width = iClampUint32((uint32_t)state->windowWidth, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        extent.height = iClampUint32((uint32_t)state->windowHeight, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+    }
+    uint32_t imageCount = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount != 0 && imageCount > capabilities.maxImageCount)
+    {
+        imageCount = capabilities.maxImageCount;
+    }
+
+    VkSwapchainCreateInfoKHR swapchainInfo = {};
+    swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchainInfo.surface = state->surface;
+    swapchainInfo.minImageCount = imageCount;
+    swapchainInfo.imageFormat = selectedFormat.format;
+    swapchainInfo.imageColorSpace = selectedFormat.colorSpace;
+    swapchainInfo.imageExtent = extent;
+    swapchainInfo.imageArrayLayers = 1;
+    swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchainInfo.preTransform = capabilities.currentTransform;
+    swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    swapchainInfo.presentMode = selectedPresentMode;
+    swapchainInfo.clipped = 1;
+    swapchainInfo.oldSwapchain = VK_NULL_SWAPCHAIN_KHR;
+
+    result = state->vkCreateSwapchainKHR(state->device, &swapchainInfo, nullptr, &state->swapchain);
+    if (result != VK_SUCCESS || state->swapchain == VK_NULL_SWAPCHAIN_KHR)
+    {
+        iError(reporter, "Vulkan renderer failed to create swapchain");
+        return false;
+    }
+
+    uint32_t swapchainImageCount = 0;
+    result = state->vkGetSwapchainImagesKHR(state->device, state->swapchain, &swapchainImageCount, nullptr);
+    if (result != VK_SUCCESS || swapchainImageCount == 0)
+    {
+        iError(reporter, "Vulkan renderer failed to query swapchain image count");
+        return false;
+    }
+    if (swapchainImageCount > 8)
+    {
+        swapchainImageCount = 8;
+    }
+    result = state->vkGetSwapchainImagesKHR(state->device, state->swapchain, &swapchainImageCount, state->swapchainImages);
+    if (result != VK_SUCCESS || swapchainImageCount == 0)
+    {
+        iError(reporter, "Vulkan renderer failed to query swapchain images");
+        return false;
+    }
+
+    state->swapchainImageCount = swapchainImageCount;
+    state->swapchainFormat = selectedFormat.format;
+    state->swapchainExtent = extent;
+    char message[256];
+    std::snprintf(message,
+                  sizeof(message),
+                  "Vulkan renderer created swapchain %ux%u images=%u format=%u",
+                  extent.width,
+                  extent.height,
+                  swapchainImageCount,
+                  selectedFormat.format);
+    iReport(reporter, message);
+    return true;
 }
 
 static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporter *reporter)
@@ -827,7 +1099,11 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     }
     state->ownsDevice = true;
     state->vkGetDeviceQueue(state->device, state->graphicsQueueFamilyIndex, 0, &state->graphicsQueue);
-    return state->graphicsQueue != VK_NULL_QUEUE;
+    if (state->graphicsQueue == VK_NULL_QUEUE)
+    {
+        return false;
+    }
+    return iCreateVulkanSwapchain(state, reporter);
 }
 
 piRendererVulkan::piRendererVulkan()
@@ -900,6 +1176,11 @@ void piRendererVulkan::Deinitialize(void)
         if (mState->vkDeviceWaitIdle)
         {
             mState->vkDeviceWaitIdle(mState->device);
+        }
+        if (mState->swapchain != VK_NULL_SWAPCHAIN_KHR && mState->vkDestroySwapchainKHR)
+        {
+            mState->vkDestroySwapchainKHR(mState->device, mState->swapchain, nullptr);
+            mState->swapchain = VK_NULL_SWAPCHAIN_KHR;
         }
         if (mState->vkDestroyDevice)
         {
