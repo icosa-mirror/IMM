@@ -2184,17 +2184,22 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
         return false;
     }
     VkPresentModeKHR selectedPresentMode = VK_PRESENT_MODE_FIFO_KHR;
+    bool hasMailboxPresent = false;
     for (uint32_t i = 0; i < presentModeCount; ++i)
     {
-        if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
-        {
-            selectedPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-            break;
-        }
         if (presentModes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
         {
             selectedPresentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+            break;
         }
+        if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+        {
+            hasMailboxPresent = true;
+        }
+    }
+    if (selectedPresentMode == VK_PRESENT_MODE_FIFO_KHR && hasMailboxPresent)
+    {
+        selectedPresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
     }
 
     VkExtent2D extent = capabilities.currentExtent;
@@ -2260,11 +2265,12 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
     char message[256];
     std::snprintf(message,
                   sizeof(message),
-                  "Vulkan renderer created swapchain %ux%u images=%u format=%u",
+                  "Vulkan renderer created swapchain %ux%u images=%u format=%u presentMode=%u",
                   extent.width,
                   extent.height,
                   swapchainImageCount,
-                  selectedFormat.format);
+                  selectedFormat.format,
+                  selectedPresentMode);
     iReport(reporter, message);
     return true;
 }
@@ -5449,7 +5455,7 @@ void piRendererVulkan::SwapBuffers(void)
         return;
     }
 
-    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkPipelineStageFlags waitStage = (directPresentTexture || copyTexture) ? VK_PIPELINE_STAGE_TRANSFER_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.waitSemaphoreCount = 1;
@@ -5460,6 +5466,16 @@ void piRendererVulkan::SwapBuffers(void)
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &mState->renderFinishedSemaphore;
     result = mState->vkQueueSubmit(mState->graphicsQueue, 1, &submitInfo, mState->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+        {
+            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
+            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
+        }
+        return;
+    }
+    result = mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
         if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
@@ -5499,6 +5515,10 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkQueuePresentKHR(mState->graphicsQueue, &presentInfo);
     if (result == VK_SUCCESS)
     {
+        if (mState->vkDeviceWaitIdle)
+        {
+            mState->vkDeviceWaitIdle(mState->device);
+        }
         ++mState->presentFrameIndex;
         if (directPresentTexture && presentTextureHasColor && !mState->directTexturePresentReported)
         {

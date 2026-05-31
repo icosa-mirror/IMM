@@ -2,8 +2,10 @@ param(
     [string]$Configuration = "Debug",
     [string]$Platform = "x64",
     [int]$DurationSeconds = 45,
+    [int]$PresentSeconds = 8,
     [int]$MinNonblackPixels = 20000,
     [int]$MinNearVisiblePixels = 10000,
+    [string]$ReferencePath = "",
     [switch]$SkipBuild,
     [switch]$KeepArtifacts
 )
@@ -127,31 +129,71 @@ if (-not (Test-Path $settingsPath)) {
 
 Remove-Item -LiteralPath $debugLog, $capturePath, $captureTmpPath -Force -ErrorAction SilentlyContinue
 
-$env:IMM_VULKAN_CPU_CAPTURE_PATH = $capturePath
-$env:IMM_VULKAN_CPU_CAPTURE_OVERWRITE = "1"
+$previousEnv = @{
+    IMM_VIEWER_VALIDATE_FRAME = $env:IMM_VIEWER_VALIDATE_FRAME
+    IMM_VIEWER_VALIDATE_MAX_FRAME = $env:IMM_VIEWER_VALIDATE_MAX_FRAME
+    IMM_VIEWER_VALIDATE_MIN_NONZERO = $env:IMM_VIEWER_VALIDATE_MIN_NONZERO
+    IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_TRIANGLES = $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES
+    IMM_VIEWER_VALIDATE_CAPTURE_PATH = $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH
+    IMM_VIEWER_VALIDATE_DISABLE_AUDIO = $env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO
+    IMM_VULKAN_CPU_CAPTURE_PATH = $env:IMM_VULKAN_CPU_CAPTURE_PATH
+    IMM_VULKAN_CPU_CAPTURE_OVERWRITE = $env:IMM_VULKAN_CPU_CAPTURE_OVERWRITE
+}
 
-$process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
-Start-Sleep -Seconds $DurationSeconds
-if (-not $process.HasExited) {
-    Stop-Process -Id $process.Id -Force
-    Start-Sleep -Seconds 1
+$env:IMM_VIEWER_VALIDATE_FRAME = "1"
+$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "240"
+$env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
+$env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES = "1"
+$env:IMM_VIEWER_VALIDATE_CAPTURE_PATH = $capturePath
+$env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO = "1"
+$env:IMM_VULKAN_CPU_CAPTURE_PATH = $null
+$env:IMM_VULKAN_CPU_CAPTURE_OVERWRITE = $null
+
+try {
+    $process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
+    $timedOut = -not $process.WaitForExit($DurationSeconds * 1000)
+    if ($timedOut) {
+        if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force
+            Start-Sleep -Seconds 1
+        }
+        throw "Vulkan sample1 smoke timed out after $DurationSeconds seconds"
+    }
+    if ($process.ExitCode -ne 0) {
+        throw "Vulkan sample1 smoke failed with exit code $($process.ExitCode)"
+    }
+}
+finally {
+    foreach ($entry in $previousEnv.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item -Path "env:$($entry.Key)" -ErrorAction SilentlyContinue
+        }
+        else {
+            Set-Item -Path "env:$($entry.Key)" -Value $entry.Value
+        }
+    }
 }
 
 if (-not (Test-Path $debugLog)) {
     throw "Viewer did not write debug log: $debugLog"
 }
 
-$log = Get-Content $debugLog -Raw
-if ($log -notmatch "Loaded in CPU") {
+$validationLog = Get-Content $debugLog -Raw
+if ($validationLog -notmatch "Loaded in CPU") {
     throw "Smoke log does not show CPU load completion."
 }
-if ($log -notmatch "Loaded in GPU \[0\]") {
+if ($validationLog -notmatch "Loaded in GPU \[0\]") {
     throw "Smoke log does not show GPU load completion."
 }
-if ($log -notmatch "Vulkan renderer presented swapchain direct GPU texture frame") {
-    throw "Smoke log does not show direct GPU Vulkan presentation."
-}
-if ($log -notmatch "Vulkan renderer read back static paint GPU target nonblack=") {
+if ($validationLog -notmatch "Vulkan renderer read back static paint GPU target nonblack=") {
     throw "Smoke log does not show Vulkan GPU target readback."
 }
 
@@ -162,7 +204,7 @@ $badPatterns = @(
     "placeholder"
 )
 foreach ($pattern in $badPatterns) {
-    if ($log -match $pattern) {
+    if ($validationLog -match $pattern) {
         throw "Smoke log matched failure pattern: $pattern"
     }
 }
@@ -184,6 +226,35 @@ if ($stats.NearVisible -lt $MinNearVisiblePixels) {
 Write-Host "Vulkan sample1 smoke passed"
 Write-Host "Capture: $capturePath"
 Write-Host "Pixels: nonblack=$($stats.Nonblack) nearVisible=$($stats.NearVisible) maxRGB=$($stats.MaxR),$($stats.MaxG),$($stats.MaxB)"
+
+if ($ReferencePath) {
+    $compareScript = Join-Path $scriptDir "compare-ppm-captures.ps1"
+    & $compareScript -ReferencePath $ReferencePath -CandidatePath $capturePath
+}
+
+Remove-Item -LiteralPath $debugLog -Force -ErrorAction SilentlyContinue
+$process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
+Start-Sleep -Seconds $PresentSeconds
+if (-not $process.HasExited) {
+    Stop-Process -Id $process.Id -Force
+    Start-Sleep -Seconds 1
+}
+if (-not (Test-Path $debugLog)) {
+    throw "Viewer did not write live-present debug log: $debugLog"
+}
+$presentLog = Get-Content $debugLog -Raw
+if ($presentLog -notmatch "Loaded in GPU \[0\]") {
+    throw "Live-present smoke log does not show GPU load completion."
+}
+if ($presentLog -notmatch "Vulkan renderer presented swapchain direct GPU texture frame") {
+    throw "Live-present smoke log does not show direct GPU Vulkan presentation."
+}
+foreach ($pattern in $badPatterns) {
+    if ($presentLog -match $pattern) {
+        throw "Live-present smoke log matched failure pattern: $pattern"
+    }
+}
+Write-Host "Live present: direct GPU Vulkan presentation logged"
 
 if (-not $KeepArtifacts) {
     Remove-Item -LiteralPath $capturePath, $captureTmpPath -Force -ErrorAction SilentlyContinue
