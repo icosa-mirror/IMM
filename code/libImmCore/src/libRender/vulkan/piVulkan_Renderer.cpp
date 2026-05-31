@@ -42,6 +42,8 @@ typedef uint64_t VkRenderPass;
 typedef uint64_t VkFramebuffer;
 typedef uint64_t VkShaderModule;
 typedef uint64_t VkSampler;
+typedef uint64_t VkDescriptorSetLayout;
+typedef uint64_t VkPipelineLayout;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
@@ -61,6 +63,10 @@ typedef uint32_t VkSamplerMipmapMode;
 typedef uint32_t VkSamplerAddressMode;
 typedef uint32_t VkCompareOp;
 typedef uint32_t VkBorderColor;
+typedef uint32_t VkDescriptorType;
+typedef uint32_t VkShaderStageFlags;
+typedef uint32_t VkDescriptorSetLayoutCreateFlags;
+typedef uint32_t VkPipelineLayoutCreateFlags;
 typedef uint32_t VkAttachmentDescriptionFlags;
 typedef uint32_t VkAttachmentLoadOp;
 typedef uint32_t VkAttachmentStoreOp;
@@ -96,6 +102,8 @@ static constexpr VkRenderPass VK_NULL_RENDER_PASS = 0;
 static constexpr VkFramebuffer VK_NULL_FRAMEBUFFER = 0;
 static constexpr VkShaderModule VK_NULL_SHADER_MODULE = 0;
 static constexpr VkSampler VK_NULL_SAMPLER = 0;
+static constexpr VkDescriptorSetLayout VK_NULL_DESCRIPTOR_SET_LAYOUT = 0;
+static constexpr VkPipelineLayout VK_NULL_PIPELINE_LAYOUT = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -116,6 +124,8 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO = 37;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO = 38;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO = 16;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO = 31;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO = 32;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO = 30;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
@@ -198,6 +208,11 @@ static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_ED
 static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER = 4;
 static constexpr VkCompareOp VK_COMPARE_OP_ALWAYS = 7;
 static constexpr VkBorderColor VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = 0;
+static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER = 1;
+static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 6;
+static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_STORAGE_BUFFER = 7;
+static constexpr VkShaderStageFlags VK_SHADER_STAGE_VERTEX_BIT = 0x00000001;
+static constexpr VkShaderStageFlags VK_SHADER_STAGE_FRAGMENT_BIT = 0x00000010;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_LOAD = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_CLEAR = 1;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_DONT_CARE = 2;
@@ -532,6 +547,35 @@ struct VkSamplerCreateInfo
     VkBool32 unnormalizedCoordinates;
 };
 
+struct VkDescriptorSetLayoutBinding
+{
+    uint32_t binding;
+    VkDescriptorType descriptorType;
+    uint32_t descriptorCount;
+    VkShaderStageFlags stageFlags;
+    const VkSampler *pImmutableSamplers;
+};
+
+struct VkDescriptorSetLayoutCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkDescriptorSetLayoutCreateFlags flags;
+    uint32_t bindingCount;
+    const VkDescriptorSetLayoutBinding *pBindings;
+};
+
+struct VkPipelineLayoutCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineLayoutCreateFlags flags;
+    uint32_t setLayoutCount;
+    const VkDescriptorSetLayout *pSetLayouts;
+    uint32_t pushConstantRangeCount;
+    const void *pPushConstantRanges;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -708,6 +752,10 @@ typedef VkResult (*PFN_vkCreateShaderModule)(VkDevice device, const VkShaderModu
 typedef void (*PFN_vkDestroyShaderModule)(VkDevice device, VkShaderModule shaderModule, const void *allocator);
 typedef VkResult (*PFN_vkCreateSampler)(VkDevice device, const VkSamplerCreateInfo *createInfo, const void *allocator, VkSampler *sampler);
 typedef void (*PFN_vkDestroySampler)(VkDevice device, VkSampler sampler, const void *allocator);
+typedef VkResult (*PFN_vkCreateDescriptorSetLayout)(VkDevice device, const VkDescriptorSetLayoutCreateInfo *createInfo, const void *allocator, VkDescriptorSetLayout *setLayout);
+typedef void (*PFN_vkDestroyDescriptorSetLayout)(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const void *allocator);
+typedef VkResult (*PFN_vkCreatePipelineLayout)(VkDevice device, const VkPipelineLayoutCreateInfo *createInfo, const void *allocator, VkPipelineLayout *pipelineLayout);
+typedef void (*PFN_vkDestroyPipelineLayout)(VkDevice device, VkPipelineLayout pipelineLayout, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
 typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
 typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
@@ -737,6 +785,7 @@ struct piShaderS
     bool hasOptions = false;
     VkShaderModule vertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule fragmentModule = VK_NULL_SHADER_MODULE;
+    VkPipelineLayout pipelineLayout = VK_NULL_PIPELINE_LAYOUT;
 };
 
 struct piTextureS
@@ -867,6 +916,7 @@ struct piVulkanState
     bool textureImageReported = false;
     bool bufferReported = false;
     bool shaderModuleReported = false;
+    bool descriptorLayoutReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -922,6 +972,10 @@ struct piVulkanState
     PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
     PFN_vkCreateSampler vkCreateSampler = nullptr;
     PFN_vkDestroySampler vkDestroySampler = nullptr;
+    PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout = nullptr;
+    PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout = nullptr;
+    PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
+    PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
     PFN_vkFreeMemory vkFreeMemory = nullptr;
     PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
@@ -957,6 +1011,8 @@ struct piVulkanState
     piSampler samplers[8] = {};
     piBuffer constantBuffers[16] = {};
     piBuffer shaderBuffers[16] = {};
+    VkDescriptorSetLayout staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+    VkPipelineLayout staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -1319,6 +1375,10 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkDestroyShaderModule = (PFN_vkDestroyShaderModule)state->vkGetDeviceProcAddr(state->device, "vkDestroyShaderModule");
     state->vkCreateSampler = (PFN_vkCreateSampler)state->vkGetDeviceProcAddr(state->device, "vkCreateSampler");
     state->vkDestroySampler = (PFN_vkDestroySampler)state->vkGetDeviceProcAddr(state->device, "vkDestroySampler");
+    state->vkCreateDescriptorSetLayout = (PFN_vkCreateDescriptorSetLayout)state->vkGetDeviceProcAddr(state->device, "vkCreateDescriptorSetLayout");
+    state->vkDestroyDescriptorSetLayout = (PFN_vkDestroyDescriptorSetLayout)state->vkGetDeviceProcAddr(state->device, "vkDestroyDescriptorSetLayout");
+    state->vkCreatePipelineLayout = (PFN_vkCreatePipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkCreatePipelineLayout");
+    state->vkDestroyPipelineLayout = (PFN_vkDestroyPipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkDestroyPipelineLayout");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
     state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
     state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
@@ -1344,6 +1404,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCreateImageView || !state->vkDestroyImageView ||
         !state->vkCreateRenderPass || !state->vkDestroyRenderPass || !state->vkCreateFramebuffer || !state->vkDestroyFramebuffer ||
         !state->vkCreateShaderModule || !state->vkDestroyShaderModule || !state->vkCreateSampler || !state->vkDestroySampler ||
+        !state->vkCreateDescriptorSetLayout || !state->vkDestroyDescriptorSetLayout || !state->vkCreatePipelineLayout || !state->vkDestroyPipelineLayout ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -1934,6 +1995,80 @@ static bool iCreateSamplerObject(piVulkanState *state, piRenderer::TextureFilter
         iError(reporter, "Vulkan renderer failed to create sampler");
         *outSampler = VK_NULL_SAMPLER;
         return false;
+    }
+    return true;
+}
+
+static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->device == VK_NULL_DEVICE)
+    {
+        return true;
+    }
+    if (state->staticPaintPipelineLayout != VK_NULL_PIPELINE_LAYOUT)
+    {
+        return true;
+    }
+    if (!state->vkCreateDescriptorSetLayout || !state->vkCreatePipelineLayout)
+    {
+        return true;
+    }
+
+    VkDescriptorSetLayoutBinding bindings[5] = {};
+    bindings[0].binding = 3;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].binding = 4;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[2].binding = 7;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[3].binding = 8;
+    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[3].descriptorCount = 1;
+    bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[4].binding = 9;
+    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[4].descriptorCount = 1;
+    bindings[4].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
+    setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    setLayoutInfo.bindingCount = 5;
+    setLayoutInfo.pBindings = bindings;
+    VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->staticPaintDescriptorSetLayout);
+    if (result != VK_SUCCESS || state->staticPaintDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
+    {
+        iError(reporter, "Vulkan renderer failed to create static paint descriptor layout");
+        state->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        return false;
+    }
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &state->staticPaintDescriptorSetLayout;
+    result = state->vkCreatePipelineLayout(state->device, &pipelineLayoutInfo, nullptr, &state->staticPaintPipelineLayout);
+    if (result != VK_SUCCESS || state->staticPaintPipelineLayout == VK_NULL_PIPELINE_LAYOUT)
+    {
+        iError(reporter, "Vulkan renderer failed to create static paint pipeline layout");
+        if (state->vkDestroyDescriptorSetLayout)
+        {
+            state->vkDestroyDescriptorSetLayout(state->device, state->staticPaintDescriptorSetLayout, nullptr);
+        }
+        state->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        state->staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        return false;
+    }
+
+    if (!state->descriptorLayoutReported)
+    {
+        iReport(reporter, "Vulkan renderer created static paint descriptor and pipeline layouts");
+        state->descriptorLayoutReported = true;
     }
     return true;
 }
@@ -2770,6 +2905,16 @@ void piRendererVulkan::Deinitialize(void)
             mState->commandPool = VK_NULL_COMMAND_POOL;
             mState->commandBuffer = VK_NULL_COMMAND_BUFFER;
         }
+        if (mState->staticPaintPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
+        {
+            mState->vkDestroyPipelineLayout(mState->device, mState->staticPaintPipelineLayout, nullptr);
+            mState->staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        }
+        if (mState->staticPaintDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
+        {
+            mState->vkDestroyDescriptorSetLayout(mState->device, mState->staticPaintDescriptorSetLayout, nullptr);
+            mState->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        }
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
             mState->vkDestroyBuffer(mState->device, mState->stagingBuffer, nullptr);
@@ -3401,6 +3546,24 @@ piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, co
         }
         delete shader;
         return nullptr;
+    }
+    if ((shader->vertexModule != VK_NULL_SHADER_MODULE || shader->fragmentModule != VK_NULL_SHADER_MODULE) &&
+        !iEnsureStaticPaintPipelineLayout(mState, mReporter))
+    {
+        if (shader->vertexModule != VK_NULL_SHADER_MODULE && mState && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, shader->vertexModule, nullptr);
+        }
+        if (shader->fragmentModule != VK_NULL_SHADER_MODULE && mState && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, shader->fragmentModule, nullptr);
+        }
+        delete shader;
+        return nullptr;
+    }
+    if (mState)
+    {
+        shader->pipelineLayout = mState->staticPaintPipelineLayout;
     }
     if (error) error[0] = 0;
     if (mState && !mState->shaderModuleReported &&
