@@ -18,6 +18,14 @@ scoop install vulkan dxc glslang
 
 The Windows CI job installs `vulkan-sdk` before building so generated/validated Vulkan shaders use the same toolchain class.
 
+Run the standalone Vulkan `sample1.imm` smoke from the repository root:
+
+```powershell
+.\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1
+```
+
+The smoke builds the Debug viewer, runs `settings-vulkan-smoke.json`, requires `Loaded in CPU`, `Loaded in GPU [0]`, direct GPU Vulkan swapchain presentation, a Vulkan GPU paint readback, no Vulkan placeholder/failure diagnostics, and a complete 1280x720 PPM capture above the configured visible-pixel thresholds.
+
 ## Unity Commands
 
 Batch:

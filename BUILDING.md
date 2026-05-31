@@ -25,6 +25,14 @@ scoop install vulkan dxc glslang
 
 The Windows GitHub Actions build installs `vulkan-sdk` before MSBuild so CI has the same SPIR-V tools available.
 
+Run the Windows standalone Vulkan sample smoke from the repository root:
+
+```powershell
+.\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1
+```
+
+The smoke builds `appImmViewer`, runs `settings-vulkan-smoke.json` against `exampleImmFiles/sample1.imm`, requires direct GPU swapchain presentation in `debug.txt`, rejects Vulkan placeholder/failure diagnostics, and validates the opt-in PPM capture dimensions plus minimum visible pixel counts. Use `-SkipBuild` for an already-built Debug viewer, or `-KeepArtifacts` to retain the PPM capture for visual inspection.
+
 In bash (Git Bash, WSL): use `-p:` not `/p:` — bash strips leading `/` from flags:
 ```
 msbuild "code/projects/windows/imm.sln" -p:Configuration=Release -p:Platform=x64 -m
