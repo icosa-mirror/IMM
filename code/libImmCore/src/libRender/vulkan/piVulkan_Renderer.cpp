@@ -470,12 +470,17 @@ static uint8_t *iBuildBgraCopy(piTexture texture)
 
 static void iWritePpmCapture(piVulkanState *state, piTexture texture)
 {
-    if (!state || state->captureWritten || !texture || !texture->data)
+    if (!state || !texture || !texture->data)
     {
         return;
     }
     const char *path = std::getenv("IMM_VULKAN_CPU_CAPTURE_PATH");
     if (!path || path[0] == 0)
+    {
+        return;
+    }
+    const bool overwriteCapture = std::getenv("IMM_VULKAN_CPU_CAPTURE_OVERWRITE") != nullptr;
+    if (state->captureWritten && !overwriteCapture)
     {
         return;
     }
