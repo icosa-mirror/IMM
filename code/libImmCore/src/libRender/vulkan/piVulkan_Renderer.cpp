@@ -4637,7 +4637,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         mState->gpuPaintActive = true;
         ++mState->gpuPaintDrawCount;
     }
-    const bool readBackGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 128u || (mState->gpuPaintDrawCount & 127u) == 0u);
+    const bool readBackGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 512u || (mState->gpuPaintDrawCount & 511u) == 0u);
     if (readBackGpuTarget && !iReadBackTextureImage(mState, target, mReporter) && !mState->gpuReadbackFailureReported)
     {
         mState->gpuReadbackFailureReported = true;
@@ -4651,6 +4651,11 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         SwapBuffers();
     }
 #endif
+    if (hasStaticPaintGpuPath)
+    {
+        return;
+    }
+
     const uint16_t *indices = (const uint16_t *)(mState->currentVertexArray->indexBuffer->data + baseIndex * sizeof(uint16_t));
     const iCpuStaticVertex *vertices = (const iCpuStaticVertex *)mState->shaderBuffers[8]->data;
     const iCpuLayerState *layer = (const iCpuLayerState *)mState->constantBuffers[3]->data;
