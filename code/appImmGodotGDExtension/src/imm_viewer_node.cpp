@@ -953,10 +953,14 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     const String effective_rendering_driver = actual_rendering_driver.is_empty() ? rendering_driver : actual_rendering_driver;
     const bool is_compatibility = effective_rendering_method == "gl_compatibility";
     const bool wants_metal = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
+    const bool wants_vulkan = _renderer_api == ImmGodotRendererApi_Vulkan;
     const bool driver_is_metal = effective_rendering_driver == "metal";
+    const bool driver_is_vulkan = effective_rendering_driver.to_lower() == "vulkan";
     const bool has_generic_driver_resources = true;
+    const bool has_vulkan_driver_resources = has_generic_driver_resources;
     const bool has_compositor_effect_path = true;
     const bool metal_adapter_candidate = rendering_device != nullptr && !is_compatibility && wants_metal && driver_is_metal && has_generic_driver_resources && has_compositor_effect_path;
+    const bool vulkan_adapter_candidate = rendering_device != nullptr && !is_compatibility && wants_vulkan && driver_is_vulkan && has_vulkan_driver_resources && has_compositor_effect_path;
 
     Dictionary result;
     result["native_backend_initialized"] = _native_initialized;
@@ -968,9 +972,13 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     result["has_rendering_device"] = rendering_device != nullptr;
     result["is_compatibility_renderer"] = is_compatibility;
     result["wants_metal_renderer"] = wants_metal;
+    result["wants_vulkan_renderer"] = wants_vulkan;
+    result["driver_is_vulkan"] = driver_is_vulkan;
     result["has_generic_driver_resources"] = has_generic_driver_resources;
+    result["has_vulkan_driver_resources"] = has_vulkan_driver_resources;
     result["has_compositor_effect_path"] = has_compositor_effect_path;
     result["metal_adapter_candidate"] = metal_adapter_candidate;
+    result["vulkan_adapter_candidate"] = vulkan_adapter_candidate;
     return result;
 }
 

@@ -15,7 +15,7 @@ signal native_backend_failed(error_code: int)
 @export_range(0.0, 1.0, 0.01) var volume: float = 1.0
 @export var debug_logging: bool = false
 @export_enum("Linear", "Gamma") var color_space: int = 0
-@export_enum("Auto", "OpenGL", "Direct3D", "GLES", "Metal") var renderer_api: int = 0
+@export_enum("Auto", "OpenGL", "Direct3D", "GLES", "Metal", "Vulkan") var renderer_api: int = 0
 @export_range(1, 16, 1) var antialiasing: int = 8
 @export var log_file_path: String = "user://imm_godot_log.txt"
 @export var tmp_folder_path: String = "user://"
@@ -295,8 +295,11 @@ func get_render_backend_diagnostics() -> Dictionary:
     var effective_rendering_driver := actual_rendering_driver if not actual_rendering_driver.is_empty() else rendering_driver
     var is_compatibility := effective_rendering_method == "gl_compatibility"
     var wants_metal := renderer_api == 0 or renderer_api == 4
+    var wants_vulkan := renderer_api == 5
     var driver_is_metal := effective_rendering_driver == "metal"
+    var driver_is_vulkan := effective_rendering_driver.to_lower() == "vulkan"
     var has_generic_driver_resources := true
+    var has_vulkan_driver_resources := has_generic_driver_resources
     var has_compositor_effect_path := true
     return {
         "native_backend_initialized": false,
@@ -308,9 +311,13 @@ func get_render_backend_diagnostics() -> Dictionary:
         "has_rendering_device": rendering_device != null,
         "is_compatibility_renderer": is_compatibility,
         "wants_metal_renderer": wants_metal,
+        "wants_vulkan_renderer": wants_vulkan,
+        "driver_is_vulkan": driver_is_vulkan,
         "has_generic_driver_resources": has_generic_driver_resources,
+        "has_vulkan_driver_resources": has_vulkan_driver_resources,
         "has_compositor_effect_path": has_compositor_effect_path,
         "metal_adapter_candidate": rendering_device != null and not is_compatibility and wants_metal and driver_is_metal and has_generic_driver_resources and has_compositor_effect_path,
+        "vulkan_adapter_candidate": rendering_device != null and not is_compatibility and wants_vulkan and driver_is_vulkan and has_vulkan_driver_resources and has_compositor_effect_path,
     }
 
 func _update_auto_render_camera() -> void:

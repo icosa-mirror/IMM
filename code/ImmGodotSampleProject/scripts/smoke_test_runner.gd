@@ -6,6 +6,7 @@ const SAMPLE_SCENE := "res://scenes/SampleScene.tscn"
 const NATIVE_SCENE := "res://scenes/NativeSmokeScene.tscn"
 const CAMERA_ID := 0
 const MAX_READY_SECONDS := 12.0
+const RENDERER_API_AUTO := 0
 
 var _signal_document_loaded_count := 0
 var _signal_document_unloaded_count := 0
@@ -42,6 +43,10 @@ func _run() -> void:
         return
 
     var scene: Node = packed_scene.instantiate()
+    var requested_renderer_api := _get_env_int("IMM_GODOT_RENDERER_API", RENDERER_API_AUTO)
+    var pre_ready_viewer := scene.get_node_or_null("ImmViewer")
+    if pre_ready_viewer != null:
+        pre_ready_viewer.set("renderer_api", requested_renderer_api)
     root.add_child(scene)
     await process_frame
 
@@ -129,10 +134,17 @@ func _run() -> void:
     var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
     if backend_diagnostics.is_empty():
         failures.append("get_render_backend_diagnostics returned an empty Dictionary")
+    if int(backend_diagnostics.get("renderer_api", -1)) != requested_renderer_api:
+        failures.append("render backend diagnostics reported renderer_api %d instead of requested %d" % [
+            int(backend_diagnostics.get("renderer_api", -1)),
+            requested_renderer_api,
+        ])
     if str(backend_diagnostics.get("project_rendering_method", "")) != EXPECTED_RENDERER:
         failures.append("render backend diagnostics reported renderer %s" % str(backend_diagnostics.get("project_rendering_method", "")))
     if bool(backend_diagnostics.get("metal_adapter_candidate", true)):
         failures.append("script-stub smoke path should not report a Metal adapter candidate")
+    if bool(backend_diagnostics.get("vulkan_adapter_candidate", true)):
+        failures.append("script-stub smoke path should not report a Vulkan adapter candidate")
     if int(backend_diagnostics.get("renderer_api", -1)) < 0:
         failures.append("render backend diagnostics did not report renderer_api")
     if bool(backend_diagnostics.get("native_backend_initialized", false)) != expected_native:

@@ -21,6 +21,9 @@ param(
 
     [switch]$RunSmoke,
 
+    [ValidateRange(0, 5)]
+    [int]$SmokeRendererApi = 0,
+
     [string]$GodotExe = $env:GODOT_EXE
 )
 
@@ -322,7 +325,7 @@ Write-Host "  $outputDir"
 Write-Host "Verified staged Godot DLL set: $($requiredOutputDlls.Count) files"
 
 if ($RunSmoke) {
-    $smokeArgs = @("-Configuration", $Configuration, "-RequireExtension")
+    $smokeArgs = @("-Configuration", $Configuration, "-RequireExtension", "-RendererApi", $SmokeRendererApi)
     if ($GodotExe) {
         $smokeArgs += @("-GodotExe", $GodotExe)
     }

@@ -10,6 +10,9 @@ param(
 
     [int]$LoadUnloadCycles = 0,
 
+    [ValidateRange(0, 5)]
+    [int]$RendererApi = 0,
+
     [switch]$RequireExtension,
 
     [switch]$PreflightOnly
@@ -105,6 +108,7 @@ Write-Host "Running smoke script: $smokeScript"
 Write-Host "Smoke scene: $SmokeScene"
 Write-Host "GDExtension configuration: $Configuration"
 Write-Host "Load/unload cycles: $LoadUnloadCycles"
+Write-Host "Renderer API: $RendererApi"
 if ($RequireExtension) {
     Write-Host "GDExtension directory: $extensionDir"
     Write-Host "Godot editor extension directory: $editorExtensionDir"
@@ -121,6 +125,7 @@ if ($PreflightOnly) {
 $env:IMM_GODOT_SMOKE_SCENE = $SmokeScene
 $env:IMM_GODOT_EXPECT_NATIVE = if ($RequireExtension) { "1" } else { "0" }
 $env:IMM_GODOT_LOAD_UNLOAD_CYCLES = "$LoadUnloadCycles"
+$env:IMM_GODOT_RENDERER_API = "$RendererApi"
 $output = & $godot --headless --path $sampleProject --script $smokeScript 2>&1
 $exitCode = $LASTEXITCODE
 $output | ForEach-Object { Write-Host $_ }
@@ -136,6 +141,7 @@ if ($LogDir) {
         "Configuration=$Configuration",
         "RequireExtension=$($RequireExtension.IsPresent)",
         "LoadUnloadCycles=$LoadUnloadCycles",
+        "RendererApi=$RendererApi",
         "ExtensionDir=$extensionDir",
         "ExtensionDll=$extensionDll",
         "EditorExtensionDir=$editorExtensionDir",
