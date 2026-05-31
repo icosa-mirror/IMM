@@ -6743,9 +6743,10 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
             return;
         }
         piTexture target = mState->currentRenderTarget->color[0];
+        const uint32_t instanceCount = numInstanced > 0 ? (uint32_t)numInstanced : 1u;
         if (iUpdatePictureDescriptorSet(mState, mReporter) &&
             iEnsurePictureGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, nullptr, mReporter) &&
-            iSubmitPictureQuadDraw(mState, mState->currentShader, mState->currentRenderTarget, (uint32_t)numInstanced, mReporter))
+            iSubmitPictureQuadDraw(mState, mState->currentShader, mState->currentRenderTarget, instanceCount, mReporter))
         {
             mState->pendingPresentTexture = target;
             return;

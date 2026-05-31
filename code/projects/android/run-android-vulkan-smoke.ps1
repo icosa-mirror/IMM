@@ -102,6 +102,7 @@ foreach ($marker in $requiredMarkers) {
 $forbiddenMarkers = @(
     "Vulkan renderer failed",
     "Vulkan renderer could not",
+    "Vulkan draw submission is not implemented yet",
     "Could not initialize piRenderer",
     "Failed to load IMM"
 )

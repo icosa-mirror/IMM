@@ -4,7 +4,7 @@ All commands run from `code/projects/android`.
 
 ## Prerequisites
 
-- **JDK 17** — matches CI and the Android Gradle Plugin (8.5.2) / Kotlin (1.9.22) toolchain. Newer JDKs (21/22) are untested here; the system default `java` may be too new. A Unity-bundled OpenJDK 17 works — point Gradle at it via `JAVA_HOME` (e.g. `JAVA_HOME=".../Unity/Hub/Editor/<ver>/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK" ./gradlew ...`) or `org.gradle.java.home`.
+- **JDK 17** — matches CI and the Android Gradle Plugin (8.5.2) / Kotlin (1.9.22) toolchain. Newer JDKs (21/22) are untested here; the system default `java` may be too new. Point Gradle at a JDK 17 install via `JAVA_HOME` or `org.gradle.java.home` when needed.
 - **Android SDK** with **NDK `26.1.10909125`** (pinned in `appImmViewer/build.gradle`) and platform `android-34`.
 - Tell Gradle where the SDK is — either export `ANDROID_SDK_ROOT`, or create `code/projects/android/local.properties` (gitignored):
 
@@ -60,7 +60,9 @@ With a Vulkan-capable Android device or emulator attached:
 ./run-android-vulkan-smoke.ps1
 ```
 
-The smoke installs the Vulkan APK, launches `sample1.imm`, captures `logcat`, and requires Vulkan surface/device initialization plus picture and static-paint draw submission markers.
+The smoke resolves `adb` from `-Adb`, the `ADB` environment variable, `PATH`, `local.properties`, or `ANDROID_SDK_ROOT`. It installs the Vulkan APK, launches `sample1.imm`, captures `logcat`, and requires Vulkan surface/device initialization plus picture and static-paint draw submission markers. It fails if the Vulkan renderer logs placeholder draw-submission diagnostics.
+
+CI installs the Android SDK/NDK through `android-actions/setup-android` and builds this Vulkan APK with `-PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan`. Runtime smoke is local/device-gated because it requires an attached Vulkan-capable device or emulator.
 
 ## Build (VR — Quest)
 
