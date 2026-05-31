@@ -1486,6 +1486,56 @@ static size_t iTextureDataSize(const piRenderer::TextureInfo *info)
     return (size_t)info->mXres * (size_t)info->mYres * (size_t)info->mZres * bytesPerPixel;
 }
 
+static float iDecodeUnsignedFloat(uint32_t bits, uint32_t mantissaBits)
+{
+    const uint32_t exponentMask = 31u;
+    const uint32_t mantissaMask = (1u << mantissaBits) - 1u;
+    const uint32_t exponent = (bits >> mantissaBits) & exponentMask;
+    const uint32_t mantissa = bits & mantissaMask;
+    if (exponent == 0)
+    {
+        if (mantissa == 0)
+        {
+            return 0.0f;
+        }
+        return std::ldexp((float)mantissa / (float)(1u << mantissaBits), -14);
+    }
+    if (exponent == exponentMask)
+    {
+        return mantissa == 0 ? 65504.0f : 0.0f;
+    }
+    return std::ldexp(1.0f + (float)mantissa / (float)(1u << mantissaBits), (int)exponent - 15);
+}
+
+static uint8_t iFloatToByte(float value)
+{
+    if (value <= 0.0f)
+    {
+        return 0;
+    }
+    if (value >= 1.0f)
+    {
+        return 255;
+    }
+    return (uint8_t)(value * 255.0f + 0.5f);
+}
+
+static void iConvertB10G11R11ToRgba8(uint8_t *dst, const uint8_t *src, size_t pixelCount)
+{
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        uint32_t packed = 0;
+        std::memcpy(&packed, src + i * 4u, sizeof(packed));
+        const uint32_t r = packed & 0x7ffu;
+        const uint32_t g = (packed >> 11u) & 0x7ffu;
+        const uint32_t b = (packed >> 22u) & 0x3ffu;
+        dst[i * 4u + 0u] = iFloatToByte(iDecodeUnsignedFloat(r, 6));
+        dst[i * 4u + 1u] = iFloatToByte(iDecodeUnsignedFloat(g, 6));
+        dst[i * 4u + 2u] = iFloatToByte(iDecodeUnsignedFloat(b, 5));
+        dst[i * 4u + 3u] = 255;
+    }
+}
+
 static int iShaderOption(const piShader shader, const char *name, int fallback)
 {
     if (!shader || !shader->hasOptions || !name)
@@ -3076,12 +3126,19 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
     {
         return false;
     }
-    std::memcpy(texture->data, mapped, (size_t)size);
+    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+    if (texture->vkFormat == VK_FORMAT_B10G11R11_UFLOAT_PACK32)
+    {
+        iConvertB10G11R11ToRgba8(texture->data, (const uint8_t *)mapped, pixelCount);
+    }
+    else
+    {
+        std::memcpy(texture->data, mapped, (size_t)size);
+    }
     state->vkUnmapMemory(state->device, state->stagingMemory);
     texture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     uint32_t nonblack = 0;
-    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
     for (size_t i = 0; i < pixelCount; ++i)
     {
         const uint8_t *src = texture->data + i * 4u;
@@ -3126,7 +3183,7 @@ static bool iToVulkanTextureFormat(piRenderer::Format format, VkFormat *outForma
             *outFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
             return true;
         case piRenderer::Format::C3_11_11_10_FLOAT:
-            *outFormat = VK_FORMAT_R8G8B8A8_UNORM;
+            *outFormat = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
             return true;
         case piRenderer::Format::D1_32_FLOAT:
             *outFormat = VK_FORMAT_D32_SFLOAT;
