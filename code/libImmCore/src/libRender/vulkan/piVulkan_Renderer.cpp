@@ -957,6 +957,14 @@ struct VkImageResolve
     VkExtent3D extent;
 };
 
+struct VkImageBlit
+{
+    VkImageSubresourceLayers srcSubresource;
+    VkOffset3D srcOffsets[2];
+    VkImageSubresourceLayers dstSubresource;
+    VkOffset3D dstOffsets[2];
+};
+
 struct VkImageMemoryBarrier
 {
     VkStructureType sType;
@@ -1038,6 +1046,7 @@ typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage 
 typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdCopyImageToBuffer)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdResolveImage)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageResolve *regions);
+typedef void (*PFN_vkCmdBlitImage)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageBlit *regions, VkFilter filter);
 typedef void (*PFN_vkCmdBeginRenderPass)(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *renderPassBegin, VkSubpassContents contents);
 typedef void (*PFN_vkCmdEndRenderPass)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdSetViewport)(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport *viewports);
@@ -1232,6 +1241,7 @@ struct piVulkanState
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
+    bool directTexturePresentReported = false;
     bool textureImageReported = false;
     bool bufferReported = false;
     bool shaderModuleReported = false;
@@ -1284,6 +1294,7 @@ struct piVulkanState
     PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
     PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
     PFN_vkCmdResolveImage vkCmdResolveImage = nullptr;
+    PFN_vkCmdBlitImage vkCmdBlitImage = nullptr;
     PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
     PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
     PFN_vkCmdSetViewport vkCmdSetViewport = nullptr;
@@ -1767,6 +1778,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
     state->vkCmdCopyImageToBuffer = (PFN_vkCmdCopyImageToBuffer)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyImageToBuffer");
     state->vkCmdResolveImage = (PFN_vkCmdResolveImage)state->vkGetDeviceProcAddr(state->device, "vkCmdResolveImage");
+    state->vkCmdBlitImage = (PFN_vkCmdBlitImage)state->vkGetDeviceProcAddr(state->device, "vkCmdBlitImage");
     state->vkCmdBeginRenderPass = (PFN_vkCmdBeginRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdBeginRenderPass");
     state->vkCmdEndRenderPass = (PFN_vkCmdEndRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdEndRenderPass");
     state->vkCmdSetViewport = (PFN_vkCmdSetViewport)state->vkGetDeviceProcAddr(state->device, "vkCmdSetViewport");
@@ -1819,7 +1831,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
-        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer || !state->vkCmdResolveImage ||
+        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer || !state->vkCmdResolveImage || !state->vkCmdBlitImage ||
         !state->vkCmdBeginRenderPass || !state->vkCmdEndRenderPass ||
         !state->vkCmdSetViewport || !state->vkCmdSetScissor || !state->vkCmdBindPipeline ||
         !state->vkCmdBindDescriptorSets || !state->vkCmdBindIndexBuffer || !state->vkCmdDrawIndexed ||
@@ -2202,6 +2214,86 @@ static bool iFindMemoryType(piVulkanState *state, uint32_t typeBits, VkMemoryPro
         }
     }
     return false;
+}
+
+static bool iCreateDeviceLocalImage(piVulkanState *state,
+                                    uint32_t width,
+                                    uint32_t height,
+                                    VkFormat format,
+                                    VkSampleCountFlagBits samples,
+                                    VkImageUsageFlags usage,
+                                    VkImage *outImage,
+                                    VkDeviceMemory *outMemory,
+                                    piRenderer::piReporter *reporter)
+{
+    if (!state || !outImage || !outMemory || width == 0 || height == 0 ||
+        !state->vkCreateImage || !state->vkGetImageMemoryRequirements || !state->vkAllocateMemory || !state->vkBindImageMemory)
+    {
+        return false;
+    }
+
+    *outImage = 0;
+    *outMemory = VK_NULL_DEVICE_MEMORY;
+
+    VkImageCreateInfo imageInfo = {};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = format;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = samples;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = usage;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VkResult result = state->vkCreateImage(state->device, &imageInfo, nullptr, outImage);
+    if (result != VK_SUCCESS || *outImage == 0)
+    {
+        iError(reporter, "Vulkan renderer failed to create device-local image");
+        *outImage = 0;
+        return false;
+    }
+
+    VkMemoryRequirements requirements = {};
+    state->vkGetImageMemoryRequirements(state->device, *outImage, &requirements);
+    uint32_t memoryTypeIndex = 0;
+    if (!iFindMemoryType(state, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &memoryTypeIndex))
+    {
+        iError(reporter, "Vulkan renderer failed to find device-local image memory");
+        state->vkDestroyImage(state->device, *outImage, nullptr);
+        *outImage = 0;
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex = memoryTypeIndex;
+    result = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, outMemory);
+    if (result != VK_SUCCESS || *outMemory == VK_NULL_DEVICE_MEMORY)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate device-local image memory");
+        state->vkDestroyImage(state->device, *outImage, nullptr);
+        *outImage = 0;
+        *outMemory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+
+    result = state->vkBindImageMemory(state->device, *outImage, *outMemory, 0);
+    if (result != VK_SUCCESS)
+    {
+        iError(reporter, "Vulkan renderer failed to bind device-local image memory");
+        state->vkDestroyImage(state->device, *outImage, nullptr);
+        state->vkFreeMemory(state->device, *outMemory, nullptr);
+        *outImage = 0;
+        *outMemory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+    return true;
 }
 
 static VkBufferUsageFlags iBufferUsageFlags(piRenderer::BufferUse use)
@@ -4144,7 +4236,28 @@ void piRendererVulkan::SwapBuffers(void)
             }
         }
     }
+    VkImage directPresentImage = presentTexture ? presentTexture->image : 0;
+    VkDeviceMemory directPresentMemory = VK_NULL_DEVICE_MEMORY;
+    const bool directPresentNeedsResolve = presentTexture && presentTexture->sampleCount != VK_SAMPLE_COUNT_1_BIT;
+    bool directPresentTexture =
+        presentTexture && presentTexture->image != 0 &&
+        presentTexture->info.mXres == (int)mState->swapchainExtent.width &&
+        presentTexture->info.mYres == (int)mState->swapchainExtent.height &&
+        mState->vkCmdBlitImage;
+    if (directPresentTexture && directPresentNeedsResolve)
+    {
+        directPresentTexture = iCreateDeviceLocalImage(mState,
+                                                       (uint32_t)presentTexture->info.mXres,
+                                                       (uint32_t)presentTexture->info.mYres,
+                                                       presentTexture->vkFormat,
+                                                       VK_SAMPLE_COUNT_1_BIT,
+                                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                                       &directPresentImage,
+                                                       &directPresentMemory,
+                                                       mReporter);
+    }
     const bool copyTexture =
+        !directPresentTexture &&
         presentTexture && presentTexture->data &&
         presentTexture->info.mXres == (int)mState->swapchainExtent.width &&
         presentTexture->info.mYres == (int)mState->swapchainExtent.height &&
@@ -4157,10 +4270,186 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkBeginCommandBuffer(mState->commandBuffer, &beginInfo);
     if (result != VK_SUCCESS)
     {
+        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+        {
+            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
+            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
+        }
         return;
     }
 
-    if (copyTexture)
+    if (directPresentTexture)
+    {
+        VkImageSubresourceRange colorRange = {};
+        colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        colorRange.baseMipLevel = 0;
+        colorRange.levelCount = 1;
+        colorRange.baseArrayLayer = 0;
+        colorRange.layerCount = 1;
+
+        VkImageMemoryBarrier sourceToTransfer = {};
+        sourceToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        sourceToTransfer.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        sourceToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        sourceToTransfer.oldLayout = presentTexture->imageLayout;
+        sourceToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        sourceToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        sourceToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        sourceToTransfer.image = presentTexture->image;
+        sourceToTransfer.subresourceRange = colorRange;
+        mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     0,
+                                     0,
+                                     nullptr,
+                                     0,
+                                     nullptr,
+                                     1,
+                                     &sourceToTransfer);
+
+        if (directPresentNeedsResolve)
+        {
+            VkImageMemoryBarrier resolveToTransfer = {};
+            resolveToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            resolveToTransfer.srcAccessMask = 0;
+            resolveToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            resolveToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            resolveToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            resolveToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveToTransfer.image = directPresentImage;
+            resolveToTransfer.subresourceRange = colorRange;
+            mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0,
+                                         0,
+                                         nullptr,
+                                         0,
+                                         nullptr,
+                                         1,
+                                         &resolveToTransfer);
+
+            VkImageResolve resolveRegion = {};
+            resolveRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            resolveRegion.srcSubresource.mipLevel = 0;
+            resolveRegion.srcSubresource.baseArrayLayer = 0;
+            resolveRegion.srcSubresource.layerCount = 1;
+            resolveRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            resolveRegion.dstSubresource.mipLevel = 0;
+            resolveRegion.dstSubresource.baseArrayLayer = 0;
+            resolveRegion.dstSubresource.layerCount = 1;
+            resolveRegion.extent.width = (uint32_t)presentTexture->info.mXres;
+            resolveRegion.extent.height = (uint32_t)presentTexture->info.mYres;
+            resolveRegion.extent.depth = 1;
+            mState->vkCmdResolveImage(mState->commandBuffer,
+                                      presentTexture->image,
+                                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                      directPresentImage,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      1,
+                                      &resolveRegion);
+
+            VkImageMemoryBarrier resolveToSource = {};
+            resolveToSource.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            resolveToSource.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            resolveToSource.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            resolveToSource.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            resolveToSource.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            resolveToSource.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveToSource.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveToSource.image = directPresentImage;
+            resolveToSource.subresourceRange = colorRange;
+            mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0,
+                                         0,
+                                         nullptr,
+                                         0,
+                                         nullptr,
+                                         1,
+                                         &resolveToSource);
+        }
+
+        VkImageMemoryBarrier swapchainToTransfer = {};
+        swapchainToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        swapchainToTransfer.srcAccessMask = 0;
+        swapchainToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        swapchainToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        swapchainToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        swapchainToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        swapchainToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        swapchainToTransfer.image = mState->swapchainImages[imageIndex];
+        swapchainToTransfer.subresourceRange = colorRange;
+        mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                     VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     0,
+                                     0,
+                                     nullptr,
+                                     0,
+                                     nullptr,
+                                     1,
+                                     &swapchainToTransfer);
+
+        VkImageBlit blitRegion = {};
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.mipLevel = 0;
+        blitRegion.srcSubresource.baseArrayLayer = 0;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.srcOffsets[1].x = presentTexture->info.mXres;
+        blitRegion.srcOffsets[1].y = presentTexture->info.mYres;
+        blitRegion.srcOffsets[1].z = 1;
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.mipLevel = 0;
+        blitRegion.dstSubresource.baseArrayLayer = 0;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.dstOffsets[1].x = (int32_t)mState->swapchainExtent.width;
+        blitRegion.dstOffsets[1].y = (int32_t)mState->swapchainExtent.height;
+        blitRegion.dstOffsets[1].z = 1;
+        mState->vkCmdBlitImage(mState->commandBuffer,
+                               directPresentImage,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               mState->swapchainImages[imageIndex],
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1,
+                               &blitRegion,
+                               VK_FILTER_NEAREST);
+
+        VkImageMemoryBarrier barriers[2] = {};
+        barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barriers[0].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barriers[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[0].image = presentTexture->image;
+        barriers[0].subresourceRange = colorRange;
+        barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barriers[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barriers[1].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barriers[1].image = mState->swapchainImages[imageIndex];
+        barriers[1].subresourceRange = colorRange;
+        mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                     0,
+                                     0,
+                                     nullptr,
+                                     0,
+                                     nullptr,
+                                     2,
+                                     barriers);
+        presentTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+    else if (copyTexture)
     {
         VkImageSubresourceRange colorRange = {};
         colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -4256,6 +4545,11 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkEndCommandBuffer(mState->commandBuffer);
     if (result != VK_SUCCESS)
     {
+        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+        {
+            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
+            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
+        }
         return;
     }
 
@@ -4272,7 +4566,16 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkQueueSubmit(mState->graphicsQueue, 1, &submitInfo, mState->frameFence);
     if (result != VK_SUCCESS)
     {
+        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+        {
+            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
+            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
+        }
         return;
+    }
+    if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+    {
+        mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
     }
 
     VkPresentInfoKHR presentInfo = {};
@@ -4286,7 +4589,12 @@ void piRendererVulkan::SwapBuffers(void)
     if (result == VK_SUCCESS)
     {
         ++mState->presentFrameIndex;
-        if (copyTexture && presentTextureHasColor && !mState->texturePresentReported)
+        if (directPresentTexture && presentTextureHasColor && !mState->directTexturePresentReported)
+        {
+            mState->directTexturePresentReported = true;
+            iReport(mReporter, "Vulkan renderer presented swapchain direct GPU texture frame");
+        }
+        else if (copyTexture && presentTextureHasColor && !mState->texturePresentReported)
         {
             mState->texturePresentReported = true;
             iReport(mReporter, "Vulkan renderer presented swapchain nonblack texture frame");
@@ -4296,6 +4604,11 @@ void piRendererVulkan::SwapBuffers(void)
             mState->realPresentReported = true;
             iReport(mReporter, "Vulkan renderer presented swapchain clear frame");
         }
+    }
+    if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
+    {
+        mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
+        mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
     }
 }
 void *piRendererVulkan::GetContext(void) { return mState ? (void *)mState->device : nullptr; }
