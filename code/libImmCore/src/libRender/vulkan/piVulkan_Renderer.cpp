@@ -1245,11 +1245,11 @@ struct piVulkanState
     bool gpuReadbackFailureReported = false;
     bool gpuPaintActive = false;
     uint32_t gpuReadbackBestNonblack = 0;
+    int windowWidth = 1;
+    int windowHeight = 1;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
-    int windowWidth = 1;
-    int windowHeight = 1;
     bool captureWritten = false;
 #elif defined(ANDROID)
     void *vulkanLibrary = nullptr;
