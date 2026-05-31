@@ -1311,8 +1311,8 @@ struct piVulkanState
     PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR = nullptr;
     PFN_vkCreateDevice vkCreateDevice = nullptr;
     PFN_vkDestroyDevice vkDestroyDevice = nullptr;
-    PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
     PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
+    PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
     PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = nullptr;
     PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = nullptr;
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
@@ -1739,17 +1739,23 @@ static void iDrawCpuLine(piTexture texture, float x0, float y0, float x1, float 
 }
 
 #if defined(WINDOWS)
+static bool iCaptureRequested()
+{
+    const char *path = std::getenv("IMM_VULKAN_CPU_CAPTURE_PATH");
+    return path && path[0] != 0;
+}
+
 static void iWritePpmCapture(piVulkanState *state, piTexture texture)
 {
     if (!state || !texture || !texture->data)
     {
         return;
     }
-    const char *path = std::getenv("IMM_VULKAN_CPU_CAPTURE_PATH");
-    if (!path || path[0] == 0)
+    if (!iCaptureRequested())
     {
         return;
     }
+    const char *path = std::getenv("IMM_VULKAN_CPU_CAPTURE_PATH");
     const bool overwriteCapture = std::getenv("IMM_VULKAN_CPU_CAPTURE_OVERWRITE") != nullptr;
     if (state->captureWritten && !overwriteCapture)
     {
@@ -3143,7 +3149,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
         return true;
     }
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -3359,7 +3365,7 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
         return false;
     }
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -3520,7 +3526,7 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
         }
     }
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -3761,7 +3767,7 @@ static bool iClearColorTextureImage(piVulkanState *state, piTexture texture, con
         return true;
     }
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -3878,7 +3884,7 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
         return true;
     }
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -4012,7 +4018,7 @@ static bool iUploadCpuColorToGpuColorAttachment(piVulkanState *state, piTexture 
     }
     state->vkUnmapMemory(state->device, state->stagingMemory);
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -4610,7 +4616,7 @@ static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piR
     std::memcpy(mapped, texture->data, texture->dataSize);
     state->vkUnmapMemory(state->device, state->stagingMemory);
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
@@ -5092,13 +5098,12 @@ void piRendererVulkan::SwapBuffers(void)
         return;
     }
 
-    const uint64_t timeout = 1000000000ull;
+    const uint64_t timeout = 5000000000ull;
     VkResult result = mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
         return;
     }
-    mState->vkResetFences(mState->device, 1, &mState->frameFence);
 
     uint32_t imageIndex = 0;
     result = mState->vkAcquireNextImageKHR(mState->device, mState->swapchain, timeout, mState->imageAvailableSemaphore, VK_NULL_FENCE, &imageIndex);
@@ -5110,9 +5115,19 @@ void piRendererVulkan::SwapBuffers(void)
     {
         return;
     }
+    mState->vkResetFences(mState->device, 1, &mState->frameFence);
     piTexture presentTexture = mState->pendingPresentTexture;
-    bool presentTextureHasColor = false;
-    if (presentTexture && presentTexture->data)
+    VkImage directPresentImage = presentTexture ? presentTexture->image : 0;
+    VkDeviceMemory directPresentMemory = VK_NULL_DEVICE_MEMORY;
+    const bool directPresentNeedsResolve = presentTexture && presentTexture->sampleCount != VK_SAMPLE_COUNT_1_BIT;
+    bool directPresentTexture =
+        presentTexture && presentTexture->image != 0 &&
+        presentTexture->info.mXres == (int)mState->swapchainExtent.width &&
+        presentTexture->info.mYres == (int)mState->swapchainExtent.height &&
+        mState->gpuPaintDrawCount > 0 &&
+        mState->vkCmdBlitImage;
+    bool presentTextureHasColor = directPresentTexture;
+    if (!presentTextureHasColor && presentTexture && presentTexture->data)
     {
         const size_t pixelCount = (size_t)presentTexture->info.mXres * (size_t)presentTexture->info.mYres;
         for (size_t i = 0; i < pixelCount; ++i)
@@ -5125,14 +5140,6 @@ void piRendererVulkan::SwapBuffers(void)
             }
         }
     }
-    VkImage directPresentImage = presentTexture ? presentTexture->image : 0;
-    VkDeviceMemory directPresentMemory = VK_NULL_DEVICE_MEMORY;
-    const bool directPresentNeedsResolve = presentTexture && presentTexture->sampleCount != VK_SAMPLE_COUNT_1_BIT;
-    bool directPresentTexture =
-        presentTexture && presentTexture->image != 0 &&
-        presentTexture->info.mXres == (int)mState->swapchainExtent.width &&
-        presentTexture->info.mYres == (int)mState->swapchainExtent.height &&
-        mState->vkCmdBlitImage;
     if (directPresentTexture && directPresentNeedsResolve)
     {
         directPresentTexture = iCreateDeviceLocalImage(mState,
@@ -5462,19 +5469,24 @@ void piRendererVulkan::SwapBuffers(void)
         }
         return;
     }
-    if (directPresentTexture)
+#if defined(WINDOWS)
+    const bool captureRequested = iCaptureRequested();
+#else
+    const bool captureRequested = false;
+#endif
+    if (directPresentTexture && captureRequested && mState->gpuPaintDrawCount > 0)
     {
         if (!iReadBackTextureImage(mState, presentTexture, mReporter) && !mState->gpuReadbackFailureReported)
         {
             mState->gpuReadbackFailureReported = true;
             iError(mReporter, "Vulkan renderer failed to read back presented GPU target");
         }
-#if defined(WINDOWS)
         if (mState->gpuReadbackReported)
         {
+#if defined(WINDOWS)
             iWritePpmCapture(mState, presentTexture);
-        }
 #endif
+        }
     }
 
     VkPresentInfoKHR presentInfo = {};
@@ -5782,7 +5794,34 @@ void piRendererVulkan::ClearTexture(piTexture vme, int level, const void *data) 
 void piRendererVulkan::UpdateTexture(piTexture me, int x0, int y0, int z0, int xres, int yres, int zres, const void *buffer) { (void)x0; (void)y0; (void)z0; (void)xres; (void)yres; (void)zres; if (me && me->data && buffer) std::memcpy(me->data, buffer, me->dataSize); }
 void piRendererVulkan::GetTextureRes(piTexture me, int *res) { if (me && res) { res[0] = me->info.mXres; res[1] = me->info.mYres; res[2] = me->info.mZres; } }
 void piRendererVulkan::GetTextureFormat(piTexture me, Format *format) { if (me && format) *format = me->info.mFormat; }
-void piRendererVulkan::GetTextureContent(piTexture me, void *data, const Format fmt) { (void)fmt; if (me && data && me->data) std::memcpy(data, me->data, me->dataSize); else iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::TextureReadback, "Vulkan texture GPU readback is not implemented yet"); }
+void piRendererVulkan::GetTextureContent(piTexture me, void *data, const Format fmt)
+{
+    if (!me || !data)
+    {
+        return;
+    }
+    if (me->image != 0 && mState && mState->gpuPaintDrawCount > 0 && !iReadBackTextureImage(mState, me, mReporter))
+    {
+        iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::TextureReadback, "Vulkan texture GPU readback failed");
+        return;
+    }
+    if (!me->data)
+    {
+        iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::TextureReadback, "Vulkan texture GPU readback is not implemented yet");
+        return;
+    }
+    if (fmt == Format::C3_11_11_10_FLOAT && me->info.mFormat == Format::C3_11_11_10_FLOAT)
+    {
+        const size_t pixelCount = (size_t)me->info.mXres * (size_t)me->info.mYres;
+        uint32_t *dst = (uint32_t *)data;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            dst[i] = iPackRgba8ToB10G11R11(me->data + i * 4u);
+        }
+        return;
+    }
+    std::memcpy(data, me->data, me->dataSize);
+}
 void piRendererVulkan::GetTextureContent(piTexture vme, void *data, int x, int y, int z, int xres, int yres, int zres) { (void)x; (void)y; (void)z; (void)xres; (void)yres; (void)zres; GetTextureContent(vme, data, vme ? vme->info.mFormat : Format::UNKOWN); }
 void piRendererVulkan::GetTextureInfo(piTexture me, TextureInfo *info) { if (me && info) *info = me->info; }
 void piRendererVulkan::GetTextureSampling(piTexture vme, TextureFilter *rfilter, TextureWrap *rwrap) { if (vme && rfilter) *rfilter = vme->filter; if (vme && rwrap) *rwrap = vme->wrap; }

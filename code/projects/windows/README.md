@@ -36,13 +36,13 @@ To capture and compare against the Windows DirectX baseline:
 
 ```powershell
 .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release
-.\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -SkipBuild -KeepArtifacts
+.\code\appImmViewer\scripts\capture_windows_vulkan_validation.ps1 -Configuration Release
 .\code\appImmViewer\scripts\compare-ppm-captures.ps1 `
   -ReferencePath .\build\baseline-captures\windows-directx-static.ppm `
-  -CandidatePath .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+  -CandidatePath .\build\baseline-captures\windows-vulkan-validation.ppm
 ```
 
-The DirectX baseline script builds the selected viewer configuration unless `-SkipBuild` is passed. Release is recommended for the baseline capture because Debug can stop on breakpoint-style runtime checks before validation completes.
+The DirectX and Vulkan validation capture scripts build the selected viewer configuration unless `-SkipBuild` is passed. Release is recommended for validation captures because Debug can stop on breakpoint-style runtime checks before validation completes.
 
 ## Unity Commands
 

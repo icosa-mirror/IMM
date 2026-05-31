@@ -90,7 +90,7 @@ void piRenderMesh::End(piRenderer *renderer)
             {
                 for (int j = 0; j < mIndexData.mElementArray[i].mVertexArray.mNum; j++)
                 {
-                    renderer->DestroyVertexArray(mIndexData.mElementArray[i].mVertexArray.mVAO[i]);
+                    renderer->DestroyVertexArray(mIndexData.mElementArray[i].mVertexArray.mVAO[j]);
                 }
                 renderer->DestroyBuffer(mIndexData.mElementArray[i].mIBO);
             }

@@ -133,9 +133,10 @@ $SamplePath = Resolve-RequiredFile $SamplePath "sample1.imm"
 
 $outputFullPath = [System.IO.Path]::GetFullPath($OutputPath)
 $outputDir = Split-Path -Parent $outputFullPath
+$outputBaseName = [System.IO.Path]::GetFileNameWithoutExtension($outputFullPath)
 $viewerDir = Split-Path -Parent $ViewerExe
 $viewerDebugLogPath = Join-Path $viewerDir "debug.txt"
-$capturedDebugLogPath = Join-Path $outputDir "windows-directx-static.debug.txt"
+$capturedDebugLogPath = Join-Path $outputDir "$outputBaseName.debug.txt"
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 if (Test-Path -LiteralPath $outputFullPath) {
     Remove-Item -LiteralPath $outputFullPath -Force

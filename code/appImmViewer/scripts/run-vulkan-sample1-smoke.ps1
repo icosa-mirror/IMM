@@ -17,7 +17,7 @@ $debugLog = Join-Path $viewerExeDir "debug.txt"
 $capturePath = Join-Path $viewerExeDir "vulkan_sample1_smoke.ppm"
 $captureTmpPath = "$capturePath.tmp"
 $settingsPath = Join-Path $viewerExeDir "settings-vulkan-smoke.json"
-$exeName = if ($Configuration -ieq "Debug") { "appImmViewer_Debug.exe" } else { "appImmViewer.exe" }
+$exeName = if ($Configuration -ieq "Debug") { "appImmViewer_Debug.exe" } else { "appImmViewer_Release.exe" }
 $viewerExe = Join-Path $viewerExeDir $exeName
 
 function Find-MSBuild {

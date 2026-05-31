@@ -1148,10 +1148,13 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                 }
             }
 
-            // resolve multisampling and postpro
-            mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
+            if (!done)
+            {
+                // resolve multisampling and postpro
+                mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
 
-            mRenderer->SwapBuffers();
+                mRenderer->SwapBuffers();
+            }
         }
 
         mSoundEngineBackend->Tick();

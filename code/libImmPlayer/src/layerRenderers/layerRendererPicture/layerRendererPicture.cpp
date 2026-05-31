@@ -286,10 +286,11 @@ namespace ImmPlayer
                         { "FORMAT_IS_STEREO", 0 },
                         { "DEBUG_RENDER_MODE", j },
                     } };
+                    const int fsIndex = static_cast<int>(colorSpace);
                     piShader shader = renderer->CreateShaderBinary(&opts,
                         reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[0]), shader_pip360Equirect_vs_spirv_size[0],
                         nullptr, 0, nullptr, 0, nullptr, 0,
-                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_fs_spirv_code[0]), shader_pip360Equirect_fs_spirv_size[0],
+                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_fs_spirv_code[fsIndex]), shader_pip360Equirect_fs_spirv_size[fsIndex],
                         error);
                     if (!shader)
                     {

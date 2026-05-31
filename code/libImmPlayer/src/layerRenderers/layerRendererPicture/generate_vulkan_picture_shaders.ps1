@@ -117,9 +117,13 @@ void main()
     vec3 nor = normalize(in_direction);
     vec2 uv = vec2(0.5 + 0.5 * atan(nor.x, -nor.z) / k_pi, acos(clamp(nor.y, -1.0, 1.0)) / k_pi);
     vec4 texel = texture(pictureTexture, uv);
-    vec3 linearColor = pow(texel.rgb, vec3(2.2));
-    float alpha = min(texel.a * layer.mOpacity, 0.65);
-    out_color = vec4(linearColor, alpha);
+#if COLOR_SPACE == 0
+    vec3 color = pow(texel.rgb, vec3(2.2));
+#else
+    vec3 color = texel.rgb;
+#endif
+    float alpha = texel.a * layer.mOpacity;
+    out_color = vec4(color, alpha);
 }
 '@
 
@@ -138,12 +142,14 @@ if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $vsOut" }
 if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $vsOut" }
 $vsVariants.Add($vsOut)
 
-$fsOut = Join-Path $workDir "shader_pip360Equirect_fs_vk.spv"
-& $glslang -V -S frag -o $fsOut $fsPath | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $fsOut" }
-& $spirvVal $fsOut
-if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $fsOut" }
-$fsVariants.Add($fsOut)
+for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
+    $fsOut = Join-Path $workDir "shader_pip360Equirect_fs_vk_c${colorSpace}.spv"
+    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fsOut $fsPath | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $fsOut" }
+    & $spirvVal $fsOut
+    if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $fsOut" }
+    $fsVariants.Add($fsOut)
+}
 
 Write-SpvInclude (Join-Path $OutputDir "shader_pip360Equirect_vs_spirv.inc") "shader_pip360Equirect_vs_spirv" $vsVariants
 Write-SpvInclude (Join-Path $OutputDir "shader_pip360Equirect_fs_spirv.inc") "shader_pip360Equirect_fs_spirv" $fsVariants
