@@ -37,6 +37,7 @@ typedef struct VkSemaphore_T *VkSemaphore;
 typedef struct VkFence_T *VkFence;
 typedef struct VkBuffer_T *VkBuffer;
 typedef struct VkDeviceMemory_T *VkDeviceMemory;
+typedef uint64_t VkImageView;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
@@ -49,6 +50,8 @@ typedef uint32_t VkImageType;
 typedef uint32_t VkImageTiling;
 typedef uint32_t VkSampleCountFlagBits;
 typedef uint32_t VkImageCreateFlags;
+typedef uint32_t VkImageViewType;
+typedef uint32_t VkComponentSwizzle;
 typedef uint32_t VkCommandPoolCreateFlags;
 typedef uint32_t VkCommandBufferLevel;
 typedef uint32_t VkCommandBufferUsageFlags;
@@ -71,6 +74,7 @@ static constexpr VkSemaphore VK_NULL_SEMAPHORE = nullptr;
 static constexpr VkFence VK_NULL_FENCE = nullptr;
 static constexpr VkBuffer VK_NULL_BUFFER = nullptr;
 static constexpr VkDeviceMemory VK_NULL_DEVICE_MEMORY = nullptr;
+static constexpr VkImageView VK_NULL_IMAGE_VIEW = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -85,6 +89,7 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_FENCE_CREATE_INFO = 8;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO = 9;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO = 12;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO = 14;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO = 15;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO = 5;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
@@ -130,6 +135,8 @@ static constexpr VkImageLayout VK_IMAGE_LAYOUT_UNDEFINED = 0;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = 7;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = 1000001002;
 static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001;
+static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_DEPTH_BIT = 0x00000002;
+static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_STENCIL_BIT = 0x00000004;
 static constexpr VkFenceCreateFlags VK_FENCE_CREATE_SIGNALED_BIT = 0x00000001;
 static constexpr uint32_t VK_QUEUE_FAMILY_IGNORED = 0xffffffffu;
 static constexpr VkMemoryPropertyFlags VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT = 0x00000001;
@@ -138,6 +145,8 @@ static constexpr VkMemoryPropertyFlags VK_MEMORY_PROPERTY_HOST_COHERENT_BIT = 0x
 static constexpr VkImageType VK_IMAGE_TYPE_2D = 1;
 static constexpr VkImageTiling VK_IMAGE_TILING_OPTIMAL = 0;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_1_BIT = 0x00000001;
+static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
+static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
 
 #define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 #define IMM_VK_API_VERSION_1_0 IMM_VK_MAKE_VERSION(1, 0, 0)
@@ -308,6 +317,35 @@ struct VkImageCreateInfo
     VkImageLayout initialLayout;
 };
 
+struct VkComponentMapping
+{
+    VkComponentSwizzle r;
+    VkComponentSwizzle g;
+    VkComponentSwizzle b;
+    VkComponentSwizzle a;
+};
+
+struct VkImageSubresourceRange
+{
+    VkImageAspectFlags aspectMask;
+    uint32_t baseMipLevel;
+    uint32_t levelCount;
+    uint32_t baseArrayLayer;
+    uint32_t layerCount;
+};
+
+struct VkImageViewCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    VkImage image;
+    VkImageViewType viewType;
+    VkFormat format;
+    VkComponentMapping components;
+    VkImageSubresourceRange subresourceRange;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -360,15 +398,6 @@ struct VkFenceCreateInfo
     VkStructureType sType;
     const void *pNext;
     VkFenceCreateFlags flags;
-};
-
-struct VkImageSubresourceRange
-{
-    VkImageAspectFlags aspectMask;
-    uint32_t baseMipLevel;
-    uint32_t levelCount;
-    uint32_t baseArrayLayer;
-    uint32_t layerCount;
 };
 
 struct VkImageSubresourceLayers
@@ -488,6 +517,8 @@ typedef void (*PFN_vkGetBufferMemoryRequirements)(VkDevice device, VkBuffer buff
 typedef VkResult (*PFN_vkCreateImage)(VkDevice device, const VkImageCreateInfo *createInfo, const void *allocator, VkImage *image);
 typedef void (*PFN_vkDestroyImage)(VkDevice device, VkImage image, const void *allocator);
 typedef void (*PFN_vkGetImageMemoryRequirements)(VkDevice device, VkImage image, VkMemoryRequirements *memoryRequirements);
+typedef VkResult (*PFN_vkCreateImageView)(VkDevice device, const VkImageViewCreateInfo *createInfo, const void *allocator, VkImageView *view);
+typedef void (*PFN_vkDestroyImageView)(VkDevice device, VkImageView imageView, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
 typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
 typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
@@ -526,6 +557,7 @@ struct piTextureS
     size_t dataSize = 0;
     uint64_t externalHandle = 0;
     VkImage image = 0;
+    VkImageView imageView = VK_NULL_IMAGE_VIEW;
     VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
     VkFormat vkFormat = 0;
     VkImageUsageFlags imageUsage = 0;
@@ -670,6 +702,8 @@ struct piVulkanState
     PFN_vkCreateImage vkCreateImage = nullptr;
     PFN_vkDestroyImage vkDestroyImage = nullptr;
     PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements = nullptr;
+    PFN_vkCreateImageView vkCreateImageView = nullptr;
+    PFN_vkDestroyImageView vkDestroyImageView = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
     PFN_vkFreeMemory vkFreeMemory = nullptr;
     PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
@@ -1055,6 +1089,8 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCreateImage = (PFN_vkCreateImage)state->vkGetDeviceProcAddr(state->device, "vkCreateImage");
     state->vkDestroyImage = (PFN_vkDestroyImage)state->vkGetDeviceProcAddr(state->device, "vkDestroyImage");
     state->vkGetImageMemoryRequirements = (PFN_vkGetImageMemoryRequirements)state->vkGetDeviceProcAddr(state->device, "vkGetImageMemoryRequirements");
+    state->vkCreateImageView = (PFN_vkCreateImageView)state->vkGetDeviceProcAddr(state->device, "vkCreateImageView");
+    state->vkDestroyImageView = (PFN_vkDestroyImageView)state->vkGetDeviceProcAddr(state->device, "vkDestroyImageView");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
     state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
     state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
@@ -1076,6 +1112,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage ||
         !state->vkCreateBuffer || !state->vkDestroyBuffer || !state->vkGetBufferMemoryRequirements ||
         !state->vkCreateImage || !state->vkDestroyImage || !state->vkGetImageMemoryRequirements ||
+        !state->vkCreateImageView || !state->vkDestroyImageView ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -1407,6 +1444,21 @@ static bool iToVulkanTextureFormat(piRenderer::Format format, VkFormat *outForma
     }
 }
 
+static VkImageAspectFlags iTextureAspectMask(piRenderer::Format format)
+{
+    switch (format)
+    {
+        case piRenderer::Format::D1_32_FLOAT:
+        case piRenderer::Format::D1_16_UNORM:
+            return VK_IMAGE_ASPECT_DEPTH_BIT;
+        case piRenderer::Format::DS_24_8_UINT:
+        case piRenderer::Format::DS_32_8_UINT:
+            return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        default:
+            return VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+}
+
 static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bindUsage, piRenderer::piReporter *reporter)
 {
     (void)bindUsage;
@@ -1415,7 +1467,8 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     {
         return true;
     }
-    if (!state->vkCreateImage || !state->vkGetImageMemoryRequirements || !state->vkAllocateMemory || !state->vkBindImageMemory)
+    if (!state->vkCreateImage || !state->vkGetImageMemoryRequirements || !state->vkAllocateMemory || !state->vkBindImageMemory ||
+        !state->vkCreateImageView)
     {
         return false;
     }
@@ -1490,9 +1543,37 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
 
     texture->vkFormat = vkFormat;
     texture->imageUsage = usage;
+
+    VkImageViewCreateInfo viewInfo = {};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = texture->image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = vkFormat;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.subresourceRange.aspectMask = iTextureAspectMask(texture->info.mFormat);
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = imageInfo.mipLevels;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    result = state->vkCreateImageView(state->device, &viewInfo, nullptr, &texture->imageView);
+    if (result != VK_SUCCESS || texture->imageView == VK_NULL_IMAGE_VIEW)
+    {
+        iError(reporter, "Vulkan renderer failed to create texture image view");
+        state->vkFreeMemory(state->device, texture->memory, nullptr);
+        state->vkDestroyImage(state->device, texture->image, nullptr);
+        texture->memory = VK_NULL_DEVICE_MEMORY;
+        texture->image = 0;
+        texture->vkFormat = 0;
+        texture->imageUsage = 0;
+        return false;
+    }
+
     if (!state->textureImageReported)
     {
-        iReport(reporter, "Vulkan renderer created VkImage-backed texture");
+        iReport(reporter, "Vulkan renderer created VkImage-backed texture view");
         state->textureImageReported = true;
     }
     return true;
@@ -2277,6 +2358,11 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
+        if (obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        {
+            mState->vkDestroyImageView(mState->device, obj->imageView, nullptr);
+            obj->imageView = VK_NULL_IMAGE_VIEW;
+        }
         if (obj->image != 0 && mState->vkDestroyImage)
         {
             mState->vkDestroyImage(mState->device, obj->image, nullptr);
