@@ -948,6 +948,15 @@ struct VkBufferImageCopy
     VkExtent3D imageExtent;
 };
 
+struct VkImageResolve
+{
+    VkImageSubresourceLayers srcSubresource;
+    VkOffset3D srcOffset;
+    VkImageSubresourceLayers dstSubresource;
+    VkOffset3D dstOffset;
+    VkExtent3D extent;
+};
+
 struct VkImageMemoryBarrier
 {
     VkStructureType sType;
@@ -1028,6 +1037,7 @@ typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipeli
 typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
 typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdCopyImageToBuffer)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy *regions);
+typedef void (*PFN_vkCmdResolveImage)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageResolve *regions);
 typedef void (*PFN_vkCmdBeginRenderPass)(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *renderPassBegin, VkSubpassContents contents);
 typedef void (*PFN_vkCmdEndRenderPass)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdSetViewport)(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport *viewports);
@@ -1273,6 +1283,7 @@ struct piVulkanState
     PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
     PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
     PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
+    PFN_vkCmdResolveImage vkCmdResolveImage = nullptr;
     PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
     PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
     PFN_vkCmdSetViewport vkCmdSetViewport = nullptr;
@@ -1705,6 +1716,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
     state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
     state->vkCmdCopyImageToBuffer = (PFN_vkCmdCopyImageToBuffer)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyImageToBuffer");
+    state->vkCmdResolveImage = (PFN_vkCmdResolveImage)state->vkGetDeviceProcAddr(state->device, "vkCmdResolveImage");
     state->vkCmdBeginRenderPass = (PFN_vkCmdBeginRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdBeginRenderPass");
     state->vkCmdEndRenderPass = (PFN_vkCmdEndRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdEndRenderPass");
     state->vkCmdSetViewport = (PFN_vkCmdSetViewport)state->vkGetDeviceProcAddr(state->device, "vkCmdSetViewport");
@@ -1757,7 +1769,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
-        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer ||
+        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer || !state->vkCmdResolveImage ||
         !state->vkCmdBeginRenderPass || !state->vkCmdEndRenderPass ||
         !state->vkCmdSetViewport || !state->vkCmdSetScissor || !state->vkCmdBindPipeline ||
         !state->vkCmdBindDescriptorSets || !state->vkCmdBindIndexBuffer || !state->vkCmdDrawIndexed ||
@@ -2789,7 +2801,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
 {
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
-        texture->sampleCount != VK_SAMPLE_COUNT_1_BIT || texture->info.mFormat != piRenderer::Format::C3_11_11_10_FLOAT ||
+        texture->info.mFormat != piRenderer::Format::C3_11_11_10_FLOAT ||
         state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE || !state->vkCmdCopyImageToBuffer)
     {
         return true;
@@ -2800,10 +2812,80 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
         return false;
     }
 
+    VkImage readbackImage = texture->image;
+    VkDeviceMemory readbackMemory = VK_NULL_DEVICE_MEMORY;
+    VkImageLayout readbackLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    const bool needsResolve = texture->sampleCount != VK_SAMPLE_COUNT_1_BIT;
+    if (needsResolve)
+    {
+        if (!state->vkCmdResolveImage || !state->vkCreateImage || !state->vkGetImageMemoryRequirements || !state->vkBindImageMemory || !state->vkAllocateMemory)
+        {
+            return false;
+        }
+
+        VkImageCreateInfo resolveInfo = {};
+        resolveInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        resolveInfo.imageType = VK_IMAGE_TYPE_2D;
+        resolveInfo.format = texture->vkFormat;
+        resolveInfo.extent.width = (uint32_t)texture->info.mXres;
+        resolveInfo.extent.height = (uint32_t)texture->info.mYres;
+        resolveInfo.extent.depth = 1;
+        resolveInfo.mipLevels = 1;
+        resolveInfo.arrayLayers = 1;
+        resolveInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        resolveInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        resolveInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        resolveInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        resolveInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        VkResult createResult = state->vkCreateImage(state->device, &resolveInfo, nullptr, &readbackImage);
+        if (createResult != VK_SUCCESS || readbackImage == 0)
+        {
+            iError(reporter, "Vulkan renderer failed to create MSAA resolve readback image");
+            return false;
+        }
+
+        VkMemoryRequirements requirements = {};
+        state->vkGetImageMemoryRequirements(state->device, readbackImage, &requirements);
+        uint32_t memoryTypeIndex = 0;
+        if (!iFindMemoryType(state, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &memoryTypeIndex))
+        {
+            iError(reporter, "Vulkan renderer failed to find MSAA resolve readback memory");
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            return false;
+        }
+
+        VkMemoryAllocateInfo allocateInfo = {};
+        allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocateInfo.allocationSize = requirements.size;
+        allocateInfo.memoryTypeIndex = memoryTypeIndex;
+        createResult = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, &readbackMemory);
+        if (createResult != VK_SUCCESS || readbackMemory == VK_NULL_DEVICE_MEMORY)
+        {
+            iError(reporter, "Vulkan renderer failed to allocate MSAA resolve readback memory");
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            return false;
+        }
+
+        createResult = state->vkBindImageMemory(state->device, readbackImage, readbackMemory, 0);
+        if (createResult != VK_SUCCESS)
+        {
+            iError(reporter, "Vulkan renderer failed to bind MSAA resolve readback memory");
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            state->vkFreeMemory(state->device, readbackMemory, nullptr);
+            return false;
+        }
+    }
+
     const uint64_t timeout = 1000000000ull;
     VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
+        if (needsResolve)
+        {
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            state->vkFreeMemory(state->device, readbackMemory, nullptr);
+        }
         return false;
     }
     state->vkResetFences(state->device, 1, &state->frameFence);
@@ -2846,6 +2928,71 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
                                 1,
                                 &toTransfer);
 
+    if (needsResolve)
+    {
+        VkImageMemoryBarrier resolveToTransfer = {};
+        resolveToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        resolveToTransfer.srcAccessMask = 0;
+        resolveToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        resolveToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        resolveToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        resolveToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        resolveToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        resolveToTransfer.image = readbackImage;
+        resolveToTransfer.subresourceRange = range;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    0,
+                                    0,
+                                    nullptr,
+                                    0,
+                                    nullptr,
+                                    1,
+                                    &resolveToTransfer);
+
+        VkImageResolve resolveRegion = {};
+        resolveRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        resolveRegion.srcSubresource.mipLevel = 0;
+        resolveRegion.srcSubresource.baseArrayLayer = 0;
+        resolveRegion.srcSubresource.layerCount = 1;
+        resolveRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        resolveRegion.dstSubresource.mipLevel = 0;
+        resolveRegion.dstSubresource.baseArrayLayer = 0;
+        resolveRegion.dstSubresource.layerCount = 1;
+        resolveRegion.extent.width = (uint32_t)texture->info.mXres;
+        resolveRegion.extent.height = (uint32_t)texture->info.mYres;
+        resolveRegion.extent.depth = 1;
+        state->vkCmdResolveImage(state->commandBuffer,
+                                 texture->image,
+                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 readbackImage,
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 1,
+                                 &resolveRegion);
+
+        VkImageMemoryBarrier resolveToCopy = {};
+        resolveToCopy.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        resolveToCopy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        resolveToCopy.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        resolveToCopy.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        resolveToCopy.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        resolveToCopy.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        resolveToCopy.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        resolveToCopy.image = readbackImage;
+        resolveToCopy.subresourceRange = range;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    0,
+                                    0,
+                                    nullptr,
+                                    0,
+                                    nullptr,
+                                    1,
+                                    &resolveToCopy);
+    }
+
     VkBufferImageCopy copyRegion = {};
     copyRegion.bufferOffset = 0;
     copyRegion.bufferRowLength = 0;
@@ -2860,7 +3007,7 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
     copyRegion.imageExtent.width = (uint32_t)texture->info.mXres;
     copyRegion.imageExtent.height = (uint32_t)texture->info.mYres;
     copyRegion.imageExtent.depth = 1;
-    state->vkCmdCopyImageToBuffer(state->commandBuffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, state->stagingBuffer, 1, &copyRegion);
+    state->vkCmdCopyImageToBuffer(state->commandBuffer, readbackImage, readbackLayout, state->stagingBuffer, 1, &copyRegion);
 
     VkImageMemoryBarrier toColor = {};
     toColor.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -2886,6 +3033,11 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
+        if (needsResolve)
+        {
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            state->vkFreeMemory(state->device, readbackMemory, nullptr);
+        }
         return false;
     }
     VkSubmitInfo submitInfo = {};
@@ -2895,12 +3047,27 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
     result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
     if (result != VK_SUCCESS)
     {
+        if (needsResolve)
+        {
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            state->vkFreeMemory(state->device, readbackMemory, nullptr);
+        }
         return false;
     }
     result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
+        if (needsResolve)
+        {
+            state->vkDestroyImage(state->device, readbackImage, nullptr);
+            state->vkFreeMemory(state->device, readbackMemory, nullptr);
+        }
         return false;
+    }
+    if (needsResolve)
+    {
+        state->vkDestroyImage(state->device, readbackImage, nullptr);
+        state->vkFreeMemory(state->device, readbackMemory, nullptr);
     }
 
     void *mapped = nullptr;
@@ -3049,7 +3216,7 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = texture->info.mMultisample > 1 ? 1 : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1);
     imageInfo.arrayLayers = is2DArray ? (uint32_t)texture->info.mZres : 1u;
-    texture->sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    texture->sampleCount = is2DArray ? VK_SAMPLE_COUNT_1_BIT : iRequestedTextureSampleCount(texture->info);
     imageInfo.samples = texture->sampleCount;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = usage;
