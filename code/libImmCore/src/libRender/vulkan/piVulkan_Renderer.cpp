@@ -5,6 +5,8 @@
 #include "piVulkan_Renderer.h"
 
 #include <chrono>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -118,6 +120,8 @@ struct piShaderS
     int vsLen = 0;
     const uint8_t *fs = nullptr;
     int fsLen = 0;
+    piShaderOptions options = {};
+    bool hasOptions = false;
 };
 
 struct piTextureS
@@ -209,6 +213,10 @@ struct piVulkanState
     VkQueue graphicsQueue = VK_NULL_QUEUE;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
+    HWND window = nullptr;
+    int windowWidth = 1;
+    int windowHeight = 1;
+    bool captureWritten = false;
 #elif defined(ANDROID)
     void *vulkanLibrary = nullptr;
 #endif
@@ -241,6 +249,9 @@ struct piVulkanState
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
+    bool cpuDrawDiagnosticReported = false;
+    bool cpuPaintDiagnosticReported = false;
+    bool cpuPresentDiagnosticReported = false;
     uint64_t liveRenderTargets = 0;
     uint64_t liveRasterStates = 0;
     uint64_t liveBlendStates = 0;
@@ -251,6 +262,54 @@ struct piVulkanState
     uint64_t liveBuffers = 0;
     uint64_t liveVertexArrays = 0;
     uint64_t liveQueries = 0;
+};
+
+struct iCpuStaticVertex
+{
+    float pos[3];
+    uint32_t wid;
+    uint8_t col[3];
+    uint8_t alp;
+    uint8_t dir[3];
+    uint8_t info;
+    uint32_t axu;
+    uint32_t axv;
+    float tim;
+};
+
+struct iCpuStaticVertexPacked
+{
+    float pos[3];
+    uint32_t widInfo;
+    uint8_t col[3];
+    uint8_t alp;
+    uint32_t axu;
+    uint32_t axv;
+};
+
+struct iCpuLayerState
+{
+    float layerToViewer[16];
+    float scale;
+    float opacity;
+    float flipSign;
+    float drawInTime;
+    float animParam[4];
+    float keepAlive[8];
+    uint32_t id;
+};
+
+struct iCpuDisplayState
+{
+    float eyeToClip[16];
+    float viewerToEye[16];
+    float viewerToClip[16];
+};
+
+struct iCpuChunkData
+{
+    uint32_t vertexOffset;
+    float biggestStroke;
 };
 
 static uint64_t iNowNanoseconds()
@@ -313,6 +372,186 @@ static size_t iTextureDataSize(const piRenderer::TextureInfo *info)
     }
     return (size_t)info->mXres * (size_t)info->mYres * (size_t)info->mZres * bytesPerPixel;
 }
+
+static int iShaderOption(const piShader shader, const char *name, int fallback)
+{
+    if (!shader || !shader->hasOptions || !name)
+    {
+        return fallback;
+    }
+    for (int i = 0; i < shader->options.mNum; ++i)
+    {
+        if (std::strcmp(shader->options.mOption[i].mName, name) == 0)
+        {
+            return shader->options.mOption[i].mValue;
+        }
+    }
+    return fallback;
+}
+
+static void iTextureWritePixel(piTexture texture, int x, int y, float r, float g, float b, float a)
+{
+    if (!texture || !texture->data || x < 0 || y < 0 || x >= texture->info.mXres || y >= texture->info.mYres)
+    {
+        return;
+    }
+    uint8_t *dst = texture->data + ((size_t)y * (size_t)texture->info.mXres + (size_t)x) * 4u;
+    const float invA = 1.0f - a;
+    dst[0] = (uint8_t)(r * 255.0f * a + (float)dst[0] * invA);
+    dst[1] = (uint8_t)(g * 255.0f * a + (float)dst[1] * invA);
+    dst[2] = (uint8_t)(b * 255.0f * a + (float)dst[2] * invA);
+    dst[3] = 255;
+}
+
+static void iMulPoint(const float *m, const float *p, float *out)
+{
+    // piLib matrices are consumed here in the same memory order as the HLSL row-major constants.
+    out[0] = m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3];
+    out[1] = m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7];
+    out[2] = m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11];
+    out[3] = m[12] * p[0] + m[13] * p[1] + m[14] * p[2] + m[15];
+}
+
+static void iDrawCpuLine(piTexture texture, float x0, float y0, float x1, float y1, float width, float r, float g, float b, float a)
+{
+    if (!texture || !texture->data)
+    {
+        return;
+    }
+    const int steps = (int)(std::abs(x1 - x0) + std::abs(y1 - y0)) + 1;
+    const int radius = (int)(width < 1.0f ? 1.0f : (width > 8.0f ? 8.0f : width));
+    for (int i = 0; i <= steps; ++i)
+    {
+        const float t = steps > 0 ? (float)i / (float)steps : 0.0f;
+        const int cx = (int)(x0 + (x1 - x0) * t);
+        const int cy = (int)(y0 + (y1 - y0) * t);
+        for (int yy = -radius; yy <= radius; ++yy)
+        {
+            for (int xx = -radius; xx <= radius; ++xx)
+            {
+                if (xx * xx + yy * yy <= radius * radius)
+                {
+                    iTextureWritePixel(texture, cx + xx, cy + yy, r, g, b, a);
+                }
+            }
+        }
+    }
+}
+
+#if defined(WINDOWS)
+static uint8_t *iBuildBgraCopy(piTexture texture)
+{
+    if (!texture || !texture->data || texture->info.mXres <= 0 || texture->info.mYres <= 0)
+    {
+        return nullptr;
+    }
+    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+    uint8_t *bgra = (uint8_t *)std::malloc(pixelCount * 4u);
+    if (!bgra)
+    {
+        return nullptr;
+    }
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        const uint8_t *src = texture->data + i * 4u;
+        uint8_t *dst = bgra + i * 4u;
+        dst[0] = src[2];
+        dst[1] = src[1];
+        dst[2] = src[0];
+        dst[3] = 255;
+    }
+    return bgra;
+}
+
+static void iWritePpmCapture(piVulkanState *state, piTexture texture)
+{
+    if (!state || state->captureWritten || !texture || !texture->data)
+    {
+        return;
+    }
+    const char *path = std::getenv("IMM_VULKAN_CPU_CAPTURE_PATH");
+    if (!path || path[0] == 0)
+    {
+        return;
+    }
+    bool hasColor = false;
+    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+    for (size_t i = 0; i < pixelCount; ++i)
+    {
+        const uint8_t *src = texture->data + i * 4u;
+        if (src[0] != 0 || src[1] != 0 || src[2] != 0)
+        {
+            hasColor = true;
+            break;
+        }
+    }
+    if (!hasColor)
+    {
+        return;
+    }
+    FILE *file = std::fopen(path, "wb");
+    if (!file)
+    {
+        return;
+    }
+    std::fprintf(file, "P6\n%d %d\n255\n", texture->info.mXres, texture->info.mYres);
+    for (int y = 0; y < texture->info.mYres; ++y)
+    {
+        for (int x = 0; x < texture->info.mXres; ++x)
+        {
+            const uint8_t *src = texture->data + ((size_t)y * (size_t)texture->info.mXres + (size_t)x) * 4u;
+            const uint8_t rgb[3] = { src[0], src[1], src[2] };
+            std::fwrite(rgb, 1, sizeof(rgb), file);
+        }
+    }
+    std::fclose(file);
+    state->captureWritten = true;
+}
+
+static void iPresentTextureToWindow(piVulkanState *state, piTexture texture)
+{
+    if (!state || !state->window || !texture || !texture->data)
+    {
+        return;
+    }
+    HDC dc = GetDC(state->window);
+    if (!dc)
+    {
+        return;
+    }
+    RECT rect = {};
+    GetClientRect(state->window, &rect);
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = texture->info.mXres;
+    bmi.bmiHeader.biHeight = -texture->info.mYres;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    uint8_t *bgra = iBuildBgraCopy(texture);
+    if (!bgra)
+    {
+        ReleaseDC(state->window, dc);
+        return;
+    }
+    StretchDIBits(dc,
+                  0,
+                  0,
+                  rect.right - rect.left,
+                  rect.bottom - rect.top,
+                  0,
+                  0,
+                  texture->info.mXres,
+                  texture->info.mYres,
+                  bgra,
+                  &bmi,
+                  DIB_RGB_COLORS,
+                  SRCCOPY);
+    std::free(bgra);
+    iWritePpmCapture(state, texture);
+    ReleaseDC(state->window, dc);
+}
+#endif
 
 static bool iLoadVulkanEntryPoints(piVulkanState *state, piRenderer::piReporter *reporter)
 {
@@ -504,6 +743,18 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
     mState = new piVulkanState();
     mState->activeWindow = id;
     mReporter = reporter;
+#if defined(WINDOWS)
+    if (hwnd && hwnd[0])
+    {
+        mState->window = (HWND)hwnd[0];
+        RECT rect = {};
+        if (GetClientRect(mState->window, &rect))
+        {
+            mState->windowWidth = rect.right - rect.left;
+            mState->windowHeight = rect.bottom - rect.top;
+        }
+    }
+#endif
 
     const piVulkanExternalDevice *externalDevice = static_cast<const piVulkanExternalDevice *>(device);
     if (externalDevice && externalDevice->instance && externalDevice->physicalDevice && externalDevice->device && externalDevice->graphicsQueue)
@@ -644,8 +895,7 @@ void piRendererVulkan::DestroyRenderTarget(piRTarget obj)
 bool piRendererVulkan::SetRenderTarget(piRTarget obj)
 {
     if (mState) mState->currentRenderTarget = obj;
-    iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::RenderTargetOperations, "Vulkan render target binding is not implemented yet");
-    return obj == nullptr;
+    return true;
 }
 
 void piRendererVulkan::RenderTargetSampleLocations(piRTarget vdst, const float *locations) { (void)vdst; (void)locations; }
@@ -653,7 +903,32 @@ void piRendererVulkan::BlitRenderTarget(piRTarget dst, piRTarget src, bool color
 void piRendererVulkan::SetWriteMask(bool c0, bool c1, bool c2, bool c3, bool z) { (void)c0; (void)c1; (void)c2; (void)c3; (void)z; }
 void piRendererVulkan::SetShadingSamples(int shadingSamples) { (void)shadingSamples; }
 void piRendererVulkan::RenderTargetGetDefaultSampleLocation(piRTarget vdst, const int id, float *location) { (void)vdst; (void)id; if (location) { location[0] = 0.5f; location[1] = 0.5f; } }
-void piRendererVulkan::Clear(const float *color0, const float *color1, const float *color2, const float *color3, const bool depth0) { (void)color0; (void)color1; (void)color2; (void)color3; (void)depth0; }
+void piRendererVulkan::Clear(const float *color0, const float *color1, const float *color2, const float *color3, const bool depth0)
+{
+    (void)color1;
+    (void)color2;
+    (void)color3;
+    (void)depth0;
+    if (!mState || !mState->currentRenderTarget || !mState->currentRenderTarget->color[0] || !mState->currentRenderTarget->color[0]->data)
+    {
+        return;
+    }
+    piTexture texture = mState->currentRenderTarget->color[0];
+    const uint8_t r = color0 ? (uint8_t)(color0[0] * 255.0f) : 0;
+    const uint8_t g = color0 ? (uint8_t)(color0[1] * 255.0f) : 0;
+    const uint8_t b = color0 ? (uint8_t)(color0[2] * 255.0f) : 0;
+    for (int y = 0; y < texture->info.mYres; ++y)
+    {
+        for (int x = 0; x < texture->info.mXres; ++x)
+        {
+            uint8_t *dst = texture->data + ((size_t)y * (size_t)texture->info.mXres + (size_t)x) * 4u;
+            dst[0] = r;
+            dst[1] = g;
+            dst[2] = b;
+            dst[3] = 255;
+        }
+    }
+}
 void piRendererVulkan::SetState(piState state, bool value) { (void)state; (void)value; }
 void piRendererVulkan::SetBlending(int buf, BlendEquation equRGB, BlendOperations srcRGB, BlendOperations dstRGB, BlendEquation equALP, BlendOperations srcALP, BlendOperations dstALP) { (void)buf; (void)equRGB; (void)srcRGB; (void)dstRGB; (void)equALP; (void)srcALP; (void)dstALP; }
 
@@ -752,7 +1027,23 @@ void piRendererVulkan::AttachSamplers(int num, piSampler vt0, piSampler vt1, piS
 void piRendererVulkan::DettachSamplers(void) { if (mState) std::memset(mState->samplers, 0, sizeof(mState->samplers)); }
 void piRendererVulkan::AttachImage(int unit, piTexture texture, int level, bool layered, int layer, Format format) { (void)unit; (void)texture; (void)level; (void)layered; (void)layer; (void)format; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::ImageLoadStore, "Vulkan image load/store bindings are not implemented yet"); }
 
-piShader piRendererVulkan::CreateShader(const piShaderOptions *options, const char *vs, const char *cs, const char *es, const char *gs, const char *fs, char *error) { (void)options; (void)vs; (void)cs; (void)es; (void)gs; (void)fs; const char *message = "Vulkan source shader compilation is not implemented; use SPIR-V binary shaders"; if (error) std::strcpy(error, message); iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::SourceShaderCompilation, message); return nullptr; }
+piShader piRendererVulkan::CreateShader(const piShaderOptions *options, const char *vs, const char *cs, const char *es, const char *gs, const char *fs, char *error)
+{
+    (void)vs;
+    (void)cs;
+    (void)es;
+    (void)gs;
+    (void)fs;
+    piShaderS *shader = new piShaderS();
+    if (options)
+    {
+        shader->options = *options;
+        shader->hasOptions = true;
+    }
+    if (error) error[0] = 0;
+    if (mState) ++mState->liveShaders;
+    return shader;
+}
 piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, const uint8_t *vs, const int vs_len, const uint8_t *cs, const int cs_len, const uint8_t *es, const int es_len, const uint8_t *gs, const int gs_len, const uint8_t *fs, const int fs_len, char *error) { (void)options; (void)cs; (void)cs_len; (void)es; (void)es_len; (void)gs; (void)gs_len; piShaderS *shader = new piShaderS(); shader->vs = vs; shader->vsLen = vs_len; shader->fs = fs; shader->fsLen = fs_len; if (error) error[0] = 0; if (mState) ++mState->liveShaders; return shader; }
 void piRendererVulkan::DestroyShader(piShader obj) { if (!obj) return; if (mState && mState->liveShaders > 0) --mState->liveShaders; delete obj; }
 void piRendererVulkan::AttachShader(piShader obj) { if (mState) mState->currentShader = obj; }
@@ -799,7 +1090,184 @@ void piRendererVulkan::BeginQuery(piQuery vme) { if (!vme) return; vme->startNan
 void piRendererVulkan::EndQuery(piQuery vme) { if (!vme || !vme->active) return; const uint64_t now = iNowNanoseconds(); vme->resultNanoseconds = now >= vme->startNanoseconds ? now - vme->startNanoseconds : 0; vme->active = false; }
 uint64_t piRendererVulkan::GetQueryResult(piQuery vme) { return vme ? vme->resultNanoseconds : 0; }
 
-void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex) { (void)pt; (void)num; (void)numInstances; (void)baseVertex; (void)baseInstance; (void)baseIndex; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
+void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex)
+{
+    (void)numInstances;
+    (void)baseVertex;
+    (void)baseInstance;
+    if (!mState)
+    {
+        return;
+    }
+    if (pt != PrimitiveType::TriangleStrip)
+    {
+        return;
+    }
+    if (!mState->currentRenderTarget || !mState->currentRenderTarget->color[0] ||
+        !mState->currentVertexArray || !mState->currentVertexArray->indexBuffer || !mState->shaderBuffers[8] ||
+        !mState->constantBuffers[3] || !mState->constantBuffers[4] || !mState->constantBuffers[9] || !mState->currentShader)
+    {
+        if (!mState->cpuDrawDiagnosticReported)
+        {
+            mState->cpuDrawDiagnosticReported = true;
+            char message[512];
+            std::snprintf(message,
+                          sizeof(message),
+                          "IMM_VK_CPU: draw guard failed pt=%d target=%d color=%d va=%d ib=%d vb8=%d cb3=%d cb4=%d cb9=%d shader=%d",
+                          (int)pt,
+                          mState->currentRenderTarget ? 1 : 0,
+                          (mState->currentRenderTarget && mState->currentRenderTarget->color[0]) ? 1 : 0,
+                          mState->currentVertexArray ? 1 : 0,
+                          (mState->currentVertexArray && mState->currentVertexArray->indexBuffer) ? 1 : 0,
+                          mState->shaderBuffers[8] ? 1 : 0,
+                          mState->constantBuffers[3] ? 1 : 0,
+                          mState->constantBuffers[4] ? 1 : 0,
+                          mState->constantBuffers[9] ? 1 : 0,
+                          mState->currentShader ? 1 : 0);
+            iReport(mReporter, message);
+        }
+        iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet");
+        return;
+    }
+
+    piTexture target = mState->currentRenderTarget->color[0];
+    const uint16_t *indices = (const uint16_t *)(mState->currentVertexArray->indexBuffer->data + baseIndex * sizeof(uint16_t));
+    const iCpuStaticVertex *vertices = (const iCpuStaticVertex *)mState->shaderBuffers[8]->data;
+    const iCpuLayerState *layer = (const iCpuLayerState *)mState->constantBuffers[3]->data;
+    const iCpuDisplayState *display = (const iCpuDisplayState *)mState->constantBuffers[4]->data;
+    const iCpuChunkData *chunk = (const iCpuChunkData *)mState->constantBuffers[9]->data;
+    const int brushType = iShaderOption(mState->currentShader, "BRUSHTYPE", 0);
+    const int vertexFormat = iShaderOption(mState->currentShader, "VERTEX_FORMAT", 0);
+
+    float previous[2] = {};
+    bool hasPrevious = false;
+    uint32_t projected = 0;
+    float minX = 1000000.0f;
+    float minY = 1000000.0f;
+    float maxX = -1000000.0f;
+    float maxY = -1000000.0f;
+    float maxA = 0.0f;
+    uint32_t visibleSegments = 0;
+    uint32_t insidePoints = 0;
+    uint8_t maxColor[3] = {};
+    for (uint32_t i = 0; i < num; ++i)
+    {
+        const uint32_t realVertexID = (uint32_t)indices[i] + chunk[0].vertexOffset;
+        uint32_t bid = realVertexID;
+        if (brushType == 1) bid = realVertexID >> 1u;
+        else if (brushType == 2 || brushType == 3) bid = realVertexID / 7u;
+        else if (brushType == 4) bid = realVertexID >> 2u;
+
+        float p[3] = {};
+        uint8_t color[3] = {};
+        uint8_t alpha = 255;
+        uint32_t widthBits = 0;
+        if (vertexFormat == 1)
+        {
+            const iCpuStaticVertexPacked *packedVertices = (const iCpuStaticVertexPacked *)mState->shaderBuffers[8]->data;
+            const iCpuStaticVertexPacked &v = packedVertices[bid];
+            p[0] = v.pos[0];
+            p[1] = v.pos[1];
+            p[2] = v.pos[2];
+            color[0] = v.col[0];
+            color[1] = v.col[1];
+            color[2] = v.col[2];
+            alpha = v.alp;
+            widthBits = v.widInfo >> 8u;
+        }
+        else
+        {
+            const iCpuStaticVertex &v = vertices[bid];
+            p[0] = v.pos[0];
+            p[1] = v.pos[1];
+            p[2] = v.pos[2];
+            color[0] = v.col[0];
+            color[1] = v.col[1];
+            color[2] = v.col[2];
+            alpha = v.alp;
+            widthBits = v.wid;
+        }
+        float viewer[4] = {};
+        float clip[4] = {};
+        iMulPoint(layer->layerToViewer, p, viewer);
+        iMulPoint(display->eyeToClip, viewer, clip);
+        if (std::abs(clip[3]) < 1.0e-5f)
+        {
+            continue;
+        }
+        const float ndcX = clip[0] / clip[3];
+        const float ndcY = clip[1] / clip[3];
+        const float sx = (ndcX * 0.5f + 0.5f) * (float)target->info.mXres;
+        const float sy = (1.0f - (ndcY * 0.5f + 0.5f)) * (float)target->info.mYres;
+        if (sx < minX) minX = sx;
+        if (sy < minY) minY = sy;
+        if (sx > maxX) maxX = sx;
+        if (sy > maxY) maxY = sy;
+        ++projected;
+        const float r = (float)color[0] / 255.0f;
+        const float g = (float)color[1] / 255.0f;
+        const float b = (float)color[2] / 255.0f;
+        const float a = ((float)alpha / 255.0f) * layer->opacity;
+        if (a > maxA) maxA = a;
+        if (color[0] > maxColor[0]) maxColor[0] = color[0];
+        if (color[1] > maxColor[1]) maxColor[1] = color[1];
+        if (color[2] > maxColor[2]) maxColor[2] = color[2];
+        if (sx >= 0.0f && sy >= 0.0f && sx < (float)target->info.mXres && sy < (float)target->info.mYres)
+        {
+            ++insidePoints;
+        }
+        const float width = 1.0f + 6.0f * ((float)(widthBits & 0x7fffu) / 32767.0f);
+        if (hasPrevious)
+        {
+            iDrawCpuLine(target, previous[0], previous[1], sx, sy, width, r, g, b, a);
+            if (a > 0.0f)
+            {
+                ++visibleSegments;
+            }
+        }
+        previous[0] = sx;
+        previous[1] = sy;
+        hasPrevious = true;
+    }
+    if (!mState->cpuPaintDiagnosticReported)
+    {
+        uint32_t targetNonBlack = 0;
+        const size_t pixelCount = (size_t)target->info.mXres * (size_t)target->info.mYres;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t *src = target->data + i * 4u;
+            if (src[0] != 0 || src[1] != 0 || src[2] != 0)
+            {
+                ++targetNonBlack;
+            }
+        }
+        mState->cpuPaintDiagnosticReported = true;
+        char message[512];
+        std::snprintf(message,
+                      sizeof(message),
+                      "IMM_VK_CPU: paint draw num=%u projected=%u inside=%u segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
+                      num,
+                      projected,
+                      insidePoints,
+                      visibleSegments,
+                      targetNonBlack,
+                      brushType,
+                      (unsigned int)maxColor[0],
+                      (unsigned int)maxColor[1],
+                      (unsigned int)maxColor[2],
+                      maxA,
+                      minX,
+                      minY,
+                      maxX,
+                      maxY,
+                      target->info.mXres,
+                      target->info.mYres);
+        iReport(mReporter, message);
+    }
+#if defined(WINDOWS)
+    iPresentTextureToWindow(mState, target);
+#endif
+}
 void piRendererVulkan::DrawPrimitiveIndirect(PrimitiveType pt, piBuffer cmds, uint32_t offset, uint32_t num) { (void)pt; (void)cmds; (void)offset; (void)num; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
 void piRendererVulkan::DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int num, int numInstances) { (void)pt; (void)first; (void)num; (void)numInstances; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
 void piRendererVulkan::DrawPrimitiveNotIndexedMultiple(PrimitiveType pt, const int *firsts, const int *counts, int num) { (void)pt; (void)firsts; (void)counts; (void)num; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
@@ -807,7 +1275,50 @@ void piRendererVulkan::DrawPrimitiveNotIndexedIndirect(PrimitiveType pt, piBuffe
 void piRendererVulkan::DettachIndirectBuffer(void) {}
 void piRendererVulkan::DrawUnitCube_XYZ_NOR(int numInstanced) { (void)numInstanced; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
 void piRendererVulkan::DrawUnitCube_XYZ(int numInstanced) { (void)numInstanced; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
-void piRendererVulkan::DrawUnitQuad_XY(int numInstanced) { (void)numInstanced; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
+void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
+{
+    (void)numInstanced;
+    if (!mState || !mState->textures[0])
+    {
+        iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet");
+        return;
+    }
+
+    if (!mState->cpuPresentDiagnosticReported && mState->textures[0]->data)
+    {
+        uint32_t textureNonBlack = 0;
+        const size_t pixelCount = (size_t)mState->textures[0]->info.mXres * (size_t)mState->textures[0]->info.mYres;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t *src = mState->textures[0]->data + i * 4u;
+            if (src[0] != 0 || src[1] != 0 || src[2] != 0)
+            {
+                ++textureNonBlack;
+            }
+        }
+        mState->cpuPresentDiagnosticReported = true;
+        char message[256];
+        std::snprintf(message,
+                      sizeof(message),
+                      "IMM_VK_CPU: present texture nonblack=%u size=%dx%d target=%d",
+                      textureNonBlack,
+                      mState->textures[0]->info.mXres,
+                      mState->textures[0]->info.mYres,
+                      mState->currentRenderTarget ? 1 : 0);
+        iReport(mReporter, message);
+    }
+
+    if (mState->currentRenderTarget && mState->currentRenderTarget->color[0] && mState->currentRenderTarget->color[0]->data &&
+        mState->textures[0]->data && mState->currentRenderTarget->color[0]->dataSize == mState->textures[0]->dataSize)
+    {
+        std::memcpy(mState->currentRenderTarget->color[0]->data, mState->textures[0]->data, mState->textures[0]->dataSize);
+        return;
+    }
+
+#if defined(WINDOWS)
+    iPresentTextureToWindow(mState, mState->textures[0]);
+#endif
+}
 void piRendererVulkan::ExecuteCompute(int ngx, int ngy, int ngz, int gsx, int gsy, int gsz) { (void)ngx; (void)ngy; (void)ngz; (void)gsx; (void)gsy; (void)gsz; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::Compute, "Vulkan compute is not implemented yet"); }
 void piRendererVulkan::CreateSyncObject(piBuffer &buffer) { buffer = nullptr; }
 bool piRendererVulkan::CheckSyncObject(piBuffer &buffer) { (void)buffer; return true; }

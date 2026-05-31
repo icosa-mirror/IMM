@@ -13,7 +13,7 @@
 - Vulkan is a blocker for the Godot plugin on Windows and Android.
 - The first target should be a Windows standalone Vulkan player because it is the easiest path to verify locally while building out backend behavior.
 - No local `dxc`, `glslc`, `glslangValidator`, `shaderc`, or Vulkan SDK shader toolchain is currently available in PATH/vcpkg, so a generated SPIR-V path needs either new tooling or checked-in generated assets.
-- To get standalone visual output sooner, the next implementation step is an interim Vulkan-presented CPU raster path for the static paint data exercised by `sample1.imm`, followed by replacement with real GPU Vulkan pipelines.
+- To get standalone visual output sooner, the current implementation step is an interim Windows standalone CPU raster path for the static paint data exercised by `sample1.imm`, presented through the Vulkan-selected renderer until real Vulkan command buffers and pipelines are available.
 
 ## Acceptance target
 
@@ -48,8 +48,8 @@
 11. [complete] Add a separate Windows standalone Vulkan smoke settings file without changing the default viewer config.
 12. [pending] Implement real Vulkan render targets, command buffers, render pass/framebuffer setup, and swapchain presentation for the Windows standalone viewer.
 13. [pending] Implement or generate Vulkan-compatible shaders for the player paths exercised by `sample1.imm`.
-14. [pending] Verify nonblank standalone Vulkan output for `sample1.imm`.
-15. [pending] Implement interim Vulkan-presented CPU raster output for static paint so `sample1.imm` becomes visible before the full SPIR-V/pipeline path lands.
+14. [in progress] Verify standalone Vulkan output for `sample1.imm` against the existing base rendering behavior. Nonblank output is now proven, but the current capture is an early partial paint frame and is not yet comparable to the full base renderer.
+15. [complete] Implement interim CPU raster output for static paint so `sample1.imm` becomes visible in the Windows standalone Vulkan-selected path before the full SPIR-V/pipeline path lands.
 
 ## Follow-up work after this pass
 
@@ -64,5 +64,6 @@
 - Windows `libImmCore` Debug builds with `piVulkan_Renderer.cpp`.
 - Windows `appImmViewer` Debug builds successfully with Vulkan selectable from settings.
 - Existing OpenGL standalone smoke reached IMM CPU/GPU load and playback start before manual termination.
-- Vulkan standalone smoke using `code/appImmViewer/exe/settings-vulkan-smoke.json` initialized an owned Vulkan device and loaded `sample1.imm`, but did not render. The placeholder diagnostics for render target binding and draw submission are now tracked as blockers.
+- Vulkan standalone smoke using `code/appImmViewer/exe/settings-vulkan-smoke.json` initialized an owned Vulkan device and loaded `sample1.imm`, but did not render before the interim paint/present work. The placeholder diagnostics for render target binding and draw submission are now tracked as blockers.
+- Vulkan standalone smoke now reaches static paint CPU rasterization for `sample1.imm`: diagnostic `IMM_VK_CPU` reported 69,468 projected paint vertices, 56,419 inside the target, 69,467 visible segments, max alpha 1.0, and a nonblack paint target. The generated capture is visible but currently only an early partial frame, so comparable full-output verification remains in progress.
 - Android `:libImmCore:assembleDebug` builds successfully with `piVulkan_Renderer.cpp` included; CMake still emits the pre-existing dev warning about no top-level `project()` command.

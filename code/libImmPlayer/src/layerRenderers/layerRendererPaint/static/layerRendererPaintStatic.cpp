@@ -256,7 +256,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             char error[1024] = { 0 };
 
 
-if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan)
             {
                 mShader[dindex] = renderer->CreateShader(&ops, shader_static_brush_vs, nullptr, nullptr, nullptr, shader_static_brush_fs, error);
             }
@@ -717,7 +717,7 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
 
                 // attach vertex and index data
                 renderer->AttachShaderBuffer(me->mBuffers[chunkType].mVertexData, 8);
-                if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+                if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan)
                     renderer->AttachVertexArray(me->mBuffers[chunkType].mVertexArray[0]);
                 else
                     renderer->AttachVertexArray2(me->mBuffers[chunkType].mVertexArray[stereoModeInt]);
