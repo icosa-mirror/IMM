@@ -89,6 +89,14 @@ For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.
 
 The native build scaffold writes the GDExtension DLL to `addons/imm_viewer/bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics. The addon is self-contained, so distributing it is just a matter of copying the `addons/imm_viewer/` folder.
 
+Android native addon packaging is built from `code/projects/android`:
+
+```powershell
+.\code\projects\android\build-godot-extension-android.ps1 -Configuration Debug -BuildGodotCpp
+```
+
+That helper builds/stages `libImmGodotPlugin.so` and `libimm_godot_extension.arm64.so` under `addons/imm_viewer/bin/android/debug/`, matching the Android entries in `imm_viewer.gdextension`. It requires the usual Android SDK/NDK `26.1.10909125` for IMM plus NDK `28.1.13356709` for Godot 4.5 `godot-cpp`.
+
 If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` checks the sample/native API boundary, `.gdextension` manifest paths, Forward+ project default, Run-button main scene, script-stub/native scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI/smoke wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the `appImmGodot` syntax-only compile when `clang++` is available. If `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a Godot 4.5 `godot-cpp` checkout with generated bindings, it also syntax-checks the GDExtension sources against the real Godot C++ headers. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -VerifyOnly` runs the same local verification without requiring MSBuild, SCons, or `godot-cpp`.
 
 With Godot installed, add `IMM_GODOT_RUN_LOCAL_SMOKE=1` to `verify_local.py` to run the script-stub smoke scene headlessly. This validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, `load_document()`, `is_loaded()`, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, playback time snapshots/seek math, document/playback/spawn-area signals, native backend signal parity, the camera/viewport queue, and render diagnostics before the native Windows extension is available.

@@ -136,6 +136,28 @@ On macOS, `verify_local.py` also checks `/Applications/Godot.app/Contents/MacOS/
 
 The SCons build stages `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the IMM runtime dependency DLLs in `addons/imm_viewer/bin/windows/{debug,release}` so Godot can resolve native dependencies from the extension directory.
 
+## Android build scaffold
+
+The Android helper builds the native `ImmGodotPlugin` library and the Android GDExtension library, then stages both files in the paths already declared by `addons/imm_viewer/imm_viewer.gdextension`:
+
+```powershell
+.\code\projects\android\build-godot-extension-android.ps1 -Configuration Debug -BuildGodotCpp
+```
+
+Outputs:
+
+- `code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so`
+- `code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so`
+
+Prerequisites:
+
+- Android SDK with NDK `26.1.10909125` for the existing IMM Gradle/CMake modules.
+- Android SDK command-line tools plus NDK `28.1.13356709` for Godot 4.5 `godot-cpp` Android builds.
+- Python and SCons.
+- A Godot 4.5-compatible `godot-cpp` checkout. Pass `-BuildGodotCpp` to build the Android `libgodot-cpp.android.*.arm64.a` library when it is missing.
+
+This is Android packaging coverage for the Godot addon binaries. Runtime verification still requires exporting/running a Godot Android project with the addon enabled on a Vulkan-capable Android device or emulator.
+
 After building the extension and installing Godot 4.5 or newer, run the sample smoke test:
 
 ```powershell

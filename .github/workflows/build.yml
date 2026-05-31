@@ -179,6 +179,8 @@ jobs:
     name: Android
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: ubuntu-latest
+    env:
+      GODOT_CPP_REF: godot-4.5-stable
 
     steps:
     - name: Checkout repository
@@ -198,12 +200,31 @@ jobs:
     - name: Cache Android NDK
       uses: actions/cache@v4
       with:
-        path: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-        key: ndk-${{ runner.os }}-26.1.10909125
+        path: |
+          ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+          ${{ env.ANDROID_SDK_ROOT }}/ndk/28.1.13356709
+        key: ndk-${{ runner.os }}-26.1.10909125-28.1.13356709
 
     - name: Install Android NDK
       run: |
         sdkmanager --install "ndk;26.1.10909125"
+        sdkmanager --install "ndk;28.1.13356709"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install SCons
+      run: python -m pip install scons
+
+    - name: Cache godot-cpp
+      uses: actions/cache@v4
+      with:
+        path: thirdparty/godot-cpp
+        key: godot-cpp-android-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/android/build-godot-extension-android.ps1', 'code/projects/android/appImmGodot/CMakeLists.txt') }}
+        restore-keys: |
+          godot-cpp-android-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-
 
     - name: Build libImmCore
       working-directory: code/projects/android
@@ -230,6 +251,10 @@ jobs:
     - name: Build appImmViewer (Vulkan)
       working-directory: code/projects/android
       run: ./gradlew :appImmViewer:assembleDebug -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan
+
+    - name: Build Android Godot GDExtension
+      shell: pwsh
+      run: .\code\projects\android\build-godot-extension-android.ps1 -Configuration Debug -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
 
     - name: Build appImmViewer (VR)
       working-directory: code/projects/android
@@ -294,6 +319,17 @@ jobs:
         path: |
           code/projects/android/appImmViewer/build_vulkan/outputs/apk/debug/*.apk
         if-no-files-found: error
+
+    - name: Upload Android Godot GDExtension platform binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotGDExtension-Android-platform
+        path: |
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/godot-extension-android-libs.txt
+        if-no-files-found: error
+        retention-days: 1
 
   build-macos:
     name: macOS

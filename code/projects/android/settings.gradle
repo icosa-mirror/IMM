@@ -13,5 +13,8 @@ project(':appImmUnity').projectDir = file('../../appImmUnity/Projects/Android/ap
 include 'appImmViewer'
 project(':appImmViewer').projectDir = file('appImmViewer')
 
+include 'appImmGodot'
+project(':appImmGodot').projectDir = file('appImmGodot')
+
 include 'appImmStrokeReader'
 project(':appImmStrokeReader').projectDir = file('../../appImmStrokeReader/Projects/Android')
