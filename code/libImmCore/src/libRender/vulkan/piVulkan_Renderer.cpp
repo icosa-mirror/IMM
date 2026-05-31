@@ -135,6 +135,12 @@ static constexpr VkImageUsageFlags VK_IMAGE_USAGE_SAMPLED_BIT = 0x00000004;
 static constexpr VkImageUsageFlags VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT = 0x00000010;
 static constexpr VkImageUsageFlags VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT = 0x00000020;
 static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_TRANSFER_SRC_BIT = 0x00000001;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_TRANSFER_DST_BIT = 0x00000002;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT = 0x00000010;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_STORAGE_BUFFER_BIT = 0x00000020;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_INDEX_BUFFER_BIT = 0x00000040;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_VERTEX_BUFFER_BIT = 0x00000080;
+static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT = 0x00000100;
 static constexpr VkSharingMode VK_SHARING_MODE_EXCLUSIVE = 0;
 static constexpr VkCompositeAlphaFlagBitsKHR VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR = 0x00000001;
 static constexpr VkCommandPoolCreateFlags VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT = 0x00000002;
@@ -691,6 +697,9 @@ struct piBufferS
     unsigned int size = 0;
     piRenderer::BufferType type = piRenderer::BufferType::Static;
     piRenderer::BufferUse use = piRenderer::BufferUse::Vertex;
+    VkBuffer buffer = VK_NULL_BUFFER;
+    VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
+    VkBufferUsageFlags usage = 0;
 };
 
 struct piVertexArrayS
@@ -790,6 +799,7 @@ struct piVulkanState
     bool realPresentReported = false;
     bool texturePresentReported = false;
     bool textureImageReported = false;
+    bool bufferReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -1629,6 +1639,132 @@ static bool iFindMemoryType(piVulkanState *state, uint32_t typeBits, VkMemoryPro
         }
     }
     return false;
+}
+
+static VkBufferUsageFlags iBufferUsageFlags(piRenderer::BufferUse use)
+{
+    VkBufferUsageFlags flags = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    switch (use)
+    {
+        case piRenderer::BufferUse::Vertex:
+            flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+            break;
+        case piRenderer::BufferUse::Index:
+            flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            break;
+        case piRenderer::BufferUse::Constant:
+            flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+            break;
+        case piRenderer::BufferUse::ShaderResource:
+        case piRenderer::BufferUse::Atomics:
+            flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            break;
+        case piRenderer::BufferUse::DrawCommands:
+            flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+            break;
+        case piRenderer::BufferUse::Pixel:
+            flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            break;
+        default:
+            break;
+    }
+    return flags;
+}
+
+static bool iUploadBufferData(piVulkanState *state, piBuffer buffer, const void *data, unsigned int offset, unsigned int len, piRenderer::piReporter *reporter)
+{
+    if (!state || !buffer || !data || buffer->memory == VK_NULL_DEVICE_MEMORY || len == 0)
+    {
+        return true;
+    }
+    void *mapped = nullptr;
+    VkResult result = state->vkMapMemory(state->device, buffer->memory, offset, len, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        iError(reporter, "Vulkan renderer failed to map buffer memory");
+        return false;
+    }
+    std::memcpy(mapped, data, len);
+    state->vkUnmapMemory(state->device, buffer->memory);
+    return true;
+}
+
+static bool iCreateBufferObject(piVulkanState *state, piBuffer buffer, const void *data, piRenderer::piReporter *reporter)
+{
+    if (!state || !buffer || state->device == VK_NULL_DEVICE || buffer->size == 0)
+    {
+        return true;
+    }
+    if (!state->vkCreateBuffer || !state->vkGetBufferMemoryRequirements || !state->vkAllocateMemory ||
+        !state->vkBindBufferMemory || !state->vkMapMemory || !state->vkUnmapMemory)
+    {
+        return true;
+    }
+
+    buffer->usage = iBufferUsageFlags(buffer->use);
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = buffer->size;
+    bufferInfo.usage = buffer->usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkResult result = state->vkCreateBuffer(state->device, &bufferInfo, nullptr, &buffer->buffer);
+    if (result != VK_SUCCESS || buffer->buffer == VK_NULL_BUFFER)
+    {
+        iError(reporter, "Vulkan renderer failed to create buffer");
+        buffer->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    VkMemoryRequirements requirements = {};
+    state->vkGetBufferMemoryRequirements(state->device, buffer->buffer, &requirements);
+    uint32_t memoryTypeIndex = 0;
+    if (!iFindMemoryType(state, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &memoryTypeIndex))
+    {
+        iError(reporter, "Vulkan renderer failed to find host-visible buffer memory");
+        state->vkDestroyBuffer(state->device, buffer->buffer, nullptr);
+        buffer->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex = memoryTypeIndex;
+    result = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, &buffer->memory);
+    if (result != VK_SUCCESS || buffer->memory == VK_NULL_DEVICE_MEMORY)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate buffer memory");
+        state->vkDestroyBuffer(state->device, buffer->buffer, nullptr);
+        buffer->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    result = state->vkBindBufferMemory(state->device, buffer->buffer, buffer->memory, 0);
+    if (result != VK_SUCCESS)
+    {
+        iError(reporter, "Vulkan renderer failed to bind buffer memory");
+        state->vkFreeMemory(state->device, buffer->memory, nullptr);
+        state->vkDestroyBuffer(state->device, buffer->buffer, nullptr);
+        buffer->memory = VK_NULL_DEVICE_MEMORY;
+        buffer->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    if (data && !iUploadBufferData(state, buffer, data, 0, buffer->size, reporter))
+    {
+        state->vkFreeMemory(state->device, buffer->memory, nullptr);
+        state->vkDestroyBuffer(state->device, buffer->buffer, nullptr);
+        buffer->memory = VK_NULL_DEVICE_MEMORY;
+        buffer->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    if (!state->bufferReported)
+    {
+        iReport(reporter, "Vulkan renderer created VkBuffer-backed renderer buffer");
+        state->bufferReported = true;
+    }
+    return true;
 }
 
 static bool iToVulkanTextureFormat(piRenderer::Format format, VkFormat *outFormat, bool *outDepth)
@@ -2888,12 +3024,67 @@ void piRendererVulkan::DettachShaderBuffer(int unit) { if (mState && unit >= 0 &
 void piRendererVulkan::AttachAtomicsBuffer(piBuffer obj, int unit) { (void)obj; (void)unit; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::Atomics, "Vulkan atomic buffers are not implemented yet"); }
 void piRendererVulkan::DettachAtomicsBuffer(int unit) { (void)unit; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::Atomics, "Vulkan atomic buffers are not implemented yet"); }
 
-piBuffer piRendererVulkan::CreateBuffer(const void *data, unsigned int amount, BufferType mode, BufferUse use) { if (amount == 0) return nullptr; piBufferS *buffer = new piBufferS(); buffer->size = amount; buffer->type = mode; buffer->use = use; buffer->data = (uint8_t *)std::malloc(amount); if (!buffer->data) { delete buffer; return nullptr; } if (data) std::memcpy(buffer->data, data, amount); else std::memset(buffer->data, 0, amount); if (mState) ++mState->liveBuffers; return buffer; }
+piBuffer piRendererVulkan::CreateBuffer(const void *data, unsigned int amount, BufferType mode, BufferUse use)
+{
+    if (amount == 0) return nullptr;
+    piBufferS *buffer = new piBufferS();
+    buffer->size = amount;
+    buffer->type = mode;
+    buffer->use = use;
+    buffer->data = (uint8_t *)std::malloc(amount);
+    if (!buffer->data)
+    {
+        delete buffer;
+        return nullptr;
+    }
+    if (data) std::memcpy(buffer->data, data, amount);
+    else std::memset(buffer->data, 0, amount);
+    if (mState && !iCreateBufferObject(mState, buffer, data ? data : buffer->data, mReporter))
+    {
+        std::free(buffer->data);
+        delete buffer;
+        return nullptr;
+    }
+    if (mState) ++mState->liveBuffers;
+    return buffer;
+}
 piBuffer piRendererVulkan::CreateStructuredBuffer(const void *data, unsigned int numElements, unsigned int elementSize, BufferType mode, BufferUse use) { return CreateBuffer(data, numElements * elementSize, mode, use); }
 piBuffer piRendererVulkan::CreateBufferMapped_Start(void **ptr, unsigned int amount, BufferUse use) { piBuffer buffer = CreateBuffer(nullptr, amount, BufferType::Dynamic, use); if (ptr) *ptr = buffer ? buffer->data : nullptr; return buffer; }
-void piRendererVulkan::CreateBufferMapped_End(piBuffer vme) { (void)vme; }
-void piRendererVulkan::DestroyBuffer(piBuffer obj) { if (!obj) return; std::free(obj->data); if (mState && mState->liveBuffers > 0) --mState->liveBuffers; delete obj; }
-void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, int len, bool invalidate) { (void)invalidate; if (!obj || !data || offset < 0 || len < 0 || (unsigned int)(offset + len) > obj->size) return; std::memcpy(obj->data + offset, data, (size_t)len); }
+void piRendererVulkan::CreateBufferMapped_End(piBuffer vme)
+{
+    if (!vme || !mState) return;
+    iUploadBufferData(mState, vme, vme->data, 0, vme->size, mReporter);
+}
+void piRendererVulkan::DestroyBuffer(piBuffer obj)
+{
+    if (!obj) return;
+    if (mState && mState->device != VK_NULL_DEVICE)
+    {
+        if (obj->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+        {
+            mState->vkDestroyBuffer(mState->device, obj->buffer, nullptr);
+            obj->buffer = VK_NULL_BUFFER;
+        }
+        if (obj->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, obj->memory, nullptr);
+            obj->memory = VK_NULL_DEVICE_MEMORY;
+        }
+    }
+    std::free(obj->data);
+    if (mState && mState->liveBuffers > 0) --mState->liveBuffers;
+    delete obj;
+}
+void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, int len, bool invalidate)
+{
+    (void)invalidate;
+    if (!obj || !data || offset < 0 || len < 0 || (unsigned int)(offset + len) > obj->size) return;
+    std::memcpy(obj->data + offset, data, (size_t)len);
+    if (mState)
+    {
+        iUploadBufferData(mState, obj, data, (unsigned int)offset, (unsigned int)len, mReporter);
+    }
+}
 void piRendererVulkan::AttachPixelPackBuffer(piBuffer obj) { (void)obj; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::PixelPackBuffer, "Vulkan pixel pack buffers are not implemented yet"); }
 void piRendererVulkan::DettachPixelPackBuffer(void) { iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::PixelPackBuffer, "Vulkan pixel pack buffers are not implemented yet"); }
 
