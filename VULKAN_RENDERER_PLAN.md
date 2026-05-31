@@ -24,18 +24,19 @@
 
 ## Implementation tasks
 
-1. [in progress] Create `piVulkan_Renderer.h/.cpp` with the full `piRenderer` implementation surface.
-2. [in progress] Support two initialization paths:
+1. [complete] Create `piVulkan_Renderer.h/.cpp` with the full `piRenderer` implementation surface.
+2. [complete] Support two initialization paths:
    - externally supplied Vulkan handles through an opaque config struct;
    - self-created Vulkan instance/device/queue for smoke/build validation.
-3. [pending] Add minimal Vulkan resource wrappers for textures, buffers, samplers, render targets, shaders, vertex arrays, fixed states, and CPU timing queries.
-4. [pending] Add one-time reporter diagnostics for unsupported shader compilation, draw submission, render target operations, image bindings, compute, atomics, and pixel pack buffers.
+3. [complete] Add minimal Vulkan resource wrappers for textures, buffers, samplers, render targets, shaders, vertex arrays, fixed states, and CPU timing queries.
+4. [complete] Add one-time reporter diagnostics for unsupported shader compilation, draw submission, render target operations, image bindings, compute, atomics, and pixel pack buffers.
 5. [complete] Register `API::Vulkan` in `piRenderer::Create` for Windows and Android.
-6. [pending] Update Windows project files to build the Vulkan source and link the Vulkan loader.
-7. [pending] Add Windows standalone viewer selection for Vulkan.
-8. [pending] Update shared bridge/Godot API names so Vulkan can be requested explicitly on Windows and Android while preserving existing defaults.
-9. [pending] Verify with the closest available Windows standalone build.
+6. [complete] Update Windows project files to build the Vulkan source and link/load the Vulkan loader.
+7. [complete] Add Windows standalone viewer selection for Vulkan.
+8. [complete] Update shared bridge/Godot API names so Vulkan can be requested explicitly on Windows and Android while preserving existing defaults.
+9. [complete] Verify with the closest available Windows standalone build.
 10. [pending] Update Android CMake to build the Vulkan source and link `vulkan` after Windows verification.
+11. [complete] Add a separate Windows standalone Vulkan smoke settings file without changing the default viewer config.
 
 ## Follow-up work after this pass
 
@@ -44,3 +45,10 @@
 - Implement descriptor set layout generation for constants, textures, samplers, and storage buffers.
 - Implement render pass/framebuffer compatibility, pipeline cache keys, and draw submission.
 - Add Android runtime smoke tests that validate initialization, selected API logging, and a simple nonblank Vulkan render once draw paths exist.
+
+## Verification notes
+
+- Windows `libImmCore` Debug builds with `piVulkan_Renderer.cpp`.
+- Windows `appImmViewer` Debug builds successfully with Vulkan selectable from settings.
+- Existing OpenGL standalone smoke reached IMM CPU/GPU load and playback start before manual termination.
+- Vulkan standalone smoke using `code/appImmViewer/exe/settings-vulkan-smoke.json` initialized an owned Vulkan device, reached renderer initialization, loaded `sample1.imm`, and emitted the expected placeholder diagnostics for render target binding and draw submission.

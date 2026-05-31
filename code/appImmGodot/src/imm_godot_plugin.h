@@ -24,6 +24,7 @@ extern "C"
         ImmGodotRendererApi_Direct3D = 2,
         ImmGodotRendererApi_GLES = 3,
         ImmGodotRendererApi_Metal = 4,
+        ImmGodotRendererApi_Vulkan = 5,
     };
 
     enum ImmGodotMetalFrameMode

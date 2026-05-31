@@ -100,6 +100,8 @@ namespace
             return piRenderer::API::GLES;
         case ImmGodotRendererApi_Metal:
             return piRenderer::API::Metal;
+        case ImmGodotRendererApi_Vulkan:
+            return piRenderer::API::Vulkan;
         case ImmGodotRendererApi_Auto:
         default:
 #if defined(__APPLE__)

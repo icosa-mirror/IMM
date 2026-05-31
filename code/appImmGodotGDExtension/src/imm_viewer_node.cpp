@@ -130,7 +130,7 @@ void ImmViewerNode::_bind_methods()
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "volume", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_volume", "get_volume");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_logging"), "set_debug_logging", "get_debug_logging");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "color_space", PROPERTY_HINT_ENUM, "Linear,Gamma"), "set_color_space", "get_color_space");
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "renderer_api", PROPERTY_HINT_ENUM, "Auto,OpenGL,Direct3D,GLES,Metal"), "set_renderer_api", "get_renderer_api");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "renderer_api", PROPERTY_HINT_ENUM, "Auto,OpenGL,Direct3D,GLES,Metal,Vulkan"), "set_renderer_api", "get_renderer_api");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "antialiasing", PROPERTY_HINT_RANGE, "1,16,1"), "set_antialiasing", "get_antialiasing");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "log_file_path"), "set_log_file_path", "get_log_file_path");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "tmp_folder_path"), "set_tmp_folder_path", "get_tmp_folder_path");
@@ -278,7 +278,7 @@ int ImmViewerNode::get_color_space() const
 
 void ImmViewerNode::set_renderer_api(int value)
 {
-    _renderer_api = CLAMP(value, ImmGodotRendererApi_Auto, ImmGodotRendererApi_Metal);
+    _renderer_api = CLAMP(value, ImmGodotRendererApi_Auto, ImmGodotRendererApi_Vulkan);
 }
 
 int ImmViewerNode::get_renderer_api() const
@@ -1536,9 +1536,13 @@ PackedFloat32Array ImmViewerNode::make_perspective_projection(float fov_degrees,
     const float f = 1.0f / std::tan((fov_degrees * 0.017453292519943295769f) * 0.5f);
     const float depth = z_near - z_far;
 #if defined(__APPLE__)
-    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
+    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Auto ||
+                                        _renderer_api == ImmGodotRendererApi_Metal ||
+                                        _renderer_api == ImmGodotRendererApi_Vulkan;
 #else
-    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Metal || _renderer_api == ImmGodotRendererApi_Direct3D;
+    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Metal ||
+                                        _renderer_api == ImmGodotRendererApi_Direct3D ||
+                                        _renderer_api == ImmGodotRendererApi_Vulkan;
 #endif
 
     PackedFloat32Array result;

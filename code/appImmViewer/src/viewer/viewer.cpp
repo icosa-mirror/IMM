@@ -47,7 +47,10 @@ bool Viewer::Init(const char *appID_DELETE_ME_THIS_IS_A_HACK, piRenderer* render
     conf.depthBuffer = DepthBuffer::Linear01;
     conf.clipDepth = (mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::GL || mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::GLES) ?
         ClipSpaceDepth::FromNegativeOneToOne : ClipSpaceDepth::FromZeroToOne;
-    conf.projectionMatrix = ClipSpaceDepth::FromNegativeOneToOne;
+    conf.projectionMatrix = (mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::DX ||
+                             mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::Metal ||
+                             mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::Vulkan) ?
+        ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
     conf.frontIsCCW = true;
     conf.paintRenderingTechnique = static_cast<Drawing::PaintRenderingTechnique>(mPlayerSettings->mRendering.mRenderingTechnique);
 

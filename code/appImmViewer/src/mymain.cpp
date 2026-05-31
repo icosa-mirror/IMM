@@ -487,6 +487,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     const wchar_t *renderingBackend =
         (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::DX) ? L"DirectX" :
         (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Metal) ? L"Metal" :
+        (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Vulkan) ? L"Vulkan" :
         (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::GLES) ? L"OpenGLES" :
         L"OpenGL";
     mLog.Printf(LT_MESSAGE, L"Rendering Backened: %s", renderingBackend);
@@ -512,6 +513,10 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     else if (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Metal)
     {
         rendererAPI = piRenderer::API::Metal;
+    }
+    else if (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Vulkan)
+    {
+        rendererAPI = piRenderer::API::Vulkan;
     }
 
     mRenderer = piRenderer::Create(rendererAPI);

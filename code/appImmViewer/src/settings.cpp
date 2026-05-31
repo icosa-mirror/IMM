@@ -176,6 +176,7 @@ namespace ExePlayer
                      if (str == L"opengl" ) mRendering.mRenderingAPI = Rendering::API::GL;
                 else if (str == L"directx") mRendering.mRenderingAPI = Rendering::API::DX;
                 else if (str == L"metal"  ) mRendering.mRenderingAPI = Rendering::API::Metal;
+                else if (str == L"vulkan" ) mRendering.mRenderingAPI = Rendering::API::Vulkan;
                 else return false;
             }
 

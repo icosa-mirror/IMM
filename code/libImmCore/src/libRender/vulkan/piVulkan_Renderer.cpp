@@ -4,13 +4,111 @@
 //
 #include "piVulkan_Renderer.h"
 
-#include <vulkan/vulkan.h>
-
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 
+#if defined(WINDOWS)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 namespace ImmCore {
+
+typedef uint32_t VkFlags;
+typedef uint32_t VkBool32;
+typedef int32_t VkResult;
+typedef uint32_t VkStructureType;
+typedef uint32_t VkQueueFlags;
+typedef struct VkInstance_T *VkInstance;
+typedef struct VkPhysicalDevice_T *VkPhysicalDevice;
+typedef struct VkDevice_T *VkDevice;
+typedef struct VkQueue_T *VkQueue;
+
+static constexpr VkInstance VK_NULL_INSTANCE = nullptr;
+static constexpr VkPhysicalDevice VK_NULL_PHYSICAL_DEVICE = nullptr;
+static constexpr VkDevice VK_NULL_DEVICE = nullptr;
+static constexpr VkQueue VK_NULL_QUEUE = nullptr;
+static constexpr VkResult VK_SUCCESS = 0;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO = 2;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO = 3;
+static constexpr VkQueueFlags VK_QUEUE_GRAPHICS_BIT = 0x00000001;
+
+#define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
+#define IMM_VK_API_VERSION_1_0 IMM_VK_MAKE_VERSION(1, 0, 0)
+
+struct VkApplicationInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    const char *pApplicationName;
+    uint32_t applicationVersion;
+    const char *pEngineName;
+    uint32_t engineVersion;
+    uint32_t apiVersion;
+};
+
+struct VkInstanceCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    const VkApplicationInfo *pApplicationInfo;
+    uint32_t enabledLayerCount;
+    const char *const *ppEnabledLayerNames;
+    uint32_t enabledExtensionCount;
+    const char *const *ppEnabledExtensionNames;
+};
+
+struct VkDeviceQueueCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    uint32_t queueFamilyIndex;
+    uint32_t queueCount;
+    const float *pQueuePriorities;
+};
+
+struct VkDeviceCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    uint32_t queueCreateInfoCount;
+    const VkDeviceQueueCreateInfo *pQueueCreateInfos;
+    uint32_t enabledLayerCount;
+    const char *const *ppEnabledLayerNames;
+    uint32_t enabledExtensionCount;
+    const char *const *ppEnabledExtensionNames;
+    const void *pEnabledFeatures;
+};
+
+struct VkQueueFamilyProperties
+{
+    VkQueueFlags queueFlags;
+    uint32_t queueCount;
+    uint32_t timestampValidBits;
+    struct
+    {
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth;
+    } minImageTransferGranularity;
+};
+
+typedef void (*PFN_vkVoidFunction)(void);
+typedef PFN_vkVoidFunction (*PFN_vkGetInstanceProcAddr)(VkInstance instance, const char *name);
+typedef VkResult (*PFN_vkCreateInstance)(const VkInstanceCreateInfo *createInfo, const void *allocator, VkInstance *instance);
+typedef void (*PFN_vkDestroyInstance)(VkInstance instance, const void *allocator);
+typedef VkResult (*PFN_vkEnumeratePhysicalDevices)(VkInstance instance, uint32_t *physicalDeviceCount, VkPhysicalDevice *physicalDevices);
+typedef void (*PFN_vkGetPhysicalDeviceQueueFamilyProperties)(VkPhysicalDevice physicalDevice, uint32_t *queueFamilyPropertyCount, VkQueueFamilyProperties *queueFamilyProperties);
+typedef VkResult (*PFN_vkCreateDevice)(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *createInfo, const void *allocator, VkDevice *device);
+typedef void (*PFN_vkDestroyDevice)(VkDevice device, const void *allocator);
+typedef void (*PFN_vkGetDeviceQueue)(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue *queue);
+typedef VkResult (*PFN_vkDeviceWaitIdle)(VkDevice device);
 
 struct piShaderS
 {
@@ -103,10 +201,22 @@ enum class piVulkanUnsupportedFeature : int
 
 struct piVulkanState
 {
-    VkInstance instance = VK_NULL_HANDLE;
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    VkDevice device = VK_NULL_HANDLE;
-    VkQueue graphicsQueue = VK_NULL_HANDLE;
+    VkInstance instance = VK_NULL_INSTANCE;
+    VkPhysicalDevice physicalDevice = VK_NULL_PHYSICAL_DEVICE;
+    VkDevice device = VK_NULL_DEVICE;
+    VkQueue graphicsQueue = VK_NULL_QUEUE;
+#if defined(WINDOWS)
+    HMODULE vulkanLibrary = nullptr;
+#endif
+    PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
+    PFN_vkCreateInstance vkCreateInstance = nullptr;
+    PFN_vkDestroyInstance vkDestroyInstance = nullptr;
+    PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
+    PFN_vkCreateDevice vkCreateDevice = nullptr;
+    PFN_vkDestroyDevice vkDestroyDevice = nullptr;
+    PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
+    PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
     uint32_t graphicsQueueFamilyIndex = 0;
     bool ownsInstance = false;
     bool ownsDevice = false;
@@ -200,29 +310,95 @@ static size_t iTextureDataSize(const piRenderer::TextureInfo *info)
     return (size_t)info->mXres * (size_t)info->mYres * (size_t)info->mZres * bytesPerPixel;
 }
 
+static bool iLoadVulkanEntryPoints(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state)
+    {
+        return false;
+    }
+
+#if defined(WINDOWS)
+    state->vulkanLibrary = LoadLibraryW(L"vulkan-1.dll");
+    if (!state->vulkanLibrary)
+    {
+        iError(reporter, "Vulkan renderer could not load vulkan-1.dll");
+        return false;
+    }
+    state->vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(state->vulkanLibrary, "vkGetInstanceProcAddr");
+#else
+    iError(reporter, "Vulkan dynamic loading is not implemented for this platform yet");
+    return false;
+#endif
+
+    if (!state->vkGetInstanceProcAddr)
+    {
+        iError(reporter, "Vulkan renderer could not load vkGetInstanceProcAddr");
+        return false;
+    }
+
+    state->vkCreateInstance = (PFN_vkCreateInstance)state->vkGetInstanceProcAddr(nullptr, "vkCreateInstance");
+    if (!state->vkCreateInstance)
+    {
+        iError(reporter, "Vulkan renderer could not load vkCreateInstance");
+        return false;
+    }
+    return true;
+}
+
+static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || !state->vkGetInstanceProcAddr || !state->instance)
+    {
+        return false;
+    }
+    state->vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)state->vkGetInstanceProcAddr(state->instance, "vkEnumeratePhysicalDevices");
+    state->vkDestroyInstance = (PFN_vkDestroyInstance)state->vkGetInstanceProcAddr(state->instance, "vkDestroyInstance");
+    state->vkGetPhysicalDeviceQueueFamilyProperties = (PFN_vkGetPhysicalDeviceQueueFamilyProperties)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+    state->vkCreateDevice = (PFN_vkCreateDevice)state->vkGetInstanceProcAddr(state->instance, "vkCreateDevice");
+    state->vkDestroyDevice = (PFN_vkDestroyDevice)state->vkGetInstanceProcAddr(state->instance, "vkDestroyDevice");
+    state->vkGetDeviceQueue = (PFN_vkGetDeviceQueue)state->vkGetInstanceProcAddr(state->instance, "vkGetDeviceQueue");
+    state->vkDeviceWaitIdle = (PFN_vkDeviceWaitIdle)state->vkGetInstanceProcAddr(state->instance, "vkDeviceWaitIdle");
+    if (!state->vkDestroyInstance || !state->vkEnumeratePhysicalDevices || !state->vkGetPhysicalDeviceQueueFamilyProperties ||
+        !state->vkCreateDevice || !state->vkDestroyDevice || !state->vkGetDeviceQueue || !state->vkDeviceWaitIdle)
+    {
+        iError(reporter, "Vulkan renderer could not load required Vulkan entry points");
+        return false;
+    }
+    return true;
+}
+
 static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporter *reporter)
 {
+    if (!iLoadVulkanEntryPoints(state, reporter))
+    {
+        return false;
+    }
+
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName = "IMM Vulkan Renderer";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.applicationVersion = IMM_VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "IMM";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.engineVersion = IMM_VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = IMM_VK_API_VERSION_1_0;
 
     VkInstanceCreateInfo instanceInfo = {};
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceInfo.pApplicationInfo = &appInfo;
-    VkResult result = vkCreateInstance(&instanceInfo, nullptr, &state->instance);
+    VkResult result = state->vkCreateInstance(&instanceInfo, nullptr, &state->instance);
     if (result != VK_SUCCESS)
     {
         iError(reporter, "Vulkan renderer failed to create VkInstance");
         return false;
     }
     state->ownsInstance = true;
+    if (!iLoadVulkanInstanceEntryPoints(state, reporter))
+    {
+        return false;
+    }
 
     uint32_t physicalDeviceCount = 0;
-    result = vkEnumeratePhysicalDevices(state->instance, &physicalDeviceCount, nullptr);
+    result = state->vkEnumeratePhysicalDevices(state->instance, &physicalDeviceCount, nullptr);
     if (result != VK_SUCCESS || physicalDeviceCount == 0)
     {
         iError(reporter, "Vulkan renderer found no physical devices");
@@ -234,7 +410,7 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     {
         physicalDeviceCount = 8;
     }
-    result = vkEnumeratePhysicalDevices(state->instance, &physicalDeviceCount, physicalDevices);
+    result = state->vkEnumeratePhysicalDevices(state->instance, &physicalDeviceCount, physicalDevices);
     if (result != VK_SUCCESS || physicalDeviceCount == 0)
     {
         iError(reporter, "Vulkan renderer failed to enumerate physical devices");
@@ -243,7 +419,7 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     state->physicalDevice = physicalDevices[0];
 
     uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(state->physicalDevice, &queueFamilyCount, nullptr);
+    state->vkGetPhysicalDeviceQueueFamilyProperties(state->physicalDevice, &queueFamilyCount, nullptr);
     if (queueFamilyCount == 0)
     {
         iError(reporter, "Vulkan renderer found no queue families");
@@ -255,7 +431,7 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     {
         queueFamilyCount = 32;
     }
-    vkGetPhysicalDeviceQueueFamilyProperties(state->physicalDevice, &queueFamilyCount, queueFamilies);
+    state->vkGetPhysicalDeviceQueueFamilyProperties(state->physicalDevice, &queueFamilyCount, queueFamilies);
     bool foundGraphicsQueue = false;
     for (uint32_t i = 0; i < queueFamilyCount; ++i)
     {
@@ -283,15 +459,15 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.queueCreateInfoCount = 1;
     deviceInfo.pQueueCreateInfos = &queueInfo;
-    result = vkCreateDevice(state->physicalDevice, &deviceInfo, nullptr, &state->device);
+    result = state->vkCreateDevice(state->physicalDevice, &deviceInfo, nullptr, &state->device);
     if (result != VK_SUCCESS)
     {
         iError(reporter, "Vulkan renderer failed to create VkDevice");
         return false;
     }
     state->ownsDevice = true;
-    vkGetDeviceQueue(state->device, state->graphicsQueueFamilyIndex, 0, &state->graphicsQueue);
-    return state->graphicsQueue != VK_NULL_HANDLE;
+    state->vkGetDeviceQueue(state->device, state->graphicsQueueFamilyIndex, 0, &state->graphicsQueue);
+    return state->graphicsQueue != VK_NULL_QUEUE;
 }
 
 piRendererVulkan::piRendererVulkan()
@@ -347,15 +523,30 @@ void piRendererVulkan::Deinitialize(void)
     {
         return;
     }
-    if (mState->ownsDevice && mState->device != VK_NULL_HANDLE)
+    if (mState->ownsDevice && mState->device != VK_NULL_DEVICE)
     {
-        vkDeviceWaitIdle(mState->device);
-        vkDestroyDevice(mState->device, nullptr);
+        if (mState->vkDeviceWaitIdle)
+        {
+            mState->vkDeviceWaitIdle(mState->device);
+        }
+        if (mState->vkDestroyDevice)
+        {
+            mState->vkDestroyDevice(mState->device, nullptr);
+        }
     }
-    if (mState->ownsInstance && mState->instance != VK_NULL_HANDLE)
+    if (mState->ownsInstance && mState->instance != VK_NULL_INSTANCE)
     {
-        vkDestroyInstance(mState->instance, nullptr);
+        if (mState->vkDestroyInstance)
+        {
+            mState->vkDestroyInstance(mState->instance, nullptr);
+        }
     }
+#if defined(WINDOWS)
+    if (mState->vulkanLibrary)
+    {
+        FreeLibrary(mState->vulkanLibrary);
+    }
+#endif
     delete mState;
     mState = nullptr;
 }

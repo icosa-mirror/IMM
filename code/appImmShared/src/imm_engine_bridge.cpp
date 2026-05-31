@@ -478,8 +478,16 @@ namespace ImmShared
             return false;
         }
 
-        const char *apiName[] = { "GL", "DX", "GLES", "Metal" };
-        wchar_t *apiNameWide = pistr2ws(apiName[static_cast<int>(mConfig.rendererApi)]);
+        const char *apiName = "unknown";
+        switch (mConfig.rendererApi)
+        {
+        case piRenderer::API::GL: apiName = "GL"; break;
+        case piRenderer::API::DX: apiName = "DX"; break;
+        case piRenderer::API::GLES: apiName = "GLES"; break;
+        case piRenderer::API::Metal: apiName = "Metal"; break;
+        case piRenderer::API::Vulkan: apiName = "Vulkan"; break;
+        }
+        wchar_t *apiNameWide = pistr2ws(apiName);
         mLog.Printf(LT_DEBUG, L"API: %s", (apiNameWide == nullptr) ? L"unknown" : apiNameWide);
         if (apiNameWide != nullptr)
             std::free(apiNameWide);
@@ -523,7 +531,9 @@ namespace ImmShared
         Player::Configuration conf = {};
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
-        const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal);
+        const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
+                                         mConfig.rendererApi == piRenderer::API::Metal ||
+                                         mConfig.rendererApi == piRenderer::API::Vulkan);
         conf.depthBuffer = DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
