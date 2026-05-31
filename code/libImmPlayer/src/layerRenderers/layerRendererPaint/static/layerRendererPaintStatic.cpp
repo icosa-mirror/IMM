@@ -53,10 +53,25 @@ namespace ImmPlayer
         return (value && value[0]) ? atoi(value) : -1;
     }
 
-    static int iForcedPaintLayerId()
+    static bool iPaintLayerAllowed(uint32_t layerId)
     {
-        const char *value = std::getenv("IMM_FORCE_PAINT_LAYER_ID");
-        return (value && value[0]) ? atoi(value) : -1;
+        const char *value = std::getenv("IMM_FORCE_PAINT_LAYER_IDS");
+        if (value && value[0])
+        {
+            const char *cursor = value;
+            while (*cursor)
+            {
+                char *end = nullptr;
+                const long id = strtol(cursor, &end, 10);
+                if (end != cursor && id >= 0 && static_cast<uint32_t>(id) == layerId) return true;
+                cursor = (*end == ',') ? end + 1 : end;
+                if (cursor == end) break;
+            }
+            return false;
+        }
+
+        value = std::getenv("IMM_FORCE_PAINT_LAYER_ID");
+        return !(value && value[0]) || static_cast<uint32_t>(atoi(value)) == layerId;
     }
 
     
@@ -650,7 +665,6 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
 
         const int forcedBrushType = iForcedPaintBrushType();
-        const int forcedLayerId = iForcedPaintLayerId();
         const bool traceDraws = std::getenv("IMM_TRACE_STATIC_PAINT_DRAWS") != nullptr;
         int lastShaderID = -1;
         int lastStateID = -1;
@@ -690,7 +704,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         for (uint64_t j = 0; j < numToRender; j++)
         {
             const uint32_t id = mVisibleLayerInfos.GetUInt32(j);
-            if (forcedLayerId >= 0 && id != static_cast<uint32_t>(forcedLayerId)) continue;
+            if (!iPaintLayerAllowed(id)) continue;
 
             iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(id);
 
