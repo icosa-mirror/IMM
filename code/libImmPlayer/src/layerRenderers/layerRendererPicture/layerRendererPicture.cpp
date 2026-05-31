@@ -52,6 +52,8 @@ namespace ImmPlayer
 #if defined(WINDOWS)
 #include "tmp/shader_pip360Equirect_vs_hlsl.inc"
 #include "tmp/shader_pip360Equirect_fs_hlsl.inc"
+#include "tmp/shader_pip360Equirect_vs_spirv.inc"
+#include "tmp/shader_pip360Equirect_fs_spirv.inc"
 #include "tmp/shader_pi2D_vs_hlsl.inc"
 #include "tmp/shader_pi2D_fs_hlsl.inc"
 #include "shader_pi2D_vs.glsl"
@@ -275,6 +277,32 @@ namespace ImmPlayer
             else
             {
 #if defined(WINDOWS)
+                if (renderer->GetAPI() == piRenderer::API::Vulkan)
+                {
+                    const piShaderOptions opts = { 5,{
+                        { "PICTURE", 1 },
+                        { "COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i },
+                        { "FORMAT_IS_STEREO", 0 },
+                        { "DEBUG_RENDER_MODE", j },
+                    } };
+                    piShader shader = renderer->CreateShaderBinary(&opts,
+                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[0]), shader_pip360Equirect_vs_spirv_size[0],
+                        nullptr, 0, nullptr, 0, nullptr, 0,
+                        reinterpret_cast<const uint8_t*>(shader_pip360Equirect_fs_spirv_code[0]), shader_pip360Equirect_fs_spirv_size[0],
+                        error);
+                    if (!shader)
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Vulkan picture image layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+                    mShaders[idx][LayerPicture::Image2D] = shader;
+                    mShaders[idx][LayerPicture::Image360EquirectMono] = shader;
+                    mShaders[idx][LayerPicture::Image360EquirectStereo] = shader;
+                    mShaders[idx][LayerPicture::Image360CubemapCrossMono] = shader;
+                    mShaders[idx][LayerPicture::Image360CubemapVstripMono] = shader;
+                    continue;
+                }
                 const int poff = 3 * (static_cast<int>(colorSpace));
 
                 mShaders[idx][LayerPicture::Image2D] = renderer->CreateShaderBinary(nullptr, shader_pi2D_vs_code[i], shader_pi2D_vs_size[i], nullptr, 0, nullptr, 0, nullptr, 0, shader_pi2D_fs_code[i + poff], shader_pi2D_fs_size[i + poff], error);

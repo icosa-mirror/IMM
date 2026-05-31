@@ -93,6 +93,7 @@ typedef uint32_t VkBlendOp;
 typedef uint32_t VkDynamicState;
 typedef uint32_t VkLogicOp;
 typedef uint32_t VkIndexType;
+typedef uint32_t VkVertexInputRate;
 typedef uint32_t VkAttachmentDescriptionFlags;
 typedef uint32_t VkAttachmentLoadOp;
 typedef uint32_t VkAttachmentStoreOp;
@@ -182,6 +183,9 @@ static constexpr VkFormat VK_FORMAT_B8G8R8A8_UNORM = 44;
 static constexpr VkFormat VK_FORMAT_R8G8B8A8_UNORM = 37;
 static constexpr VkFormat VK_FORMAT_R8G8B8A8_SRGB = 43;
 static constexpr VkFormat VK_FORMAT_R8_UNORM = 9;
+static constexpr VkFormat VK_FORMAT_R32_SFLOAT = 100;
+static constexpr VkFormat VK_FORMAT_R32G32_SFLOAT = 103;
+static constexpr VkFormat VK_FORMAT_R32G32B32_SFLOAT = 106;
 static constexpr VkFormat VK_FORMAT_R16G16B16A16_SFLOAT = 97;
 static constexpr VkFormat VK_FORMAT_R32G32B32A32_SFLOAT = 109;
 static constexpr VkFormat VK_FORMAT_B10G11R11_UFLOAT_PACK32 = 122;
@@ -213,12 +217,15 @@ static constexpr VkCommandBufferUsageFlags VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBM
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT = 0x00000001;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_TRANSFER_BIT = 0x00001000;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT = 0x00000080;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT = 0x00000100;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT = 0x00000200;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 0x00000400;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = 0x00002000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_WRITE_BIT = 0x00001000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_READ_BIT = 0x00000800;
 static constexpr VkAccessFlags VK_ACCESS_SHADER_READ_BIT = 0x00000020;
 static constexpr VkAccessFlags VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT = 0x00000100;
+static constexpr VkAccessFlags VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT = 0x00000400;
 static constexpr VkAccessFlags VK_ACCESS_MEMORY_READ_BIT = 0x00008000;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_UNDEFINED = 0;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL = 5;
@@ -253,13 +260,16 @@ static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE = 2;
 static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE = 3;
 static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER = 4;
 static constexpr VkCompareOp VK_COMPARE_OP_ALWAYS = 7;
+static constexpr VkCompareOp VK_COMPARE_OP_LESS_OR_EQUAL = 3;
 static constexpr VkBorderColor VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = 0;
 static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER = 1;
 static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 6;
 static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_STORAGE_BUFFER = 7;
 static constexpr VkShaderStageFlags VK_SHADER_STAGE_VERTEX_BIT = 0x00000001;
 static constexpr VkShaderStageFlags VK_SHADER_STAGE_FRAGMENT_BIT = 0x00000010;
+static constexpr VkPrimitiveTopology VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST = 3;
 static constexpr VkPrimitiveTopology VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP = 4;
+static constexpr VkVertexInputRate VK_VERTEX_INPUT_RATE_VERTEX = 0;
 static constexpr VkPolygonMode VK_POLYGON_MODE_FILL = 0;
 static constexpr VkPolygonMode VK_POLYGON_MODE_LINE = 1;
 static constexpr VkCullModeFlags VK_CULL_MODE_NONE = 0;
@@ -577,6 +587,12 @@ union VkClearColorValue
     uint32_t uint32[4];
 };
 
+struct VkClearDepthStencilValue
+{
+    float depth;
+    uint32_t stencil;
+};
+
 union VkClearValue
 {
     VkClearColorValue color;
@@ -735,6 +751,21 @@ struct VkPipelineVertexInputStateCreateInfo
     const void *pVertexBindingDescriptions;
     uint32_t vertexAttributeDescriptionCount;
     const void *pVertexAttributeDescriptions;
+};
+
+struct VkVertexInputBindingDescription
+{
+    uint32_t binding;
+    uint32_t stride;
+    VkVertexInputRate inputRate;
+};
+
+struct VkVertexInputAttributeDescription
+{
+    uint32_t location;
+    uint32_t binding;
+    VkFormat format;
+    uint32_t offset;
 };
 
 struct VkPipelineInputAssemblyStateCreateInfo
@@ -1044,6 +1075,7 @@ typedef VkResult (*PFN_vkBeginCommandBuffer)(VkCommandBuffer commandBuffer, cons
 typedef VkResult (*PFN_vkEndCommandBuffer)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const void *memoryBarriers, uint32_t bufferMemoryBarrierCount, const void *bufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *imageMemoryBarriers);
 typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
+typedef void (*PFN_vkCmdClearDepthStencilImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue *depthStencil, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
 typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdCopyImageToBuffer)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdResolveImage)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageResolve *regions);
@@ -1054,6 +1086,7 @@ typedef void (*PFN_vkCmdSetViewport)(VkCommandBuffer commandBuffer, uint32_t fir
 typedef void (*PFN_vkCmdSetScissor)(VkCommandBuffer commandBuffer, uint32_t firstScissor, uint32_t scissorCount, const VkRect2D *scissors);
 typedef void (*PFN_vkCmdBindPipeline)(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline);
 typedef void (*PFN_vkCmdBindDescriptorSets)(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *descriptorSets, uint32_t dynamicOffsetCount, const uint32_t *dynamicOffsets);
+typedef void (*PFN_vkCmdBindVertexBuffers)(VkCommandBuffer commandBuffer, uint32_t firstBinding, uint32_t bindingCount, const VkBuffer *buffers, const VkDeviceSize *offsets);
 typedef void (*PFN_vkCmdBindIndexBuffer)(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType);
 typedef void (*PFN_vkCmdDrawIndexed)(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
 typedef VkResult (*PFN_vkCreateBuffer)(VkDevice device, const VkBufferCreateInfo *createInfo, const void *allocator, VkBuffer *buffer);
@@ -1114,6 +1147,7 @@ struct piShaderS
     VkPipelineLayout pipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     VkPipeline pipeline = VK_NULL_PIPELINE;
     VkRenderPass pipelineRenderPass = VK_NULL_RENDER_PASS;
+    bool isPicture = false;
 };
 
 struct piTextureS
@@ -1150,6 +1184,9 @@ struct piVertexArrayS
     piBuffer vertexBuffer[2] = { nullptr, nullptr };
     piBuffer indexBuffer = nullptr;
     piRenderer::IndexArrayFormat indexFormat = piRenderer::IndexArrayFormat::UINT_32;
+    uint32_t stride[2] = {};
+    uint32_t attributeCount = 0;
+    VkVertexInputAttributeDescription attributes[12] = {};
 };
 
 struct piRTargetS
@@ -1293,6 +1330,7 @@ struct piVulkanState
     PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
     PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
     PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
+    PFN_vkCmdClearDepthStencilImage vkCmdClearDepthStencilImage = nullptr;
     PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
     PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
     PFN_vkCmdResolveImage vkCmdResolveImage = nullptr;
@@ -1303,6 +1341,7 @@ struct piVulkanState
     PFN_vkCmdSetScissor vkCmdSetScissor = nullptr;
     PFN_vkCmdBindPipeline vkCmdBindPipeline = nullptr;
     PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets = nullptr;
+    PFN_vkCmdBindVertexBuffers vkCmdBindVertexBuffers = nullptr;
     PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer = nullptr;
     PFN_vkCmdDrawIndexed vkCmdDrawIndexed = nullptr;
     PFN_vkCreateBuffer vkCreateBuffer = nullptr;
@@ -1370,6 +1409,10 @@ struct piVulkanState
     VkDescriptorPool staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
     VkDescriptorSet staticPaintDescriptorSet = VK_NULL_DESCRIPTOR_SET;
     VkPipelineLayout staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+    VkDescriptorSetLayout pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+    VkDescriptorPool pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+    VkDescriptorSet pictureDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+    VkPipelineLayout picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -1377,6 +1420,10 @@ struct piVulkanState
     bool cpuPaintDiagnosticReported = false;
     bool cpuPresentDiagnosticReported = false;
     bool cpuPictureDiagnosticReported = false;
+    bool pictureLayoutReported = false;
+    bool pictureDescriptorReported = false;
+    bool picturePipelineReported = false;
+    bool pictureDrawReported = false;
     uint32_t cpuPaintDrawCount = 0;
     uint32_t gpuPaintDrawCount = 0;
     uint64_t liveRenderTargets = 0;
@@ -1482,6 +1529,29 @@ static size_t iBytesPerPixel(piRenderer::Format format)
         case piRenderer::Format::C3_11_11_10_FLOAT: return 4;
         case piRenderer::Format::C4_16_FLOAT: return 8;
         case piRenderer::Format::C4_32_FLOAT: return 16;
+        default: return 0;
+    }
+}
+
+static uint32_t iVertexFormatSize(piRenderer::Format format)
+{
+    switch (format)
+    {
+        case piRenderer::Format::C1_32_FLOAT: return 4;
+        case piRenderer::Format::C2_32_FLOAT: return 8;
+        case piRenderer::Format::C3_32_FLOAT: return 12;
+        case piRenderer::Format::C4_32_FLOAT: return 16;
+        default: return 0;
+    }
+}
+
+static VkFormat iVertexFormatPiToVulkan(piRenderer::Format format)
+{
+    switch (format)
+    {
+        case piRenderer::Format::C2_32_FLOAT: return VK_FORMAT_R32G32_SFLOAT;
+        case piRenderer::Format::C3_32_FLOAT: return VK_FORMAT_R32G32B32_SFLOAT;
+        case piRenderer::Format::C4_32_FLOAT: return VK_FORMAT_R32G32B32A32_SFLOAT;
         default: return 0;
     }
 }
@@ -1827,6 +1897,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkEndCommandBuffer = (PFN_vkEndCommandBuffer)state->vkGetDeviceProcAddr(state->device, "vkEndCommandBuffer");
     state->vkCmdPipelineBarrier = (PFN_vkCmdPipelineBarrier)state->vkGetDeviceProcAddr(state->device, "vkCmdPipelineBarrier");
     state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
+    state->vkCmdClearDepthStencilImage = (PFN_vkCmdClearDepthStencilImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearDepthStencilImage");
     state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
     state->vkCmdCopyImageToBuffer = (PFN_vkCmdCopyImageToBuffer)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyImageToBuffer");
     state->vkCmdResolveImage = (PFN_vkCmdResolveImage)state->vkGetDeviceProcAddr(state->device, "vkCmdResolveImage");
@@ -1837,6 +1908,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCmdSetScissor = (PFN_vkCmdSetScissor)state->vkGetDeviceProcAddr(state->device, "vkCmdSetScissor");
     state->vkCmdBindPipeline = (PFN_vkCmdBindPipeline)state->vkGetDeviceProcAddr(state->device, "vkCmdBindPipeline");
     state->vkCmdBindDescriptorSets = (PFN_vkCmdBindDescriptorSets)state->vkGetDeviceProcAddr(state->device, "vkCmdBindDescriptorSets");
+    state->vkCmdBindVertexBuffers = (PFN_vkCmdBindVertexBuffers)state->vkGetDeviceProcAddr(state->device, "vkCmdBindVertexBuffers");
     state->vkCmdBindIndexBuffer = (PFN_vkCmdBindIndexBuffer)state->vkGetDeviceProcAddr(state->device, "vkCmdBindIndexBuffer");
     state->vkCmdDrawIndexed = (PFN_vkCmdDrawIndexed)state->vkGetDeviceProcAddr(state->device, "vkCmdDrawIndexed");
     state->vkCreateBuffer = (PFN_vkCreateBuffer)state->vkGetDeviceProcAddr(state->device, "vkCreateBuffer");
@@ -1883,10 +1955,10 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
-        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer || !state->vkCmdResolveImage || !state->vkCmdBlitImage ||
+        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdClearDepthStencilImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer || !state->vkCmdResolveImage || !state->vkCmdBlitImage ||
         !state->vkCmdBeginRenderPass || !state->vkCmdEndRenderPass ||
         !state->vkCmdSetViewport || !state->vkCmdSetScissor || !state->vkCmdBindPipeline ||
-        !state->vkCmdBindDescriptorSets || !state->vkCmdBindIndexBuffer || !state->vkCmdDrawIndexed ||
+        !state->vkCmdBindDescriptorSets || !state->vkCmdBindVertexBuffers || !state->vkCmdBindIndexBuffer || !state->vkCmdDrawIndexed ||
         !state->vkCreateBuffer || !state->vkDestroyBuffer || !state->vkGetBufferMemoryRequirements ||
         !state->vkCreateImage || !state->vkDestroyImage || !state->vkGetImageMemoryRequirements ||
         !state->vkCreateImageView || !state->vkDestroyImageView ||
@@ -2767,6 +2839,167 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     return true;
 }
 
+static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->device == VK_NULL_DEVICE)
+    {
+        return true;
+    }
+    if (state->picturePipelineLayout != VK_NULL_PIPELINE_LAYOUT)
+    {
+        return true;
+    }
+    if (!state->vkCreateDescriptorSetLayout || !state->vkCreatePipelineLayout ||
+        !state->vkCreateDescriptorPool || !state->vkAllocateDescriptorSets)
+    {
+        return true;
+    }
+
+    VkDescriptorSetLayoutBinding bindings[3] = {};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[1].binding = 3;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[2].binding = 4;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
+    setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    setLayoutInfo.bindingCount = 3;
+    setLayoutInfo.pBindings = bindings;
+    VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->pictureDescriptorSetLayout);
+    if (result != VK_SUCCESS || state->pictureDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
+    {
+        iError(reporter, "Vulkan renderer failed to create picture descriptor layout");
+        state->pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        return false;
+    }
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &state->pictureDescriptorSetLayout;
+    result = state->vkCreatePipelineLayout(state->device, &pipelineLayoutInfo, nullptr, &state->picturePipelineLayout);
+    if (result != VK_SUCCESS || state->picturePipelineLayout == VK_NULL_PIPELINE_LAYOUT)
+    {
+        iError(reporter, "Vulkan renderer failed to create picture pipeline layout");
+        state->vkDestroyDescriptorSetLayout(state->device, state->pictureDescriptorSetLayout, nullptr);
+        state->pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        state->picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        return false;
+    }
+
+    VkDescriptorPoolSize poolSizes[2] = {};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[0].descriptorCount = 1;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[1].descriptorCount = 2;
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets = 1;
+    poolInfo.poolSizeCount = 2;
+    poolInfo.pPoolSizes = poolSizes;
+    result = state->vkCreateDescriptorPool(state->device, &poolInfo, nullptr, &state->pictureDescriptorPool);
+    if (result != VK_SUCCESS || state->pictureDescriptorPool == VK_NULL_DESCRIPTOR_POOL)
+    {
+        iError(reporter, "Vulkan renderer failed to create picture descriptor pool");
+        state->vkDestroyPipelineLayout(state->device, state->picturePipelineLayout, nullptr);
+        state->vkDestroyDescriptorSetLayout(state->device, state->pictureDescriptorSetLayout, nullptr);
+        state->picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        state->pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        state->pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        return false;
+    }
+
+    VkDescriptorSetAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = state->pictureDescriptorPool;
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &state->pictureDescriptorSetLayout;
+    result = state->vkAllocateDescriptorSets(state->device, &allocateInfo, &state->pictureDescriptorSet);
+    if (result != VK_SUCCESS || state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate picture descriptor set");
+        state->vkDestroyDescriptorPool(state->device, state->pictureDescriptorPool, nullptr);
+        state->vkDestroyPipelineLayout(state->device, state->picturePipelineLayout, nullptr);
+        state->vkDestroyDescriptorSetLayout(state->device, state->pictureDescriptorSetLayout, nullptr);
+        state->pictureDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+        state->pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        state->picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        state->pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        return false;
+    }
+    if (!state->pictureLayoutReported)
+    {
+        iReport(reporter, "Vulkan renderer created picture descriptor and pipeline layouts");
+        state->pictureLayoutReported = true;
+    }
+    return true;
+}
+
+static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
+    {
+        return true;
+    }
+    piTexture picture = state->textures[0];
+    piBuffer layerBuffer = state->constantBuffers[3];
+    piBuffer displayBuffer = state->constantBuffers[4];
+    if (!picture || picture->imageView == VK_NULL_IMAGE_VIEW || picture->sampler == VK_NULL_SAMPLER ||
+        !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
+        !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER)
+    {
+        return false;
+    }
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.sampler = picture->sampler;
+    imageInfo.imageView = picture->imageView;
+    imageInfo.imageLayout = picture->imageLayout;
+
+    VkDescriptorBufferInfo bufferInfos[2] = {};
+    bufferInfos[0].buffer = layerBuffer->buffer;
+    bufferInfos[0].range = layerBuffer->size;
+    bufferInfos[1].buffer = displayBuffer->buffer;
+    bufferInfos[1].range = displayBuffer->size;
+
+    VkWriteDescriptorSet writes[3] = {};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = state->pictureDescriptorSet;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[0].pImageInfo = &imageInfo;
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = state->pictureDescriptorSet;
+    writes[1].dstBinding = 3;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[1].pBufferInfo = &bufferInfos[0];
+    writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[2].dstSet = state->pictureDescriptorSet;
+    writes[2].dstBinding = 4;
+    writes[2].descriptorCount = 1;
+    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[2].pBufferInfo = &bufferInfos[1];
+    state->vkUpdateDescriptorSets(state->device, 3, writes, 0, nullptr);
+
+    if (!state->pictureDescriptorReported)
+    {
+        iReport(reporter, "Vulkan renderer updated picture descriptor set");
+        state->pictureDescriptorReported = true;
+    }
+    return true;
+}
+
 static VkSampleCountFlagBits iRequestedTextureSampleCount(const piRenderer::TextureInfo &info);
 static bool iEnsureStagingBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter);
 
@@ -2940,9 +3173,9 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
-    viewport.y = 0.0f;
+    viewport.y = (float)target->height;
     viewport.width = (float)target->width;
-    viewport.height = (float)target->height;
+    viewport.height = -(float)target->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     VkRect2D scissor = {};
@@ -2988,6 +3221,222 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     {
         iReport(reporter, "Vulkan renderer submitted static paint draw commands");
         state->drawSubmittedReported = true;
+    }
+    return true;
+}
+
+static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, const piVertexArray vertexArray, piRenderer::piReporter *reporter)
+{
+    if (!state || !shader || !target || !vertexArray)
+    {
+        return false;
+    }
+    if (shader->pipeline != VK_NULL_PIPELINE && shader->pipelineRenderPass == target->renderPass)
+    {
+        return true;
+    }
+    if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+    {
+        state->vkDestroyPipeline(state->device, shader->pipeline, nullptr);
+        shader->pipeline = VK_NULL_PIPELINE;
+        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+    }
+    if (shader->vertexModule == VK_NULL_SHADER_MODULE || shader->fragmentModule == VK_NULL_SHADER_MODULE ||
+        shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT || target->renderPass == VK_NULL_RENDER_PASS ||
+        vertexArray->attributeCount == 0 || vertexArray->stride[0] == 0 || !state->vkCreateGraphicsPipelines)
+    {
+        return false;
+    }
+
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = shader->vertexModule;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = shader->fragmentModule;
+    stages[1].pName = "main";
+
+    VkVertexInputBindingDescription binding = {};
+    binding.binding = 0;
+    binding.stride = vertexArray->stride[0];
+    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkPipelineVertexInputStateCreateInfo vertexInput = {};
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInput.vertexBindingDescriptionCount = 1;
+    vertexInput.pVertexBindingDescriptions = &binding;
+    vertexInput.vertexAttributeDescriptionCount = vertexArray->attributeCount;
+    vertexInput.pVertexAttributeDescriptions = vertexArray->attributes;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo viewport = {};
+    viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterization = {};
+    rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterization.cullMode = VK_CULL_MODE_NONE;
+    rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterization.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisample = {};
+    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample.rasterizationSamples = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttachment = {};
+    blendAttachment.blendEnable = 1;
+    blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo colorBlend = {};
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlend.attachmentCount = 1;
+    colorBlend.pAttachments = &blendAttachment;
+
+    VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState = {};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynamicStates;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = target->hasDepth ? 1 : 0;
+    depthStencil.depthWriteEnable = 0;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = stages;
+    pipelineInfo.pVertexInputState = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewport;
+    pipelineInfo.pRasterizationState = &rasterization;
+    pipelineInfo.pMultisampleState = &multisample;
+    pipelineInfo.pDepthStencilState = target->hasDepth ? &depthStencil : nullptr;
+    pipelineInfo.pColorBlendState = &colorBlend;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = shader->pipelineLayout;
+    pipelineInfo.renderPass = target->renderPass;
+    pipelineInfo.subpass = 0;
+
+    const VkResult result = state->vkCreateGraphicsPipelines(state->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &shader->pipeline);
+    if (result != VK_SUCCESS || shader->pipeline == VK_NULL_PIPELINE)
+    {
+        iError(reporter, "Vulkan renderer failed to create picture graphics pipeline");
+        shader->pipeline = VK_NULL_PIPELINE;
+        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+        return false;
+    }
+    shader->pipelineRenderPass = target->renderPass;
+    if (!state->picturePipelineReported)
+    {
+        iReport(reporter, "Vulkan renderer created picture graphics pipeline");
+        state->picturePipelineReported = true;
+    }
+    return true;
+}
+
+static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget target, const piVertexArray vertexArray, uint32_t num, uint32_t numInstances, uint32_t baseIndex, piRenderer::piReporter *reporter)
+{
+    if (!state || !shader || !target || !vertexArray || !vertexArray->vertexBuffer[0] || !vertexArray->indexBuffer ||
+        shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
+        target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
+        state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET)
+    {
+        return false;
+    }
+
+    const uint64_t timeout = 1000000000ull;
+    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkRenderPassBeginInfo renderPassBegin = {};
+    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBegin.renderPass = target->renderPass;
+    renderPassBegin.framebuffer = target->framebuffer;
+    renderPassBegin.renderArea.offset.x = 0;
+    renderPassBegin.renderArea.offset.y = 0;
+    renderPassBegin.renderArea.extent.width = target->width;
+    renderPassBegin.renderArea.extent.height = target->height;
+    state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = (float)target->height;
+    viewport.width = (float)target->width;
+    viewport.height = -(float)target->height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    VkRect2D scissor = {};
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent.width = target->width;
+    scissor.extent.height = target->height;
+    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
+    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->pictureDescriptorSet, 0, nullptr);
+    VkDeviceSize vertexOffset = 0;
+    state->vkCmdBindVertexBuffers(state->commandBuffer, 0, 1, &vertexArray->vertexBuffer[0]->buffer, &vertexOffset);
+    const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+    state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
+    state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, 0, 0);
+    state->vkCmdEndRenderPass(state->commandBuffer);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    if (target->color[0])
+    {
+        target->color[0]->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+    if (!state->pictureDrawReported)
+    {
+        iReport(reporter, "Vulkan renderer submitted picture draw commands");
+        state->pictureDrawReported = true;
     }
     return true;
 }
@@ -3413,6 +3862,119 @@ static bool iClearColorTextureImage(piVulkanState *state, piTexture texture, con
         iReport(reporter, "Vulkan renderer cleared GPU color render target");
         state->clearTextureReported = true;
     }
+    return true;
+}
+
+static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+{
+    if (!state || !texture || texture->image == 0 ||
+        (texture->info.mFormat != piRenderer::Format::D1_32_FLOAT &&
+         texture->info.mFormat != piRenderer::Format::D1_16_UNORM &&
+         texture->info.mFormat != piRenderer::Format::DS_24_8_UINT &&
+         texture->info.mFormat != piRenderer::Format::DS_32_8_UINT) ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE ||
+        !state->vkCmdClearDepthStencilImage)
+    {
+        return true;
+    }
+
+    const uint64_t timeout = 1000000000ull;
+    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange range = {};
+    range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    if (texture->info.mFormat == piRenderer::Format::DS_24_8_UINT || texture->info.mFormat == piRenderer::Format::DS_32_8_UINT)
+    {
+        range.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
+    range.baseMipLevel = 0;
+    range.levelCount = 1;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+
+    VkImageMemoryBarrier toTransfer = {};
+    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransfer.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toTransfer.oldLayout = texture->imageLayout;
+    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.image = texture->image;
+    toTransfer.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toTransfer);
+
+    VkClearDepthStencilValue clearDepth = {};
+    clearDepth.depth = 1.0f;
+    clearDepth.stencil = 0;
+    state->vkCmdClearDepthStencilImage(state->commandBuffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearDepth, 1, &range);
+
+    VkImageMemoryBarrier toDepth = {};
+    toDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toDepth.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toDepth.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    toDepth.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    toDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toDepth.image = texture->image;
+    toDepth.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toDepth);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    texture->imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     return true;
 }
 
@@ -4404,16 +4966,32 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroyPipelineLayout(mState->device, mState->staticPaintPipelineLayout, nullptr);
             mState->staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
         }
+        if (mState->picturePipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
+        {
+            mState->vkDestroyPipelineLayout(mState->device, mState->picturePipelineLayout, nullptr);
+            mState->picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        }
         if (mState->staticPaintDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
         {
             mState->vkDestroyDescriptorPool(mState->device, mState->staticPaintDescriptorPool, nullptr);
             mState->staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
             mState->staticPaintDescriptorSet = VK_NULL_DESCRIPTOR_SET;
         }
+        if (mState->pictureDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+        {
+            mState->vkDestroyDescriptorPool(mState->device, mState->pictureDescriptorPool, nullptr);
+            mState->pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+            mState->pictureDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+        }
         if (mState->staticPaintDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
         {
             mState->vkDestroyDescriptorSetLayout(mState->device, mState->staticPaintDescriptorSetLayout, nullptr);
             mState->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        }
+        if (mState->pictureDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
+        {
+            mState->vkDestroyDescriptorSetLayout(mState->device, mState->pictureDescriptorSetLayout, nullptr);
+            mState->pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
         }
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
@@ -5017,8 +5595,16 @@ void piRendererVulkan::Clear(const float *color0, const float *color1, const flo
     (void)color1;
     (void)color2;
     (void)color3;
-    (void)depth0;
-    if (!mState || !mState->currentRenderTarget || !mState->currentRenderTarget->color[0] || !mState->currentRenderTarget->color[0]->data)
+    if (!mState || !mState->currentRenderTarget)
+    {
+        return;
+    }
+    if (depth0 && mState->currentRenderTarget->depth &&
+        !iClearDepthTextureImage(mState, mState->currentRenderTarget->depth, mReporter))
+    {
+        iError(mReporter, "Vulkan renderer failed to clear GPU depth render target");
+    }
+    if (!mState->currentRenderTarget->color[0] || !mState->currentRenderTarget->color[0]->data)
     {
         return;
     }
@@ -5267,6 +5853,7 @@ piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, co
     {
         shader->options = *options;
         shader->hasOptions = true;
+        shader->isPicture = iShaderOption(shader, "PICTURE", 0) != 0;
     }
     if (!iCreateShaderModule(mState, vs, vs_len, &shader->vertexModule, mReporter) ||
         !iCreateShaderModule(mState, fs, fs_len, &shader->fragmentModule, mReporter))
@@ -5282,8 +5869,11 @@ piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, co
         delete shader;
         return nullptr;
     }
-    if ((shader->vertexModule != VK_NULL_SHADER_MODULE || shader->fragmentModule != VK_NULL_SHADER_MODULE) &&
-        !iEnsureStaticPaintPipelineLayout(mState, mReporter))
+    const bool hasShaderModules = shader->vertexModule != VK_NULL_SHADER_MODULE || shader->fragmentModule != VK_NULL_SHADER_MODULE;
+    const bool hasPipelineLayout = shader->isPicture ?
+        iEnsurePicturePipelineLayout(mState, mReporter) :
+        iEnsureStaticPaintPipelineLayout(mState, mReporter);
+    if (hasShaderModules && !hasPipelineLayout)
     {
         if (shader->vertexModule != VK_NULL_SHADER_MODULE && mState && mState->vkDestroyShaderModule)
         {
@@ -5298,7 +5888,7 @@ piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, co
     }
     if (mState)
     {
-        shader->pipelineLayout = mState->staticPaintPipelineLayout;
+        shader->pipelineLayout = shader->isPicture ? mState->picturePipelineLayout : mState->staticPaintPipelineLayout;
     }
     if (error) error[0] = 0;
     if (mState && !mState->shaderModuleReported &&
@@ -5420,11 +6010,92 @@ void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, 
 void piRendererVulkan::AttachPixelPackBuffer(piBuffer obj) { (void)obj; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::PixelPackBuffer, "Vulkan pixel pack buffers are not implemented yet"); }
 void piRendererVulkan::DettachPixelPackBuffer(void) { iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::PixelPackBuffer, "Vulkan pixel pack buffers are not implemented yet"); }
 
-piVertexArray piRendererVulkan::CreateVertexArray(int numStreams, piBuffer vb0, const piRArrayLayout *streamLayout0, piBuffer vb1, const piRArrayLayout *streamLayout1, piBuffer eb, const IndexArrayFormat ebFormat) { (void)numStreams; (void)streamLayout0; (void)streamLayout1; piVertexArrayS *vertexArray = new piVertexArrayS(); vertexArray->vertexBuffer[0] = vb0; vertexArray->vertexBuffer[1] = vb1; vertexArray->indexBuffer = eb; vertexArray->indexFormat = ebFormat; if (mState) ++mState->liveVertexArrays; return vertexArray; }
+piVertexArray piRendererVulkan::CreateVertexArray(int numStreams, piBuffer vb0, const piRArrayLayout *streamLayout0, piBuffer vb1, const piRArrayLayout *streamLayout1, piBuffer eb, const IndexArrayFormat ebFormat)
+{
+    piVertexArrayS *vertexArray = new piVertexArrayS();
+    vertexArray->vertexBuffer[0] = vb0;
+    vertexArray->vertexBuffer[1] = vb1;
+    vertexArray->indexBuffer = eb;
+    vertexArray->indexFormat = ebFormat;
+    const piRArrayLayout *layouts[2] = { streamLayout0, streamLayout1 };
+    uint32_t attribute = 0;
+    for (int stream = 0; stream < numStreams && stream < 2; ++stream)
+    {
+        const piRArrayLayout *layout = layouts[stream];
+        if (!layout)
+        {
+            continue;
+        }
+        vertexArray->stride[stream] = (uint32_t)layout->mStride;
+        uint32_t offset = 0;
+        for (int entry = 0; entry < layout->mNumElements && attribute < 12; ++entry)
+        {
+            VkFormat format = 0;
+            uint32_t size = 0;
+            if (layout->mEntry[entry].mType == piRArrayType_Float)
+            {
+                switch (layout->mEntry[entry].mNumComponents)
+                {
+                    case 1: format = VK_FORMAT_R32_SFLOAT; size = 4; break;
+                    case 2: format = VK_FORMAT_R32G32_SFLOAT; size = 8; break;
+                    case 3: format = VK_FORMAT_R32G32B32_SFLOAT; size = 12; break;
+                    case 4: format = VK_FORMAT_R32G32B32A32_SFLOAT; size = 16; break;
+                    default: break;
+                }
+            }
+            if (format != 0 && size != 0)
+            {
+                VkVertexInputAttributeDescription *desc = &vertexArray->attributes[attribute];
+                desc->location = attribute;
+                desc->binding = (uint32_t)stream;
+                desc->format = format;
+                desc->offset = offset;
+                ++attribute;
+            }
+            offset += size;
+        }
+    }
+    vertexArray->attributeCount = attribute;
+    if (mState) ++mState->liveVertexArrays;
+    return vertexArray;
+}
 void piRendererVulkan::DestroyVertexArray(piVertexArray obj) { if (!obj) return; if (mState && mState->liveVertexArrays > 0) --mState->liveVertexArrays; delete obj; }
 void piRendererVulkan::AttachVertexArray(piVertexArray obj) { if (mState) mState->currentVertexArray = obj; }
 void piRendererVulkan::DettachVertexArray(void) { if (mState) mState->currentVertexArray = nullptr; }
-piVertexArray piRendererVulkan::CreateVertexArray2(int numStreams, piBuffer vb0, const ArrayLayout2 *streamLayout0, piBuffer vb1, const ArrayLayout2 *streamLayout1, const void *shaderBinary, size_t shaderBinarySize, piBuffer ib, const IndexArrayFormat ebFormat) { (void)shaderBinary; (void)shaderBinarySize; (void)streamLayout0; (void)streamLayout1; return CreateVertexArray(numStreams, vb0, nullptr, vb1, nullptr, ib, ebFormat); }
+piVertexArray piRendererVulkan::CreateVertexArray2(int numStreams, piBuffer vb0, const ArrayLayout2 *streamLayout0, piBuffer vb1, const ArrayLayout2 *streamLayout1, const void *shaderBinary, size_t shaderBinarySize, piBuffer ib, const IndexArrayFormat ebFormat)
+{
+    (void)shaderBinary;
+    (void)shaderBinarySize;
+    piVertexArrayS *vertexArray = new piVertexArrayS();
+    vertexArray->vertexBuffer[0] = vb0;
+    vertexArray->vertexBuffer[1] = vb1;
+    vertexArray->indexBuffer = ib;
+    vertexArray->indexFormat = ebFormat;
+    uint32_t attribute = 0;
+    for (int stream = 0; stream < numStreams && stream < 2; ++stream)
+    {
+        const ArrayLayout2 *layout = stream == 0 ? streamLayout0 : streamLayout1;
+        if (!layout)
+        {
+            continue;
+        }
+        uint32_t offset = 0;
+        for (int entry = 0; entry < layout->mNumElements && attribute < 12; ++entry)
+        {
+            VkVertexInputAttributeDescription *desc = &vertexArray->attributes[attribute];
+            desc->location = attribute;
+            desc->binding = stream;
+            desc->format = iVertexFormatPiToVulkan(layout->mEntry[entry].mFormat);
+            desc->offset = offset;
+            offset += iVertexFormatSize(layout->mEntry[entry].mFormat);
+            ++attribute;
+        }
+        vertexArray->stride[stream] = offset;
+    }
+    vertexArray->attributeCount = attribute;
+    if (mState) ++mState->liveVertexArrays;
+    return vertexArray;
+}
 void piRendererVulkan::AttachVertexArray2(piVertexArray vme) { AttachVertexArray(vme); }
 void piRendererVulkan::DestroyVertexArray2(piVertexArray vme) { DestroyVertexArray(vme); }
 
@@ -5442,6 +6113,24 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     if (!mState)
     {
         return;
+    }
+    if (pt == PrimitiveType::Triangle && mState->currentShader && mState->currentShader->isPicture &&
+        mState->currentRenderTarget && mState->currentRenderTarget->color[0] &&
+        mState->currentVertexArray && mState->currentVertexArray->indexBuffer && mState->textures[0])
+    {
+        piTexture target = mState->currentRenderTarget->color[0];
+        if (iUpdatePictureDescriptorSet(mState, mReporter) &&
+            iEnsurePictureGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, mReporter) &&
+            iSubmitPictureDraw(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, num, numInstances, baseIndex, mReporter))
+        {
+            mState->pendingPresentTexture = target;
+            return;
+        }
+        if (!mState->drawSubmitFailureReported)
+        {
+            mState->drawSubmitFailureReported = true;
+            iError(mReporter, "Vulkan renderer failed to submit picture draw commands");
+        }
     }
     if (pt == PrimitiveType::Triangle && mState->currentRenderTarget && mState->currentRenderTarget->color[0] &&
         mState->currentRenderTarget->color[0]->data && mState->textures[0] && mState->textures[0]->data &&
