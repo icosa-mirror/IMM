@@ -31,6 +31,10 @@ typedef struct VkQueue_T *VkQueue;
 typedef uint64_t VkSurfaceKHR;
 typedef uint64_t VkSwapchainKHR;
 typedef uint64_t VkImage;
+typedef struct VkCommandPool_T *VkCommandPool;
+typedef struct VkCommandBuffer_T *VkCommandBuffer;
+typedef struct VkSemaphore_T *VkSemaphore;
+typedef struct VkFence_T *VkFence;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
 typedef uint32_t VkPresentModeKHR;
@@ -38,20 +42,43 @@ typedef uint32_t VkImageUsageFlags;
 typedef uint32_t VkSharingMode;
 typedef uint32_t VkSurfaceTransformFlagBitsKHR;
 typedef uint32_t VkCompositeAlphaFlagBitsKHR;
+typedef uint32_t VkCommandPoolCreateFlags;
+typedef uint32_t VkCommandBufferLevel;
+typedef uint32_t VkCommandBufferUsageFlags;
+typedef uint32_t VkPipelineStageFlags;
+typedef uint32_t VkAccessFlags;
+typedef uint32_t VkImageLayout;
+typedef uint32_t VkImageAspectFlags;
+typedef uint32_t VkDependencyFlags;
+typedef uint32_t VkFenceCreateFlags;
 
 static constexpr VkInstance VK_NULL_INSTANCE = nullptr;
 static constexpr VkPhysicalDevice VK_NULL_PHYSICAL_DEVICE = nullptr;
 static constexpr VkDevice VK_NULL_DEVICE = nullptr;
 static constexpr VkQueue VK_NULL_QUEUE = nullptr;
+static constexpr VkCommandPool VK_NULL_COMMAND_POOL = nullptr;
+static constexpr VkCommandBuffer VK_NULL_COMMAND_BUFFER = nullptr;
+static constexpr VkSemaphore VK_NULL_SEMAPHORE = nullptr;
+static constexpr VkFence VK_NULL_FENCE = nullptr;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
+static constexpr VkResult VK_NOT_READY = 1;
+static constexpr VkResult VK_TIMEOUT = 2;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO = 2;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO = 3;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_SUBMIT_INFO = 4;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_FENCE_CREATE_INFO = 8;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO = 9;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 44;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PRESENT_INFO_KHR = 1000001001;
 static constexpr VkQueueFlags VK_QUEUE_GRAPHICS_BIT = 0x00000001;
 static constexpr VkFormat VK_FORMAT_B8G8R8A8_UNORM = 44;
 static constexpr VkFormat VK_FORMAT_R8G8B8A8_UNORM = 37;
@@ -63,6 +90,21 @@ static constexpr VkImageUsageFlags VK_IMAGE_USAGE_TRANSFER_DST_BIT = 0x00000002;
 static constexpr VkImageUsageFlags VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT = 0x00000010;
 static constexpr VkSharingMode VK_SHARING_MODE_EXCLUSIVE = 0;
 static constexpr VkCompositeAlphaFlagBitsKHR VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR = 0x00000001;
+static constexpr VkCommandPoolCreateFlags VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT = 0x00000002;
+static constexpr VkCommandBufferLevel VK_COMMAND_BUFFER_LEVEL_PRIMARY = 0;
+static constexpr VkCommandBufferUsageFlags VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT = 0x00000001;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT = 0x00000001;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_TRANSFER_BIT = 0x00001000;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 0x00000400;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = 0x00002000;
+static constexpr VkAccessFlags VK_ACCESS_TRANSFER_WRITE_BIT = 0x00001000;
+static constexpr VkAccessFlags VK_ACCESS_MEMORY_READ_BIT = 0x00008000;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_UNDEFINED = 0;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = 7;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = 1000001002;
+static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001;
+static constexpr VkFenceCreateFlags VK_FENCE_CREATE_SIGNALED_BIT = 0x00000001;
+static constexpr uint32_t VK_QUEUE_FAMILY_IGNORED = 0xffffffffu;
 
 #define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 #define IMM_VK_API_VERSION_1_0 IMM_VK_MAKE_VERSION(1, 0, 0)
@@ -175,6 +217,100 @@ struct VkSwapchainCreateInfoKHR
     VkSwapchainKHR oldSwapchain;
 };
 
+struct VkCommandPoolCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkCommandPoolCreateFlags flags;
+    uint32_t queueFamilyIndex;
+};
+
+struct VkCommandBufferAllocateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkCommandPool commandPool;
+    VkCommandBufferLevel level;
+    uint32_t commandBufferCount;
+};
+
+struct VkCommandBufferBeginInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkCommandBufferUsageFlags flags;
+    const void *pInheritanceInfo;
+};
+
+struct VkSemaphoreCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+};
+
+struct VkFenceCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFenceCreateFlags flags;
+};
+
+struct VkImageSubresourceRange
+{
+    VkImageAspectFlags aspectMask;
+    uint32_t baseMipLevel;
+    uint32_t levelCount;
+    uint32_t baseArrayLayer;
+    uint32_t layerCount;
+};
+
+struct VkImageMemoryBarrier
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkAccessFlags srcAccessMask;
+    VkAccessFlags dstAccessMask;
+    VkImageLayout oldLayout;
+    VkImageLayout newLayout;
+    uint32_t srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex;
+    VkImage image;
+    VkImageSubresourceRange subresourceRange;
+};
+
+union VkClearColorValue
+{
+    float float32[4];
+    int32_t int32[4];
+    uint32_t uint32[4];
+};
+
+struct VkSubmitInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    uint32_t waitSemaphoreCount;
+    const VkSemaphore *pWaitSemaphores;
+    const VkPipelineStageFlags *pWaitDstStageMask;
+    uint32_t commandBufferCount;
+    const VkCommandBuffer *pCommandBuffers;
+    uint32_t signalSemaphoreCount;
+    const VkSemaphore *pSignalSemaphores;
+};
+
+struct VkPresentInfoKHR
+{
+    VkStructureType sType;
+    const void *pNext;
+    uint32_t waitSemaphoreCount;
+    const VkSemaphore *pWaitSemaphores;
+    uint32_t swapchainCount;
+    const VkSwapchainKHR *pSwapchains;
+    const uint32_t *pImageIndices;
+    VkResult *pResults;
+};
+
 #if defined(WINDOWS)
 struct VkWin32SurfaceCreateInfoKHR
 {
@@ -205,6 +341,23 @@ typedef VkResult (*PFN_vkGetPhysicalDeviceSurfacePresentModesKHR)(VkPhysicalDevi
 typedef VkResult (*PFN_vkCreateSwapchainKHR)(VkDevice device, const VkSwapchainCreateInfoKHR *createInfo, const void *allocator, VkSwapchainKHR *swapchain);
 typedef void (*PFN_vkDestroySwapchainKHR)(VkDevice device, VkSwapchainKHR swapchain, const void *allocator);
 typedef VkResult (*PFN_vkGetSwapchainImagesKHR)(VkDevice device, VkSwapchainKHR swapchain, uint32_t *swapchainImageCount, VkImage *swapchainImages);
+typedef VkResult (*PFN_vkCreateCommandPool)(VkDevice device, const VkCommandPoolCreateInfo *createInfo, const void *allocator, VkCommandPool *commandPool);
+typedef void (*PFN_vkDestroyCommandPool)(VkDevice device, VkCommandPool commandPool, const void *allocator);
+typedef VkResult (*PFN_vkAllocateCommandBuffers)(VkDevice device, const VkCommandBufferAllocateInfo *allocateInfo, VkCommandBuffer *commandBuffers);
+typedef VkResult (*PFN_vkResetCommandBuffer)(VkCommandBuffer commandBuffer, VkCommandBufferUsageFlags flags);
+typedef VkResult (*PFN_vkBeginCommandBuffer)(VkCommandBuffer commandBuffer, const VkCommandBufferBeginInfo *beginInfo);
+typedef VkResult (*PFN_vkEndCommandBuffer)(VkCommandBuffer commandBuffer);
+typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const void *memoryBarriers, uint32_t bufferMemoryBarrierCount, const void *bufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *imageMemoryBarriers);
+typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
+typedef VkResult (*PFN_vkCreateSemaphore)(VkDevice device, const VkSemaphoreCreateInfo *createInfo, const void *allocator, VkSemaphore *semaphore);
+typedef void (*PFN_vkDestroySemaphore)(VkDevice device, VkSemaphore semaphore, const void *allocator);
+typedef VkResult (*PFN_vkCreateFence)(VkDevice device, const VkFenceCreateInfo *createInfo, const void *allocator, VkFence *fence);
+typedef void (*PFN_vkDestroyFence)(VkDevice device, VkFence fence, const void *allocator);
+typedef VkResult (*PFN_vkWaitForFences)(VkDevice device, uint32_t fenceCount, const VkFence *fences, VkBool32 waitAll, uint64_t timeout);
+typedef VkResult (*PFN_vkResetFences)(VkDevice device, uint32_t fenceCount, const VkFence *fences);
+typedef VkResult (*PFN_vkQueueSubmit)(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *submits, VkFence fence);
+typedef VkResult (*PFN_vkAcquireNextImageKHR)(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t *imageIndex);
+typedef VkResult (*PFN_vkQueuePresentKHR)(VkQueue queue, const VkPresentInfoKHR *presentInfo);
 #if defined(WINDOWS)
 typedef VkResult (*PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, const VkWin32SurfaceCreateInfoKHR *createInfo, const void *allocator, VkSurfaceKHR *surface);
 #endif
@@ -312,6 +465,13 @@ struct piVulkanState
     uint32_t swapchainImageCount = 0;
     VkFormat swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkExtent2D swapchainExtent = {};
+    VkCommandPool commandPool = VK_NULL_COMMAND_POOL;
+    VkCommandBuffer commandBuffer = VK_NULL_COMMAND_BUFFER;
+    VkSemaphore imageAvailableSemaphore = VK_NULL_SEMAPHORE;
+    VkSemaphore renderFinishedSemaphore = VK_NULL_SEMAPHORE;
+    VkFence frameFence = VK_NULL_FENCE;
+    uint32_t presentFrameIndex = 0;
+    bool realPresentReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -339,6 +499,23 @@ struct piVulkanState
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR = nullptr;
     PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR = nullptr;
+    PFN_vkCreateCommandPool vkCreateCommandPool = nullptr;
+    PFN_vkDestroyCommandPool vkDestroyCommandPool = nullptr;
+    PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers = nullptr;
+    PFN_vkResetCommandBuffer vkResetCommandBuffer = nullptr;
+    PFN_vkBeginCommandBuffer vkBeginCommandBuffer = nullptr;
+    PFN_vkEndCommandBuffer vkEndCommandBuffer = nullptr;
+    PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
+    PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
+    PFN_vkCreateSemaphore vkCreateSemaphore = nullptr;
+    PFN_vkDestroySemaphore vkDestroySemaphore = nullptr;
+    PFN_vkCreateFence vkCreateFence = nullptr;
+    PFN_vkDestroyFence vkDestroyFence = nullptr;
+    PFN_vkWaitForFences vkWaitForFences = nullptr;
+    PFN_vkResetFences vkResetFences = nullptr;
+    PFN_vkQueueSubmit vkQueueSubmit = nullptr;
+    PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR = nullptr;
+    PFN_vkQueuePresentKHR vkQueuePresentKHR = nullptr;
 #if defined(WINDOWS)
     PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR = nullptr;
 #endif
@@ -760,9 +937,31 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCreateSwapchainKHR = (PFN_vkCreateSwapchainKHR)state->vkGetDeviceProcAddr(state->device, "vkCreateSwapchainKHR");
     state->vkDestroySwapchainKHR = (PFN_vkDestroySwapchainKHR)state->vkGetDeviceProcAddr(state->device, "vkDestroySwapchainKHR");
     state->vkGetSwapchainImagesKHR = (PFN_vkGetSwapchainImagesKHR)state->vkGetDeviceProcAddr(state->device, "vkGetSwapchainImagesKHR");
-    if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR)
+    state->vkCreateCommandPool = (PFN_vkCreateCommandPool)state->vkGetDeviceProcAddr(state->device, "vkCreateCommandPool");
+    state->vkDestroyCommandPool = (PFN_vkDestroyCommandPool)state->vkGetDeviceProcAddr(state->device, "vkDestroyCommandPool");
+    state->vkAllocateCommandBuffers = (PFN_vkAllocateCommandBuffers)state->vkGetDeviceProcAddr(state->device, "vkAllocateCommandBuffers");
+    state->vkResetCommandBuffer = (PFN_vkResetCommandBuffer)state->vkGetDeviceProcAddr(state->device, "vkResetCommandBuffer");
+    state->vkBeginCommandBuffer = (PFN_vkBeginCommandBuffer)state->vkGetDeviceProcAddr(state->device, "vkBeginCommandBuffer");
+    state->vkEndCommandBuffer = (PFN_vkEndCommandBuffer)state->vkGetDeviceProcAddr(state->device, "vkEndCommandBuffer");
+    state->vkCmdPipelineBarrier = (PFN_vkCmdPipelineBarrier)state->vkGetDeviceProcAddr(state->device, "vkCmdPipelineBarrier");
+    state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
+    state->vkCreateSemaphore = (PFN_vkCreateSemaphore)state->vkGetDeviceProcAddr(state->device, "vkCreateSemaphore");
+    state->vkDestroySemaphore = (PFN_vkDestroySemaphore)state->vkGetDeviceProcAddr(state->device, "vkDestroySemaphore");
+    state->vkCreateFence = (PFN_vkCreateFence)state->vkGetDeviceProcAddr(state->device, "vkCreateFence");
+    state->vkDestroyFence = (PFN_vkDestroyFence)state->vkGetDeviceProcAddr(state->device, "vkDestroyFence");
+    state->vkWaitForFences = (PFN_vkWaitForFences)state->vkGetDeviceProcAddr(state->device, "vkWaitForFences");
+    state->vkResetFences = (PFN_vkResetFences)state->vkGetDeviceProcAddr(state->device, "vkResetFences");
+    state->vkQueueSubmit = (PFN_vkQueueSubmit)state->vkGetDeviceProcAddr(state->device, "vkQueueSubmit");
+    state->vkAcquireNextImageKHR = (PFN_vkAcquireNextImageKHR)state->vkGetDeviceProcAddr(state->device, "vkAcquireNextImageKHR");
+    state->vkQueuePresentKHR = (PFN_vkQueuePresentKHR)state->vkGetDeviceProcAddr(state->device, "vkQueuePresentKHR");
+    if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
+        !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
+        !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
+        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCreateSemaphore ||
+        !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
+        !state->vkResetFences || !state->vkQueueSubmit || !state->vkAcquireNextImageKHR || !state->vkQueuePresentKHR)
     {
-        iError(reporter, "Vulkan renderer could not load required swapchain entry points");
+        iError(reporter, "Vulkan renderer could not load required swapchain frame entry points");
         return false;
     }
     return true;
@@ -963,6 +1162,64 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
     return true;
 }
 
+static bool iCreateVulkanFrameResources(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->swapchain == VK_NULL_SWAPCHAIN_KHR)
+    {
+        return true;
+    }
+
+    VkCommandPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = state->graphicsQueueFamilyIndex;
+    VkResult result = state->vkCreateCommandPool(state->device, &poolInfo, nullptr, &state->commandPool);
+    if (result != VK_SUCCESS || state->commandPool == VK_NULL_COMMAND_POOL)
+    {
+        iError(reporter, "Vulkan renderer failed to create command pool");
+        return false;
+    }
+
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = state->commandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+    result = state->vkAllocateCommandBuffers(state->device, &allocInfo, &state->commandBuffer);
+    if (result != VK_SUCCESS || state->commandBuffer == VK_NULL_COMMAND_BUFFER)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate command buffer");
+        return false;
+    }
+
+    VkSemaphoreCreateInfo semaphoreInfo = {};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    result = state->vkCreateSemaphore(state->device, &semaphoreInfo, nullptr, &state->imageAvailableSemaphore);
+    if (result != VK_SUCCESS || state->imageAvailableSemaphore == VK_NULL_SEMAPHORE)
+    {
+        iError(reporter, "Vulkan renderer failed to create image-available semaphore");
+        return false;
+    }
+    result = state->vkCreateSemaphore(state->device, &semaphoreInfo, nullptr, &state->renderFinishedSemaphore);
+    if (result != VK_SUCCESS || state->renderFinishedSemaphore == VK_NULL_SEMAPHORE)
+    {
+        iError(reporter, "Vulkan renderer failed to create render-finished semaphore");
+        return false;
+    }
+
+    VkFenceCreateInfo fenceInfo = {};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    result = state->vkCreateFence(state->device, &fenceInfo, nullptr, &state->frameFence);
+    if (result != VK_SUCCESS || state->frameFence == VK_NULL_FENCE)
+    {
+        iError(reporter, "Vulkan renderer failed to create frame fence");
+        return false;
+    }
+    iReport(reporter, "Vulkan renderer created frame resources");
+    return true;
+}
+
 static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporter *reporter)
 {
     if (!iLoadVulkanEntryPoints(state, reporter))
@@ -1103,7 +1360,11 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     {
         return false;
     }
-    return iCreateVulkanSwapchain(state, reporter);
+    if (!iCreateVulkanSwapchain(state, reporter))
+    {
+        return false;
+    }
+    return iCreateVulkanFrameResources(state, reporter);
 }
 
 piRendererVulkan::piRendererVulkan()
@@ -1177,6 +1438,27 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDeviceWaitIdle(mState->device);
         }
+        if (mState->imageAvailableSemaphore != VK_NULL_SEMAPHORE && mState->vkDestroySemaphore)
+        {
+            mState->vkDestroySemaphore(mState->device, mState->imageAvailableSemaphore, nullptr);
+            mState->imageAvailableSemaphore = VK_NULL_SEMAPHORE;
+        }
+        if (mState->renderFinishedSemaphore != VK_NULL_SEMAPHORE && mState->vkDestroySemaphore)
+        {
+            mState->vkDestroySemaphore(mState->device, mState->renderFinishedSemaphore, nullptr);
+            mState->renderFinishedSemaphore = VK_NULL_SEMAPHORE;
+        }
+        if (mState->frameFence != VK_NULL_FENCE && mState->vkDestroyFence)
+        {
+            mState->vkDestroyFence(mState->device, mState->frameFence, nullptr);
+            mState->frameFence = VK_NULL_FENCE;
+        }
+        if (mState->commandPool != VK_NULL_COMMAND_POOL && mState->vkDestroyCommandPool)
+        {
+            mState->vkDestroyCommandPool(mState->device, mState->commandPool, nullptr);
+            mState->commandPool = VK_NULL_COMMAND_POOL;
+            mState->commandBuffer = VK_NULL_COMMAND_BUFFER;
+        }
         if (mState->swapchain != VK_NULL_SWAPCHAIN_KHR && mState->vkDestroySwapchainKHR)
         {
             mState->vkDestroySwapchainKHR(mState->device, mState->swapchain, nullptr);
@@ -1235,7 +1517,146 @@ void piRendererVulkan::Report(void)
 void piRendererVulkan::SetActiveWindow(int id) { if (mState) mState->activeWindow = id; }
 void piRendererVulkan::Enable(void) {}
 void piRendererVulkan::Disable(void) {}
-void piRendererVulkan::SwapBuffers(void) {}
+void piRendererVulkan::SwapBuffers(void)
+{
+    if (!mState || mState->swapchain == VK_NULL_SWAPCHAIN_KHR || mState->commandBuffer == VK_NULL_COMMAND_BUFFER ||
+        mState->imageAvailableSemaphore == VK_NULL_SEMAPHORE || mState->renderFinishedSemaphore == VK_NULL_SEMAPHORE ||
+        mState->frameFence == VK_NULL_FENCE)
+    {
+        return;
+    }
+
+    const uint64_t timeout = 1000000000ull;
+    VkResult result = mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return;
+    }
+    mState->vkResetFences(mState->device, 1, &mState->frameFence);
+
+    uint32_t imageIndex = 0;
+    result = mState->vkAcquireNextImageKHR(mState->device, mState->swapchain, timeout, mState->imageAvailableSemaphore, VK_NULL_FENCE, &imageIndex);
+    if (result != VK_SUCCESS)
+    {
+        return;
+    }
+    if (imageIndex >= mState->swapchainImageCount)
+    {
+        return;
+    }
+
+    mState->vkResetCommandBuffer(mState->commandBuffer, 0);
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = mState->vkBeginCommandBuffer(mState->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return;
+    }
+
+    VkImageSubresourceRange colorRange = {};
+    colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    colorRange.baseMipLevel = 0;
+    colorRange.levelCount = 1;
+    colorRange.baseArrayLayer = 0;
+    colorRange.layerCount = 1;
+
+    VkImageMemoryBarrier toTransfer = {};
+    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransfer.srcAccessMask = 0;
+    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.image = mState->swapchainImages[imageIndex];
+    toTransfer.subresourceRange = colorRange;
+    mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0,
+                                 0,
+                                 nullptr,
+                                 0,
+                                 nullptr,
+                                 1,
+                                 &toTransfer);
+
+    const float phase = (float)((mState->presentFrameIndex % 120u) / 119.0f);
+    VkClearColorValue clearColor = {};
+    clearColor.float32[0] = 0.02f;
+    clearColor.float32[1] = 0.12f + 0.25f * phase;
+    clearColor.float32[2] = 0.08f;
+    clearColor.float32[3] = 1.0f;
+    mState->vkCmdClearColorImage(mState->commandBuffer,
+                                 mState->swapchainImages[imageIndex],
+                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 &clearColor,
+                                 1,
+                                 &colorRange);
+
+    VkImageMemoryBarrier toPresent = {};
+    toPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toPresent.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toPresent.image = mState->swapchainImages[imageIndex];
+    toPresent.subresourceRange = colorRange;
+    mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                 0,
+                                 0,
+                                 nullptr,
+                                 0,
+                                 nullptr,
+                                 1,
+                                 &toPresent);
+
+    result = mState->vkEndCommandBuffer(mState->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return;
+    }
+
+    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &mState->imageAvailableSemaphore;
+    submitInfo.pWaitDstStageMask = &waitStage;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &mState->commandBuffer;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &mState->renderFinishedSemaphore;
+    result = mState->vkQueueSubmit(mState->graphicsQueue, 1, &submitInfo, mState->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return;
+    }
+
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &mState->renderFinishedSemaphore;
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &mState->swapchain;
+    presentInfo.pImageIndices = &imageIndex;
+    result = mState->vkQueuePresentKHR(mState->graphicsQueue, &presentInfo);
+    if (result == VK_SUCCESS)
+    {
+        ++mState->presentFrameIndex;
+        if (!mState->realPresentReported)
+        {
+            mState->realPresentReported = true;
+            iReport(mReporter, "Vulkan renderer presented swapchain frame");
+        }
+    }
+}
 void *piRendererVulkan::GetContext(void) { return mState ? (void *)mState->device : nullptr; }
 
 void piRendererVulkan::StartPerformanceMeasure(void)
