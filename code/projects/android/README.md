@@ -43,6 +43,25 @@ adb install -r appImmViewer/build/outputs/apk/debug/appImmViewer-debug.apk
 adb shell am start -n org.linuxfoundation.imm.player/.MainActivity
 ```
 
+### Vulkan Non-VR build and smoke
+
+The Vulkan non-VR build selects `piRenderer::API::Vulkan` in the native app and passes the Android `ANativeWindow` into the Vulkan renderer. Use a separate build directory so the default GLES APK remains available.
+
+```bash
+./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vulkan
+./gradlew :appImmViewer:assembleDebug -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan
+```
+
+APK output: `appImmViewer/build_vulkan/outputs/apk/debug/appImmViewer-debug.apk`
+
+With a Vulkan-capable Android device or emulator attached:
+
+```powershell
+./run-android-vulkan-smoke.ps1
+```
+
+The smoke installs the Vulkan APK, launches `sample1.imm`, captures `logcat`, and requires Vulkan surface/device initialization plus picture and static-paint draw submission markers.
+
 ## Build (VR — Quest)
 
 The VR build requires separate library compilation with a dedicated build dir to avoid conflicts:
@@ -67,6 +86,7 @@ adb shell am start -n org.linuxfoundation.imm.player/.MainActivity
 |------|---------|-------------|
 | `-PimmNonVr=ON/OFF` | `ON` | `ON` = phone/tablet build, `OFF` = Quest VR build |
 | `-PimmBuildDir=<dir>` | `build` | Custom build output dir (use `build_vr` for VR to avoid conflicts) |
+| `-PimmRendererApi=GLES/Vulkan` | `GLES` | Selects the non-VR Android renderer backend. Use `Vulkan` with `-PimmBuildDir=build_vulkan` to keep the default GLES APK separate. |
 
 ## Loading IMM content on device
 

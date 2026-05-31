@@ -14,6 +14,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #elif defined(ANDROID)
+#include <android/native_window.h>
 #include <dlfcn.h>
 #endif
 
@@ -176,6 +177,7 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 4
 static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO = 43;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 44;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_PRESENT_INFO_KHR = 1000001001;
 static constexpr VkQueueFlags VK_QUEUE_GRAPHICS_BIT = 0x00000001;
@@ -1045,6 +1047,14 @@ struct VkWin32SurfaceCreateInfoKHR
     HINSTANCE hinstance;
     HWND hwnd;
 };
+#elif defined(ANDROID)
+struct VkAndroidSurfaceCreateInfoKHR
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    ANativeWindow *window;
+};
 #endif
 
 typedef void (*PFN_vkVoidFunction)(void);
@@ -1132,6 +1142,8 @@ typedef VkResult (*PFN_vkAcquireNextImageKHR)(VkDevice device, VkSwapchainKHR sw
 typedef VkResult (*PFN_vkQueuePresentKHR)(VkQueue queue, const VkPresentInfoKHR *presentInfo);
 #if defined(WINDOWS)
 typedef VkResult (*PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, const VkWin32SurfaceCreateInfoKHR *createInfo, const void *allocator, VkSurfaceKHR *surface);
+#elif defined(ANDROID)
+typedef VkResult (*PFN_vkCreateAndroidSurfaceKHR)(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR *createInfo, const void *allocator, VkSurfaceKHR *surface);
 #endif
 
 struct piShaderS
@@ -1305,6 +1317,7 @@ struct piVulkanState
     bool captureWritten = false;
 #elif defined(ANDROID)
     void *vulkanLibrary = nullptr;
+    ANativeWindow *window = nullptr;
 #endif
     PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
     PFN_vkCreateInstance vkCreateInstance = nullptr;
@@ -1390,6 +1403,8 @@ struct piVulkanState
     PFN_vkQueuePresentKHR vkQueuePresentKHR = nullptr;
 #if defined(WINDOWS)
     PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR = nullptr;
+#elif defined(ANDROID)
+    PFN_vkCreateAndroidSurfaceKHR vkCreateAndroidSurfaceKHR = nullptr;
 #endif
     uint32_t graphicsQueueFamilyIndex = 0;
     bool ownsInstance = false;
@@ -1877,6 +1892,8 @@ static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piR
     state->vkGetPhysicalDeviceMemoryProperties = (PFN_vkGetPhysicalDeviceMemoryProperties)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceMemoryProperties");
 #if defined(WINDOWS)
     state->vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkCreateWin32SurfaceKHR");
+#elif defined(ANDROID)
+    state->vkCreateAndroidSurfaceKHR = (PFN_vkCreateAndroidSurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkCreateAndroidSurfaceKHR");
 #endif
     if (!state->vkDestroyInstance || !state->vkEnumeratePhysicalDevices || !state->vkGetPhysicalDeviceQueueFamilyProperties ||
         !state->vkGetPhysicalDeviceMemoryProperties || !state->vkCreateDevice || !state->vkDestroyDevice ||
@@ -2016,6 +2033,27 @@ static bool iCreateVulkanSurface(piVulkanState *state, piRenderer::piReporter *r
         return false;
     }
     iReport(reporter, "Vulkan renderer created Win32 surface");
+    return true;
+#elif defined(ANDROID)
+    if (!state->window)
+    {
+        return true;
+    }
+    if (!state->vkCreateAndroidSurfaceKHR)
+    {
+        iError(reporter, "Vulkan renderer could not load vkCreateAndroidSurfaceKHR");
+        return false;
+    }
+    VkAndroidSurfaceCreateInfoKHR surfaceInfo = {};
+    surfaceInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+    surfaceInfo.window = state->window;
+    const VkResult result = state->vkCreateAndroidSurfaceKHR(state->instance, &surfaceInfo, nullptr, &state->surface);
+    if (result != VK_SUCCESS || state->surface == VK_NULL_SURFACE_KHR)
+    {
+        iError(reporter, "Vulkan renderer failed to create Android VkSurfaceKHR");
+        return false;
+    }
+    iReport(reporter, "Vulkan renderer created Android surface");
     return true;
 #else
     return true;
@@ -4768,6 +4806,13 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
         instanceInfo.enabledExtensionCount = 2;
         instanceInfo.ppEnabledExtensionNames = instanceExtensions;
     }
+#elif defined(ANDROID)
+    const char *instanceExtensions[] = { "VK_KHR_surface", "VK_KHR_android_surface" };
+    if (state->window)
+    {
+        instanceInfo.enabledExtensionCount = 2;
+        instanceInfo.ppEnabledExtensionNames = instanceExtensions;
+    }
 #endif
     VkResult result = state->vkCreateInstance(&instanceInfo, nullptr, &state->instance);
     if (result != VK_SUCCESS)
@@ -4921,6 +4966,18 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
         {
             mState->windowWidth = rect.right - rect.left;
             mState->windowHeight = rect.bottom - rect.top;
+        }
+    }
+#elif defined(ANDROID)
+    if (hwnd && hwnd[0])
+    {
+        mState->window = (ANativeWindow *)hwnd[0];
+        const int width = ANativeWindow_getWidth(mState->window);
+        const int height = ANativeWindow_getHeight(mState->window);
+        if (width > 0 && height > 0)
+        {
+            mState->windowWidth = width;
+            mState->windowHeight = height;
         }
     }
 #endif

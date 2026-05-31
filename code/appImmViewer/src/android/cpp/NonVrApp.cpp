@@ -49,6 +49,7 @@ struct EngineState {
     int height = 0;
     bool hasWindow = false;
     bool running = false;
+    bool useVulkan = false;
 
     piRenderer* renderer = nullptr;
     piLog* log = nullptr;
@@ -175,6 +176,24 @@ bool initEgl(android_app* app) {
     eglQuerySurface(gEngine.display, gEngine.surface, EGL_WIDTH, &gEngine.width);
     eglQuerySurface(gEngine.display, gEngine.surface, EGL_HEIGHT, &gEngine.height);
     gEngine.hasWindow = true;
+    return true;
+}
+
+bool initVulkanWindow(android_app* app) {
+    if (app == nullptr || app->window == nullptr) {
+        ALOGE("Vulkan: no Android window");
+        return false;
+    }
+
+    gEngine.width = ANativeWindow_getWidth(app->window);
+    gEngine.height = ANativeWindow_getHeight(app->window);
+    if (gEngine.width <= 0 || gEngine.height <= 0) {
+        ALOGE("Vulkan: invalid Android window size %dx%d", gEngine.width, gEngine.height);
+        return false;
+    }
+
+    gEngine.hasWindow = true;
+    ALOGV("Vulkan: Android window ready %dx%d", gEngine.width, gEngine.height);
     return true;
 }
 
@@ -344,14 +363,18 @@ void initViewer() {
     gEngine.timer = new piTimer();
     gEngine.timer->Init();
 
-    gEngine.renderer = piRenderer::Create(piRenderer::API::GLES);
+    const piRenderer::API rendererApi = gEngine.useVulkan ? piRenderer::API::Vulkan : piRenderer::API::GLES;
+    gEngine.renderer = piRenderer::Create(rendererApi);
     if (!gEngine.renderer) {
         ALOGF("Could not create piRenderer");
     }
 
-    if (!gEngine.renderer->Initialize(0, nullptr, 1, false, false, nullptr, false, nullptr)) {
+    const void *nativeWindowHandles[1] = { gEngine.app != nullptr ? gEngine.app->window : nullptr };
+    const void **rendererWindow = gEngine.useVulkan ? nativeWindowHandles : nullptr;
+    if (!gEngine.renderer->Initialize(0, rendererWindow, 1, false, false, nullptr, false, nullptr)) {
         ALOGF("Could not initialize piRenderer");
     }
+    ALOGV("IMM Android renderer API: %s", gEngine.useVulkan ? "Vulkan" : "GLES");
 
     gEngine.stereoMode = ImmPlayer::StereoMode::None;
     gEngine.soundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Android, gEngine.log);
@@ -391,7 +414,7 @@ bool loadPath(const std::wstring& path) {
     settings.mPlayback.mPlayerSpawn.mLocation.InitCopyW(gEngine.playerSpawnLocation.c_str());
     settings.mPlayback.mPlayerSpawn.mCustom = ImmCore::trans3d::identity();
 
-    settings.mRendering.mRenderingAPI = Settings::Rendering::API::GLES;
+    settings.mRendering.mRenderingAPI = gEngine.useVulkan ? Settings::Rendering::API::Vulkan : Settings::Rendering::API::GLES;
     settings.mRendering.mRenderingTechnique = gEngine.renderingTechnique;
     settings.mRendering.mEnableVR = false;
 
@@ -455,9 +478,11 @@ void renderFrame() {
         return;
     }
 
-    glViewport(0, 0, gEngine.width, gEngine.height);
-    glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (!gEngine.useVulkan) {
+        glViewport(0, 0, gEngine.width, gEngine.height);
+        glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
 
     const double now = gEngine.timer->GetTime();
     static double lastTime = now;
@@ -473,7 +498,11 @@ void renderFrame() {
     gEngine.viewer->GlobalRender(vrToHead, projection);
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
 
-    eglSwapBuffers(gEngine.display, gEngine.surface);
+    if (gEngine.useVulkan) {
+        gEngine.renderer->SwapBuffers();
+    } else {
+        eglSwapBuffers(gEngine.display, gEngine.surface);
+    }
 }
 
 static float getPinchDistance(float x1, float y1, float x2, float y2) {
@@ -608,8 +637,14 @@ void handleCmd(android_app* app, int32_t cmd) {
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
             if (app->window != nullptr && !gEngine.hasWindow) {
-                if (!initEgl(app)) {
-                    ALOGF("Failed to init EGL");
+                if (gEngine.useVulkan) {
+                    if (!initVulkanWindow(app)) {
+                        ALOGF("Failed to init Vulkan window");
+                    }
+                } else {
+                    if (!initEgl(app)) {
+                        ALOGF("Failed to init EGL");
+                    }
                 }
                 initViewer();
             }
@@ -701,6 +736,9 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetTrackingTransform
 } // extern "C"
 
 void android_main(android_app* app) {
+#if defined(IMM_ANDROID_RENDERER_VULKAN)
+    gEngine.useVulkan = true;
+#endif
     app->onAppCmd = handleCmd;
     app->onInputEvent = handleInput;
     gEngine.app = app;

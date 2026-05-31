@@ -227,6 +227,10 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :appImmViewer:assembleDebug
 
+    - name: Build appImmViewer (Vulkan)
+      working-directory: code/projects/android
+      run: ./gradlew :appImmViewer:assembleDebug -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan
+
     - name: Build appImmViewer (VR)
       working-directory: code/projects/android
       run: ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vr && ./gradlew :appImmViewer:assembleDebug -PimmNonVr=OFF -PimmBuildDir=build_vr
@@ -281,6 +285,14 @@ jobs:
         name: ImmViewer-Android-VR
         path: |
           code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk
+        if-no-files-found: error
+
+    - name: Upload Android Viewer Vulkan
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Android-Vulkan
+        path: |
+          code/projects/android/appImmViewer/build_vulkan/outputs/apk/debug/*.apk
         if-no-files-found: error
 
   build-macos:

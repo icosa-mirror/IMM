@@ -49,6 +49,10 @@ if (IMM_ANDROID_NON_VR)
     target_compile_definitions(appImmPlayer PRIVATE IMM_ANDROID_NON_VR=1)
 endif()
 
+if (IMM_ANDROID_RENDERER_API STREQUAL "Vulkan")
+    target_compile_definitions(appImmPlayer PRIVATE IMM_ANDROID_RENDERER_VULKAN=1)
+endif()
+
 # libImmCore dependency
 set(LIB_IMM_CORE_DIR ${IMM_ROOT}/code/libImmCore)
 set(LIB_IMM_CORE_BUILD_DIR ${LIB_IMM_CORE_DIR}/build)
