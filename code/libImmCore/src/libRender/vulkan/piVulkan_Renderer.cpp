@@ -1958,7 +1958,9 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkQueueSubmit = (PFN_vkQueueSubmit)state->vkGetDeviceProcAddr(state->device, "vkQueueSubmit");
     state->vkAcquireNextImageKHR = (PFN_vkAcquireNextImageKHR)state->vkGetDeviceProcAddr(state->device, "vkAcquireNextImageKHR");
     state->vkQueuePresentKHR = (PFN_vkQueuePresentKHR)state->vkGetDeviceProcAddr(state->device, "vkQueuePresentKHR");
-    if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
+    const bool needsSwapchainEntryPoints = state->surface != VK_NULL_SURFACE_KHR;
+    if ((needsSwapchainEntryPoints && (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
+                                      !state->vkAcquireNextImageKHR || !state->vkQueuePresentKHR)) ||
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
         !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdClearDepthStencilImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer || !state->vkCmdResolveImage || !state->vkCmdBlitImage ||
@@ -1976,9 +1978,9 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
-        !state->vkResetFences || !state->vkQueueSubmit || !state->vkAcquireNextImageKHR || !state->vkQueuePresentKHR)
+        !state->vkResetFences || !state->vkQueueSubmit)
     {
-        iError(reporter, "Vulkan renderer could not load required swapchain frame entry points");
+        iError(reporter, "Vulkan renderer could not load required device frame entry points");
         return false;
     }
     return true;
@@ -2277,9 +2279,9 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
 
 static bool iCreateVulkanFrameResources(piVulkanState *state, piRenderer::piReporter *reporter)
 {
-    if (!state || state->swapchain == VK_NULL_SWAPCHAIN_KHR)
+    if (!state)
     {
-        return true;
+        return false;
     }
 
     VkCommandPoolCreateInfo poolInfo = {};
@@ -2305,19 +2307,23 @@ static bool iCreateVulkanFrameResources(piVulkanState *state, piRenderer::piRepo
         return false;
     }
 
-    VkSemaphoreCreateInfo semaphoreInfo = {};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    result = state->vkCreateSemaphore(state->device, &semaphoreInfo, nullptr, &state->imageAvailableSemaphore);
-    if (result != VK_SUCCESS || state->imageAvailableSemaphore == VK_NULL_SEMAPHORE)
+    const bool needsSwapchainSemaphores = state->swapchain != VK_NULL_SWAPCHAIN_KHR;
+    if (needsSwapchainSemaphores)
     {
-        iError(reporter, "Vulkan renderer failed to create image-available semaphore");
-        return false;
-    }
-    result = state->vkCreateSemaphore(state->device, &semaphoreInfo, nullptr, &state->renderFinishedSemaphore);
-    if (result != VK_SUCCESS || state->renderFinishedSemaphore == VK_NULL_SEMAPHORE)
-    {
-        iError(reporter, "Vulkan renderer failed to create render-finished semaphore");
-        return false;
+        VkSemaphoreCreateInfo semaphoreInfo = {};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        result = state->vkCreateSemaphore(state->device, &semaphoreInfo, nullptr, &state->imageAvailableSemaphore);
+        if (result != VK_SUCCESS || state->imageAvailableSemaphore == VK_NULL_SEMAPHORE)
+        {
+            iError(reporter, "Vulkan renderer failed to create image-available semaphore");
+            return false;
+        }
+        result = state->vkCreateSemaphore(state->device, &semaphoreInfo, nullptr, &state->renderFinishedSemaphore);
+        if (result != VK_SUCCESS || state->renderFinishedSemaphore == VK_NULL_SEMAPHORE)
+        {
+            iError(reporter, "Vulkan renderer failed to create render-finished semaphore");
+            return false;
+        }
     }
 
     VkFenceCreateInfo fenceInfo = {};
@@ -4919,11 +4925,23 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
     const piVulkanExternalDevice *externalDevice = static_cast<const piVulkanExternalDevice *>(device);
     if (externalDevice && externalDevice->instance && externalDevice->physicalDevice && externalDevice->device && externalDevice->graphicsQueue)
     {
+        if (!iLoadVulkanEntryPoints(mState, mReporter))
+        {
+            Deinitialize();
+            return false;
+        }
         mState->instance = static_cast<VkInstance>(externalDevice->instance);
         mState->physicalDevice = static_cast<VkPhysicalDevice>(externalDevice->physicalDevice);
         mState->device = static_cast<VkDevice>(externalDevice->device);
         mState->graphicsQueue = static_cast<VkQueue>(externalDevice->graphicsQueue);
         mState->graphicsQueueFamilyIndex = externalDevice->graphicsQueueFamilyIndex;
+        if (!iLoadVulkanInstanceEntryPoints(mState, mReporter) ||
+            !iLoadVulkanSwapchainEntryPoints(mState, mReporter) ||
+            !iCreateVulkanFrameResources(mState, mReporter))
+        {
+            Deinitialize();
+            return false;
+        }
         mState->initialized = true;
         iReport(mReporter, "Vulkan renderer initialized with external device");
         return true;
@@ -4946,7 +4964,7 @@ void piRendererVulkan::Deinitialize(void)
     {
         return;
     }
-    if (mState->ownsDevice && mState->device != VK_NULL_DEVICE)
+    if (mState->device != VK_NULL_DEVICE)
     {
         if (mState->vkDeviceWaitIdle)
         {
@@ -5042,7 +5060,7 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroySwapchainKHR(mState->device, mState->swapchain, nullptr);
             mState->swapchain = VK_NULL_SWAPCHAIN_KHR;
         }
-        if (mState->vkDestroyDevice)
+        if (mState->ownsDevice && mState->vkDestroyDevice)
         {
             mState->vkDestroyDevice(mState->device, nullptr);
         }

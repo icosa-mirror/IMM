@@ -109,6 +109,12 @@ To build the extension and immediately run the native Godot smoke test:
 .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
 ```
 
+To request Vulkan in that smoke, pass renderer API `5` (`0=Auto`, `1=OpenGL`, `2=Direct3D`, `3=GLES`, `4=Metal`, `5=Vulkan`):
+
+```powershell
+.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -SmokeRendererApi 5 -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
+```
+
 To run local Godot extension checks without MSBuild, SCons, or `godot-cpp`:
 
 ```powershell
@@ -145,6 +151,12 @@ Or pass the executable directly:
 
 ```powershell
 .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
+```
+
+Use `-RendererApi 5` to request Vulkan in the native smoke scene:
+
+```powershell
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -RendererApi 5
 ```
 
 To save smoke output and run metadata for debugging:
