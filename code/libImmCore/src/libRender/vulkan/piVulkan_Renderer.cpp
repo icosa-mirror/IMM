@@ -159,11 +159,14 @@ static constexpr VkCommandBufferLevel VK_COMMAND_BUFFER_LEVEL_PRIMARY = 0;
 static constexpr VkCommandBufferUsageFlags VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT = 0x00000001;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT = 0x00000001;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_TRANSFER_BIT = 0x00001000;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT = 0x00000080;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 0x00000400;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = 0x00002000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_WRITE_BIT = 0x00001000;
+static constexpr VkAccessFlags VK_ACCESS_SHADER_READ_BIT = 0x00000020;
 static constexpr VkAccessFlags VK_ACCESS_MEMORY_READ_BIT = 0x00008000;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_UNDEFINED = 0;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL = 5;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = 7;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = 1000001002;
 static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001;
@@ -750,6 +753,7 @@ struct piTextureS
     VkFormat vkFormat = 0;
     VkImageUsageFlags imageUsage = 0;
     VkSampler sampler = VK_NULL_SAMPLER;
+    VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 };
 
 struct piBufferS
@@ -2394,6 +2398,139 @@ static bool iUploadTextureToStaging(piVulkanState *state, piTexture texture, piR
     return true;
 }
 
+static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+{
+    if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE)
+    {
+        return true;
+    }
+    if (!iEnsureStagingBuffer(state, (VkDeviceSize)texture->dataSize, reporter))
+    {
+        return false;
+    }
+    void *mapped = nullptr;
+    VkResult result = state->vkMapMemory(state->device, state->stagingMemory, 0, (VkDeviceSize)texture->dataSize, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        iError(reporter, "Vulkan renderer failed to map texture staging memory");
+        return false;
+    }
+    std::memcpy(mapped, texture->data, texture->dataSize);
+    state->vkUnmapMemory(state->device, state->stagingMemory);
+
+    const uint64_t timeout = 1000000000ull;
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange range = {};
+    range.aspectMask = iTextureAspectMask(texture->info.mFormat);
+    range.baseMipLevel = 0;
+    range.levelCount = texture->info.mMultisample > 1 ? 1u : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1u);
+    range.baseArrayLayer = 0;
+    range.layerCount = texture->info.mType == piRenderer::TextureType::T2D_ARRAY ? (uint32_t)texture->info.mZres : 1u;
+
+    VkImageMemoryBarrier toTransfer = {};
+    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransfer.srcAccessMask = 0;
+    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toTransfer.oldLayout = texture->imageLayout;
+    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.image = texture->image;
+    toTransfer.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toTransfer);
+
+    VkBufferImageCopy copyRegion = {};
+    copyRegion.bufferOffset = 0;
+    copyRegion.bufferRowLength = 0;
+    copyRegion.bufferImageHeight = 0;
+    copyRegion.imageSubresource.aspectMask = range.aspectMask;
+    copyRegion.imageSubresource.mipLevel = 0;
+    copyRegion.imageSubresource.baseArrayLayer = 0;
+    copyRegion.imageSubresource.layerCount = range.layerCount;
+    copyRegion.imageOffset.x = 0;
+    copyRegion.imageOffset.y = 0;
+    copyRegion.imageOffset.z = 0;
+    copyRegion.imageExtent.width = (uint32_t)texture->info.mXres;
+    copyRegion.imageExtent.height = (uint32_t)texture->info.mYres;
+    copyRegion.imageExtent.depth = 1;
+    state->vkCmdCopyBufferToImage(state->commandBuffer,
+                                  state->stagingBuffer,
+                                  texture->image,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  1,
+                                  &copyRegion);
+
+    VkImageMemoryBarrier toShader = {};
+    toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toShader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    toShader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toShader.image = texture->image;
+    toShader.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toShader);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    texture->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    return true;
+}
+
 static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporter *reporter)
 {
     if (!iLoadVulkanEntryPoints(state, reporter))
@@ -3103,6 +3240,28 @@ piTexture piRendererVulkan::CreateTexture2(const wchar_t *key, const TextureInfo
     }
     if (mState && !iCreateSamplerObject(mState, filter, wrap1, aniso, &texture->sampler, mReporter))
     {
+        if (texture->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        {
+            mState->vkDestroyImageView(mState->device, texture->imageView, nullptr);
+        }
+        if (texture->image != 0 && mState->vkDestroyImage)
+        {
+            mState->vkDestroyImage(mState->device, texture->image, nullptr);
+        }
+        if (texture->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, texture->memory, nullptr);
+        }
+        std::free(texture->data);
+        delete texture;
+        return nullptr;
+    }
+    if (mState && buffer && !iUploadTextureImageData(mState, texture, mReporter))
+    {
+        if (texture->sampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
+        {
+            mState->vkDestroySampler(mState->device, texture->sampler, nullptr);
+        }
         if (texture->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
         {
             mState->vkDestroyImageView(mState->device, texture->imageView, nullptr);
