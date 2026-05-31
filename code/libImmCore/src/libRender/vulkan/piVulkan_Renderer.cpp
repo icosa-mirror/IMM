@@ -5174,17 +5174,21 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         mState->gpuPaintActive = true;
         ++mState->gpuPaintDrawCount;
     }
-    const bool readBackGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 512u || (mState->gpuPaintDrawCount & 511u) == 0u);
+    const bool presentGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 128u || (mState->gpuPaintDrawCount & 127u) == 0u);
+    const bool readBackGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 1024u || (mState->gpuPaintDrawCount & 1023u) == 0u);
     if (readBackGpuTarget && !iReadBackTextureImage(mState, target, mReporter) && !mState->gpuReadbackFailureReported)
     {
         mState->gpuReadbackFailureReported = true;
         iError(mReporter, "Vulkan renderer failed to read back static paint GPU target");
     }
 #if defined(WINDOWS)
-    if (readBackGpuTarget && mState->gpuReadbackReported)
+    if (presentGpuTarget)
     {
         mState->pendingPresentTexture = target;
-        iWritePpmCapture(mState, target);
+        if (readBackGpuTarget && mState->gpuReadbackReported)
+        {
+            iWritePpmCapture(mState, target);
+        }
         SwapBuffers();
     }
 #endif
