@@ -174,6 +174,7 @@ static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_4_BIT = 0x00000004;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_8_BIT = 0x00000008;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_16_BIT = 0x00000010;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
+static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D_ARRAY = 5;
 static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_LOAD = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_CLEAR = 1;
@@ -1902,8 +1903,10 @@ static VkSampleCountFlagBits iTextureSampleCount(const piRenderer::TextureInfo &
 static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bindUsage, piRenderer::piReporter *reporter)
 {
     (void)bindUsage;
-    if (!state || !texture || state->device == VK_NULL_DEVICE || texture->info.mType != piRenderer::TextureType::T2D ||
-        texture->info.mXres <= 0 || texture->info.mYres <= 0)
+    const bool is2D = texture && texture->info.mType == piRenderer::TextureType::T2D;
+    const bool is2DArray = texture && texture->info.mType == piRenderer::TextureType::T2D_ARRAY;
+    if (!state || !texture || state->device == VK_NULL_DEVICE || (!is2D && !is2DArray) ||
+        texture->info.mXres <= 0 || texture->info.mYres <= 0 || (is2DArray && texture->info.mZres <= 0))
     {
         return true;
     }
@@ -1931,7 +1934,7 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     imageInfo.extent.height = (uint32_t)texture->info.mYres;
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = texture->info.mMultisample > 1 ? 1 : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1);
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = is2DArray ? (uint32_t)texture->info.mZres : 1u;
     imageInfo.samples = iTextureSampleCount(texture->info);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = usage;
@@ -1987,7 +1990,7 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = texture->image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType = is2DArray ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = vkFormat;
     viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -1997,7 +2000,7 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = imageInfo.mipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.layerCount = imageInfo.arrayLayers;
     result = state->vkCreateImageView(state->device, &viewInfo, nullptr, &texture->imageView);
     if (result != VK_SUCCESS || texture->imageView == VK_NULL_IMAGE_VIEW)
     {
