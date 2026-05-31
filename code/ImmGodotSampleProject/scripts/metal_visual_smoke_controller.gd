@@ -2,6 +2,7 @@ extends Node3D
 
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_DOCUMENT_PATH := "res://../../exampleImmFiles/sample1.imm"
+const ANDROID_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
 const CAMERA_ID := 0
 const IMM_RENDERER_API_METAL := 4
 const IMM_RENDERER_API_VULKAN := 5
@@ -24,7 +25,7 @@ var _has_applied_background_color := false
 var _last_background_color := Color.BLACK
 
 func _ready() -> void:
-	if OS.get_environment("IMM_GODOT_VISUAL_SMOKE") == "1":
+	if _should_run_visual_smoke():
 		call_deferred("_run_visual_smoke")
 		return
 
@@ -63,7 +64,7 @@ func _setup_viewer() -> bool:
 		return false
 
 	viewer.name = "ImmViewer"
-	viewer.document_path = SAMPLE_DOCUMENT_PATH
+	viewer.document_path = _sample_document_path()
 	viewer.load_on_ready = false
 	viewer.auto_play = true
 	viewer.auto_queue_render = true
@@ -428,8 +429,22 @@ func _selected_renderer_name(renderer_api: int = -1) -> String:
 		return "Metal"
 	return "API%d" % api
 
+func _sample_document_path() -> String:
+	return ANDROID_SAMPLE_DOCUMENT_PATH if OS.get_name() == "Android" else SAMPLE_DOCUMENT_PATH
+
+func _should_run_visual_smoke() -> bool:
+	if OS.get_environment("IMM_GODOT_VISUAL_SMOKE") == "1":
+		return true
+	return OS.get_cmdline_args().has("--imm-godot-visual-smoke")
+
 func _get_env_int(name: String, default_value: int) -> int:
 	var value := OS.get_environment(name)
+	if value.is_empty():
+		for argument in OS.get_cmdline_args():
+			var prefix := "--%s=" % name.to_lower().replace("_", "-")
+			if argument.begins_with(prefix):
+				value = argument.substr(prefix.length())
+				break
 	if value.is_empty():
 		return default_value
 	if not value.is_valid_int():
