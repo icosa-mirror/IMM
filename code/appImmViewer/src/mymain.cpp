@@ -1040,6 +1040,9 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             // render
             mViewer.RenderMono(mRenderSize*mSuperSample, vr_to_head, 0);
 
+            // Resolve before validation so capture/readback observes the frame just rendered.
+            mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
+
             if (validationEnabled && !validationDone && (uint64_t)frameid >= validationFrame)
             {
                 const size_t pixelCount = (size_t)mRenderSize.x * (size_t)mRenderSize.y;
@@ -1171,9 +1174,6 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
             if (!done)
             {
-                // resolve multisampling and postpro
-                mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
-
                 mRenderer->SwapBuffers();
             }
         }

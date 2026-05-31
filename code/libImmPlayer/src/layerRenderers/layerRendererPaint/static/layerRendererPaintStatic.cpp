@@ -53,6 +53,12 @@ namespace ImmPlayer
         return (value && value[0]) ? atoi(value) : -1;
     }
 
+    static int iForcedPaintLayerId()
+    {
+        const char *value = std::getenv("IMM_FORCE_PAINT_LAYER_ID");
+        return (value && value[0]) ? atoi(value) : -1;
+    }
+
     
     struct iSLayerDrawInfoStatic
     {
@@ -644,8 +650,11 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
 
         const int forcedBrushType = iForcedPaintBrushType();
+        const int forcedLayerId = iForcedPaintLayerId();
+        const bool traceDraws = std::getenv("IMM_TRACE_STATIC_PAINT_DRAWS") != nullptr;
         int lastShaderID = -1;
         int lastStateID = -1;
+        uint32_t traceDrawIndex = 0;
 
         const int stereoModeInt = static_cast<int>(mStereoMode);
 
@@ -681,6 +690,8 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         for (uint64_t j = 0; j < numToRender; j++)
         {
             const uint32_t id = mVisibleLayerInfos.GetUInt32(j);
+            if (forcedLayerId >= 0 && id != static_cast<uint32_t>(forcedLayerId)) continue;
+
             iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(id);
 
             // upload to GPU, if needed. This should be commaded externally as we stream scenes. But for now we do it here
@@ -717,7 +728,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
                 if (numChunks == 0) continue;
 
                 // set shader and state
-                const int stateID = ((chunkType == static_cast<int>(Element::BrushSectionType::Segment)) ? 0 : 1);                                    
+                const int stateID = ((chunkType == static_cast<int>(Element::BrushSectionType::Segment)) ? 0 : 1);
                 if (stateID != lastStateID) { lastStateID = stateID; renderer->SetRasterState(mRasterState[stateID]); }
 
 #if !defined(ANDROID)
@@ -754,6 +765,27 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
                     renderer->UpdateBuffer(mChunkData, &cd, 0, 1 * sizeof(ChunkData)); // TODO:  put this in an buffer so we only do one upload per chunkType, not per chunk
 
+                    if (traceDraws)
+                    {
+                        log->Printf(LT_MESSAGE,
+                                    L"IMM_VKPARITY_DRAW api=%d draw=%u layerId=%u chunkType=%d chunk=%llu shader=%d state=%d drawin=%d wiggle=%d opacity=%.6f drawInTime=%.6f layerStateId=%u vertexOffset=%u indexOffset=%u numIndices=%u biggestStroke=%.6f",
+                                    static_cast<int>(renderer->GetAPI()),
+                                    traceDrawIndex++,
+                                    id,
+                                    chunkType,
+                                    static_cast<unsigned long long>(i),
+                                    shaderID,
+                                    stateID,
+                                    me->mDrawin ? 1 : 0,
+                                    me->mWiggle ? 1 : 0,
+                                    me->mLayerState.mOpacity,
+                                    me->mLayerState.mDrawInTime,
+                                    me->mLayerState.mID,
+                                    chunk->mVertexOffset,
+                                    chunk->mIndexOffset,
+                                    chunk->mNumIndices,
+                                    chunk->mBiggestStroke);
+                    }
                     renderer->DrawPrimitiveIndexed(piRenderer::PrimitiveType::TriangleStrip, chunk->mNumIndices, numInstances, 0 /*chunk->mVertexOffset*/, 0, chunk->mIndexOffset);
                     mDrawCallInfo.numIndices += chunk->mNumIndices;
                     mDrawCallInfo.numTriangles += chunk->mNumPolygons * 2;

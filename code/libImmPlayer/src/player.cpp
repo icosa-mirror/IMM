@@ -183,7 +183,7 @@ namespace ImmPlayer
         //----------------------------------------------------------------------------------------------------------------------------------------
 
         // render states
-        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::Metal)
+        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::Metal || renderer->GetAPI() == piRenderer::API::Vulkan)
         {
             mRasterState = renderer->CreateRasterState(false,true, piRenderer::CullMode::NONE, true, false); // note multisample is set to false
             if (!mRasterState) return false;
@@ -1352,16 +1352,8 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
-        {
-            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        }
-        else
-        {
-            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        }
+        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         if (!iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND")) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         if (!iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL")) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
