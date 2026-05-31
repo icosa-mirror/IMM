@@ -214,7 +214,7 @@ def verify_render_thread_queue() -> None:
             raise RuntimeError(f"ImmViewerNode script stub render adapter diagnostics token is missing: {token}")
     if "queue_render_camera_transform" in sample or "register_render_camera" in sample or "unregister_render_camera" in sample:
         raise RuntimeError("Sample controller should not own the per-frame render queue or render camera lifecycle")
-    for token in ["ImmGodotRendererApi_Metal", "ImmGodot_InitEx", "ImmGodotMetalFrame", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame"]:
+    for token in ["ImmGodotRendererApi_Metal", "ImmGodot_InitEx", "ImmGodotMetalFrame", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame", "ImmGodotVulkanFrame", "ImmGodot_BeginVulkanFrame", "ImmGodot_EndVulkanFrame"]:
         if token not in abi_header or token not in abi_source:
             raise RuntimeError(f"ImmGodot native renderer selection token is missing from C ABI: {token}")
     for token in ["renderer_api", "set_renderer_api", "get_renderer_api", "ImmGodot_InitEx", "get_render_backend_diagnostics", "actual_rendering_method", "actual_rendering_driver", "metal_adapter_candidate", "vulkan_adapter_candidate", "wants_vulkan_renderer", "driver_is_vulkan", "has_rendering_device", "has_generic_driver_resources", "has_vulkan_driver_resources", "has_compositor_effect_path"]:
@@ -223,7 +223,7 @@ def verify_render_thread_queue() -> None:
     for token in ["renderer_api", "Vulkan", "get_render_backend_diagnostics", "actual_rendering_method", "actual_rendering_driver", "metal_adapter_candidate", "vulkan_adapter_candidate", "wants_vulkan_renderer", "driver_is_vulkan", "has_rendering_device", "has_generic_driver_resources", "has_vulkan_driver_resources", "has_compositor_effect_path"]:
         if token not in script_stub:
             raise RuntimeError(f"ImmViewerNode script stub renderer backend token is missing: {token}")
-    for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "last_metal_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
+    for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "DRIVER_RESOURCE_VULKAN_INSTANCE", "DRIVER_RESOURCE_VULKAN_IMAGE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "ImmViewerGodotBeginVulkanTextureFrame", "last_metal_frame_started", "last_vulkan_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
         if token not in compositor_source and token not in compositor_header:
             raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
     if "texture(source_color, uv_interp)" not in compositor_source:
@@ -232,7 +232,7 @@ def verify_render_thread_queue() -> None:
         raise RuntimeError("ImmViewerCompositorEffect composite shader should not vertically flip the Godot-owned intermediate texture")
     if "register_class<ImmViewerCompositorEffect>" not in register_types:
         raise RuntimeError("ImmViewerCompositorEffect is not registered with ClassDB")
-    for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
+    for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "src/imm_viewer_vulkan_frame.cpp", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing compositor/Metal build token: {token}")
     metal_helper = (ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm").read_text(encoding="utf-8")

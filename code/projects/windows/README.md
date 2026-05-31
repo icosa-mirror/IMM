@@ -75,6 +75,14 @@ Optional configuration:
 
 ## Godot Commands
 
+Godot GDExtension builds require Python, SCons, Visual Studio C++ tools, `godot-cpp`, and a Godot executable for smoke tests. Install SCons with:
+
+```powershell
+python -m pip install --user scons
+```
+
+The helpers default to Godot 4.5-compatible `godot-cpp` bindings (`godot-4.5-stable`). Use a matching Godot 4.5 executable for local smoke runs; the Windows CI job installs SCons, downloads Godot 4.5, caches `thirdparty\godot-cpp`, and builds the extension with the same binding ref.
+
 Batch:
 
 ```batch
@@ -109,10 +117,10 @@ To build the extension and immediately run the native Godot smoke test:
 .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
 ```
 
-To request Vulkan in that smoke, pass renderer API `5` (`0=Auto`, `1=OpenGL`, `2=Direct3D`, `3=GLES`, `4=Metal`, `5=Vulkan`):
+To request Vulkan in that smoke, pass renderer API `5` (`0=Auto`, `1=OpenGL`, `2=Direct3D`, `3=GLES`, `4=Metal`, `5=Vulkan`) and run headed so Godot exposes a `RenderingDevice`:
 
 ```powershell
-.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -SmokeRendererApi 5 -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
+.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -HeadedSmoke -SmokeRendererApi 5 -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
 ```
 
 To run local Godot extension checks without MSBuild, SCons, or `godot-cpp`:
@@ -153,10 +161,10 @@ Or pass the executable directly:
 .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
 ```
 
-Use `-RendererApi 5` to request Vulkan in the native smoke scene:
+Use `-RendererApi 5 -Headed` to request Vulkan in the native smoke scene. The headed Vulkan smoke currently verifies that Godot is running Forward+/Vulkan, exposes native Vulkan driver resources, and starts an IMM Vulkan frame against Godot's external instance/device/queue through the compositor. It is a handoff/init smoke, not yet a full `sample1.imm` Godot rendering gate.
 
 ```powershell
-.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -RendererApi 5
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -RendererApi 5 -Headed
 ```
 
 To save smoke output and run metadata for debugging:
@@ -187,6 +195,6 @@ To check Godot executable resolution, smoke scene selection, and native dependen
 10. Writes `imm_godot_extension.dll`, copies `ImmGodotPlugin.dll`, stages the IMM runtime dependency DLLs, verifies the complete staged DLL set, and writes `godot-extension-dlls.txt` in:
    - `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug`
    - or `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release`
-11. Runs `run-godot-smoke.ps1 -RequireExtension` when `-RunSmoke` is passed.
+11. Runs `run-godot-smoke.ps1 -RequireExtension` when `-RunSmoke` is passed, adding `-Headed` when `-HeadedSmoke` is passed.
 
 The GitHub Actions Windows job additionally downloads Godot 4.5, caches `thirdparty\godot-cpp` by `GODOT_CPP_REF`, runs script-stub smoke before the native build with `run-godot-smoke.ps1 -LogDir artifacts\godot-smoke-script`, builds the GDExtension, then runs `run-godot-smoke.ps1 -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight`. That post-build preflight verifies the GDExtension DLL, `ImmGodotPlugin.dll`, staged IMM runtime dependency DLLs, and Godot editor lookup mirroring without launching the native IMM renderer. CI uploads both log directories as `ImmGodotSmokeLogs-Windows` and uploads the full staged DLL set plus `godot-extension-dlls.txt` as `ImmGodotGDExtension-Windows`. The full native Windows smoke remains available for local backend work through `-RunSmoke` or `run-godot-smoke.ps1 -RequireExtension`, but it is not a CI gate until Windows has a valid Godot-compatible production renderer backend. Omit `-RequireExtension` to run the script-stub `SampleScene.tscn` smoke path.

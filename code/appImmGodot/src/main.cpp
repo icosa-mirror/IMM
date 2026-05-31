@@ -5,6 +5,9 @@
 #if defined(__APPLE__)
 #include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
 #endif
+#if defined(_WIN32) || defined(ANDROID)
+#include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
+#endif
 
 #include <cstdlib>
 #include <cstdio>
@@ -146,6 +149,11 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     config.rendererApi = iResolveRendererApi(rendererApi);
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
+    if (config.rendererApi == piRenderer::API::Vulkan)
+    {
+        config.initializeRendererOnInit = false;
+        config.initializeFullscreen = false;
+    }
     const int result = gBridge.Init(config) ? 0 : -1;
     if (result == 0 && iDebugLoggingEnabled())
     {
@@ -248,6 +256,42 @@ extern "C" IMMGODOT_EXPORT void ImmGodot_EndMetalFrame()
 #endif
 }
 
+extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFrame *frame)
+{
+    if (frame == nullptr || frame->version != 1 || frame->width <= 0 || frame->height <= 0)
+        return -1;
+    if (!gBridge.IsInitialized() || gBridge.GetRenderer() == nullptr || gBridge.GetRenderer()->GetAPI() != piRenderer::API::Vulkan)
+        return -1;
+
+#if defined(_WIN32) || defined(ANDROID)
+    piVulkanExternalDevice externalDevice = {};
+    externalDevice.instance = frame->instance;
+    externalDevice.physicalDevice = frame->physicalDevice;
+    externalDevice.device = frame->device;
+    externalDevice.graphicsQueue = frame->graphicsQueue;
+    externalDevice.graphicsQueueFamilyIndex = frame->graphicsQueueFamilyIndex;
+    if (externalDevice.instance == nullptr ||
+        externalDevice.physicalDevice == nullptr ||
+        externalDevice.device == nullptr ||
+        externalDevice.graphicsQueue == nullptr)
+    {
+        return -1;
+    }
+
+    if (!gBridge.CompleteGraphicsInitialization(&externalDevice))
+    {
+        return -1;
+    }
+    return 0;
+#else
+    return -1;
+#endif
+}
+
+extern "C" IMMGODOT_EXPORT void ImmGodot_EndVulkanFrame()
+{
+}
+
 extern "C" IMMGODOT_EXPORT void ImmGodot_GlobalWork(int enabled)
 {
     gBridge.GlobalWork(enabled == 1, 9000);
@@ -343,6 +387,8 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_RenderCamera(int cameraID,
 extern "C" IMMGODOT_EXPORT int ImmGodot_LoadFromFile(char *fileName)
 {
     if (fileName == nullptr || fileName[0] == '\0')
+        return -1;
+    if (!gBridge.IsInitialized() || !gBridge.IsGraphicsInitialized() || gBridge.GetPlayer() == nullptr)
         return -1;
     return iPlayer().Load(pistr2ws(fileName));
 }

@@ -2,6 +2,7 @@
 
 #include "appImmGodot/src/imm_godot_plugin.h"
 #include "imm_viewer_metal_frame.h"
+#include "imm_viewer_vulkan_frame.h"
 
 #include <godot_cpp/classes/render_data.hpp>
 #include <godot_cpp/classes/render_scene_buffers.hpp>
@@ -333,6 +334,13 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     int view_count = 0;
     uint64_t command_queue_handle = 0;
     uint64_t color_texture_handle = 0;
+    uint64_t vulkan_instance_handle = 0;
+    uint64_t vulkan_physical_device_handle = 0;
+    uint64_t vulkan_device_handle = 0;
+    uint64_t vulkan_queue_handle = 0;
+    uint64_t vulkan_queue_family_index = 0;
+    uint64_t vulkan_image_view_handle = 0;
+    uint32_t vulkan_image_format = 0;
     const bool rd_clear_test = std::getenv("IMM_GODOT_RD_CLEAR_TEST") != nullptr;
     Error rd_clear_result = OK;
     bool rd_framebuffer_valid = false;
@@ -357,9 +365,16 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         if (rendering_device != nullptr)
         {
             command_queue_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_COMMAND_QUEUE, RID(), 0);
+            vulkan_instance_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_INSTANCE, RID(), 0);
+            vulkan_physical_device_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE, RID(), 0);
+            vulkan_device_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_DEVICE, RID(), 0);
+            vulkan_queue_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_QUEUE, RID(), 0);
+            vulkan_queue_family_index = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_QUEUE_FAMILY_INDEX, RID(), 0);
             if (color_texture.is_valid())
             {
                 color_texture_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, color_texture, 0);
+                vulkan_image_view_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, color_texture, 0);
+                vulkan_image_format = static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, color_texture, 0));
             }
         }
     }
@@ -401,6 +416,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     }
 
     bool metal_frame_started = false;
+    bool vulkan_frame_started = false;
     bool composite_result = false;
     bool had_intermediate_texture = false;
     int render_result = 0;
@@ -413,11 +429,36 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         uint64_t render_texture_handle = had_intermediate_texture
                                              ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, intermediate_texture, 0)
                                              : 0;
-        metal_frame_started = ImmViewerGodotBeginMetalTextureFrame(command_queue_handle,
-                                                                   render_texture_handle,
-                                                                   render_width,
-                                                                   render_height);
-        if (metal_frame_started)
+        uint64_t render_texture_vulkan_image_handle = had_intermediate_texture
+                                                          ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE, intermediate_texture, 0)
+                                                          : 0;
+        uint64_t render_texture_view_handle = had_intermediate_texture
+                                                  ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, intermediate_texture, 0)
+                                                  : 0;
+        const uint32_t render_texture_format = had_intermediate_texture
+                                                   ? static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, intermediate_texture, 0))
+                                                   : 0;
+        if (vulkan_instance_handle != 0 && vulkan_physical_device_handle != 0 && vulkan_device_handle != 0 && vulkan_queue_handle != 0)
+        {
+            vulkan_frame_started = ImmViewerGodotBeginVulkanTextureFrame(vulkan_instance_handle,
+                                                                         vulkan_physical_device_handle,
+                                                                         vulkan_device_handle,
+                                                                         vulkan_queue_handle,
+                                                                         vulkan_queue_family_index,
+                                                                         render_texture_vulkan_image_handle,
+                                                                         render_texture_view_handle,
+                                                                         render_texture_format,
+                                                                         render_width,
+                                                                         render_height);
+        }
+        if (!vulkan_frame_started)
+        {
+            metal_frame_started = ImmViewerGodotBeginMetalTextureFrame(command_queue_handle,
+                                                                       render_texture_handle,
+                                                                       render_width,
+                                                                       render_height);
+        }
+        if (vulkan_frame_started || metal_frame_started)
         {
             render_result = ImmGodot_RenderCamera(render_request.camera_id,
                                                   0,
@@ -427,7 +468,14 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
                                                   static_cast<float>(render_height),
                                                   0.0f,
                                                   1.0f);
-            ImmViewerGodotEndMetalTextureFrame();
+            if (vulkan_frame_started)
+            {
+                ImmViewerGodotEndVulkanTextureFrame();
+            }
+            else
+            {
+                ImmViewerGodotEndMetalTextureFrame();
+            }
             composite_result = composite_texture_to_color(rendering_device, intermediate_texture, color_texture);
         }
         else
@@ -456,6 +504,8 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _last_rd_clear_draw_list = rd_clear_draw_list;
         _last_had_queued_render = render_request.queued;
         _last_metal_frame_started = metal_frame_started;
+        _last_vulkan_frame_started = vulkan_frame_started;
+        _ever_vulkan_frame_started = _ever_vulkan_frame_started || vulkan_frame_started;
         _last_composite_result = composite_result;
         _last_had_intermediate_texture = had_intermediate_texture;
         _last_render_result = render_result;
@@ -464,6 +514,13 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _last_render_height = render_request.queued ? render_request.height : 0;
         _last_command_queue_handle = command_queue_handle;
         _last_color_texture_handle = color_texture_handle;
+        _last_vulkan_instance_handle = vulkan_instance_handle;
+        _last_vulkan_physical_device_handle = vulkan_physical_device_handle;
+        _last_vulkan_device_handle = vulkan_device_handle;
+        _last_vulkan_queue_handle = vulkan_queue_handle;
+        _last_vulkan_queue_family_index = vulkan_queue_family_index;
+        _last_vulkan_image_view_handle = vulkan_image_view_handle;
+        _last_vulkan_image_format = vulkan_image_format;
         _last_color_texture = color_texture;
         _last_internal_size = internal_size;
         _last_target_size = target_size;
@@ -489,6 +546,8 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["last_rd_clear_draw_list"] = _last_rd_clear_draw_list;
     result["last_had_queued_render"] = _last_had_queued_render;
     result["last_metal_frame_started"] = _last_metal_frame_started;
+    result["last_vulkan_frame_started"] = _last_vulkan_frame_started;
+    result["ever_vulkan_frame_started"] = _ever_vulkan_frame_started;
     result["last_composite_result"] = _last_composite_result;
     result["last_had_intermediate_texture"] = _last_had_intermediate_texture;
     result["last_render_result"] = _last_render_result;
@@ -497,6 +556,13 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["last_render_height"] = _last_render_height;
     result["last_command_queue_handle"] = _last_command_queue_handle;
     result["last_color_texture_handle"] = _last_color_texture_handle;
+    result["last_vulkan_instance_handle"] = _last_vulkan_instance_handle;
+    result["last_vulkan_physical_device_handle"] = _last_vulkan_physical_device_handle;
+    result["last_vulkan_device_handle"] = _last_vulkan_device_handle;
+    result["last_vulkan_queue_handle"] = _last_vulkan_queue_handle;
+    result["last_vulkan_queue_family_index"] = _last_vulkan_queue_family_index;
+    result["last_vulkan_image_view_handle"] = _last_vulkan_image_view_handle;
+    result["last_vulkan_image_format"] = _last_vulkan_image_format;
     result["last_color_texture"] = _last_color_texture;
     result["last_internal_size"] = _last_internal_size;
     result["last_target_size"] = _last_target_size;

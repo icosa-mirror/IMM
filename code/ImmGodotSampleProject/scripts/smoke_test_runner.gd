@@ -132,6 +132,7 @@ func _run() -> void:
         failures.append("camera %d was not auto-registered by ImmViewer" % CAMERA_ID)
 
     var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
+    print("IMM Godot backend diagnostics: %s" % str(backend_diagnostics))
     if backend_diagnostics.is_empty():
         failures.append("get_render_backend_diagnostics returned an empty Dictionary")
     if int(backend_diagnostics.get("renderer_api", -1)) != requested_renderer_api:
@@ -141,9 +142,17 @@ func _run() -> void:
         ])
     if str(backend_diagnostics.get("project_rendering_method", "")) != EXPECTED_RENDERER:
         failures.append("render backend diagnostics reported renderer %s" % str(backend_diagnostics.get("project_rendering_method", "")))
+    var requested_vulkan := requested_renderer_api == 5
     if bool(backend_diagnostics.get("metal_adapter_candidate", true)):
         failures.append("script-stub smoke path should not report a Metal adapter candidate")
-    if bool(backend_diagnostics.get("vulkan_adapter_candidate", true)):
+    if requested_vulkan and expected_native:
+        if not bool(backend_diagnostics.get("wants_vulkan_renderer", false)):
+            failures.append("native Vulkan smoke did not report wants_vulkan_renderer")
+        if not bool(backend_diagnostics.get("driver_is_vulkan", false)):
+            failures.append("native Vulkan smoke did not report a Vulkan RenderingDevice driver")
+        if not bool(backend_diagnostics.get("vulkan_adapter_candidate", false)):
+            failures.append("native Vulkan smoke did not report a Vulkan adapter candidate")
+    elif bool(backend_diagnostics.get("vulkan_adapter_candidate", true)):
         failures.append("script-stub smoke path should not report a Vulkan adapter candidate")
     if int(backend_diagnostics.get("renderer_api", -1)) < 0:
         failures.append("render backend diagnostics did not report renderer_api")
@@ -152,6 +161,36 @@ func _run() -> void:
             str(backend_diagnostics.get("native_backend_initialized", false)),
             str(expected_native),
         ])
+
+    if requested_vulkan and expected_native:
+        var warmup_size: Vector2 = root.get_visible_rect().size
+        var warmup_width: int = max(int(warmup_size.x), 1)
+        var warmup_height: int = max(int(warmup_size.y), 1)
+        var warmup_queue_result: int = int(viewer.queue_render_camera_transform(camera.global_transform, warmup_width, warmup_height, camera.fov, CAMERA_ID))
+        if warmup_queue_result < 0:
+            failures.append("native Vulkan warmup queue_render_camera_transform returned %d" % warmup_queue_result)
+        await process_frame
+        await process_frame
+        var compositor_effect: Object = null
+        if camera.compositor != null and not camera.compositor.compositor_effects.is_empty():
+            compositor_effect = camera.compositor.compositor_effects[0]
+        if compositor_effect == null or not compositor_effect.has_method("get_diagnostics"):
+            failures.append("native Vulkan smoke scene is missing ImmViewerCompositorEffect diagnostics")
+        else:
+            var compositor_diagnostics: Dictionary = compositor_effect.get_diagnostics()
+            print("IMM Godot compositor diagnostics: %s" % str(compositor_diagnostics))
+            if int(compositor_diagnostics.get("callback_count", 0)) <= 0:
+                failures.append("ImmViewerCompositorEffect render callback did not run")
+            if int(compositor_diagnostics.get("last_vulkan_instance_handle", 0)) == 0:
+                failures.append("ImmViewerCompositorEffect did not receive a Vulkan instance handle")
+            if int(compositor_diagnostics.get("last_vulkan_device_handle", 0)) == 0:
+                failures.append("ImmViewerCompositorEffect did not receive a Vulkan device handle")
+            if int(compositor_diagnostics.get("last_vulkan_queue_handle", 0)) == 0:
+                failures.append("ImmViewerCompositorEffect did not receive a Vulkan queue handle")
+            if not bool(compositor_diagnostics.get("ever_vulkan_frame_started", false)):
+                failures.append("ImmViewerCompositorEffect did not start a Vulkan frame")
+        _finish(failures)
+        return
 
     if not viewer.is_loaded():
         var load_result: int = int(viewer.load_document())

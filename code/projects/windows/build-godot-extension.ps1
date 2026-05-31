@@ -21,6 +21,8 @@ param(
 
     [switch]$RunSmoke,
 
+    [switch]$HeadedSmoke,
+
     [ValidateRange(0, 5)]
     [int]$SmokeRendererApi = 0,
 
@@ -163,6 +165,9 @@ function Resolve-Python {
 function Invoke-Tool([string[]]$command, [string[]]$arguments, [string]$workingDirectory) {
     Push-Location $workingDirectory
     try {
+        if (-not $env:PROCESSOR_ARCHITECTURE) {
+            $env:PROCESSOR_ARCHITECTURE = "AMD64"
+        }
         $toolArgs = @()
         if ($command.Length -gt 1) {
             $toolArgs += $command[1..($command.Length - 1)]
@@ -240,7 +245,7 @@ if ($PreflightOnly) {
     return
 }
 
-& $msbuild $solution "/t:appImmGodot:Rebuild" "/p:Configuration=$Configuration" "/p:Platform=$Platform" "/p:PostBuildEventUseInBuild=false" "/m"
+& $msbuild $solution "/t:appImmGodot" "/p:Configuration=$Configuration" "/p:Platform=$Platform" "/p:PostBuildEventUseInBuild=false" "/p:TrackFileAccess=false" "/p:CL_MPCount=1" "-nr:false"
 if ($LASTEXITCODE -ne 0) {
     throw "MSBuild failed with exit code $LASTEXITCODE"
 }
@@ -326,6 +331,9 @@ Write-Host "Verified staged Godot DLL set: $($requiredOutputDlls.Count) files"
 
 if ($RunSmoke) {
     $smokeArgs = @("-Configuration", $Configuration, "-RequireExtension", "-RendererApi", $SmokeRendererApi)
+    if ($HeadedSmoke) {
+        $smokeArgs += "-Headed"
+    }
     if ($GodotExe) {
         $smokeArgs += @("-GodotExe", $GodotExe)
     }

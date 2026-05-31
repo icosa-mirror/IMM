@@ -133,6 +133,13 @@ namespace ImmShared
         return true;
     }
 
+    bool ImmEngineBridge::CompleteGraphicsInitialization(void *graphicsDevice)
+    {
+        if (!mGraphicsInitialized)
+            mConfig.graphicsDevice = graphicsDevice;
+        return CompleteGraphicsInitialization();
+    }
+
     void ImmEngineBridge::Shutdown()
     {
         ShutdownRuntime();

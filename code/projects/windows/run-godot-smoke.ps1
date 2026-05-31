@@ -15,6 +15,8 @@ param(
 
     [switch]$RequireExtension,
 
+    [switch]$Headed,
+
     [switch]$PreflightOnly
 )
 
@@ -126,7 +128,12 @@ $env:IMM_GODOT_SMOKE_SCENE = $SmokeScene
 $env:IMM_GODOT_EXPECT_NATIVE = if ($RequireExtension) { "1" } else { "0" }
 $env:IMM_GODOT_LOAD_UNLOAD_CYCLES = "$LoadUnloadCycles"
 $env:IMM_GODOT_RENDERER_API = "$RendererApi"
-$output = & $godot --headless --path $sampleProject --script $smokeScript 2>&1
+$godotArgs = @()
+if (-not $Headed) {
+    $godotArgs += "--headless"
+}
+$godotArgs += @("--path", $sampleProject, "--script", $smokeScript)
+$output = & $godot @godotArgs 2>&1
 $exitCode = $LASTEXITCODE
 $output | ForEach-Object { Write-Host $_ }
 $successMarker = "IMM Godot smoke test passed"
@@ -142,6 +149,7 @@ if ($LogDir) {
         "RequireExtension=$($RequireExtension.IsPresent)",
         "LoadUnloadCycles=$LoadUnloadCycles",
         "RendererApi=$RendererApi",
+        "Headed=$($Headed.IsPresent)",
         "ExtensionDir=$extensionDir",
         "ExtensionDll=$extensionDll",
         "EditorExtensionDir=$editorExtensionDir",

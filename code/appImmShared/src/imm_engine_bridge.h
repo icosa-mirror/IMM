@@ -53,6 +53,7 @@ namespace ImmShared
 
         bool Init(const InitConfig &config);
         bool CompleteGraphicsInitialization();
+        bool CompleteGraphicsInitialization(void *graphicsDevice);
         void Shutdown();
 
         void GlobalWork(bool enabled, int budgetMicroseconds = 9000);

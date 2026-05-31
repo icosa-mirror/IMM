@@ -41,6 +41,8 @@ namespace godot
         int64_t _last_rd_clear_draw_list = -1;
         bool _last_had_queued_render = false;
         bool _last_metal_frame_started = false;
+        bool _last_vulkan_frame_started = false;
+        bool _ever_vulkan_frame_started = false;
         bool _last_composite_result = false;
         bool _last_had_intermediate_texture = false;
         int _last_render_result = 0;
@@ -49,6 +51,13 @@ namespace godot
         int _last_render_height = 0;
         uint64_t _last_command_queue_handle = 0;
         uint64_t _last_color_texture_handle = 0;
+        uint64_t _last_vulkan_instance_handle = 0;
+        uint64_t _last_vulkan_physical_device_handle = 0;
+        uint64_t _last_vulkan_device_handle = 0;
+        uint64_t _last_vulkan_queue_handle = 0;
+        uint64_t _last_vulkan_queue_family_index = 0;
+        uint64_t _last_vulkan_image_view_handle = 0;
+        uint32_t _last_vulkan_image_format = 0;
         RID _last_color_texture;
         Vector2i _last_internal_size;
         Vector2i _last_target_size;
