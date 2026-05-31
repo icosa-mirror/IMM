@@ -252,6 +252,7 @@ struct piVulkanState
     bool cpuDrawDiagnosticReported = false;
     bool cpuPaintDiagnosticReported = false;
     bool cpuPresentDiagnosticReported = false;
+    uint32_t cpuPaintDrawCount = 0;
     uint64_t liveRenderTargets = 0;
     uint64_t liveRasterStates = 0;
     uint64_t liveBlendStates = 0;
@@ -418,8 +419,12 @@ static void iDrawCpuLine(piTexture texture, float x0, float y0, float x1, float 
     {
         return;
     }
-    const int steps = (int)(std::abs(x1 - x0) + std::abs(y1 - y0)) + 1;
-    const int radius = (int)(width < 1.0f ? 1.0f : (width > 8.0f ? 8.0f : width));
+    int steps = (int)(std::abs(x1 - x0) + std::abs(y1 - y0)) + 1;
+    if (steps > 64)
+    {
+        steps = 64;
+    }
+    const int radius = (int)(width < 1.0f ? 1.0f : (width > 2.0f ? 2.0f : width));
     for (int i = 0; i <= steps; ++i)
     {
         const float t = steps > 0 ? (float)i / (float)steps : 0.0f;
@@ -1141,6 +1146,8 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
 
     float previous[2] = {};
     bool hasPrevious = false;
+    uint32_t lastBid = 0;
+    bool hasLastBid = false;
     uint32_t projected = 0;
     float minX = 1000000.0f;
     float minY = 1000000.0f;
@@ -1157,6 +1164,12 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         if (brushType == 1) bid = realVertexID >> 1u;
         else if (brushType == 2 || brushType == 3) bid = realVertexID / 7u;
         else if (brushType == 4) bid = realVertexID >> 2u;
+        if (hasLastBid && bid == lastBid)
+        {
+            continue;
+        }
+        lastBid = bid;
+        hasLastBid = true;
 
         float p[3] = {};
         uint8_t color[3] = {};
@@ -1265,7 +1278,11 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         iReport(mReporter, message);
     }
 #if defined(WINDOWS)
-    iPresentTextureToWindow(mState, target);
+    ++mState->cpuPaintDrawCount;
+    if (!mState->captureWritten || (mState->cpuPaintDrawCount & 31u) == 0u)
+    {
+        iPresentTextureToWindow(mState, target);
+    }
 #endif
 }
 void piRendererVulkan::DrawPrimitiveIndirect(PrimitiveType pt, piBuffer cmds, uint32_t offset, uint32_t num) { (void)pt; (void)cmds; (void)offset; (void)num; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet"); }
