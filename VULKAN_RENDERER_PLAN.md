@@ -12,6 +12,14 @@
 - Metal is a working playback backend used by the macOS standalone player, macOS Unity plugin, and macOS Godot plugin.
 - Vulkan is a blocker for the Godot plugin on Windows and Android.
 - The first target should be a Windows standalone Vulkan player because it is the easiest path to verify locally while building out backend behavior.
+- No local `dxc`, `glslc`, `glslangValidator`, `shaderc`, or Vulkan SDK shader toolchain is currently available in PATH/vcpkg, so a generated SPIR-V path needs either new tooling or checked-in generated assets.
+- To get standalone visual output sooner, the next implementation step is an interim Vulkan-presented CPU raster path for the static paint data exercised by `sample1.imm`, followed by replacement with real GPU Vulkan pipelines.
+
+## Acceptance target
+
+- The Windows standalone player must render `exampleImmFiles/sample1.imm` through `RenderingAPI: "Vulkan"` with visible output comparable to the existing base standalone rendering path.
+- Vulkan initialization-only smoke is not sufficient.
+- Placeholder diagnostics for render target binding or draw submission are blockers, not acceptable completion criteria.
 
 ## Scope for this pass
 
@@ -20,7 +28,8 @@
 3. Make the backend compile in the Windows standalone build first, then keep Android integration as a follow-up target.
 4. Implement initialization, teardown, reporting, CPU-side resource wrappers, state tracking, query timing, viewport state, and unsupported-feature diagnostics.
 5. Add enough Windows standalone player selection/build wiring to instantiate and verify the Vulkan backend locally.
-6. Keep draw and shader paths explicitly diagnosed until the player shader pipeline is translated to SPIR-V and render pass/swapchain ownership is defined; this pass should establish the Vulkan backend skeleton and integration, not claim Metal-equivalent playback.
+6. Replace placeholder render target and draw submission paths with real Vulkan rendering for the standalone player.
+7. Translate or provide the shader path needed by `sample1.imm` playback.
 
 ## Implementation tasks
 
@@ -34,9 +43,13 @@
 6. [complete] Update Windows project files to build the Vulkan source and link/load the Vulkan loader.
 7. [complete] Add Windows standalone viewer selection for Vulkan.
 8. [complete] Update shared bridge/Godot API names so Vulkan can be requested explicitly on Windows and Android while preserving existing defaults.
-9. [complete] Verify with the closest available Windows standalone build.
+9. [in progress] Verify with the closest available Windows standalone build.
 10. [complete] Update Android CMake to build the Vulkan source and load `libvulkan.so` dynamically after Windows verification.
 11. [complete] Add a separate Windows standalone Vulkan smoke settings file without changing the default viewer config.
+12. [pending] Implement real Vulkan render targets, command buffers, render pass/framebuffer setup, and swapchain presentation for the Windows standalone viewer.
+13. [pending] Implement or generate Vulkan-compatible shaders for the player paths exercised by `sample1.imm`.
+14. [pending] Verify nonblank standalone Vulkan output for `sample1.imm`.
+15. [pending] Implement interim Vulkan-presented CPU raster output for static paint so `sample1.imm` becomes visible before the full SPIR-V/pipeline path lands.
 
 ## Follow-up work after this pass
 
@@ -51,5 +64,5 @@
 - Windows `libImmCore` Debug builds with `piVulkan_Renderer.cpp`.
 - Windows `appImmViewer` Debug builds successfully with Vulkan selectable from settings.
 - Existing OpenGL standalone smoke reached IMM CPU/GPU load and playback start before manual termination.
-- Vulkan standalone smoke using `code/appImmViewer/exe/settings-vulkan-smoke.json` initialized an owned Vulkan device, reached renderer initialization, loaded `sample1.imm`, and emitted the expected placeholder diagnostics for render target binding and draw submission.
+- Vulkan standalone smoke using `code/appImmViewer/exe/settings-vulkan-smoke.json` initialized an owned Vulkan device and loaded `sample1.imm`, but did not render. The placeholder diagnostics for render target binding and draw submission are now tracked as blockers.
 - Android `:libImmCore:assembleDebug` builds successfully with `piVulkan_Renderer.cpp` included; CMake still emits the pre-existing dev warning about no top-level `project()` command.
