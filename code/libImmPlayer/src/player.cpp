@@ -1318,8 +1318,16 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        {
+            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        else
+        {
+            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
         if (!iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND")) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         if (!iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL")) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
@@ -1394,8 +1402,16 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        {
+            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        else
+        {
+            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
         mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
@@ -1464,8 +1480,16 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        {
+            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        else
+        {
+            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
         mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
