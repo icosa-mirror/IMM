@@ -18,6 +18,7 @@ $repoRoot = Resolve-Path (Join-Path $scriptDir "..\..\..")
 $viewerExeDir = Join-Path $repoRoot "code\appImmViewer\exe"
 $debugLog = Join-Path $viewerExeDir "debug.txt"
 $capturePath = Join-Path $viewerExeDir "vulkan_sample1_smoke.ppm"
+$capturePngPath = Join-Path $viewerExeDir "vulkan_sample1_smoke.png"
 $captureTmpPath = "$capturePath.tmp"
 $settingsPath = Join-Path $viewerExeDir "settings-vulkan-smoke.json"
 $exeName = if ($Configuration -ieq "Debug") { "appImmViewer_Debug.exe" } else { "appImmViewer_Release.exe" }
@@ -128,7 +129,7 @@ if (-not (Test-Path $settingsPath)) {
     throw "Vulkan smoke settings were not found: $settingsPath"
 }
 
-Remove-Item -LiteralPath $debugLog, $capturePath, $captureTmpPath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $debugLog, $capturePath, $capturePngPath, $captureTmpPath -Force -ErrorAction SilentlyContinue
 
 $previousEnv = @{
     IMM_VIEWER_VALIDATE_FRAME = $env:IMM_VIEWER_VALIDATE_FRAME
@@ -262,5 +263,5 @@ foreach ($pattern in $badPatterns) {
 Write-Host "Live present: direct GPU Vulkan presentation logged"
 
 if (-not $KeepArtifacts) {
-    Remove-Item -LiteralPath $capturePath, $captureTmpPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $capturePath, $capturePngPath, $captureTmpPath -Force -ErrorAction SilentlyContinue
 }

@@ -139,14 +139,27 @@ $viewerDir = Split-Path -Parent $ViewerExe
 $viewerDebugLogPath = Join-Path $viewerDir "debug.txt"
 $capturedDebugLogPath = Join-Path $outputDir "$outputBaseName.debug.txt"
 New-Item -ItemType Directory -Force $outputDir | Out-Null
-if (Test-Path -LiteralPath $outputFullPath) {
-    Remove-Item -LiteralPath $outputFullPath -Force
-}
-if (Test-Path -LiteralPath $viewerDebugLogPath) {
-    Remove-Item -LiteralPath $viewerDebugLogPath -Force
-}
-if (Test-Path -LiteralPath $capturedDebugLogPath) {
-    Remove-Item -LiteralPath $capturedDebugLogPath -Force
+
+function Remove-FileIfPossible([string]$PathValue, [switch]$Required) {
+    if (-not (Test-Path -LiteralPath $PathValue)) {
+        return
+    }
+
+    for ($attempt = 1; $attempt -le 5; ++$attempt) {
+        try {
+            Remove-Item -LiteralPath $PathValue -Force -ErrorAction Stop
+            return
+        } catch {
+            if ($attempt -eq 5) {
+                if ($Required) {
+                    throw
+                }
+                Write-Warning "Could not remove stale file '$PathValue': $($_.Exception.Message)"
+                return
+            }
+            Start-Sleep -Milliseconds 250
+        }
+    }
 }
 
 function Copy-ViewerDebugLog {
@@ -160,6 +173,10 @@ function Copy-ViewerDebugLog {
         Write-Host "Viewer debug log was not written: $viewerDebugLogPath"
     }
 }
+
+Remove-FileIfPossible $outputFullPath -Required
+Remove-FileIfPossible $viewerDebugLogPath
+Remove-FileIfPossible $capturedDebugLogPath -Required
 
 $runtimeSettingsPath = Join-Path $outputDir "settings-baseline-directx-sample1.runtime.json"
 $runtimeSettings = Get-Content -LiteralPath $SettingsPath -Raw | ConvertFrom-Json
