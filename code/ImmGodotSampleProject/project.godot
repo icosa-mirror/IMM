@@ -23,6 +23,11 @@ window/size/viewport_height=900
 
 paths=["res://addons/imm_viewer/imm_viewer.gdextension"]
 
+[display]
+
+window/frame_pacing/android/enable_frame_pacing=false
+
 [rendering]
 
 environment/defaults/default_clear_color=Color(0.04, 0.05, 0.08, 1)
+textures/vram_compression/import_etc2_astc=true

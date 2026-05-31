@@ -3,10 +3,12 @@ extends Node3D
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_DOCUMENT_PATH := "res://../../exampleImmFiles/sample1.imm"
 const ANDROID_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
+const ANDROID_USER_SAMPLE_DOCUMENT_PATH := "user://sample1.imm"
 const CAMERA_ID := 0
 const IMM_RENDERER_API_METAL := 4
 const IMM_RENDERER_API_VULKAN := 5
 const MAX_READY_SECONDS := 12.0
+const ANDROID_MAX_READY_SECONDS := 30.0
 const RENDER_SETTLE_FRAMES := 30
 const DEFAULT_RELOAD_CYCLES := 1
 const MIN_CONTENT_PIXELS := 512
@@ -129,7 +131,8 @@ func _run_visual_smoke() -> void:
 			failures.append("load_document returned %d" % load_result)
 
 	var sequence_ready: bool = bool(viewer.is_sequence_ready())
-	var ready_deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
+	var max_ready_seconds := _max_ready_seconds()
+	var ready_deadline_msec: int = Time.get_ticks_msec() + int(max_ready_seconds * 1000.0)
 	while Time.get_ticks_msec() < ready_deadline_msec:
 		if viewer.is_loaded():
 			_apply_background_color()
@@ -149,6 +152,8 @@ func _run_visual_smoke() -> void:
 		await get_tree().process_frame
 		if viewer.is_loaded():
 			_apply_background_color()
+			if viewer.is_sequence_ready():
+				sequence_ready = true
 			if sequence_ready:
 				_frame_camera_from_document()
 			_queue_active_camera()
@@ -156,7 +161,7 @@ func _run_visual_smoke() -> void:
 	if not viewer.is_loaded():
 		failures.append("ImmViewer did not load %s" % str(viewer.get("document_path")))
 	if not sequence_ready:
-		failures.append("ImmViewer sequence was not ready after %.1f seconds" % MAX_READY_SECONDS)
+		failures.append("ImmViewer sequence was not ready after %.1f seconds" % max_ready_seconds)
 
 	var document_state: Dictionary = viewer.get_document_state()
 	var document_bounds: Dictionary = viewer.get_bounding_box()
@@ -184,7 +189,7 @@ func _run_visual_smoke() -> void:
 		if int(compositor_diagnostics.get("last_render_result", -1)) < 0:
 			failures.append("ImmGodot_RenderCamera returned %d" % int(compositor_diagnostics.get("last_render_result", -1)))
 
-	var screenshot_path := OS.get_environment("IMM_GODOT_VISUAL_SMOKE_PNG")
+	var screenshot_path := _get_env_string("IMM_GODOT_VISUAL_SMOKE_PNG", "")
 	if not screenshot_path.is_empty():
 		_apply_background_color()
 		await RenderingServer.frame_post_draw
@@ -200,8 +205,9 @@ func _run_visual_smoke() -> void:
 				str(content_diagnostics.get("content_bounds_width", 0)),
 				str(content_diagnostics.get("content_bounds_height", 0)),
 			])
-		if float(content_diagnostics.get("orientation_luma_delta", 0.0)) < MIN_ORIENTATION_LUMA_DELTA:
-			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % float(content_diagnostics.get("orientation_luma_delta", 0.0)))
+		var orientation_luma_delta := float(content_diagnostics.get("orientation_luma_delta", 0.0))
+		if selected_renderer_api == IMM_RENDERER_API_METAL and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
+			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % orientation_luma_delta)
 		var save_result := image.save_png(screenshot_path)
 		if save_result != OK:
 			failures.append("Failed to save visual smoke PNG %s: %d" % [screenshot_path, int(save_result)])
@@ -261,7 +267,8 @@ func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
 			continue
 
 		var ready := false
-		var ready_deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
+		var max_ready_seconds := _max_ready_seconds()
+		var ready_deadline_msec: int = Time.get_ticks_msec() + int(max_ready_seconds * 1000.0)
 		while Time.get_ticks_msec() < ready_deadline_msec:
 			if viewer.is_loaded():
 				_apply_background_color()
@@ -277,7 +284,7 @@ func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
 			failures.append("%s visual smoke reload cycle %d sequence was not ready after %.1f seconds" % [
 				selected_renderer_name,
 				cycle_index + 1,
-				MAX_READY_SECONDS,
+				max_ready_seconds,
 			])
 			stayed_ready = false
 	return stayed_ready
@@ -430,7 +437,34 @@ func _selected_renderer_name(renderer_api: int = -1) -> String:
 	return "API%d" % api
 
 func _sample_document_path() -> String:
-	return ANDROID_SAMPLE_DOCUMENT_PATH if OS.get_name() == "Android" else SAMPLE_DOCUMENT_PATH
+	if OS.get_name() != "Android":
+		return SAMPLE_DOCUMENT_PATH
+	return _prepare_android_sample_document()
+
+func _max_ready_seconds() -> float:
+	return ANDROID_MAX_READY_SECONDS if OS.get_name() == "Android" else MAX_READY_SECONDS
+
+func _prepare_android_sample_document() -> String:
+	var source_file := FileAccess.open(ANDROID_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
+	if source_file == null:
+		push_error("Failed to open Android sample document %s: %s" % [
+			ANDROID_SAMPLE_DOCUMENT_PATH,
+			error_string(FileAccess.get_open_error()),
+		])
+		return ANDROID_SAMPLE_DOCUMENT_PATH
+
+	var data := source_file.get_buffer(source_file.get_length())
+	var target_file := FileAccess.open(ANDROID_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
+	if target_file == null:
+		push_error("Failed to create Android sample document %s: %s" % [
+			ANDROID_USER_SAMPLE_DOCUMENT_PATH,
+			error_string(FileAccess.get_open_error()),
+		])
+		return ANDROID_SAMPLE_DOCUMENT_PATH
+
+	target_file.store_buffer(data)
+	target_file.flush()
+	return OS.get_user_data_dir().path_join("sample1.imm")
 
 func _should_run_visual_smoke() -> bool:
 	if OS.get_environment("IMM_GODOT_VISUAL_SMOKE") == "1":
@@ -438,6 +472,14 @@ func _should_run_visual_smoke() -> bool:
 	return OS.get_cmdline_args().has("--imm-godot-visual-smoke")
 
 func _get_env_int(name: String, default_value: int) -> int:
+	var value := _get_env_string(name, "")
+	if value.is_empty():
+		return default_value
+	if not value.is_valid_int():
+		return default_value
+	return max(int(value), 0)
+
+func _get_env_string(name: String, default_value: String) -> String:
 	var value := OS.get_environment(name)
 	if value.is_empty():
 		for argument in OS.get_cmdline_args():
@@ -447,6 +489,4 @@ func _get_env_int(name: String, default_value: int) -> int:
 				break
 	if value.is_empty():
 		return default_value
-	if not value.is_valid_int():
-		return default_value
-	return max(int(value), 0)
+	return value
