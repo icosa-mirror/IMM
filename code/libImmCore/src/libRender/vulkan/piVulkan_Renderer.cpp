@@ -46,6 +46,8 @@ typedef uint64_t VkDescriptorSetLayout;
 typedef uint64_t VkDescriptorPool;
 typedef uint64_t VkDescriptorSet;
 typedef uint64_t VkPipelineLayout;
+typedef uint64_t VkPipeline;
+typedef uint64_t VkPipelineCache;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
@@ -70,6 +72,26 @@ typedef uint32_t VkShaderStageFlags;
 typedef uint32_t VkDescriptorSetLayoutCreateFlags;
 typedef uint32_t VkDescriptorPoolCreateFlags;
 typedef uint32_t VkPipelineLayoutCreateFlags;
+typedef uint32_t VkPipelineCreateFlags;
+typedef uint32_t VkPipelineShaderStageCreateFlags;
+typedef uint32_t VkPipelineVertexInputStateCreateFlags;
+typedef uint32_t VkPipelineInputAssemblyStateCreateFlags;
+typedef uint32_t VkPipelineViewportStateCreateFlags;
+typedef uint32_t VkPipelineRasterizationStateCreateFlags;
+typedef uint32_t VkPipelineMultisampleStateCreateFlags;
+typedef uint32_t VkPipelineDepthStencilStateCreateFlags;
+typedef uint32_t VkPipelineColorBlendStateCreateFlags;
+typedef uint32_t VkPipelineDynamicStateCreateFlags;
+typedef uint32_t VkShaderStageFlagBits;
+typedef uint32_t VkPrimitiveTopology;
+typedef uint32_t VkPolygonMode;
+typedef uint32_t VkCullModeFlags;
+typedef uint32_t VkFrontFace;
+typedef uint32_t VkColorComponentFlags;
+typedef uint32_t VkBlendFactor;
+typedef uint32_t VkBlendOp;
+typedef uint32_t VkDynamicState;
+typedef uint32_t VkLogicOp;
 typedef uint32_t VkAttachmentDescriptionFlags;
 typedef uint32_t VkAttachmentLoadOp;
 typedef uint32_t VkAttachmentStoreOp;
@@ -109,6 +131,8 @@ static constexpr VkDescriptorSetLayout VK_NULL_DESCRIPTOR_SET_LAYOUT = 0;
 static constexpr VkDescriptorPool VK_NULL_DESCRIPTOR_POOL = 0;
 static constexpr VkDescriptorSet VK_NULL_DESCRIPTOR_SET = 0;
 static constexpr VkPipelineLayout VK_NULL_PIPELINE_LAYOUT = 0;
+static constexpr VkPipeline VK_NULL_PIPELINE = 0;
+static constexpr VkPipelineCache VK_NULL_PIPELINE_CACHE = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -134,6 +158,16 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO =
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO = 34;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET = 35;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO = 30;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO = 18;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO = 19;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO = 20;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO = 22;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO = 23;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO = 24;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO = 25;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO = 26;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO = 27;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO = 28;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
@@ -221,6 +255,26 @@ static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER = 6;
 static constexpr VkDescriptorType VK_DESCRIPTOR_TYPE_STORAGE_BUFFER = 7;
 static constexpr VkShaderStageFlags VK_SHADER_STAGE_VERTEX_BIT = 0x00000001;
 static constexpr VkShaderStageFlags VK_SHADER_STAGE_FRAGMENT_BIT = 0x00000010;
+static constexpr VkPrimitiveTopology VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP = 4;
+static constexpr VkPolygonMode VK_POLYGON_MODE_FILL = 0;
+static constexpr VkPolygonMode VK_POLYGON_MODE_LINE = 1;
+static constexpr VkCullModeFlags VK_CULL_MODE_NONE = 0;
+static constexpr VkCullModeFlags VK_CULL_MODE_FRONT_BIT = 0x00000001;
+static constexpr VkCullModeFlags VK_CULL_MODE_BACK_BIT = 0x00000002;
+static constexpr VkFrontFace VK_FRONT_FACE_CLOCKWISE = 0;
+static constexpr VkFrontFace VK_FRONT_FACE_COUNTER_CLOCKWISE = 1;
+static constexpr VkColorComponentFlags VK_COLOR_COMPONENT_R_BIT = 0x00000001;
+static constexpr VkColorComponentFlags VK_COLOR_COMPONENT_G_BIT = 0x00000002;
+static constexpr VkColorComponentFlags VK_COLOR_COMPONENT_B_BIT = 0x00000004;
+static constexpr VkColorComponentFlags VK_COLOR_COMPONENT_A_BIT = 0x00000008;
+static constexpr VkBlendFactor VK_BLEND_FACTOR_ZERO = 0;
+static constexpr VkBlendFactor VK_BLEND_FACTOR_ONE = 1;
+static constexpr VkBlendFactor VK_BLEND_FACTOR_SRC_ALPHA = 6;
+static constexpr VkBlendFactor VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA = 7;
+static constexpr VkBlendOp VK_BLEND_OP_ADD = 0;
+static constexpr VkDynamicState VK_DYNAMIC_STATE_VIEWPORT = 0;
+static constexpr VkDynamicState VK_DYNAMIC_STATE_SCISSOR = 1;
+static constexpr VkLogicOp VK_LOGIC_OP_COPY = 3;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_LOAD = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_CLEAR = 1;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_DONT_CARE = 2;
@@ -637,6 +691,169 @@ struct VkWriteDescriptorSet
     const void *pTexelBufferView;
 };
 
+struct VkSpecializationInfo
+{
+    uint32_t mapEntryCount;
+    const void *pMapEntries;
+    size_t dataSize;
+    const void *pData;
+};
+
+struct VkPipelineShaderStageCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineShaderStageCreateFlags flags;
+    VkShaderStageFlagBits stage;
+    VkShaderModule module;
+    const char *pName;
+    const VkSpecializationInfo *pSpecializationInfo;
+};
+
+struct VkPipelineVertexInputStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineVertexInputStateCreateFlags flags;
+    uint32_t vertexBindingDescriptionCount;
+    const void *pVertexBindingDescriptions;
+    uint32_t vertexAttributeDescriptionCount;
+    const void *pVertexAttributeDescriptions;
+};
+
+struct VkPipelineInputAssemblyStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineInputAssemblyStateCreateFlags flags;
+    VkPrimitiveTopology topology;
+    VkBool32 primitiveRestartEnable;
+};
+
+struct VkPipelineViewportStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineViewportStateCreateFlags flags;
+    uint32_t viewportCount;
+    const void *pViewports;
+    uint32_t scissorCount;
+    const void *pScissors;
+};
+
+struct VkPipelineRasterizationStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineRasterizationStateCreateFlags flags;
+    VkBool32 depthClampEnable;
+    VkBool32 rasterizerDiscardEnable;
+    VkPolygonMode polygonMode;
+    VkCullModeFlags cullMode;
+    VkFrontFace frontFace;
+    VkBool32 depthBiasEnable;
+    float depthBiasConstantFactor;
+    float depthBiasClamp;
+    float depthBiasSlopeFactor;
+    float lineWidth;
+};
+
+struct VkPipelineMultisampleStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineMultisampleStateCreateFlags flags;
+    VkSampleCountFlagBits rasterizationSamples;
+    VkBool32 sampleShadingEnable;
+    float minSampleShading;
+    const uint32_t *pSampleMask;
+    VkBool32 alphaToCoverageEnable;
+    VkBool32 alphaToOneEnable;
+};
+
+struct VkStencilOpState
+{
+    uint32_t failOp;
+    uint32_t passOp;
+    uint32_t depthFailOp;
+    VkCompareOp compareOp;
+    uint32_t compareMask;
+    uint32_t writeMask;
+    uint32_t reference;
+};
+
+struct VkPipelineDepthStencilStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineDepthStencilStateCreateFlags flags;
+    VkBool32 depthTestEnable;
+    VkBool32 depthWriteEnable;
+    VkCompareOp depthCompareOp;
+    VkBool32 depthBoundsTestEnable;
+    VkBool32 stencilTestEnable;
+    VkStencilOpState front;
+    VkStencilOpState back;
+    float minDepthBounds;
+    float maxDepthBounds;
+};
+
+struct VkPipelineColorBlendAttachmentState
+{
+    VkBool32 blendEnable;
+    VkBlendFactor srcColorBlendFactor;
+    VkBlendFactor dstColorBlendFactor;
+    VkBlendOp colorBlendOp;
+    VkBlendFactor srcAlphaBlendFactor;
+    VkBlendFactor dstAlphaBlendFactor;
+    VkBlendOp alphaBlendOp;
+    VkColorComponentFlags colorWriteMask;
+};
+
+struct VkPipelineColorBlendStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineColorBlendStateCreateFlags flags;
+    VkBool32 logicOpEnable;
+    VkLogicOp logicOp;
+    uint32_t attachmentCount;
+    const VkPipelineColorBlendAttachmentState *pAttachments;
+    float blendConstants[4];
+};
+
+struct VkPipelineDynamicStateCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineDynamicStateCreateFlags flags;
+    uint32_t dynamicStateCount;
+    const VkDynamicState *pDynamicStates;
+};
+
+struct VkGraphicsPipelineCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkPipelineCreateFlags flags;
+    uint32_t stageCount;
+    const VkPipelineShaderStageCreateInfo *pStages;
+    const VkPipelineVertexInputStateCreateInfo *pVertexInputState;
+    const VkPipelineInputAssemblyStateCreateInfo *pInputAssemblyState;
+    const void *pTessellationState;
+    const VkPipelineViewportStateCreateInfo *pViewportState;
+    const VkPipelineRasterizationStateCreateInfo *pRasterizationState;
+    const VkPipelineMultisampleStateCreateInfo *pMultisampleState;
+    const VkPipelineDepthStencilStateCreateInfo *pDepthStencilState;
+    const VkPipelineColorBlendStateCreateInfo *pColorBlendState;
+    const VkPipelineDynamicStateCreateInfo *pDynamicState;
+    VkPipelineLayout layout;
+    VkRenderPass renderPass;
+    uint32_t subpass;
+    VkPipeline basePipelineHandle;
+    int32_t basePipelineIndex;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -821,6 +1038,8 @@ typedef VkResult (*PFN_vkAllocateDescriptorSets)(VkDevice device, const VkDescri
 typedef void (*PFN_vkUpdateDescriptorSets)(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *descriptorWrites, uint32_t descriptorCopyCount, const void *descriptorCopies);
 typedef VkResult (*PFN_vkCreatePipelineLayout)(VkDevice device, const VkPipelineLayoutCreateInfo *createInfo, const void *allocator, VkPipelineLayout *pipelineLayout);
 typedef void (*PFN_vkDestroyPipelineLayout)(VkDevice device, VkPipelineLayout pipelineLayout, const void *allocator);
+typedef VkResult (*PFN_vkCreateGraphicsPipelines)(VkDevice device, VkPipelineCache pipelineCache, uint32_t createInfoCount, const VkGraphicsPipelineCreateInfo *createInfos, const void *allocator, VkPipeline *pipelines);
+typedef void (*PFN_vkDestroyPipeline)(VkDevice device, VkPipeline pipeline, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
 typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
 typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
@@ -851,6 +1070,8 @@ struct piShaderS
     VkShaderModule vertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule fragmentModule = VK_NULL_SHADER_MODULE;
     VkPipelineLayout pipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+    VkPipeline pipeline = VK_NULL_PIPELINE;
+    VkRenderPass pipelineRenderPass = VK_NULL_RENDER_PASS;
 };
 
 struct piTextureS
@@ -984,6 +1205,7 @@ struct piVulkanState
     bool descriptorLayoutReported = false;
     bool descriptorSetReported = false;
     bool descriptorSetFailureReported = false;
+    bool graphicsPipelineReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -1047,6 +1269,8 @@ struct piVulkanState
     PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets = nullptr;
     PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
     PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout = nullptr;
+    PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines = nullptr;
+    PFN_vkDestroyPipeline vkDestroyPipeline = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
     PFN_vkFreeMemory vkFreeMemory = nullptr;
     PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
@@ -1456,6 +1680,8 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkUpdateDescriptorSets = (PFN_vkUpdateDescriptorSets)state->vkGetDeviceProcAddr(state->device, "vkUpdateDescriptorSets");
     state->vkCreatePipelineLayout = (PFN_vkCreatePipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkCreatePipelineLayout");
     state->vkDestroyPipelineLayout = (PFN_vkDestroyPipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkDestroyPipelineLayout");
+    state->vkCreateGraphicsPipelines = (PFN_vkCreateGraphicsPipelines)state->vkGetDeviceProcAddr(state->device, "vkCreateGraphicsPipelines");
+    state->vkDestroyPipeline = (PFN_vkDestroyPipeline)state->vkGetDeviceProcAddr(state->device, "vkDestroyPipeline");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
     state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
     state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
@@ -1483,7 +1709,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCreateShaderModule || !state->vkDestroyShaderModule || !state->vkCreateSampler || !state->vkDestroySampler ||
         !state->vkCreateDescriptorSetLayout || !state->vkDestroyDescriptorSetLayout ||
         !state->vkCreateDescriptorPool || !state->vkDestroyDescriptorPool || !state->vkAllocateDescriptorSets || !state->vkUpdateDescriptorSets ||
-        !state->vkCreatePipelineLayout || !state->vkDestroyPipelineLayout ||
+        !state->vkCreatePipelineLayout || !state->vkDestroyPipelineLayout || !state->vkCreateGraphicsPipelines || !state->vkDestroyPipeline ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -2272,6 +2498,136 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     {
         iReport(reporter, "Vulkan renderer updated static paint descriptor set");
         state->descriptorSetReported = true;
+    }
+    return true;
+}
+
+static VkSampleCountFlagBits iTextureSampleCount(const piRenderer::TextureInfo &info);
+
+static VkCullModeFlags iToVulkanCullMode(piRenderer::CullMode mode)
+{
+    switch (mode)
+    {
+        case piRenderer::CullMode::FRONT: return VK_CULL_MODE_FRONT_BIT;
+        case piRenderer::CullMode::BACK: return VK_CULL_MODE_BACK_BIT;
+        case piRenderer::CullMode::NONE:
+        default: return VK_CULL_MODE_NONE;
+    }
+}
+
+static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, piRenderer::piReporter *reporter)
+{
+    if (!state || !shader || !target || state->device == VK_NULL_DEVICE)
+    {
+        return true;
+    }
+    if (shader->pipeline != VK_NULL_PIPELINE && shader->pipelineRenderPass == target->renderPass)
+    {
+        return true;
+    }
+    if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+    {
+        state->vkDestroyPipeline(state->device, shader->pipeline, nullptr);
+        shader->pipeline = VK_NULL_PIPELINE;
+        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+    }
+    if (shader->vertexModule == VK_NULL_SHADER_MODULE || shader->fragmentModule == VK_NULL_SHADER_MODULE ||
+        shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT || target->renderPass == VK_NULL_RENDER_PASS ||
+        !state->vkCreateGraphicsPipelines)
+    {
+        return true;
+    }
+
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = shader->vertexModule;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = shader->fragmentModule;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertexInput = {};
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+
+    VkPipelineViewportStateCreateInfo viewport = {};
+    viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+
+    piRasterState rasterState = state->currentRasterState;
+    VkPipelineRasterizationStateCreateInfo rasterization = {};
+    rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterization.depthClampEnable = rasterState && rasterState->depthClamp ? 1u : 0u;
+    rasterization.polygonMode = rasterState && rasterState->wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+    rasterization.cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
+    rasterization.frontFace = rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    rasterization.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisample = {};
+    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample.rasterizationSamples = target->color[0] ? iTextureSampleCount(target->color[0]->info) : VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+
+    VkPipelineColorBlendAttachmentState blendAttachment = {};
+    blendAttachment.blendEnable = 1;
+    blendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    blendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    blendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    blendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo colorBlend = {};
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlend.logicOp = VK_LOGIC_OP_COPY;
+    colorBlend.attachmentCount = 1;
+    colorBlend.pAttachments = &blendAttachment;
+
+    VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState = {};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynamicStates;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = stages;
+    pipelineInfo.pVertexInputState = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewport;
+    pipelineInfo.pRasterizationState = &rasterization;
+    pipelineInfo.pMultisampleState = &multisample;
+    pipelineInfo.pDepthStencilState = target->hasDepth ? &depthStencil : nullptr;
+    pipelineInfo.pColorBlendState = &colorBlend;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = shader->pipelineLayout;
+    pipelineInfo.renderPass = target->renderPass;
+    pipelineInfo.subpass = 0;
+
+    const VkResult result = state->vkCreateGraphicsPipelines(state->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &shader->pipeline);
+    if (result != VK_SUCCESS || shader->pipeline == VK_NULL_PIPELINE)
+    {
+        iError(reporter, "Vulkan renderer failed to create static paint graphics pipeline");
+        shader->pipeline = VK_NULL_PIPELINE;
+        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+        return false;
+    }
+    shader->pipelineRenderPass = target->renderPass;
+    if (!state->graphicsPipelineReported)
+    {
+        iReport(reporter, "Vulkan renderer created static paint graphics pipeline");
+        state->graphicsPipelineReported = true;
     }
     return true;
 }
@@ -3789,6 +4145,12 @@ void piRendererVulkan::DestroyShader(piShader obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
+        if (obj->pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+        {
+            mState->vkDestroyPipeline(mState->device, obj->pipeline, nullptr);
+            obj->pipeline = VK_NULL_PIPELINE;
+            obj->pipelineRenderPass = VK_NULL_RENDER_PASS;
+        }
         if (obj->vertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
         {
             mState->vkDestroyShaderModule(mState->device, obj->vertexModule, nullptr);
@@ -3947,6 +4309,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     {
         mState->descriptorSetFailureReported = true;
         iError(mReporter, "Vulkan renderer failed to update static paint descriptor set");
+    }
+    if (!iEnsureStaticPaintGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, mReporter))
+    {
+        return;
     }
     const uint16_t *indices = (const uint16_t *)(mState->currentVertexArray->indexBuffer->data + baseIndex * sizeof(uint16_t));
     const iCpuStaticVertex *vertices = (const iCpuStaticVertex *)mState->shaderBuffers[8]->data;
