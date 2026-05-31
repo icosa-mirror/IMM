@@ -35,6 +35,8 @@ public:
     void Disable(void) override;
     void SwapBuffers(void) override;
     void *GetContext(void) override;
+    bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
+    void EndExternalImageFrame(void);
 
     void StartPerformanceMeasure(void) override;
     void EndPerformanceMeasure(void) override;

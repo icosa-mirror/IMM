@@ -128,13 +128,24 @@ $env:IMM_GODOT_SMOKE_SCENE = $SmokeScene
 $env:IMM_GODOT_EXPECT_NATIVE = if ($RequireExtension) { "1" } else { "0" }
 $env:IMM_GODOT_LOAD_UNLOAD_CYCLES = "$LoadUnloadCycles"
 $env:IMM_GODOT_RENDERER_API = "$RendererApi"
+$previousPath = $env:PATH
+if ($RequireExtension) {
+    $env:PATH = "$extensionDir;$env:PATH"
+}
 $godotArgs = @()
 if (-not $Headed) {
     $godotArgs += "--headless"
 }
 $godotArgs += @("--path", $sampleProject, "--script", $smokeScript)
-$output = & $godot @godotArgs 2>&1
-$exitCode = $LASTEXITCODE
+try {
+    $output = & $godot @godotArgs 2>&1
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    if ($RequireExtension) {
+        $env:PATH = $previousPath
+    }
+}
 $output | ForEach-Object { Write-Host $_ }
 $successMarker = "IMM Godot smoke test passed"
 $hasSuccessMarker = ($output -join "`n").Contains($successMarker)

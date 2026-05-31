@@ -9,7 +9,7 @@ signal spawn_area_changed(active_index: int)
 signal native_backend_initialized()
 signal native_backend_failed(error_code: int)
 
-@export var document_path: String = "../../../exampleImmFiles/sample1.imm"
+@export var document_path: String = "res://../../exampleImmFiles/sample1.imm"
 @export var load_on_ready: bool = false
 @export var auto_play: bool = true
 @export_range(0.0, 1.0, 0.01) var volume: float = 1.0

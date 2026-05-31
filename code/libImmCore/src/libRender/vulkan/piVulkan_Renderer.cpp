@@ -1276,6 +1276,9 @@ struct piVulkanState
     VkDeviceMemory stagingMemory = VK_NULL_DEVICE_MEMORY;
     VkDeviceSize stagingSize = 0;
     piTexture pendingPresentTexture = nullptr;
+    piTexture externalFrameColorTexture = nullptr;
+    piTexture externalFrameDepthTexture = nullptr;
+    piRTarget externalFrameRenderTarget = nullptr;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -4964,6 +4967,7 @@ void piRendererVulkan::Deinitialize(void)
     {
         return;
     }
+    EndExternalImageFrame();
     if (mState->device != VK_NULL_DEVICE)
     {
         if (mState->vkDeviceWaitIdle)
@@ -5560,6 +5564,83 @@ void piRendererVulkan::SwapBuffers(void)
         mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
     }
 }
+
+void piRendererVulkan::EndExternalImageFrame(void)
+{
+    if (!mState)
+    {
+        return;
+    }
+
+    SetRenderTarget(nullptr);
+    if (mState->externalFrameRenderTarget)
+    {
+        DestroyRenderTarget(mState->externalFrameRenderTarget);
+        mState->externalFrameRenderTarget = nullptr;
+    }
+    if (mState->externalFrameDepthTexture)
+    {
+        DestroyTexture(mState->externalFrameDepthTexture);
+        mState->externalFrameDepthTexture = nullptr;
+    }
+    if (mState->externalFrameColorTexture)
+    {
+        DestroyTexture(mState->externalFrameColorTexture);
+        mState->externalFrameColorTexture = nullptr;
+    }
+}
+
+bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
+{
+    EndExternalImageFrame();
+    if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || vkFormat == 0)
+    {
+        return false;
+    }
+
+    piTextureS *colorTexture = new piTextureS();
+    colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, 1, 1, 1, 0 };
+    colorTexture->filter = TextureFilter::NONE;
+    colorTexture->wrap = TextureWrap::CLAMP;
+    colorTexture->dataSize = (size_t)width * (size_t)height * 4u;
+    colorTexture->data = (uint8_t *)std::calloc(1, colorTexture->dataSize);
+    colorTexture->externalHandle = reinterpret_cast<uint64_t>(image);
+    colorTexture->image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
+    colorTexture->imageView = static_cast<VkImageView>(reinterpret_cast<uintptr_t>(imageView));
+    colorTexture->vkFormat = static_cast<VkFormat>(vkFormat);
+    colorTexture->imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    colorTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (!colorTexture->data)
+    {
+        delete colorTexture;
+        return false;
+    }
+    ++mState->liveTextures;
+
+    const TextureInfo depthInfo = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, 1, 1, 0 };
+    piTexture depthTexture = CreateTexture(L"imm_godot_external_depth", &depthInfo, false, TextureFilter::NONE, TextureWrap::CLAMP, 1.0f, nullptr);
+    if (!depthTexture)
+    {
+        DestroyTexture(colorTexture);
+        return false;
+    }
+
+    piRTarget renderTarget = CreateRenderTarget(colorTexture, nullptr, nullptr, nullptr, depthTexture);
+    if (!renderTarget || !SetRenderTarget(renderTarget))
+    {
+        if (renderTarget) DestroyRenderTarget(renderTarget);
+        DestroyTexture(depthTexture);
+        DestroyTexture(colorTexture);
+        return false;
+    }
+
+    mState->externalFrameColorTexture = colorTexture;
+    mState->externalFrameDepthTexture = depthTexture;
+    mState->externalFrameRenderTarget = renderTarget;
+    iReport(mReporter, "Vulkan renderer began external image frame");
+    return true;
+}
+
 void *piRendererVulkan::GetContext(void) { return mState ? (void *)mState->device : nullptr; }
 
 void piRendererVulkan::StartPerformanceMeasure(void)
@@ -5808,12 +5889,13 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
             mState->vkDestroySampler(mState->device, obj->sampler, nullptr);
             obj->sampler = VK_NULL_SAMPLER;
         }
-        if (obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        const bool ownsVulkanImage = obj->externalHandle == 0;
+        if (ownsVulkanImage && obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
         {
             mState->vkDestroyImageView(mState->device, obj->imageView, nullptr);
             obj->imageView = VK_NULL_IMAGE_VIEW;
         }
-        if (obj->image != 0 && mState->vkDestroyImage)
+        if (ownsVulkanImage && obj->image != 0 && mState->vkDestroyImage)
         {
             mState->vkDestroyImage(mState->device, obj->image, nullptr);
             obj->image = 0;

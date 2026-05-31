@@ -169,15 +169,10 @@ func _run() -> void:
         var warmup_queue_result: int = int(viewer.queue_render_camera_transform(camera.global_transform, warmup_width, warmup_height, camera.fov, CAMERA_ID))
         if warmup_queue_result < 0:
             failures.append("native Vulkan warmup queue_render_camera_transform returned %d" % warmup_queue_result)
-        await process_frame
-        await process_frame
-        var compositor_effect: Object = null
-        if camera.compositor != null and not camera.compositor.compositor_effects.is_empty():
-            compositor_effect = camera.compositor.compositor_effects[0]
-        if compositor_effect == null or not compositor_effect.has_method("get_diagnostics"):
+        var compositor_diagnostics: Dictionary = await _wait_for_compositor_render(camera, -1, -1, -1)
+        if compositor_diagnostics.is_empty():
             failures.append("native Vulkan smoke scene is missing ImmViewerCompositorEffect diagnostics")
         else:
-            var compositor_diagnostics: Dictionary = compositor_effect.get_diagnostics()
             print("IMM Godot compositor diagnostics: %s" % str(compositor_diagnostics))
             if int(compositor_diagnostics.get("callback_count", 0)) <= 0:
                 failures.append("ImmViewerCompositorEffect render callback did not run")
@@ -189,8 +184,6 @@ func _run() -> void:
                 failures.append("ImmViewerCompositorEffect did not receive a Vulkan queue handle")
             if not bool(compositor_diagnostics.get("ever_vulkan_frame_started", false)):
                 failures.append("ImmViewerCompositorEffect did not start a Vulkan frame")
-        _finish(failures)
-        return
 
     if not viewer.is_loaded():
         var load_result: int = int(viewer.load_document())
@@ -256,44 +249,40 @@ func _run() -> void:
     if layer_count < 0:
         failures.append("get_layer_count returned %d" % layer_count)
     if layer_count > 0:
-        var layer_info: Dictionary = viewer.get_layer_info(0)
-        if layer_info.is_empty():
-            failures.append("get_layer_info(0) returned an empty Dictionary")
+        var layer_id := _find_override_test_layer(viewer, layer_count)
+        if layer_id < 0:
+            failures.append("could not find a layer that supports override diagnostics")
         else:
-            var layer_id: int = int(layer_info.get("id", -1))
-            if layer_id < 0:
-                failures.append("get_layer_info(0) did not include a valid id")
-            else:
-                var layer_diagnostics: Dictionary = viewer.get_layer_diagnostics(layer_id)
-                if layer_diagnostics.is_empty():
-                    failures.append("get_layer_diagnostics(%d) returned an empty Dictionary" % layer_id)
-                if not bool(viewer.set_layer_visible(layer_id, false)):
-                    failures.append("set_layer_visible(%d, false) failed" % layer_id)
-                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
-                if not bool(layer_diagnostics.get("visibility_override_enabled", false)):
-                    failures.append("set_layer_visible(%d, false) did not enable visibility override" % layer_id)
-                if bool(layer_diagnostics.get("is_visible", true)):
-                    failures.append("set_layer_visible(%d, false) did not report invisible diagnostics" % layer_id)
-                if not bool(viewer.clear_layer_visibility_override(layer_id)):
-                    failures.append("clear_layer_visibility_override(%d) failed" % layer_id)
-                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
-                if bool(layer_diagnostics.get("visibility_override_enabled", false)):
-                    failures.append("clear_layer_visibility_override(%d) left visibility override enabled" % layer_id)
-                if not bool(viewer.set_layer_opacity(layer_id, 0.42)):
-                    failures.append("set_layer_opacity(%d, 0.42) failed" % layer_id)
-                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
-                if not bool(layer_diagnostics.get("opacity_override_enabled", false)):
-                    failures.append("set_layer_opacity(%d, 0.42) did not enable opacity override" % layer_id)
-                if not bool(viewer.set_layer_transform(layer_id, Transform3D(Basis.IDENTITY, Vector3(0.25, 0.0, 0.0)))):
-                    failures.append("set_layer_transform(%d, translated identity) failed" % layer_id)
-                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
-                if not bool(layer_diagnostics.get("transform_override_enabled", false)):
-                    failures.append("set_layer_transform(%d) did not enable transform override" % layer_id)
-                if not bool(viewer.clear_layer_transform_override(layer_id)):
-                    failures.append("clear_layer_transform_override(%d) failed" % layer_id)
-                layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
-                if bool(layer_diagnostics.get("transform_override_enabled", false)):
-                    failures.append("clear_layer_transform_override(%d) left transform override enabled" % layer_id)
+            var layer_diagnostics: Dictionary = viewer.get_layer_diagnostics(layer_id)
+            if layer_diagnostics.is_empty():
+                failures.append("get_layer_diagnostics(%d) returned an empty Dictionary" % layer_id)
+            if not bool(viewer.set_layer_visible(layer_id, false)):
+                failures.append("set_layer_visible(%d, false) failed" % layer_id)
+            layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+            if not bool(layer_diagnostics.get("visibility_override_enabled", false)):
+                failures.append("set_layer_visible(%d, false) did not enable visibility override" % layer_id)
+            if bool(layer_diagnostics.get("is_visible", true)):
+                failures.append("set_layer_visible(%d, false) did not report invisible diagnostics" % layer_id)
+            if not bool(viewer.clear_layer_visibility_override(layer_id)):
+                failures.append("clear_layer_visibility_override(%d) failed" % layer_id)
+            layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+            if bool(layer_diagnostics.get("visibility_override_enabled", false)):
+                failures.append("clear_layer_visibility_override(%d) left visibility override enabled" % layer_id)
+            if not bool(viewer.set_layer_opacity(layer_id, 0.42)):
+                failures.append("set_layer_opacity(%d, 0.42) failed" % layer_id)
+            layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+            if not bool(layer_diagnostics.get("opacity_override_enabled", false)):
+                failures.append("set_layer_opacity(%d, 0.42) did not enable opacity override" % layer_id)
+            if not bool(viewer.set_layer_transform(layer_id, Transform3D(Basis.IDENTITY, Vector3(0.25, 0.0, 0.0)))):
+                failures.append("set_layer_transform(%d, translated identity) failed" % layer_id)
+            layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+            if not bool(layer_diagnostics.get("transform_override_enabled", false)):
+                failures.append("set_layer_transform(%d) did not enable transform override" % layer_id)
+            if not bool(viewer.clear_layer_transform_override(layer_id)):
+                failures.append("clear_layer_transform_override(%d) failed" % layer_id)
+            layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+            if bool(layer_diagnostics.get("transform_override_enabled", false)):
+                failures.append("clear_layer_transform_override(%d) left transform override enabled" % layer_id)
 
     var spawn_area_ids: PackedInt32Array = PackedInt32Array(viewer.get_spawn_area_ids())
     var active_spawn_area_index: int = int(viewer.get_active_spawn_area_index())
@@ -443,7 +432,7 @@ func _run() -> void:
     var queue_result: int = int(viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID))
     if queue_result < 0:
         failures.append("queue_render_camera_transform returned %d" % queue_result)
-    if expected_native:
+    if expected_native and not requested_vulkan:
         var direct_render_result: int = int(viewer.smoke_render_camera(CAMERA_ID, width, height))
         if direct_render_result < 0:
             failures.append("smoke_render_camera returned %d" % direct_render_result)
@@ -462,7 +451,32 @@ func _run() -> void:
     if int(render_diagnostics.get("last_projection_size", 0)) != 16:
         failures.append("get_render_diagnostics did not report a 4x4 projection matrix")
 
-    await process_frame
+    var post_load_compositor_diagnostics: Dictionary = {}
+    if requested_vulkan and expected_native:
+        post_load_compositor_diagnostics = await _wait_for_compositor_render(camera, CAMERA_ID, width, height)
+        print("IMM Godot post-load Vulkan compositor diagnostics: %s" % str(post_load_compositor_diagnostics))
+        if post_load_compositor_diagnostics.is_empty():
+            failures.append("ImmViewerCompositorEffect diagnostics were unavailable after sample render")
+        else:
+            if not bool(post_load_compositor_diagnostics.get("last_vulkan_frame_started", false)):
+                failures.append("post-load Vulkan render did not start a Vulkan frame")
+            if not bool(post_load_compositor_diagnostics.get("last_had_intermediate_texture", false)):
+                failures.append("post-load Vulkan render did not allocate an intermediate texture")
+            if not bool(post_load_compositor_diagnostics.get("last_composite_result", false)):
+                failures.append("post-load Vulkan render did not composite into the Godot color texture")
+            if int(post_load_compositor_diagnostics.get("last_render_result", -1)) < 0:
+                failures.append("post-load ImmGodot_RenderCamera returned %d" % int(post_load_compositor_diagnostics.get("last_render_result", -1)))
+            if int(post_load_compositor_diagnostics.get("last_render_camera_id", -1)) != CAMERA_ID:
+                failures.append("post-load Vulkan compositor rendered camera %d" % int(post_load_compositor_diagnostics.get("last_render_camera_id", -1)))
+            if int(post_load_compositor_diagnostics.get("last_render_width", -1)) != width or int(post_load_compositor_diagnostics.get("last_render_height", -1)) != height:
+                failures.append("post-load Vulkan compositor rendered viewport %sx%s instead of %dx%d" % [
+                    str(post_load_compositor_diagnostics.get("last_render_width", "")),
+                    str(post_load_compositor_diagnostics.get("last_render_height", "")),
+                    width,
+                    height,
+                ])
+    else:
+        await process_frame
     render_diagnostics = viewer.get_render_diagnostics()
     var adapter_before_count: int = int(render_diagnostics.get("adapter_before_render_count", 0))
     var adapter_after_count: int = int(render_diagnostics.get("adapter_after_render_count", 0))
@@ -602,6 +616,48 @@ func _wait_for_timeline_ready(viewer: Node, expected_native: bool) -> bool:
             return true
         await create_timer(0.05).timeout
     return false
+
+func _wait_for_compositor_render(camera: Camera3D, expected_camera_id: int, expected_width: int, expected_height: int) -> Dictionary:
+    if camera.compositor == null or camera.compositor.compositor_effects.is_empty():
+        return {}
+    var compositor_effect: Object = camera.compositor.compositor_effects[0]
+    if compositor_effect == null or not compositor_effect.has_method("get_diagnostics"):
+        return {}
+
+    var ready_deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
+    var latest: Dictionary = {}
+    while Time.get_ticks_msec() < ready_deadline_msec:
+        latest = compositor_effect.get_diagnostics()
+        if expected_camera_id < 0:
+            if int(latest.get("callback_count", 0)) > 0 and bool(latest.get("ever_vulkan_frame_started", false)):
+                return latest
+        elif int(latest.get("last_render_camera_id", -1)) == expected_camera_id \
+            and int(latest.get("last_render_width", -1)) == expected_width \
+            and int(latest.get("last_render_height", -1)) == expected_height \
+            and bool(latest.get("last_vulkan_frame_started", false)):
+            return latest
+        await process_frame
+    return latest
+
+func _find_override_test_layer(viewer: Node, layer_count: int) -> int:
+    for index in range(layer_count):
+        var layer_info: Dictionary = viewer.get_layer_info(index)
+        if layer_info.is_empty():
+            continue
+        var layer_id: int = int(layer_info.get("id", -1))
+        if layer_id < 0:
+            continue
+        if bool(layer_info.get("is_timeline", false)):
+            continue
+        var layer_diagnostics: Dictionary = viewer.get_layer_diagnostics(layer_id)
+        if layer_diagnostics.is_empty():
+            continue
+        if not bool(viewer.set_layer_opacity(layer_id, 0.42)):
+            continue
+        layer_diagnostics = viewer.get_layer_diagnostics(layer_id)
+        if bool(layer_diagnostics.get("opacity_override_enabled", false)):
+            return layer_id
+    return -1
 
 func _finish(failures: Array[String]) -> void:
     if failures.is_empty():

@@ -79,7 +79,7 @@ Node3D (root)
 
 ## Document path
 
-The default document path is set to `../../../exampleImmFiles/sample1.imm`, which points at the repository sample from this project directory.
+The default document path is set to `res://../../exampleImmFiles/sample1.imm`, which Godot globalizes to the repository sample from this project directory.
 
 ## Native build and validation
 

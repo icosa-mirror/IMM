@@ -282,7 +282,14 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFra
     {
         return -1;
     }
-    return 0;
+    piRendererVulkan *renderer = static_cast<piRendererVulkan *>(gBridge.GetRenderer());
+    return renderer->BeginExternalImageFrame(frame->colorImage,
+                                             frame->colorImageView,
+                                             frame->colorFormat,
+                                             frame->width,
+                                             frame->height)
+               ? 0
+               : -1;
 #else
     return -1;
 #endif
@@ -290,6 +297,12 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFra
 
 extern "C" IMMGODOT_EXPORT void ImmGodot_EndVulkanFrame()
 {
+#if defined(_WIN32) || defined(ANDROID)
+    if (gBridge.IsInitialized() && gBridge.GetRenderer() != nullptr && gBridge.GetRenderer()->GetAPI() == piRenderer::API::Vulkan)
+    {
+        static_cast<piRendererVulkan *>(gBridge.GetRenderer())->EndExternalImageFrame();
+    }
+#endif
 }
 
 extern "C" IMMGODOT_EXPORT void ImmGodot_GlobalWork(int enabled)
