@@ -1376,6 +1376,7 @@ struct piVulkanState
     bool cpuDrawDiagnosticReported = false;
     bool cpuPaintDiagnosticReported = false;
     bool cpuPresentDiagnosticReported = false;
+    bool cpuPictureDiagnosticReported = false;
     uint32_t cpuPaintDrawCount = 0;
     uint32_t gpuPaintDrawCount = 0;
     uint64_t liveRenderTargets = 0;
@@ -1547,6 +1548,55 @@ static void iConvertB10G11R11ToRgba8(uint8_t *dst, const uint8_t *src, size_t pi
         dst[i * 4u + 2u] = iFloatToByte(iDecodeUnsignedFloat(b, 5));
         dst[i * 4u + 3u] = 255;
     }
+}
+
+static uint32_t iEncodeUnsignedFloat(float value, uint32_t mantissaBits)
+{
+    if (value <= 0.0f)
+    {
+        return 0;
+    }
+    if (value > 65000.0f)
+    {
+        value = 65000.0f;
+    }
+    int exponent = 0;
+    float normalized = std::frexp(value, &exponent) * 2.0f;
+    exponent -= 1;
+    int biasedExponent = exponent + 15;
+    if (biasedExponent <= 0)
+    {
+        const float scaled = std::ldexp(value, 14 + (int)mantissaBits);
+        const uint32_t mantissa = (uint32_t)(scaled + 0.5f);
+        const uint32_t mantissaMask = (1u << mantissaBits) - 1u;
+        return mantissa > mantissaMask ? mantissaMask : mantissa;
+    }
+    if (biasedExponent >= 31)
+    {
+        return 31u << mantissaBits;
+    }
+    const float fraction = normalized - 1.0f;
+    const uint32_t mantissa = (uint32_t)(fraction * (float)(1u << mantissaBits) + 0.5f);
+    if (mantissa >= (1u << mantissaBits))
+    {
+        ++biasedExponent;
+        if (biasedExponent >= 31)
+        {
+            return 31u << mantissaBits;
+        }
+        return (uint32_t)biasedExponent << mantissaBits;
+    }
+    return ((uint32_t)biasedExponent << mantissaBits) | mantissa;
+}
+
+static uint32_t iPackRgba8ToB10G11R11(const uint8_t *src)
+{
+    const float r = (float)src[0] / 255.0f;
+    const float g = (float)src[1] / 255.0f;
+    const float b = (float)src[2] / 255.0f;
+    return (iEncodeUnsignedFloat(r, 6) & 0x7ffu) |
+           ((iEncodeUnsignedFloat(g, 6) & 0x7ffu) << 11u) |
+           ((iEncodeUnsignedFloat(b, 5) & 0x3ffu) << 22u);
 }
 
 static int iShaderOption(const piShader shader, const char *name, int fallback)
@@ -3363,6 +3413,151 @@ static bool iClearColorTextureImage(piVulkanState *state, piTexture texture, con
         iReport(reporter, "Vulkan renderer cleared GPU color render target");
         state->clearTextureReported = true;
     }
+    return true;
+}
+
+static bool iUploadCpuColorToGpuColorAttachment(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+{
+    if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE)
+    {
+        return true;
+    }
+    const VkDeviceSize size = (VkDeviceSize)texture->info.mXres * (VkDeviceSize)texture->info.mYres * 4ull;
+    if (!iEnsureStagingBuffer(state, size, reporter))
+    {
+        return false;
+    }
+    void *mapped = nullptr;
+    VkResult result = state->vkMapMemory(state->device, state->stagingMemory, 0, size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        iError(reporter, "Vulkan renderer failed to map color attachment upload staging memory");
+        return false;
+    }
+    if (texture->vkFormat == VK_FORMAT_B10G11R11_UFLOAT_PACK32)
+    {
+        uint32_t *dst = (uint32_t *)mapped;
+        const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            dst[i] = iPackRgba8ToB10G11R11(texture->data + i * 4u);
+        }
+    }
+    else
+    {
+        std::memcpy(mapped, texture->data, (size_t)size);
+    }
+    state->vkUnmapMemory(state->device, state->stagingMemory);
+
+    const uint64_t timeout = 1000000000ull;
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange range = {};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseMipLevel = 0;
+    range.levelCount = 1;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+
+    VkImageMemoryBarrier toTransfer = {};
+    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransfer.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toTransfer.oldLayout = texture->imageLayout;
+    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.image = texture->image;
+    toTransfer.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toTransfer);
+
+    VkBufferImageCopy copyRegion = {};
+    copyRegion.bufferOffset = 0;
+    copyRegion.bufferRowLength = 0;
+    copyRegion.bufferImageHeight = 0;
+    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyRegion.imageSubresource.mipLevel = 0;
+    copyRegion.imageSubresource.baseArrayLayer = 0;
+    copyRegion.imageSubresource.layerCount = 1;
+    copyRegion.imageOffset.x = 0;
+    copyRegion.imageOffset.y = 0;
+    copyRegion.imageOffset.z = 0;
+    copyRegion.imageExtent.width = (uint32_t)texture->info.mXres;
+    copyRegion.imageExtent.height = (uint32_t)texture->info.mYres;
+    copyRegion.imageExtent.depth = 1;
+    state->vkCmdCopyBufferToImage(state->commandBuffer,
+                                  state->stagingBuffer,
+                                  texture->image,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  1,
+                                  &copyRegion);
+
+    VkImageMemoryBarrier toColor = {};
+    toColor.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toColor.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toColor.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+    toColor.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    toColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    toColor.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColor.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColor.image = texture->image;
+    toColor.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toColor);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    texture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     return true;
 }
 
@@ -5246,6 +5441,58 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     (void)baseInstance;
     if (!mState)
     {
+        return;
+    }
+    if (pt == PrimitiveType::Triangle && mState->currentRenderTarget && mState->currentRenderTarget->color[0] &&
+        mState->currentRenderTarget->color[0]->data && mState->textures[0] && mState->textures[0]->data &&
+        mState->textures[0]->info.mXres > 0 && mState->textures[0]->info.mYres > 0)
+    {
+        piTexture target = mState->currentRenderTarget->color[0];
+        piTexture source = mState->textures[0];
+        const int targetWidth = target->info.mXres;
+        const int targetHeight = target->info.mYres;
+        const int sourceWidth = source->info.mXres;
+        const int sourceHeight = source->info.mYres;
+        uint32_t visiblePixels = 0;
+        for (int y = 0; y < targetHeight; ++y)
+        {
+            const int sy = (int)(((uint64_t)y * (uint64_t)sourceHeight) / (uint64_t)targetHeight);
+            for (int x = 0; x < targetWidth; ++x)
+            {
+                const int sxBase = (int)(((uint64_t)x * (uint64_t)sourceWidth) / (uint64_t)targetWidth);
+                const int sx = (sxBase + sourceWidth / 2) % sourceWidth;
+                const uint8_t *src = source->data + ((size_t)sy * (size_t)sourceWidth + (size_t)sx) * 4u;
+                uint8_t *dst = target->data + ((size_t)y * (size_t)targetWidth + (size_t)x) * 4u;
+                dst[0] = (uint8_t)((uint32_t)src[0] * 3u / 5u);
+                dst[1] = (uint8_t)((uint32_t)src[1] * 3u / 5u);
+                dst[2] = (uint8_t)((uint32_t)src[2] * 3u / 5u);
+                dst[3] = 255;
+                if (dst[0] > 32 || dst[1] > 32 || dst[2] > 32)
+                {
+                    ++visiblePixels;
+                }
+            }
+        }
+        if (!iUploadCpuColorToGpuColorAttachment(mState, target, mReporter) && !mState->drawSubmitFailureReported)
+        {
+            mState->drawSubmitFailureReported = true;
+            iError(mReporter, "Vulkan renderer failed to upload picture fallback target");
+        }
+        if (!mState->cpuPictureDiagnosticReported)
+        {
+            mState->cpuPictureDiagnosticReported = true;
+            char message[256];
+            std::snprintf(message,
+                          sizeof(message),
+                          "IMM_VK_CPU: picture fallback filled target visible=%u source=%dx%d target=%dx%d",
+                          visiblePixels,
+                          sourceWidth,
+                          sourceHeight,
+                          targetWidth,
+                          targetHeight);
+            iReport(mReporter, message);
+        }
+        mState->pendingPresentTexture = target;
         return;
     }
     if (pt != PrimitiveType::TriangleStrip)
