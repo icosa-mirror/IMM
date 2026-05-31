@@ -38,6 +38,24 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
+    - name: Install Vulkan shader tools
+      shell: pwsh
+      run: |
+        choco install vulkan-sdk --no-progress -y
+        $sdk = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $sdk) {
+          throw "Vulkan SDK install directory was not found under C:\VulkanSDK"
+        }
+        $bin = Join-Path $sdk.FullName "Bin"
+        if (-not (Test-Path (Join-Path $bin "glslangValidator.exe"))) {
+          throw "glslangValidator.exe was not found in $bin"
+        }
+        if (-not (Test-Path (Join-Path $bin "spirv-val.exe"))) {
+          throw "spirv-val.exe was not found in $bin"
+        }
+        "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+        $bin | Out-File -FilePath $env:GITHUB_PATH -Append
+
     - name: Build Solution
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m

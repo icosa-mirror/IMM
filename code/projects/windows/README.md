@@ -2,6 +2,22 @@
 
 Use these helpers from the repository root to rebuild Windows Unity/Godot plugins and sync sample project binaries.
 
+## Vulkan Shader Tools
+
+Vulkan renderer development requires SPIR-V shader tools on PATH:
+
+- `glslangValidator` or `glslc`
+- `dxc`
+- `spirv-val` and `spirv-dis`
+
+Install the LunarG Vulkan SDK, or use Scoop:
+
+```powershell
+scoop install vulkan dxc glslang
+```
+
+The Windows CI job installs `vulkan-sdk` before building so generated/validated Vulkan shaders use the same toolchain class.
+
 ## Unity Commands
 
 Batch:

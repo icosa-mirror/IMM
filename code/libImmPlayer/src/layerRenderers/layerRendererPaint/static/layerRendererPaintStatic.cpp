@@ -26,6 +26,8 @@ namespace ImmPlayer
 #if defined(WINDOWS)
     #include "tmp/shader_static_brush_vs_hlsl.inc"
     #include "tmp/shader_static_brush_fs_hlsl.inc"
+    #include "tmp/shader_static_brush_vs_spirv.inc"
+    #include "tmp/shader_static_brush_fs_spirv.inc"
     #include "shader_static_brush_vs.glsl"
     #include "shader_static_brush_fs.glsl"
 #elif defined(ANDROID)
@@ -256,7 +258,25 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             char error[1024] = { 0 };
 
 
-if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan)
+            if (renderer->GetAPI() == piRenderer::API::Vulkan)
+            {
+#if defined(WINDOWS)
+                const int vs_index = i +
+                    j * 3 +
+                    k * 3 * 2 +
+                    l * 3 * 2 * 2 +
+                    (static_cast<int>(colorSpace)) * 5 * 3 * 2 * 2;
+                const int fs_index = i;
+                mShader[dindex] = renderer->CreateShaderBinary(&ops,
+                    reinterpret_cast<const uint8_t *>(shader_static_brush_vs_spirv_code[vs_index]), shader_static_brush_vs_spirv_size[vs_index],
+                    nullptr, 0, nullptr, 0, nullptr, 0,
+                    reinterpret_cast<const uint8_t *>(shader_static_brush_fs_spirv_code[fs_index]), shader_static_brush_fs_spirv_size[fs_index],
+                    error);
+#else
+                mShader[dindex] = renderer->CreateShader(&ops, shader_static_brush_vs, nullptr, nullptr, nullptr, shader_static_brush_fs, error);
+#endif
+            }
+            else if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
             {
                 mShader[dindex] = renderer->CreateShader(&ops, shader_static_brush_vs, nullptr, nullptr, nullptr, shader_static_brush_fs, error);
             }

@@ -40,6 +40,7 @@ typedef struct VkDeviceMemory_T *VkDeviceMemory;
 typedef uint64_t VkImageView;
 typedef uint64_t VkRenderPass;
 typedef uint64_t VkFramebuffer;
+typedef uint64_t VkShaderModule;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
@@ -87,6 +88,7 @@ static constexpr VkDeviceMemory VK_NULL_DEVICE_MEMORY = nullptr;
 static constexpr VkImageView VK_NULL_IMAGE_VIEW = 0;
 static constexpr VkRenderPass VK_NULL_RENDER_PASS = 0;
 static constexpr VkFramebuffer VK_NULL_FRAMEBUFFER = 0;
+static constexpr VkShaderModule VK_NULL_SHADER_MODULE = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -105,6 +107,7 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO = 15;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO = 5;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO = 37;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO = 38;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO = 16;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
@@ -475,6 +478,15 @@ struct VkRenderPassBeginInfo
     const VkClearValue *pClearValues;
 };
 
+struct VkShaderModuleCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    size_t codeSize;
+    const uint32_t *pCode;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -647,6 +659,8 @@ typedef VkResult (*PFN_vkCreateRenderPass)(VkDevice device, const VkRenderPassCr
 typedef void (*PFN_vkDestroyRenderPass)(VkDevice device, VkRenderPass renderPass, const void *allocator);
 typedef VkResult (*PFN_vkCreateFramebuffer)(VkDevice device, const VkFramebufferCreateInfo *createInfo, const void *allocator, VkFramebuffer *framebuffer);
 typedef void (*PFN_vkDestroyFramebuffer)(VkDevice device, VkFramebuffer framebuffer, const void *allocator);
+typedef VkResult (*PFN_vkCreateShaderModule)(VkDevice device, const VkShaderModuleCreateInfo *createInfo, const void *allocator, VkShaderModule *shaderModule);
+typedef void (*PFN_vkDestroyShaderModule)(VkDevice device, VkShaderModule shaderModule, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
 typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
 typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
@@ -674,6 +688,8 @@ struct piShaderS
     int fsLen = 0;
     piShaderOptions options = {};
     bool hasOptions = false;
+    VkShaderModule vertexModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule fragmentModule = VK_NULL_SHADER_MODULE;
 };
 
 struct piTextureS
@@ -800,6 +816,7 @@ struct piVulkanState
     bool texturePresentReported = false;
     bool textureImageReported = false;
     bool bufferReported = false;
+    bool shaderModuleReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -851,6 +868,8 @@ struct piVulkanState
     PFN_vkDestroyRenderPass vkDestroyRenderPass = nullptr;
     PFN_vkCreateFramebuffer vkCreateFramebuffer = nullptr;
     PFN_vkDestroyFramebuffer vkDestroyFramebuffer = nullptr;
+    PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
+    PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
     PFN_vkFreeMemory vkFreeMemory = nullptr;
     PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
@@ -1244,6 +1263,8 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkDestroyRenderPass = (PFN_vkDestroyRenderPass)state->vkGetDeviceProcAddr(state->device, "vkDestroyRenderPass");
     state->vkCreateFramebuffer = (PFN_vkCreateFramebuffer)state->vkGetDeviceProcAddr(state->device, "vkCreateFramebuffer");
     state->vkDestroyFramebuffer = (PFN_vkDestroyFramebuffer)state->vkGetDeviceProcAddr(state->device, "vkDestroyFramebuffer");
+    state->vkCreateShaderModule = (PFN_vkCreateShaderModule)state->vkGetDeviceProcAddr(state->device, "vkCreateShaderModule");
+    state->vkDestroyShaderModule = (PFN_vkDestroyShaderModule)state->vkGetDeviceProcAddr(state->device, "vkDestroyShaderModule");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
     state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
     state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
@@ -1268,6 +1289,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCreateImage || !state->vkDestroyImage || !state->vkGetImageMemoryRequirements ||
         !state->vkCreateImageView || !state->vkDestroyImageView ||
         !state->vkCreateRenderPass || !state->vkDestroyRenderPass || !state->vkCreateFramebuffer || !state->vkDestroyFramebuffer ||
+        !state->vkCreateShaderModule || !state->vkDestroyShaderModule ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -1763,6 +1785,41 @@ static bool iCreateBufferObject(piVulkanState *state, piBuffer buffer, const voi
     {
         iReport(reporter, "Vulkan renderer created VkBuffer-backed renderer buffer");
         state->bufferReported = true;
+    }
+    return true;
+}
+
+static bool iLooksLikeSpirv(const uint8_t *code, int len)
+{
+    if (!code || len < 4 || (len & 3) != 0)
+    {
+        return false;
+    }
+    const uint32_t magic = ((const uint32_t *)code)[0];
+    return magic == 0x07230203u;
+}
+
+static bool iCreateShaderModule(piVulkanState *state, const uint8_t *code, int len, VkShaderModule *outModule, piRenderer::piReporter *reporter)
+{
+    if (!outModule)
+    {
+        return false;
+    }
+    *outModule = VK_NULL_SHADER_MODULE;
+    if (!state || state->device == VK_NULL_DEVICE || !state->vkCreateShaderModule || !iLooksLikeSpirv(code, len))
+    {
+        return true;
+    }
+    VkShaderModuleCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = (size_t)len;
+    createInfo.pCode = (const uint32_t *)code;
+    const VkResult result = state->vkCreateShaderModule(state->device, &createInfo, nullptr, outModule);
+    if (result != VK_SUCCESS || *outModule == VK_NULL_SHADER_MODULE)
+    {
+        iError(reporter, "Vulkan renderer failed to create shader module");
+        *outModule = VK_NULL_SHADER_MODULE;
+        return false;
     }
     return true;
 }
@@ -3001,8 +3058,62 @@ piShader piRendererVulkan::CreateShader(const piShaderOptions *options, const ch
     if (mState) ++mState->liveShaders;
     return shader;
 }
-piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, const uint8_t *vs, const int vs_len, const uint8_t *cs, const int cs_len, const uint8_t *es, const int es_len, const uint8_t *gs, const int gs_len, const uint8_t *fs, const int fs_len, char *error) { (void)options; (void)cs; (void)cs_len; (void)es; (void)es_len; (void)gs; (void)gs_len; piShaderS *shader = new piShaderS(); shader->vs = vs; shader->vsLen = vs_len; shader->fs = fs; shader->fsLen = fs_len; if (error) error[0] = 0; if (mState) ++mState->liveShaders; return shader; }
-void piRendererVulkan::DestroyShader(piShader obj) { if (!obj) return; if (mState && mState->liveShaders > 0) --mState->liveShaders; delete obj; }
+piShader piRendererVulkan::CreateShaderBinary(const piShaderOptions *options, const uint8_t *vs, const int vs_len, const uint8_t *cs, const int cs_len, const uint8_t *es, const int es_len, const uint8_t *gs, const int gs_len, const uint8_t *fs, const int fs_len, char *error)
+{
+    (void)cs; (void)cs_len; (void)es; (void)es_len; (void)gs; (void)gs_len;
+    piShaderS *shader = new piShaderS();
+    shader->vs = vs;
+    shader->vsLen = vs_len;
+    shader->fs = fs;
+    shader->fsLen = fs_len;
+    if (options)
+    {
+        shader->options = *options;
+        shader->hasOptions = true;
+    }
+    if (!iCreateShaderModule(mState, vs, vs_len, &shader->vertexModule, mReporter) ||
+        !iCreateShaderModule(mState, fs, fs_len, &shader->fragmentModule, mReporter))
+    {
+        if (shader->vertexModule != VK_NULL_SHADER_MODULE && mState && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, shader->vertexModule, nullptr);
+        }
+        if (shader->fragmentModule != VK_NULL_SHADER_MODULE && mState && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, shader->fragmentModule, nullptr);
+        }
+        delete shader;
+        return nullptr;
+    }
+    if (error) error[0] = 0;
+    if (mState && !mState->shaderModuleReported &&
+        (shader->vertexModule != VK_NULL_SHADER_MODULE || shader->fragmentModule != VK_NULL_SHADER_MODULE))
+    {
+        iReport(mReporter, "Vulkan renderer created SPIR-V shader modules");
+        mState->shaderModuleReported = true;
+    }
+    if (mState) ++mState->liveShaders;
+    return shader;
+}
+void piRendererVulkan::DestroyShader(piShader obj)
+{
+    if (!obj) return;
+    if (mState && mState->device != VK_NULL_DEVICE)
+    {
+        if (obj->vertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, obj->vertexModule, nullptr);
+            obj->vertexModule = VK_NULL_SHADER_MODULE;
+        }
+        if (obj->fragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, obj->fragmentModule, nullptr);
+            obj->fragmentModule = VK_NULL_SHADER_MODULE;
+        }
+    }
+    if (mState && mState->liveShaders > 0) --mState->liveShaders;
+    delete obj;
+}
 void piRendererVulkan::AttachShader(piShader obj) { if (mState) mState->currentShader = obj; }
 void piRendererVulkan::DettachShader(void) { if (mState) mState->currentShader = nullptr; }
 piShader piRendererVulkan::CreateCompute(const piShaderOptions *options, const char *cs, char *error) { (void)options; (void)cs; const char *message = "Vulkan compute is not implemented yet"; if (error) std::strcpy(error, message); iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::Compute, message); return nullptr; }

@@ -11,6 +11,20 @@ In PowerShell or cmd.exe:
 msbuild code\projects\windows\imm.sln /p:Configuration=Release /p:Platform=x64 /m
 ```
 
+Vulkan renderer development additionally needs a Vulkan shader toolchain on PATH:
+
+- `glslangValidator` or `glslc` for GLSL-to-SPIR-V generation.
+- `dxc` for HLSL-to-SPIR-V experiments.
+- `spirv-val` and `spirv-dis` for validation and inspection.
+
+On Windows, the LunarG Vulkan SDK provides these tools. A local user-profile install via Scoop is:
+
+```powershell
+scoop install vulkan dxc glslang
+```
+
+The Windows GitHub Actions build installs `vulkan-sdk` before MSBuild so CI has the same SPIR-V tools available.
+
 In bash (Git Bash, WSL): use `-p:` not `/p:` — bash strips leading `/` from flags:
 ```
 msbuild "code/projects/windows/imm.sln" -p:Configuration=Release -p:Platform=x64 -m
