@@ -4,6 +4,7 @@ const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_DOCUMENT_PATH := "res://../../exampleImmFiles/sample1.imm"
 const CAMERA_ID := 0
 const IMM_RENDERER_API_METAL := 4
+const IMM_RENDERER_API_VULKAN := 5
 const MAX_READY_SECONDS := 12.0
 const RENDER_SETTLE_FRAMES := 30
 const DEFAULT_RELOAD_CYCLES := 1
@@ -11,7 +12,8 @@ const MIN_CONTENT_PIXELS := 512
 const MIN_CONTENT_BOUNDS_SIZE := 12
 const MIN_LUMA_RANGE := 0.02
 const MIN_ORIENTATION_LUMA_DELTA := 0.05
-const SUCCESS_MARKER := "IMM Godot Metal visual smoke passed"
+const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
+const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
 
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var status_label: Label3D = $StatusLabel
@@ -31,12 +33,13 @@ func _ready() -> void:
 	_setup_compositor()
 	viewer.load_document()
 	_apply_background_color()
-	_update_status("Metal visual scene ready")
+	_update_status("%s visual scene ready" % _selected_renderer_name())
 
 func _process(_delta: float) -> void:
-	if _compositor_effect == null or viewer == null or not viewer.is_loaded():
+	if _compositor_effect == null or viewer == null:
 		return
-	_apply_background_color()
+	if viewer.is_loaded():
+		_apply_background_color()
 	_queue_active_camera()
 
 func _setup_extension() -> bool:
@@ -60,11 +63,11 @@ func _setup_viewer() -> bool:
 		return false
 
 	viewer.name = "ImmViewer"
-	viewer.document_path = ProjectSettings.globalize_path(SAMPLE_DOCUMENT_PATH)
+	viewer.document_path = SAMPLE_DOCUMENT_PATH
 	viewer.load_on_ready = false
 	viewer.auto_play = true
 	viewer.auto_queue_render = true
-	viewer.renderer_api = IMM_RENDERER_API_METAL
+	viewer.renderer_api = _selected_renderer_api()
 	viewer.render_camera_path = NodePath("../CameraRig/Camera3D")
 	add_child(viewer)
 	return true
@@ -96,23 +99,31 @@ func _run_visual_smoke() -> void:
 		failures.append("ImmViewerNode was not created")
 		_finish_visual_smoke(failures, {}, {}, {}, {}, {})
 		return
+	await get_tree().process_frame
 
 	if not viewer.is_class("ImmViewerNode"):
 		failures.append("Expected native ImmViewerNode, got %s" % viewer.get_class())
 
-	viewer.renderer_api = IMM_RENDERER_API_METAL
+	var selected_renderer_api := _selected_renderer_api()
+	var selected_renderer_name := _selected_renderer_name(selected_renderer_api)
+	viewer.renderer_api = selected_renderer_api
 	var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
-	if int(backend_diagnostics.get("renderer_api", -1)) != IMM_RENDERER_API_METAL:
-		failures.append("ImmViewerNode did not select the Metal renderer API")
+	if int(backend_diagnostics.get("renderer_api", -1)) != selected_renderer_api:
+		failures.append("ImmViewerNode did not select the %s renderer API" % selected_renderer_name)
 	if not bool(backend_diagnostics.get("has_rendering_device", false)):
-		failures.append("Metal visual smoke did not expose a RenderingDevice")
+		failures.append("%s visual smoke did not expose a RenderingDevice" % selected_renderer_name)
+	if selected_renderer_api == IMM_RENDERER_API_VULKAN and not bool(backend_diagnostics.get("vulkan_adapter_candidate", false)):
+		failures.append("Vulkan visual smoke did not report a Vulkan adapter candidate")
+	for _frame in range(3):
+		_queue_active_camera()
+		await get_tree().process_frame
 
 	if not viewer.is_render_camera_registered(CAMERA_ID):
 		failures.append("camera %d was not auto-registered by ImmViewer" % CAMERA_ID)
 
 	if failures.is_empty() and not viewer.is_loaded():
 		var load_result: int = int(viewer.load_document())
-		print("IMM Godot Metal visual smoke load result: %d" % load_result)
+		print("IMM Godot %s visual smoke load result: %d" % [selected_renderer_name, load_result])
 		if load_result < 0:
 			failures.append("load_document returned %d" % load_result)
 
@@ -164,7 +175,10 @@ func _run_visual_smoke() -> void:
 			failures.append("ImmViewerCompositorEffect did not receive a native color texture handle")
 		if int(compositor_diagnostics.get("last_command_queue_handle", 0)) == 0:
 			failures.append("ImmViewerCompositorEffect did not receive a native command queue handle")
-		if not bool(compositor_diagnostics.get("last_metal_frame_started", false)):
+		if selected_renderer_api == IMM_RENDERER_API_VULKAN:
+			if not bool(compositor_diagnostics.get("last_vulkan_frame_started", false)):
+				failures.append("ImmViewerCompositorEffect did not start a Vulkan frame")
+		elif not bool(compositor_diagnostics.get("last_metal_frame_started", false)):
 			failures.append("ImmViewerCompositorEffect did not start a Metal frame")
 		if int(compositor_diagnostics.get("last_render_result", -1)) < 0:
 			failures.append("ImmGodot_RenderCamera returned %d" % int(compositor_diagnostics.get("last_render_result", -1)))
@@ -175,7 +189,7 @@ func _run_visual_smoke() -> void:
 		await RenderingServer.frame_post_draw
 		var image := get_viewport().get_texture().get_image()
 		var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
-		print("IMM Godot Metal visual smoke content diagnostics: %s" % str(content_diagnostics))
+		print("IMM Godot %s visual smoke content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
 		if float(content_diagnostics.get("luma_range", 0.0)) < MIN_LUMA_RANGE:
 			failures.append("visual smoke PNG was too flat: luma range %.5f" % float(content_diagnostics.get("luma_range", 0.0)))
 		if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
@@ -191,7 +205,7 @@ func _run_visual_smoke() -> void:
 		if save_result != OK:
 			failures.append("Failed to save visual smoke PNG %s: %d" % [screenshot_path, int(save_result)])
 		else:
-			print("IMM Godot Metal visual smoke PNG: %s" % screenshot_path)
+			print("IMM Godot %s visual smoke PNG: %s" % [selected_renderer_name, screenshot_path])
 
 	_finish_visual_smoke(failures, backend_diagnostics, document_state, document_bounds, render_diagnostics, compositor_diagnostics)
 
@@ -203,14 +217,16 @@ func _finish_visual_smoke(
 	render_diagnostics: Dictionary,
 	compositor_diagnostics: Dictionary
 ) -> void:
-	print("IMM Godot Metal visual smoke backend diagnostics: %s" % str(backend_diagnostics))
-	print("IMM Godot Metal visual smoke document state: %s" % str(document_state))
-	print("IMM Godot Metal visual smoke document bounds: %s" % str(document_bounds))
-	print("IMM Godot Metal visual smoke render diagnostics: %s" % str(render_diagnostics))
-	print("IMM Godot Metal visual smoke compositor diagnostics: %s" % str(compositor_diagnostics))
+	var selected_renderer_api := _selected_renderer_api()
+	var selected_renderer_name := _selected_renderer_name(selected_renderer_api)
+	print("IMM Godot %s visual smoke backend diagnostics: %s" % [selected_renderer_name, str(backend_diagnostics)])
+	print("IMM Godot %s visual smoke document state: %s" % [selected_renderer_name, str(document_state)])
+	print("IMM Godot %s visual smoke document bounds: %s" % [selected_renderer_name, str(document_bounds)])
+	print("IMM Godot %s visual smoke render diagnostics: %s" % [selected_renderer_name, str(render_diagnostics)])
+	print("IMM Godot %s visual smoke compositor diagnostics: %s" % [selected_renderer_name, str(compositor_diagnostics)])
 
 	if failures.is_empty():
-		print(SUCCESS_MARKER)
+		print(SUCCESS_MARKER_VULKAN if selected_renderer_api == IMM_RENDERER_API_VULKAN else SUCCESS_MARKER_METAL)
 		get_tree().quit(0)
 		return
 
@@ -227,18 +243,19 @@ func _queue_active_camera() -> void:
 func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
 	var stayed_ready := true
 	for cycle_index in range(cycle_count):
+		var selected_renderer_name := _selected_renderer_name()
 		viewer.unload_document()
 		await get_tree().process_frame
 		if viewer.is_loaded():
-			failures.append("Metal visual smoke reload cycle %d did not unload the document" % [cycle_index + 1])
+			failures.append("%s visual smoke reload cycle %d did not unload the document" % [selected_renderer_name, cycle_index + 1])
 			stayed_ready = false
 			continue
 
 		_queue_active_camera()
 		var load_result: int = int(viewer.load_document())
-		print("IMM Godot Metal visual smoke reload cycle %d load result: %d" % [cycle_index + 1, load_result])
+		print("IMM Godot %s visual smoke reload cycle %d load result: %d" % [selected_renderer_name, cycle_index + 1, load_result])
 		if load_result < 0:
-			failures.append("Metal visual smoke reload cycle %d load_document returned %d" % [cycle_index + 1, load_result])
+			failures.append("%s visual smoke reload cycle %d load_document returned %d" % [selected_renderer_name, cycle_index + 1, load_result])
 			stayed_ready = false
 			continue
 
@@ -256,7 +273,8 @@ func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
 			await get_tree().create_timer(0.05).timeout
 
 		if not ready:
-			failures.append("Metal visual smoke reload cycle %d sequence was not ready after %.1f seconds" % [
+			failures.append("%s visual smoke reload cycle %d sequence was not ready after %.1f seconds" % [
+				selected_renderer_name,
 				cycle_index + 1,
 				MAX_READY_SECONDS,
 			])
@@ -281,7 +299,8 @@ func _frame_camera_from_document() -> bool:
 		camera.near = 0.01
 		camera.far = 10000.0
 		camera.force_update_transform()
-		print("IMM Godot Metal visual smoke camera framed from spawn area: position=%s basis=%s" % [
+		print("IMM Godot %s visual smoke camera framed from spawn area: position=%s basis=%s" % [
+			_selected_renderer_name(),
 			str(camera.global_position),
 			str(camera.global_transform.basis),
 		])
@@ -303,7 +322,8 @@ func _frame_camera_from_document() -> bool:
 	camera.near = 0.01
 	camera.far = max(distance + radius * 4.0, 100.0)
 	camera.force_update_transform()
-	print("IMM Godot Metal visual smoke camera framed: position=%s target=%s radius=%.3f far=%.3f" % [
+	print("IMM Godot %s visual smoke camera framed: position=%s target=%s radius=%.3f far=%.3f" % [
+		_selected_renderer_name(),
 		str(camera.global_position),
 		str(center),
 		radius,
@@ -388,10 +408,25 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 	}
 
 func _update_status(message: String) -> void:
-	status_label.text = "%s\nRenderer API: Metal\nDocument: %s" % [
+	status_label.text = "%s\nRenderer API: %s\nDocument: %s" % [
 		message,
+		_selected_renderer_name(),
 		"loaded" if viewer.is_loaded() else "not loaded",
 	]
+
+func _selected_renderer_api() -> int:
+	var requested_api := _get_env_int("IMM_GODOT_VISUAL_RENDERER_API", -1)
+	if requested_api >= 0:
+		return requested_api
+	return IMM_RENDERER_API_VULKAN if OS.get_name() == "Android" else IMM_RENDERER_API_METAL
+
+func _selected_renderer_name(renderer_api: int = -1) -> String:
+	var api := renderer_api if renderer_api >= 0 else _selected_renderer_api()
+	if api == IMM_RENDERER_API_VULKAN:
+		return "Vulkan"
+	if api == IMM_RENDERER_API_METAL:
+		return "Metal"
+	return "API%d" % api
 
 func _get_env_int(name: String, default_value: int) -> int:
 	var value := OS.get_environment(name)
