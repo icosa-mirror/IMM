@@ -2731,31 +2731,35 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
         return true;
     }
 
-    VkDescriptorSetLayoutBinding bindings[5] = {};
-    bindings[0].binding = 3;
+    VkDescriptorSetLayoutBinding bindings[6] = {};
+    bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[1].binding = 4;
+    bindings[1].binding = 3;
     bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[2].binding = 7;
-    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[2].binding = 4;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[2].descriptorCount = 1;
-    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[3].binding = 8;
-    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[3].binding = 7;
+    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[3].descriptorCount = 1;
-    bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    bindings[4].binding = 9;
-    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[4].binding = 8;
+    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bindings[4].descriptorCount = 1;
     bindings[4].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[5].binding = 9;
+    bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[5].descriptorCount = 1;
+    bindings[5].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
     setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setLayoutInfo.bindingCount = 5;
+    setLayoutInfo.bindingCount = 6;
     setLayoutInfo.pBindings = bindings;
     VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->staticPaintDescriptorSetLayout);
     if (result != VK_SUCCESS || state->staticPaintDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
@@ -2790,7 +2794,7 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
 
     VkDescriptorPoolSize poolSizes[3] = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = 3;
+    poolSizes[0].descriptorCount = 4;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[1].descriptorCount = 1;
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2844,11 +2848,13 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
         return true;
     }
     piTexture blueNoise = state->textures[7];
+    piBuffer frameBuffer = state->constantBuffers[0];
     piBuffer layerBuffer = state->constantBuffers[3];
     piBuffer displayBuffer = state->constantBuffers[4];
     piBuffer vertexData = state->shaderBuffers[8];
     piBuffer chunkBuffer = state->constantBuffers[9];
     if (!blueNoise || blueNoise->imageView == VK_NULL_IMAGE_VIEW || blueNoise->sampler == VK_NULL_SAMPLER ||
+        !frameBuffer || frameBuffer->buffer == VK_NULL_BUFFER ||
         !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
         !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
         !vertexData || vertexData->buffer == VK_NULL_BUFFER ||
@@ -2857,53 +2863,61 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
         return false;
     }
 
-    VkDescriptorBufferInfo bufferInfos[4] = {};
-    bufferInfos[0].buffer = layerBuffer->buffer;
-    bufferInfos[0].range = layerBuffer->size;
-    bufferInfos[1].buffer = displayBuffer->buffer;
-    bufferInfos[1].range = displayBuffer->size;
-    bufferInfos[2].buffer = vertexData->buffer;
-    bufferInfos[2].range = vertexData->size;
-    bufferInfos[3].buffer = chunkBuffer->buffer;
-    bufferInfos[3].range = chunkBuffer->size;
+    VkDescriptorBufferInfo bufferInfos[5] = {};
+    bufferInfos[0].buffer = frameBuffer->buffer;
+    bufferInfos[0].range = frameBuffer->size;
+    bufferInfos[1].buffer = layerBuffer->buffer;
+    bufferInfos[1].range = layerBuffer->size;
+    bufferInfos[2].buffer = displayBuffer->buffer;
+    bufferInfos[2].range = displayBuffer->size;
+    bufferInfos[3].buffer = vertexData->buffer;
+    bufferInfos[3].range = vertexData->size;
+    bufferInfos[4].buffer = chunkBuffer->buffer;
+    bufferInfos[4].range = chunkBuffer->size;
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.sampler = blueNoise->sampler;
     imageInfo.imageView = blueNoise->imageView;
     imageInfo.imageLayout = blueNoise->imageLayout;
 
-    VkWriteDescriptorSet writes[5] = {};
+    VkWriteDescriptorSet writes[6] = {};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].dstSet = state->staticPaintDescriptorSet;
-    writes[0].dstBinding = 3;
+    writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &bufferInfos[0];
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[1].dstSet = state->staticPaintDescriptorSet;
-    writes[1].dstBinding = 4;
+    writes[1].dstBinding = 3;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[1].pBufferInfo = &bufferInfos[1];
     writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[2].dstSet = state->staticPaintDescriptorSet;
-    writes[2].dstBinding = 7;
+    writes[2].dstBinding = 4;
     writes[2].descriptorCount = 1;
-    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    writes[2].pImageInfo = &imageInfo;
+    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[2].pBufferInfo = &bufferInfos[2];
     writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[3].dstSet = state->staticPaintDescriptorSet;
-    writes[3].dstBinding = 8;
+    writes[3].dstBinding = 7;
     writes[3].descriptorCount = 1;
-    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writes[3].pBufferInfo = &bufferInfos[2];
+    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[3].pImageInfo = &imageInfo;
     writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[4].dstSet = state->staticPaintDescriptorSet;
-    writes[4].dstBinding = 9;
+    writes[4].dstBinding = 8;
     writes[4].descriptorCount = 1;
-    writes[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[4].pBufferInfo = &bufferInfos[3];
-    state->vkUpdateDescriptorSets(state->device, 5, writes, 0, nullptr);
+    writes[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[5].dstSet = state->staticPaintDescriptorSet;
+    writes[5].dstBinding = 9;
+    writes[5].descriptorCount = 1;
+    writes[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[5].pBufferInfo = &bufferInfos[4];
+    state->vkUpdateDescriptorSets(state->device, 6, writes, 0, nullptr);
 
     if (!state->descriptorSetReported)
     {
