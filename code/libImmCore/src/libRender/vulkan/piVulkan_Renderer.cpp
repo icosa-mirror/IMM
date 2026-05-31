@@ -43,6 +43,8 @@ typedef uint64_t VkFramebuffer;
 typedef uint64_t VkShaderModule;
 typedef uint64_t VkSampler;
 typedef uint64_t VkDescriptorSetLayout;
+typedef uint64_t VkDescriptorPool;
+typedef uint64_t VkDescriptorSet;
 typedef uint64_t VkPipelineLayout;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
@@ -66,6 +68,7 @@ typedef uint32_t VkBorderColor;
 typedef uint32_t VkDescriptorType;
 typedef uint32_t VkShaderStageFlags;
 typedef uint32_t VkDescriptorSetLayoutCreateFlags;
+typedef uint32_t VkDescriptorPoolCreateFlags;
 typedef uint32_t VkPipelineLayoutCreateFlags;
 typedef uint32_t VkAttachmentDescriptionFlags;
 typedef uint32_t VkAttachmentLoadOp;
@@ -103,6 +106,8 @@ static constexpr VkFramebuffer VK_NULL_FRAMEBUFFER = 0;
 static constexpr VkShaderModule VK_NULL_SHADER_MODULE = 0;
 static constexpr VkSampler VK_NULL_SAMPLER = 0;
 static constexpr VkDescriptorSetLayout VK_NULL_DESCRIPTOR_SET_LAYOUT = 0;
+static constexpr VkDescriptorPool VK_NULL_DESCRIPTOR_POOL = 0;
+static constexpr VkDescriptorSet VK_NULL_DESCRIPTOR_SET = 0;
 static constexpr VkPipelineLayout VK_NULL_PIPELINE_LAYOUT = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
@@ -125,6 +130,9 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO = 38;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO = 16;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO = 31;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO = 32;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO = 33;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO = 34;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET = 35;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO = 30;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
@@ -576,6 +584,59 @@ struct VkPipelineLayoutCreateInfo
     const void *pPushConstantRanges;
 };
 
+struct VkDescriptorPoolSize
+{
+    VkDescriptorType type;
+    uint32_t descriptorCount;
+};
+
+struct VkDescriptorPoolCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkDescriptorPoolCreateFlags flags;
+    uint32_t maxSets;
+    uint32_t poolSizeCount;
+    const VkDescriptorPoolSize *pPoolSizes;
+};
+
+struct VkDescriptorSetAllocateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkDescriptorPool descriptorPool;
+    uint32_t descriptorSetCount;
+    const VkDescriptorSetLayout *pSetLayouts;
+};
+
+struct VkDescriptorBufferInfo
+{
+    VkBuffer buffer;
+    VkDeviceSize offset;
+    VkDeviceSize range;
+};
+
+struct VkDescriptorImageInfo
+{
+    VkSampler sampler;
+    VkImageView imageView;
+    VkImageLayout imageLayout;
+};
+
+struct VkWriteDescriptorSet
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkDescriptorSet dstSet;
+    uint32_t dstBinding;
+    uint32_t dstArrayElement;
+    uint32_t descriptorCount;
+    VkDescriptorType descriptorType;
+    const VkDescriptorImageInfo *pImageInfo;
+    const VkDescriptorBufferInfo *pBufferInfo;
+    const void *pTexelBufferView;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -754,6 +815,10 @@ typedef VkResult (*PFN_vkCreateSampler)(VkDevice device, const VkSamplerCreateIn
 typedef void (*PFN_vkDestroySampler)(VkDevice device, VkSampler sampler, const void *allocator);
 typedef VkResult (*PFN_vkCreateDescriptorSetLayout)(VkDevice device, const VkDescriptorSetLayoutCreateInfo *createInfo, const void *allocator, VkDescriptorSetLayout *setLayout);
 typedef void (*PFN_vkDestroyDescriptorSetLayout)(VkDevice device, VkDescriptorSetLayout descriptorSetLayout, const void *allocator);
+typedef VkResult (*PFN_vkCreateDescriptorPool)(VkDevice device, const VkDescriptorPoolCreateInfo *createInfo, const void *allocator, VkDescriptorPool *descriptorPool);
+typedef void (*PFN_vkDestroyDescriptorPool)(VkDevice device, VkDescriptorPool descriptorPool, const void *allocator);
+typedef VkResult (*PFN_vkAllocateDescriptorSets)(VkDevice device, const VkDescriptorSetAllocateInfo *allocateInfo, VkDescriptorSet *descriptorSets);
+typedef void (*PFN_vkUpdateDescriptorSets)(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *descriptorWrites, uint32_t descriptorCopyCount, const void *descriptorCopies);
 typedef VkResult (*PFN_vkCreatePipelineLayout)(VkDevice device, const VkPipelineLayoutCreateInfo *createInfo, const void *allocator, VkPipelineLayout *pipelineLayout);
 typedef void (*PFN_vkDestroyPipelineLayout)(VkDevice device, VkPipelineLayout pipelineLayout, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
@@ -917,6 +982,8 @@ struct piVulkanState
     bool bufferReported = false;
     bool shaderModuleReported = false;
     bool descriptorLayoutReported = false;
+    bool descriptorSetReported = false;
+    bool descriptorSetFailureReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -974,6 +1041,10 @@ struct piVulkanState
     PFN_vkDestroySampler vkDestroySampler = nullptr;
     PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout = nullptr;
     PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout = nullptr;
+    PFN_vkCreateDescriptorPool vkCreateDescriptorPool = nullptr;
+    PFN_vkDestroyDescriptorPool vkDestroyDescriptorPool = nullptr;
+    PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets = nullptr;
+    PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets = nullptr;
     PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
     PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
@@ -1012,6 +1083,8 @@ struct piVulkanState
     piBuffer constantBuffers[16] = {};
     piBuffer shaderBuffers[16] = {};
     VkDescriptorSetLayout staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+    VkDescriptorPool staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+    VkDescriptorSet staticPaintDescriptorSet = VK_NULL_DESCRIPTOR_SET;
     VkPipelineLayout staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
@@ -1377,6 +1450,10 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkDestroySampler = (PFN_vkDestroySampler)state->vkGetDeviceProcAddr(state->device, "vkDestroySampler");
     state->vkCreateDescriptorSetLayout = (PFN_vkCreateDescriptorSetLayout)state->vkGetDeviceProcAddr(state->device, "vkCreateDescriptorSetLayout");
     state->vkDestroyDescriptorSetLayout = (PFN_vkDestroyDescriptorSetLayout)state->vkGetDeviceProcAddr(state->device, "vkDestroyDescriptorSetLayout");
+    state->vkCreateDescriptorPool = (PFN_vkCreateDescriptorPool)state->vkGetDeviceProcAddr(state->device, "vkCreateDescriptorPool");
+    state->vkDestroyDescriptorPool = (PFN_vkDestroyDescriptorPool)state->vkGetDeviceProcAddr(state->device, "vkDestroyDescriptorPool");
+    state->vkAllocateDescriptorSets = (PFN_vkAllocateDescriptorSets)state->vkGetDeviceProcAddr(state->device, "vkAllocateDescriptorSets");
+    state->vkUpdateDescriptorSets = (PFN_vkUpdateDescriptorSets)state->vkGetDeviceProcAddr(state->device, "vkUpdateDescriptorSets");
     state->vkCreatePipelineLayout = (PFN_vkCreatePipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkCreatePipelineLayout");
     state->vkDestroyPipelineLayout = (PFN_vkDestroyPipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkDestroyPipelineLayout");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
@@ -1404,7 +1481,9 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCreateImageView || !state->vkDestroyImageView ||
         !state->vkCreateRenderPass || !state->vkDestroyRenderPass || !state->vkCreateFramebuffer || !state->vkDestroyFramebuffer ||
         !state->vkCreateShaderModule || !state->vkDestroyShaderModule || !state->vkCreateSampler || !state->vkDestroySampler ||
-        !state->vkCreateDescriptorSetLayout || !state->vkDestroyDescriptorSetLayout || !state->vkCreatePipelineLayout || !state->vkDestroyPipelineLayout ||
+        !state->vkCreateDescriptorSetLayout || !state->vkDestroyDescriptorSetLayout ||
+        !state->vkCreateDescriptorPool || !state->vkDestroyDescriptorPool || !state->vkAllocateDescriptorSets || !state->vkUpdateDescriptorSets ||
+        !state->vkCreatePipelineLayout || !state->vkDestroyPipelineLayout ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -2009,7 +2088,8 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     {
         return true;
     }
-    if (!state->vkCreateDescriptorSetLayout || !state->vkCreatePipelineLayout)
+    if (!state->vkCreateDescriptorSetLayout || !state->vkCreatePipelineLayout ||
+        !state->vkCreateDescriptorPool || !state->vkAllocateDescriptorSets)
     {
         return true;
     }
@@ -2069,6 +2149,129 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     {
         iReport(reporter, "Vulkan renderer created static paint descriptor and pipeline layouts");
         state->descriptorLayoutReported = true;
+    }
+
+    VkDescriptorPoolSize poolSizes[3] = {};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = 3;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[1].descriptorCount = 1;
+    poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[2].descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets = 1;
+    poolInfo.poolSizeCount = 3;
+    poolInfo.pPoolSizes = poolSizes;
+    result = state->vkCreateDescriptorPool(state->device, &poolInfo, nullptr, &state->staticPaintDescriptorPool);
+    if (result != VK_SUCCESS || state->staticPaintDescriptorPool == VK_NULL_DESCRIPTOR_POOL)
+    {
+        iError(reporter, "Vulkan renderer failed to create static paint descriptor pool");
+        state->vkDestroyPipelineLayout(state->device, state->staticPaintPipelineLayout, nullptr);
+        state->vkDestroyDescriptorSetLayout(state->device, state->staticPaintDescriptorSetLayout, nullptr);
+        state->staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        state->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        state->staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        return false;
+    }
+
+    VkDescriptorSetAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = state->staticPaintDescriptorPool;
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &state->staticPaintDescriptorSetLayout;
+    result = state->vkAllocateDescriptorSets(state->device, &allocateInfo, &state->staticPaintDescriptorSet);
+    if (result != VK_SUCCESS || state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate static paint descriptor set");
+        if (state->vkDestroyDescriptorPool)
+        {
+            state->vkDestroyDescriptorPool(state->device, state->staticPaintDescriptorPool, nullptr);
+        }
+        state->vkDestroyPipelineLayout(state->device, state->staticPaintPipelineLayout, nullptr);
+        state->vkDestroyDescriptorSetLayout(state->device, state->staticPaintDescriptorSetLayout, nullptr);
+        state->staticPaintDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+        state->staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        state->staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        state->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        return false;
+    }
+    return true;
+}
+
+static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
+    {
+        return true;
+    }
+    piTexture blueNoise = state->textures[7];
+    piBuffer layerBuffer = state->constantBuffers[3];
+    piBuffer displayBuffer = state->constantBuffers[4];
+    piBuffer vertexData = state->shaderBuffers[8];
+    piBuffer chunkBuffer = state->constantBuffers[9];
+    if (!blueNoise || blueNoise->imageView == VK_NULL_IMAGE_VIEW || blueNoise->sampler == VK_NULL_SAMPLER ||
+        !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
+        !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
+        !vertexData || vertexData->buffer == VK_NULL_BUFFER ||
+        !chunkBuffer || chunkBuffer->buffer == VK_NULL_BUFFER)
+    {
+        return false;
+    }
+
+    VkDescriptorBufferInfo bufferInfos[4] = {};
+    bufferInfos[0].buffer = layerBuffer->buffer;
+    bufferInfos[0].range = layerBuffer->size;
+    bufferInfos[1].buffer = displayBuffer->buffer;
+    bufferInfos[1].range = displayBuffer->size;
+    bufferInfos[2].buffer = vertexData->buffer;
+    bufferInfos[2].range = vertexData->size;
+    bufferInfos[3].buffer = chunkBuffer->buffer;
+    bufferInfos[3].range = chunkBuffer->size;
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.sampler = blueNoise->sampler;
+    imageInfo.imageView = blueNoise->imageView;
+    imageInfo.imageLayout = blueNoise->imageLayout;
+
+    VkWriteDescriptorSet writes[5] = {};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = state->staticPaintDescriptorSet;
+    writes[0].dstBinding = 3;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].pBufferInfo = &bufferInfos[0];
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = state->staticPaintDescriptorSet;
+    writes[1].dstBinding = 4;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[1].pBufferInfo = &bufferInfos[1];
+    writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[2].dstSet = state->staticPaintDescriptorSet;
+    writes[2].dstBinding = 7;
+    writes[2].descriptorCount = 1;
+    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[2].pImageInfo = &imageInfo;
+    writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[3].dstSet = state->staticPaintDescriptorSet;
+    writes[3].dstBinding = 8;
+    writes[3].descriptorCount = 1;
+    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[3].pBufferInfo = &bufferInfos[2];
+    writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[4].dstSet = state->staticPaintDescriptorSet;
+    writes[4].dstBinding = 9;
+    writes[4].descriptorCount = 1;
+    writes[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[4].pBufferInfo = &bufferInfos[3];
+    state->vkUpdateDescriptorSets(state->device, 5, writes, 0, nullptr);
+
+    if (!state->descriptorSetReported)
+    {
+        iReport(reporter, "Vulkan renderer updated static paint descriptor set");
+        state->descriptorSetReported = true;
     }
     return true;
 }
@@ -2910,6 +3113,12 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroyPipelineLayout(mState->device, mState->staticPaintPipelineLayout, nullptr);
             mState->staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
         }
+        if (mState->staticPaintDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+        {
+            mState->vkDestroyDescriptorPool(mState->device, mState->staticPaintDescriptorPool, nullptr);
+            mState->staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+            mState->staticPaintDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+        }
         if (mState->staticPaintDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
         {
             mState->vkDestroyDescriptorSetLayout(mState->device, mState->staticPaintDescriptorSetLayout, nullptr);
@@ -3734,6 +3943,11 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     }
 
     piTexture target = mState->currentRenderTarget->color[0];
+    if (!iUpdateStaticPaintDescriptorSet(mState, mReporter) && !mState->descriptorSetFailureReported)
+    {
+        mState->descriptorSetFailureReported = true;
+        iError(mReporter, "Vulkan renderer failed to update static paint descriptor set");
+    }
     const uint16_t *indices = (const uint16_t *)(mState->currentVertexArray->indexBuffer->data + baseIndex * sizeof(uint16_t));
     const iCpuStaticVertex *vertices = (const iCpuStaticVertex *)mState->shaderBuffers[8]->data;
     const iCpuLayerState *layer = (const iCpuLayerState *)mState->constantBuffers[3]->data;
