@@ -56,6 +56,9 @@ struct EngineState {
     piTimer* timer = nullptr;
     piSoundEngineBackend* soundBackend = nullptr;
     Viewer* viewer = nullptr;
+    piTexture colorTexture = nullptr;
+    piTexture depthTexture = nullptr;
+    piRTarget renderTarget = nullptr;
     ImmPlayer::StereoMode stereoMode = ImmPlayer::StereoMode::None;
     bool viewerInitialized = false;
     bool firstFrame = true;
@@ -84,6 +87,23 @@ EngineState gEngine;
 std::mutex gMessageMutex;
 std::wstring gPendingPath;
 bool gTriedAutoLoad = false;
+
+class AndroidRenderReporter final : public piRenderer::piReporter {
+public:
+    void Info(const char* str) override {
+        ALOGV("%s", str ? str : "");
+    }
+
+    void Error(const char* str, int) override {
+        ALOGE("%s", str ? str : "");
+    }
+
+    void Begin(uint64_t, uint64_t, int, int) override {}
+    void Texture(const wchar_t*, uint64_t, piRenderer::Format, bool, int, int, int) override {}
+    void End(void) override {}
+};
+
+AndroidRenderReporter gRenderReporter;
 
 std::string gAssetDirectory;
 std::string gExternalFilesDirectory;
@@ -329,6 +349,21 @@ void shutdownViewer() {
     delete gEngine.viewer;
     gEngine.viewer = nullptr;
 
+    if (gEngine.renderer) {
+        if (gEngine.renderTarget) {
+            gEngine.renderer->DestroyRenderTarget(gEngine.renderTarget);
+            gEngine.renderTarget = nullptr;
+        }
+        if (gEngine.depthTexture) {
+            gEngine.renderer->DestroyTexture(gEngine.depthTexture);
+            gEngine.depthTexture = nullptr;
+        }
+        if (gEngine.colorTexture) {
+            gEngine.renderer->DestroyTexture(gEngine.colorTexture);
+            gEngine.colorTexture = nullptr;
+        }
+    }
+
     if (gEngine.soundBackend) {
         gEngine.soundBackend->Deinit();
         piDestroySoundEngineBackend(gEngine.soundBackend);
@@ -354,6 +389,55 @@ void shutdownViewer() {
     }
 }
 
+bool ensureRenderTarget() {
+    if (!gEngine.useVulkan) {
+        return true;
+    }
+    if (!gEngine.renderer || gEngine.width <= 0 || gEngine.height <= 0) {
+        return false;
+    }
+    if (gEngine.renderTarget) {
+        return true;
+    }
+
+    const piRenderer::TextureInfo colorInfo = {
+        piRenderer::TextureType::T2D,
+        piRenderer::Format::C3_11_11_10_FLOAT,
+        gEngine.width,
+        gEngine.height,
+        1,
+        4,
+        1,
+        0
+    };
+    const piRenderer::TextureInfo depthInfo = {
+        piRenderer::TextureType::T2D,
+        piRenderer::Format::DS_24_8_UINT,
+        gEngine.width,
+        gEngine.height,
+        1,
+        4,
+        1,
+        0
+    };
+
+    gEngine.colorTexture = gEngine.renderer->CreateTexture2(L"android_vulkan_color", &colorInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, nullptr, 1 + 2);
+    gEngine.depthTexture = gEngine.renderer->CreateTexture2(L"android_vulkan_depth", &depthInfo, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, nullptr, 2);
+    if (!gEngine.colorTexture || !gEngine.depthTexture) {
+        ALOGE("Failed to create Android Vulkan render textures");
+        return false;
+    }
+
+    gEngine.renderTarget = gEngine.renderer->CreateRenderTarget(gEngine.colorTexture, nullptr, nullptr, nullptr, gEngine.depthTexture);
+    if (!gEngine.renderTarget) {
+        ALOGE("Failed to create Android Vulkan render target");
+        return false;
+    }
+
+    ALOGV("Android Vulkan render target ready %dx%d", gEngine.width, gEngine.height);
+    return true;
+}
+
 void initViewer() {
     if (gEngine.viewer) {
         return;
@@ -371,7 +455,7 @@ void initViewer() {
 
     const void *nativeWindowHandles[1] = { gEngine.app != nullptr ? gEngine.app->window : nullptr };
     const void **rendererWindow = gEngine.useVulkan ? nativeWindowHandles : nullptr;
-    if (!gEngine.renderer->Initialize(0, rendererWindow, 1, false, false, nullptr, false, nullptr)) {
+    if (!gEngine.renderer->Initialize(0, rendererWindow, 1, false, false, &gRenderReporter, false, nullptr)) {
         ALOGF("Could not initialize piRenderer");
     }
     ALOGV("IMM Android renderer API: %s", gEngine.useVulkan ? "Vulkan" : "GLES");
@@ -482,6 +566,9 @@ void renderFrame() {
         glViewport(0, 0, gEngine.width, gEngine.height);
         glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    } else if (!ensureRenderTarget() || !gEngine.renderer->SetRenderTarget(gEngine.renderTarget)) {
+        ALOGE("Failed to bind Android Vulkan render target");
+        return;
     }
 
     const double now = gEngine.timer->GetTime();
@@ -499,6 +586,7 @@ void renderFrame() {
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
 
     if (gEngine.useVulkan) {
+        gEngine.renderer->SetRenderTarget(nullptr);
         gEngine.renderer->SwapBuffers();
     } else {
         eglSwapBuffers(gEngine.display, gEngine.surface);

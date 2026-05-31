@@ -31,8 +31,10 @@ namespace ImmPlayer
     #include "shader_static_brush_vs.glsl"
     #include "shader_static_brush_fs.glsl"
 #elif defined(ANDROID)
-#include "shader_static_brush_vs.es.glsl"
+    #include "shader_static_brush_vs.es.glsl"
     #include "shader_static_brush_fs.es.glsl"
+    #include "tmp/shader_static_brush_vs_spirv.inc"
+    #include "tmp/shader_static_brush_fs_spirv.inc"
 #else
     #include "shader_static_brush_vs.glsl"
     #include "shader_static_brush_fs.glsl"
@@ -260,7 +262,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
             if (renderer->GetAPI() == piRenderer::API::Vulkan)
             {
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(ANDROID)
                 const int vs_index = i +
                     j * 3 +
                     k * 3 * 2 +

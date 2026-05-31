@@ -132,8 +132,74 @@ $fsPath = Join-Path $workDir "shader_pip360Equirect_vk.frag"
 Set-Content -Path $vsPath -Value $vsSource -NoNewline -Encoding ASCII
 Set-Content -Path $fsPath -Value $fsSource -NoNewline -Encoding ASCII
 
+$vs2DSource = @'
+#version 460
+
+layout(location=0) out vec2 out_uv;
+
+void main()
+{
+    vec2 positions[6] = vec2[](
+        vec2(-1.0, -1.0),
+        vec2( 1.0, -1.0),
+        vec2( 1.0,  1.0),
+        vec2(-1.0, -1.0),
+        vec2( 1.0,  1.0),
+        vec2(-1.0,  1.0)
+    );
+    vec2 uvs[6] = vec2[](
+        vec2(0.0, 1.0),
+        vec2(1.0, 1.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, 1.0),
+        vec2(1.0, 0.0),
+        vec2(0.0, 0.0)
+    );
+    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+    out_uv = uvs[gl_VertexIndex];
+}
+'@
+
+$fs2DSource = @'
+#version 460
+
+layout (std140, row_major, binding=3) uniform LayersState
+{
+    mat4x4 mLayerToViewer;
+    float  mLayerToViewerScale;
+    float  mOpacity;
+    float  mkUnused;
+    float  mDrawInTime;
+    vec4   mAnimParams;
+    vec4   mKeepAlive[2];
+    uint   mID;
+} layer;
+
+layout(binding = 0) uniform sampler2D pictureTexture;
+layout(location=0) in vec2 in_uv;
+layout(location=0) out vec4 out_color;
+
+void main()
+{
+    vec4 texel = texture(pictureTexture, in_uv);
+#if COLOR_SPACE == 0
+    vec3 color = texel.rgb * texel.rgb;
+#else
+    vec3 color = texel.rgb;
+#endif
+    out_color = vec4(color, texel.a * layer.mOpacity);
+}
+'@
+
+$vs2DPath = Join-Path $workDir "shader_pi2D_vk.vert"
+$fs2DPath = Join-Path $workDir "shader_pi2D_vk.frag"
+Set-Content -Path $vs2DPath -Value $vs2DSource -NoNewline -Encoding ASCII
+Set-Content -Path $fs2DPath -Value $fs2DSource -NoNewline -Encoding ASCII
+
 $vsVariants = New-Object System.Collections.Generic.List[string]
 $fsVariants = New-Object System.Collections.Generic.List[string]
+$vs2DVariants = New-Object System.Collections.Generic.List[string]
+$fs2DVariants = New-Object System.Collections.Generic.List[string]
 
 $vsOut = Join-Path $workDir "shader_pip360Equirect_vs_vk.spv"
 & $glslang -V -S vert -o $vsOut $vsPath | Out-Host
@@ -151,5 +217,23 @@ for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
     $fsVariants.Add($fsOut)
 }
 
+$vs2DOut = Join-Path $workDir "shader_pi2D_vs_vk.spv"
+& $glslang -V -S vert -o $vs2DOut $vs2DPath | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $vs2DOut" }
+& $spirvVal $vs2DOut
+if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $vs2DOut" }
+$vs2DVariants.Add($vs2DOut)
+
+for ($colorSpace = 0; $colorSpace -le 1; ++$colorSpace) {
+    $fs2DOut = Join-Path $workDir "shader_pi2D_fs_vk_c${colorSpace}.spv"
+    & $glslang -V -S frag "-DCOLOR_SPACE=$colorSpace" -o $fs2DOut $fs2DPath | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $fs2DOut" }
+    & $spirvVal $fs2DOut
+    if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $fs2DOut" }
+    $fs2DVariants.Add($fs2DOut)
+}
+
 Write-SpvInclude (Join-Path $OutputDir "shader_pip360Equirect_vs_spirv.inc") "shader_pip360Equirect_vs_spirv" $vsVariants
 Write-SpvInclude (Join-Path $OutputDir "shader_pip360Equirect_fs_spirv.inc") "shader_pip360Equirect_fs_spirv" $fsVariants
+Write-SpvInclude (Join-Path $OutputDir "shader_pi2D_vs_spirv.inc") "shader_pi2D_vs_spirv" $vs2DVariants
+Write-SpvInclude (Join-Path $OutputDir "shader_pi2D_fs_spirv.inc") "shader_pi2D_fs_spirv" $fs2DVariants

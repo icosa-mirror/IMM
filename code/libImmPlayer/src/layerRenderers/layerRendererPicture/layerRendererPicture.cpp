@@ -69,6 +69,10 @@ namespace ImmPlayer
 #include "shader_pip360Cubemap_fs.es.glsl"
 #include "shader_pip360Equirect_vs.es.glsl"
 #include "shader_pip360Equirect_fs.es.glsl"
+#include "tmp/shader_pi2D_vs_spirv.inc"
+#include "tmp/shader_pi2D_fs_spirv.inc"
+#include "tmp/shader_pip360Equirect_vs_spirv.inc"
+#include "tmp/shader_pip360Equirect_fs_spirv.inc"
 #else
 #include "shader_pi2D_vs.glsl"
 #include "shader_pi2D_fs.glsl"
@@ -276,9 +280,32 @@ namespace ImmPlayer
             }
             else
             {
-#if defined(WINDOWS)
                 if (renderer->GetAPI() == piRenderer::API::Vulkan)
                 {
+#if defined(WINDOWS) || defined(ANDROID)
+                    const piShaderOptions opts2D = { 6,{
+                        { "PICTURE", 1 },
+                        { "PICTURE_2D", 1 },
+                        { "COLOR_SPACE", static_cast<int>(colorSpace) },
+                        { "STEREOMODE", i },
+                        { "FORMAT_IS_STEREO", 0 },
+                        { "DEBUG_RENDER_MODE", j },
+                    } };
+                    const int fsIndex = static_cast<int>(colorSpace);
+#if defined(ANDROID)
+                    piShader shader2D = renderer->CreateShaderBinary(&opts2D,
+                        reinterpret_cast<const uint8_t*>(shader_pi2D_vs_spirv_code[0]), shader_pi2D_vs_spirv_size[0],
+                        nullptr, 0, nullptr, 0, nullptr, 0,
+                        reinterpret_cast<const uint8_t*>(shader_pi2D_fs_spirv_code[fsIndex]), shader_pi2D_fs_spirv_size[fsIndex],
+                        error);
+                    if (!shader2D)
+                    {
+                        log->Printf(LT_ERROR, L"Could not initialize Vulkan 2D picture image layer shader\n%s", pistr2ws(error));
+                        return false;
+                    }
+#else
+                    piShader shader2D = nullptr;
+#endif
                     const piShaderOptions opts = { 5,{
                         { "PICTURE", 1 },
                         { "COLOR_SPACE", static_cast<int>(colorSpace) },
@@ -286,7 +313,6 @@ namespace ImmPlayer
                         { "FORMAT_IS_STEREO", 0 },
                         { "DEBUG_RENDER_MODE", j },
                     } };
-                    const int fsIndex = static_cast<int>(colorSpace);
                     piShader shader = renderer->CreateShaderBinary(&opts,
                         reinterpret_cast<const uint8_t*>(shader_pip360Equirect_vs_spirv_code[0]), shader_pip360Equirect_vs_spirv_size[0],
                         nullptr, 0, nullptr, 0, nullptr, 0,
@@ -297,13 +323,18 @@ namespace ImmPlayer
                         log->Printf(LT_ERROR, L"Could not initialize Vulkan picture image layer shader\n%s", pistr2ws(error));
                         return false;
                     }
-                    mShaders[idx][LayerPicture::Image2D] = shader;
+                    mShaders[idx][LayerPicture::Image2D] = shader2D ? shader2D : shader;
                     mShaders[idx][LayerPicture::Image360EquirectMono] = shader;
                     mShaders[idx][LayerPicture::Image360EquirectStereo] = shader;
                     mShaders[idx][LayerPicture::Image360CubemapCrossMono] = shader;
                     mShaders[idx][LayerPicture::Image360CubemapVstripMono] = shader;
                     continue;
+#else
+                    log->Printf(LT_ERROR, L"Could not initialize Vulkan picture image layer shader: SPIR-V is unavailable on this platform");
+                    return false;
+#endif
                 }
+#if defined(WINDOWS)
                 const int poff = 3 * (static_cast<int>(colorSpace));
 
                 mShaders[idx][LayerPicture::Image2D] = renderer->CreateShaderBinary(nullptr, shader_pi2D_vs_code[i], shader_pi2D_vs_size[i], nullptr, 0, nullptr, 0, nullptr, 0, shader_pi2D_fs_code[i + poff], shader_pi2D_fs_size[i + poff], error);
@@ -388,9 +419,23 @@ namespace ImmPlayer
             }
             else
             {
+#if defined(WINDOWS) || defined(ANDROID)
 #if defined(WINDOWS)
                 const void *shaders[3] = { (void*)shader_pip360Equirect_vs0, (void*)shader_pip360Equirect_vs1, (void*)shader_pip360Equirect_vs2 };
                 if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
+#else
+                const void *shaders[3] = {
+                    shader_pip360Equirect_vs_spirv_code[0],
+                    shader_pip360Equirect_vs_spirv_code[0],
+                    shader_pip360Equirect_vs_spirv_code[0]
+                };
+                const int shaderSizes[3] = {
+                    shader_pip360Equirect_vs_spirv_size[0],
+                    shader_pip360Equirect_vs_spirv_size[0],
+                    shader_pip360Equirect_vs_spirv_size[0]
+                };
+                if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shaderSizes, log))
+#endif
                 {
                     log->Printf(LT_ERROR, L"Could not initalize 360 sphere render mesh");
                     return false;
@@ -422,9 +467,23 @@ namespace ImmPlayer
             }
             else
             {
+#if defined(WINDOWS) || defined(ANDROID)
 #if defined(WINDOWS)
                 const void *shaders[3] = { (void*)shader_pip360Equirect_vs0, (void*)shader_pip360Equirect_vs1, (void*)shader_pip360Equirect_vs2 };
                 if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
+#else
+                const void *shaders[3] = {
+                    shader_pip360Equirect_vs_spirv_code[0],
+                    shader_pip360Equirect_vs_spirv_code[0],
+                    shader_pip360Equirect_vs_spirv_code[0]
+                };
+                const int shaderSizes[3] = {
+                    shader_pip360Equirect_vs_spirv_size[0],
+                    shader_pip360Equirect_vs_spirv_size[0],
+                    shader_pip360Equirect_vs_spirv_size[0]
+                };
+                if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shaderSizes, log))
+#endif
                 {
                     log->Printf(LT_ERROR, L"Could not initalize 360 sphere render mesh");
                     return false;

@@ -6456,12 +6456,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         mState->gpuPaintActive = true;
         ++mState->gpuPaintDrawCount;
     }
-#if defined(WINDOWS)
     if (hasStaticPaintGpuPath)
     {
         mState->pendingPresentTexture = target;
     }
-#endif
     if (hasStaticPaintGpuPath)
     {
         return;
