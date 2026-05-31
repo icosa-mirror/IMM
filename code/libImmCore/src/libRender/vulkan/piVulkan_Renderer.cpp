@@ -1234,6 +1234,7 @@ struct piVulkanState
     bool gpuReadbackReported = false;
     bool gpuReadbackFailureReported = false;
     bool gpuPaintActive = false;
+    uint32_t gpuReadbackBestNonblack = 0;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -1575,7 +1576,9 @@ static void iWritePpmCapture(piVulkanState *state, piTexture texture)
     {
         return;
     }
-    FILE *file = std::fopen(path, "wb");
+    char tempPath[1024];
+    std::snprintf(tempPath, sizeof(tempPath), "%s.tmp", path);
+    FILE *file = std::fopen(tempPath, "wb");
     if (!file)
     {
         return;
@@ -1587,10 +1590,21 @@ static void iWritePpmCapture(piVulkanState *state, piTexture texture)
         {
             const uint8_t *src = texture->data + ((size_t)y * (size_t)texture->info.mXres + (size_t)x) * 4u;
             const uint8_t rgb[3] = { src[0], src[1], src[2] };
-            std::fwrite(rgb, 1, sizeof(rgb), file);
+            if (std::fwrite(rgb, 1, sizeof(rgb), file) != sizeof(rgb))
+            {
+                std::fclose(file);
+                std::remove(tempPath);
+                return;
+            }
         }
     }
     std::fclose(file);
+    std::remove(path);
+    if (std::rename(tempPath, path) != 0)
+    {
+        std::remove(tempPath);
+        return;
+    }
     state->captureWritten = true;
 }
 #endif
@@ -2899,20 +2913,21 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
     state->vkUnmapMemory(state->device, state->stagingMemory);
     texture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    if (!state->gpuReadbackReported)
+    uint32_t nonblack = 0;
+    const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+    for (size_t i = 0; i < pixelCount; ++i)
     {
-        uint32_t nonblack = 0;
-        const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
-        for (size_t i = 0; i < pixelCount; ++i)
+        const uint8_t *src = texture->data + i * 4u;
+        if (src[0] != 0 || src[1] != 0 || src[2] != 0)
         {
-            const uint8_t *src = texture->data + i * 4u;
-            if (src[0] != 0 || src[1] != 0 || src[2] != 0)
-            {
-                ++nonblack;
-            }
+            ++nonblack;
         }
+    }
+    if (!state->gpuReadbackReported || nonblack > state->gpuReadbackBestNonblack)
+    {
+        state->gpuReadbackBestNonblack = nonblack;
         char message[256];
-        std::snprintf(message, sizeof(message), "Vulkan renderer read back static paint GPU target nonblack=%u size=%dx%d", nonblack, texture->info.mXres, texture->info.mYres);
+        std::snprintf(message, sizeof(message), "Vulkan renderer read back static paint GPU target nonblack=%u size=%dx%d draw=%u", nonblack, texture->info.mXres, texture->info.mYres, state->gpuPaintDrawCount);
         iReport(reporter, message);
         state->gpuReadbackReported = true;
     }
@@ -4802,7 +4817,7 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
         iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet");
         return;
     }
-    if (!mState->currentRenderTarget && mState->gpuPaintActive && !mState->gpuReadbackReported)
+    if (!mState->currentRenderTarget && mState->gpuPaintActive)
     {
         return;
     }
