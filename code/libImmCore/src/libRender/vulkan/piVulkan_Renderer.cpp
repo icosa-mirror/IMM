@@ -1233,6 +1233,7 @@ struct piVulkanState
     bool drawSubmitFailureReported = false;
     bool gpuReadbackReported = false;
     bool gpuReadbackFailureReported = false;
+    bool gpuPaintActive = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -1351,6 +1352,7 @@ struct piVulkanState
     bool cpuPaintDiagnosticReported = false;
     bool cpuPresentDiagnosticReported = false;
     uint32_t cpuPaintDrawCount = 0;
+    uint32_t gpuPaintDrawCount = 0;
     uint64_t liveRenderTargets = 0;
     uint64_t liveRasterStates = 0;
     uint64_t liveBlendStates = 0;
@@ -4605,19 +4607,29 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     {
         return;
     }
+    const bool hasStaticPaintGpuPath =
+        mState->currentShader->pipeline != VK_NULL_PIPELINE &&
+        mState->currentRenderTarget->framebuffer != VK_NULL_FRAMEBUFFER &&
+        mState->staticPaintDescriptorSet != VK_NULL_DESCRIPTOR_SET;
     if (!iSubmitStaticPaintDraw(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, num, numInstances, baseVertex, baseInstance, baseIndex, mReporter) &&
         !mState->drawSubmitFailureReported)
     {
         mState->drawSubmitFailureReported = true;
         iError(mReporter, "Vulkan renderer failed to submit static paint draw commands");
     }
-    if (!iReadBackTextureImage(mState, target, mReporter) && !mState->gpuReadbackFailureReported)
+    if (hasStaticPaintGpuPath)
+    {
+        mState->gpuPaintActive = true;
+        ++mState->gpuPaintDrawCount;
+    }
+    const bool readBackGpuTarget = hasStaticPaintGpuPath && (mState->gpuPaintDrawCount == 128u || (mState->gpuPaintDrawCount & 127u) == 0u);
+    if (readBackGpuTarget && !iReadBackTextureImage(mState, target, mReporter) && !mState->gpuReadbackFailureReported)
     {
         mState->gpuReadbackFailureReported = true;
         iError(mReporter, "Vulkan renderer failed to read back static paint GPU target");
     }
 #if defined(WINDOWS)
-    if (mState->gpuReadbackReported)
+    if (readBackGpuTarget && mState->gpuReadbackReported)
     {
         mState->pendingPresentTexture = target;
         iWritePpmCapture(mState, target);
@@ -4767,7 +4779,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     }
 #if defined(WINDOWS)
     ++mState->cpuPaintDrawCount;
-    if (mState->cpuPaintDrawCount == 1u || (mState->cpuPaintDrawCount & 31u) == 0u)
+    if (!mState->gpuPaintActive && (mState->cpuPaintDrawCount == 1u || (mState->cpuPaintDrawCount & 31u) == 0u))
     {
         mState->pendingPresentTexture = target;
         iWritePpmCapture(mState, target);
@@ -4788,6 +4800,10 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
     if (!mState || !mState->textures[0])
     {
         iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::DrawSubmission, "Vulkan draw submission is not implemented yet");
+        return;
+    }
+    if (!mState->currentRenderTarget && mState->gpuPaintActive && !mState->gpuReadbackReported)
+    {
         return;
     }
     if (!mState->currentRenderTarget)
