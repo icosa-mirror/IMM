@@ -28,16 +28,19 @@ typedef struct VkInstance_T *VkInstance;
 typedef struct VkPhysicalDevice_T *VkPhysicalDevice;
 typedef struct VkDevice_T *VkDevice;
 typedef struct VkQueue_T *VkQueue;
+typedef uint64_t VkSurfaceKHR;
 
 static constexpr VkInstance VK_NULL_INSTANCE = nullptr;
 static constexpr VkPhysicalDevice VK_NULL_PHYSICAL_DEVICE = nullptr;
 static constexpr VkDevice VK_NULL_DEVICE = nullptr;
 static constexpr VkQueue VK_NULL_QUEUE = nullptr;
+static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_APPLICATION_INFO = 0;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO = 2;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO = 3;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000;
 static constexpr VkQueueFlags VK_QUEUE_GRAPHICS_BIT = 0x00000001;
 
 #define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
@@ -103,6 +106,17 @@ struct VkQueueFamilyProperties
     } minImageTransferGranularity;
 };
 
+#if defined(WINDOWS)
+struct VkWin32SurfaceCreateInfoKHR
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    HINSTANCE hinstance;
+    HWND hwnd;
+};
+#endif
+
 typedef void (*PFN_vkVoidFunction)(void);
 typedef PFN_vkVoidFunction (*PFN_vkGetInstanceProcAddr)(VkInstance instance, const char *name);
 typedef VkResult (*PFN_vkCreateInstance)(const VkInstanceCreateInfo *createInfo, const void *allocator, VkInstance *instance);
@@ -113,6 +127,11 @@ typedef VkResult (*PFN_vkCreateDevice)(VkPhysicalDevice physicalDevice, const Vk
 typedef void (*PFN_vkDestroyDevice)(VkDevice device, const void *allocator);
 typedef void (*PFN_vkGetDeviceQueue)(VkDevice device, uint32_t queueFamilyIndex, uint32_t queueIndex, VkQueue *queue);
 typedef VkResult (*PFN_vkDeviceWaitIdle)(VkDevice device);
+typedef VkResult (*PFN_vkGetPhysicalDeviceSurfaceSupportKHR)(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32 *supported);
+typedef void (*PFN_vkDestroySurfaceKHR)(VkInstance instance, VkSurfaceKHR surface, const void *allocator);
+#if defined(WINDOWS)
+typedef VkResult (*PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, const VkWin32SurfaceCreateInfoKHR *createInfo, const void *allocator, VkSurfaceKHR *surface);
+#endif
 
 struct piShaderS
 {
@@ -211,6 +230,7 @@ struct piVulkanState
     VkPhysicalDevice physicalDevice = VK_NULL_PHYSICAL_DEVICE;
     VkDevice device = VK_NULL_DEVICE;
     VkQueue graphicsQueue = VK_NULL_QUEUE;
+    VkSurfaceKHR surface = VK_NULL_SURFACE_KHR;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -225,10 +245,15 @@ struct piVulkanState
     PFN_vkDestroyInstance vkDestroyInstance = nullptr;
     PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = nullptr;
     PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties = nullptr;
+    PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR = nullptr;
     PFN_vkCreateDevice vkCreateDevice = nullptr;
     PFN_vkDestroyDevice vkDestroyDevice = nullptr;
     PFN_vkGetDeviceQueue vkGetDeviceQueue = nullptr;
     PFN_vkDeviceWaitIdle vkDeviceWaitIdle = nullptr;
+    PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = nullptr;
+#if defined(WINDOWS)
+    PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR = nullptr;
+#endif
     uint32_t graphicsQueueFamilyIndex = 0;
     bool ownsInstance = false;
     bool ownsDevice = false;
@@ -615,10 +640,15 @@ static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piR
     state->vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)state->vkGetInstanceProcAddr(state->instance, "vkEnumeratePhysicalDevices");
     state->vkDestroyInstance = (PFN_vkDestroyInstance)state->vkGetInstanceProcAddr(state->instance, "vkDestroyInstance");
     state->vkGetPhysicalDeviceQueueFamilyProperties = (PFN_vkGetPhysicalDeviceQueueFamilyProperties)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+    state->vkGetPhysicalDeviceSurfaceSupportKHR = (PFN_vkGetPhysicalDeviceSurfaceSupportKHR)state->vkGetInstanceProcAddr(state->instance, "vkGetPhysicalDeviceSurfaceSupportKHR");
     state->vkCreateDevice = (PFN_vkCreateDevice)state->vkGetInstanceProcAddr(state->instance, "vkCreateDevice");
     state->vkDestroyDevice = (PFN_vkDestroyDevice)state->vkGetInstanceProcAddr(state->instance, "vkDestroyDevice");
     state->vkGetDeviceQueue = (PFN_vkGetDeviceQueue)state->vkGetInstanceProcAddr(state->instance, "vkGetDeviceQueue");
     state->vkDeviceWaitIdle = (PFN_vkDeviceWaitIdle)state->vkGetInstanceProcAddr(state->instance, "vkDeviceWaitIdle");
+    state->vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkDestroySurfaceKHR");
+#if defined(WINDOWS)
+    state->vkCreateWin32SurfaceKHR = (PFN_vkCreateWin32SurfaceKHR)state->vkGetInstanceProcAddr(state->instance, "vkCreateWin32SurfaceKHR");
+#endif
     if (!state->vkDestroyInstance || !state->vkEnumeratePhysicalDevices || !state->vkGetPhysicalDeviceQueueFamilyProperties ||
         !state->vkCreateDevice || !state->vkDestroyDevice || !state->vkGetDeviceQueue || !state->vkDeviceWaitIdle)
     {
@@ -626,6 +656,39 @@ static bool iLoadVulkanInstanceEntryPoints(piVulkanState *state, piRenderer::piR
         return false;
     }
     return true;
+}
+
+static bool iCreateVulkanSurface(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state)
+    {
+        return false;
+    }
+#if defined(WINDOWS)
+    if (!state->window)
+    {
+        return true;
+    }
+    if (!state->vkCreateWin32SurfaceKHR)
+    {
+        iError(reporter, "Vulkan renderer could not load vkCreateWin32SurfaceKHR");
+        return false;
+    }
+    VkWin32SurfaceCreateInfoKHR surfaceInfo = {};
+    surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    surfaceInfo.hinstance = GetModuleHandleW(nullptr);
+    surfaceInfo.hwnd = state->window;
+    const VkResult result = state->vkCreateWin32SurfaceKHR(state->instance, &surfaceInfo, nullptr, &state->surface);
+    if (result != VK_SUCCESS || state->surface == VK_NULL_SURFACE_KHR)
+    {
+        iError(reporter, "Vulkan renderer failed to create Win32 VkSurfaceKHR");
+        return false;
+    }
+    iReport(reporter, "Vulkan renderer created Win32 surface");
+    return true;
+#else
+    return true;
+#endif
 }
 
 static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporter *reporter)
@@ -646,6 +709,14 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     VkInstanceCreateInfo instanceInfo = {};
     instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instanceInfo.pApplicationInfo = &appInfo;
+#if defined(WINDOWS)
+    const char *instanceExtensions[] = { "VK_KHR_surface", "VK_KHR_win32_surface" };
+    if (state->window)
+    {
+        instanceInfo.enabledExtensionCount = 2;
+        instanceInfo.ppEnabledExtensionNames = instanceExtensions;
+    }
+#endif
     VkResult result = state->vkCreateInstance(&instanceInfo, nullptr, &state->instance);
     if (result != VK_SUCCESS)
     {
@@ -654,6 +725,10 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     }
     state->ownsInstance = true;
     if (!iLoadVulkanInstanceEntryPoints(state, reporter))
+    {
+        return false;
+    }
+    if (!iCreateVulkanSurface(state, reporter))
     {
         return false;
     }
@@ -696,7 +771,25 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     bool foundGraphicsQueue = false;
     for (uint32_t i = 0; i < queueFamilyCount; ++i)
     {
-        if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+        if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)
+        {
+            continue;
+        }
+        VkBool32 presentSupported = 1;
+        if (state->surface != VK_NULL_SURFACE_KHR)
+        {
+            if (!state->vkGetPhysicalDeviceSurfaceSupportKHR)
+            {
+                iError(reporter, "Vulkan renderer could not load vkGetPhysicalDeviceSurfaceSupportKHR");
+                return false;
+            }
+            result = state->vkGetPhysicalDeviceSurfaceSupportKHR(state->physicalDevice, i, state->surface, &presentSupported);
+            if (result != VK_SUCCESS)
+            {
+                presentSupported = 0;
+            }
+        }
+        if (presentSupported)
         {
             state->graphicsQueueFamilyIndex = i;
             foundGraphicsQueue = true;
@@ -720,6 +813,12 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.queueCreateInfoCount = 1;
     deviceInfo.pQueueCreateInfos = &queueInfo;
+    const char *deviceExtensions[] = { "VK_KHR_swapchain" };
+    if (state->surface != VK_NULL_SURFACE_KHR)
+    {
+        deviceInfo.enabledExtensionCount = 1;
+        deviceInfo.ppEnabledExtensionNames = deviceExtensions;
+    }
     result = state->vkCreateDevice(state->physicalDevice, &deviceInfo, nullptr, &state->device);
     if (result != VK_SUCCESS)
     {
@@ -806,6 +905,11 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDestroyDevice(mState->device, nullptr);
         }
+    }
+    if (mState->surface != VK_NULL_SURFACE_KHR && mState->vkDestroySurfaceKHR && mState->instance != VK_NULL_INSTANCE)
+    {
+        mState->vkDestroySurfaceKHR(mState->instance, mState->surface, nullptr);
+        mState->surface = VK_NULL_SURFACE_KHR;
     }
     if (mState->ownsInstance && mState->instance != VK_NULL_INSTANCE)
     {

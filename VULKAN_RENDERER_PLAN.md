@@ -46,7 +46,7 @@
 9. [in progress] Verify with the closest available Windows standalone build.
 10. [complete] Update Android CMake to build the Vulkan source and load `libvulkan.so` dynamically after Windows verification.
 11. [complete] Add a separate Windows standalone Vulkan smoke settings file without changing the default viewer config.
-12. [pending] Implement real Vulkan render targets, command buffers, render pass/framebuffer setup, and swapchain presentation for the Windows standalone viewer.
+12. [in progress] Implement real Vulkan render targets, command buffers, render pass/framebuffer setup, and swapchain presentation for the Windows standalone viewer. The owned Windows path now creates a Win32 `VkSurfaceKHR`, selects a graphics queue that can present to it, and enables `VK_KHR_swapchain`; actual swapchain image acquisition/presentation is still pending.
 13. [pending] Implement or generate Vulkan-compatible shaders for the player paths exercised by `sample1.imm`.
 14. [in progress] Verify standalone Vulkan output for `sample1.imm` against the existing base rendering behavior. Nonblank output is now proven, but the current capture is an early partial paint frame and is not yet comparable to the full base renderer.
 15. [complete] Implement interim CPU raster output for static paint so `sample1.imm` becomes visible in the Windows standalone Vulkan-selected path before the full SPIR-V/pipeline path lands.
@@ -70,4 +70,5 @@
 - Current learning: the capture hook initially wrote only the first nonblack paint target, which is too weak for comparable-output verification. `IMM_VULKAN_CPU_CAPTURE_OVERWRITE` now allows smoke tests to keep the latest nonblack paint output.
 - Latest Windows Vulkan smoke with overwrite capture ran `sample1.imm` for 45 seconds, produced a visibly fuller paint capture, and had no `not implemented`, render-target placeholder, or draw-submission diagnostics in `debug.txt`. Capture stats: 909,307 nonblack pixels, 127,345 near-visible pixels, max RGB 208,204,173.
 - Base-renderer comparison is still not fully established locally: OpenGL and DirectX validation capture attempts both exited with `0x80000003` after import-time/runtime issues before producing a validation image. Comparable-output verification remains in progress until a stable base capture or a stronger visual invariant is available.
+- Real Vulkan presentation progress: the Windows standalone owned-device path now requests `VK_KHR_surface`/`VK_KHR_win32_surface`, creates a Win32 `VkSurfaceKHR`, requires queue-family surface support, and enables `VK_KHR_swapchain` on the logical device.
 - Android `:libImmCore:assembleDebug` builds successfully with `piVulkan_Renderer.cpp` included; CMake still emits the pre-existing dev warning about no top-level `project()` command.
