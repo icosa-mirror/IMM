@@ -41,6 +41,7 @@ typedef uint64_t VkImageView;
 typedef uint64_t VkRenderPass;
 typedef uint64_t VkFramebuffer;
 typedef uint64_t VkShaderModule;
+typedef uint64_t VkSampler;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
@@ -55,6 +56,11 @@ typedef uint32_t VkSampleCountFlagBits;
 typedef uint32_t VkImageCreateFlags;
 typedef uint32_t VkImageViewType;
 typedef uint32_t VkComponentSwizzle;
+typedef uint32_t VkFilter;
+typedef uint32_t VkSamplerMipmapMode;
+typedef uint32_t VkSamplerAddressMode;
+typedef uint32_t VkCompareOp;
+typedef uint32_t VkBorderColor;
 typedef uint32_t VkAttachmentDescriptionFlags;
 typedef uint32_t VkAttachmentLoadOp;
 typedef uint32_t VkAttachmentStoreOp;
@@ -89,6 +95,7 @@ static constexpr VkImageView VK_NULL_IMAGE_VIEW = 0;
 static constexpr VkRenderPass VK_NULL_RENDER_PASS = 0;
 static constexpr VkFramebuffer VK_NULL_FRAMEBUFFER = 0;
 static constexpr VkShaderModule VK_NULL_SHADER_MODULE = 0;
+static constexpr VkSampler VK_NULL_SAMPLER = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -108,6 +115,7 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO = 5;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO = 37;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO = 38;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO = 16;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO = 31;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
@@ -176,6 +184,17 @@ static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_16_BIT = 0x00000010;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D_ARRAY = 5;
 static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
+static constexpr VkFilter VK_FILTER_NEAREST = 0;
+static constexpr VkFilter VK_FILTER_LINEAR = 1;
+static constexpr VkSamplerMipmapMode VK_SAMPLER_MIPMAP_MODE_NEAREST = 0;
+static constexpr VkSamplerMipmapMode VK_SAMPLER_MIPMAP_MODE_LINEAR = 1;
+static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_REPEAT = 0;
+static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT = 1;
+static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE = 2;
+static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE = 3;
+static constexpr VkSamplerAddressMode VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER = 4;
+static constexpr VkCompareOp VK_COMPARE_OP_ALWAYS = 7;
+static constexpr VkBorderColor VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_LOAD = 0;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_CLEAR = 1;
 static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_DONT_CARE = 2;
@@ -488,6 +507,28 @@ struct VkShaderModuleCreateInfo
     const uint32_t *pCode;
 };
 
+struct VkSamplerCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    VkFilter magFilter;
+    VkFilter minFilter;
+    VkSamplerMipmapMode mipmapMode;
+    VkSamplerAddressMode addressModeU;
+    VkSamplerAddressMode addressModeV;
+    VkSamplerAddressMode addressModeW;
+    float mipLodBias;
+    VkBool32 anisotropyEnable;
+    float maxAnisotropy;
+    VkBool32 compareEnable;
+    VkCompareOp compareOp;
+    float minLod;
+    float maxLod;
+    VkBorderColor borderColor;
+    VkBool32 unnormalizedCoordinates;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -662,6 +703,8 @@ typedef VkResult (*PFN_vkCreateFramebuffer)(VkDevice device, const VkFramebuffer
 typedef void (*PFN_vkDestroyFramebuffer)(VkDevice device, VkFramebuffer framebuffer, const void *allocator);
 typedef VkResult (*PFN_vkCreateShaderModule)(VkDevice device, const VkShaderModuleCreateInfo *createInfo, const void *allocator, VkShaderModule *shaderModule);
 typedef void (*PFN_vkDestroyShaderModule)(VkDevice device, VkShaderModule shaderModule, const void *allocator);
+typedef VkResult (*PFN_vkCreateSampler)(VkDevice device, const VkSamplerCreateInfo *createInfo, const void *allocator, VkSampler *sampler);
+typedef void (*PFN_vkDestroySampler)(VkDevice device, VkSampler sampler, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
 typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
 typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
@@ -706,6 +749,7 @@ struct piTextureS
     VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
     VkFormat vkFormat = 0;
     VkImageUsageFlags imageUsage = 0;
+    VkSampler sampler = VK_NULL_SAMPLER;
 };
 
 struct piBufferS
@@ -743,6 +787,7 @@ struct piSamplerS
     piRenderer::TextureFilter filter = piRenderer::TextureFilter::NONE;
     piRenderer::TextureWrap wrap = piRenderer::TextureWrap::CLAMP;
     float anisotropy = 1.0f;
+    VkSampler sampler = VK_NULL_SAMPLER;
 };
 
 struct piRasterStateS
@@ -871,6 +916,8 @@ struct piVulkanState
     PFN_vkDestroyFramebuffer vkDestroyFramebuffer = nullptr;
     PFN_vkCreateShaderModule vkCreateShaderModule = nullptr;
     PFN_vkDestroyShaderModule vkDestroyShaderModule = nullptr;
+    PFN_vkCreateSampler vkCreateSampler = nullptr;
+    PFN_vkDestroySampler vkDestroySampler = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
     PFN_vkFreeMemory vkFreeMemory = nullptr;
     PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
@@ -1266,6 +1313,8 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkDestroyFramebuffer = (PFN_vkDestroyFramebuffer)state->vkGetDeviceProcAddr(state->device, "vkDestroyFramebuffer");
     state->vkCreateShaderModule = (PFN_vkCreateShaderModule)state->vkGetDeviceProcAddr(state->device, "vkCreateShaderModule");
     state->vkDestroyShaderModule = (PFN_vkDestroyShaderModule)state->vkGetDeviceProcAddr(state->device, "vkDestroyShaderModule");
+    state->vkCreateSampler = (PFN_vkCreateSampler)state->vkGetDeviceProcAddr(state->device, "vkCreateSampler");
+    state->vkDestroySampler = (PFN_vkDestroySampler)state->vkGetDeviceProcAddr(state->device, "vkDestroySampler");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
     state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
     state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
@@ -1290,7 +1339,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCreateImage || !state->vkDestroyImage || !state->vkGetImageMemoryRequirements ||
         !state->vkCreateImageView || !state->vkDestroyImageView ||
         !state->vkCreateRenderPass || !state->vkDestroyRenderPass || !state->vkCreateFramebuffer || !state->vkDestroyFramebuffer ||
-        !state->vkCreateShaderModule || !state->vkDestroyShaderModule ||
+        !state->vkCreateShaderModule || !state->vkDestroyShaderModule || !state->vkCreateSampler || !state->vkDestroySampler ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -1820,6 +1869,66 @@ static bool iCreateShaderModule(piVulkanState *state, const uint8_t *code, int l
     {
         iError(reporter, "Vulkan renderer failed to create shader module");
         *outModule = VK_NULL_SHADER_MODULE;
+        return false;
+    }
+    return true;
+}
+
+static VkFilter iToVulkanFilter(piRenderer::TextureFilter filter)
+{
+    return (filter == piRenderer::TextureFilter::LINEAR ||
+            filter == piRenderer::TextureFilter::MIPMAP ||
+            filter == piRenderer::TextureFilter::PCF) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+}
+
+static VkSamplerMipmapMode iToVulkanMipmapMode(piRenderer::TextureFilter filter)
+{
+    return (filter == piRenderer::TextureFilter::MIPMAP ||
+            filter == piRenderer::TextureFilter::NONE_MIPMAP) ? VK_SAMPLER_MIPMAP_MODE_LINEAR : VK_SAMPLER_MIPMAP_MODE_NEAREST;
+}
+
+static VkSamplerAddressMode iToVulkanAddressMode(piRenderer::TextureWrap wrap)
+{
+    switch (wrap)
+    {
+        case piRenderer::TextureWrap::REPEAT: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        case piRenderer::TextureWrap::MIRROR_REPEAT: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        case piRenderer::TextureWrap::MIRROR_CLAMP: return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+        case piRenderer::TextureWrap::CLAMP_TO_BORDER: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        case piRenderer::TextureWrap::CLAMP:
+        default: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    }
+}
+
+static bool iCreateSamplerObject(piVulkanState *state, piRenderer::TextureFilter filter, piRenderer::TextureWrap wrap, float anisotropy, VkSampler *outSampler, piRenderer::piReporter *reporter)
+{
+    if (!outSampler)
+    {
+        return false;
+    }
+    *outSampler = VK_NULL_SAMPLER;
+    if (!state || state->device == VK_NULL_DEVICE || !state->vkCreateSampler)
+    {
+        return true;
+    }
+    VkSamplerCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    createInfo.magFilter = iToVulkanFilter(filter);
+    createInfo.minFilter = iToVulkanFilter(filter);
+    createInfo.mipmapMode = iToVulkanMipmapMode(filter);
+    createInfo.addressModeU = iToVulkanAddressMode(wrap);
+    createInfo.addressModeV = iToVulkanAddressMode(wrap);
+    createInfo.addressModeW = iToVulkanAddressMode(wrap);
+    (void)anisotropy;
+    createInfo.maxAnisotropy = 1.0f;
+    createInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    createInfo.maxLod = 1000.0f;
+    createInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    const VkResult result = state->vkCreateSampler(state->device, &createInfo, nullptr, outSampler);
+    if (result != VK_SUCCESS || *outSampler == VK_NULL_SAMPLER)
+    {
+        iError(reporter, "Vulkan renderer failed to create sampler");
+        *outSampler = VK_NULL_SAMPLER;
         return false;
     }
     return true;
@@ -2992,6 +3101,24 @@ piTexture piRendererVulkan::CreateTexture2(const wchar_t *key, const TextureInfo
         delete texture;
         return nullptr;
     }
+    if (mState && !iCreateSamplerObject(mState, filter, wrap1, aniso, &texture->sampler, mReporter))
+    {
+        if (texture->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        {
+            mState->vkDestroyImageView(mState->device, texture->imageView, nullptr);
+        }
+        if (texture->image != 0 && mState->vkDestroyImage)
+        {
+            mState->vkDestroyImage(mState->device, texture->image, nullptr);
+        }
+        if (texture->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, texture->memory, nullptr);
+        }
+        std::free(texture->data);
+        delete texture;
+        return nullptr;
+    }
     if (mState) ++mState->liveTextures;
     return texture;
 }
@@ -3001,6 +3128,11 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
+        if (obj->sampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
+        {
+            mState->vkDestroySampler(mState->device, obj->sampler, nullptr);
+            obj->sampler = VK_NULL_SAMPLER;
+        }
         if (obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
         {
             mState->vkDestroyImageView(mState->device, obj->imageView, nullptr);
@@ -3038,8 +3170,31 @@ void piRendererVulkan::MakeResident(piTexture vme) { (void)vme; }
 void piRendererVulkan::MakeNonResident(piTexture vme) { (void)vme; }
 uint64_t piRendererVulkan::GetTextureHandle(piTexture vme) { return vme ? vme->externalHandle : 0; }
 
-piSampler piRendererVulkan::CreateSampler(TextureFilter filter, TextureWrap wrap, float anisotropy) { piSamplerS *sampler = new piSamplerS(); sampler->filter = filter; sampler->wrap = wrap; sampler->anisotropy = anisotropy; if (mState) ++mState->liveSamplers; return sampler; }
-void piRendererVulkan::DestroySampler(piSampler obj) { if (!obj) return; if (mState && mState->liveSamplers > 0) --mState->liveSamplers; delete obj; }
+piSampler piRendererVulkan::CreateSampler(TextureFilter filter, TextureWrap wrap, float anisotropy)
+{
+    piSamplerS *sampler = new piSamplerS();
+    sampler->filter = filter;
+    sampler->wrap = wrap;
+    sampler->anisotropy = anisotropy;
+    if (mState && !iCreateSamplerObject(mState, filter, wrap, anisotropy, &sampler->sampler, mReporter))
+    {
+        delete sampler;
+        return nullptr;
+    }
+    if (mState) ++mState->liveSamplers;
+    return sampler;
+}
+void piRendererVulkan::DestroySampler(piSampler obj)
+{
+    if (!obj) return;
+    if (mState && mState->device != VK_NULL_DEVICE && obj->sampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
+    {
+        mState->vkDestroySampler(mState->device, obj->sampler, nullptr);
+        obj->sampler = VK_NULL_SAMPLER;
+    }
+    if (mState && mState->liveSamplers > 0) --mState->liveSamplers;
+    delete obj;
+}
 void piRendererVulkan::AttachSamplers(int num, piSampler vt0, piSampler vt1, piSampler vt2, piSampler vt3, piSampler vt4, piSampler vt5, piSampler vt6, piSampler vt7) { if (!mState) return; piSampler samplers[8] = { vt0, vt1, vt2, vt3, vt4, vt5, vt6, vt7 }; for (int i = 0; i < num && i < 8; ++i) mState->samplers[i] = samplers[i]; }
 void piRendererVulkan::DettachSamplers(void) { if (mState) std::memset(mState->samplers, 0, sizeof(mState->samplers)); }
 void piRendererVulkan::AttachImage(int unit, piTexture texture, int level, bool layered, int layer, Format format) { (void)unit; (void)texture; (void)level; (void)layered; (void)layer; (void)format; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::ImageLoadStore, "Vulkan image load/store bindings are not implemented yet"); }
