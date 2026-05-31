@@ -6,6 +6,7 @@ param(
     [int]$MinNonblackPixels = 20000,
     [int]$MinNearVisiblePixels = 10000,
     [string]$ReferencePath = "",
+    [int]$PlayerFrame = 60,
     [switch]$SkipBuild,
     [switch]$KeepArtifacts
 )
@@ -139,14 +140,16 @@ $previousEnv = @{
     IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS
     IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS
     IMM_VIEWER_VALIDATE_MIN_TRIANGLES = $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES
+    IMM_VIEWER_VALIDATE_PLAYER_FRAME = $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME
     IMM_VIEWER_VALIDATE_CAPTURE_PATH = $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH
     IMM_VIEWER_VALIDATE_DISABLE_AUDIO = $env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO
     IMM_VULKAN_CPU_CAPTURE_PATH = $env:IMM_VULKAN_CPU_CAPTURE_PATH
     IMM_VULKAN_CPU_CAPTURE_OVERWRITE = $env:IMM_VULKAN_CPU_CAPTURE_OVERWRITE
 }
 
-$env:IMM_VIEWER_VALIDATE_FRAME = "114"
-$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "240"
+$env:IMM_VIEWER_VALIDATE_FRAME = "0"
+$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "360"
+$env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
 $env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
 $env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
 $env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = "1"
@@ -231,7 +234,7 @@ Write-Host "Pixels: nonblack=$($stats.Nonblack) nearVisible=$($stats.NearVisible
 
 if ($ReferencePath) {
     $compareScript = Join-Path $scriptDir "compare-ppm-captures.ps1"
-    & $compareScript -ReferencePath $ReferencePath -CandidatePath $capturePath
+    & $compareScript -ReferencePath $ReferencePath -CandidatePath $capturePath -MaxMeanAbsoluteError 8.0 -MaxRootMeanSquareError 25.0 -MinVisibleOverlap 0.85
 }
 
 Remove-Item -LiteralPath $debugLog -Force -ErrorAction SilentlyContinue

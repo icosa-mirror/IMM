@@ -2,6 +2,7 @@ param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
     [string]$OutputPath = "",
+    [int]$PlayerFrame = 60,
     [int]$TimeoutSeconds = 90,
     [switch]$SkipBuild
 )
@@ -20,6 +21,7 @@ $baselineArgs = @{
     Platform = $Platform
     SettingsPath = Join-Path $repoRoot "code\appImmViewer\exe\settings-vulkan-smoke.json"
     OutputPath = $OutputPath
+    PlayerFrame = $PlayerFrame
     TimeoutSeconds = $TimeoutSeconds
 }
 if ($SkipBuild) {
