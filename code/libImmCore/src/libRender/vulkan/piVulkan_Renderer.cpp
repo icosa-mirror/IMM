@@ -216,10 +216,12 @@ static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT = 0x
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 0x00000400;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = 0x00002000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_WRITE_BIT = 0x00001000;
+static constexpr VkAccessFlags VK_ACCESS_TRANSFER_READ_BIT = 0x00000800;
 static constexpr VkAccessFlags VK_ACCESS_SHADER_READ_BIT = 0x00000020;
 static constexpr VkAccessFlags VK_ACCESS_MEMORY_READ_BIT = 0x00008000;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_UNDEFINED = 0;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL = 5;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL = 6;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = 7;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_PRESENT_SRC_KHR = 1000001002;
 static constexpr VkImageAspectFlags VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001;
@@ -1025,6 +1027,7 @@ typedef VkResult (*PFN_vkEndCommandBuffer)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const void *memoryBarriers, uint32_t bufferMemoryBarrierCount, const void *bufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *imageMemoryBarriers);
 typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
 typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
+typedef void (*PFN_vkCmdCopyImageToBuffer)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdBeginRenderPass)(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *renderPassBegin, VkSubpassContents contents);
 typedef void (*PFN_vkCmdEndRenderPass)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdSetViewport)(VkCommandBuffer commandBuffer, uint32_t firstViewport, uint32_t viewportCount, const VkViewport *viewports);
@@ -1108,6 +1111,7 @@ struct piTextureS
     VkImageUsageFlags imageUsage = 0;
     VkSampler sampler = VK_NULL_SAMPLER;
     VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
 };
 
 struct piBufferS
@@ -1227,6 +1231,8 @@ struct piVulkanState
     bool graphicsPipelineReported = false;
     bool drawSubmittedReported = false;
     bool drawSubmitFailureReported = false;
+    bool gpuReadbackReported = false;
+    bool gpuReadbackFailureReported = false;
 #if defined(WINDOWS)
     HMODULE vulkanLibrary = nullptr;
     HWND window = nullptr;
@@ -1264,6 +1270,7 @@ struct piVulkanState
     PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
     PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
     PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
+    PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
     PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
     PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
     PFN_vkCmdSetViewport vkCmdSetViewport = nullptr;
@@ -1681,6 +1688,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCmdPipelineBarrier = (PFN_vkCmdPipelineBarrier)state->vkGetDeviceProcAddr(state->device, "vkCmdPipelineBarrier");
     state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
     state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
+    state->vkCmdCopyImageToBuffer = (PFN_vkCmdCopyImageToBuffer)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyImageToBuffer");
     state->vkCmdBeginRenderPass = (PFN_vkCmdBeginRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdBeginRenderPass");
     state->vkCmdEndRenderPass = (PFN_vkCmdEndRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdEndRenderPass");
     state->vkCmdSetViewport = (PFN_vkCmdSetViewport)state->vkGetDeviceProcAddr(state->device, "vkCmdSetViewport");
@@ -1733,7 +1741,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     if (!state->vkCreateSwapchainKHR || !state->vkDestroySwapchainKHR || !state->vkGetSwapchainImagesKHR ||
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
-        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage ||
+        !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage || !state->vkCmdCopyImageToBuffer ||
         !state->vkCmdBeginRenderPass || !state->vkCmdEndRenderPass ||
         !state->vkCmdSetViewport || !state->vkCmdSetScissor || !state->vkCmdBindPipeline ||
         !state->vkCmdBindDescriptorSets || !state->vkCmdBindIndexBuffer || !state->vkCmdDrawIndexed ||
@@ -2537,7 +2545,8 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     return true;
 }
 
-static VkSampleCountFlagBits iTextureSampleCount(const piRenderer::TextureInfo &info);
+static VkSampleCountFlagBits iRequestedTextureSampleCount(const piRenderer::TextureInfo &info);
+static bool iEnsureStagingBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter);
 
 static VkCullModeFlags iToVulkanCullMode(piRenderer::CullMode mode)
 {
@@ -2606,7 +2615,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
     VkPipelineMultisampleStateCreateInfo multisample = {};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = target->color[0] ? iTextureSampleCount(target->color[0]->info) : VK_SAMPLE_COUNT_1_BIT;
+    multisample.rasterizationSamples = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil = {};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -2749,10 +2758,161 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     {
         return false;
     }
+    if (target->color[0])
+    {
+        target->color[0]->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
     if (!state->drawSubmittedReported)
     {
         iReport(reporter, "Vulkan renderer submitted static paint draw commands");
         state->drawSubmittedReported = true;
+    }
+    return true;
+}
+
+static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+{
+    if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
+        texture->sampleCount != VK_SAMPLE_COUNT_1_BIT || texture->info.mFormat != piRenderer::Format::C3_11_11_10_FLOAT ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE || !state->vkCmdCopyImageToBuffer)
+    {
+        return true;
+    }
+    const VkDeviceSize size = (VkDeviceSize)texture->info.mXres * (VkDeviceSize)texture->info.mYres * 4ull;
+    if (!iEnsureStagingBuffer(state, size, reporter))
+    {
+        return false;
+    }
+
+    const uint64_t timeout = 1000000000ull;
+    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange range = {};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseMipLevel = 0;
+    range.levelCount = 1;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+
+    VkImageMemoryBarrier toTransfer = {};
+    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toTransfer.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    toTransfer.oldLayout = texture->imageLayout;
+    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toTransfer.image = texture->image;
+    toTransfer.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toTransfer);
+
+    VkBufferImageCopy copyRegion = {};
+    copyRegion.bufferOffset = 0;
+    copyRegion.bufferRowLength = 0;
+    copyRegion.bufferImageHeight = 0;
+    copyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyRegion.imageSubresource.mipLevel = 0;
+    copyRegion.imageSubresource.baseArrayLayer = 0;
+    copyRegion.imageSubresource.layerCount = 1;
+    copyRegion.imageOffset.x = 0;
+    copyRegion.imageOffset.y = 0;
+    copyRegion.imageOffset.z = 0;
+    copyRegion.imageExtent.width = (uint32_t)texture->info.mXres;
+    copyRegion.imageExtent.height = (uint32_t)texture->info.mYres;
+    copyRegion.imageExtent.depth = 1;
+    state->vkCmdCopyImageToBuffer(state->commandBuffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, state->stagingBuffer, 1, &copyRegion);
+
+    VkImageMemoryBarrier toColor = {};
+    toColor.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toColor.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    toColor.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    toColor.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    toColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    toColor.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColor.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toColor.image = texture->image;
+    toColor.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toColor);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    void *mapped = nullptr;
+    result = state->vkMapMemory(state->device, state->stagingMemory, 0, size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        return false;
+    }
+    std::memcpy(texture->data, mapped, (size_t)size);
+    state->vkUnmapMemory(state->device, state->stagingMemory);
+    texture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    if (!state->gpuReadbackReported)
+    {
+        uint32_t nonblack = 0;
+        const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            const uint8_t *src = texture->data + i * 4u;
+            if (src[0] != 0 || src[1] != 0 || src[2] != 0)
+            {
+                ++nonblack;
+            }
+        }
+        char message[256];
+        std::snprintf(message, sizeof(message), "Vulkan renderer read back static paint GPU target nonblack=%u size=%dx%d", nonblack, texture->info.mXres, texture->info.mYres);
+        iReport(reporter, message);
+        state->gpuReadbackReported = true;
     }
     return true;
 }
@@ -2782,7 +2942,7 @@ static bool iToVulkanTextureFormat(piRenderer::Format format, VkFormat *outForma
             *outFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
             return true;
         case piRenderer::Format::C3_11_11_10_FLOAT:
-            *outFormat = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+            *outFormat = VK_FORMAT_R8G8B8A8_UNORM;
             return true;
         case piRenderer::Format::D1_32_FLOAT:
             *outFormat = VK_FORMAT_D32_SFLOAT;
@@ -2820,7 +2980,7 @@ static VkImageAspectFlags iTextureAspectMask(piRenderer::Format format)
     }
 }
 
-static VkSampleCountFlagBits iTextureSampleCount(const piRenderer::TextureInfo &info)
+static VkSampleCountFlagBits iRequestedTextureSampleCount(const piRenderer::TextureInfo &info)
 {
     switch (info.mMultisample)
     {
@@ -2830,6 +2990,11 @@ static VkSampleCountFlagBits iTextureSampleCount(const piRenderer::TextureInfo &
         case 16: return VK_SAMPLE_COUNT_16_BIT;
         default: return VK_SAMPLE_COUNT_1_BIT;
     }
+}
+
+static VkSampleCountFlagBits iTextureSampleCount(const piTexture texture)
+{
+    return texture ? texture->sampleCount : VK_SAMPLE_COUNT_1_BIT;
 }
 
 static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bindUsage, piRenderer::piReporter *reporter)
@@ -2867,7 +3032,8 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = texture->info.mMultisample > 1 ? 1 : (texture->info.mNumMips > 0 ? texture->info.mNumMips : 1);
     imageInfo.arrayLayers = is2DArray ? (uint32_t)texture->info.mZres : 1u;
-    imageInfo.samples = iTextureSampleCount(texture->info);
+    texture->sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = texture->sampleCount;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = usage;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -2989,14 +3155,14 @@ static bool iCreateRenderTargetObjects(piVulkanState *state, piRTarget target, p
         {
             width = (uint32_t)color->info.mXres;
             height = (uint32_t)color->info.mYres;
-            sampleCount = iTextureSampleCount(color->info);
+            sampleCount = iTextureSampleCount(color);
         }
         else if (width != (uint32_t)color->info.mXres || height != (uint32_t)color->info.mYres)
         {
             iError(reporter, "Vulkan render target color attachment sizes do not match");
             return false;
         }
-        if (sampleCount != iTextureSampleCount(color->info))
+        if (sampleCount != iTextureSampleCount(color))
         {
             iError(reporter, "Vulkan render target color attachment sample counts do not match");
             return false;
@@ -3032,14 +3198,14 @@ static bool iCreateRenderTargetObjects(piVulkanState *state, piRTarget target, p
         {
             width = (uint32_t)depth->info.mXres;
             height = (uint32_t)depth->info.mYres;
-            sampleCount = iTextureSampleCount(depth->info);
+            sampleCount = iTextureSampleCount(depth);
         }
         else if (width != (uint32_t)depth->info.mXres || height != (uint32_t)depth->info.mYres)
         {
             iError(reporter, "Vulkan render target depth attachment size does not match");
             return false;
         }
-        if (sampleCount != iTextureSampleCount(depth->info))
+        if (sampleCount != iTextureSampleCount(depth))
         {
             iError(reporter, "Vulkan render target depth attachment sample count does not match");
             return false;
@@ -3135,7 +3301,7 @@ static bool iEnsureStagingBuffer(piVulkanState *state, VkDeviceSize size, piRend
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = size;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     VkResult result = state->vkCreateBuffer(state->device, &bufferInfo, nullptr, &state->stagingBuffer);
     if (result != VK_SUCCESS || state->stagingBuffer == VK_NULL_BUFFER)
@@ -4445,6 +4611,19 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         mState->drawSubmitFailureReported = true;
         iError(mReporter, "Vulkan renderer failed to submit static paint draw commands");
     }
+    if (!iReadBackTextureImage(mState, target, mReporter) && !mState->gpuReadbackFailureReported)
+    {
+        mState->gpuReadbackFailureReported = true;
+        iError(mReporter, "Vulkan renderer failed to read back static paint GPU target");
+    }
+#if defined(WINDOWS)
+    if (mState->gpuReadbackReported)
+    {
+        mState->pendingPresentTexture = target;
+        iWritePpmCapture(mState, target);
+        SwapBuffers();
+    }
+#endif
     const uint16_t *indices = (const uint16_t *)(mState->currentVertexArray->indexBuffer->data + baseIndex * sizeof(uint16_t));
     const iCpuStaticVertex *vertices = (const iCpuStaticVertex *)mState->shaderBuffers[8]->data;
     const iCpuLayerState *layer = (const iCpuLayerState *)mState->constantBuffers[3]->data;
