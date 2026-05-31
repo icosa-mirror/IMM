@@ -38,6 +38,8 @@ typedef struct VkFence_T *VkFence;
 typedef struct VkBuffer_T *VkBuffer;
 typedef struct VkDeviceMemory_T *VkDeviceMemory;
 typedef uint64_t VkImageView;
+typedef uint64_t VkRenderPass;
+typedef uint64_t VkFramebuffer;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFormat;
 typedef uint32_t VkColorSpaceKHR;
@@ -52,6 +54,14 @@ typedef uint32_t VkSampleCountFlagBits;
 typedef uint32_t VkImageCreateFlags;
 typedef uint32_t VkImageViewType;
 typedef uint32_t VkComponentSwizzle;
+typedef uint32_t VkAttachmentDescriptionFlags;
+typedef uint32_t VkAttachmentLoadOp;
+typedef uint32_t VkAttachmentStoreOp;
+typedef uint32_t VkPipelineBindPoint;
+typedef uint32_t VkSubpassDescriptionFlags;
+typedef uint32_t VkRenderPassCreateFlags;
+typedef uint32_t VkFramebufferCreateFlags;
+typedef uint32_t VkSubpassContents;
 typedef uint32_t VkCommandPoolCreateFlags;
 typedef uint32_t VkCommandBufferLevel;
 typedef uint32_t VkCommandBufferUsageFlags;
@@ -75,6 +85,8 @@ static constexpr VkFence VK_NULL_FENCE = nullptr;
 static constexpr VkBuffer VK_NULL_BUFFER = nullptr;
 static constexpr VkDeviceMemory VK_NULL_DEVICE_MEMORY = nullptr;
 static constexpr VkImageView VK_NULL_IMAGE_VIEW = 0;
+static constexpr VkRenderPass VK_NULL_RENDER_PASS = 0;
+static constexpr VkFramebuffer VK_NULL_FRAMEBUFFER = 0;
 static constexpr VkSurfaceKHR VK_NULL_SURFACE_KHR = 0;
 static constexpr VkSwapchainKHR VK_NULL_SWAPCHAIN_KHR = 0;
 static constexpr VkResult VK_SUCCESS = 0;
@@ -91,9 +103,12 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO = 12;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO = 14;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO = 15;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO = 5;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO = 37;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO = 38;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO = 43;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 44;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000;
@@ -147,6 +162,14 @@ static constexpr VkImageTiling VK_IMAGE_TILING_OPTIMAL = 0;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_1_BIT = 0x00000001;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
 static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
+static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_LOAD = 0;
+static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_CLEAR = 1;
+static constexpr VkAttachmentLoadOp VK_ATTACHMENT_LOAD_OP_DONT_CARE = 2;
+static constexpr VkAttachmentStoreOp VK_ATTACHMENT_STORE_OP_STORE = 0;
+static constexpr VkAttachmentStoreOp VK_ATTACHMENT_STORE_OP_DONT_CARE = 1;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = 2;
+static constexpr VkPipelineBindPoint VK_PIPELINE_BIND_POINT_GRAPHICS = 0;
+static constexpr VkSubpassContents VK_SUBPASS_CONTENTS_INLINE = 0;
 
 #define IMM_VK_MAKE_VERSION(major, minor, patch) ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 #define IMM_VK_API_VERSION_1_0 IMM_VK_MAKE_VERSION(1, 0, 0)
@@ -215,6 +238,18 @@ struct VkExtent2D
 {
     uint32_t width;
     uint32_t height;
+};
+
+struct VkOffset2D
+{
+    int32_t x;
+    int32_t y;
+};
+
+struct VkRect2D
+{
+    VkOffset2D offset;
+    VkExtent2D extent;
 };
 
 struct VkSurfaceCapabilitiesKHR
@@ -346,6 +381,89 @@ struct VkImageViewCreateInfo
     VkImageSubresourceRange subresourceRange;
 };
 
+struct VkAttachmentDescription
+{
+    VkAttachmentDescriptionFlags flags;
+    VkFormat format;
+    VkSampleCountFlagBits samples;
+    VkAttachmentLoadOp loadOp;
+    VkAttachmentStoreOp storeOp;
+    VkAttachmentLoadOp stencilLoadOp;
+    VkAttachmentStoreOp stencilStoreOp;
+    VkImageLayout initialLayout;
+    VkImageLayout finalLayout;
+};
+
+struct VkAttachmentReference
+{
+    uint32_t attachment;
+    VkImageLayout layout;
+};
+
+struct VkSubpassDescription
+{
+    VkSubpassDescriptionFlags flags;
+    VkPipelineBindPoint pipelineBindPoint;
+    uint32_t inputAttachmentCount;
+    const VkAttachmentReference *pInputAttachments;
+    uint32_t colorAttachmentCount;
+    const VkAttachmentReference *pColorAttachments;
+    const VkAttachmentReference *pResolveAttachments;
+    const VkAttachmentReference *pDepthStencilAttachment;
+    uint32_t preserveAttachmentCount;
+    const uint32_t *pPreserveAttachments;
+};
+
+struct VkRenderPassCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkRenderPassCreateFlags flags;
+    uint32_t attachmentCount;
+    const VkAttachmentDescription *pAttachments;
+    uint32_t subpassCount;
+    const VkSubpassDescription *pSubpasses;
+    uint32_t dependencyCount;
+    const void *pDependencies;
+};
+
+struct VkFramebufferCreateInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkFramebufferCreateFlags flags;
+    VkRenderPass renderPass;
+    uint32_t attachmentCount;
+    const VkImageView *pAttachments;
+    uint32_t width;
+    uint32_t height;
+    uint32_t layers;
+};
+
+union VkClearColorValue
+{
+    float float32[4];
+    int32_t int32[4];
+    uint32_t uint32[4];
+};
+
+union VkClearValue
+{
+    VkClearColorValue color;
+    float depthStencil[2];
+};
+
+struct VkRenderPassBeginInfo
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkRenderPass renderPass;
+    VkFramebuffer framebuffer;
+    VkRect2D renderArea;
+    uint32_t clearValueCount;
+    const VkClearValue *pClearValues;
+};
+
 struct VkMemoryRequirements
 {
     VkDeviceSize size;
@@ -439,13 +557,6 @@ struct VkImageMemoryBarrier
     VkImageSubresourceRange subresourceRange;
 };
 
-union VkClearColorValue
-{
-    float float32[4];
-    int32_t int32[4];
-    uint32_t uint32[4];
-};
-
 struct VkSubmitInfo
 {
     VkStructureType sType;
@@ -511,6 +622,8 @@ typedef VkResult (*PFN_vkEndCommandBuffer)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const void *memoryBarriers, uint32_t bufferMemoryBarrierCount, const void *bufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *imageMemoryBarriers);
 typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
 typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
+typedef void (*PFN_vkCmdBeginRenderPass)(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo *renderPassBegin, VkSubpassContents contents);
+typedef void (*PFN_vkCmdEndRenderPass)(VkCommandBuffer commandBuffer);
 typedef VkResult (*PFN_vkCreateBuffer)(VkDevice device, const VkBufferCreateInfo *createInfo, const void *allocator, VkBuffer *buffer);
 typedef void (*PFN_vkDestroyBuffer)(VkDevice device, VkBuffer buffer, const void *allocator);
 typedef void (*PFN_vkGetBufferMemoryRequirements)(VkDevice device, VkBuffer buffer, VkMemoryRequirements *memoryRequirements);
@@ -519,6 +632,10 @@ typedef void (*PFN_vkDestroyImage)(VkDevice device, VkImage image, const void *a
 typedef void (*PFN_vkGetImageMemoryRequirements)(VkDevice device, VkImage image, VkMemoryRequirements *memoryRequirements);
 typedef VkResult (*PFN_vkCreateImageView)(VkDevice device, const VkImageViewCreateInfo *createInfo, const void *allocator, VkImageView *view);
 typedef void (*PFN_vkDestroyImageView)(VkDevice device, VkImageView imageView, const void *allocator);
+typedef VkResult (*PFN_vkCreateRenderPass)(VkDevice device, const VkRenderPassCreateInfo *createInfo, const void *allocator, VkRenderPass *renderPass);
+typedef void (*PFN_vkDestroyRenderPass)(VkDevice device, VkRenderPass renderPass, const void *allocator);
+typedef VkResult (*PFN_vkCreateFramebuffer)(VkDevice device, const VkFramebufferCreateInfo *createInfo, const void *allocator, VkFramebuffer *framebuffer);
+typedef void (*PFN_vkDestroyFramebuffer)(VkDevice device, VkFramebuffer framebuffer, const void *allocator);
 typedef VkResult (*PFN_vkAllocateMemory)(VkDevice device, const VkMemoryAllocateInfo *allocateInfo, const void *allocator, VkDeviceMemory *memory);
 typedef void (*PFN_vkFreeMemory)(VkDevice device, VkDeviceMemory memory, const void *allocator);
 typedef VkResult (*PFN_vkBindBufferMemory)(VkDevice device, VkBuffer buffer, VkDeviceMemory memory, VkDeviceSize memoryOffset);
@@ -643,9 +760,12 @@ struct piVulkanState
     VkSurfaceKHR surface = VK_NULL_SURFACE_KHR;
     VkSwapchainKHR swapchain = VK_NULL_SWAPCHAIN_KHR;
     VkImage swapchainImages[8] = {};
+    VkImageView swapchainImageViews[8] = {};
+    VkFramebuffer swapchainFramebuffers[8] = {};
     uint32_t swapchainImageCount = 0;
     VkFormat swapchainFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkExtent2D swapchainExtent = {};
+    VkRenderPass swapchainRenderPass = VK_NULL_RENDER_PASS;
     VkCommandPool commandPool = VK_NULL_COMMAND_POOL;
     VkCommandBuffer commandBuffer = VK_NULL_COMMAND_BUFFER;
     VkSemaphore imageAvailableSemaphore = VK_NULL_SEMAPHORE;
@@ -696,6 +816,8 @@ struct piVulkanState
     PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
     PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
     PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
+    PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass = nullptr;
+    PFN_vkCmdEndRenderPass vkCmdEndRenderPass = nullptr;
     PFN_vkCreateBuffer vkCreateBuffer = nullptr;
     PFN_vkDestroyBuffer vkDestroyBuffer = nullptr;
     PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements = nullptr;
@@ -704,6 +826,10 @@ struct piVulkanState
     PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements = nullptr;
     PFN_vkCreateImageView vkCreateImageView = nullptr;
     PFN_vkDestroyImageView vkDestroyImageView = nullptr;
+    PFN_vkCreateRenderPass vkCreateRenderPass = nullptr;
+    PFN_vkDestroyRenderPass vkDestroyRenderPass = nullptr;
+    PFN_vkCreateFramebuffer vkCreateFramebuffer = nullptr;
+    PFN_vkDestroyFramebuffer vkDestroyFramebuffer = nullptr;
     PFN_vkAllocateMemory vkAllocateMemory = nullptr;
     PFN_vkFreeMemory vkFreeMemory = nullptr;
     PFN_vkBindBufferMemory vkBindBufferMemory = nullptr;
@@ -1083,6 +1209,8 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCmdPipelineBarrier = (PFN_vkCmdPipelineBarrier)state->vkGetDeviceProcAddr(state->device, "vkCmdPipelineBarrier");
     state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
     state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
+    state->vkCmdBeginRenderPass = (PFN_vkCmdBeginRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdBeginRenderPass");
+    state->vkCmdEndRenderPass = (PFN_vkCmdEndRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCmdEndRenderPass");
     state->vkCreateBuffer = (PFN_vkCreateBuffer)state->vkGetDeviceProcAddr(state->device, "vkCreateBuffer");
     state->vkDestroyBuffer = (PFN_vkDestroyBuffer)state->vkGetDeviceProcAddr(state->device, "vkDestroyBuffer");
     state->vkGetBufferMemoryRequirements = (PFN_vkGetBufferMemoryRequirements)state->vkGetDeviceProcAddr(state->device, "vkGetBufferMemoryRequirements");
@@ -1091,6 +1219,10 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkGetImageMemoryRequirements = (PFN_vkGetImageMemoryRequirements)state->vkGetDeviceProcAddr(state->device, "vkGetImageMemoryRequirements");
     state->vkCreateImageView = (PFN_vkCreateImageView)state->vkGetDeviceProcAddr(state->device, "vkCreateImageView");
     state->vkDestroyImageView = (PFN_vkDestroyImageView)state->vkGetDeviceProcAddr(state->device, "vkDestroyImageView");
+    state->vkCreateRenderPass = (PFN_vkCreateRenderPass)state->vkGetDeviceProcAddr(state->device, "vkCreateRenderPass");
+    state->vkDestroyRenderPass = (PFN_vkDestroyRenderPass)state->vkGetDeviceProcAddr(state->device, "vkDestroyRenderPass");
+    state->vkCreateFramebuffer = (PFN_vkCreateFramebuffer)state->vkGetDeviceProcAddr(state->device, "vkCreateFramebuffer");
+    state->vkDestroyFramebuffer = (PFN_vkDestroyFramebuffer)state->vkGetDeviceProcAddr(state->device, "vkDestroyFramebuffer");
     state->vkAllocateMemory = (PFN_vkAllocateMemory)state->vkGetDeviceProcAddr(state->device, "vkAllocateMemory");
     state->vkFreeMemory = (PFN_vkFreeMemory)state->vkGetDeviceProcAddr(state->device, "vkFreeMemory");
     state->vkBindBufferMemory = (PFN_vkBindBufferMemory)state->vkGetDeviceProcAddr(state->device, "vkBindBufferMemory");
@@ -1110,9 +1242,11 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
         !state->vkCreateCommandPool || !state->vkDestroyCommandPool || !state->vkAllocateCommandBuffers ||
         !state->vkResetCommandBuffer || !state->vkBeginCommandBuffer || !state->vkEndCommandBuffer ||
         !state->vkCmdPipelineBarrier || !state->vkCmdClearColorImage || !state->vkCmdCopyBufferToImage ||
+        !state->vkCmdBeginRenderPass || !state->vkCmdEndRenderPass ||
         !state->vkCreateBuffer || !state->vkDestroyBuffer || !state->vkGetBufferMemoryRequirements ||
         !state->vkCreateImage || !state->vkDestroyImage || !state->vkGetImageMemoryRequirements ||
         !state->vkCreateImageView || !state->vkDestroyImageView ||
+        !state->vkCreateRenderPass || !state->vkDestroyRenderPass || !state->vkCreateFramebuffer || !state->vkDestroyFramebuffer ||
         !state->vkAllocateMemory || !state->vkFreeMemory || !state->vkBindBufferMemory || !state->vkBindImageMemory ||
         !state->vkMapMemory || !state->vkUnmapMemory || !state->vkCreateSemaphore ||
         !state->vkDestroySemaphore || !state->vkCreateFence || !state->vkDestroyFence || !state->vkWaitForFences ||
@@ -1162,6 +1296,92 @@ static uint32_t iClampUint32(uint32_t value, uint32_t lo, uint32_t hi)
     if (value < lo) return lo;
     if (hi != 0 && value > hi) return hi;
     return value;
+}
+
+static bool iCreateSwapchainRenderTargets(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->swapchainImageCount == 0)
+    {
+        return true;
+    }
+
+    for (uint32_t i = 0; i < state->swapchainImageCount; ++i)
+    {
+        VkImageViewCreateInfo viewInfo = {};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = state->swapchainImages[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = state->swapchainFormat;
+        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        VkResult result = state->vkCreateImageView(state->device, &viewInfo, nullptr, &state->swapchainImageViews[i]);
+        if (result != VK_SUCCESS || state->swapchainImageViews[i] == VK_NULL_IMAGE_VIEW)
+        {
+            iError(reporter, "Vulkan renderer failed to create swapchain image view");
+            return false;
+        }
+    }
+
+    VkAttachmentDescription colorAttachment = {};
+    colorAttachment.format = state->swapchainFormat;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorReference = {};
+    colorReference.attachment = 0;
+    colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorReference;
+
+    VkRenderPassCreateInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = 1;
+    renderPassInfo.pAttachments = &colorAttachment;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    VkResult result = state->vkCreateRenderPass(state->device, &renderPassInfo, nullptr, &state->swapchainRenderPass);
+    if (result != VK_SUCCESS || state->swapchainRenderPass == VK_NULL_RENDER_PASS)
+    {
+        iError(reporter, "Vulkan renderer failed to create swapchain render pass");
+        return false;
+    }
+
+    for (uint32_t i = 0; i < state->swapchainImageCount; ++i)
+    {
+        VkImageView attachments[] = { state->swapchainImageViews[i] };
+        VkFramebufferCreateInfo framebufferInfo = {};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = state->swapchainRenderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = state->swapchainExtent.width;
+        framebufferInfo.height = state->swapchainExtent.height;
+        framebufferInfo.layers = 1;
+        result = state->vkCreateFramebuffer(state->device, &framebufferInfo, nullptr, &state->swapchainFramebuffers[i]);
+        if (result != VK_SUCCESS || state->swapchainFramebuffers[i] == VK_NULL_FRAMEBUFFER)
+        {
+            iError(reporter, "Vulkan renderer failed to create swapchain framebuffer");
+            return false;
+        }
+    }
+
+    iReport(reporter, "Vulkan renderer created swapchain render pass and framebuffers");
+    return true;
 }
 
 static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter *reporter)
@@ -1307,6 +1527,10 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
     state->swapchainImageCount = swapchainImageCount;
     state->swapchainFormat = selectedFormat.format;
     state->swapchainExtent = extent;
+    if (!iCreateSwapchainRenderTargets(state, reporter))
+    {
+        return false;
+    }
     char message[256];
     std::snprintf(message,
                   sizeof(message),
@@ -1936,6 +2160,27 @@ void piRendererVulkan::Deinitialize(void)
             mState->stagingMemory = VK_NULL_DEVICE_MEMORY;
             mState->stagingSize = 0;
         }
+        for (uint32_t i = 0; i < mState->swapchainImageCount && i < 8; ++i)
+        {
+            if (mState->swapchainFramebuffers[i] != VK_NULL_FRAMEBUFFER && mState->vkDestroyFramebuffer)
+            {
+                mState->vkDestroyFramebuffer(mState->device, mState->swapchainFramebuffers[i], nullptr);
+                mState->swapchainFramebuffers[i] = VK_NULL_FRAMEBUFFER;
+            }
+        }
+        if (mState->swapchainRenderPass != VK_NULL_RENDER_PASS && mState->vkDestroyRenderPass)
+        {
+            mState->vkDestroyRenderPass(mState->device, mState->swapchainRenderPass, nullptr);
+            mState->swapchainRenderPass = VK_NULL_RENDER_PASS;
+        }
+        for (uint32_t i = 0; i < mState->swapchainImageCount && i < 8; ++i)
+        {
+            if (mState->swapchainImageViews[i] != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+            {
+                mState->vkDestroyImageView(mState->device, mState->swapchainImageViews[i], nullptr);
+                mState->swapchainImageViews[i] = VK_NULL_IMAGE_VIEW;
+            }
+        }
         if (mState->swapchain != VK_NULL_SWAPCHAIN_KHR && mState->vkDestroySwapchainKHR)
         {
             mState->vkDestroySwapchainKHR(mState->device, mState->swapchain, nullptr);
@@ -2052,36 +2297,36 @@ void piRendererVulkan::SwapBuffers(void)
         return;
     }
 
-    VkImageSubresourceRange colorRange = {};
-    colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    colorRange.baseMipLevel = 0;
-    colorRange.levelCount = 1;
-    colorRange.baseArrayLayer = 0;
-    colorRange.layerCount = 1;
-
-    VkImageMemoryBarrier toTransfer = {};
-    toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    toTransfer.srcAccessMask = 0;
-    toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toTransfer.image = mState->swapchainImages[imageIndex];
-    toTransfer.subresourceRange = colorRange;
-    mState->vkCmdPipelineBarrier(mState->commandBuffer,
-                                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 0,
-                                 0,
-                                 nullptr,
-                                 0,
-                                 nullptr,
-                                 1,
-                                 &toTransfer);
-
     if (copyTexture)
     {
+        VkImageSubresourceRange colorRange = {};
+        colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        colorRange.baseMipLevel = 0;
+        colorRange.levelCount = 1;
+        colorRange.baseArrayLayer = 0;
+        colorRange.layerCount = 1;
+
+        VkImageMemoryBarrier toTransfer = {};
+        toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toTransfer.srcAccessMask = 0;
+        toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toTransfer.image = mState->swapchainImages[imageIndex];
+        toTransfer.subresourceRange = colorRange;
+        mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                     VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     0,
+                                     0,
+                                     nullptr,
+                                     0,
+                                     nullptr,
+                                     1,
+                                     &toTransfer);
+
         VkBufferImageCopy copyRegion = {};
         copyRegion.bufferOffset = 0;
         copyRegion.bufferRowLength = 0;
@@ -2102,43 +2347,48 @@ void piRendererVulkan::SwapBuffers(void)
                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                        1,
                                        &copyRegion);
+
+        VkImageMemoryBarrier toPresent = {};
+        toPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        toPresent.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toPresent.image = mState->swapchainImages[imageIndex];
+        toPresent.subresourceRange = colorRange;
+        mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                     0,
+                                     0,
+                                     nullptr,
+                                     0,
+                                     nullptr,
+                                     1,
+                                     &toPresent);
     }
-    else
+    else if (mState->swapchainRenderPass != VK_NULL_RENDER_PASS && mState->swapchainFramebuffers[imageIndex] != VK_NULL_FRAMEBUFFER)
     {
         const float phase = (float)((mState->presentFrameIndex % 120u) / 119.0f);
-        VkClearColorValue clearColor = {};
-        clearColor.float32[0] = 0.02f;
-        clearColor.float32[1] = 0.12f + 0.25f * phase;
-        clearColor.float32[2] = 0.08f;
-        clearColor.float32[3] = 1.0f;
-        mState->vkCmdClearColorImage(mState->commandBuffer,
-                                     mState->swapchainImages[imageIndex],
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     &clearColor,
-                                     1,
-                                     &colorRange);
+        VkClearValue clearValue = {};
+        clearValue.color.float32[0] = 0.02f;
+        clearValue.color.float32[1] = 0.12f + 0.25f * phase;
+        clearValue.color.float32[2] = 0.08f;
+        clearValue.color.float32[3] = 1.0f;
+        VkRenderPassBeginInfo renderPassBegin = {};
+        renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBegin.renderPass = mState->swapchainRenderPass;
+        renderPassBegin.framebuffer = mState->swapchainFramebuffers[imageIndex];
+        renderPassBegin.renderArea.offset.x = 0;
+        renderPassBegin.renderArea.offset.y = 0;
+        renderPassBegin.renderArea.extent = mState->swapchainExtent;
+        renderPassBegin.clearValueCount = 1;
+        renderPassBegin.pClearValues = &clearValue;
+        mState->vkCmdBeginRenderPass(mState->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+        mState->vkCmdEndRenderPass(mState->commandBuffer);
     }
-
-    VkImageMemoryBarrier toPresent = {};
-    toPresent.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    toPresent.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    toPresent.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    toPresent.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    toPresent.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    toPresent.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toPresent.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    toPresent.image = mState->swapchainImages[imageIndex];
-    toPresent.subresourceRange = colorRange;
-    mState->vkCmdPipelineBarrier(mState->commandBuffer,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                                 0,
-                                 0,
-                                 nullptr,
-                                 0,
-                                 nullptr,
-                                 1,
-                                 &toPresent);
 
     result = mState->vkEndCommandBuffer(mState->commandBuffer);
     if (result != VK_SUCCESS)
