@@ -1,0 +1,187 @@
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Release",
+
+    [string]$GodotExe = $env:GODOT_EXE,
+
+    [string]$ReferencePath = "",
+
+    [string]$CapturePath = "",
+
+    [string]$LogDir = "",
+
+    [int]$PlayerFrame = 60,
+
+    [double]$MaxMeanAbsoluteError = 35.0,
+
+    [double]$MaxRootMeanSquareError = 70.0,
+
+    [double]$MinVisibleOverlap = 0.70,
+
+    [int]$TimeoutSeconds = 90,
+
+    [switch]$GenerateReference,
+
+    [switch]$SkipBuild
+)
+
+$ErrorActionPreference = "Stop"
+
+function Resolve-GodotExe([string]$requested) {
+    if ($requested -and (Test-Path $requested)) {
+        return (Resolve-Path $requested).Path
+    }
+
+    foreach ($name in @("godot.exe", "godot")) {
+        $cmd = Get-Command $name -ErrorAction SilentlyContinue
+        if ($cmd) {
+            return $cmd.Source
+        }
+    }
+
+    throw "Godot executable not found. Pass -GodotExe, set GODOT_EXE, or add Godot to PATH."
+}
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
+$sampleProject = Join-Path $repoRoot "code\ImmGodotSampleProject"
+$variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
+$extensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$variant"
+$editorExtensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\debug"
+
+if (-not $ReferencePath) {
+    $ReferencePath = Join-Path $repoRoot "build\baseline-captures\windows-directx-static.ppm"
+}
+if (-not $LogDir) {
+    $LogDir = Join-Path $repoRoot "build\logs\godot-vulkan-visual-baseline-smoke"
+}
+$LogDir = (New-Item -ItemType Directory -Force $LogDir).FullName
+if (-not $CapturePath) {
+    $CapturePath = Join-Path $LogDir "godot-vulkan-visual.ppm"
+}
+$ReferencePath = [System.IO.Path]::GetFullPath($ReferencePath)
+$CapturePath = [System.IO.Path]::GetFullPath($CapturePath)
+
+if (-not $SkipBuild) {
+    & (Join-Path $scriptDir "build-godot-extension.ps1") -Configuration $Configuration
+    if ($LASTEXITCODE -ne 0) {
+        throw "Godot extension build failed with exit code $LASTEXITCODE"
+    }
+}
+
+if ($GenerateReference -or -not (Test-Path -LiteralPath $ReferencePath -PathType Leaf)) {
+    & (Join-Path $repoRoot "code\appImmViewer\scripts\capture_windows_directx_baseline.ps1") `
+        -Configuration "Release" `
+        -OutputPath $ReferencePath `
+        -PlayerFrame $PlayerFrame `
+        -SkipBuild:$SkipBuild
+    if ($LASTEXITCODE -ne 0) {
+        throw "DirectX baseline capture failed with exit code $LASTEXITCODE"
+    }
+}
+
+$requiredDlls = @(
+    "imm_godot_extension.dll",
+    "ImmGodotPlugin.dll",
+    "Audio360.dll",
+    "opus.dll",
+    "opusenc.dll",
+    "vorbisenc.dll",
+    "zlib1.dll",
+    "jpeg62.dll",
+    "libpng16.dll",
+    "ogg.dll",
+    "vorbis.dll"
+)
+foreach ($dll in $requiredDlls) {
+    $candidate = Join-Path $extensionDir $dll
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+        throw "Godot GDExtension runtime DLL is missing: $candidate"
+    }
+}
+if ($editorExtensionDir -ne $extensionDir) {
+    New-Item -ItemType Directory -Force $editorExtensionDir | Out-Null
+    foreach ($dll in $requiredDlls) {
+        Copy-Item -Force (Join-Path $extensionDir $dll) (Join-Path $editorExtensionDir $dll)
+    }
+}
+
+Remove-Item -LiteralPath $CapturePath -Force -ErrorAction SilentlyContinue
+
+$godot = Resolve-GodotExe $GodotExe
+$outputPath = Join-Path $LogDir "godot-visual-baseline-output.log"
+$previousEnv = @{
+    PATH = $env:PATH
+    IMM_GODOT_VISUAL_SMOKE = $env:IMM_GODOT_VISUAL_SMOKE
+    IMM_GODOT_VISUAL_RENDERER_API = $env:IMM_GODOT_VISUAL_RENDERER_API
+    IMM_GODOT_VISUAL_SMOKE_PPM = $env:IMM_GODOT_VISUAL_SMOKE_PPM
+    IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME
+    IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES
+}
+
+try {
+    $env:PATH = "$extensionDir;$env:PATH"
+    $env:IMM_GODOT_VISUAL_SMOKE = "1"
+    $env:IMM_GODOT_VISUAL_RENDERER_API = "5"
+    $env:IMM_GODOT_VISUAL_SMOKE_PPM = $CapturePath
+    $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = "$PlayerFrame"
+    $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = "0"
+
+    $godotArgs = @(
+        "--resolution", "1280x720",
+        "--fixed-fps", "30",
+        "--path", $sampleProject,
+        "res://scenes/VisualSmokeScene.tscn"
+    )
+    $stdoutPath = Join-Path $LogDir "godot-visual-baseline.stdout.log"
+    $stderrPath = Join-Path $LogDir "godot-visual-baseline.stderr.log"
+    $process = Start-Process -FilePath $godot `
+        -ArgumentList $godotArgs `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath `
+        -PassThru
+    $timedOut = -not $process.WaitForExit($TimeoutSeconds * 1000)
+    if ($timedOut) {
+        if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force
+            Start-Sleep -Seconds 1
+        }
+        throw "Godot Vulkan visual baseline smoke timed out after $TimeoutSeconds seconds"
+    }
+    $exitCode = $process.ExitCode
+    $output = @()
+    if (Test-Path -LiteralPath $stdoutPath) {
+        $output += Get-Content -LiteralPath $stdoutPath
+    }
+    if (Test-Path -LiteralPath $stderrPath) {
+        $output += Get-Content -LiteralPath $stderrPath
+    }
+}
+finally {
+    foreach ($entry in $previousEnv.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item -Path "env:$($entry.Key)" -ErrorAction SilentlyContinue
+        }
+        else {
+            Set-Item -Path "env:$($entry.Key)" -Value $entry.Value
+        }
+    }
+}
+
+$output | Tee-Object -FilePath $outputPath
+if ($exitCode -ne 0) {
+    throw "Godot Vulkan visual baseline smoke failed with exit code $exitCode"
+}
+if (-not (($output -join "`n").Contains("IMM Godot Vulkan visual smoke passed"))) {
+    throw "Godot Vulkan visual baseline smoke did not print the success marker."
+}
+if (-not (Test-Path -LiteralPath $CapturePath -PathType Leaf)) {
+    throw "Godot Vulkan visual baseline smoke did not write capture: $CapturePath"
+}
+
+& (Join-Path $repoRoot "code\appImmViewer\scripts\compare-ppm-captures.ps1") `
+    -ReferencePath $ReferencePath `
+    -CandidatePath $CapturePath `
+    -MaxMeanAbsoluteError $MaxMeanAbsoluteError `
+    -MaxRootMeanSquareError $MaxRootMeanSquareError `
+    -MinVisibleOverlap $MinVisibleOverlap

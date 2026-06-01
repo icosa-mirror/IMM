@@ -1497,12 +1497,12 @@ Dictionary ImmViewerNode::spawn_area_to_dictionary(int spawn_area_id, const ImmG
     const float m22 = (1.0f - 2.0f * (xx + yy)) * scale;
 
     Dictionary transform;
-    transform["position"] = Vector3(spawn_area.transform.posx,
+    transform["position"] = Vector3(-spawn_area.transform.posx,
                                     spawn_area.transform.posy,
                                     -spawn_area.transform.posz);
-    transform["basis_x"] = Vector3(-m00, -m10, m20);
-    transform["basis_y"] = Vector3(m01, m11, -m21);
-    transform["basis_z"] = Vector3(m02, m12, -m22);
+    transform["basis_x"] = Vector3(m00, -m10, m20);
+    transform["basis_y"] = Vector3(-m01, m11, -m21);
+    transform["basis_z"] = Vector3(m02, -m12, m22);
     transform["raw_position"] = Vector3(spawn_area.transform.posx,
                                         spawn_area.transform.posy,
                                         spawn_area.transform.posz);

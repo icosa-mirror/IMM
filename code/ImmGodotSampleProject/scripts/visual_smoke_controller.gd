@@ -16,6 +16,9 @@ const MIN_CONTENT_PIXELS := 512
 const MIN_CONTENT_BOUNDS_SIZE := 12
 const MIN_LUMA_RANGE := 0.02
 const MIN_ORIENTATION_LUMA_DELTA := 0.05
+const IMM_TICKS_PER_SECOND := 12600
+const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
+const VISUAL_SMOKE_FRAME_RATE := 30
 const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
 
@@ -148,6 +151,7 @@ func _run_visual_smoke() -> void:
 
 	var selected_renderer_api := _selected_renderer_api()
 	var selected_renderer_name := _selected_renderer_name(selected_renderer_api)
+	var forced_player_frame := _get_env_int("IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME", DEFAULT_VISUAL_SMOKE_PLAYER_FRAME)
 	viewer.renderer_api = selected_renderer_api
 	var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
 	if int(backend_diagnostics.get("renderer_api", -1)) != selected_renderer_api:
@@ -177,6 +181,7 @@ func _run_visual_smoke() -> void:
 			_apply_background_color()
 			if viewer.is_sequence_ready():
 				sequence_ready = true
+				_apply_forced_player_frame(forced_player_frame)
 				if _frame_camera_from_document():
 					_queue_active_camera()
 					break
@@ -193,6 +198,7 @@ func _run_visual_smoke() -> void:
 			_apply_background_color()
 			if viewer.is_sequence_ready():
 				sequence_ready = true
+				_apply_forced_player_frame(forced_player_frame)
 			if sequence_ready:
 				_frame_camera_from_document()
 			_queue_active_camera()
@@ -229,6 +235,7 @@ func _run_visual_smoke() -> void:
 			failures.append("ImmGodot_RenderCamera returned %d" % int(compositor_diagnostics.get("last_render_result", -1)))
 
 	var screenshot_path := _get_env_string("IMM_GODOT_VISUAL_SMOKE_PNG", "")
+	var ppm_path := _get_env_string("IMM_GODOT_VISUAL_SMOKE_PPM", "")
 	if not screenshot_path.is_empty():
 		_apply_background_color()
 		await RenderingServer.frame_post_draw
@@ -252,6 +259,20 @@ func _run_visual_smoke() -> void:
 			failures.append("Failed to save visual smoke PNG %s: %d" % [screenshot_path, int(save_result)])
 		else:
 			print("IMM Godot %s visual smoke PNG: %s" % [selected_renderer_name, screenshot_path])
+
+	if not ppm_path.is_empty():
+		_apply_background_color()
+		await RenderingServer.frame_post_draw
+		var image := get_viewport().get_texture().get_image()
+		var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
+		print("IMM Godot %s visual smoke PPM content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
+		if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
+			failures.append("visual smoke PPM had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
+		var save_result := _save_ppm(image, ppm_path)
+		if save_result != OK:
+			failures.append("Failed to save visual smoke PPM %s: %d" % [ppm_path, int(save_result)])
+		else:
+			print("IMM Godot %s visual smoke PPM: %s" % [selected_renderer_name, ppm_path])
 
 	_finish_visual_smoke(failures, backend_diagnostics, document_state, document_bounds, render_diagnostics, compositor_diagnostics)
 
@@ -285,6 +306,12 @@ func _queue_active_camera() -> void:
 	var width: int = max(int(viewport_size.x), 1)
 	var height: int = max(int(viewport_size.y), 1)
 	viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID)
+
+func _apply_forced_player_frame(player_frame: int) -> void:
+	if player_frame < 0:
+		return
+	var ticks_per_frame := IMM_TICKS_PER_SECOND / VISUAL_SMOKE_FRAME_RATE
+	viewer.set_time(int(player_frame * ticks_per_frame), 0)
 
 func _frame_interactive_camera() -> bool:
 	var deadline_msec: int = Time.get_ticks_msec() + int(SPAWN_AREA_FRAME_WAIT_SECONDS * 1000.0)
@@ -467,6 +494,19 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 		"lower_content_luma": lower_content_luma,
 		"orientation_luma_delta": upper_content_luma - lower_content_luma,
 	}
+
+func _save_ppm(image: Image, path: String) -> int:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return FileAccess.get_open_error()
+	file.store_buffer(("P6\n%d %d\n255\n" % [image.get_width(), image.get_height()]).to_ascii_buffer())
+	for y in range(image.get_height()):
+		for x in range(image.get_width()):
+			var color := image.get_pixel(x, y)
+			file.store_8(clampi(int(round(color.r * 255.0)), 0, 255))
+			file.store_8(clampi(int(round(color.g * 255.0)), 0, 255))
+			file.store_8(clampi(int(round(color.b * 255.0)), 0, 255))
+	return OK
 
 func _update_status(message: String) -> void:
 	status_label.text = "%s\nRenderer API: %s\nDocument: %s" % [
