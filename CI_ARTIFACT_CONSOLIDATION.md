@@ -17,13 +17,13 @@ Recommended cleanup order:
    - Update release packaging to normalize those APK names from the combined artifact.
 
 3. Leave plugin platform artifacts as intermediate unless they are renamed clearly as internal build artifacts.
-   - `ImmStrokeReaderPlugin-{Windows,Android,macOS,iOS}` and `ImmViewerPlugin-{Windows,Android,macOS,iOS}` are consumed by the UPM package job.
+   - `Internal-ImmStrokeReaderPlugin-{Windows,Android,macOS,iOS}` and `Internal-ImmViewerPlugin-{Windows,Android,macOS,iOS}` are consumed by the UPM package job.
    - They could be merged into platform bundles, but separate artifacts make missing-platform failures explicit.
-   - If they remain separate, consider naming or documenting them as package-job inputs, not user-facing downloads.
+   - Keep them separate but prefixed with `Internal-` so they read as package-job inputs, not user-facing downloads.
 
 4. Keep final user-facing artifacts distinct by product.
    - Keep `ImmViewerPlugin-UPM`, `ImmStrokeReaderPlugin-UPM`, and `ImmGodotGDExtension` as separate final artifacts.
    - Keep smoke log artifacts such as `ImmGodotSmokeLogs-*` and `ImmViewerVulkanSmokeLogs-Windows` separate and failure-only.
-   - Treat `ImmGodotGDExtension-{Windows,Android,macOS}-platform` as intermediate artifacts that are merged into the final `ImmGodotGDExtension` addon.
+   - Treat `Internal-ImmGodotGDExtension-{Windows,Android,macOS}-platform` as intermediate artifacts that are merged into the final `ImmGodotGDExtension` addon.
 
 When changing the workflow, update `code/appImmGodotGDExtension/verify_local.py` token checks and rerun it. Also update release download/zip steps so GitHub releases still contain the intended user-facing packages.

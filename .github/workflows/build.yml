@@ -144,7 +144,7 @@ jobs:
     - name: Upload Windows Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: ImmGodotGDExtension-Windows-platform
+        name: Internal-ImmGodotGDExtension-Windows-platform
         path: |
           code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.dll
           code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/*.dll
@@ -155,7 +155,7 @@ jobs:
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Windows
+        name: Internal-ImmStrokeReaderPlugin-Windows
         path: |
           code/appImmStrokeReader/exe/ImmStrokeReader.dll
         if-no-files-found: error
@@ -164,7 +164,7 @@ jobs:
     - name: Upload Unity Plugin DLL
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-Windows
+        name: Internal-ImmViewerPlugin-Windows
         path: |
           code/appImmUnity/exe/ImmUnityPlugin.dll
         if-no-files-found: error
@@ -292,15 +292,15 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p artifacts/ImmViewerPlugin-Android
+        mkdir -p artifacts/Internal-ImmViewerPlugin-Android
         so_file=$(ls code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so | head -n 1)
-        cp "$so_file" artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
+        cp "$so_file" artifacts/Internal-ImmViewerPlugin-Android/libImmUnityPlugin.so
 
     - name: Upload Unity Plugin
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-Android
-        path: artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
+        name: Internal-ImmViewerPlugin-Android
+        path: artifacts/Internal-ImmViewerPlugin-Android/libImmUnityPlugin.so
         if-no-files-found: error
         retention-days: 1
 
@@ -308,15 +308,15 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p artifacts/ImmStrokeReaderPlugin-Android
+        mkdir -p artifacts/Internal-ImmStrokeReaderPlugin-Android
         so_file=$(ls code/appImmStrokeReader/Projects/Android/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmStrokeReader.so | head -n 1)
-        cp "$so_file" artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
+        cp "$so_file" artifacts/Internal-ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
 
     - name: Upload Stroke Reader
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Android
-        path: artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
+        name: Internal-ImmStrokeReaderPlugin-Android
+        path: artifacts/Internal-ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
         if-no-files-found: error
         retention-days: 1
 
@@ -358,7 +358,7 @@ jobs:
     - name: Upload Android Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: ImmGodotGDExtension-Android-platform
+        name: Internal-ImmGodotGDExtension-Android-platform
         path: |
           code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so
           code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so
@@ -473,8 +473,8 @@ jobs:
     - name: Stage macOS Godot GDExtension binaries
       run: |
         set -euo pipefail
-        staging="artifacts/ImmGodotGDExtension-macOS-platform/bin/macos/release"
-        rm -rf artifacts/ImmGodotGDExtension-macOS-platform
+        staging="artifacts/Internal-ImmGodotGDExtension-macOS-platform/bin/macos/release"
+        rm -rf artifacts/Internal-ImmGodotGDExtension-macOS-platform
         mkdir -p "$staging"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib "$staging/"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
@@ -484,8 +484,8 @@ jobs:
     - name: Upload macOS Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: ImmGodotGDExtension-macOS-platform
-        path: artifacts/ImmGodotGDExtension-macOS-platform
+        name: Internal-ImmGodotGDExtension-macOS-platform
+        path: artifacts/Internal-ImmGodotGDExtension-macOS-platform
         if-no-files-found: error
         retention-days: 1
 
@@ -531,7 +531,7 @@ jobs:
     - name: Upload Unity Plugin Bundle
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-macOS
+        name: Internal-ImmViewerPlugin-macOS
         path: |
           build/macos/unity/ImmUnityPlugin.bundle
         if-no-files-found: error
@@ -540,7 +540,7 @@ jobs:
     - name: Upload Stroke Reader dylib
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-macOS
+        name: Internal-ImmStrokeReaderPlugin-macOS
         path: |
           code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
         if-no-files-found: error
@@ -579,7 +579,7 @@ jobs:
     - name: Upload Stroke Reader (iOS)
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-iOS
+        name: Internal-ImmStrokeReaderPlugin-iOS
         path: |
           build/ios/stroke-reader/libImmStrokeReader.a
         if-no-files-found: error
@@ -588,7 +588,7 @@ jobs:
     - name: Upload Unity Plugin (iOS)
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-iOS
+        name: Internal-ImmViewerPlugin-iOS
         path: |
           build/ios/unity/libImmUnityPlugin.a
         if-no-files-found: error
@@ -615,50 +615,50 @@ jobs:
     - name: Download Windows Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Windows
-        path: artifacts/ImmStrokeReaderPlugin-Windows
+        name: Internal-ImmStrokeReaderPlugin-Windows
+        path: artifacts/Internal-ImmStrokeReaderPlugin-Windows
 
     - name: Download Android Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Android
-        path: artifacts/ImmStrokeReaderPlugin-Android
+        name: Internal-ImmStrokeReaderPlugin-Android
+        path: artifacts/Internal-ImmStrokeReaderPlugin-Android
 
     - name: Download macOS Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-macOS
-        path: artifacts/ImmStrokeReaderPlugin-macOS
+        name: Internal-ImmStrokeReaderPlugin-macOS
+        path: artifacts/Internal-ImmStrokeReaderPlugin-macOS
 
     - name: Download iOS Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-iOS
-        path: artifacts/ImmStrokeReaderPlugin-iOS
+        name: Internal-ImmStrokeReaderPlugin-iOS
+        path: artifacts/Internal-ImmStrokeReaderPlugin-iOS
 
     - name: Download Windows ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-Windows
-        path: artifacts/ImmViewerPlugin-Windows
+        name: Internal-ImmViewerPlugin-Windows
+        path: artifacts/Internal-ImmViewerPlugin-Windows
 
     - name: Download Android ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-Android
-        path: artifacts/ImmViewerPlugin-Android
+        name: Internal-ImmViewerPlugin-Android
+        path: artifacts/Internal-ImmViewerPlugin-Android
 
     - name: Download macOS ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-macOS
-        path: artifacts/ImmViewerPlugin-macOS
+        name: Internal-ImmViewerPlugin-macOS
+        path: artifacts/Internal-ImmViewerPlugin-macOS
 
     - name: Download iOS ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-iOS
-        path: artifacts/ImmViewerPlugin-iOS
+        name: Internal-ImmViewerPlugin-iOS
+        path: artifacts/Internal-ImmViewerPlugin-iOS
 
     - name: Sync stroke reader package binaries
       shell: bash
@@ -666,16 +666,16 @@ jobs:
         set -euo pipefail
         stroke_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader"
         mkdir -p "$stroke_pkg/Plugins/x86_64" "$stroke_pkg/Plugins/Android/arm64-v8a" "$stroke_pkg/Plugins/macOS" "$stroke_pkg/Plugins/iOS"
-        cp artifacts/ImmStrokeReaderPlugin-Windows/ImmStrokeReader.dll "$stroke_pkg/Plugins/x86_64/ImmStrokeReader.dll"
+        cp artifacts/Internal-ImmStrokeReaderPlugin-Windows/ImmStrokeReader.dll "$stroke_pkg/Plugins/x86_64/ImmStrokeReader.dll"
         shopt -s nullglob globstar
-        android_so=(artifacts/ImmStrokeReaderPlugin-Android/**/libImmStrokeReader.so)
+        android_so=(artifacts/Internal-ImmStrokeReaderPlugin-Android/**/libImmStrokeReader.so)
         if [ ${#android_so[@]} -eq 0 ]; then
-          echo "Missing libImmStrokeReader.so in ImmStrokeReaderPlugin-Android artifact"
+          echo "Missing libImmStrokeReader.so in Internal-ImmStrokeReaderPlugin-Android artifact"
           exit 1
         fi
         cp "${android_so[0]}" "$stroke_pkg/Plugins/Android/arm64-v8a/libImmStrokeReader.so"
-        cp artifacts/ImmStrokeReaderPlugin-macOS/libImmStrokeReader.dylib "$stroke_pkg/Plugins/macOS/libImmStrokeReader.dylib"
-        cp artifacts/ImmStrokeReaderPlugin-iOS/libImmStrokeReader.a "$stroke_pkg/Plugins/iOS/libImmStrokeReader.a"
+        cp artifacts/Internal-ImmStrokeReaderPlugin-macOS/libImmStrokeReader.dylib "$stroke_pkg/Plugins/macOS/libImmStrokeReader.dylib"
+        cp artifacts/Internal-ImmStrokeReaderPlugin-iOS/libImmStrokeReader.a "$stroke_pkg/Plugins/iOS/libImmStrokeReader.a"
 
     - name: Sync ImmUnity package binaries
       shell: bash
@@ -683,18 +683,18 @@ jobs:
         set -euo pipefail
         unity_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity"
         mkdir -p "$unity_pkg/Plugins/x86_64" "$unity_pkg/Plugins/Android/libs/arm64-v8a" "$unity_pkg/Plugins/OSX" "$unity_pkg/Plugins/iOS"
-        cp artifacts/ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
+        cp artifacts/Internal-ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
         shopt -s nullglob globstar
-        android_unity_so=(artifacts/ImmViewerPlugin-Android/**/libImmUnityPlugin.so)
+        android_unity_so=(artifacts/Internal-ImmViewerPlugin-Android/**/libImmUnityPlugin.so)
         if [ ${#android_unity_so[@]} -eq 0 ]; then
-          echo "Missing libImmUnityPlugin.so in ImmViewerPlugin-Android artifact"
+          echo "Missing libImmUnityPlugin.so in Internal-ImmViewerPlugin-Android artifact"
           exit 1
         fi
         cp "${android_unity_so[0]}" "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
         rm -rf "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
         mkdir -p "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
-        cp -R artifacts/ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
-        cp artifacts/ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
+        cp -R artifacts/Internal-ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
+        cp artifacts/Internal-ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
 
     - name: Archive stroke reader UPM package
       shell: bash
@@ -729,14 +729,14 @@ jobs:
       with:
         script: |
           const targetNames = new Set([
-            'ImmStrokeReaderPlugin-Windows',
-            'ImmStrokeReaderPlugin-Android',
-            'ImmStrokeReaderPlugin-macOS',
-            'ImmStrokeReaderPlugin-iOS',
-            'ImmViewerPlugin-Windows',
-            'ImmViewerPlugin-Android',
-            'ImmViewerPlugin-macOS',
-            'ImmViewerPlugin-iOS',
+            'Internal-ImmStrokeReaderPlugin-Windows',
+            'Internal-ImmStrokeReaderPlugin-Android',
+            'Internal-ImmStrokeReaderPlugin-macOS',
+            'Internal-ImmStrokeReaderPlugin-iOS',
+            'Internal-ImmViewerPlugin-Windows',
+            'Internal-ImmViewerPlugin-Android',
+            'Internal-ImmViewerPlugin-macOS',
+            'Internal-ImmViewerPlugin-iOS',
           ]);
           const owner = context.repo.owner;
           const repo = context.repo.repo;
@@ -774,7 +774,7 @@ jobs:
     - name: Download Godot GDExtension platform binaries
       uses: actions/download-artifact@v4
       with:
-        pattern: ImmGodotGDExtension-*-platform
+        pattern: Internal-ImmGodotGDExtension-*-platform
         path: artifacts/platform-bins
         merge-multiple: true
 
@@ -851,7 +851,7 @@ jobs:
             run_id,
           });
           for (const artifact of artifacts) {
-            if (artifact.name.startsWith('ImmGodotGDExtension-') && artifact.name.endsWith('-platform')) {
+            if (artifact.name.startsWith('Internal-ImmGodotGDExtension-') && artifact.name.endsWith('-platform')) {
               await github.rest.actions.deleteArtifact({
                 owner,
                 repo,

@@ -367,15 +367,18 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "IMM_CI_ENABLE_GPU_SMOKE", "Capture Windows DirectX standalone baseline", "Smoke Windows Vulkan standalone viewer", "ImmViewerVulkanSmokeLogs-Windows", "Check Godot GDExtension staging", "Smoke Windows Godot Vulkan playback", "IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE", "-Configuration Release", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "Upload Windows Godot GDExtension platform binaries", "ImmGodotGDExtension-Windows-platform", "Package Windows Viewer Artifact", "ImmViewer-Windows", "settings-vulkan-sample1.json", "settings-vr.json"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "IMM_CI_ENABLE_GPU_SMOKE", "Capture Windows DirectX standalone baseline", "Smoke Windows Vulkan standalone viewer", "ImmViewerVulkanSmokeLogs-Windows", "Check Godot GDExtension staging", "Smoke Windows Godot Vulkan playback", "IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE", "-Configuration Release", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "Upload Windows Godot GDExtension platform binaries", "Internal-ImmGodotGDExtension-Windows-platform", "Package Windows Viewer Artifact", "ImmViewer-Windows", "settings-vulkan-sample1.json", "settings-vr.json"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
     for token in ["Smoke macOS Metal standalone viewer", "IMM_METAL_VALIDATE_EXPECTED_VALUES=0", "Download Godot for macOS", "Smoke macOS Godot Metal visual playback", "ImmGodotSmokeLogs-macOS", "ImmViewerMetal-macOS"]:
         if token not in workflow:
             raise RuntimeError(f"macOS workflow is missing Metal/Godot coverage token: {token}")
-    for token in ["build-windows", "build-android", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
+    for token in ["build-windows", "build-android", "Internal-ImmGodotGDExtension-*-platform", "Internal-ImmGodotGDExtension-", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
         if token not in workflow:
             raise RuntimeError(f"Godot packaging workflow is missing platform merge token: {token}")
+    for token in ["Internal-ImmStrokeReaderPlugin-Windows", "Internal-ImmStrokeReaderPlugin-Android", "Internal-ImmStrokeReaderPlugin-macOS", "Internal-ImmStrokeReaderPlugin-iOS", "Internal-ImmViewerPlugin-Windows", "Internal-ImmViewerPlugin-Android", "Internal-ImmViewerPlugin-macOS", "Internal-ImmViewerPlugin-iOS"]:
+        if token not in workflow:
+            raise RuntimeError(f"Unity packaging workflow is missing internal platform artifact token: {token}")
     for token in ["Stage Android Viewer APKs", "Upload Android Viewer APKs", "Verify Android APK names", "ImmViewer-Windows.zip", "ImmViewerMetal-macOS.zip", "release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk"]:
         if token not in workflow:
             raise RuntimeError(f"Release workflow is missing supported viewer artifact token: {token}")
@@ -385,6 +388,9 @@ def verify_windows_build_wiring() -> None:
     for stale_text in ["name: ImmViewerVulkan-Windows", "name: ImmViewer-Windows-VR", "ImmViewerVulkan-Windows.zip", "ImmViewer-Windows-VR.zip", "release-assets/ImmViewerVulkan-Windows", "release-assets/ImmViewer-Windows-VR"]:
         if stale_text in workflow:
             raise RuntimeError(f"Workflow still publishes a split Windows viewer artifact: {stale_text}")
+    for stale_text in ["name: ImmStrokeReaderPlugin-Windows", "name: ImmStrokeReaderPlugin-Android", "name: ImmStrokeReaderPlugin-macOS", "name: ImmStrokeReaderPlugin-iOS", "name: ImmViewerPlugin-Windows", "name: ImmViewerPlugin-Android", "name: ImmViewerPlugin-macOS", "name: ImmViewerPlugin-iOS", "name: ImmGodotGDExtension-Windows-platform", "name: ImmGodotGDExtension-Android-platform", "name: ImmGodotGDExtension-macOS-platform", "pattern: ImmGodotGDExtension-*-platform"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still exposes an intermediate artifact without the Internal prefix: {stale_text}")
     for stale_text in ["Run Godot script smoke test", "-LogDir artifacts\\godot-smoke-script"]:
         if stale_text in workflow:
             raise RuntimeError(f"Windows workflow still runs the removed script-stub Godot smoke path: {stale_text}")
