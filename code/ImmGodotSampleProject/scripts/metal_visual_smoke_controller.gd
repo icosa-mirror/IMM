@@ -26,6 +26,7 @@ var _compositor_effect: Resource
 var _world_environment: WorldEnvironment
 var _has_applied_background_color := false
 var _last_background_color := Color.BLACK
+var _interactive_camera_framed := false
 
 func _ready() -> void:
 	if _should_run_visual_smoke():
@@ -35,16 +36,47 @@ func _ready() -> void:
 	if not _setup_viewer():
 		return
 	_setup_compositor()
-	viewer.load_document()
 	_apply_background_color()
-	_update_status("%s visual scene ready" % _selected_renderer_name())
+	_update_status("%s visual scene loading" % _selected_renderer_name())
+	call_deferred("_run_interactive_playback")
 
 func _process(_delta: float) -> void:
 	if _compositor_effect == null or viewer == null:
 		return
 	if viewer.is_loaded():
 		_apply_background_color()
-	_queue_active_camera()
+		if not _interactive_camera_framed and viewer.is_sequence_ready():
+			_interactive_camera_framed = _frame_camera_from_document()
+		_queue_active_camera()
+
+func _run_interactive_playback() -> void:
+	await get_tree().process_frame
+	if viewer == null:
+		return
+	for _frame in range(3):
+		_queue_active_camera()
+		await get_tree().process_frame
+
+	var load_result: int = int(viewer.load_document())
+	if load_result < 0:
+		push_error("Interactive %s load_document returned %d" % [_selected_renderer_name(), load_result])
+		_update_status("%s visual scene load failed" % _selected_renderer_name())
+		return
+
+	var ready_deadline_msec: int = Time.get_ticks_msec() + int(_max_ready_seconds() * 1000.0)
+	while Time.get_ticks_msec() < ready_deadline_msec:
+		if viewer.is_loaded():
+			_apply_background_color()
+			if viewer.is_sequence_ready():
+				_interactive_camera_framed = _frame_camera_from_document()
+				_queue_active_camera()
+				_update_status("%s visual scene playing" % _selected_renderer_name())
+				return
+			_queue_active_camera()
+		await get_tree().create_timer(0.05).timeout
+
+	push_error("Interactive %s scene did not become ready after %.1f seconds" % [_selected_renderer_name(), _max_ready_seconds()])
+	_update_status("%s visual scene not ready" % _selected_renderer_name())
 
 func _setup_extension() -> bool:
 	if not ClassDB.class_exists("ImmViewerCompositorEffect"):
