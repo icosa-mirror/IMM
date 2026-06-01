@@ -11,6 +11,7 @@
 namespace godot
 {
     class RenderData;
+    class RenderingDevice;
 
     class ImmViewerCompositorEffect : public CompositorEffect
     {
@@ -27,7 +28,12 @@ namespace godot
         Dictionary get_diagnostics() const;
 
     private:
+        RID ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height);
+
         mutable std::mutex _diagnostics_mutex;
+        RID _intermediate_texture;
+        Vector2i _intermediate_size;
+        int64_t _intermediate_format = -1;
         int _callback_count = 0;
         int _last_callback_type = -1;
         bool _last_had_render_data = false;

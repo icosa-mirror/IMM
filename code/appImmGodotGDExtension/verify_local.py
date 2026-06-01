@@ -226,6 +226,11 @@ def verify_render_thread_queue() -> None:
     for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "DRIVER_RESOURCE_VULKAN_INSTANCE", "DRIVER_RESOURCE_VULKAN_IMAGE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "ImmViewerGodotBeginVulkanTextureFrame", "last_metal_frame_started", "last_vulkan_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
         if token not in compositor_source and token not in compositor_header:
             raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
+    if "g_queued_render_request.queued = false" in compositor_source:
+        raise RuntimeError("ImmViewerCompositorEffect should keep the latest render request for continuous editor playback")
+    for token in ["ensure_intermediate_texture", "_intermediate_texture", "_intermediate_size", "_intermediate_format"]:
+        if token not in compositor_source and token not in compositor_header:
+            raise RuntimeError(f"ImmViewerCompositorEffect persistent intermediate token is missing: {token}")
     if "texture(source_color, uv_interp)" not in compositor_source:
         raise RuntimeError("ImmViewerCompositorEffect composite shader must sample the Metal intermediate texture without an extra vertical flip")
     if "1.0 - uv_interp.y" in compositor_source:

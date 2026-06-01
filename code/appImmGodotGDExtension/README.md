@@ -96,7 +96,7 @@ The native class exposes these test and diagnostic hooks around the production c
 - `set_document_transform(document_transform)` stores a Godot document transform and applies it after load when the native backend is active. `get_document_transform()` exposes the stored transform for script and smoke parity checks.
 - `smoke_render_last_camera()` invokes the smoke render hook for the last submitted camera.
 - `queue_render_last_camera()` publishes a diagnostic request for the last submitted camera through the same compositor queue used by the production render path.
-- The compositor callback copies camera id and viewport size from a mutex-protected request snapshot before calling into `ImmGodot_RenderCamera`, and clears the queued request only after taking that snapshot.
+- The compositor callback copies camera id and viewport size from a mutex-protected request snapshot before calling into `ImmGodot_RenderCamera`. It keeps the latest render request active for continuous editor playback and reuses the Godot-created intermediate texture until its size or format changes, avoiding black-frame flicker from render callbacks that arrive between `_process` queues or after a just-recorded composite draw.
 - `auto_queue_render` plus `render_camera_path` lets `ImmViewerNode` own per-frame camera lookup, viewport-size capture, render-camera registration, matrix submission, and compositor request publishing.
 - `debug_logging` or `IMM_GODOT_DEBUG=1` enables native log messages for init, matrix submission, and render calls.
 - `ImmGodotRenderAdapter` brackets graphics init/shutdown and render-camera calls so the real Godot render integration has a stable handoff point.

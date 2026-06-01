@@ -46,7 +46,7 @@ func _process(_delta: float) -> void:
 	if viewer.is_loaded():
 		_apply_background_color()
 		if not _interactive_camera_framed and viewer.is_sequence_ready():
-			_interactive_camera_framed = _frame_camera_from_document()
+			_interactive_camera_framed = _frame_camera_from_document(false)
 		_queue_active_camera()
 
 func _run_interactive_playback() -> void:
@@ -68,7 +68,7 @@ func _run_interactive_playback() -> void:
 		if viewer.is_loaded():
 			_apply_background_color()
 			if viewer.is_sequence_ready():
-				_interactive_camera_framed = _frame_camera_from_document()
+				_interactive_camera_framed = _frame_camera_from_document(false)
 				_queue_active_camera()
 				_update_status("%s visual scene playing" % _selected_renderer_name())
 				return
@@ -337,8 +337,8 @@ func _apply_background_color() -> void:
 	_last_background_color = color
 	_has_applied_background_color = true
 
-func _frame_camera_from_document() -> bool:
-	var spawn_info: Dictionary = viewer.get_active_spawn_area_info()
+func _frame_camera_from_document(prefer_spawn_area: bool = true) -> bool:
+	var spawn_info: Dictionary = viewer.get_active_spawn_area_info() if prefer_spawn_area else {}
 	if not spawn_info.is_empty():
 		var spawn_transform := _spawn_area_transform_from_info(spawn_info)
 		camera.global_transform = spawn_transform

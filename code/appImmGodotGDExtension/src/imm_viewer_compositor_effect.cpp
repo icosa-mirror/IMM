@@ -301,7 +301,15 @@ ImmViewerCompositorEffect::ImmViewerCompositorEffect()
     set_access_resolved_color(false);
 }
 
-ImmViewerCompositorEffect::~ImmViewerCompositorEffect() = default;
+ImmViewerCompositorEffect::~ImmViewerCompositorEffect()
+{
+    RenderingServer *rendering_server = RenderingServer::get_singleton();
+    RenderingDevice *rendering_device = rendering_server != nullptr ? rendering_server->get_rendering_device() : nullptr;
+    if (rendering_device != nullptr && _intermediate_texture.is_valid())
+    {
+        rendering_device->free_rid(_intermediate_texture);
+    }
+}
 
 void ImmViewerCompositorEffect::_bind_methods()
 {
@@ -315,6 +323,38 @@ void ImmViewerCompositorEffect::queue_render_request(int camera_id, int width, i
     g_queued_render_request.camera_id = camera_id;
     g_queued_render_request.width = width;
     g_queued_render_request.height = height;
+}
+
+RID ImmViewerCompositorEffect::ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height)
+{
+    if (rendering_device == nullptr || !color_texture.is_valid() || width <= 0 || height <= 0)
+    {
+        return RID();
+    }
+
+    Ref<RDTextureFormat> color_format = rendering_device->texture_get_format(color_texture);
+    if (!color_format.is_valid())
+    {
+        return RID();
+    }
+
+    const int64_t format = static_cast<int64_t>(color_format->get_format());
+    const Vector2i size(width, height);
+    if (_intermediate_texture.is_valid() && _intermediate_size == size && _intermediate_format == format)
+    {
+        return _intermediate_texture;
+    }
+
+    if (_intermediate_texture.is_valid())
+    {
+        rendering_device->free_rid(_intermediate_texture);
+        _intermediate_texture = RID();
+    }
+
+    _intermediate_texture = create_intermediate_texture(rendering_device, color_texture, width, height);
+    _intermediate_size = _intermediate_texture.is_valid() ? size : Vector2i();
+    _intermediate_format = _intermediate_texture.is_valid() ? format : -1;
+    return _intermediate_texture;
 }
 
 void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, RenderData *render_data)
@@ -413,7 +453,6 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     {
         std::lock_guard<std::mutex> lock(g_queued_render_mutex);
         render_request = g_queued_render_request;
-        g_queued_render_request.queued = false;
     }
 
     bool metal_frame_started = false;
@@ -427,7 +466,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     {
         const int render_width = render_request.width > 0 ? render_request.width : target_size.x;
         const int render_height = render_request.height > 0 ? render_request.height : target_size.y;
-        RID intermediate_texture = create_intermediate_texture(rendering_device, color_texture, render_width, render_height);
+        RID intermediate_texture = ensure_intermediate_texture(rendering_device, color_texture, render_width, render_height);
         had_intermediate_texture = intermediate_texture.is_valid();
         uint64_t render_texture_handle = had_intermediate_texture
                                              ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, intermediate_texture, 0)
@@ -497,11 +536,6 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         else
         {
             render_result = -1;
-        }
-
-        if (intermediate_texture.is_valid())
-        {
-            rendering_device->free_rid(intermediate_texture);
         }
     }
 
