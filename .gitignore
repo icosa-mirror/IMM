@@ -88,3 +88,9 @@ code/ImmUnitySampleProject/imm_player_log.txt
 code/appImmViewer/exe/debug.txt
 /code/ImmGodotSampleProject/.godot
 metal_player_debug.txt
+
+# Godot GDExtension local build artifacts
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/godot-extension-dlls.txt
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.ilk
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.pdb
+code/appImmGodotGDExtension/*.pdb
