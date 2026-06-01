@@ -822,7 +822,22 @@ jobs:
           cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd.uid "$addon/"
         fi
         # Merge whatever platform binaries were produced this run (bin/<platform>/...).
-        cp -R artifacts/platform-bins/bin/* "$addon/bin/"
+        if [ -d artifacts/platform-bins/bin ]; then
+          cp -R artifacts/platform-bins/bin/* "$addon/bin/"
+        fi
+        # upload-artifact preserves paths relative to the least common ancestor.
+        # Windows currently arrives as debug/release and Android as loose .so files.
+        if [ -d artifacts/platform-bins/release ] || [ -d artifacts/platform-bins/debug ]; then
+          mkdir -p "$addon/bin/windows"
+          [ ! -d artifacts/platform-bins/release ] || cp -R artifacts/platform-bins/release "$addon/bin/windows/"
+          [ ! -d artifacts/platform-bins/debug ] || cp -R artifacts/platform-bins/debug "$addon/bin/windows/"
+        fi
+        if [ -f artifacts/platform-bins/libimm_godot_extension.arm64.so ] || [ -f artifacts/platform-bins/libImmGodotPlugin.so ]; then
+          mkdir -p "$addon/bin/android/debug"
+          [ ! -f artifacts/platform-bins/libimm_godot_extension.arm64.so ] || cp artifacts/platform-bins/libimm_godot_extension.arm64.so "$addon/bin/android/debug/"
+          [ ! -f artifacts/platform-bins/libImmGodotPlugin.so ] || cp artifacts/platform-bins/libImmGodotPlugin.so "$addon/bin/android/debug/"
+          [ ! -f artifacts/platform-bins/godot-extension-android-libs.txt ] || cp artifacts/platform-bins/godot-extension-android-libs.txt "$addon/bin/android/debug/"
+        fi
         # Mirror release -> debug for any platform that only built a release binary
         # so the editor (which selects the debug feature tag) can load the extension.
         for plat in "$addon"/bin/*/; do
