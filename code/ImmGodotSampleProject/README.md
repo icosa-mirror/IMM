@@ -14,7 +14,7 @@ This project mirrors the intent of the Unity sample project and exercises the na
 
 1. Open `code/ImmGodotSampleProject` in Godot 4.5 or newer.
 2. Use Forward+ rendering. On macOS, Godot 4.6.1 selects Metal for the Forward+ path.
-3. Press Run. The project main scene is `scenes/VisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor. The editor Play path uses the active authored spawn area for initial camera placement when one is available, with document-bounds framing only as a fallback.
+3. Press Run. The project main scene is `scenes/VisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor. The editor Play path uses the active authored spawn area for initial camera placement when one is available, converted for Godot's `Camera3D` `-Z` forward convention, with document-bounds framing only as a fallback.
 
 ## Using the addon in a new project
 

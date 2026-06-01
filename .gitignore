@@ -93,4 +93,6 @@ metal_player_debug.txt
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/godot-extension-dlls.txt
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.ilk
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.pdb
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
 code/appImmGodotGDExtension/*.pdb
