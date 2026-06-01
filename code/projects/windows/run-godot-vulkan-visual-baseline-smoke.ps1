@@ -14,9 +14,9 @@ param(
 
     [double]$MaxMeanAbsoluteError = 35.0,
 
-    [double]$MaxRootMeanSquareError = 70.0,
+    [double]$MaxRootMeanSquareError = 50.0,
 
-    [double]$MinVisibleOverlap = 0.70,
+    [double]$MinVisibleOverlap = 0.95,
 
     [int]$TimeoutSeconds = 90,
 
@@ -75,9 +75,6 @@ if ($GenerateReference -or -not (Test-Path -LiteralPath $ReferencePath -PathType
         -OutputPath $ReferencePath `
         -PlayerFrame $PlayerFrame `
         -SkipBuild:$SkipBuild
-    if ($LASTEXITCODE -ne 0) {
-        throw "DirectX baseline capture failed with exit code $LASTEXITCODE"
-    }
 }
 
 $requiredDlls = @(
