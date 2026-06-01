@@ -376,9 +376,12 @@ def verify_windows_build_wiring() -> None:
     for token in ["build-windows", "build-android", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
         if token not in workflow:
             raise RuntimeError(f"Godot packaging workflow is missing platform merge token: {token}")
-    for token in ["ImmViewer-Windows.zip", "ImmViewerMetal-macOS.zip", "ImmViewer-Android-Vulkan.apk"]:
+    for token in ["Stage Android Viewer APKs", "Upload Android Viewer APKs", "Verify Android APK names", "ImmViewer-Windows.zip", "ImmViewerMetal-macOS.zip", "release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk"]:
         if token not in workflow:
             raise RuntimeError(f"Release workflow is missing supported viewer artifact token: {token}")
+    for stale_text in ["name: ImmViewer-Android-VR", "name: ImmViewer-Android-Vulkan", "release-assets/ImmViewer-Android-VR", "release-assets/ImmViewer-Android-Vulkan"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still publishes a split Android viewer artifact: {stale_text}")
     for stale_text in ["name: ImmViewerVulkan-Windows", "name: ImmViewer-Windows-VR", "ImmViewerVulkan-Windows.zip", "ImmViewer-Windows-VR.zip", "release-assets/ImmViewerVulkan-Windows", "release-assets/ImmViewer-Windows-VR"]:
         if stale_text in workflow:
             raise RuntimeError(f"Workflow still publishes a split Windows viewer artifact: {stale_text}")

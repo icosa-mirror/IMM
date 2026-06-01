@@ -320,28 +320,39 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
-    - name: Upload Android Viewer
+    - name: Stage Android Viewer APKs
+      shell: bash
+      run: |
+        set -euo pipefail
+        staging="artifacts/ImmViewer-Android"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        shopt -s nullglob
+        default_apk=(code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk)
+        vr_apk=(code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk)
+        vulkan_apk=(code/projects/android/appImmViewer/build_vulkan/outputs/apk/debug/*.apk)
+        if [ ${#default_apk[@]} -eq 0 ]; then
+          echo "Missing default Android viewer APK"
+          exit 1
+        fi
+        if [ ${#vr_apk[@]} -eq 0 ]; then
+          echo "Missing VR Android viewer APK"
+          exit 1
+        fi
+        if [ ${#vulkan_apk[@]} -eq 0 ]; then
+          echo "Missing Vulkan Android viewer APK"
+          exit 1
+        fi
+        cp "${default_apk[0]}" "$staging/ImmViewer-Android.apk"
+        cp "${vr_apk[0]}" "$staging/ImmViewer-Android-VR.apk"
+        cp "${vulkan_apk[0]}" "$staging/ImmViewer-Android-Vulkan.apk"
+
+    - name: Upload Android Viewer APKs
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-Android
         path: |
-          code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
-        if-no-files-found: error
-
-    - name: Upload Android Viewer VR
-      uses: actions/upload-artifact@v4
-      with:
-        name: ImmViewer-Android-VR
-        path: |
-          code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk
-        if-no-files-found: error
-
-    - name: Upload Android Viewer Vulkan
-      uses: actions/upload-artifact@v4
-      with:
-        name: ImmViewer-Android-Vulkan
-        path: |
-          code/projects/android/appImmViewer/build_vulkan/outputs/apk/debug/*.apk
+          artifacts/ImmViewer-Android
         if-no-files-found: error
 
     - name: Upload Android Godot GDExtension platform binaries
@@ -973,18 +984,6 @@ jobs:
         name: ImmViewer-Android
         path: release-assets/ImmViewer-Android
 
-    - name: Download Android viewer (VR)
-      uses: actions/download-artifact@v4
-      with:
-        name: ImmViewer-Android-VR
-        path: release-assets/ImmViewer-Android-VR
-
-    - name: Download Android Vulkan viewer
-      uses: actions/download-artifact@v4
-      with:
-        name: ImmViewer-Android-Vulkan
-        path: release-assets/ImmViewer-Android-Vulkan
-
     - name: Download macOS Metal viewer
       uses: actions/download-artifact@v4
       with:
@@ -1006,29 +1005,13 @@ jobs:
         zip -r ImmViewerMetal-macOS.zip ImmViewerMetal-macOS
         zip -r ImmGodotGDExtension.zip ImmGodotGDExtension
 
-    - name: Normalize Android APK names
+    - name: Verify Android APK names
       shell: bash
       run: |
         set -euo pipefail
-        shopt -s nullglob
-        apk=(release-assets/ImmViewer-Android/*.apk)
-        apk_vr=(release-assets/ImmViewer-Android-VR/*.apk)
-        apk_vulkan=(release-assets/ImmViewer-Android-Vulkan/*.apk)
-        if [ ${#apk[@]} -eq 0 ]; then
-          echo "Missing Android APK in ImmViewer-Android artifact"
-          exit 1
-        fi
-        if [ ${#apk_vr[@]} -eq 0 ]; then
-          echo "Missing Android APK in ImmViewer-Android-VR artifact"
-          exit 1
-        fi
-        if [ ${#apk_vulkan[@]} -eq 0 ]; then
-          echo "Missing Android APK in ImmViewer-Android-Vulkan artifact"
-          exit 1
-        fi
-        cp "${apk[0]}" release-assets/ImmViewer-Android.apk
-        cp "${apk_vr[0]}" release-assets/ImmViewer-Android-VR.apk
-        cp "${apk_vulkan[0]}" release-assets/ImmViewer-Android-Vulkan.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-VR.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk
 
     - name: Compute release metadata
       id: release_meta
@@ -1066,9 +1049,9 @@ jobs:
           release-assets/ImmViewer-Windows.zip \
           release-assets/ImmViewerMetal-macOS.zip \
           release-assets/ImmGodotGDExtension.zip \
-          release-assets/ImmViewer-Android.apk \
-          release-assets/ImmViewer-Android-VR.apk \
-          release-assets/ImmViewer-Android-Vulkan.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android-VR.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
           release-assets/ImmViewer-Windows/sample1.imm
 
   publish-upm:
