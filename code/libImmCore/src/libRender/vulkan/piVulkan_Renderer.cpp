@@ -3352,6 +3352,85 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     return true;
 }
 
+static bool iTransitionColorTextureToShaderRead(piVulkanState *state, piTexture texture)
+{
+    if (!state || !texture || texture->image == 0 ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE ||
+        !state->vkCmdPipelineBarrier)
+    {
+        return false;
+    }
+
+    const uint64_t timeout = 5000000000ull;
+    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange range = {};
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseMipLevel = 0;
+    range.levelCount = 1;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+
+    VkImageMemoryBarrier toShader = {};
+    toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    toShader.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    toShader.oldLayout = texture->imageLayout;
+    toShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    toShader.image = texture->image;
+    toShader.subresourceRange = range;
+    state->vkCmdPipelineBarrier(state->commandBuffer,
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                0,
+                                0,
+                                nullptr,
+                                0,
+                                nullptr,
+                                1,
+                                &toShader);
+
+    result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
+    {
+        return false;
+    }
+    texture->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    return true;
+}
+
 static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, const piVertexArray vertexArray, piRenderer::piReporter *reporter)
 {
     if (!state || !shader || !target)
@@ -4133,7 +4212,7 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
 
     VkImageMemoryBarrier toTransfer = {};
     toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    toTransfer.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    toTransfer.srcAccessMask = texture->imageLayout == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
     toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     toTransfer.oldLayout = texture->imageLayout;
     toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -4141,8 +4220,11 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
     toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     toTransfer.image = texture->image;
     toTransfer.subresourceRange = range;
+    const VkPipelineStageFlags sourceStage = texture->imageLayout == VK_IMAGE_LAYOUT_UNDEFINED
+                                                 ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                                                 : (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
     state->vkCmdPipelineBarrier(state->commandBuffer,
-                                VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                                sourceStage,
                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
                                 0,
                                 0,
@@ -5794,6 +5876,11 @@ void piRendererVulkan::EndExternalImageFrame(void)
         return;
     }
 
+    if (mState->externalFrameColorTexture &&
+        !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))
+    {
+        iError(mReporter, "Vulkan renderer failed to transition external image frame for host sampling");
+    }
     SetRenderTarget(nullptr);
     if (mState->externalFrameRenderTarget)
     {
@@ -5851,6 +5938,13 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uin
     if (!renderTarget || !SetRenderTarget(renderTarget))
     {
         if (renderTarget) DestroyRenderTarget(renderTarget);
+        DestroyTexture(depthTexture);
+        DestroyTexture(colorTexture);
+        return false;
+    }
+    if (!iClearDepthTextureImage(mState, depthTexture, mReporter))
+    {
+        DestroyRenderTarget(renderTarget);
         DestroyTexture(depthTexture);
         DestroyTexture(colorTexture);
         return false;

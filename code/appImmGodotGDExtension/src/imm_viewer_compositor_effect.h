@@ -45,6 +45,8 @@ namespace godot
         bool _ever_vulkan_frame_started = false;
         bool _last_composite_result = false;
         bool _last_had_intermediate_texture = false;
+        int _last_intermediate_nonzero_bytes = -1;
+        int _last_intermediate_total_bytes = 0;
         int _last_render_result = 0;
         int _last_render_camera_id = -1;
         int _last_render_width = 0;

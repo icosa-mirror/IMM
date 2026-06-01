@@ -23,6 +23,7 @@ const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
 
 var viewer: Node
 var _compositor_effect: Resource
+var _world_environment: WorldEnvironment
 var _has_applied_background_color := false
 var _last_background_color := Color.BLACK
 
@@ -87,6 +88,11 @@ func _setup_compositor() -> bool:
 	var compositor := Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
 	camera.compositor = compositor
+	if _world_environment == null:
+		_world_environment = WorldEnvironment.new()
+		_world_environment.name = "ImmViewerWorldEnvironment"
+		add_child(_world_environment)
+	_world_environment.compositor = compositor
 	return true
 
 func _run_visual_smoke() -> void:

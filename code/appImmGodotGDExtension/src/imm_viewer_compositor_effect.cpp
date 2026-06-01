@@ -22,6 +22,7 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
@@ -297,7 +298,7 @@ ImmViewerCompositorEffect::ImmViewerCompositorEffect()
 {
     set_enabled(true);
     set_effect_callback_type(CompositorEffect::EFFECT_CALLBACK_TYPE_POST_TRANSPARENT);
-    set_access_resolved_color(true);
+    set_access_resolved_color(false);
 }
 
 ImmViewerCompositorEffect::~ImmViewerCompositorEffect() = default;
@@ -349,14 +350,14 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
 
     if (rd_scene_buffers != nullptr)
     {
-        color_texture = rd_scene_buffers->get_texture(StringName("render_buffers"), StringName("color"));
-        if (!color_texture.is_valid())
-        {
-            color_texture = rd_scene_buffers->get_color_layer(0, false);
-        }
+        color_texture = rd_scene_buffers->get_color_layer(0, false);
         if (!color_texture.is_valid())
         {
             color_texture = rd_scene_buffers->get_color_texture(false);
+        }
+        if (!color_texture.is_valid())
+        {
+            color_texture = rd_scene_buffers->get_texture(StringName("render_buffers"), StringName("color"));
         }
         internal_size = rd_scene_buffers->get_internal_size();
         target_size = rd_scene_buffers->get_target_size();
@@ -419,6 +420,8 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     bool vulkan_frame_started = false;
     bool composite_result = false;
     bool had_intermediate_texture = false;
+    int intermediate_nonzero_bytes = -1;
+    int intermediate_total_bytes = 0;
     int render_result = 0;
     if (render_request.queued && command_queue_handle != 0 && color_texture_handle != 0 && target_size.x > 0 && target_size.y > 0)
     {
@@ -476,6 +479,19 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
             {
                 ImmViewerGodotEndMetalTextureFrame();
             }
+            if (std::getenv("IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE") != nullptr && intermediate_texture.is_valid())
+            {
+                PackedByteArray intermediate_data = rendering_device->texture_get_data(intermediate_texture, 0);
+                intermediate_total_bytes = intermediate_data.size();
+                intermediate_nonzero_bytes = 0;
+                for (int i = 0; i < intermediate_total_bytes; ++i)
+                {
+                    if (intermediate_data[i] != 0)
+                    {
+                        ++intermediate_nonzero_bytes;
+                    }
+                }
+            }
             composite_result = composite_texture_to_color(rendering_device, intermediate_texture, color_texture);
         }
         else
@@ -508,6 +524,8 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _ever_vulkan_frame_started = _ever_vulkan_frame_started || vulkan_frame_started;
         _last_composite_result = composite_result;
         _last_had_intermediate_texture = had_intermediate_texture;
+        _last_intermediate_nonzero_bytes = intermediate_nonzero_bytes;
+        _last_intermediate_total_bytes = intermediate_total_bytes;
         _last_render_result = render_result;
         _last_render_camera_id = render_request.queued ? render_request.camera_id : -1;
         _last_render_width = render_request.queued ? render_request.width : 0;
@@ -550,6 +568,8 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["ever_vulkan_frame_started"] = _ever_vulkan_frame_started;
     result["last_composite_result"] = _last_composite_result;
     result["last_had_intermediate_texture"] = _last_had_intermediate_texture;
+    result["last_intermediate_nonzero_bytes"] = _last_intermediate_nonzero_bytes;
+    result["last_intermediate_total_bytes"] = _last_intermediate_total_bytes;
     result["last_render_result"] = _last_render_result;
     result["last_render_camera_id"] = _last_render_camera_id;
     result["last_render_width"] = _last_render_width;
