@@ -232,6 +232,9 @@ def verify_render_thread_queue() -> None:
         raise RuntimeError("ImmViewerCompositorEffect composite shader should not vertically flip the Godot-owned intermediate texture")
     if "register_class<ImmViewerCompositorEffect>" not in register_types:
         raise RuntimeError("ImmViewerCompositorEffect is not registered with ClassDB")
+    for token in ["register_extension_dll_directory", "GetModuleHandleExW", "GetModuleFileNameW", "AddDllDirectory", "SetDllDirectoryW"]:
+        if token not in register_types:
+            raise RuntimeError(f"Windows editor DLL dependency search token is missing: {token}")
     for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "src/imm_viewer_vulkan_frame.cpp", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing compositor/Metal build token: {token}")

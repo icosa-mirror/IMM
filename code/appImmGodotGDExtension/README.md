@@ -62,7 +62,7 @@ Prerequisites:
 - Build `godot-cpp` first so `libgodot-cpp.windows.*.x86_64.lib` exists under its `bin` folder, or pass `godot_cpp_lib=...`.
 - Build `appImmGodot` first so `code/appImmGodot/exe/ImmGodotPlugin.lib` exists.
 - The output DLL is written to `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/{debug,release}/imm_godot_extension.dll`, matching `addons/imm_viewer/imm_viewer.gdextension`. The addon is self-contained: every binary lives under `addons/imm_viewer/bin/`.
-- `ImmGodotPlugin.dll` and the IMM runtime dependency DLLs are copied beside the GDExtension DLL so the backend dependencies can be found at runtime.
+- `ImmGodotPlugin.dll` and the IMM runtime dependency DLLs are copied beside the GDExtension DLL. On Windows, the GDExtension registers its own binary directory with the process DLL search path at library initialization so editor Play can resolve delayed IMM dependencies without a wrapper-modified `PATH`.
 - The Windows build helper verifies the complete staged DLL set after SCons before reporting success or running `-RunSmoke`, then writes `godot-extension-dlls.txt` beside the DLLs for artifact diagnostics.
 
 ## Intended runtime shape
@@ -134,7 +134,7 @@ python code\appImmGodotGDExtension\verify_local.py
 
 On macOS, `verify_local.py` also checks `/Applications/Godot.app/Contents/MacOS/Godot` and `/Applications/Godot_mono.app/Contents/MacOS/Godot` when the smoke flag is set.
 
-The SCons build stages `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the IMM runtime dependency DLLs in `addons/imm_viewer/bin/windows/{debug,release}` so Godot can resolve native dependencies from the extension directory.
+The SCons build stages `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the IMM runtime dependency DLLs in `addons/imm_viewer/bin/windows/{debug,release}`. The Windows GDExtension registers that directory with `AddDllDirectory`/`SetDllDirectoryW` during library initialization so delayed dependencies such as `jpeg62.dll` and `libpng16.dll` resolve in editor Play and wrapper-launched runs.
 
 ## Android build scaffold
 
