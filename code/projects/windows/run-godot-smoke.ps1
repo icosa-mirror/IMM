@@ -137,11 +137,14 @@ if (-not $Headed) {
     $godotArgs += "--headless"
 }
 $godotArgs += @("--path", $sampleProject, "--script", $smokeScript)
+$previousErrorActionPreference = $ErrorActionPreference
 try {
+    $ErrorActionPreference = "Continue"
     $output = & $godot @godotArgs 2>&1
     $exitCode = $LASTEXITCODE
 }
 finally {
+    $ErrorActionPreference = $previousErrorActionPreference
     if ($RequireExtension) {
         $env:PATH = $previousPath
     }
