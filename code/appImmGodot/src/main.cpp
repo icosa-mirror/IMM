@@ -109,8 +109,8 @@ namespace
         default:
 #if defined(__APPLE__)
             return piRenderer::API::Metal;
-#elif defined(ANDROID)
-            return piRenderer::API::GLES;
+#elif defined(_WIN32) || defined(ANDROID)
+            return piRenderer::API::Vulkan;
 #else
             return piRenderer::API::GL;
 #endif

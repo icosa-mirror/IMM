@@ -35,7 +35,7 @@ Run this once from your project root before opening the project in Godot. If you
 
 1. **Add an `ImmViewerNode`** to your scene tree. Set its properties in the Inspector:
    - `document_path`: path to your `.imm` file (e.g. `res://myfile.imm`)
-   - `load_on_ready`: enable to load automatically when the scene starts
+   - `load_on_ready`: leave disabled when using the Vulkan compositor path; load after at least one camera/render warmup frame
    - `auto_play`: enable to start playback immediately after loading
    - `auto_queue_render`: enable to let the node submit camera transforms each frame
    - `render_camera_path`: set to the path of your `Camera3D` node
@@ -57,10 +57,12 @@ Node3D (root)
 ├── Camera3D          ← compositor → Compositor [ImmViewerCompositorEffect]
 └── ImmViewerNode     ← render_camera_path: ../Camera3D
                          document_path: res://myfile.imm
-                         load_on_ready: true
+                         load_on_ready: false
                          auto_play: true
                          auto_queue_render: true
 ```
+
+For Vulkan editor playback, queue the active camera for a few frames before calling `load_document()`. The sample controller does this automatically so Godot has exposed the external Vulkan frame resources before IMM loads GPU content.
 
 ## Sample controls
 

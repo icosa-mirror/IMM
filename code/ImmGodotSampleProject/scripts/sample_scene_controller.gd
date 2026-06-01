@@ -3,6 +3,8 @@ extends Node3D
 const MOVE_SPEED := 4.0
 const BOOST_MULTIPLIER := 3.0
 const VOLUME_STEP := 0.1
+const SPAWN_AREA_FRAME_WAIT_SECONDS := 2.0
+const CAMERA_ID := 0
 
 @onready var viewer := $ImmViewer
 @onready var camera_rig: Node3D = $CameraRig
@@ -12,16 +14,22 @@ const VOLUME_STEP := 0.1
 var _first_layer_hidden := false
 var _has_applied_background_color := false
 var _last_background_color := Color.BLACK
+var _initial_camera_framed := false
 
 func _ready() -> void:
-	viewer.document_loaded.connect(_update_status)
+	viewer.document_loaded.connect(_on_document_loaded)
 	viewer.document_unloaded.connect(_update_status)
 	viewer.playback_changed.connect(_on_playback_changed)
 	viewer.spawn_area_changed.connect(_on_spawn_area_changed)
 	_update_status()
+	call_deferred("_run_initial_playback")
 
 func _process(delta: float) -> void:
 	_handle_movement(delta)
+	if viewer.is_loaded():
+		_apply_background_color()
+		if not _initial_camera_framed and viewer.is_sequence_ready():
+			_initial_camera_framed = _jump_to_active_spawn_area()
 
 func _handle_movement(delta: float) -> void:
 	var move_input := Vector3.ZERO
@@ -55,8 +63,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 	match event.keycode:
 		KEY_L:
-			viewer.load_document()
-			_apply_background_color()
+			_load_document_after_render_warmup()
 		KEY_U:
 			viewer.unload_document()
 			_apply_background_color()
@@ -94,14 +101,45 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _on_playback_changed(_is_playing: bool) -> void:
 	_update_status()
 
+func _on_document_loaded(_path: String) -> void:
+	_initial_camera_framed = false
+	_apply_background_color()
+	call_deferred("_frame_initial_camera")
+	_update_status()
+
 func _on_spawn_area_changed(_active_index: int) -> void:
 	_update_status()
 
-func _jump_to_active_spawn_area() -> void:
+func _run_initial_playback() -> void:
+	await _load_document_after_render_warmup()
+
+func _load_document_after_render_warmup() -> void:
+	if viewer.is_loaded():
+		_apply_background_color()
+		_update_status()
+		return
+	for _frame in range(3):
+		_queue_active_camera()
+		await get_tree().process_frame
+	var load_result: int = int(viewer.load_document())
+	if load_result < 0:
+		push_error("IMM sample load_document returned %d" % load_result)
+	_update_status()
+
+func _frame_initial_camera() -> void:
+	var deadline_msec: int = Time.get_ticks_msec() + int(SPAWN_AREA_FRAME_WAIT_SECONDS * 1000.0)
+	while Time.get_ticks_msec() < deadline_msec:
+		if _jump_to_active_spawn_area():
+			_initial_camera_framed = true
+			return
+		await get_tree().create_timer(0.05).timeout
+	_update_status()
+
+func _jump_to_active_spawn_area() -> bool:
 	var info: Dictionary = viewer.get_active_spawn_area_info()
 	if info.is_empty():
 		_update_status()
-		return
+		return false
 
 	var spawn_transform: Transform3D = _spawn_area_transform_from_info(info)
 	var desired_basis: Basis = spawn_transform.basis.orthonormalized()
@@ -115,6 +153,7 @@ func _jump_to_active_spawn_area() -> void:
 	var target_position: Vector3 = spawn_transform.origin - (target_basis * head_local_position)
 	camera_rig.global_transform = Transform3D(target_basis, target_position)
 	_update_status()
+	return true
 
 func _spawn_area_transform_from_info(info: Dictionary) -> Transform3D:
 	var transform: Dictionary = info.get("transform", {})
@@ -124,6 +163,12 @@ func _spawn_area_transform_from_info(info: Dictionary) -> Transform3D:
 		transform.get("basis_z", Vector3.BACK)
 	)
 	return Transform3D(basis, transform.get("position", Vector3.ZERO))
+
+func _queue_active_camera() -> void:
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var width: int = max(int(viewport_size.x), 1)
+	var height: int = max(int(viewport_size.y), 1)
+	viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID)
 
 func _toggle_first_layer_visibility() -> void:
 	if viewer.get_layer_count() <= 0:

@@ -211,8 +211,8 @@ def verify_render_thread_queue() -> None:
             raise RuntimeError(f"ImmViewerNode native render adapter diagnostics token is missing: {token}")
         if token not in script_stub:
             raise RuntimeError(f"ImmViewerNode script stub render adapter diagnostics token is missing: {token}")
-    if "queue_render_camera_transform" in sample or "register_render_camera" in sample or "unregister_render_camera" in sample:
-        raise RuntimeError("Sample controller should not own the per-frame render queue or render camera lifecycle")
+    if "register_render_camera" in sample or "unregister_render_camera" in sample:
+        raise RuntimeError("Sample controller should not own render camera lifecycle")
     for token in ["ImmGodotRendererApi_Metal", "ImmGodot_InitEx", "ImmGodotMetalFrame", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame", "ImmGodotVulkanFrame", "ImmGodot_BeginVulkanFrame", "ImmGodot_EndVulkanFrame"]:
         if token not in abi_header or token not in abi_source:
             raise RuntimeError(f"ImmGodot native renderer selection token is missing from C ABI: {token}")
@@ -313,8 +313,8 @@ def verify_godot_scenes() -> None:
     viewer = node_by_name(sample_nodes, "ImmViewer")
     if viewer.get("document_path") != '"res://../../exampleImmFiles/sample1.imm"':
         raise RuntimeError("SampleScene.tscn ImmViewer must reference sample1.imm")
-    if viewer.get("load_on_ready") != "true":
-        raise RuntimeError("SampleScene.tscn ImmViewer must load on ready")
+    if viewer.get("load_on_ready") == "true":
+        raise RuntimeError("SampleScene.tscn ImmViewer must let the controller warm up compositor resources before loading")
     if viewer.get("auto_play") != "true":
         raise RuntimeError("SampleScene.tscn ImmViewer must auto-play")
     if viewer.get("auto_queue_render") != "true":

@@ -161,7 +161,7 @@ Or pass the executable directly:
 .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
 ```
 
-Use `-RendererApi 5 -Headed` to request Vulkan in the native smoke scene. The headed Vulkan smoke currently verifies that Godot is running Forward+/Vulkan, exposes native Vulkan driver resources, and starts an IMM Vulkan frame against Godot's external instance/device/queue through the compositor. It is a handoff/init smoke, not yet a full `sample1.imm` Godot rendering gate.
+Use `-RendererApi 5 -Headed` to request Vulkan explicitly in the native smoke scene. The default `Auto` renderer also resolves to Vulkan for the Windows Godot plugin when the project is running Forward+/Vulkan. The headed Vulkan smoke verifies that Godot exposes native Vulkan driver resources, starts an IMM Vulkan frame against Godot's external instance/device/queue through the compositor, and renders nonzero IMM content after document load.
 
 ```powershell
 .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -RendererApi 5 -Headed

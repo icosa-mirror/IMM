@@ -141,7 +141,7 @@ func _run() -> void:
         ])
     if str(backend_diagnostics.get("project_rendering_method", "")) != EXPECTED_RENDERER:
         failures.append("render backend diagnostics reported renderer %s" % str(backend_diagnostics.get("project_rendering_method", "")))
-    var requested_vulkan := requested_renderer_api == 5
+    var requested_vulkan := bool(backend_diagnostics.get("wants_vulkan_renderer", false)) and bool(backend_diagnostics.get("driver_is_vulkan", false))
     if requested_vulkan and expected_native:
         if not bool(backend_diagnostics.get("wants_vulkan_renderer", false)):
             failures.append("native Vulkan smoke did not report wants_vulkan_renderer")

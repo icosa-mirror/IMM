@@ -952,8 +952,18 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     const String effective_rendering_method = actual_rendering_method.is_empty() ? rendering_method : actual_rendering_method;
     const String effective_rendering_driver = actual_rendering_driver.is_empty() ? rendering_driver : actual_rendering_driver;
     const bool is_compatibility = effective_rendering_method == "gl_compatibility";
-    const bool wants_metal = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
-    const bool wants_vulkan = _renderer_api == ImmGodotRendererApi_Vulkan;
+#if defined(__APPLE__)
+    const bool auto_wants_metal = true;
+    const bool auto_wants_vulkan = false;
+#elif defined(_WIN32) || defined(ANDROID)
+    const bool auto_wants_metal = false;
+    const bool auto_wants_vulkan = true;
+#else
+    const bool auto_wants_metal = false;
+    const bool auto_wants_vulkan = false;
+#endif
+    const bool wants_metal = (_renderer_api == ImmGodotRendererApi_Auto && auto_wants_metal) || _renderer_api == ImmGodotRendererApi_Metal;
+    const bool wants_vulkan = (_renderer_api == ImmGodotRendererApi_Auto && auto_wants_vulkan) || _renderer_api == ImmGodotRendererApi_Vulkan;
     const bool driver_is_metal = effective_rendering_driver == "metal";
     const bool driver_is_vulkan = effective_rendering_driver.to_lower() == "vulkan";
     const bool has_generic_driver_resources = true;
