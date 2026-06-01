@@ -60,6 +60,26 @@ jobs:
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
 
+    - name: Capture Windows DirectX standalone baseline
+      shell: pwsh
+      run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+    - name: Smoke Windows Vulkan standalone viewer
+      shell: pwsh
+      run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+    - name: Upload Windows Vulkan standalone smoke logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerVulkanSmokeLogs-Windows
+        path: |
+          build/baseline-captures
+          code/appImmViewer/exe/debug.txt
+          code/appImmViewer/exe/vulkan_sample1_smoke.ppm
+        if-no-files-found: ignore
+        retention-days: 7
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -99,6 +119,12 @@ jobs:
       shell: pwsh
       run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight
 
+    - name: Smoke Windows Godot Vulkan playback
+      shell: pwsh
+      run: |
+        $env:IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE = "1"
+        .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -Headed -LogDir artifacts\godot-smoke-windows-vulkan
+
     - name: Upload Godot smoke logs
       if: failure()
       uses: actions/upload-artifact@v4
@@ -106,8 +132,20 @@ jobs:
         name: ImmGodotSmokeLogs-Windows
         path: |
           artifacts/godot-extension-preflight
+          artifacts/godot-smoke-windows-vulkan
         if-no-files-found: ignore
         retention-days: 7
+
+    - name: Upload Windows Godot GDExtension platform binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotGDExtension-Windows-platform
+        path: |
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.dll
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/*.dll
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/godot-extension-dlls.txt
+        if-no-files-found: error
+        retention-days: 1
 
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
@@ -139,6 +177,18 @@ jobs:
         Copy-Item docs/viewer_settings.md $staging
         Copy-Item docs/viewer_readme.md $staging/README.md
 
+    - name: Package Viewer Artifact (Vulkan)
+      shell: pwsh
+      run: |
+        $staging = "viewer_artifact_vulkan"
+        New-Item -ItemType Directory -Force $staging | Out-Null
+        Copy-Item code/appImmViewer/exe/appImmViewer_Release.exe $staging
+        Copy-Item code/appImmViewer/exe/settings-vulkan-smoke.json (Join-Path $staging "settings.json")
+        Copy-Item exampleImmFiles/sample1.imm $staging
+        Copy-Item code/appImmViewer/exe/*.dll $staging
+        Copy-Item docs/viewer_settings.md $staging
+        Copy-Item docs/viewer_readme.md $staging/README.md
+
     - name: Package Viewer Artifact (VR)
       shell: pwsh
       run: |
@@ -163,6 +213,12 @@ jobs:
         name: ImmViewer-Windows
         path: viewer_artifact
         if-no-files-found: error
+    - name: Upload Vulkan Viewer Executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerVulkan-Windows
+        path: viewer_artifact_vulkan
+        if-no-files-found: error
     - name: Upload Viewer Executable (VR)
       uses: actions/upload-artifact@v4
       with:
@@ -176,6 +232,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GODOT_CPP_REF: godot-4.5-stable
+      GODOT_VERSION: 4.5-stable
 
     steps:
     - name: Checkout repository
@@ -354,6 +411,9 @@ jobs:
     - name: Build macOS Metal standalone viewer
       run: cmake --build build/macos --target appImmViewerMetal --config Release
 
+    - name: Smoke macOS Metal standalone viewer
+      run: cmake --build build/macos --target validateAppImmViewerMetalPlayback --config Release
+
     - name: Install Godot GDExtension build tools
       run: python3 -m pip install --break-system-packages scons
 
@@ -384,6 +444,46 @@ jobs:
             codesign --sign - --deep "$f"
           fi
         done
+
+    - name: Mirror macOS Godot release binaries for editor debug feature
+      run: |
+        set -euo pipefail
+        rm -rf code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug
+        cp -R code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug
+
+    - name: Download Godot for macOS
+      run: |
+        set -euo pipefail
+        version="$GODOT_VERSION"
+        zip_name="Godot_v${version}_macos.universal.zip"
+        url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
+        curl -L "$url" -o "$zip_name"
+        unzip -q "$zip_name" -d godot
+        godot_exe="$(find godot -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
+        if [ -z "$godot_exe" ]; then
+          echo "Godot executable not found after extracting $zip_name" >&2
+          exit 1
+        fi
+        echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
+
+    - name: Smoke macOS Godot Metal visual playback
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/godot-smoke-macos-metal
+        IMM_GODOT_VISUAL_SMOKE=1 \
+        IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
+        "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
+          > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1
+        grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
+
+    - name: Upload macOS Godot smoke logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotSmokeLogs-macOS
+        path: artifacts/godot-smoke-macos-metal
+        if-no-files-found: ignore
+        retention-days: 7
 
     - name: Stage macOS Godot GDExtension binaries
       run: |
@@ -676,6 +776,8 @@ jobs:
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: ubuntu-latest
     needs:
+      - build-windows
+      - build-android
       - build-macos
     permissions:
       actions: write
@@ -722,8 +824,12 @@ jobs:
           fi
         done
         test -f "$addon/imm_viewer.gdextension"
+        test -f "$addon/bin/windows/release/imm_godot_extension.dll"
+        test -f "$addon/bin/windows/release/ImmGodotPlugin.dll"
         test -f "$addon/bin/macos/release/libimm_godot_extension.dylib"
         test -f "$addon/bin/macos/release/libImmGodotPlugin.dylib"
+        test -f "$addon/bin/android/debug/libimm_godot_extension.arm64.so"
+        test -f "$addon/bin/android/debug/libImmGodotPlugin.so"
 
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4
@@ -842,6 +948,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     needs:
+      - build-macos
       - build-windows
       - build-android
       - package-godot-extension
@@ -871,6 +978,12 @@ jobs:
         name: ImmViewer-Windows
         path: release-assets/ImmViewer-Windows
 
+    - name: Download Windows Vulkan viewer
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerVulkan-Windows
+        path: release-assets/ImmViewerVulkan-Windows
+
     - name: Download Windows viewer (VR)
       uses: actions/download-artifact@v4
       with:
@@ -889,6 +1002,18 @@ jobs:
         name: ImmViewer-Android-VR
         path: release-assets/ImmViewer-Android-VR
 
+    - name: Download Android Vulkan viewer
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewer-Android-Vulkan
+        path: release-assets/ImmViewer-Android-Vulkan
+
+    - name: Download macOS Metal viewer
+      uses: actions/download-artifact@v4
+      with:
+        name: ImmViewerMetal-macOS
+        path: release-assets/ImmViewerMetal-macOS
+
     - name: Download Godot GDExtension addon
       uses: actions/download-artifact@v4
       with:
@@ -901,7 +1026,9 @@ jobs:
         set -euo pipefail
         cd release-assets
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
+        zip -r ImmViewerVulkan-Windows.zip ImmViewerVulkan-Windows
         zip -r ImmViewer-Windows-VR.zip ImmViewer-Windows-VR
+        zip -r ImmViewerMetal-macOS.zip ImmViewerMetal-macOS
         zip -r ImmGodotGDExtension.zip ImmGodotGDExtension
 
     - name: Normalize Android APK names
@@ -911,6 +1038,7 @@ jobs:
         shopt -s nullglob
         apk=(release-assets/ImmViewer-Android/*.apk)
         apk_vr=(release-assets/ImmViewer-Android-VR/*.apk)
+        apk_vulkan=(release-assets/ImmViewer-Android-Vulkan/*.apk)
         if [ ${#apk[@]} -eq 0 ]; then
           echo "Missing Android APK in ImmViewer-Android artifact"
           exit 1
@@ -919,8 +1047,13 @@ jobs:
           echo "Missing Android APK in ImmViewer-Android-VR artifact"
           exit 1
         fi
+        if [ ${#apk_vulkan[@]} -eq 0 ]; then
+          echo "Missing Android APK in ImmViewer-Android-Vulkan artifact"
+          exit 1
+        fi
         cp "${apk[0]}" release-assets/ImmViewer-Android.apk
         cp "${apk_vr[0]}" release-assets/ImmViewer-Android-VR.apk
+        cp "${apk_vulkan[0]}" release-assets/ImmViewer-Android-Vulkan.apk
 
     - name: Compute release metadata
       id: release_meta
@@ -956,10 +1089,13 @@ jobs:
           release-assets/upm/ImmStrokeReaderPlugin-UPM.zip \
           release-assets/upm/ImmViewerPlugin-UPM.zip \
           release-assets/ImmViewer-Windows.zip \
+          release-assets/ImmViewerVulkan-Windows.zip \
           release-assets/ImmViewer-Windows-VR.zip \
+          release-assets/ImmViewerMetal-macOS.zip \
           release-assets/ImmGodotGDExtension.zip \
           release-assets/ImmViewer-Android.apk \
           release-assets/ImmViewer-Android-VR.apk \
+          release-assets/ImmViewer-Android-Vulkan.apk \
           release-assets/ImmViewer-Windows/sample1.imm
 
   publish-upm:

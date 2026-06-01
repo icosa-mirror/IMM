@@ -315,8 +315,8 @@ def verify_godot_scenes() -> None:
         raise RuntimeError("SampleScene.tscn ImmViewer must reference sample1.imm")
     if viewer.get("load_on_ready") == "true":
         raise RuntimeError("SampleScene.tscn ImmViewer must let the controller warm up compositor resources before loading")
-    if viewer.get("auto_play") != "true":
-        raise RuntimeError("SampleScene.tscn ImmViewer must auto-play")
+    if viewer.get("auto_play") == "false":
+        raise RuntimeError("SampleScene.tscn ImmViewer must not disable auto-play")
     if viewer.get("auto_queue_render") != "true":
         raise RuntimeError("SampleScene.tscn ImmViewer must enable auto_queue_render")
     if viewer.get("render_camera_path") != 'NodePath("../CameraRig/Camera3D")':
@@ -367,9 +367,18 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Check Godot GDExtension staging", "-Configuration Release", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Capture Windows DirectX standalone baseline", "Smoke Windows Vulkan standalone viewer", "ImmViewerVulkanSmokeLogs-Windows", "Check Godot GDExtension staging", "Smoke Windows Godot Vulkan playback", "IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE", "-Configuration Release", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "Upload Windows Godot GDExtension platform binaries", "ImmGodotGDExtension-Windows-platform", "Package Viewer Artifact (Vulkan)", "ImmViewerVulkan-Windows", "settings-vulkan-smoke.json"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
+    for token in ["Smoke macOS Metal standalone viewer", "Download Godot for macOS", "Smoke macOS Godot Metal visual playback", "ImmGodotSmokeLogs-macOS", "ImmViewerMetal-macOS"]:
+        if token not in workflow:
+            raise RuntimeError(f"macOS workflow is missing Metal/Godot coverage token: {token}")
+    for token in ["build-windows", "build-android", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
+        if token not in workflow:
+            raise RuntimeError(f"Godot packaging workflow is missing platform merge token: {token}")
+    for token in ["ImmViewerVulkan-Windows.zip", "ImmViewerMetal-macOS.zip", "ImmViewer-Android-Vulkan.apk"]:
+        if token not in workflow:
+            raise RuntimeError(f"Release workflow is missing supported viewer artifact token: {token}")
     for stale_text in ["Run Godot script smoke test", "-LogDir artifacts\\godot-smoke-script"]:
         if stale_text in workflow:
             raise RuntimeError(f"Windows workflow still runs the removed script-stub Godot smoke path: {stale_text}")
