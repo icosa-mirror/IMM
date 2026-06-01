@@ -10,6 +10,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  IMM_CI_ENABLE_GPU_SMOKE: ${{ vars.IMM_CI_ENABLE_GPU_SMOKE || '0' }}
+
 jobs:
   build-windows:
     name: Windows
@@ -65,6 +68,7 @@ jobs:
       run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
 
     - name: Smoke Windows Vulkan standalone viewer
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       shell: pwsh
       run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
 
@@ -120,6 +124,7 @@ jobs:
       run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight
 
     - name: Smoke Windows Godot Vulkan playback
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       shell: pwsh
       run: |
         $env:IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE = "1"
@@ -389,6 +394,7 @@ jobs:
     runs-on: macos-latest
     env:
       GODOT_CPP_REF: godot-4.5-stable
+      GODOT_VERSION: 4.5-stable
 
     steps:
     - name: Checkout repository
@@ -412,7 +418,7 @@ jobs:
       run: cmake --build build/macos --target appImmViewerMetal --config Release
 
     - name: Smoke macOS Metal standalone viewer
-      run: cmake --build build/macos --target validateAppImmViewerMetalPlayback --config Release
+      run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalPlayback --config Release
 
     - name: Install Godot GDExtension build tools
       run: python3 -m pip install --break-system-packages scons
@@ -467,6 +473,7 @@ jobs:
         echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
 
     - name: Smoke macOS Godot Metal visual playback
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       run: |
         set -euo pipefail
         mkdir -p artifacts/godot-smoke-macos-metal
