@@ -1,10 +1,10 @@
 Configuration=Release
 OutputDir=C:\Users\andyb\Documents\IMM\code\ImmGodotSampleProject\addons\imm_viewer\bin\windows\release
 ExpectedDllCount=11
-GeneratedUtc=2026-06-01T10:23:05.2339373Z
+GeneratedUtc=2026-06-01T10:42:18.6907803Z
 DLLs:
-FOUND	imm_godot_extension.dll	562176	2026-06-01T10:23:05.0035837Z
-FOUND	ImmGodotPlugin.dll	3704320	2026-06-01T10:22:57.7264265Z
+FOUND	imm_godot_extension.dll	562176	2026-06-01T10:42:18.5095192Z
+FOUND	ImmGodotPlugin.dll	3704320	2026-06-01T10:42:12.4344943Z
 FOUND	Audio360.dll	2735616	2026-01-02T10:16:08.9073818Z
 FOUND	opus.dll	435200	2026-01-02T10:16:08.9946584Z
 FOUND	opusenc.dll	50688	2026-01-02T10:16:08.9596051Z
