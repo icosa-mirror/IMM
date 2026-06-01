@@ -184,7 +184,7 @@ void ImmViewerNode::_process(double)
         ImmGodot_GlobalWork(1);
         if (is_sequence_ready())
         {
-            if (!_sequence_ready_seen)
+            if (!_sequence_ready_seen || _spawn_area_ids.is_empty())
             {
                 refresh_spawn_areas();
                 _sequence_ready_seen = true;
@@ -1366,7 +1366,7 @@ void ImmViewerNode::refresh_spawn_areas()
     _spawn_area_ids.resize(count);
     ImmGodot_GetSpawnAreaList(_document_id, count, _spawn_area_ids.ptrw());
 
-    const int active = ImmGodot_GetActiveSpawnAreaId(_document_id);
+    int active = ImmGodot_GetActiveSpawnAreaId(_document_id);
     for (int i = 0; i < _spawn_area_ids.size(); ++i)
     {
         if (_spawn_area_ids[i] == active)
@@ -1374,6 +1374,26 @@ void ImmViewerNode::refresh_spawn_areas()
             _active_spawn_area_index = i;
             break;
         }
+    }
+
+    if (_active_spawn_area_index < 0)
+    {
+        active = ImmGodot_GetInitialSpawnAreaId(_document_id);
+        for (int i = 0; i < _spawn_area_ids.size(); ++i)
+        {
+            if (_spawn_area_ids[i] == active)
+            {
+                _active_spawn_area_index = i;
+                ImmGodot_SetActiveSpawnAreaId(_document_id, active);
+                break;
+            }
+        }
+    }
+
+    if (_active_spawn_area_index < 0 && !_spawn_area_ids.is_empty())
+    {
+        _active_spawn_area_index = 0;
+        ImmGodot_SetActiveSpawnAreaId(_document_id, _spawn_area_ids[0]);
     }
 }
 
@@ -1501,6 +1521,9 @@ Dictionary ImmViewerNode::spawn_area_to_dictionary(int spawn_area_id, const ImmG
     volume["box_extent"] = Vector3(spawn_area.volume.boxExtent.x,
                                    spawn_area.volume.boxExtent.y,
                                    spawn_area.volume.boxExtent.z);
+    volume["allow_translation"] = Vector3(spawn_area.volume.allowTranslation.x != 0 ? 1.0f : 0.0f,
+                                          spawn_area.volume.allowTranslation.y != 0 ? 1.0f : 0.0f,
+                                          spawn_area.volume.allowTranslation.z != 0 ? 1.0f : 0.0f);
 
     Dictionary result;
     result["id"] = spawn_area_id;

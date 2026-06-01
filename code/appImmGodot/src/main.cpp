@@ -767,6 +767,9 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_GetSpawnAreaInfo(int docId, int spawnAre
         (((spawnAreaInfo.mVolume.mAllowTranslationX ? 1 : 0) << 2) |
          ((spawnAreaInfo.mVolume.mAllowTranslationY ? 1 : 0) << 1) |
          ((spawnAreaInfo.mVolume.mAllowTranslationZ ? 1 : 0) << 0));
+    serializedSpawnArea->volume.allowTranslation.x = spawnAreaInfo.mVolume.mAllowTranslationX ? 1 : 0;
+    serializedSpawnArea->volume.allowTranslation.y = spawnAreaInfo.mVolume.mAllowTranslationY ? 1 : 0;
+    serializedSpawnArea->volume.allowTranslation.z = spawnAreaInfo.mVolume.mAllowTranslationZ ? 1 : 0;
 
     return 0;
 }

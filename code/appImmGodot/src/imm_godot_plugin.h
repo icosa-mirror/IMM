@@ -178,6 +178,10 @@ extern "C"
             {
                 float x, y, z;
             } offset;
+            struct
+            {
+                int x, y, z;
+            } allowTranslation;
         } volume;
 
         struct Transform

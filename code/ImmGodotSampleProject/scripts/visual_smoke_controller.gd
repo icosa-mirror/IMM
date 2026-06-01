@@ -9,6 +9,7 @@ const IMM_RENDERER_API_METAL := 4
 const IMM_RENDERER_API_VULKAN := 5
 const MAX_READY_SECONDS := 12.0
 const ANDROID_MAX_READY_SECONDS := 30.0
+const SPAWN_AREA_FRAME_WAIT_SECONDS := 2.0
 const RENDER_SETTLE_FRAMES := 30
 const DEFAULT_RELOAD_CYCLES := 1
 const MIN_CONTENT_PIXELS := 512
@@ -46,7 +47,7 @@ func _process(_delta: float) -> void:
 	if viewer.is_loaded():
 		_apply_background_color()
 		if not _interactive_camera_framed and viewer.is_sequence_ready():
-			_interactive_camera_framed = _frame_camera_from_document(false)
+			_interactive_camera_framed = _frame_camera_from_spawn_area()
 		_queue_active_camera()
 
 func _run_interactive_playback() -> void:
@@ -68,7 +69,7 @@ func _run_interactive_playback() -> void:
 		if viewer.is_loaded():
 			_apply_background_color()
 			if viewer.is_sequence_ready():
-				_interactive_camera_framed = _frame_camera_from_document(false)
+				_interactive_camera_framed = await _frame_interactive_camera()
 				_queue_active_camera()
 				_update_status("%s visual scene playing" % _selected_renderer_name())
 				return
@@ -285,6 +286,31 @@ func _queue_active_camera() -> void:
 	var height: int = max(int(viewport_size.y), 1)
 	viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID)
 
+func _frame_interactive_camera() -> bool:
+	var deadline_msec: int = Time.get_ticks_msec() + int(SPAWN_AREA_FRAME_WAIT_SECONDS * 1000.0)
+	while Time.get_ticks_msec() < deadline_msec:
+		if _frame_camera_from_spawn_area():
+			return true
+		_queue_active_camera()
+		await get_tree().create_timer(0.05).timeout
+	return _frame_camera_from_document(false)
+
+func _frame_camera_from_spawn_area() -> bool:
+	var spawn_info: Dictionary = viewer.get_active_spawn_area_info()
+	if spawn_info.is_empty():
+		return false
+	var spawn_transform := _spawn_area_transform_from_info(spawn_info)
+	camera.global_transform = spawn_transform
+	camera.near = 0.01
+	camera.far = 10000.0
+	camera.force_update_transform()
+	print("IMM Godot %s visual smoke camera framed from spawn area: position=%s basis=%s" % [
+		_selected_renderer_name(),
+		str(camera.global_position),
+		str(camera.global_transform.basis),
+	])
+	return true
+
 func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
 	var stayed_ready := true
 	for cycle_index in range(cycle_count):
@@ -338,18 +364,7 @@ func _apply_background_color() -> void:
 	_has_applied_background_color = true
 
 func _frame_camera_from_document(prefer_spawn_area: bool = true) -> bool:
-	var spawn_info: Dictionary = viewer.get_active_spawn_area_info() if prefer_spawn_area else {}
-	if not spawn_info.is_empty():
-		var spawn_transform := _spawn_area_transform_from_info(spawn_info)
-		camera.global_transform = spawn_transform
-		camera.near = 0.01
-		camera.far = 10000.0
-		camera.force_update_transform()
-		print("IMM Godot %s visual smoke camera framed from spawn area: position=%s basis=%s" % [
-			_selected_renderer_name(),
-			str(camera.global_position),
-			str(camera.global_transform.basis),
-		])
+	if prefer_spawn_area and _frame_camera_from_spawn_area():
 		return true
 
 	var bounds: Dictionary = viewer.get_bounding_box()
