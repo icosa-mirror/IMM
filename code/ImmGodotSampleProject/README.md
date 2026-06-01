@@ -8,13 +8,13 @@ This project mirrors the intent of the Unity sample project and exercises the na
 - The `ImmViewerNode` script mirrors the runtime API shape the native GDExtension exposes.
 - The native `appImmGodot` plugin and GDExtension own native init/shutdown, camera registration, matrix submission, and compositor render request publishing.
 - A `.gdextension` manifest is present under `addons/imm_viewer/`.
-- The project Run button opens the macOS Forward+/Metal scene by default, and the script-stub smoke plus macOS Forward+/Metal visual smoke pass locally. Windows currently validates GDExtension build/staging in CI, not native rendering.
+- The project Run button opens `VisualSmokeScene.tscn`, which defaults to Metal on macOS and Vulkan on Windows/Android. The script-stub smoke and visible visual smoke paths pass locally where the matching renderer backend is available.
 
 ## Open in Godot
 
 1. Open `code/ImmGodotSampleProject` in Godot 4.5 or newer.
 2. Use Forward+ rendering. On macOS, Godot 4.6.1 selects Metal for the Forward+ path.
-3. Press Run. The project main scene is `scenes/MetalVisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor.
+3. Press Run. The project main scene is `scenes/VisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor.
 
 ## Using the addon in a new project
 
@@ -83,9 +83,9 @@ The default document path is set to `res://../../exampleImmFiles/sample1.imm`, w
 
 ## Native build and validation
 
-Build the GDExtension with `godot-cpp`, run the script-stub smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
+Build the GDExtension with `godot-cpp`, run the script-stub smoke, and run the visual smoke scene when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
 
-For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build. This is not the current Windows CI gate because Windows does not yet have a valid Godot-compatible production renderer backend.
+For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build. For visible validation, run the `VisualSmokeScene.tscn` harness with `IMM_GODOT_VISUAL_SMOKE=1`; on Windows it selects Vulkan by default.
 
 The native build scaffold writes the GDExtension DLL to `addons/imm_viewer/bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics. The addon is self-contained, so distributing it is just a matter of copying the `addons/imm_viewer/` folder.
 

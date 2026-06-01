@@ -464,7 +464,7 @@ func _selected_renderer_api() -> int:
 	var requested_api := _get_env_int("IMM_GODOT_VISUAL_RENDERER_API", -1)
 	if requested_api >= 0:
 		return requested_api
-	return IMM_RENDERER_API_VULKAN if OS.get_name() == "Android" else IMM_RENDERER_API_METAL
+	return IMM_RENDERER_API_METAL if OS.get_name() == "macOS" else IMM_RENDERER_API_VULKAN
 
 func _selected_renderer_name(renderer_api: int = -1) -> String:
 	var api := renderer_api if renderer_api >= 0 else _selected_renderer_api()

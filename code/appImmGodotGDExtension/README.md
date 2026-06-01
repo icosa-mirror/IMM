@@ -9,7 +9,7 @@ This folder contains the Godot 4 GDExtension-side integration for `ImmGodotPlugi
 - The sample project includes a `.gdextension` manifest that points at the staged binary locations.
 - `ImmViewerNode` now owns native backend init/shutdown and exposes a smoke API for mono camera matrix submission plus queued viewport render calls.
 - `ImmViewerNode` registers the `ImmGodotRenderAdapter` callback table and records graphics/render callback diagnostics for the smoke harness.
-- On macOS, the Forward+/Metal visual smoke path renders IMM content into Godot-owned GPU resources through `ImmViewerCompositorEffect` and verifies visible pixels in a saved PNG.
+- The visual smoke path renders IMM content into Godot-owned GPU resources through `ImmViewerCompositorEffect` and verifies visible pixels in a saved PNG. It defaults to Metal on macOS and Vulkan on Windows/Android.
 
 ## Expected dependency
 
@@ -82,7 +82,7 @@ Prerequisites:
 - Spawn-area metadata is copied through caller-owned ABI structs; names use fixed-size buffers so GDExtension callers do not own native allocations.
 - It is the handoff point for render-thread camera capture and draw callbacks in Phase 2.
 - The native backend now exposes `ImmGodot_InitEx(..., rendererApi)` plus `ImmGodot_BeginMetalFrame` / `ImmGodot_EndMetalFrame`, so the production macOS path can attach IMM's existing Metal renderer to Godot-owned Metal render resources instead of relying on the OpenGL smoke path.
-- `ImmViewerCompositorEffect` is the production render-pipeline entry point. Its render callback records `RenderSceneBuffersRD`, color texture RID, target/internal size, view count, and native command-queue/color-texture handles through `RenderingDevice.get_driver_resource`. On macOS it renders IMM Metal content into a Godot-created intermediate texture and composites that texture back into Godot's scene color through `RenderingDevice`, keeping final presentation inside Godot's render graph. To activate it, assign an instance to the **Camera3D's `compositor` property**: create a `Compositor` resource, add `ImmViewerCompositorEffect` to its `compositor_effects` array, and assign the `Compositor` to the camera. No `WorldEnvironment` is needed. In GDScript: `var effect = ImmViewerCompositorEffect.new(); var c = Compositor.new(); c.compositor_effects = [effect]; $Camera3D.compositor = c`. The `MetalVisualSmokeScene` script (`metal_visual_smoke_controller.gd`) shows the reference implementation of `_setup_compositor()`.
+- `ImmViewerCompositorEffect` is the production render-pipeline entry point. Its render callback records `RenderSceneBuffersRD`, color texture RID, target/internal size, view count, and native command-queue/color-texture handles through `RenderingDevice.get_driver_resource`. It renders IMM content into a Godot-created intermediate texture and composites that texture back into Godot's scene color through `RenderingDevice`, keeping final presentation inside Godot's render graph. To activate it, assign an instance to the **Camera3D's `compositor` property**: create a `Compositor` resource, add `ImmViewerCompositorEffect` to its `compositor_effects` array, and assign the `Compositor` to the camera. The reference scene also assigns the same compositor to a `WorldEnvironment` node so the path remains explicit when opened in the editor. In GDScript: `var effect = ImmViewerCompositorEffect.new(); var c = Compositor.new(); c.compositor_effects = [effect]; $Camera3D.compositor = c`. The `VisualSmokeScene` script (`visual_smoke_controller.gd`) shows the reference implementation of `_setup_compositor()`.
 
 ## Smoke API
 
@@ -178,7 +178,7 @@ That path currently builds and loads the native extension, instantiates `ImmView
 For the macOS Forward+/Metal visual harness, run:
 
 ```bash
-IMM_GODOT_VISUAL_SMOKE=1 IMM_GODOT_VISUAL_SMOKE_PNG=/tmp/imm-godot-metal-visual-smoke.png /Applications/Godot.app/Contents/MacOS/Godot --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/MetalVisualSmokeScene.tscn --fixed-fps 30
+IMM_GODOT_VISUAL_SMOKE=1 IMM_GODOT_VISUAL_SMOKE_PNG=/tmp/imm-godot-metal-visual-smoke.png /Applications/Godot.app/Contents/MacOS/Godot --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30
 ```
 
 This path explicitly loads the GDExtension, creates a native `ImmViewerNode`, attaches `ImmViewerCompositorEffect` to the active camera, loads `sample1.imm`, queues camera renders, saves a PNG, and requires valid Godot-owned Metal command queue/color texture handles plus a successful `ImmGodot_RenderCamera` result. The current local visual smoke passes on Godot 4.6.1, verifies non-background content pixels in the saved PNG, checks the saved image orientation, and composites the Metal intermediate into Godot scene color without an extra vertical texture-coordinate flip.

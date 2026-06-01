@@ -29,10 +29,10 @@ WORKFLOW = ROOT / ".github/workflows/build.yml"
 SCONSTRUCT = ROOT / "code/appImmGodotGDExtension/SConstruct"
 GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runner.gd"
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
-GODOT_METAL_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/metal_visual_smoke_controller.gd"
+GODOT_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
 GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
-GODOT_METAL_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/MetalVisualSmokeScene.tscn"
+GODOT_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/VisualSmokeScene.tscn"
 GODOT_EXTENSION_SOURCES = [
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp",
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm",
@@ -90,8 +90,8 @@ def verify_project_renderer() -> None:
     rendering_method = unquote(rendering_match.group(1)) if rendering_match else "forward_plus"
     if rendering_method != "forward_plus":
         raise RuntimeError(f"Unexpected sample renderer path: {rendering_method!r}")
-    if 'run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"' not in project:
-        raise RuntimeError("Godot sample project Run button must launch MetalVisualSmokeScene.tscn")
+    if 'run/main_scene="res://scenes/VisualSmokeScene.tscn"' not in project:
+        raise RuntimeError("Godot sample project Run button must launch VisualSmokeScene.tscn")
 
     print("Godot sample renderer path ok", flush=True)
 
@@ -243,10 +243,10 @@ def verify_render_thread_queue() -> None:
         raise RuntimeError("ImmViewerNode does not publish queued camera renders to ImmViewerCompositorEffect")
     if "src/imm_viewer_compositor_effect.cpp" not in sconstruct:
         raise RuntimeError("SConstruct does not build ImmViewerCompositorEffect")
-    visual_controller = GODOT_METAL_VISUAL_CONTROLLER.read_text(encoding="utf-8")
+    visual_controller = GODOT_VISUAL_CONTROLLER.read_text(encoding="utf-8")
     for token in ["IMM_GODOT_VISUAL_SMOKE", "IMM_GODOT_VISUAL_RENDERER_API", "IMM_GODOT_VISUAL_SMOKE_PNG", "IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", "_exercise_reload_cycles", "ClassDB.instantiate(\"ImmViewerNode\")", "ClassDB.instantiate(\"ImmViewerCompositorEffect\")", "Compositor.new", "camera.compositor", "_selected_renderer_api", "IMM_RENDERER_API_METAL", "IMM_RENDERER_API_VULKAN", "SAMPLE_DOCUMENT_PATH", "callback_count", "last_command_queue_handle", "last_color_texture_handle", "last_metal_frame_started", "last_vulkan_frame_started", "last_render_result", "MIN_ORIENTATION_LUMA_DELTA", "orientation_luma_delta", "visual smoke PNG orientation check failed", "IMM Godot Metal visual smoke passed", "IMM Godot Vulkan visual smoke passed"]:
         if token not in visual_controller:
-            raise RuntimeError(f"Metal visual smoke controller token is missing: {token}")
+            raise RuntimeError(f"Visual smoke controller token is missing: {token}")
 
     print("ImmViewerNode camera/viewport render queue ownership ok", flush=True)
 
@@ -285,7 +285,7 @@ def node_by_name(nodes: list[dict[str, str]], name: str) -> dict[str, str]:
 def verify_godot_scenes() -> None:
     sample_resources, sample_nodes = parse_tscn(GODOT_SAMPLE_SCENE)
     native_resources, native_nodes = parse_tscn(GODOT_NATIVE_SMOKE_SCENE)
-    visual_resources, visual_nodes = parse_tscn(GODOT_METAL_VISUAL_SCENE)
+    visual_resources, visual_nodes = parse_tscn(GODOT_VISUAL_SCENE)
 
     sample_resource_paths = {resource["path"] for resource in sample_resources}
     native_resource_paths = {resource["path"] for resource in native_resources}
@@ -299,17 +299,17 @@ def verify_godot_scenes() -> None:
         raise RuntimeError("NativeSmokeScene.tscn must not reference the script stub")
     if "res://scripts/sample_scene_controller.gd" not in native_resource_paths:
         raise RuntimeError("NativeSmokeScene.tscn does not reference sample_scene_controller.gd")
-    if "res://scripts/metal_visual_smoke_controller.gd" not in visual_resource_paths:
-        raise RuntimeError("MetalVisualSmokeScene.tscn does not reference metal_visual_smoke_controller.gd")
+    if "res://scripts/visual_smoke_controller.gd" not in visual_resource_paths:
+        raise RuntimeError("VisualSmokeScene.tscn does not reference visual_smoke_controller.gd")
     if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
-        raise RuntimeError("MetalVisualSmokeScene.tscn must not reference the script stub")
+        raise RuntimeError("VisualSmokeScene.tscn must not reference the script stub")
 
     if node_by_name(sample_nodes, "ImmViewer").get("type") != "Node":
         raise RuntimeError("SampleScene.tscn ImmViewer must be a script-backed Node")
     if node_by_name(native_nodes, "ImmViewer").get("type") != "ImmViewerNode":
         raise RuntimeError("NativeSmokeScene.tscn ImmViewer must be native ImmViewerNode")
     if any(node.get("type") == "ImmViewerNode" for node in visual_nodes):
-        raise RuntimeError("MetalVisualSmokeScene.tscn should create ImmViewerNode after explicitly loading the extension")
+        raise RuntimeError("VisualSmokeScene.tscn should create ImmViewerNode after explicitly loading the extension")
 
     for scene_name, nodes in [
         ("SampleScene.tscn", sample_nodes),
@@ -326,7 +326,7 @@ def verify_godot_scenes() -> None:
         node_by_name(native_nodes, required)
         node_by_name(visual_nodes, required)
 
-    print("Godot sample/native/Metal visual scenes ok", flush=True)
+    print("Godot sample/native/visual smoke scenes ok", flush=True)
 
 
 def verify_windows_build_wiring() -> None:
@@ -383,7 +383,7 @@ def verify_windows_build_wiring() -> None:
     for stale_text in ["not yet buildable", "future binary location", "future render callback", "still does not prove visible Metal rendering", "now attempts to build an `MTLRenderPassDescriptor`", "RenderingServer.call_on_render_thread"]:
         if stale_text in readme:
             raise RuntimeError(f"GDExtension README still contains stale status text: {stale_text}")
-    for token in ["builds locally", "Forward+/Metal visual smoke", "Godot-created intermediate texture", "final composite into scene color", "verifies non-background content pixels"]:
+    for token in ["builds locally", "visual smoke path", "Godot-created intermediate texture", "final composite into scene color", "verifies non-background content pixels"]:
         if token not in readme:
             raise RuntimeError(f"GDExtension README is missing current status token: {token}")
 
