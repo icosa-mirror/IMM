@@ -101,7 +101,7 @@ if ($RequireExtension) {
 }
 
 if (-not $SmokeScene) {
-    $SmokeScene = if ($RequireExtension) { "res://scenes/NativeSmokeScene.tscn" } else { "res://scenes/SampleScene.tscn" }
+    $SmokeScene = "res://scenes/SampleScene.tscn"
 }
 
 $godot = Resolve-GodotExe $GodotExe
@@ -125,7 +125,7 @@ if ($PreflightOnly) {
 }
 
 $env:IMM_GODOT_SMOKE_SCENE = $SmokeScene
-$env:IMM_GODOT_EXPECT_NATIVE = if ($RequireExtension) { "1" } else { "0" }
+$env:IMM_GODOT_EXPECT_NATIVE = "1"
 $env:IMM_GODOT_LOAD_UNLOAD_CYCLES = "$LoadUnloadCycles"
 $env:IMM_GODOT_RENDERER_API = "$RendererApi"
 $previousPath = $env:PATH

@@ -3,7 +3,6 @@ extends SceneTree
 const EXPECTED_RENDERER := "forward_plus"
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_SCENE := "res://scenes/SampleScene.tscn"
-const NATIVE_SCENE := "res://scenes/NativeSmokeScene.tscn"
 const CAMERA_ID := 0
 const MAX_READY_SECONDS := 12.0
 const RENDERER_API_AUTO := 0
@@ -26,15 +25,15 @@ func _run() -> void:
     if renderer != EXPECTED_RENDERER:
         failures.append("Expected renderer %s, got %s" % [EXPECTED_RENDERER, renderer])
 
-    var expected_native := OS.get_environment("IMM_GODOT_EXPECT_NATIVE") == "1"
-    if expected_native and not ClassDB.class_exists("ImmViewerNode"):
+    var expected_native := true
+    if not ClassDB.class_exists("ImmViewerNode"):
         var extension_status := GDExtensionManager.load_extension(EXTENSION_PATH)
         if extension_status != OK and extension_status != ERR_ALREADY_EXISTS:
             failures.append("Failed to load %s: %d" % [EXTENSION_PATH, int(extension_status)])
 
     var scene_path := OS.get_environment("IMM_GODOT_SMOKE_SCENE")
     if scene_path.is_empty():
-        scene_path = NATIVE_SCENE if expected_native else SAMPLE_SCENE
+        scene_path = SAMPLE_SCENE
 
     var packed_scene := load(scene_path)
     if packed_scene == null:
@@ -143,8 +142,6 @@ func _run() -> void:
     if str(backend_diagnostics.get("project_rendering_method", "")) != EXPECTED_RENDERER:
         failures.append("render backend diagnostics reported renderer %s" % str(backend_diagnostics.get("project_rendering_method", "")))
     var requested_vulkan := requested_renderer_api == 5
-    if bool(backend_diagnostics.get("metal_adapter_candidate", true)):
-        failures.append("script-stub smoke path should not report a Metal adapter candidate")
     if requested_vulkan and expected_native:
         if not bool(backend_diagnostics.get("wants_vulkan_renderer", false)):
             failures.append("native Vulkan smoke did not report wants_vulkan_renderer")
@@ -152,8 +149,6 @@ func _run() -> void:
             failures.append("native Vulkan smoke did not report a Vulkan RenderingDevice driver")
         if not bool(backend_diagnostics.get("vulkan_adapter_candidate", false)):
             failures.append("native Vulkan smoke did not report a Vulkan adapter candidate")
-    elif bool(backend_diagnostics.get("vulkan_adapter_candidate", true)):
-        failures.append("script-stub smoke path should not report a Vulkan adapter candidate")
     if int(backend_diagnostics.get("renderer_api", -1)) < 0:
         failures.append("render backend diagnostics did not report renderer_api")
     if bool(backend_diagnostics.get("native_backend_initialized", false)) != expected_native:
@@ -185,7 +180,9 @@ func _run() -> void:
             if not bool(compositor_diagnostics.get("ever_vulkan_frame_started", false)):
                 failures.append("ImmViewerCompositorEffect did not start a Vulkan frame")
 
+    var initiated_load := false
     if not viewer.is_loaded():
+        initiated_load = true
         var load_result: int = int(viewer.load_document())
         await process_frame
         await process_frame
@@ -193,14 +190,14 @@ func _run() -> void:
             failures.append("load_document returned %d" % load_result)
     if not viewer.is_loaded():
         failures.append("ImmViewer did not load %s" % str(viewer.get("document_path")))
-    if _signal_document_loaded_count <= 0:
+    if initiated_load and _signal_document_loaded_count <= 0:
         failures.append("document_loaded signal was not emitted by load_document")
-    elif _signal_last_document_loaded_path != str(viewer.get("document_path")):
+    elif _signal_document_loaded_count > 0 and _signal_last_document_loaded_path != str(viewer.get("document_path")):
         failures.append("document_loaded path %s did not match document_path %s" % [
             _signal_last_document_loaded_path,
             str(viewer.get("document_path")),
         ])
-    if bool(viewer.get("auto_play")) and _signal_playback_changed_count <= 0:
+    if initiated_load and bool(viewer.get("auto_play")) and _signal_playback_changed_count <= 0:
         failures.append("playback_changed signal was not emitted by auto-play load")
 
     var document_state: Dictionary = viewer.get_document_state()

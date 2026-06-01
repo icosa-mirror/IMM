@@ -135,7 +135,7 @@ The same local checks can be run directly on any platform with Python:
 python code\appImmGodotGDExtension\verify_local.py
 ```
 
-To include the script-stub Godot project smoke when Godot is installed:
+To include the native Godot project smoke when Godot is installed and the extension DLLs are built:
 
 ```powershell
 $env:IMM_GODOT_RUN_LOCAL_SMOKE = "1"
@@ -183,7 +183,7 @@ To check Godot executable resolution, smoke scene selection, and native dependen
 
 ## Godot Helper Behavior
 
-1. Runs `code/appImmGodotGDExtension/verify_local.py` to check sample/native API parity, `.gdextension` manifest paths, Compatibility renderer setting, script-stub/native scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the native syntax-only compile when `clang++` is available.
+1. Runs `code/appImmGodotGDExtension/verify_local.py` to check sample/native API parity, `.gdextension` manifest paths, Forward+ renderer setting, native sample scene structure, visual smoke scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the native syntax-only compile when `clang++` is available.
 2. Stops after local verification when `-VerifyOnly` is passed.
 3. Resolves `godot-cpp` from `-GodotCppPath`, `GODOT_CPP_PATH`, or `thirdparty\godot-cpp`; with `-BootstrapGodotCpp`, a full build clones `https://github.com/godotengine/godot-cpp.git` at `-GodotCppRef` when missing.
 4. Finds `MSBuild.exe`.
@@ -197,4 +197,4 @@ To check Godot executable resolution, smoke scene selection, and native dependen
    - or `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release`
 11. Runs `run-godot-smoke.ps1 -RequireExtension` when `-RunSmoke` is passed, adding `-Headed` when `-HeadedSmoke` is passed.
 
-The GitHub Actions Windows job additionally downloads Godot 4.5, caches `thirdparty\godot-cpp` by `GODOT_CPP_REF`, runs script-stub smoke before the native build with `run-godot-smoke.ps1 -LogDir artifacts\godot-smoke-script`, builds the GDExtension, then runs `run-godot-smoke.ps1 -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight`. That post-build preflight verifies the GDExtension DLL, `ImmGodotPlugin.dll`, staged IMM runtime dependency DLLs, and Godot editor lookup mirroring without launching the native IMM renderer. CI uploads both log directories as `ImmGodotSmokeLogs-Windows` and uploads the full staged DLL set plus `godot-extension-dlls.txt` as `ImmGodotGDExtension-Windows`. The full native Windows smoke remains available for local backend work through `-RunSmoke` or `run-godot-smoke.ps1 -RequireExtension`, but it is not a CI gate until Windows has a valid Godot-compatible production renderer backend. Omit `-RequireExtension` to run the script-stub `SampleScene.tscn` smoke path.
+The GitHub Actions Windows job additionally downloads Godot 4.5, caches `thirdparty\godot-cpp` by `GODOT_CPP_REF`, builds the GDExtension, then runs `run-godot-smoke.ps1 -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight`. That post-build preflight verifies the GDExtension DLL, `ImmGodotPlugin.dll`, staged IMM runtime dependency DLLs, and Godot editor lookup mirroring without launching the native IMM renderer. CI uploads the preflight log directory as `ImmGodotSmokeLogs-Windows` and uploads the full staged DLL set plus `godot-extension-dlls.txt` as `ImmGodotGDExtension-Windows`. The full native Windows smoke remains available for local backend work through `-RunSmoke` or `run-godot-smoke.ps1 -RequireExtension`, but it is not a CI gate until Windows has a valid Godot-compatible production renderer backend.

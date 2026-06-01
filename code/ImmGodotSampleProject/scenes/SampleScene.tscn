@@ -1,13 +1,19 @@
-[gd_scene format=3 uid="uid://dxrq2se1fvtxw"]
+[gd_scene load_steps=4 format=3 uid="uid://dxrq2se1fvtxw"]
 
 [ext_resource type="Script" uid="uid://bhunfscvj5yb7" path="res://scripts/sample_scene_controller.gd" id="1"]
-[ext_resource type="Script" uid="uid://dfh35qkni0xtk" path="res://addons/imm_viewer/imm_viewer_node.gd" id="2"]
+
+[sub_resource type="ImmViewerCompositorEffect" id="ImmViewerCompositorEffect_xc5g8"]
+
+[sub_resource type="Compositor" id="Compositor_bt3ie"]
+compositor_effects = Array[CompositorEffect]([SubResource("ImmViewerCompositorEffect_xc5g8")])
 
 [node name="SampleScene" type="Node3D" unique_id=1935212271]
 script = ExtResource("1")
 
-[node name="ImmViewer" type="Node" parent="." unique_id=513623797]
-script = ExtResource("2")
+[node name="ImmViewer" type="ImmViewerNode" parent="." unique_id=513623797]
+document_path = "res://../../exampleImmFiles/sample1.imm"
+load_on_ready = true
+auto_play = true
 auto_queue_render = true
 render_camera_path = NodePath("../CameraRig/Camera3D")
 
@@ -19,6 +25,7 @@ light_energy = 2.0
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 6)
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig" unique_id=993558228]
+compositor = SubResource("Compositor_bt3ie")
 current = true
 
 [node name="StatusLabel" type="Label3D" parent="." unique_id=1638710341]

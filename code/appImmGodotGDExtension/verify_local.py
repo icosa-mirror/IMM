@@ -31,7 +31,6 @@ GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runne
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
 GODOT_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
-GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
 GODOT_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/VisualSmokeScene.tscn"
 GODOT_EXTENSION_SOURCES = [
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp",
@@ -90,8 +89,8 @@ def verify_project_renderer() -> None:
     rendering_method = unquote(rendering_match.group(1)) if rendering_match else "forward_plus"
     if rendering_method != "forward_plus":
         raise RuntimeError(f"Unexpected sample renderer path: {rendering_method!r}")
-    if 'run/main_scene="res://scenes/VisualSmokeScene.tscn"' not in project:
-        raise RuntimeError("Godot sample project Run button must launch VisualSmokeScene.tscn")
+    if 'run/main_scene="uid://dxrq2se1fvtxw"' not in project and 'run/main_scene="res://scenes/SampleScene.tscn"' not in project:
+        raise RuntimeError("Godot sample project Run button must launch SampleScene.tscn")
 
     print("Godot sample renderer path ok", flush=True)
 
@@ -292,49 +291,42 @@ def node_by_name(nodes: list[dict[str, str]], name: str) -> dict[str, str]:
 
 def verify_godot_scenes() -> None:
     sample_resources, sample_nodes = parse_tscn(GODOT_SAMPLE_SCENE)
-    native_resources, native_nodes = parse_tscn(GODOT_NATIVE_SMOKE_SCENE)
     visual_resources, visual_nodes = parse_tscn(GODOT_VISUAL_SCENE)
 
     sample_resource_paths = {resource["path"] for resource in sample_resources}
-    native_resource_paths = {resource["path"] for resource in native_resources}
     visual_resource_paths = {resource["path"] for resource in visual_resources}
 
     if "res://scripts/sample_scene_controller.gd" not in sample_resource_paths:
         raise RuntimeError("SampleScene.tscn does not reference sample_scene_controller.gd")
-    if "res://addons/imm_viewer/imm_viewer_node.gd" not in sample_resource_paths:
-        raise RuntimeError("SampleScene.tscn does not reference the script stub")
-    if "res://addons/imm_viewer/imm_viewer_node.gd" in native_resource_paths:
-        raise RuntimeError("NativeSmokeScene.tscn must not reference the script stub")
-    if "res://scripts/sample_scene_controller.gd" not in native_resource_paths:
-        raise RuntimeError("NativeSmokeScene.tscn does not reference sample_scene_controller.gd")
+    if "res://addons/imm_viewer/imm_viewer_node.gd" in sample_resource_paths:
+        raise RuntimeError("SampleScene.tscn must use native ImmViewerNode, not the script stub")
     if "res://scripts/visual_smoke_controller.gd" not in visual_resource_paths:
         raise RuntimeError("VisualSmokeScene.tscn does not reference visual_smoke_controller.gd")
     if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
         raise RuntimeError("VisualSmokeScene.tscn must not reference the script stub")
 
-    if node_by_name(sample_nodes, "ImmViewer").get("type") != "Node":
-        raise RuntimeError("SampleScene.tscn ImmViewer must be a script-backed Node")
-    if node_by_name(native_nodes, "ImmViewer").get("type") != "ImmViewerNode":
-        raise RuntimeError("NativeSmokeScene.tscn ImmViewer must be native ImmViewerNode")
+    if node_by_name(sample_nodes, "ImmViewer").get("type") != "ImmViewerNode":
+        raise RuntimeError("SampleScene.tscn ImmViewer must be native ImmViewerNode")
     if any(node.get("type") == "ImmViewerNode" for node in visual_nodes):
         raise RuntimeError("VisualSmokeScene.tscn should create ImmViewerNode after explicitly loading the extension")
 
-    for scene_name, nodes in [
-        ("SampleScene.tscn", sample_nodes),
-        ("NativeSmokeScene.tscn", native_nodes),
-    ]:
-        viewer = node_by_name(nodes, "ImmViewer")
-        if viewer.get("auto_queue_render") != "true":
-            raise RuntimeError(f"{scene_name} ImmViewer must enable auto_queue_render")
-        if viewer.get("render_camera_path") != 'NodePath("../CameraRig/Camera3D")':
-            raise RuntimeError(f"{scene_name} ImmViewer must target ../CameraRig/Camera3D for render_camera_path")
+    viewer = node_by_name(sample_nodes, "ImmViewer")
+    if viewer.get("document_path") != '"res://../../exampleImmFiles/sample1.imm"':
+        raise RuntimeError("SampleScene.tscn ImmViewer must reference sample1.imm")
+    if viewer.get("load_on_ready") != "true":
+        raise RuntimeError("SampleScene.tscn ImmViewer must load on ready")
+    if viewer.get("auto_play") != "true":
+        raise RuntimeError("SampleScene.tscn ImmViewer must auto-play")
+    if viewer.get("auto_queue_render") != "true":
+        raise RuntimeError("SampleScene.tscn ImmViewer must enable auto_queue_render")
+    if viewer.get("render_camera_path") != 'NodePath("../CameraRig/Camera3D")':
+        raise RuntimeError("SampleScene.tscn ImmViewer must target ../CameraRig/Camera3D for render_camera_path")
 
     for required in ["CameraRig", "Camera3D", "StatusLabel"]:
         node_by_name(sample_nodes, required)
-        node_by_name(native_nodes, required)
         node_by_name(visual_nodes, required)
 
-    print("Godot sample/native/visual smoke scenes ok", flush=True)
+    print("Godot sample/visual smoke scenes ok", flush=True)
 
 
 def verify_windows_build_wiring() -> None:
@@ -361,11 +353,11 @@ def verify_windows_build_wiring() -> None:
     if re.search(r"^\s*class_name\s+ImmViewerNode\b", script_stub, re.MULTILINE):
         raise RuntimeError("Script stub must not claim the native ImmViewerNode class_name")
 
-    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "RendererApi", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
+    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "RendererApi", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "SampleScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
-    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "requested_renderer_api", "render backend diagnostics reported renderer_api", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "document_loaded signal was not emitted by load_document", "document_unloaded signal was not emitted by unload_document", "playback_changed signal was not emitted by auto-play load", "spawn_area_changed signal was not emitted by next/previous spawn-area navigation", "native_backend_initialized", "native_backend_failed", "did not match expected_native", "_connect_viewer_signals", "_wait_for_timeline_ready", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "set_time", "get_time", "get_play_time", "get_play_time_seconds", "seek_relative_seconds", "seek_relative_seconds(0.5) did not advance get_play_time()", "seek_relative_seconds should clamp below zero", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "override-capable layer", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_spawn_area_info", "get_active_spawn_area_info", "next_spawn_area", "previous_spawn_area", "get_active_spawn_area_index %d was outside %d authored spawn areas", "get_spawn_area_info(%d) returned an empty Dictionary", "get_active_spawn_area_info id %d did not match active spawn id %d", "next_spawn_area moved active index to %d instead of %d", "previous_spawn_area restored active index to %d instead of %d", "_validate_spawn_area_info", "_vector_is_finite", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale", "basis_x/basis_y were not orthogonal", "converted basis did not preserve right-handed orientation", "transform scale was not positive", "allow_translation", "locomotion", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "vulkan_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
+    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "SAMPLE_SCENE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "requested_renderer_api", "render backend diagnostics reported renderer_api", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "document_loaded signal was not emitted by load_document", "document_unloaded signal was not emitted by unload_document", "playback_changed signal was not emitted by auto-play load", "spawn_area_changed signal was not emitted by next/previous spawn-area navigation", "native_backend_initialized", "native_backend_failed", "did not match expected_native", "_connect_viewer_signals", "_wait_for_timeline_ready", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "set_time", "get_time", "get_play_time", "get_play_time_seconds", "seek_relative_seconds", "seek_relative_seconds(0.5) did not advance get_play_time()", "seek_relative_seconds should clamp below zero", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "override-capable layer", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_spawn_area_info", "get_active_spawn_area_info", "next_spawn_area", "previous_spawn_area", "get_active_spawn_area_index %d was outside %d authored spawn areas", "get_spawn_area_info(%d) returned an empty Dictionary", "get_active_spawn_area_info id %d did not match active spawn id %d", "next_spawn_area moved active index to %d instead of %d", "previous_spawn_area restored active index to %d instead of %d", "_validate_spawn_area_info", "_vector_is_finite", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale", "basis_x/basis_y were not orthogonal", "converted basis did not preserve right-handed orientation", "transform scale was not positive", "allow_translation", "locomotion", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "vulkan_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
         if token not in smoke_runner:
             raise RuntimeError(f"Godot smoke runner is missing token: {token}")
     if "viewer.register_render_camera(CAMERA_ID)" in smoke_runner or "viewer.unregister_render_camera(CAMERA_ID)" in smoke_runner:
@@ -375,9 +367,12 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Check Godot GDExtension staging", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Check Godot GDExtension staging", "-Configuration Release", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
+    for stale_text in ["Run Godot script smoke test", "-LogDir artifacts\\godot-smoke-script"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Windows workflow still runs the removed script-stub Godot smoke path: {stale_text}")
     for stale_text in ["Run Godot native smoke test", "-RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\\godot-smoke-native"]:
         if stale_text in workflow:
             raise RuntimeError(f"Windows workflow still treats native Godot rendering smoke as a CI gate: {stale_text}")
@@ -566,7 +561,7 @@ def verify_godot_script_smoke() -> None:
     ]
     print("+ " + " ".join(command), flush=True)
     env = os.environ.copy()
-    env["IMM_GODOT_EXPECT_NATIVE"] = "0"
+    env["IMM_GODOT_EXPECT_NATIVE"] = "1"
     env["IMM_GODOT_SMOKE_SCENE"] = "res://scenes/SampleScene.tscn"
     result = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     print(result.stdout, end="", flush=True)

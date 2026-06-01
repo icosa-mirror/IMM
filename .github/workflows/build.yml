@@ -91,10 +91,6 @@ jobs:
         }
         "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-    - name: Run Godot script smoke test
-      shell: pwsh
-      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -LogDir artifacts\godot-smoke-script
-
     - name: Build Godot GDExtension
       shell: pwsh
       run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
@@ -109,7 +105,6 @@ jobs:
       with:
         name: ImmGodotSmokeLogs-Windows
         path: |
-          artifacts/godot-smoke-script
           artifacts/godot-extension-preflight
         if-no-files-found: ignore
         retention-days: 7
