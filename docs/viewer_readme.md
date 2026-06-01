@@ -69,14 +69,15 @@ An IMM file can contain named viewpoints called spawn areas. Use the shifted num
 | `$` (Shift+4) | Jump to spawn area 3 |
 | … and so on up to `(` (Shift+9) for spawn area 8, `)` (Shift+0) for spawn area 9 |
 
-## VR vs desktop
+## Viewer settings variants
 
-Two variants of this artifact are published, both containing the same executable. The only difference is the `EnableVR` value in `settings.json`:
+The Windows artifact contains one executable and multiple settings files:
 
-- **ImmViewer-Windows** — `EnableVR` is `false`. Runs on any Windows PC.
-- **ImmViewer-Windows-VR** — `EnableVR` is `true`. Requires an Oculus headset (Rift, Rift S, or Quest via Link/Air Link) with the Oculus PC app running.
+- `settings.json` — default desktop settings.
+- `settings-vulkan-sample1.json` — Vulkan desktop playback for the bundled `sample1.imm`.
+- `settings-vr.json` — VR settings with `EnableVR` set to `true`. Requires an Oculus headset (Rift, Rift S, or Quest via Link/Air Link) with the Oculus PC app running.
 
-You can switch between modes at any time by editing `settings.json`:
+Pass the settings filename as the first command-line argument, or switch modes by editing `settings.json`:
 ```json
 "Rendering": {
   "EnableVR": true
