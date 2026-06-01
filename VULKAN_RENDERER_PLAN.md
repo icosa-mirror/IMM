@@ -1,5 +1,19 @@
 # Vulkan renderer plan
 
+## Top-level goals
+
+1. [working baseline; parity hardening remains] Working Vulkan standalone player
+   - Windows standalone `appImmViewer` renders `exampleImmFiles/sample1.imm` through `RenderingAPI: "Vulkan"` with direct GPU Vulkan picture/static-paint draw submission and swapchain presentation.
+   - Current verification compares deterministic `playerFrame=60` Vulkan output against a fresh DirectX baseline and passes the tightened smoke gate with MAE about 1.38, RMSE about 7.29, and visible-overlap about 0.927.
+   - Remaining work is standalone parity hardening: residual paint coverage/alpha/noise differences, broader sample coverage, and replacement of coarse synchronization with proper per-frame command/fence ownership.
+2. [smoke-passing; product hardening remains] Working Vulkan Godot addon for Android and Windows
+   - Windows Godot Vulkan smoke passes with Godot 4.5 Forward+ Vulkan, host `RenderingDevice` Vulkan resource handoff, compositor callbacks, and successful `sample1.imm` CPU/GPU load plus picture/static-paint draw submission.
+   - Android Godot Vulkan smoke exports, installs, runs the Vulkan visual-smoke scene, loads `sample1.imm`, captures visible output, and requires CPU/GPU load markers plus Vulkan compositor/render diagnostics.
+   - Remaining work is to broaden Godot coverage beyond the current smoke scene and keep Windows/Android packaging, runtime dependencies, and CI coverage reproducible.
+3. [open] Working Vulkan Unity Plugin for Android and Windows
+   - The existing Unity plugin already has working macOS Metal coverage, but Vulkan-specific Unity runtime integration for Windows and Android has not been completed or verified in this plan.
+   - Required work is to inspect the Unity native plugin path, define the Vulkan host-frame/device contract for Unity on Windows and Android, add renderer selection/API plumbing, add build and smoke coverage, and verify visible `sample1.imm` playback from the Unity sample project.
+
 ## Current renderer shape
 
 - `piRenderer` is the shared rendering abstraction used by the player, Unity/Godot bridges, and standalone apps.
@@ -17,17 +31,19 @@
 - The interim Windows standalone CPU raster path was useful as a visibility bridge, but the current `sample1.imm` checkpoint is rendered through Vulkan picture and static-paint GPU draw paths.
 - The Vulkan backend now has real device-local `VkImage` allocation and `VkImageView` creation for supported 2D renderer textures, including multisampled render textures, plus swapchain image views, render passes, and framebuffers for both swapchain and renderer-created render targets. Renderer buffers allocate host-visible coherent `VkBuffer` memory for vertex, index, constant, storage, indirect, and transfer use. The Windows standalone path now records Vulkan picture/static-paint draw commands and presents the resulting GPU target through the swapchain.
 
-## Acceptance target
+## Acceptance targets
 
-- The Windows standalone player must render `exampleImmFiles/sample1.imm` through `RenderingAPI: "Vulkan"` with visible output comparable to the existing base standalone rendering path.
+- Goal 1: the Windows standalone player must render `exampleImmFiles/sample1.imm` through `RenderingAPI: "Vulkan"` with visible output comparable to the existing base standalone rendering path.
+- Goal 2: the Godot addon must render `sample1.imm` through Vulkan on Windows and Android, using the host engine's Vulkan device/frame resources where required.
+- Goal 3: the Unity plugin must render `sample1.imm` through Vulkan on Windows and Android, with build and smoke coverage comparable to the standalone/Godot gates.
 - Vulkan initialization-only smoke is not sufficient.
 - Placeholder diagnostics for render target binding or draw submission are blockers, not acceptable completion criteria.
 
-## Scope for this pass
+## Completed standalone-first scope
 
 1. Add `piRenderer::API::Vulkan` without changing existing defaults.
 2. Add a Vulkan backend under `code/libImmCore/src/libRender/vulkan`.
-3. Make the backend compile in the Windows standalone build first, then keep Android integration as a follow-up target.
+3. Make the backend compile in the Windows standalone build first, then extend the verified path into Android and plugin integrations.
 4. Implement initialization, teardown, reporting, CPU-side resource wrappers, state tracking, query timing, viewport state, and unsupported-feature diagnostics.
 5. Add enough Windows standalone player selection/build wiring to instantiate and verify the Vulkan backend locally.
 6. Replace placeholder render target and draw submission paths with real Vulkan rendering for the standalone player.
@@ -53,14 +69,13 @@
 14. [complete] Verify standalone Vulkan output for `sample1.imm` against the existing base rendering behavior. The prior wrong-side/static-paint orientation blocker is fixed in the current standalone captures, and the current Vulkan smoke renders a comparable front-facing `sample1.imm` view with direct GPU presentation. Residual branch/foliage coverage and lighting/detail differences remain documented as follow-up parity work rather than a blocker for the Vulkan backend.
 15. [complete] Implement interim CPU raster output for static paint so `sample1.imm` becomes visible in the Windows standalone Vulkan-selected path before the full SPIR-V/pipeline path lands.
 
-## Follow-up work after this pass
+## Follow-up work
 
-- Define the host-frame contract for Vulkan swapchain images or Godot `RenderingDevice` textures.
-- Wire the verified Vulkan backend into the Windows Godot plugin path and add plugin-level smoke coverage.
+- Standalone: tighten residual visual parity for paint coverage/alpha/noise, broaden sample coverage, and replace temporary per-present `vkDeviceWaitIdle` synchronization with proper per-frame command/fence ownership.
+- Godot: broaden Android and Windows runtime coverage beyond the current smoke scene once more IMM samples and device classes are available, and keep packaging/runtime dependency checks in CI.
+- Unity: inspect the current Unity native plugin and sample project paths, define the Vulkan host-frame/device contract for Windows and Android, add renderer selection/API plumbing, and add Unity Vulkan build/smoke verification.
 - Expand GLSL/HLSL-to-SPIR-V shader generation beyond the player paths currently exercised by `sample1.imm`.
-- Replace the temporary per-present `vkDeviceWaitIdle` synchronization with proper per-frame command/fence ownership.
 - Broaden render pass/framebuffer compatibility, pipeline cache keys, and draw submission beyond the picture/static-paint paths covered by `sample1.imm`.
-- Broaden Android Godot runtime coverage beyond the current single visual smoke scene once more IMM samples and device classes are available.
 
 ## Verification notes
 
