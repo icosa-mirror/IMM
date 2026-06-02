@@ -710,6 +710,7 @@ jobs:
         rm -rf "$staging"
         mkdir -p "$staging"
         cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader "$staging/"
+        cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/README.md "$staging/README.md"
 
     - name: Stage ImmUnity Unity package
       shell: bash
@@ -719,6 +720,7 @@ jobs:
         rm -rf "$staging"
         mkdir -p "$staging"
         cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity "$staging/"
+        cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/README.md "$staging/README.md"
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
@@ -797,6 +799,7 @@ jobs:
         addon="artifacts/ImmGodotGDExtension/addons/imm_viewer"
         rm -rf artifacts/ImmGodotGDExtension
         mkdir -p "$addon/bin"
+        cp code/ImmGodotSampleProject/addons/imm_viewer/README.md artifacts/ImmGodotGDExtension/README.md
         # Ship the manifest verbatim - it declares every platform up front so
         # Windows/Android binaries drop in later with no manifest or layout change.
         cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension "$addon/"
@@ -1013,7 +1016,7 @@ jobs:
         zip -r ImmViewer-macOS.zip ImmViewer-macOS
         (cd upm && zip -r ../ImmStrokeReaderPlugin-Unity.zip com.immersive-foundation.imm-stroke-reader)
         (cd upm && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity)
-        (cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip addons)
+        (cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip README.md addons)
 
     - name: Verify Android APK names
       shell: bash
