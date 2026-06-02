@@ -7,19 +7,26 @@ A standalone Windows desktop player for `.imm` files.
 | File | Description |
 |------|-------------|
 | `appImmViewer_Release.exe` | The viewer executable |
-| `settings.json` | Configuration file (edit this to change what file loads) |
+| `settings.json` | Default OpenGL desktop configuration |
+| `settings-vulkan.json` | Vulkan desktop configuration |
+| `settings-opengl-vr.json` | OpenGL VR configuration |
+| `sample1.imm` | Bundled sample document loaded by the packaged settings files |
 | `viewer_settings.md` | Full reference for all settings.json fields |
 | `*.dll` | Required runtime libraries — keep these alongside the exe |
 
 ## Quick start
 
-1. Edit `settings.json` and set the path to your `.imm` file:
+1. Run `appImmViewer_Release.exe` to open the bundled `sample1.imm` with `settings.json`.
+2. To use Vulkan, run:
+   ```
+   appImmViewer_Release.exe settings-vulkan.json
+   ```
+3. To load your own `.imm` file, edit a settings file:
    ```json
    "File": {
      "Load": [ "C:/path/to/your/file.imm" ]
    }
    ```
-2. Run `appImmViewer_Release.exe`.
 
 ## Loading a different settings file
 
@@ -73,9 +80,11 @@ An IMM file can contain named viewpoints called spawn areas. Use the shifted num
 
 The Windows artifact contains one executable and multiple settings files:
 
-- `settings.json` — default desktop settings.
-- `settings-vulkan-sample1.json` — Vulkan desktop playback for the bundled `sample1.imm`.
-- `settings-vr.json` — VR settings with `EnableVR` set to `true`. Requires an Oculus headset (Rift, Rift S, or Quest via Link/Air Link) with the Oculus PC app running.
+- `settings.json` — default OpenGL desktop settings.
+- `settings-vulkan.json` — Vulkan desktop playback.
+- `settings-opengl-vr.json` — OpenGL VR playback. Requires an Oculus headset (Rift, Rift S, or Quest via Link/Air Link) with the Oculus PC app running.
+
+Each packaged settings file loads the bundled `sample1.imm` from the same directory as `appImmViewer_Release.exe`.
 
 Pass the settings filename as the first command-line argument, or switch modes by editing `settings.json`:
 ```json
@@ -86,7 +95,15 @@ Pass the settings filename as the first command-line argument, or switch modes b
 
 ## File paths in settings.json
 
-Paths in `settings.json` are resolved relative to the exe's directory. For files outside that directory use an absolute path:
+In the packaged artifact, `sample1.imm` is beside `appImmViewer_Release.exe`, so the packaged settings use:
+
+```json
+"File": {
+  "Load": [ "sample1.imm" ]
+}
+```
+
+For files outside the viewer directory use an absolute path:
 
 ```json
 "File": {

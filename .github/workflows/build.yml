@@ -176,20 +176,26 @@ jobs:
         $staging = "viewer_artifact"
         New-Item -ItemType Directory -Force $staging | Out-Null
         Copy-Item code/appImmViewer/exe/appImmViewer_Release.exe $staging
-        Copy-Item code/appImmViewer/exe/settings.json $staging
-        Copy-Item code/appImmViewer/exe/settings-vulkan-smoke.json (Join-Path $staging "settings-vulkan-sample1.json")
         Copy-Item exampleImmFiles/sample1.imm $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
         Copy-Item docs/viewer_readme.md $staging/README.md
-        $vrSettingsPath = Join-Path $staging "settings-vr.json"
-        Copy-Item code/appImmViewer/exe/settings.json $vrSettingsPath
-        $json = Get-Content $vrSettingsPath -Raw | ConvertFrom-Json
-        $json.Rendering.EnableVR = $true
-        $json.Rendering.RenderingAPI = "OpenGL"
-        $jsonText = $json | ConvertTo-Json -Depth 6
+
+        function Write-PackagedViewerSettings($SourcePath, $OutputName, $RenderingApi, $EnableVr) {
+          $outputPath = Join-Path $staging $OutputName
+          Copy-Item $SourcePath $outputPath
+          $json = Get-Content $outputPath -Raw | ConvertFrom-Json
+          $json.File.Load = @("sample1.imm")
+          $json.Rendering.RenderingAPI = $RenderingApi
+          $json.Rendering.EnableVR = $EnableVr
+          $jsonText = $json | ConvertTo-Json -Depth 6
+          [System.IO.File]::WriteAllText($outputPath, $jsonText, $utf8NoBom)
+        }
+
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($vrSettingsPath, $jsonText, $utf8NoBom)
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings.json "settings.json" "OpenGL" $false
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings-vulkan-smoke.json "settings-vulkan.json" "Vulkan" $false
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings.json "settings-opengl-vr.json" "OpenGL" $true
 
     - name: Upload Windows Viewer Executable
       uses: actions/upload-artifact@v4
