@@ -29,6 +29,7 @@ WORKFLOW = ROOT / ".github/workflows/build.yml"
 SCONSTRUCT = ROOT / "code/appImmGodotGDExtension/SConstruct"
 GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runner.gd"
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
+GODOT_ADDON_README = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/README.md"
 GODOT_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
 GODOT_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/VisualSmokeScene.tscn"
@@ -334,6 +335,7 @@ def verify_windows_build_wiring() -> None:
     smoke_helper = WINDOWS_SMOKE_HELPER.read_text(encoding="utf-8")
     smoke_runner = GODOT_SMOKE_RUNNER.read_text(encoding="utf-8")
     script_stub = GODOT_SCRIPT_STUB.read_text(encoding="utf-8")
+    godot_addon_readme = GODOT_ADDON_README.read_text(encoding="utf-8")
     sconstruct = SCONSTRUCT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -352,6 +354,9 @@ def verify_windows_build_wiring() -> None:
 
     if re.search(r"^\s*class_name\s+ImmViewerNode\b", script_stub, re.MULTILINE):
         raise RuntimeError("Script stub must not claim the native ImmViewerNode class_name")
+    for token in ["Install in a new Godot project", "Create a new playback scene", "res://sample1.imm", "ImmViewerCompositorEffect", "auto_queue_render", "render_camera_path"]:
+        if token not in godot_addon_readme:
+            raise RuntimeError(f"Godot addon README is missing setup token: {token}")
 
     for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "RendererApi", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "SampleScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
@@ -373,7 +378,7 @@ def verify_windows_build_wiring() -> None:
     for token in ["Smoke macOS Metal standalone viewer", "IMM_METAL_VALIDATE_EXPECTED_VALUES=0", "Download Godot for macOS", "code/appImmGodotGDExtension", "Smoke macOS Godot Metal visual playback", "ImmGodotSmokeLogs-macOS", "Internal-ImmGodotGDExtension-macOS-platform", "ImmViewer-macOS"]:
         if token not in workflow:
             raise RuntimeError(f"macOS workflow is missing Metal/Godot coverage token: {token}")
-    for token in ["build-windows", "build-android", "Internal-ImmGodotGDExtension-*-platform", "Internal-ImmGodotGDExtension-", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
+    for token in ["build-windows", "build-android", "Internal-ImmGodotGDExtension-*-platform", "Internal-ImmGodotGDExtension-", "cp code/ImmGodotSampleProject/addons/imm_viewer/README.md \"$addon/\"", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
         if token not in workflow:
             raise RuntimeError(f"Godot packaging workflow is missing platform merge token: {token}")
     for token in ["Internal-ImmStrokeReaderPlugin-Windows", "Internal-ImmStrokeReaderPlugin-Android", "Internal-ImmStrokeReaderPlugin-macOS", "Internal-ImmStrokeReaderPlugin-iOS", "Internal-ImmViewerPlugin-Windows", "Internal-ImmViewerPlugin-Android", "Internal-ImmViewerPlugin-macOS", "Internal-ImmViewerPlugin-iOS"]:
