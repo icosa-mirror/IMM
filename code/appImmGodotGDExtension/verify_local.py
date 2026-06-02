@@ -379,7 +379,7 @@ def verify_windows_build_wiring() -> None:
     for token in ["Internal-ImmStrokeReaderPlugin-Windows", "Internal-ImmStrokeReaderPlugin-Android", "Internal-ImmStrokeReaderPlugin-macOS", "Internal-ImmStrokeReaderPlugin-iOS", "Internal-ImmViewerPlugin-Windows", "Internal-ImmViewerPlugin-Android", "Internal-ImmViewerPlugin-macOS", "Internal-ImmViewerPlugin-iOS"]:
         if token not in workflow:
             raise RuntimeError(f"Unity packaging workflow is missing internal platform artifact token: {token}")
-    for token in ["Stage Android Viewer APKs", "Upload Android Viewer APKs", "Verify Android APK names", "ImmViewer-Windows.zip", "ImmViewer-macOS.zip", "ImmPlayerPlugin-Unity", "ImmStrokeReaderPlugin-Unity", "ImmPlayerPlugin-Godot", "ImmPlayerPlugin-Godot.zip", "release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk"]:
+    for token in ["Stage Android Viewer APKs", "Upload Android Viewer APKs", "Verify Android APK names", "ImmViewer-Windows.zip", "ImmViewer-macOS.zip", "ImmPlayerPlugin-Unity", "ImmStrokeReaderPlugin-Unity", "ImmPlayerPlugin-Godot", "ImmPlayerPlugin-Godot.zip", "release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk", "release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk", "release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk", "(cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip addons)", "(cd upm && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity)"]:
         if token not in workflow:
             raise RuntimeError(f"Release workflow is missing supported viewer artifact token: {token}")
     for stale_text in ["name: ImmViewerMetal-macOS", "ImmViewerMetal-macOS.zip", "name: ImmViewerPlugin-UPM", "ImmViewerPlugin-UPM.zip", "name: ImmStrokeReaderPlugin-UPM", "ImmStrokeReaderPlugin-UPM.zip", "name: ImmGodotGDExtension", "release-assets/ImmGodotGDExtension", "ImmGodotGDExtension.zip", "code/appImmPlayerPlugin-Godot", "Internal-ImmPlayerPlugin-Godot-platform"]:
@@ -388,6 +388,9 @@ def verify_windows_build_wiring() -> None:
     for stale_text in ["name: ImmViewer-Android-VR", "name: ImmViewer-Android-Vulkan", "release-assets/ImmViewer-Android-VR", "release-assets/ImmViewer-Android-Vulkan"]:
         if stale_text in workflow:
             raise RuntimeError(f"Workflow still publishes a split Android viewer artifact: {stale_text}")
+    for stale_text in ["ImmViewer-Android.apk", "ImmViewer-Android-VR.apk", "release-assets/upm/ImmStrokeReaderPlugin-Unity.zip", "release-assets/upm/ImmPlayerPlugin-Unity.zip", "zip -r ImmPlayerPlugin-Godot.zip ImmPlayerPlugin-Godot", "path: ImmStrokeReaderPlugin-Unity.zip", "path: ImmPlayerPlugin-Unity.zip"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still uses an old packaged artifact layout: {stale_text}")
     for stale_text in ["name: ImmViewerVulkan-Windows", "name: ImmViewer-Windows-VR", "ImmViewerVulkan-Windows.zip", "ImmViewer-Windows-VR.zip", "release-assets/ImmViewerVulkan-Windows", "release-assets/ImmViewer-Windows-VR"]:
         if stale_text in workflow:
             raise RuntimeError(f"Workflow still publishes a split Windows viewer artifact: {stale_text}")

@@ -13,7 +13,7 @@ Recommended cleanup order:
 
 2. Merge Android viewer APKs into one Android viewer artifact folder.
    - `ImmViewer-Android`, `ImmViewer-Android-Vulkan`, and `ImmViewer-Android-VR` may remain separate APK builds because Gradle properties change renderer/VR mode.
-   - They can still be uploaded as one artifact, for example `ImmViewer-Android`, containing clearly named APKs such as default, Vulkan, and VR variants.
+   - They can still be uploaded as one artifact, for example `ImmViewer-Android`, containing clearly named APKs such as OpenGL, OpenGL VR, and Vulkan variants.
    - Update release packaging to normalize those APK names from the combined artifact.
 
 3. Leave plugin platform artifacts as intermediate unless they are renamed clearly as internal build artifacts.
@@ -23,6 +23,8 @@ Recommended cleanup order:
 
 4. Keep final user-facing artifacts distinct by product.
    - Keep `ImmPlayerPlugin-Unity`, `ImmStrokeReaderPlugin-Unity`, and `ImmPlayerPlugin-Godot` as separate final artifacts.
+   - Unity plugin artifacts should contain raw package folders, not zip files, because GitHub Actions already wraps artifact downloads in a zip. Release packaging should create `ImmPlayerPlugin-Unity.zip` and `ImmStrokeReaderPlugin-Unity.zip` exactly once from those raw package folders.
+   - The Godot release zip should have `addons/` at its root so unzipping into a Godot project root creates `addons/imm_viewer/...`; it should not wrap that folder under `ImmPlayerPlugin-Godot/`.
    - Keep smoke log artifacts such as `ImmGodotSmokeLogs-*` and `ImmViewerVulkanSmokeLogs-Windows` separate and failure-only.
    - Treat `Internal-ImmGodotGDExtension-{Windows,Android,macOS}-platform` as intermediate artifacts that are merged into the final `ImmPlayerPlugin-Godot` addon.
 

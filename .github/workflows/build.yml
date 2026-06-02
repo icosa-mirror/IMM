@@ -349,8 +349,8 @@ jobs:
           echo "Missing Vulkan Android viewer APK"
           exit 1
         fi
-        cp "${default_apk[0]}" "$staging/ImmViewer-Android.apk"
-        cp "${vr_apk[0]}" "$staging/ImmViewer-Android-VR.apk"
+        cp "${default_apk[0]}" "$staging/ImmViewer-Android-OpenGL.apk"
+        cp "${vr_apk[0]}" "$staging/ImmViewer-Android-OpenGL-VR.apk"
         cp "${vulkan_apk[0]}" "$staging/ImmViewer-Android-Vulkan.apk"
 
     - name: Upload Android Viewer APKs
@@ -702,32 +702,36 @@ jobs:
         cp -R artifacts/Internal-ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
         cp artifacts/Internal-ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
 
-    - name: Archive stroke reader UPM package
+    - name: Stage stroke reader Unity package
       shell: bash
       run: |
         set -euo pipefail
-        cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-Unity.zip" com.immersive-foundation.imm-stroke-reader
+        staging="artifacts/ImmStrokeReaderPlugin-Unity"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader "$staging/"
 
-    - name: Archive ImmUnity UPM package
+    - name: Stage ImmUnity Unity package
       shell: bash
       run: |
         set -euo pipefail
-        cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmPlayerPlugin-Unity.zip" com.immersive-foundation.imm-unity
+        staging="artifacts/ImmPlayerPlugin-Unity"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity "$staging/"
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
       with:
         name: ImmStrokeReaderPlugin-Unity
-        path: ImmStrokeReaderPlugin-Unity.zip
+        path: artifacts/ImmStrokeReaderPlugin-Unity
         if-no-files-found: error
 
     - name: Upload ImmUnity UPM package
       uses: actions/upload-artifact@v4
       with:
         name: ImmPlayerPlugin-Unity
-        path: ImmPlayerPlugin-Unity.zip
+        path: artifacts/ImmPlayerPlugin-Unity
         if-no-files-found: error
 
     - name: Delete intermediate plugin artifacts
@@ -906,11 +910,8 @@ jobs:
       run: |
         set -euo pipefail
 
-        unzip -q upm/ImmStrokeReaderPlugin-Unity.zip -d upm/stroke
-        unzip -q upm/ImmPlayerPlugin-Unity.zip       -d upm/unity
-
-        stroke_src="upm/stroke/com.immersive-foundation.imm-stroke-reader/Plugins"
-        unity_src="upm/unity/com.immersive-foundation.imm-unity/Plugins"
+        stroke_src="upm/com.immersive-foundation.imm-stroke-reader/Plugins"
+        unity_src="upm/com.immersive-foundation.imm-unity/Plugins"
         stroke_dst="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins"
         unity_dst="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins"
 
@@ -1009,14 +1010,16 @@ jobs:
         cd release-assets
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
         zip -r ImmViewer-macOS.zip ImmViewer-macOS
-        zip -r ImmPlayerPlugin-Godot.zip ImmPlayerPlugin-Godot
+        (cd upm && zip -r ../ImmStrokeReaderPlugin-Unity.zip com.immersive-foundation.imm-stroke-reader)
+        (cd upm && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity)
+        (cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip addons)
 
     - name: Verify Android APK names
       shell: bash
       run: |
         set -euo pipefail
-        test -f release-assets/ImmViewer-Android/ImmViewer-Android.apk
-        test -f release-assets/ImmViewer-Android/ImmViewer-Android-VR.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk
 
     - name: Compute release metadata
@@ -1050,13 +1053,13 @@ jobs:
           --title "${{ steps.release_meta.outputs.release_tag }}" \
           --generate-notes \
           --notes "$release_notes" \
-          release-assets/upm/ImmStrokeReaderPlugin-Unity.zip \
-          release-assets/upm/ImmPlayerPlugin-Unity.zip \
+          release-assets/ImmStrokeReaderPlugin-Unity.zip \
+          release-assets/ImmPlayerPlugin-Unity.zip \
           release-assets/ImmViewer-Windows.zip \
           release-assets/ImmViewer-macOS.zip \
           release-assets/ImmPlayerPlugin-Godot.zip \
-          release-assets/ImmViewer-Android/ImmViewer-Android.apk \
-          release-assets/ImmViewer-Android/ImmViewer-Android-VR.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
           release-assets/ImmViewer-Windows/sample1.imm
 
@@ -1112,8 +1115,8 @@ jobs:
           -exec rm -rf {} +
 
         mkdir -p Packages
-        unzip -q "$RUNNER_TEMP/upm/ImmStrokeReaderPlugin-Unity.zip" -d Packages
-        unzip -q "$RUNNER_TEMP/upm/ImmPlayerPlugin-Unity.zip" -d Packages
+        cp -R "$RUNNER_TEMP/upm/com.immersive-foundation.imm-stroke-reader" Packages/
+        cp -R "$RUNNER_TEMP/upm/com.immersive-foundation.imm-unity" Packages/
 
         git add Packages
 
