@@ -19,7 +19,7 @@ This project mirrors the intent of the Unity sample project and exercises the na
 
 ## Using the addon in a new project
 
-The CI artifact (`ImmGodotGDExtension-macOS`) is a self-contained `addons/imm_viewer/` folder. Copy it into your Godot project's root so you have `res://addons/imm_viewer/`.
+The CI artifact (`ImmPlayerPlugin-Godot`) is a self-contained `addons/imm_viewer/` folder. Copy it into your Godot project's root so you have `res://addons/imm_viewer/`.
 
 ### macOS quarantine (required after downloading from CI)
 

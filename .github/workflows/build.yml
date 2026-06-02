@@ -417,7 +417,7 @@ jobs:
         fi
         arch="$(uname -m)"
         python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
-        python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$GITHUB_WORKSPACE/thirdparty/godot-cpp" imm_godot_lib="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib"
+        python3 -m SCons -C code/appImmPlayerPlugin-Godot platform=macos target=template_release arch="$arch" godot_cpp="$GITHUB_WORKSPACE/thirdparty/godot-cpp" imm_godot_lib="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib"
 
     - name: Sign macOS Godot GDExtension dylibs (if unsigned)
       run: |
@@ -473,8 +473,8 @@ jobs:
     - name: Stage macOS Godot GDExtension binaries
       run: |
         set -euo pipefail
-        staging="artifacts/Internal-ImmGodotGDExtension-macOS-platform/bin/macos/release"
-        rm -rf artifacts/Internal-ImmGodotGDExtension-macOS-platform
+        staging="artifacts/Internal-ImmPlayerPlugin-Godot-platform/bin/macos/release"
+        rm -rf artifacts/Internal-ImmPlayerPlugin-Godot-platform
         mkdir -p "$staging"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib "$staging/"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
@@ -484,8 +484,8 @@ jobs:
     - name: Upload macOS Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: Internal-ImmGodotGDExtension-macOS-platform
-        path: artifacts/Internal-ImmGodotGDExtension-macOS-platform
+        name: Internal-ImmPlayerPlugin-Godot-platform
+        path: artifacts/Internal-ImmPlayerPlugin-Godot-platform
         if-no-files-found: error
         retention-days: 1
 
@@ -498,7 +498,7 @@ jobs:
     - name: Package macOS Metal standalone viewer app bundle
       run: |
         set -euo pipefail
-        staging="artifacts/ImmViewerMetal-macOS"
+        staging="artifacts/ImmViewer-macOS"
         app="build/macos/viewer/appImmViewerMetal.app"
         rm -rf "$staging"
         mkdir -p "$staging"
@@ -510,9 +510,9 @@ jobs:
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerMetal-macOS
+        name: ImmViewer-macOS
         path: |
-          artifacts/ImmViewerMetal-macOS
+          artifacts/ImmViewer-macOS
         if-no-files-found: error
 
     - name: Build macOS Stroke Reader plugin
@@ -701,27 +701,27 @@ jobs:
       run: |
         set -euo pipefail
         cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-UPM.zip" com.immersive-foundation.imm-stroke-reader
+        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-Unity.zip" com.immersive-foundation.imm-stroke-reader
 
     - name: Archive ImmUnity UPM package
       shell: bash
       run: |
         set -euo pipefail
         cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmViewerPlugin-UPM.zip" com.immersive-foundation.imm-unity
+        zip -r "$GITHUB_WORKSPACE/ImmPlayerPlugin-Unity.zip" com.immersive-foundation.imm-unity
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
-        path: ImmStrokeReaderPlugin-UPM.zip
+        name: ImmStrokeReaderPlugin-Unity
+        path: ImmStrokeReaderPlugin-Unity.zip
         if-no-files-found: error
 
     - name: Upload ImmUnity UPM package
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
-        path: ImmViewerPlugin-UPM.zip
+        name: ImmPlayerPlugin-Unity
+        path: ImmPlayerPlugin-Unity.zip
         if-no-files-found: error
 
     - name: Delete intermediate plugin artifacts
@@ -834,7 +834,7 @@ jobs:
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4
       with:
-        name: ImmGodotGDExtension
+        name: ImmPlayerPlugin-Godot
         path: artifacts/ImmGodotGDExtension
         if-no-files-found: error
 
@@ -880,19 +880,19 @@ jobs:
     - name: Download stroke reader UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
+        name: ImmStrokeReaderPlugin-Unity
         path: upm
 
     - name: Download ImmUnity UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
+        name: ImmPlayerPlugin-Unity
         path: upm
 
     - name: Download Godot GDExtension addon
       uses: actions/download-artifact@v4
       with:
-        name: ImmGodotGDExtension
+        name: ImmPlayerPlugin-Godot
         path: artifacts/ImmGodotGDExtension
 
     - name: Extract and sync plugin binaries
@@ -900,8 +900,8 @@ jobs:
       run: |
         set -euo pipefail
 
-        unzip -q upm/ImmStrokeReaderPlugin-UPM.zip -d upm/stroke
-        unzip -q upm/ImmViewerPlugin-UPM.zip       -d upm/unity
+        unzip -q upm/ImmStrokeReaderPlugin-Unity.zip -d upm/stroke
+        unzip -q upm/ImmPlayerPlugin-Unity.zip       -d upm/unity
 
         stroke_src="upm/stroke/com.immersive-foundation.imm-stroke-reader/Plugins"
         unity_src="upm/unity/com.immersive-foundation.imm-unity/Plugins"
@@ -960,16 +960,16 @@ jobs:
       actions: read
 
     steps:
-    - name: Download UPM packages
+    - name: Download Unity stroke reader package
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
+        name: ImmStrokeReaderPlugin-Unity
         path: release-assets/upm
 
-    - name: Download UPM packages (ImmViewer)
+    - name: Download Unity player package
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
+        name: ImmPlayerPlugin-Unity
         path: release-assets/upm
 
     - name: Download Windows viewer
@@ -987,14 +987,14 @@ jobs:
     - name: Download macOS Metal viewer
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerMetal-macOS
-        path: release-assets/ImmViewerMetal-macOS
+        name: ImmViewer-macOS
+        path: release-assets/ImmViewer-macOS
 
     - name: Download Godot GDExtension addon
       uses: actions/download-artifact@v4
       with:
-        name: ImmGodotGDExtension
-        path: release-assets/ImmGodotGDExtension
+        name: ImmPlayerPlugin-Godot
+        path: release-assets/ImmPlayerPlugin-Godot
 
     - name: Zip Windows viewer artifacts
       shell: bash
@@ -1002,8 +1002,8 @@ jobs:
         set -euo pipefail
         cd release-assets
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
-        zip -r ImmViewerMetal-macOS.zip ImmViewerMetal-macOS
-        zip -r ImmGodotGDExtension.zip ImmGodotGDExtension
+        zip -r ImmViewer-macOS.zip ImmViewer-macOS
+        zip -r ImmPlayerPlugin-Godot.zip ImmPlayerPlugin-Godot
 
     - name: Verify Android APK names
       shell: bash
@@ -1044,11 +1044,11 @@ jobs:
           --title "${{ steps.release_meta.outputs.release_tag }}" \
           --generate-notes \
           --notes "$release_notes" \
-          release-assets/upm/ImmStrokeReaderPlugin-UPM.zip \
-          release-assets/upm/ImmViewerPlugin-UPM.zip \
+          release-assets/upm/ImmStrokeReaderPlugin-Unity.zip \
+          release-assets/upm/ImmPlayerPlugin-Unity.zip \
           release-assets/ImmViewer-Windows.zip \
-          release-assets/ImmViewerMetal-macOS.zip \
-          release-assets/ImmGodotGDExtension.zip \
+          release-assets/ImmViewer-macOS.zip \
+          release-assets/ImmPlayerPlugin-Godot.zip \
           release-assets/ImmViewer-Android/ImmViewer-Android.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-VR.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
@@ -1073,13 +1073,13 @@ jobs:
     - name: Download stroke reader UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
+        name: ImmStrokeReaderPlugin-Unity
         path: ${{ runner.temp }}/upm
 
     - name: Download ImmUnity UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
+        name: ImmPlayerPlugin-Unity
         path: ${{ runner.temp }}/upm
 
     - name: Publish package contents to upm branch
@@ -1106,8 +1106,8 @@ jobs:
           -exec rm -rf {} +
 
         mkdir -p Packages
-        unzip -q "$RUNNER_TEMP/upm/ImmStrokeReaderPlugin-UPM.zip" -d Packages
-        unzip -q "$RUNNER_TEMP/upm/ImmViewerPlugin-UPM.zip" -d Packages
+        unzip -q "$RUNNER_TEMP/upm/ImmStrokeReaderPlugin-Unity.zip" -d Packages
+        unzip -q "$RUNNER_TEMP/upm/ImmPlayerPlugin-Unity.zip" -d Packages
 
         git add Packages
 

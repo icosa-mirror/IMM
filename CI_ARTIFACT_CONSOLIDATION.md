@@ -22,8 +22,8 @@ Recommended cleanup order:
    - Keep them separate but prefixed with `Internal-` so they read as package-job inputs, not user-facing downloads.
 
 4. Keep final user-facing artifacts distinct by product.
-   - Keep `ImmViewerPlugin-UPM`, `ImmStrokeReaderPlugin-UPM`, and `ImmGodotGDExtension` as separate final artifacts.
+   - Keep `ImmPlayerPlugin-Unity`, `ImmStrokeReaderPlugin-Unity`, and `ImmPlayerPlugin-Godot` as separate final artifacts.
    - Keep smoke log artifacts such as `ImmGodotSmokeLogs-*` and `ImmViewerVulkanSmokeLogs-Windows` separate and failure-only.
-   - Treat `Internal-ImmGodotGDExtension-{Windows,Android,macOS}-platform` as intermediate artifacts that are merged into the final `ImmGodotGDExtension` addon.
+   - Treat `Internal-ImmGodotGDExtension-{Windows,Android,macOS}-platform` as intermediate artifacts that are merged into the final `ImmPlayerPlugin-Godot` addon.
 
 When changing the workflow, update `code/appImmGodotGDExtension/verify_local.py` token checks and rerun it. Also update release download/zip steps so GitHub releases still contain the intended user-facing packages.
