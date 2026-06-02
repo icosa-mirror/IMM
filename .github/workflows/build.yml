@@ -417,7 +417,7 @@ jobs:
         fi
         arch="$(uname -m)"
         python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
-        python3 -m SCons -C code/appImmPlayerPlugin-Godot platform=macos target=template_release arch="$arch" godot_cpp="$GITHUB_WORKSPACE/thirdparty/godot-cpp" imm_godot_lib="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib"
+        python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$GITHUB_WORKSPACE/thirdparty/godot-cpp" imm_godot_lib="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$GITHUB_WORKSPACE/build/macos/godot/libImmGodotPlugin.dylib"
 
     - name: Sign macOS Godot GDExtension dylibs (if unsigned)
       run: |
