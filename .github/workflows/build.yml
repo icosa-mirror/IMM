@@ -473,8 +473,8 @@ jobs:
     - name: Stage macOS Godot GDExtension binaries
       run: |
         set -euo pipefail
-        staging="artifacts/Internal-ImmPlayerPlugin-Godot-platform/bin/macos/release"
-        rm -rf artifacts/Internal-ImmPlayerPlugin-Godot-platform
+        staging="artifacts/Internal-ImmGodotGDExtension-macOS-platform/bin/macos/release"
+        rm -rf artifacts/Internal-ImmGodotGDExtension-macOS-platform
         mkdir -p "$staging"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib "$staging/"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
@@ -484,8 +484,8 @@ jobs:
     - name: Upload macOS Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: Internal-ImmPlayerPlugin-Godot-platform
-        path: artifacts/Internal-ImmPlayerPlugin-Godot-platform
+        name: Internal-ImmGodotGDExtension-macOS-platform
+        path: artifacts/Internal-ImmGodotGDExtension-macOS-platform
         if-no-files-found: error
         retention-days: 1
 

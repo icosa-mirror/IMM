@@ -370,7 +370,7 @@ def verify_windows_build_wiring() -> None:
     for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "IMM_CI_ENABLE_GPU_SMOKE", "Capture Windows DirectX standalone baseline", "Smoke Windows Vulkan standalone viewer", "ImmViewerVulkanSmokeLogs-Windows", "Check Godot GDExtension staging", "Smoke Windows Godot Vulkan playback", "IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE", "-Configuration Release", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "Upload Windows Godot GDExtension platform binaries", "Internal-ImmGodotGDExtension-Windows-platform", "Package Windows Viewer Artifact", "ImmViewer-Windows", "settings-vulkan-sample1.json", "settings-vr.json"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
-    for token in ["Smoke macOS Metal standalone viewer", "IMM_METAL_VALIDATE_EXPECTED_VALUES=0", "Download Godot for macOS", "code/appImmGodotGDExtension", "Smoke macOS Godot Metal visual playback", "ImmGodotSmokeLogs-macOS", "ImmViewer-macOS"]:
+    for token in ["Smoke macOS Metal standalone viewer", "IMM_METAL_VALIDATE_EXPECTED_VALUES=0", "Download Godot for macOS", "code/appImmGodotGDExtension", "Smoke macOS Godot Metal visual playback", "ImmGodotSmokeLogs-macOS", "Internal-ImmGodotGDExtension-macOS-platform", "ImmViewer-macOS"]:
         if token not in workflow:
             raise RuntimeError(f"macOS workflow is missing Metal/Godot coverage token: {token}")
     for token in ["build-windows", "build-android", "Internal-ImmGodotGDExtension-*-platform", "Internal-ImmGodotGDExtension-", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
@@ -382,7 +382,7 @@ def verify_windows_build_wiring() -> None:
     for token in ["Stage Android Viewer APKs", "Upload Android Viewer APKs", "Verify Android APK names", "ImmViewer-Windows.zip", "ImmViewer-macOS.zip", "ImmPlayerPlugin-Unity", "ImmStrokeReaderPlugin-Unity", "ImmPlayerPlugin-Godot", "ImmPlayerPlugin-Godot.zip", "release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk"]:
         if token not in workflow:
             raise RuntimeError(f"Release workflow is missing supported viewer artifact token: {token}")
-    for stale_text in ["name: ImmViewerMetal-macOS", "ImmViewerMetal-macOS.zip", "name: ImmViewerPlugin-UPM", "ImmViewerPlugin-UPM.zip", "name: ImmStrokeReaderPlugin-UPM", "ImmStrokeReaderPlugin-UPM.zip", "name: ImmGodotGDExtension", "release-assets/ImmGodotGDExtension", "ImmGodotGDExtension.zip", "code/appImmPlayerPlugin-Godot"]:
+    for stale_text in ["name: ImmViewerMetal-macOS", "ImmViewerMetal-macOS.zip", "name: ImmViewerPlugin-UPM", "ImmViewerPlugin-UPM.zip", "name: ImmStrokeReaderPlugin-UPM", "ImmStrokeReaderPlugin-UPM.zip", "name: ImmGodotGDExtension", "release-assets/ImmGodotGDExtension", "ImmGodotGDExtension.zip", "code/appImmPlayerPlugin-Godot", "Internal-ImmPlayerPlugin-Godot-platform"]:
         if stale_text in workflow:
             raise RuntimeError(f"Workflow still publishes an old final artifact name: {stale_text}")
     for stale_text in ["name: ImmViewer-Android-VR", "name: ImmViewer-Android-Vulkan", "release-assets/ImmViewer-Android-VR", "release-assets/ImmViewer-Android-Vulkan"]:
