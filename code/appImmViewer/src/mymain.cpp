@@ -794,7 +794,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     mLog.Printf(LT_MESSAGE, L"Initializing resolve");
-    if (!mResolve.Init(mRenderer, mSuperSample, AA))
+    if (!mResolve.Init(mRenderer, mSuperSample, AA, Resolve::OutputEncoding::DisplaySrgb))
     {
         mLog.Printf(LT_ERROR, L"Resolve init failed");
         mSettings.End();

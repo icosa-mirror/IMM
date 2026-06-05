@@ -1446,6 +1446,14 @@ struct piVulkanState
     VkDescriptorPool pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
     VkDescriptorSet pictureDescriptorSet = VK_NULL_DESCRIPTOR_SET;
     VkPipelineLayout picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+    VkDescriptorSetLayout presentDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+    VkDescriptorPool presentDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+    VkDescriptorSet presentDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+    VkPipelineLayout presentPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+    VkShaderModule presentVertexModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule presentFragmentModule = VK_NULL_SHADER_MODULE;
+    VkPipeline presentPipeline = VK_NULL_PIPELINE;
+    VkSampler presentSampler = VK_NULL_SAMPLER;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -1458,6 +1466,10 @@ struct piVulkanState
     bool picturePipelineReported = false;
     bool pictureDrawReported = false;
     bool pictureDrawFailureReported = false;
+    bool presentLayoutReported = false;
+    bool presentDescriptorReported = false;
+    bool presentPipelineReported = false;
+    bool presentPassReported = false;
     uint32_t cpuPaintDrawCount = 0;
     uint32_t gpuPaintDrawCount = 0;
     uint64_t liveRenderTargets = 0;
@@ -1638,6 +1650,20 @@ static uint8_t iFloatToByte(float value)
     return (uint8_t)(value * 255.0f + 0.5f);
 }
 
+static uint8_t iLinearFloatToSrgbByte(float value)
+{
+    if (value <= 0.0f)
+    {
+        return 0;
+    }
+    if (value >= 1.0f)
+    {
+        return 255;
+    }
+    const float encoded = value < 0.0031308f ? value * 12.92f : 1.055f * std::pow(value, 1.0f / 2.4f) - 0.055f;
+    return iFloatToByte(encoded);
+}
+
 static void iConvertB10G11R11ToRgba8(uint8_t *dst, const uint8_t *src, size_t pixelCount)
 {
     for (size_t i = 0; i < pixelCount; ++i)
@@ -1647,9 +1673,9 @@ static void iConvertB10G11R11ToRgba8(uint8_t *dst, const uint8_t *src, size_t pi
         const uint32_t r = packed & 0x7ffu;
         const uint32_t g = (packed >> 11u) & 0x7ffu;
         const uint32_t b = (packed >> 22u) & 0x3ffu;
-        dst[i * 4u + 0u] = iFloatToByte(iDecodeUnsignedFloat(r, 6));
-        dst[i * 4u + 1u] = iFloatToByte(iDecodeUnsignedFloat(g, 6));
-        dst[i * 4u + 2u] = iFloatToByte(iDecodeUnsignedFloat(b, 5));
+        dst[i * 4u + 0u] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(r, 6));
+        dst[i * 4u + 1u] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(g, 6));
+        dst[i * 4u + 2u] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(b, 5));
         dst[i * 4u + 3u] = 255;
     }
 }
@@ -3086,6 +3112,291 @@ static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piRepo
     {
         iReport(reporter, "Vulkan renderer updated picture descriptor set");
         state->pictureDescriptorReported = true;
+    }
+    return true;
+}
+
+static const uint32_t kSrgbPresentVS[] = {
+    0x07230203u, 0x00010000u, 0x000d000bu, 0x00000034u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+    0x0008000fu, 0x00000000u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00000017u, 0x0000001du, 0x00000028u,
+    0x00040047u, 0x00000017u, 0x0000000bu, 0x0000002au, 0x00040047u, 0x0000001du, 0x0000001eu, 0x00000000u,
+    0x00030047u, 0x00000026u, 0x00000002u, 0x00050048u, 0x00000026u, 0x00000000u, 0x0000000bu, 0x00000000u,
+    0x00050048u, 0x00000026u, 0x00000001u, 0x0000000bu, 0x00000001u, 0x00050048u, 0x00000026u, 0x00000002u,
+    0x0000000bu, 0x00000003u, 0x00050048u, 0x00000026u, 0x00000003u, 0x0000000bu, 0x00000004u, 0x00020013u,
+    0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u, 0x00000006u, 0x00000020u, 0x00040017u,
+    0x00000007u, 0x00000006u, 0x00000002u, 0x00040015u, 0x00000008u, 0x00000020u, 0x00000000u, 0x0004002bu,
+    0x00000008u, 0x00000009u, 0x00000003u, 0x0004001cu, 0x0000000au, 0x00000007u, 0x00000009u, 0x0004002bu,
+    0x00000006u, 0x0000000du, 0xbf800000u, 0x0005002cu, 0x00000007u, 0x0000000eu, 0x0000000du, 0x0000000du,
+    0x0004002bu, 0x00000006u, 0x0000000fu, 0x40400000u, 0x0005002cu, 0x00000007u, 0x00000010u, 0x0000000fu,
+    0x0000000du, 0x0005002cu, 0x00000007u, 0x00000011u, 0x0000000du, 0x0000000fu, 0x0006002cu, 0x0000000au,
+    0x00000012u, 0x0000000eu, 0x00000010u, 0x00000011u, 0x00040020u, 0x00000013u, 0x00000007u, 0x00000007u,
+    0x00040015u, 0x00000015u, 0x00000020u, 0x00000001u, 0x00040020u, 0x00000016u, 0x00000001u, 0x00000015u,
+    0x0004003bu, 0x00000016u, 0x00000017u, 0x00000001u, 0x00040020u, 0x0000001cu, 0x00000003u, 0x00000007u,
+    0x0004003bu, 0x0000001cu, 0x0000001du, 0x00000003u, 0x0004002bu, 0x00000006u, 0x0000001fu, 0x3f000000u,
+    0x00040017u, 0x00000023u, 0x00000006u, 0x00000004u, 0x0004002bu, 0x00000008u, 0x00000024u, 0x00000001u,
+    0x0004001cu, 0x00000025u, 0x00000006u, 0x00000024u, 0x0006001eu, 0x00000026u, 0x00000023u, 0x00000006u,
+    0x00000025u, 0x00000025u, 0x00040020u, 0x00000027u, 0x00000003u, 0x00000026u, 0x0004003bu, 0x00000027u,
+    0x00000028u, 0x00000003u, 0x0004002bu, 0x00000015u, 0x00000029u, 0x00000000u, 0x0004002bu, 0x00000006u,
+    0x0000002bu, 0x00000000u, 0x0004002bu, 0x00000006u, 0x0000002cu, 0x3f800000u, 0x00040020u, 0x00000030u,
+    0x00000003u, 0x00000023u, 0x00040020u, 0x00000032u, 0x00000007u, 0x0000000au, 0x0005002cu, 0x00000007u,
+    0x00000033u, 0x0000001fu, 0x0000001fu, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u,
+    0x000200f8u, 0x00000005u, 0x0004003bu, 0x00000032u, 0x0000000cu, 0x00000007u, 0x0003003eu, 0x0000000cu,
+    0x00000012u, 0x0004003du, 0x00000015u, 0x00000018u, 0x00000017u, 0x00050041u, 0x00000013u, 0x0000001au,
+    0x0000000cu, 0x00000018u, 0x0004003du, 0x00000007u, 0x0000001bu, 0x0000001au, 0x0005008eu, 0x00000007u,
+    0x00000020u, 0x0000001bu, 0x0000001fu, 0x00050081u, 0x00000007u, 0x00000022u, 0x00000020u, 0x00000033u,
+    0x0003003eu, 0x0000001du, 0x00000022u, 0x00050051u, 0x00000006u, 0x0000002du, 0x0000001bu, 0x00000000u,
+    0x00050051u, 0x00000006u, 0x0000002eu, 0x0000001bu, 0x00000001u, 0x00070050u, 0x00000023u, 0x0000002fu,
+    0x0000002du, 0x0000002eu, 0x0000002bu, 0x0000002cu, 0x00050041u, 0x00000030u, 0x00000031u, 0x00000028u,
+    0x00000029u, 0x0003003eu, 0x00000031u, 0x0000002fu, 0x000100fdu, 0x00010038u
+};
+
+static const uint32_t kSrgbPresentFS[] = {
+    0x07230203u, 0x00010000u, 0x000d000bu, 0x0000005au, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+    0x0007000fu, 0x00000004u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00000037u, 0x0000003du, 0x00030010u,
+    0x00000004u, 0x00000007u, 0x00040047u, 0x00000033u, 0x00000021u, 0x00000000u, 0x00040047u, 0x00000033u,
+    0x00000022u, 0x00000000u, 0x00040047u, 0x00000037u, 0x0000001eu, 0x00000000u, 0x00040047u, 0x0000003du,
+    0x0000001eu, 0x00000000u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u,
+    0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000003u, 0x00020014u, 0x0000000du,
+    0x00040017u, 0x0000000eu, 0x0000000du, 0x00000003u, 0x0004002bu, 0x00000006u, 0x00000012u, 0x3b4d2e1cu,
+    0x0006002cu, 0x00000007u, 0x00000013u, 0x00000012u, 0x00000012u, 0x00000012u, 0x0004002bu, 0x00000006u,
+    0x00000017u, 0x414eb852u, 0x0004002bu, 0x00000006u, 0x0000001au, 0x3f870a3du, 0x0004002bu, 0x00000006u,
+    0x0000001cu, 0x00000000u, 0x0006002cu, 0x00000007u, 0x0000001du, 0x0000001cu, 0x0000001cu, 0x0000001cu,
+    0x0004002bu, 0x00000006u, 0x0000001fu, 0x3ed55555u, 0x0006002cu, 0x00000007u, 0x00000020u, 0x0000001fu,
+    0x0000001fu, 0x0000001fu, 0x0004002bu, 0x00000006u, 0x00000023u, 0x3d6147aeu, 0x0004002bu, 0x00000006u,
+    0x00000029u, 0x3f800000u, 0x0006002cu, 0x00000007u, 0x0000002au, 0x00000029u, 0x00000029u, 0x00000029u,
+    0x00090019u, 0x00000030u, 0x00000006u, 0x00000001u, 0x00000000u, 0x00000000u, 0x00000000u, 0x00000001u,
+    0x00000000u, 0x0003001bu, 0x00000031u, 0x00000030u, 0x00040020u, 0x00000032u, 0x00000000u, 0x00000031u,
+    0x0004003bu, 0x00000032u, 0x00000033u, 0x00000000u, 0x00040017u, 0x00000035u, 0x00000006u, 0x00000002u,
+    0x00040020u, 0x00000036u, 0x00000001u, 0x00000035u, 0x0004003bu, 0x00000036u, 0x00000037u, 0x00000001u,
+    0x00040017u, 0x00000039u, 0x00000006u, 0x00000004u, 0x00040020u, 0x0000003cu, 0x00000003u, 0x00000039u,
+    0x0004003bu, 0x0000003cu, 0x0000003du, 0x00000003u, 0x0006002cu, 0x00000007u, 0x00000059u, 0x00000023u,
+    0x00000023u, 0x00000023u, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u,
+    0x00000005u, 0x0004003du, 0x00000031u, 0x00000034u, 0x00000033u, 0x0004003du, 0x00000035u, 0x00000038u,
+    0x00000037u, 0x00050057u, 0x00000039u, 0x0000003au, 0x00000034u, 0x00000038u, 0x0008004fu, 0x00000007u,
+    0x0000003bu, 0x0000003au, 0x0000003au, 0x00000000u, 0x00000001u, 0x00000002u, 0x000500b8u, 0x0000000eu,
+    0x0000004bu, 0x0000003bu, 0x00000013u, 0x0005008eu, 0x00000007u, 0x0000004du, 0x0000003bu, 0x00000017u,
+    0x0007000cu, 0x00000007u, 0x0000004fu, 0x00000001u, 0x00000028u, 0x0000003bu, 0x0000001du, 0x0007000cu,
+    0x00000007u, 0x00000050u, 0x00000001u, 0x0000001au, 0x0000004fu, 0x00000020u, 0x0005008eu, 0x00000007u,
+    0x00000051u, 0x00000050u, 0x0000001au, 0x00050083u, 0x00000007u, 0x00000053u, 0x00000051u, 0x00000059u,
+    0x000600a9u, 0x00000007u, 0x00000057u, 0x0000004bu, 0x0000002au, 0x0000001du, 0x0008000cu, 0x00000007u,
+    0x00000058u, 0x00000001u, 0x0000002eu, 0x00000053u, 0x0000004du, 0x00000057u, 0x00050051u, 0x00000006u,
+    0x00000041u, 0x00000058u, 0x00000000u, 0x00050051u, 0x00000006u, 0x00000042u, 0x00000058u, 0x00000001u,
+    0x00050051u, 0x00000006u, 0x00000043u, 0x00000058u, 0x00000002u, 0x00070050u, 0x00000039u, 0x00000044u,
+    0x00000041u, 0x00000042u, 0x00000043u, 0x00000029u, 0x0003003eu, 0x0000003du, 0x00000044u, 0x000100fdu,
+    0x00010038u
+};
+
+static bool iEnsureSrgbPresentResources(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->device == VK_NULL_DEVICE)
+    {
+        return false;
+    }
+    if (state->presentPipelineLayout != VK_NULL_PIPELINE_LAYOUT &&
+        state->presentDescriptorSet != VK_NULL_DESCRIPTOR_SET &&
+        state->presentVertexModule != VK_NULL_SHADER_MODULE &&
+        state->presentFragmentModule != VK_NULL_SHADER_MODULE &&
+        state->presentSampler != VK_NULL_SAMPLER)
+    {
+        return true;
+    }
+    if (!state->vkCreateDescriptorSetLayout || !state->vkCreatePipelineLayout ||
+        !state->vkCreateDescriptorPool || !state->vkAllocateDescriptorSets || !state->vkCreateSampler)
+    {
+        return false;
+    }
+
+    VkDescriptorSetLayoutBinding binding = {};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
+    setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    setLayoutInfo.bindingCount = 1;
+    setLayoutInfo.pBindings = &binding;
+    VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->presentDescriptorSetLayout);
+    if (result != VK_SUCCESS || state->presentDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
+    {
+        iError(reporter, "Vulkan renderer failed to create sRGB present descriptor layout");
+        return false;
+    }
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &state->presentDescriptorSetLayout;
+    result = state->vkCreatePipelineLayout(state->device, &pipelineLayoutInfo, nullptr, &state->presentPipelineLayout);
+    if (result != VK_SUCCESS || state->presentPipelineLayout == VK_NULL_PIPELINE_LAYOUT)
+    {
+        iError(reporter, "Vulkan renderer failed to create sRGB present pipeline layout");
+        return false;
+    }
+
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSize.descriptorCount = 1;
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.maxSets = 1;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    result = state->vkCreateDescriptorPool(state->device, &poolInfo, nullptr, &state->presentDescriptorPool);
+    if (result != VK_SUCCESS || state->presentDescriptorPool == VK_NULL_DESCRIPTOR_POOL)
+    {
+        iError(reporter, "Vulkan renderer failed to create sRGB present descriptor pool");
+        return false;
+    }
+
+    VkDescriptorSetAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = state->presentDescriptorPool;
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &state->presentDescriptorSetLayout;
+    result = state->vkAllocateDescriptorSets(state->device, &allocateInfo, &state->presentDescriptorSet);
+    if (result != VK_SUCCESS || state->presentDescriptorSet == VK_NULL_DESCRIPTOR_SET)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate sRGB present descriptor set");
+        return false;
+    }
+
+    if (!iCreateSamplerObject(state, piRenderer::TextureFilter::LINEAR, piRenderer::TextureWrap::CLAMP, 1.0f, &state->presentSampler, reporter) ||
+        !iCreateShaderModule(state, reinterpret_cast<const uint8_t *>(kSrgbPresentVS), (int)sizeof(kSrgbPresentVS), &state->presentVertexModule, reporter) ||
+        !iCreateShaderModule(state, reinterpret_cast<const uint8_t *>(kSrgbPresentFS), (int)sizeof(kSrgbPresentFS), &state->presentFragmentModule, reporter))
+    {
+        iError(reporter, "Vulkan renderer failed to create sRGB present shader resources");
+        return false;
+    }
+
+    if (!state->presentLayoutReported)
+    {
+        iReport(reporter, "Vulkan renderer created sRGB present descriptor and pipeline layouts");
+        state->presentLayoutReported = true;
+    }
+    return true;
+}
+
+static bool iUpdateSrgbPresentDescriptorSet(piVulkanState *state, piTexture source, piRenderer::piReporter *reporter)
+{
+    if (!state || !source || state->presentDescriptorSet == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets ||
+        source->imageView == VK_NULL_IMAGE_VIEW || state->presentSampler == VK_NULL_SAMPLER)
+    {
+        return false;
+    }
+
+    VkDescriptorImageInfo imageInfo = {};
+    imageInfo.sampler = state->presentSampler;
+    imageInfo.imageView = source->imageView;
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet write = {};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = state->presentDescriptorSet;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &imageInfo;
+    state->vkUpdateDescriptorSets(state->device, 1, &write, 0, nullptr);
+
+    if (!state->presentDescriptorReported)
+    {
+        iReport(reporter, "Vulkan renderer updated sRGB present descriptor set");
+        state->presentDescriptorReported = true;
+    }
+    return true;
+}
+
+static bool iEnsureSrgbPresentPipeline(piVulkanState *state, piRenderer::piReporter *reporter)
+{
+    if (!state || state->device == VK_NULL_DEVICE || state->swapchainRenderPass == VK_NULL_RENDER_PASS)
+    {
+        return false;
+    }
+    if (state->presentPipeline != VK_NULL_PIPELINE)
+    {
+        return true;
+    }
+    if (!iEnsureSrgbPresentResources(state, reporter) || !state->vkCreateGraphicsPipelines)
+    {
+        return false;
+    }
+
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = state->presentVertexModule;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = state->presentFragmentModule;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertexInput = {};
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo viewport = {};
+    viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterization = {};
+    rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterization.cullMode = VK_CULL_MODE_NONE;
+    rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterization.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisample = {};
+    multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttachment = {};
+    blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendStateCreateInfo colorBlend = {};
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlend.attachmentCount = 1;
+    colorBlend.pAttachments = &blendAttachment;
+
+    VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicState = {};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = 2;
+    dynamicState.pDynamicStates = dynamicStates;
+
+    VkGraphicsPipelineCreateInfo pipelineInfo = {};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = stages;
+    pipelineInfo.pVertexInputState = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewport;
+    pipelineInfo.pRasterizationState = &rasterization;
+    pipelineInfo.pMultisampleState = &multisample;
+    pipelineInfo.pColorBlendState = &colorBlend;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = state->presentPipelineLayout;
+    pipelineInfo.renderPass = state->swapchainRenderPass;
+    pipelineInfo.subpass = 0;
+
+    const VkResult result = state->vkCreateGraphicsPipelines(state->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &state->presentPipeline);
+    if (result != VK_SUCCESS || state->presentPipeline == VK_NULL_PIPELINE)
+    {
+        iError(reporter, "Vulkan renderer failed to create sRGB present graphics pipeline");
+        state->presentPipeline = VK_NULL_PIPELINE;
+        return false;
+    }
+
+    if (!state->presentPipelineReported)
+    {
+        iReport(reporter, "Vulkan renderer created sRGB present graphics pipeline");
+        state->presentPipelineReported = true;
     }
     return true;
 }
@@ -5321,6 +5632,12 @@ void piRendererVulkan::Deinitialize(void)
             mState->pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
             mState->pictureDescriptorSet = VK_NULL_DESCRIPTOR_SET;
         }
+        if (mState->presentDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+        {
+            mState->vkDestroyDescriptorPool(mState->device, mState->presentDescriptorPool, nullptr);
+            mState->presentDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+            mState->presentDescriptorSet = VK_NULL_DESCRIPTOR_SET;
+        }
         if (mState->staticPaintDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
         {
             mState->vkDestroyDescriptorSetLayout(mState->device, mState->staticPaintDescriptorSetLayout, nullptr);
@@ -5330,6 +5647,36 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDestroyDescriptorSetLayout(mState->device, mState->pictureDescriptorSetLayout, nullptr);
             mState->pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        }
+        if (mState->presentPipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+        {
+            mState->vkDestroyPipeline(mState->device, mState->presentPipeline, nullptr);
+            mState->presentPipeline = VK_NULL_PIPELINE;
+        }
+        if (mState->presentPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
+        {
+            mState->vkDestroyPipelineLayout(mState->device, mState->presentPipelineLayout, nullptr);
+            mState->presentPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        }
+        if (mState->presentDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
+        {
+            mState->vkDestroyDescriptorSetLayout(mState->device, mState->presentDescriptorSetLayout, nullptr);
+            mState->presentDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        }
+        if (mState->presentVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->presentVertexModule, nullptr);
+            mState->presentVertexModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->presentFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->presentFragmentModule, nullptr);
+            mState->presentFragmentModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->presentSampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
+        {
+            mState->vkDestroySampler(mState->device, mState->presentSampler, nullptr);
+            mState->presentSampler = VK_NULL_SAMPLER;
         }
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
@@ -5421,6 +5768,149 @@ void piRendererVulkan::Report(void)
 void piRendererVulkan::SetActiveWindow(int id) { if (mState) mState->activeWindow = id; }
 void piRendererVulkan::Enable(void) {}
 void piRendererVulkan::Disable(void) {}
+
+static bool iRecordSrgbPresentPass(piVulkanState *state, piTexture source, uint32_t imageIndex, piRenderer::piReporter *reporter)
+{
+    if (!state || !source || imageIndex >= state->swapchainImageCount ||
+        state->swapchainRenderPass == VK_NULL_RENDER_PASS || state->swapchainFramebuffers[imageIndex] == VK_NULL_FRAMEBUFFER ||
+        source->image == 0 || source->imageView == VK_NULL_IMAGE_VIEW)
+    {
+        return false;
+    }
+    if (!iEnsureSrgbPresentPipeline(state, reporter))
+    {
+        return false;
+    }
+
+    VkImageSubresourceRange colorRange = {};
+    colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    colorRange.baseMipLevel = 0;
+    colorRange.levelCount = 1;
+    colorRange.baseArrayLayer = 0;
+    colorRange.layerCount = 1;
+
+    const bool sourceNeedsShaderTransition = source->imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    if (sourceNeedsShaderTransition)
+    {
+        VkImageMemoryBarrier toShader = {};
+        toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toShader.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+        toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        toShader.oldLayout = source->imageLayout;
+        toShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.image = source->image;
+        toShader.subresourceRange = colorRange;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                    0,
+                                    0,
+                                    nullptr,
+                                    0,
+                                    nullptr,
+                                    1,
+                                    &toShader);
+        source->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+
+    if (!iUpdateSrgbPresentDescriptorSet(state, source, reporter))
+    {
+        return false;
+    }
+
+    VkClearValue clearValue = {};
+    clearValue.color.float32[0] = 0.0f;
+    clearValue.color.float32[1] = 0.0f;
+    clearValue.color.float32[2] = 0.0f;
+    clearValue.color.float32[3] = 1.0f;
+
+    VkRenderPassBeginInfo renderPassBegin = {};
+    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBegin.renderPass = state->swapchainRenderPass;
+    renderPassBegin.framebuffer = state->swapchainFramebuffers[imageIndex];
+    renderPassBegin.renderArea.offset.x = 0;
+    renderPassBegin.renderArea.offset.y = 0;
+    renderPassBegin.renderArea.extent = state->swapchainExtent;
+    renderPassBegin.clearValueCount = 1;
+    renderPassBegin.pClearValues = &clearValue;
+    state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+
+    VkViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)state->swapchainExtent.width;
+    viewport.height = (float)state->swapchainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    VkRect2D scissor = {};
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent = state->swapchainExtent;
+    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->presentPipeline);
+    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->presentPipelineLayout, 0, 1, &state->presentDescriptorSet, 0, nullptr);
+    state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
+    state->vkCmdEndRenderPass(state->commandBuffer);
+
+    if (sourceNeedsShaderTransition)
+    {
+        VkImageMemoryBarrier backToColor = {};
+        backToColor.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        backToColor.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        backToColor.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+        backToColor.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        backToColor.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        backToColor.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        backToColor.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        backToColor.image = source->image;
+        backToColor.subresourceRange = colorRange;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                    0,
+                                    0,
+                                    nullptr,
+                                    0,
+                                    nullptr,
+                                    1,
+                                    &backToColor);
+        source->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    if (!state->presentPassReported)
+    {
+        iReport(reporter, "IMM_VK_SRGB_PRESENT: rendered linear B10G11R11 target through GPU sRGB present pass");
+        state->presentPassReported = true;
+    }
+    return true;
+}
+
+static void iDestroyPresentScratch(piVulkanState *state, VkImage image, VkImageView view, VkDeviceMemory memory)
+{
+    if (!state || state->device == VK_NULL_DEVICE)
+    {
+        return;
+    }
+    if (view != VK_NULL_IMAGE_VIEW && state->vkDestroyImageView)
+    {
+        state->vkDestroyImageView(state->device, view, nullptr);
+    }
+    if (memory != VK_NULL_DEVICE_MEMORY)
+    {
+        if (image != 0 && state->vkDestroyImage)
+        {
+            state->vkDestroyImage(state->device, image, nullptr);
+        }
+        if (state->vkFreeMemory)
+        {
+            state->vkFreeMemory(state->device, memory, nullptr);
+        }
+    }
+}
+
 void piRendererVulkan::SwapBuffers(void)
 {
     if (!mState || mState->swapchain == VK_NULL_SWAPCHAIN_KHR || mState->commandBuffer == VK_NULL_COMMAND_BUFFER ||
@@ -5447,9 +5937,9 @@ void piRendererVulkan::SwapBuffers(void)
     {
         return;
     }
-    mState->vkResetFences(mState->device, 1, &mState->frameFence);
     piTexture presentTexture = mState->pendingPresentTexture;
     VkImage directPresentImage = presentTexture ? presentTexture->image : 0;
+    VkImageView directPresentImageView = VK_NULL_IMAGE_VIEW;
     VkDeviceMemory directPresentMemory = VK_NULL_DEVICE_MEMORY;
     const bool directPresentNeedsResolve = presentTexture && presentTexture->sampleCount != VK_SAMPLE_COUNT_1_BIT;
     bool directPresentTexture =
@@ -5472,25 +5962,56 @@ void piRendererVulkan::SwapBuffers(void)
             }
         }
     }
+    const bool srgbGpuPresentTexture =
+        directPresentTexture &&
+        presentTexture &&
+        presentTexture->vkFormat == VK_FORMAT_B10G11R11_UFLOAT_PACK32;
     if (directPresentTexture && directPresentNeedsResolve)
     {
+        const VkImageUsageFlags resolveUsage = srgbGpuPresentTexture
+                                                   ? (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+                                                   : (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
         directPresentTexture = iCreateDeviceLocalImage(mState,
                                                        (uint32_t)presentTexture->info.mXres,
                                                        (uint32_t)presentTexture->info.mYres,
                                                        presentTexture->vkFormat,
                                                        VK_SAMPLE_COUNT_1_BIT,
-                                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                                       resolveUsage,
                                                        &directPresentImage,
                                                        &directPresentMemory,
                                                        mReporter);
+        if (directPresentTexture && srgbGpuPresentTexture)
+        {
+            VkImageViewCreateInfo viewInfo = {};
+            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            viewInfo.image = directPresentImage;
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            viewInfo.format = presentTexture->vkFormat;
+            viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            viewInfo.subresourceRange.baseMipLevel = 0;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 1;
+            VkResult viewResult = mState->vkCreateImageView(mState->device, &viewInfo, nullptr, &directPresentImageView);
+            if (viewResult != VK_SUCCESS || directPresentImageView == VK_NULL_IMAGE_VIEW)
+            {
+                iError(mReporter, "Vulkan renderer failed to create sRGB present resolve image view");
+                directPresentTexture = false;
+            }
+        }
     }
-    const bool copyTexture =
+    bool copyTexture =
         !directPresentTexture &&
         presentTexture && presentTexture->data &&
         presentTexture->info.mXres == (int)mState->swapchainExtent.width &&
         presentTexture->info.mYres == (int)mState->swapchainExtent.height &&
         iUploadTextureToStaging(mState, presentTexture, mReporter);
 
+    mState->vkResetFences(mState->device, 1, &mState->frameFence);
     mState->vkResetCommandBuffer(mState->commandBuffer, 0);
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -5498,15 +6019,138 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkBeginCommandBuffer(mState->commandBuffer, &beginInfo);
     if (result != VK_SUCCESS)
     {
-        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
-        {
-            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
-            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
-        }
+        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
 
-    if (directPresentTexture)
+    if (srgbGpuPresentTexture)
+    {
+        piTextureS resolvedPresentTexture = {};
+        piTexture srgbPresentSource = presentTexture;
+        if (directPresentNeedsResolve)
+        {
+            VkImageSubresourceRange colorRange = {};
+            colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            colorRange.baseMipLevel = 0;
+            colorRange.levelCount = 1;
+            colorRange.baseArrayLayer = 0;
+            colorRange.layerCount = 1;
+
+            VkImageMemoryBarrier sourceToTransfer = {};
+            sourceToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            sourceToTransfer.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+            sourceToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            sourceToTransfer.oldLayout = presentTexture->imageLayout;
+            sourceToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            sourceToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            sourceToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            sourceToTransfer.image = presentTexture->image;
+            sourceToTransfer.subresourceRange = colorRange;
+            mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0,
+                                         0,
+                                         nullptr,
+                                         0,
+                                         nullptr,
+                                         1,
+                                         &sourceToTransfer);
+
+            VkImageMemoryBarrier resolveToTransfer = {};
+            resolveToTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            resolveToTransfer.srcAccessMask = 0;
+            resolveToTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            resolveToTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            resolveToTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            resolveToTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveToTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resolveToTransfer.image = directPresentImage;
+            resolveToTransfer.subresourceRange = colorRange;
+            mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0,
+                                         0,
+                                         nullptr,
+                                         0,
+                                         nullptr,
+                                         1,
+                                         &resolveToTransfer);
+
+            VkImageResolve resolveRegion = {};
+            resolveRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            resolveRegion.srcSubresource.mipLevel = 0;
+            resolveRegion.srcSubresource.baseArrayLayer = 0;
+            resolveRegion.srcSubresource.layerCount = 1;
+            resolveRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            resolveRegion.dstSubresource.mipLevel = 0;
+            resolveRegion.dstSubresource.baseArrayLayer = 0;
+            resolveRegion.dstSubresource.layerCount = 1;
+            resolveRegion.extent.width = (uint32_t)presentTexture->info.mXres;
+            resolveRegion.extent.height = (uint32_t)presentTexture->info.mYres;
+            resolveRegion.extent.depth = 1;
+            mState->vkCmdResolveImage(mState->commandBuffer,
+                                      presentTexture->image,
+                                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                      directPresentImage,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      1,
+                                      &resolveRegion);
+
+            VkImageMemoryBarrier barriers[2] = {};
+            barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barriers[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barriers[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_MEMORY_READ_BIT;
+            barriers[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barriers[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[0].image = presentTexture->image;
+            barriers[0].subresourceRange = colorRange;
+            barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barriers[1].image = directPresentImage;
+            barriers[1].subresourceRange = colorRange;
+            mState->vkCmdPipelineBarrier(mState->commandBuffer,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                         0,
+                                         0,
+                                         nullptr,
+                                         0,
+                                         nullptr,
+                                         2,
+                                         barriers);
+            presentTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+            resolvedPresentTexture = *presentTexture;
+            resolvedPresentTexture.image = directPresentImage;
+            resolvedPresentTexture.imageView = directPresentImageView;
+            resolvedPresentTexture.memory = VK_NULL_DEVICE_MEMORY;
+            resolvedPresentTexture.sampleCount = VK_SAMPLE_COUNT_1_BIT;
+            resolvedPresentTexture.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            srgbPresentSource = &resolvedPresentTexture;
+        }
+
+        if (!iRecordSrgbPresentPass(mState, srgbPresentSource, imageIndex, mReporter))
+        {
+            if (!mState->gpuReadbackFailureReported)
+            {
+                mState->gpuReadbackFailureReported = true;
+                iError(mReporter, "Vulkan renderer failed to record sRGB present pass");
+            }
+            iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
+            return;
+        }
+        directPresentTexture = false;
+    }
+    else if (directPresentTexture)
     {
         VkImageSubresourceRange colorRange = {};
         colorRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -5773,11 +6417,7 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkEndCommandBuffer(mState->commandBuffer);
     if (result != VK_SUCCESS)
     {
-        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
-        {
-            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
-            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
-        }
+        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
 
@@ -5794,21 +6434,13 @@ void piRendererVulkan::SwapBuffers(void)
     result = mState->vkQueueSubmit(mState->graphicsQueue, 1, &submitInfo, mState->frameFence);
     if (result != VK_SUCCESS)
     {
-        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
-        {
-            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
-            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
-        }
+        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
     result = mState->vkWaitForFences(mState->device, 1, &mState->frameFence, 1, timeout);
     if (result != VK_SUCCESS)
     {
-        if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
-        {
-            mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
-            mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
-        }
+        iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
         return;
     }
 #if defined(WINDOWS)
@@ -5846,7 +6478,12 @@ void piRendererVulkan::SwapBuffers(void)
             mState->vkDeviceWaitIdle(mState->device);
         }
         ++mState->presentFrameIndex;
-        if (directPresentTexture && presentTextureHasColor && !mState->directTexturePresentReported)
+        if (srgbGpuPresentTexture && presentTextureHasColor && !mState->directTexturePresentReported)
+        {
+            mState->directTexturePresentReported = true;
+            iReport(mReporter, "Vulkan renderer presented swapchain sRGB GPU present frame");
+        }
+        else if (directPresentTexture && presentTextureHasColor && !mState->directTexturePresentReported)
         {
             mState->directTexturePresentReported = true;
             iReport(mReporter, "Vulkan renderer presented swapchain direct GPU texture frame");
@@ -5862,11 +6499,7 @@ void piRendererVulkan::SwapBuffers(void)
             iReport(mReporter, "Vulkan renderer presented swapchain clear frame");
         }
     }
-    if (directPresentMemory != VK_NULL_DEVICE_MEMORY)
-    {
-        mState->vkDestroyImage(mState->device, directPresentImage, nullptr);
-        mState->vkFreeMemory(mState->device, directPresentMemory, nullptr);
-    }
+    iDestroyPresentScratch(mState, directPresentImage, directPresentImageView, directPresentMemory);
 }
 
 void piRendererVulkan::EndExternalImageFrame(void)
@@ -6915,8 +7548,15 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
         }
         return;
     }
+    const bool displaySrgbOutput =
+        mState->currentShader &&
+        iShaderOption(mState->currentShader, "OUTPUT_ENCODING", 0) == 1;
     if (!mState->currentRenderTarget && mState->gpuPaintActive)
     {
+        if (displaySrgbOutput)
+        {
+            mState->pendingPresentTexture = mState->textures[0];
+        }
         return;
     }
     if (!mState->currentRenderTarget)

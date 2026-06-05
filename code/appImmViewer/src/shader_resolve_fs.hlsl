@@ -16,7 +16,9 @@ float4 main( float4 fragCoord : SV_POSITION ) : SV_TARGET
         col += myTex.Load(int2(fragCoord.xy), i).xyz;
     col /= 8.0;
 
+#if OUTPUT_ENCODING == 1
     col = linear2srgb(col);
+#endif
 
     return float4(col,1.0);
 }

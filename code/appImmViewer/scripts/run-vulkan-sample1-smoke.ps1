@@ -252,15 +252,15 @@ $presentLog = Get-Content $debugLog -Raw
 if ($presentLog -notmatch "Loaded in GPU \[0\]") {
     throw "Live-present smoke log does not show GPU load completion."
 }
-if ($presentLog -notmatch "Vulkan renderer presented swapchain direct GPU texture frame") {
-    throw "Live-present smoke log does not show direct GPU Vulkan presentation."
+if ($presentLog -notmatch "Vulkan renderer presented swapchain sRGB GPU present frame") {
+    throw "Live-present smoke log does not show sRGB GPU Vulkan presentation."
 }
 foreach ($pattern in $badPatterns) {
     if ($presentLog -match $pattern) {
         throw "Live-present smoke log matched failure pattern: $pattern"
     }
 }
-Write-Host "Live present: direct GPU Vulkan presentation logged"
+Write-Host "Live present: sRGB GPU Vulkan presentation logged"
 
 if (-not $KeepArtifacts) {
     Remove-Item -LiteralPath $capturePath, $capturePngPath, $captureTmpPath -Force -ErrorAction SilentlyContinue
