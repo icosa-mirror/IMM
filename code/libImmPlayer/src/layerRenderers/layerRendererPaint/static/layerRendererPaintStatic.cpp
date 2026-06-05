@@ -284,11 +284,19 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             if (renderer->GetAPI() == piRenderer::API::Vulkan)
             {
 #if defined(WINDOWS) || defined(ANDROID)
+#if ST_VERTEX_FORMAT == 1
+                const int vs_index = i +
+                    k * 3 +
+                    l * 3 * 2 +
+                    (static_cast<int>(colorSpace)) * 5 * 3 * 2 +
+                    2 * 5 * 3 * 2 * 2;
+#else
                 const int vs_index = i +
                     j * 3 +
                     k * 3 * 2 +
                     l * 3 * 2 * 2 +
                     (static_cast<int>(colorSpace)) * 5 * 3 * 2 * 2;
+#endif
                 const int fs_index = i;
                 mShader[dindex] = renderer->CreateShaderBinary(&ops,
                     reinterpret_cast<const uint8_t *>(shader_static_brush_vs_spirv_code[vs_index]), shader_static_brush_vs_spirv_size[vs_index],

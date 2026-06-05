@@ -47,11 +47,11 @@ adb shell am start -n org.linuxfoundation.imm.player/.MainActivity
 
 ### Vulkan Non-VR build and smoke
 
-The Vulkan non-VR build selects `piRenderer::API::Vulkan` in the native app and passes the Android `ANativeWindow` into the Vulkan renderer. Use a separate build directory so the default GLES APK remains available.
+The non-VR build defaults to Vulkan and passes the Android `ANativeWindow` into the Vulkan renderer. Use a separate build directory for local smoke runs if you want to keep another APK output around.
 
 ```bash
 ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vulkan
-./gradlew :appImmViewer:assembleDebug -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan
+./gradlew :appImmViewer:assembleDebug -PimmNonVr=ON -PimmBuildDir=build_vulkan
 ```
 
 APK output: `appImmViewer/build_vulkan/outputs/apk/debug/appImmViewer-debug.apk`
@@ -64,7 +64,23 @@ With a Vulkan-capable Android device or emulator attached:
 
 The smoke resolves `adb` from `-Adb`, the `ADB` environment variable, `PATH`, `local.properties`, or `ANDROID_SDK_ROOT`. It installs the Vulkan APK, launches `sample1.imm`, captures `logcat`, and requires Vulkan surface/device initialization plus picture and static-paint draw submission markers. It fails if the Vulkan renderer logs placeholder draw-submission diagnostics.
 
-CI installs the Android SDK/NDK through `android-actions/setup-android` and builds this Vulkan APK with `-PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan`. Runtime smoke is local/device-gated because it requires an attached Vulkan-capable device or emulator.
+Use the generic renderer smoke when checking renderer fallback regressions:
+
+```powershell
+./run-android-renderer-smoke.ps1 -RendererApi Vulkan
+./run-android-renderer-smoke.ps1 -RendererApi GLES
+```
+
+`./run-android-gles-smoke.ps1` is a GLES-specific wrapper. The smoke uses the same non-VR launch path as the manual `adb shell am start -n org.linuxfoundation.imm.player/.MainActivity` command; pass `-UseIntentRendererExtra` only when explicitly testing the `RenderingAPI` intent override. The GLES gate requires GLES selection plus CPU/GPU `sample1.imm` load completion; the Vulkan gate adds Vulkan surface/device/draw-submission markers.
+
+`./run-android-openxr-probe-smoke.ps1` builds and launches the explicit non-VR
+OpenXR startup probe (`-PimmXrRuntime=OpenXR`). It validates Android OpenXR
+loader initialization, extension enumeration, instance creation, HMD system
+query, stereo-view query, and teardown through `IMM_ANDROID_OPENXR_PROBE` log
+markers. Quest OS lockscreen, Guardian, and reprojected-dialog focus blockers
+are classified before marker checks.
+
+CI installs the Android SDK/NDK through `android-actions/setup-android` and builds this Vulkan APK with `-PimmNonVr=ON -PimmBuildDir=build_vulkan`. Runtime smoke is local/device-gated because it requires an attached Vulkan-capable device or emulator.
 
 ## Build and smoke (Godot Android GDExtension)
 
@@ -108,7 +124,7 @@ adb shell am start -n org.linuxfoundation.imm.player/.MainActivity
 |------|---------|-------------|
 | `-PimmNonVr=ON/OFF` | `ON` | `ON` = phone/tablet build, `OFF` = Quest VR build |
 | `-PimmBuildDir=<dir>` | `build` | Custom build output dir (use `build_vr` for VR to avoid conflicts) |
-| `-PimmRendererApi=GLES/Vulkan` | `GLES` | Selects the non-VR Android renderer backend. Use `Vulkan` with `-PimmBuildDir=build_vulkan` to keep the default GLES APK separate. |
+| `-PimmRendererApi=GLES/Vulkan` | `Vulkan` for non-VR, `GLES` for VR | Selects the Android startup renderer. Non-VR can still request `RenderingAPI` through intent extras before native renderer initialization. |
 
 ## Loading IMM content on device
 
@@ -141,4 +157,4 @@ MSBuild code/projects/windows/imm.sln -t:appImmViewer -p:Configuration=Release -
 
 Executable output: `code/appImmViewer/exe/appImmViewer_Release.exe`
 
-Settings: `code/appImmViewer/exe/settings.json` (set `EnableVR: false` for desktop non-VR).
+Settings: `code/appImmViewer/exe/settings.json` defaults to desktop non-VR Vulkan. Use `code/appImmViewer/exe/settings-opengl.json` for the OpenGL fallback/reference path.

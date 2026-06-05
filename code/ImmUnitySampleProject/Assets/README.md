@@ -30,6 +30,12 @@ This does all of the following:
    - `Packages/com.immersive-foundation.imm-unity/Plugins/x86_64`
    - `Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64`
 
+## Unity MCP Setup
+
+This sample project includes the `com.coplaydev.unity-mcp` package in `Packages/manifest.json` so Codex and other MCP clients can inspect scenes, read console errors, run tests, and capture screenshots through the Unity Editor.
+
+After pulling this project, focus Unity while it is not in Play mode so Package Manager can resolve and import the package. The MCP setup wizard should open automatically; it can also be opened from **Window > MCP for Unity**. Confirm Python/uv dependencies in the wizard, then configure the MCP client from that window.
+
 ## Manual Setup
 
 ### 1. Copy Files to Unity Project

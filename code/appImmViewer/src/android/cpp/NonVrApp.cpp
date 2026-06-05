@@ -21,12 +21,23 @@
 #include <GLES3/gl3.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <dirent.h>
 #include <mutex>
+#include <vector>
 #include <string>
 #include <strings.h>
 #include <sys/stat.h>
 #include <cmath>
+
+#if defined(IMM_ANDROID_XR_RUNTIME_OPENXR)
+#define XR_USE_PLATFORM_ANDROID 1
+#define XR_USE_GRAPHICS_API_VULKAN 1
+#include <dlfcn.h>
+#include <vulkan/vulkan.h>
+#include "openxr/openxr.h"
+#include "openxr/openxr_platform.h"
+#endif
 
 #if !defined(EGL_OPENGL_ES3_BIT_KHR)
 #define EGL_OPENGL_ES3_BIT_KHR 0x0040
@@ -56,12 +67,14 @@ struct EngineState {
     piTimer* timer = nullptr;
     piSoundEngineBackend* soundBackend = nullptr;
     Viewer* viewer = nullptr;
+    Settings* activeSettings = nullptr;
     piTexture colorTexture = nullptr;
     piTexture depthTexture = nullptr;
     piRTarget renderTarget = nullptr;
     ImmPlayer::StereoMode stereoMode = ImmPlayer::StereoMode::None;
     bool viewerInitialized = false;
     bool firstFrame = true;
+    uint32_t frameCount = 0;
 
     std::wstring playerSpawnLocation = L"Default";
     ExePlayer::Settings::Rendering::Technique renderingTechnique =
@@ -88,6 +101,13 @@ std::mutex gMessageMutex;
 std::wstring gPendingPath;
 bool gTriedAutoLoad = false;
 
+bool iEqualsIgnoreCase(const char* a, const char* b) {
+    if (!a || !b) {
+        return false;
+    }
+    return strcasecmp(a, b) == 0;
+}
+
 class AndroidRenderReporter final : public piRenderer::piReporter {
 public:
     void Info(const char* str) override {
@@ -107,6 +127,210 @@ AndroidRenderReporter gRenderReporter;
 
 std::string gAssetDirectory;
 std::string gExternalFilesDirectory;
+
+#if defined(IMM_ANDROID_XR_RUNTIME_OPENXR)
+const char* XrResultName(XrResult result) {
+    switch (result) {
+        case XR_SUCCESS: return "XR_SUCCESS";
+        case XR_TIMEOUT_EXPIRED: return "XR_TIMEOUT_EXPIRED";
+        case XR_ERROR_VALIDATION_FAILURE: return "XR_ERROR_VALIDATION_FAILURE";
+        case XR_ERROR_RUNTIME_FAILURE: return "XR_ERROR_RUNTIME_FAILURE";
+        case XR_ERROR_OUT_OF_MEMORY: return "XR_ERROR_OUT_OF_MEMORY";
+        case XR_ERROR_API_VERSION_UNSUPPORTED: return "XR_ERROR_API_VERSION_UNSUPPORTED";
+        case XR_ERROR_INITIALIZATION_FAILED: return "XR_ERROR_INITIALIZATION_FAILED";
+        case XR_ERROR_FUNCTION_UNSUPPORTED: return "XR_ERROR_FUNCTION_UNSUPPORTED";
+        case XR_ERROR_FEATURE_UNSUPPORTED: return "XR_ERROR_FEATURE_UNSUPPORTED";
+        case XR_ERROR_EXTENSION_NOT_PRESENT: return "XR_ERROR_EXTENSION_NOT_PRESENT";
+        case XR_ERROR_LIMIT_REACHED: return "XR_ERROR_LIMIT_REACHED";
+        case XR_ERROR_SIZE_INSUFFICIENT: return "XR_ERROR_SIZE_INSUFFICIENT";
+        case XR_ERROR_HANDLE_INVALID: return "XR_ERROR_HANDLE_INVALID";
+        case XR_ERROR_INSTANCE_LOST: return "XR_ERROR_INSTANCE_LOST";
+        case XR_ERROR_SYSTEM_INVALID: return "XR_ERROR_SYSTEM_INVALID";
+        case XR_ERROR_FORM_FACTOR_UNAVAILABLE: return "XR_ERROR_FORM_FACTOR_UNAVAILABLE";
+        case XR_ERROR_FORM_FACTOR_UNSUPPORTED: return "XR_ERROR_FORM_FACTOR_UNSUPPORTED";
+        case XR_ERROR_VIEW_CONFIGURATION_TYPE_UNSUPPORTED: return "XR_ERROR_VIEW_CONFIGURATION_TYPE_UNSUPPORTED";
+        default: return "XR_UNKNOWN_RESULT";
+    }
+}
+
+bool HasOpenXrExtension(const std::vector<XrExtensionProperties>& extensions, const char* name) {
+    for (const XrExtensionProperties& extension : extensions) {
+        if (std::strcmp(extension.extensionName, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
+bool LoadOpenXrSymbol(void* loader, const char* name, T* out) {
+    *out = reinterpret_cast<T>(dlsym(loader, name));
+    if (*out == nullptr) {
+        ALOGE("IMM_ANDROID_OPENXR_PROBE missingSymbol=%s", name);
+        return false;
+    }
+    return true;
+}
+
+void RunAndroidOpenXrStartupProbe(android_app* app) {
+    ALOGV("IMM_ANDROID_OPENXR_PROBE begin");
+    if (app == nullptr || app->activity == nullptr || app->activity->vm == nullptr || app->activity->clazz == nullptr) {
+        ALOGE("IMM_ANDROID_OPENXR_PROBE missingNativeActivityContext app=%p activity=%p", app, app ? app->activity : nullptr);
+        return;
+    }
+
+    void* loader = dlopen("libopenxr_loader.so", RTLD_NOW | RTLD_LOCAL);
+    if (loader == nullptr) {
+        ALOGE("IMM_ANDROID_OPENXR_PROBE dlopenResult=0 error=%s", dlerror());
+        return;
+    }
+
+    PFN_xrInitializeLoaderKHR xrInitializeLoaderKHR = nullptr;
+    PFN_xrEnumerateInstanceExtensionProperties xrEnumerateInstanceExtensionProperties = nullptr;
+    PFN_xrCreateInstance xrCreateInstance = nullptr;
+    PFN_xrGetSystem xrGetSystem = nullptr;
+    PFN_xrGetSystemProperties xrGetSystemProperties = nullptr;
+    PFN_xrEnumerateViewConfigurations xrEnumerateViewConfigurations = nullptr;
+    PFN_xrEnumerateViewConfigurationViews xrEnumerateViewConfigurationViews = nullptr;
+    PFN_xrDestroyInstance xrDestroyInstance = nullptr;
+
+    const bool loaded =
+        LoadOpenXrSymbol(loader, "xrInitializeLoaderKHR", &xrInitializeLoaderKHR) &&
+        LoadOpenXrSymbol(loader, "xrEnumerateInstanceExtensionProperties", &xrEnumerateInstanceExtensionProperties) &&
+        LoadOpenXrSymbol(loader, "xrCreateInstance", &xrCreateInstance) &&
+        LoadOpenXrSymbol(loader, "xrGetSystem", &xrGetSystem) &&
+        LoadOpenXrSymbol(loader, "xrGetSystemProperties", &xrGetSystemProperties) &&
+        LoadOpenXrSymbol(loader, "xrEnumerateViewConfigurations", &xrEnumerateViewConfigurations) &&
+        LoadOpenXrSymbol(loader, "xrEnumerateViewConfigurationViews", &xrEnumerateViewConfigurationViews) &&
+        LoadOpenXrSymbol(loader, "xrDestroyInstance", &xrDestroyInstance);
+    if (!loaded) {
+        dlclose(loader);
+        return;
+    }
+
+    XrLoaderInitInfoAndroidKHR loaderInit = {};
+    loaderInit.type = XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR;
+    loaderInit.applicationVM = app->activity->vm;
+    loaderInit.applicationContext = app->activity->clazz;
+    XrResult result = xrInitializeLoaderKHR(reinterpret_cast<const XrLoaderInitInfoBaseHeaderKHR*>(&loaderInit));
+    ALOGV("IMM_ANDROID_OPENXR_PROBE initializeLoaderResult=%d resultName=%s", result, XrResultName(result));
+    if (XR_FAILED(result)) {
+        dlclose(loader);
+        return;
+    }
+
+    uint32_t extensionCount = 0;
+    result = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+    ALOGV("IMM_ANDROID_OPENXR_PROBE enumerateExtensionsResult=%d resultName=%s count=%u", result, XrResultName(result), extensionCount);
+    if (XR_FAILED(result)) {
+        dlclose(loader);
+        return;
+    }
+
+    std::vector<XrExtensionProperties> extensions(extensionCount);
+    for (XrExtensionProperties& extension : extensions) {
+        extension.type = XR_TYPE_EXTENSION_PROPERTIES;
+    }
+    result = xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensions.data());
+    ALOGV("IMM_ANDROID_OPENXR_PROBE enumerateExtensionsFillResult=%d resultName=%s count=%u", result, XrResultName(result), extensionCount);
+    if (XR_FAILED(result)) {
+        dlclose(loader);
+        return;
+    }
+
+    for (const XrExtensionProperties& extension : extensions) {
+        if (std::strstr(extension.extensionName, "vulkan") != nullptr ||
+            std::strstr(extension.extensionName, "android") != nullptr ||
+            std::strstr(extension.extensionName, "Android") != nullptr) {
+            ALOGV("IMM_ANDROID_OPENXR_PROBE extension=%s version=%u", extension.extensionName, extension.extensionVersion);
+        }
+    }
+
+    if (!HasOpenXrExtension(extensions, XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME)) {
+        ALOGE("IMM_ANDROID_OPENXR_PROBE missingRequiredExtension=%s", XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+        dlclose(loader);
+        return;
+    }
+
+    std::vector<const char*> enabledExtensions;
+    enabledExtensions.push_back(XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME);
+    if (HasOpenXrExtension(extensions, XR_KHR_VULKAN_ENABLE_EXTENSION_NAME)) {
+        enabledExtensions.push_back(XR_KHR_VULKAN_ENABLE_EXTENSION_NAME);
+    }
+    if (HasOpenXrExtension(extensions, XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME)) {
+        enabledExtensions.push_back(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+    }
+
+    XrInstanceCreateInfoAndroidKHR androidCreateInfo = {};
+    androidCreateInfo.type = XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR;
+    androidCreateInfo.applicationVM = app->activity->vm;
+    androidCreateInfo.applicationActivity = app->activity->clazz;
+
+    XrInstanceCreateInfo createInfo = {};
+    createInfo.type = XR_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.next = &androidCreateInfo;
+    std::strncpy(createInfo.applicationInfo.applicationName, "IMM Android OpenXR Probe", XR_MAX_APPLICATION_NAME_SIZE - 1);
+    std::strncpy(createInfo.applicationInfo.engineName, "IMM", XR_MAX_ENGINE_NAME_SIZE - 1);
+    createInfo.applicationInfo.applicationVersion = 1;
+    createInfo.applicationInfo.engineVersion = 1;
+    createInfo.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
+    createInfo.enabledExtensionNames = enabledExtensions.data();
+
+    XrInstance instance = XR_NULL_HANDLE;
+    result = xrCreateInstance(&createInfo, &instance);
+    ALOGV("IMM_ANDROID_OPENXR_PROBE createInstanceResult=%d resultName=%s instance=%p enabledExtensions=%u", result, XrResultName(result), reinterpret_cast<void*>(instance), createInfo.enabledExtensionCount);
+    if (XR_FAILED(result)) {
+        dlclose(loader);
+        return;
+    }
+
+    XrSystemGetInfo systemInfo = {};
+    systemInfo.type = XR_TYPE_SYSTEM_GET_INFO;
+    systemInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+    XrSystemId systemId = XR_NULL_SYSTEM_ID;
+    result = xrGetSystem(instance, &systemInfo, &systemId);
+    ALOGV("IMM_ANDROID_OPENXR_PROBE getHmdSystemResult=%d resultName=%s systemId=%llu", result, XrResultName(result), static_cast<unsigned long long>(systemId));
+
+    if (XR_SUCCEEDED(result)) {
+        XrSystemProperties systemProperties = {};
+        systemProperties.type = XR_TYPE_SYSTEM_PROPERTIES;
+        result = xrGetSystemProperties(instance, systemId, &systemProperties);
+        ALOGV("IMM_ANDROID_OPENXR_PROBE getSystemPropertiesResult=%d resultName=%s systemName=%s vendorId=%u", result, XrResultName(result), systemProperties.systemName, systemProperties.vendorId);
+
+        uint32_t viewConfigCount = 0;
+        result = xrEnumerateViewConfigurations(instance, systemId, 0, &viewConfigCount, nullptr);
+        ALOGV("IMM_ANDROID_OPENXR_PROBE enumerateViewConfigsResult=%d resultName=%s count=%u", result, XrResultName(result), viewConfigCount);
+        if (XR_SUCCEEDED(result) && viewConfigCount > 0) {
+            uint32_t stereoViewCount = 0;
+            result = xrEnumerateViewConfigurationViews(instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &stereoViewCount, nullptr);
+            ALOGV("IMM_ANDROID_OPENXR_PROBE enumerateStereoViewsResult=%d resultName=%s count=%u", result, XrResultName(result), stereoViewCount);
+            if (XR_SUCCEEDED(result) && stereoViewCount > 0) {
+                std::vector<XrViewConfigurationView> stereoViews(stereoViewCount);
+                for (XrViewConfigurationView& view : stereoViews) {
+                    view.type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
+                }
+                result = xrEnumerateViewConfigurationViews(instance, systemId, XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, stereoViewCount, &stereoViewCount, stereoViews.data());
+                ALOGV("IMM_ANDROID_OPENXR_PROBE enumerateStereoViewsFillResult=%d resultName=%s count=%u", result, XrResultName(result), stereoViewCount);
+                for (uint32_t i = 0; i < stereoViewCount; ++i) {
+                    ALOGV("IMM_ANDROID_OPENXR_PROBE stereoView[%u]=recommended=%ux%u max=%ux%u samples=%u",
+                          i,
+                          stereoViews[i].recommendedImageRectWidth,
+                          stereoViews[i].recommendedImageRectHeight,
+                          stereoViews[i].maxImageRectWidth,
+                          stereoViews[i].maxImageRectHeight,
+                          stereoViews[i].recommendedSwapchainSampleCount);
+                }
+            }
+        }
+    }
+
+    result = xrDestroyInstance(instance);
+    ALOGV("IMM_ANDROID_OPENXR_PROBE destroyInstanceResult=%d resultName=%s", result, XrResultName(result));
+    dlclose(loader);
+    ALOGV("IMM_ANDROID_OPENXR_PROBE end");
+}
+#endif
 
 void setAssetDirectory(const char* dir) {
     gAssetDirectory = dir ? dir : "";
@@ -205,6 +429,7 @@ bool initVulkanWindow(android_app* app) {
         return false;
     }
 
+    ANativeWindow_setBuffersGeometry(app->window, 0, 0, WINDOW_FORMAT_RGBX_8888);
     gEngine.width = ANativeWindow_getWidth(app->window);
     gEngine.height = ANativeWindow_getHeight(app->window);
     if (gEngine.width <= 0 || gEngine.height <= 0) {
@@ -303,6 +528,7 @@ std::string ResolveInitialImmPath() {
     // }
 
     if (ResolveImmPathInDirectory(appDir.c_str(), resolvedPath)) {
+        ALOGV("IMMAVAL autoload appDir path=%s", resolvedPath.c_str());
         return resolvedPath;
     }
 
@@ -315,10 +541,16 @@ std::string ResolveInitialImmPath() {
         FILE *fp = fopen(assetImmPath.c_str(), "rb");
         if (fp) {
             fclose(fp);
+            ALOGV("IMMAVAL autoload asset path=%s", assetImmPath.c_str());
             return assetImmPath;
         }
+        ALOGV("IMMAVAL autoload asset missing path=%s", assetImmPath.c_str());
     }
 
+    ALOGV("IMMAVAL autoload none appDir=%s assetDir=%s externalDir=%s",
+          appDir.c_str(),
+          gAssetDirectory.c_str(),
+          gExternalFilesDirectory.c_str());
     return std::string();
 }
 
@@ -387,6 +619,12 @@ void shutdownViewer() {
         delete gEngine.log;
         gEngine.log = nullptr;
     }
+
+    if (gEngine.activeSettings) {
+        gEngine.activeSettings->End();
+        delete gEngine.activeSettings;
+        gEngine.activeSettings = nullptr;
+    }
 }
 
 bool ensureRenderTarget() {
@@ -406,7 +644,7 @@ bool ensureRenderTarget() {
         gEngine.width,
         gEngine.height,
         1,
-        4,
+        8,
         1,
         0
     };
@@ -416,7 +654,7 @@ bool ensureRenderTarget() {
         gEngine.width,
         gEngine.height,
         1,
-        4,
+        8,
         1,
         0
     };
@@ -493,20 +731,34 @@ bool loadPath(const std::wstring& path) {
 
     initViewer();
 
-    Settings settings;
-    settings.mPlayback.mLocation = ImmCore::trans3d::identity();
-    settings.mPlayback.mPlayerSpawn.mLocation.InitCopyW(gEngine.playerSpawnLocation.c_str());
-    settings.mPlayback.mPlayerSpawn.mCustom = ImmCore::trans3d::identity();
+    if (gEngine.activeSettings) {
+        gEngine.activeSettings->End();
+        delete gEngine.activeSettings;
+        gEngine.activeSettings = nullptr;
+    }
 
-    settings.mRendering.mRenderingAPI = gEngine.useVulkan ? Settings::Rendering::API::Vulkan : Settings::Rendering::API::GLES;
-    settings.mRendering.mRenderingTechnique = gEngine.renderingTechnique;
-    settings.mRendering.mEnableVR = false;
+    Settings *settings = new Settings();
+    gEngine.activeSettings = settings;
+    settings->mPlayback.mLocation = ImmCore::trans3d::identity();
+    settings->mPlayback.mPlayerSpawn.mLocation.InitCopyW(gEngine.playerSpawnLocation.c_str());
+    settings->mPlayback.mPlayerSpawn.mCustom = ImmCore::trans3d::identity();
 
-    if (!settings.mFiles.mLoad.Init(16, false)) {
+    settings->mRendering.mRenderingAPI = gEngine.useVulkan ? Settings::Rendering::API::Vulkan : Settings::Rendering::API::GLES;
+    settings->mRendering.mXRRuntime = Settings::Rendering::XRRuntime::Legacy;
+    settings->mRendering.mRenderingTechnique = gEngine.renderingTechnique;
+    settings->mRendering.mEnableVR = false;
+
+    if (!settings->mFiles.mLoad.Init(16, false)) {
         return false;
     }
-    settings.mFiles.mLoad.New(1, true);
-    settings.mFiles.mLoad[0].InitCopyW(path.c_str());
+    settings->mFiles.mLoad.New(1, true);
+    settings->mFiles.mLoad[0].InitCopyW(path.c_str());
+    char *utf8Path = piws2str(path.c_str());
+    ALOGV("IMMAVAL loadPath path=%s settings=%p renderer=%s",
+          utf8Path ? utf8Path : "",
+          settings,
+          gEngine.useVulkan ? "Vulkan" : "GLES");
+    free(utf8Path);
 
     const bool success = gEngine.viewer->Init(
         0,
@@ -515,13 +767,12 @@ bool loadPath(const std::wstring& path) {
         gEngine.log,
         gEngine.timer,
         gEngine.stereoMode,
-        &settings);
-
-    settings.mFiles.mLoad[0].End();
-    settings.mFiles.mLoad.End();
+        settings);
 
     gEngine.viewerInitialized = success;
     gEngine.firstFrame = true;
+    gEngine.frameCount = 0;
+    ALOGV("IMMAVAL loadPath result=%d settings=%p", success ? 1 : 0, settings);
     return success;
 }
 
@@ -536,6 +787,7 @@ void pollMessages() {
                 gPendingPath = widePath ? widePath : L"";
                 free(widePath);
             }
+            ALOGV("IMMAVAL pollMessages autoload tried pathPresent=%d", gPendingPath.empty() ? 0 : 1);
         }
 
         if (gPendingPath.empty()) {
@@ -584,6 +836,17 @@ void renderFrame() {
                                ivec2(gEngine.width, gEngine.height), true, 8000, gEngine.firstFrame);
     gEngine.viewer->GlobalRender(vrToHead, projection);
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
+    if (gEngine.frameCount == 0 || gEngine.frameCount == 60) {
+        ALOGV("IMMAVAL renderFrame frame=%u size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
+              gEngine.frameCount,
+              gEngine.width,
+              gEngine.height,
+              gEngine.useVulkan ? "Vulkan" : "GLES",
+              gEngine.firstFrame ? 1 : 0,
+              gEngine.renderTarget,
+              gEngine.colorTexture);
+    }
+    ++gEngine.frameCount;
 
     if (gEngine.useVulkan) {
         gEngine.renderer->SetRenderTarget(nullptr);
@@ -722,6 +985,11 @@ void updateCameraFromTouch(float dtime) {
 }
 
 void handleCmd(android_app* app, int32_t cmd) {
+    ALOGV("IMMAVAL appCmd cmd=%d hasWindow=%d viewerInitialized=%d window=%p",
+          cmd,
+          gEngine.hasWindow ? 1 : 0,
+          gEngine.viewerInitialized ? 1 : 0,
+          app ? app->window : nullptr);
     switch (cmd) {
         case APP_CMD_INIT_WINDOW:
             if (app->window != nullptr && !gEngine.hasWindow) {
@@ -735,6 +1003,7 @@ void handleCmd(android_app* app, int32_t cmd) {
                     }
                 }
                 initViewer();
+                pollMessages();
             }
             break;
         case APP_CMD_TERM_WINDOW:
@@ -797,6 +1066,33 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetQuillRenderingTec
     gEngine.renderingTechnique = static_cast<Settings::Rendering::Technique>(renderingTechnique);
 }
 
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingApi(
+    JNIEnv* jni,
+    jclass,
+    jstring jRenderingApi) {
+    if (!jRenderingApi) {
+        return;
+    }
+
+    const char* renderingApiUtf = jni->GetStringUTFChars(jRenderingApi, 0);
+    if (gEngine.renderer) {
+        ALOGW("IMM Android renderer API change ignored after renderer initialization: %s", renderingApiUtf ? renderingApiUtf : "");
+        jni->ReleaseStringUTFChars(jRenderingApi, renderingApiUtf);
+        return;
+    }
+
+    if (iEqualsIgnoreCase(renderingApiUtf, "vulkan")) {
+        gEngine.useVulkan = true;
+        ALOGV("IMM Android requested renderer API: Vulkan");
+    } else if (iEqualsIgnoreCase(renderingApiUtf, "gles") || iEqualsIgnoreCase(renderingApiUtf, "opengles") || iEqualsIgnoreCase(renderingApiUtf, "opengl")) {
+        gEngine.useVulkan = false;
+        ALOGV("IMM Android requested renderer API: GLES");
+    } else {
+        ALOGW("IMM Android ignoring unknown renderer API: %s", renderingApiUtf ? renderingApiUtf : "");
+    }
+    jni->ReleaseStringUTFChars(jRenderingApi, renderingApiUtf);
+}
+
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetEyeBufferScale(
     JNIEnv*,
     jclass,
@@ -831,6 +1127,10 @@ void android_main(android_app* app) {
     app->onInputEvent = handleInput;
     gEngine.app = app;
     gEngine.running = true;
+
+#if defined(IMM_ANDROID_XR_RUNTIME_OPENXR)
+    RunAndroidOpenXrStartupProbe(app);
+#endif
 
     while (gEngine.running) {
         int events = 0;

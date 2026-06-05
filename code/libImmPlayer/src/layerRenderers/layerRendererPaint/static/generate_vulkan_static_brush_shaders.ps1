@@ -41,7 +41,6 @@ function Convert-VertexGlslForVulkan([string]$Source) {
         $source,
         '(?s)layout \(std140, row_major, binding=9\) uniform ChunkData\s*\{.*?\}chunk_data;',
         'layout (std140, row_major, binding=9) uniform ChunkData { ChunkDataEntry mData[128]; } chunk_data;')
-    $source = $source.Replace('uint bid = uint(real_vertexID);', 'uint bid = uint(gl_VertexID);')
     $source = [regex]::Replace(
         $source,
         '(?s)// this maps the first pt \(tim=0\).*?//vg\.col_tra \*= smoothstep\(layer\.mAnimParams\.z, layer\.mAnimParams\.z \+ layer\.mAnimParams\.w, drawingT\);\s*',
@@ -115,17 +114,20 @@ Set-Content -Path $vsPath -Value $vsSource -NoNewline -Encoding ASCII
 Set-Content -Path $fsPath -Value $fsSource -NoNewline -Encoding ASCII
 
 $vsVariants = New-Object System.Collections.Generic.List[string]
-for ($colorCompressed = 0; $colorCompressed -le 1; ++$colorCompressed) {
-    for ($brush = 0; $brush -lt 5; ++$brush) {
-        for ($wiggle = 0; $wiggle -lt 2; ++$wiggle) {
-            for ($drawin = 0; $drawin -lt 2; ++$drawin) {
-                for ($stereo = 0; $stereo -lt 3; ++$stereo) {
-                    $out = Join-Path $workDir "shader_static_brush_vs_c${colorCompressed}_b${brush}_w${wiggle}_d${drawin}_s${stereo}.spv"
-                    & $glslang -V -S vert "-DCOLOR_COMPRESSED=$colorCompressed" "-DBRUSHTYPE=$brush" "-DWIGGLE=$wiggle" "-DDRAWIN=$drawin" "-DSTEREOMODE=$stereo" "-DVERTEX_FORMAT=0" -o $out $vsPath | Out-Host
-                    if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $out" }
-                    & $spirvVal $out
-                    if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $out" }
-                    $vsVariants.Add($out)
+for ($vertexFormat = 0; $vertexFormat -le 1; ++$vertexFormat) {
+    for ($colorCompressed = 0; $colorCompressed -le 1; ++$colorCompressed) {
+        for ($brush = 0; $brush -lt 5; ++$brush) {
+            for ($wiggle = 0; $wiggle -lt 2; ++$wiggle) {
+                $drawinCount = if ($vertexFormat -eq 1) { 1 } else { 2 }
+                for ($drawin = 0; $drawin -lt $drawinCount; ++$drawin) {
+                    for ($stereo = 0; $stereo -lt 3; ++$stereo) {
+                        $out = Join-Path $workDir "shader_static_brush_vs_v${vertexFormat}_c${colorCompressed}_b${brush}_w${wiggle}_d${drawin}_s${stereo}.spv"
+                        & $glslang -V -S vert "-DCOLOR_COMPRESSED=$colorCompressed" "-DBRUSHTYPE=$brush" "-DWIGGLE=$wiggle" "-DDRAWIN=$drawin" "-DSTEREOMODE=$stereo" "-DVERTEX_FORMAT=$vertexFormat" -o $out $vsPath | Out-Host
+                        if ($LASTEXITCODE -ne 0) { throw "glslangValidator failed for $out" }
+                        & $spirvVal $out
+                        if ($LASTEXITCODE -ne 0) { throw "spirv-val failed for $out" }
+                        $vsVariants.Add($out)
+                    }
                 }
             }
         }

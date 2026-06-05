@@ -23,11 +23,13 @@ android {
         externalNativeBuild {
             cmake {
                 def immNonVr = project.findProperty("immNonVr") ?: "ON"
-                def immRendererApi = project.findProperty("immRendererApi") ?: "GLES"
+                def immRendererApi = project.findProperty("immRendererApi") ?: (immNonVr == "ON" ? "Vulkan" : "GLES")
+                def immXrRuntime = project.findProperty("immXrRuntime") ?: "Legacy"
                 cppFlags "-std=c++17", "-D__ANDROID__", "-DANDROID"
                 arguments "-DANDROID_STL=c++_shared",
                         "-DIMM_ANDROID_NON_VR=${immNonVr}",
                         "-DIMM_ANDROID_RENDERER_API=${immRendererApi}",
+                        "-DIMM_ANDROID_XR_RUNTIME=${immXrRuntime}",
                         "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
                         "-DCMAKE_C_COMPILER_WORKS=1",
                         "-DCMAKE_CXX_COMPILER_WORKS=1",
@@ -57,7 +59,10 @@ android {
 
     sourceSets {
         main {
+            def immNonVr = project.findProperty("immNonVr") ?: "ON"
+            def immManifest = project.findProperty("immManifest") ?: (immNonVr == "ON" ? "nonVr" : "vr")
             def viewerSrc = "${projectDir}/../../../appImmViewer/src/android"
+            manifest.srcFile immManifest == "vr" ? "src/vr/AndroidManifest.xml" : "src/nonVr/AndroidManifest.xml"
             java.srcDirs = ["${viewerSrc}/java"]
             res.srcDirs = ["${viewerSrc}/res"]
             assets.srcDirs = ["${viewerSrc}/assets", "${buildDir}/generated/assets"]

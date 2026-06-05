@@ -38,12 +38,14 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     // Spaces_Player4
     const val EXTRA_QUILL_EYE_BUFFER_SCALE = "QUILL_EYE_BUFFER_SCALE"
     const val EXTRA_QUILL_RENDERING_TECHNIQUE = "QUILL_RENDERING_TECHNIQUE"
+    const val EXTRA_RENDERING_API = "RenderingAPI"
     const val PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 0x1
 
     @JvmStatic external fun nativeSetAssetDirectory(assetsDir: String?)
     @JvmStatic external fun nativeSetExternalFilesDirectory(externalDir: String?)
     @JvmStatic external fun nativeSendMessage(message: String?, messageType: Int)
     @JvmStatic external fun nativeSetQuillRenderingTechnique(renderingTechnique: Int)
+    @JvmStatic external fun nativeSetRenderingApi(renderingApi: String?)
     @JvmStatic
     external fun nativeSetEyeBufferScale(
         scaleFactor: Float
@@ -79,18 +81,12 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    applyRenderingApiExtra(intent)
     super.onCreate(savedInstanceState)
 
     if (intent != null)
         Log.d(TAG, "onCreate intent category: " + intent.categories + " action: " + intent.action)
     else Log.d(TAG, "onCreate null intent")
-
-    if (!requestExternalStoragePermission()) {
-      // Continue init even if the permission dialog is pending to avoid blocking startup.
-      Log.d(TAG, "Permissions pending; continuing init")
-      finishInit()
-      return
-    }
 
     finishInit()
   }
@@ -314,6 +310,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
           nativeSetQuillRenderingTechnique(renderingTechnique)
         }
       }
+      applyRenderingApiExtra(intent)
       if (extras.containsKey(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)) {
         val spawnLocation = extras.getString(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)
         Log.d(TAG, "found player spawn location extra $spawnLocation")
@@ -329,6 +326,19 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
       }
     }
     return false
+  }
+
+  private fun applyRenderingApiExtra(intent: Intent?) {
+    val extras = intent?.extras ?: return
+    if (!extras.containsKey(EXTRA_RENDERING_API)) {
+      return
+    }
+
+    val renderingApi = extras.getString(EXTRA_RENDERING_API, "")
+    if (renderingApi.isNotEmpty()) {
+      Log.d(TAG, "found rendering API extra $renderingApi")
+      nativeSetRenderingApi(renderingApi)
+    }
   }
 
   private fun loadImmPath(path: String) {
@@ -380,17 +390,13 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
 
   private fun requestExternalStoragePermission(): Boolean {
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-        PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) !=
-            PackageManager.PERMISSION_GRANTED) {
+        PackageManager.PERMISSION_GRANTED) {
 
       ActivityCompat.requestPermissions(
           this,
           arrayOf(
               Manifest.permission.READ_EXTERNAL_STORAGE,
-              Manifest.permission.WRITE_EXTERNAL_STORAGE,
-              Manifest.permission.ACCESS_FINE_LOCATION,
-              Manifest.permission.ACCESS_COARSE_LOCATION),
+              Manifest.permission.WRITE_EXTERNAL_STORAGE),
           PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE)
       return false
     }

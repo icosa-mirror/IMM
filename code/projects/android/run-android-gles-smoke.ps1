@@ -6,9 +6,9 @@ param(
 
     [int]$WaitSeconds = 20,
 
-    [string]$LogDir = "logs/android-vulkan-smoke",
+    [string]$LogDir = "logs/android-gles-smoke",
 
-    [string]$BuildDir = "build_vulkan",
+    [string]$BuildDir = "build_gles_fallback",
 
     [switch]$UseIntentRendererExtra,
 
@@ -18,12 +18,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ($Help) {
-    Write-Host "Usage: ./run-android-vulkan-smoke.ps1 [-Adb <adb>] [-WaitSeconds <seconds>] [-LogDir <path>] [-BuildDir <dir>] [-UseIntentRendererExtra] [-SkipBuild]"
+    Write-Host "Usage: ./run-android-gles-smoke.ps1 [-Adb <adb>] [-WaitSeconds <seconds>] [-LogDir <path>] [-BuildDir <dir>] [-UseIntentRendererExtra] [-SkipBuild]"
     return
 }
 
 & (Join-Path $PSScriptRoot "run-android-renderer-smoke.ps1") `
-    -RendererApi Vulkan `
+    -RendererApi GLES `
     -Adb $Adb `
     -WaitSeconds $WaitSeconds `
     -LogDir $LogDir `

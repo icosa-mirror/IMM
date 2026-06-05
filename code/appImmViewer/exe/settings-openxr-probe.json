@@ -1,8 +1,8 @@
 {
   "Rendering": {
-    "EnableVR": false,
+    "EnableVR": true,
     "RenderingAPI": "Vulkan",
-    "XRRuntime": "Legacy",
+    "XRRuntime": "OpenXR",
     "RenderingTechnique": "Static",
     "PixelDensity": 1.0,
     "Supersampling": 1
