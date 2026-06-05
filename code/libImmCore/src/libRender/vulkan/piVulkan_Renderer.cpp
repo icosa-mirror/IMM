@@ -212,6 +212,7 @@ static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_INDEX_BUFFER_BIT = 0x0000004
 static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_VERTEX_BUFFER_BIT = 0x00000080;
 static constexpr VkBufferUsageFlags VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT = 0x00000100;
 static constexpr VkSharingMode VK_SHARING_MODE_EXCLUSIVE = 0;
+static constexpr VkSurfaceTransformFlagBitsKHR VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR = 0x00000001;
 static constexpr VkCompositeAlphaFlagBitsKHR VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR = 0x00000001;
 static constexpr VkCommandPoolCreateFlags VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT = 0x00000002;
 static constexpr VkCommandBufferLevel VK_COMMAND_BUFFER_LEVEL_PRIMARY = 0;
@@ -1185,6 +1186,7 @@ struct piTextureS
     uint64_t externalHandle = 0;
     VkImage image = 0;
     VkImageView imageView = VK_NULL_IMAGE_VIEW;
+    bool ownsImageView = true;
     VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
     VkFormat vkFormat = 0;
     VkImageUsageFlags imageUsage = 0;
@@ -1470,6 +1472,7 @@ struct piVulkanState
     bool presentDescriptorReported = false;
     bool presentPipelineReported = false;
     bool presentPassReported = false;
+    bool presentSelectionReported = false;
     uint32_t cpuPaintDrawCount = 0;
     uint32_t gpuPaintDrawCount = 0;
     uint64_t liveRenderTargets = 0;
@@ -2299,6 +2302,10 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
     {
         imageCount = capabilities.maxImageCount;
     }
+    const VkSurfaceTransformFlagBitsKHR selectedTransform =
+        (capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+            ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+            : capabilities.currentTransform;
 
     VkSwapchainCreateInfoKHR swapchainInfo = {};
     swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -2310,7 +2317,7 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
     swapchainInfo.imageArrayLayers = 1;
     swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchainInfo.preTransform = capabilities.currentTransform;
+    swapchainInfo.preTransform = selectedTransform;
     swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swapchainInfo.presentMode = selectedPresentMode;
     swapchainInfo.clipped = 1;
@@ -2321,6 +2328,16 @@ static bool iCreateVulkanSwapchain(piVulkanState *state, piRenderer::piReporter 
     {
         iError(reporter, "Vulkan renderer failed to create swapchain");
         return false;
+    }
+    {
+        char message[256];
+        std::snprintf(message,
+                      sizeof(message),
+                      "IMMAVAL swapchain transform current=%u supported=0x%x selected=%u",
+                      (unsigned int)capabilities.currentTransform,
+                      (unsigned int)capabilities.supportedTransforms,
+                      (unsigned int)selectedTransform);
+        iReport(reporter, message);
     }
 
     uint32_t swapchainImageCount = 0;
@@ -2759,7 +2776,7 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
         return true;
     }
 
-    VkDescriptorSetLayoutBinding bindings[6] = {};
+    VkDescriptorSetLayoutBinding bindings[7] = {};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[0].descriptorCount = 1;
@@ -2772,22 +2789,26 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[2].descriptorCount = 1;
     bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[3].binding = 7;
-    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[3].binding = 5;
+    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[3].descriptorCount = 1;
-    bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[4].binding = 8;
-    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[4].binding = 7;
+    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[4].descriptorCount = 1;
-    bindings[4].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    bindings[5].binding = 9;
-    bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[5].binding = 8;
+    bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bindings[5].descriptorCount = 1;
     bindings[5].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[6].binding = 9;
+    bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[6].descriptorCount = 1;
+    bindings[6].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
     setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setLayoutInfo.bindingCount = 6;
+    setLayoutInfo.bindingCount = 7;
     setLayoutInfo.pBindings = bindings;
     VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->staticPaintDescriptorSetLayout);
     if (result != VK_SUCCESS || state->staticPaintDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
@@ -2822,7 +2843,7 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
 
     VkDescriptorPoolSize poolSizes[3] = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = 4;
+    poolSizes[0].descriptorCount = 5;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     poolSizes[1].descriptorCount = 1;
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -2879,36 +2900,40 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     piBuffer frameBuffer = state->constantBuffers[0];
     piBuffer layerBuffer = state->constantBuffers[3];
     piBuffer displayBuffer = state->constantBuffers[4];
+    piBuffer passBuffer = state->constantBuffers[5];
     piBuffer vertexData = state->shaderBuffers[8];
     piBuffer chunkBuffer = state->constantBuffers[9];
     if (!blueNoise || blueNoise->imageView == VK_NULL_IMAGE_VIEW || blueNoise->sampler == VK_NULL_SAMPLER ||
         !frameBuffer || frameBuffer->buffer == VK_NULL_BUFFER ||
         !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
         !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
+        !passBuffer || passBuffer->buffer == VK_NULL_BUFFER ||
         !vertexData || vertexData->buffer == VK_NULL_BUFFER ||
         !chunkBuffer || chunkBuffer->buffer == VK_NULL_BUFFER)
     {
         return false;
     }
 
-    VkDescriptorBufferInfo bufferInfos[5] = {};
+    VkDescriptorBufferInfo bufferInfos[6] = {};
     bufferInfos[0].buffer = frameBuffer->buffer;
     bufferInfos[0].range = frameBuffer->size;
     bufferInfos[1].buffer = layerBuffer->buffer;
     bufferInfos[1].range = layerBuffer->size;
     bufferInfos[2].buffer = displayBuffer->buffer;
     bufferInfos[2].range = displayBuffer->size;
-    bufferInfos[3].buffer = vertexData->buffer;
-    bufferInfos[3].range = vertexData->size;
-    bufferInfos[4].buffer = chunkBuffer->buffer;
-    bufferInfos[4].range = chunkBuffer->size;
+    bufferInfos[3].buffer = passBuffer->buffer;
+    bufferInfos[3].range = passBuffer->size;
+    bufferInfos[4].buffer = vertexData->buffer;
+    bufferInfos[4].range = vertexData->size;
+    bufferInfos[5].buffer = chunkBuffer->buffer;
+    bufferInfos[5].range = chunkBuffer->size;
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.sampler = blueNoise->sampler;
     imageInfo.imageView = blueNoise->imageView;
     imageInfo.imageLayout = blueNoise->imageLayout;
 
-    VkWriteDescriptorSet writes[6] = {};
+    VkWriteDescriptorSet writes[7] = {};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].dstSet = state->staticPaintDescriptorSet;
     writes[0].dstBinding = 0;
@@ -2929,23 +2954,29 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     writes[2].pBufferInfo = &bufferInfos[2];
     writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[3].dstSet = state->staticPaintDescriptorSet;
-    writes[3].dstBinding = 7;
+    writes[3].dstBinding = 5;
     writes[3].descriptorCount = 1;
-    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    writes[3].pImageInfo = &imageInfo;
+    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[3].pBufferInfo = &bufferInfos[3];
     writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[4].dstSet = state->staticPaintDescriptorSet;
-    writes[4].dstBinding = 8;
+    writes[4].dstBinding = 7;
     writes[4].descriptorCount = 1;
-    writes[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writes[4].pBufferInfo = &bufferInfos[3];
+    writes[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[4].pImageInfo = &imageInfo;
     writes[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[5].dstSet = state->staticPaintDescriptorSet;
-    writes[5].dstBinding = 9;
+    writes[5].dstBinding = 8;
     writes[5].descriptorCount = 1;
-    writes[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[5].pBufferInfo = &bufferInfos[4];
-    state->vkUpdateDescriptorSets(state->device, 6, writes, 0, nullptr);
+    writes[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[6].dstSet = state->staticPaintDescriptorSet;
+    writes[6].dstBinding = 9;
+    writes[6].descriptorCount = 1;
+    writes[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[6].pBufferInfo = &bufferInfos[5];
+    state->vkUpdateDescriptorSets(state->device, 7, writes, 0, nullptr);
 
     if (!state->descriptorSetReported)
     {
@@ -2971,7 +3002,7 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
         return true;
     }
 
-    VkDescriptorSetLayoutBinding bindings[3] = {};
+    VkDescriptorSetLayoutBinding bindings[4] = {};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[0].descriptorCount = 1;
@@ -2984,10 +3015,14 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
     bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[2].descriptorCount = 1;
     bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[3].binding = 5;
+    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[3].descriptorCount = 1;
+    bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
     setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setLayoutInfo.bindingCount = 3;
+    setLayoutInfo.bindingCount = 4;
     setLayoutInfo.pBindings = bindings;
     VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->pictureDescriptorSetLayout);
     if (result != VK_SUCCESS || state->pictureDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
@@ -3015,7 +3050,7 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[1].descriptorCount = 2;
+    poolSizes[1].descriptorCount = 3;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -3069,9 +3104,11 @@ static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piRepo
     piTexture picture = state->textures[0];
     piBuffer layerBuffer = state->constantBuffers[3];
     piBuffer displayBuffer = state->constantBuffers[4];
+    piBuffer passBuffer = state->constantBuffers[5];
     if (!picture || picture->imageView == VK_NULL_IMAGE_VIEW || picture->sampler == VK_NULL_SAMPLER ||
         !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
-        !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER)
+        !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
+        !passBuffer || passBuffer->buffer == VK_NULL_BUFFER)
     {
         return false;
     }
@@ -3081,13 +3118,15 @@ static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piRepo
     imageInfo.imageView = picture->imageView;
     imageInfo.imageLayout = picture->imageLayout;
 
-    VkDescriptorBufferInfo bufferInfos[2] = {};
+    VkDescriptorBufferInfo bufferInfos[3] = {};
     bufferInfos[0].buffer = layerBuffer->buffer;
     bufferInfos[0].range = layerBuffer->size;
     bufferInfos[1].buffer = displayBuffer->buffer;
     bufferInfos[1].range = displayBuffer->size;
+    bufferInfos[2].buffer = passBuffer->buffer;
+    bufferInfos[2].range = passBuffer->size;
 
-    VkWriteDescriptorSet writes[3] = {};
+    VkWriteDescriptorSet writes[4] = {};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].dstSet = state->pictureDescriptorSet;
     writes[0].dstBinding = 0;
@@ -3106,7 +3145,13 @@ static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piRepo
     writes[2].descriptorCount = 1;
     writes[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[2].pBufferInfo = &bufferInfos[1];
-    state->vkUpdateDescriptorSets(state->device, 3, writes, 0, nullptr);
+    writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[3].dstSet = state->pictureDescriptorSet;
+    writes[3].dstBinding = 5;
+    writes[3].descriptorCount = 1;
+    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[3].pBufferInfo = &bufferInfos[2];
+    state->vkUpdateDescriptorSets(state->device, 4, writes, 0, nullptr);
 
     if (!state->pictureDescriptorReported)
     {
@@ -6004,6 +6049,25 @@ void piRendererVulkan::SwapBuffers(void)
             }
         }
     }
+    if (!mState->presentSelectionReported && presentTexture)
+    {
+        mState->presentSelectionReported = true;
+        char message[512];
+        std::snprintf(message,
+                      sizeof(message),
+                      "IMMAVAL present select direct=%d srgb=%d needsResolve=%d sampleCount=%u resolveImage=%d resolveView=%d format=%u size=%dx%d gpuPaintDraws=%u",
+                      directPresentTexture ? 1 : 0,
+                      srgbGpuPresentTexture ? 1 : 0,
+                      directPresentNeedsResolve ? 1 : 0,
+                      (unsigned int)presentTexture->sampleCount,
+                      directPresentImage != 0 ? 1 : 0,
+                      directPresentImageView != VK_NULL_IMAGE_VIEW ? 1 : 0,
+                      (unsigned int)presentTexture->vkFormat,
+                      presentTexture->info.mXres,
+                      presentTexture->info.mYres,
+                      mState->gpuPaintDrawCount);
+        iReport(mReporter, message);
+    }
     bool copyTexture =
         !directPresentTexture &&
         presentTexture && presentTexture->data &&
@@ -6532,23 +6596,74 @@ void piRendererVulkan::EndExternalImageFrame(void)
     }
 }
 
-bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
+bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers)
 {
     EndExternalImageFrame();
-    if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || vkFormat == 0)
+    if (!mState || image == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0 || !mState->vkCreateImageView)
+    {
+        return false;
+    }
+
+    VkImageViewCreateInfo viewInfo = {};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
+    viewInfo.viewType = arrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = static_cast<VkFormat>(vkFormat);
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = static_cast<uint32_t>(arrayLayers);
+
+    VkImageView imageView = VK_NULL_IMAGE_VIEW;
+    VkResult result = mState->vkCreateImageView(mState->device, &viewInfo, nullptr, &imageView);
+    if (result != VK_SUCCESS || imageView == VK_NULL_IMAGE_VIEW)
+    {
+        iError(mReporter, "Vulkan renderer failed to create external image view");
+        return false;
+    }
+
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, width, height, arrayLayers, false))
+    {
+        mState->vkDestroyImageView(mState->device, imageView, nullptr);
+        return false;
+    }
+    if (mState->externalFrameColorTexture)
+    {
+        mState->externalFrameColorTexture->ownsImageView = true;
+    }
+
+    iReport(mReporter, "Vulkan renderer began external image frame with owned image view");
+    return true;
+}
+
+bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
+{
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, width, height, 1, false);
+}
+
+bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, int width, int height, int arrayLayers, bool ownsImageView)
+{
+    EndExternalImageFrame();
+    if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0)
     {
         return false;
     }
 
     piTextureS *colorTexture = new piTextureS();
-    colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, 1, 1, 1, 0 };
+    colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, arrayLayers, 1, 1, 0 };
     colorTexture->filter = TextureFilter::NONE;
     colorTexture->wrap = TextureWrap::CLAMP;
-    colorTexture->dataSize = (size_t)width * (size_t)height * 4u;
+    colorTexture->dataSize = (size_t)width * (size_t)height * (size_t)arrayLayers * 4u;
     colorTexture->data = (uint8_t *)std::calloc(1, colorTexture->dataSize);
     colorTexture->externalHandle = reinterpret_cast<uint64_t>(image);
     colorTexture->image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
     colorTexture->imageView = static_cast<VkImageView>(reinterpret_cast<uintptr_t>(imageView));
+    colorTexture->ownsImageView = ownsImageView;
     colorTexture->vkFormat = static_cast<VkFormat>(vkFormat);
     colorTexture->imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     colorTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -6560,7 +6675,7 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uin
     ++mState->liveTextures;
 
     const TextureInfo depthInfo = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, 1, 1, 0 };
-    piTexture depthTexture = CreateTexture(L"imm_godot_external_depth", &depthInfo, false, TextureFilter::NONE, TextureWrap::CLAMP, 1.0f, nullptr);
+    piTexture depthTexture = CreateTexture(L"imm_external_image_depth", &depthInfo, false, TextureFilter::NONE, TextureWrap::CLAMP, 1.0f, nullptr);
     if (!depthTexture)
     {
         DestroyTexture(colorTexture);
@@ -6839,7 +6954,7 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
             obj->sampler = VK_NULL_SAMPLER;
         }
         const bool ownsVulkanImage = obj->externalHandle == 0;
-        if (ownsVulkanImage && obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        if ((ownsVulkanImage || obj->ownsImageView) && obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
         {
             mState->vkDestroyImageView(mState->device, obj->imageView, nullptr);
             obj->imageView = VK_NULL_IMAGE_VIEW;

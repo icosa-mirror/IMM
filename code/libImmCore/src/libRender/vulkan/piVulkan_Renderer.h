@@ -35,6 +35,7 @@ public:
     void Disable(void) override;
     void SwapBuffers(void) override;
     void *GetContext(void) override;
+    bool BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
     void EndExternalImageFrame(void);
 
@@ -159,6 +160,8 @@ public:
     void RenderMemoryBarrier(BarrierType type) override;
 
 private:
+    bool BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, int width, int height, int arrayLayers, bool ownsImageView);
+
     piVulkanState *mState;
     piReporter *mReporter;
 };

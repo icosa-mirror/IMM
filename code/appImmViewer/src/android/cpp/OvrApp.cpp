@@ -356,6 +356,18 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetQuillRenderingTec
     immPlayerState.renderingTechnique = static_cast<ExePlayer::Settings::Rendering::Technique>(renderingTechnique);
 }
 
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingApi(
+        JNIEnv * jni,
+        jclass clazz,
+        jstring jRenderingApi)
+{
+    const char* renderingApiUtf = jRenderingApi ? jni->GetStringUTFChars(jRenderingApi, 0) : "";
+    ALOGV("nativeSetRenderingApi ignored by Oculus/GLES VR path: %s", renderingApiUtf);
+    if (jRenderingApi) {
+        jni->ReleaseStringUTFChars(jRenderingApi, renderingApiUtf);
+    }
+}
+
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetTrackingTransformLevel(
         JNIEnv * jni,
         jclass clazz,
@@ -536,6 +548,7 @@ bool loadQuillPath(const wchar_t * quillPath, ExePlayer::Settings::Rendering::Te
     free((void*)spawnLocation);
 
     settings.mRendering.mRenderingAPI = ExePlayer::Settings::Rendering::API::GLES;
+    settings.mRendering.mXRRuntime = ExePlayer::Settings::Rendering::XRRuntime::Legacy;
     // Set the Quill file path in settings.
     settings.mFiles.mLoad.New(1, true);
     settings.mFiles.mLoad[0].InitCopyW(quillPath);

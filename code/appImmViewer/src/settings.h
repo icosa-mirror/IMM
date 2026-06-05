@@ -66,7 +66,14 @@ namespace ExePlayer
                 Pretessellated = 1
             };
 
+            enum class XRRuntime
+            {
+                Legacy = 0,
+                OpenXR = 1
+            };
+
             API        mRenderingAPI;
+            XRRuntime  mXRRuntime;
             Technique  mRenderingTechnique;
             bool mEnableVR;
             float mPixelDensity;

@@ -1,7 +1,8 @@
 {
   "Rendering": {
     "EnableVR": false,
-    "RenderingAPI": "OpenGL",
+    "RenderingAPI": "Vulkan",
+    "XRRuntime": "Legacy",
     "// DirectX": "",
     "RenderingTechnique": "Static",
     "// Pretessellated": "",

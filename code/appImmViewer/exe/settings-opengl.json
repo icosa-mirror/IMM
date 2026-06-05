@@ -1,9 +1,11 @@
 {
   "Rendering": {
     "EnableVR": false,
-    "RenderingAPI": "Vulkan",
+    "RenderingAPI": "OpenGL",
     "XRRuntime": "Legacy",
+    "// Vulkan": "",
     "RenderingTechnique": "Static",
+    "// Pretessellated": "",
     "PixelDensity": 1.0,
     "Supersampling": 1
   },
@@ -17,8 +19,8 @@
     "FullScreen": false,
     "PositionX": 0,
     "PositionY": 0,
-    "Width": 1280,
-    "Height": 720
+    "Width": 1920,
+    "Height": 1080
   },
 
   "Playback": {
