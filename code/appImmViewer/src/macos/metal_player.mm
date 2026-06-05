@@ -1810,7 +1810,7 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
         return;
     }
 
-    if (!_resolve.Init(_renderer, 1, 1))
+    if (!_resolve.Init(_renderer, 1, 1, ExePlayer::Resolve::OutputEncoding::DisplaySrgb))
     {
         NSLog(@"IMM Metal player: resolve initialization failed");
         [self terminateWithExitCode:1];
