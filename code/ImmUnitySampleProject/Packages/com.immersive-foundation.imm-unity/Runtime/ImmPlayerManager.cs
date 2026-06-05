@@ -370,6 +370,15 @@ namespace ImmPlayer
                 return false;
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
+
+            // Unity's DX11 command-buffer plugin event renders into the camera target as
+            // a texture-style render target, even for Game cameras. Passing false here
+            // produces a vertically inverted Game View once the native DX depth convention
+            // is correct again. Keep the env overrides above so future backend work can
+            // deliberately test both projection conventions without changing code.
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
+                return true;
+
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
