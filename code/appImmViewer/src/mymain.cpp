@@ -1499,15 +1499,35 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
         }
 
 
-        // Keep this override close to the renderer capability decision so legacy
-        // Windows VR can be tested in both stereo paths. If eye positions differ
-        // between fast and slow stereo, the bug is below the HMD pose conversion.
+        // Legacy Oculus/OpenGL currently has correct eye placement in the slow
+        // multipass path and visibly wrong eye placement in the fast single-pass
+        // path. Keep that runtime on slow stereo by default so it remains a
+        // usable fallback while standalone OpenXR work proceeds. The opt-in env
+        // var is only for future debugging of the old fast path.
         const bool forceSlowStereo = getenv("IMM_VIEWER_FORCE_SLOW_STEREO") != nullptr;
+        const bool allowLegacyOculusFastStereo = getenv("IMM_VIEWER_ENABLE_LEGACY_OCULUS_FAST_STEREO") != nullptr;
+        const bool legacyOculusHmd =
+            mHMD->mType == piVRHMD::Oculus_Rift ||
+            mHMD->mType == piVRHMD::Oculus_RiftS ||
+            mHMD->mType == piVRHMD::Oculus_Quest;
+        const bool forceLegacyOculusSlowStereo = legacyOculusHmd && !allowLegacyOculusFastStereo;
         if (forceSlowStereo ||
+            forceLegacyOculusSlowStereo ||
             !mRenderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT) ||
             !mRenderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY))
         {
-            mLog.Printf(LT_WARNING, forceSlowStereo ? L"Fast stereo disabled by IMM_VIEWER_FORCE_SLOW_STEREO, falling back to slow stereo" : L"Fast stereo is not available, falling back to slow stereo");
+            if (forceSlowStereo)
+            {
+                mLog.Printf(LT_WARNING, L"Fast stereo disabled by IMM_VIEWER_FORCE_SLOW_STEREO, falling back to slow stereo");
+            }
+            else if (forceLegacyOculusSlowStereo)
+            {
+                mLog.Printf(LT_WARNING, L"Fast stereo disabled for legacy Oculus/OpenGL, falling back to slow stereo");
+            }
+            else
+            {
+                mLog.Printf(LT_WARNING, L"Fast stereo is not available, falling back to slow stereo");
+            }
             mStereoMode = ImmPlayer::StereoMode::Fallback;
         }
         else
