@@ -1499,9 +1499,15 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
         }
 
 
-        if (!mRenderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT) || !mRenderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY))
+        // Keep this override close to the renderer capability decision so legacy
+        // Windows VR can be tested in both stereo paths. If eye positions differ
+        // between fast and slow stereo, the bug is below the HMD pose conversion.
+        const bool forceSlowStereo = getenv("IMM_VIEWER_FORCE_SLOW_STEREO") != nullptr;
+        if (forceSlowStereo ||
+            !mRenderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT) ||
+            !mRenderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY))
         {
-            mLog.Printf(LT_WARNING, L"Fast stereo is not available, falling back to slow stereo");
+            mLog.Printf(LT_WARNING, forceSlowStereo ? L"Fast stereo disabled by IMM_VIEWER_FORCE_SLOW_STEREO, falling back to slow stereo" : L"Fast stereo is not available, falling back to slow stereo");
             mStereoMode = ImmPlayer::StereoMode::Fallback;
         }
         else
