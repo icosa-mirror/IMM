@@ -463,14 +463,19 @@ def verify_unity_projection_guard() -> None:
         "GraphicsDeviceType.Direct3D11",
         "has ping-ponged",
         "legacy reverse-depth convention",
+        "D3D11 non-XR Game cameras",
+        "D3D11 XR/stereo Game cameras",
+        "!cam.stereoEnabled",
         "stereoEnabled as a",
         "CameraType.SceneView",
     ]:
         if token not in manager:
             raise RuntimeError(f"Unity projection guard is missing token: {token}")
-    if not re.search(r"GraphicsDeviceType\.Direct3D11\)\s*\r?\n\s*return true;", manager):
-        raise RuntimeError("Unity D3D11 must use render-into-texture projection to avoid upside-down command-buffer rendering")
-    print("Unity D3D11 projection guard ok", flush=True)
+    if re.search(r"GraphicsDeviceType\.Direct3D11\)\s*\r?\n\s*return true;", manager):
+        raise RuntimeError("Unity D3D11 projection guard must not apply texture projection to XR/stereo Game cameras")
+    if not re.search(r"GraphicsDeviceType\.Direct3D11\s*&&\s*\r?\n\s*cam != null\s*&&\s*\r?\n\s*cam\.cameraType == CameraType\.Game\s*&&\s*\r?\n\s*!cam\.stereoEnabled\)\s*\r?\n\s*return true;", manager):
+        raise RuntimeError("Unity D3D11 projection guard must be limited to non-XR Game cameras")
+    print("Unity D3D11/XR projection guard ok", flush=True)
 
 
 def verify_unity_xr_scene_bootstrap() -> None:

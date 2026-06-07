@@ -391,20 +391,23 @@ namespace ImmPlayer
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
 
-            // Do not remove this D3D11 branch while fixing Android, Metal,
+            // Do not widen this D3D11 branch while fixing Android, Metal,
             // Vulkan, or XR projection regressions. This path has ping-ponged:
-            // using false here fixed some non-D3D11 cases but makes Windows
-            // Unity/DX11 command-buffer rendering upside down. The native DX
-            // path intentionally keeps its legacy reverse-depth convention, and
-            // Unity's D3D11 command-buffer plugin event needs texture-style GPU
-            // projection orientation to stay upright.
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
+            // D3D11 non-XR Game cameras need texture-style projection to avoid
+            // upside-down Windows desktop command-buffer rendering, but
+            // D3D11 XR/stereo Game cameras flip upside down if this is true. The
+            // native DX path intentionally keeps its legacy reverse-depth convention,
+            // so keep non-XR desktop and XR separate here.
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 &&
+                cam != null &&
+                cam.cameraType == CameraType.Game &&
+                !cam.stereoEnabled)
                 return true;
 
             // Unity can mark Game cameras as stereo/XR-active even when we are
             // validating the editor Game view. Do not use stereoEnabled as a
-            // proxy for render-into-texture projection; SceneView is the only
-            // built-in non-D3D11 camera path that needs it here.
+            // proxy for render-into-texture projection. SceneView is the other
+            // built-in path that needs texture-style projection here.
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
