@@ -447,7 +447,8 @@ jobs:
         version="$GODOT_VERSION"
         zip_name="Godot_v${version}_macos.universal.zip"
         url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
-        curl -L "$url" -o "$zip_name"
+        curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$url" -o "$zip_name"
+        unzip -tq "$zip_name"
         unzip -q "$zip_name" -d godot
         godot_exe="$(find godot -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
         if [ -z "$godot_exe" ]; then

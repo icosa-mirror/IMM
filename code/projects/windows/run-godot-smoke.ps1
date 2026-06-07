@@ -44,10 +44,11 @@ $smokeScript = "res://scripts/smoke_test_runner.gd"
 $platform = if ($IsMacOS) { "macos" } elseif ($IsWindows) { "windows" } else { throw "Unsupported platform for Godot smoke test" }
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
 $extensionDir = Join-Path $sampleProject "addons" "imm_viewer" "bin" $platform $variant
-$extensionDll = Join-Path $extensionDir (if ($IsMacOS) { "libimm_godot_extension.dylib" } else { "imm_godot_extension.dll" })
+$extensionFile = if ($IsMacOS) { "libimm_godot_extension.dylib" } else { "imm_godot_extension.dll" }
+$extensionDll = Join-Path $extensionDir $extensionFile
 $editorVariant = if ($Configuration -eq "Release") { "debug" } else { $variant }
 $editorExtensionDir = Join-Path $sampleProject "addons" "imm_viewer" "bin" $platform $editorVariant
-$editorExtensionDll = Join-Path $editorExtensionDir (if ($IsMacOS) { "libimm_godot_extension.dylib" } else { "imm_godot_extension.dll" })
+$editorExtensionDll = Join-Path $editorExtensionDir $extensionFile
 
 if ($LogDir) {
     $LogDir = (New-Item -ItemType Directory -Force $LogDir).FullName
