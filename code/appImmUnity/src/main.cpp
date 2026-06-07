@@ -760,6 +760,15 @@ extern "C" void UNITY_INTERFACE_EXPORT Debug()
 
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API IsReadyForDocumentLoad()
+{
+#if defined(__ANDROID__) || defined(ANDROID)
+    return (gImmUnityPlugin.mBridge.IsInitialized() && sAndroidDeferredInit.isInitialized) ? 1 : 0;
+#else
+    return gImmUnityPlugin.mBridge.IsInitialized() ? 1 : 0;
+#endif
+}
+
 static mat4x4 iUnityToPilibs(const float *m)
 {
 	return mat4x4(m[0], m[4], m[ 8], m[12],
@@ -886,6 +895,19 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
         return -1;
     }
 
+#if defined(__ANDROID__) || defined(ANDROID)
+    // Android Unity creates IMM's GLES renderer from the first render-thread
+    // plugin event. Loading before that event leaves Player partially
+    // initialized and crashes in Player::Load; report a load failure instead
+    // so managed code can wait for the render-thread readiness signal.
+    if (!sAndroidDeferredInit.isInitialized)
+    {
+        __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "LoadFromFile blocked until Android deferred renderer init completes");
+        iLog().Printf(LT_ERROR, L"LoadFromFile blocked until Android deferred renderer init completes");
+        return -1;
+    }
+#endif
+
     iLog().Printf(LT_DEBUG, L"loading from file: %s", pistr2ws(fileName));
 
     try
@@ -910,6 +932,17 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
 
 extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, void* data) // ToDo: need to pass data from managed code to native code.
 {
+#if defined(__ANDROID__) || defined(ANDROID)
+    // See LoadFromFile. Memory-backed loads still enter Player::Load and need
+    // the same render-thread GLES initialization to have completed first.
+    if (!sAndroidDeferredInit.isInitialized)
+    {
+        __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "LoadFromMemory blocked until Android deferred renderer init completes");
+        iLog().Printf(LT_ERROR, L"LoadFromMemory blocked until Android deferred renderer init completes");
+        return -1;
+    }
+#endif
+
     if (!data || size == 0)
     {
         iLog().Printf(LT_DEBUG, L"loading from memory...\nfile name is %s\nsize is %d", pistr2ws(fileName), size);

@@ -1396,8 +1396,22 @@ void piRendererGLES::SetState( piState state, bool value )
 	}
 	else if (state == piSTATE_DEPTH_TEST)
 	{
-		if (value) glEnable(GL_DEPTH_TEST);
-		else	   glDisable(GL_DEPTH_TEST);
+		if (value)
+		{
+			glEnable(GL_DEPTH_TEST);
+			// Unity/OpenXR owns the surrounding GLES context and may leave a
+			// reverse-Z or otherwise incompatible compare function bound before
+			// our plugin event. IMM projection/depth clearing on GLES assumes
+			// the same LEQUAL convention as the desktop GL renderer; set it
+			// every time depth testing is enabled so paint occlusion cannot
+			// depend on ambient Unity XR state.
+			glDepthFunc(GL_LEQUAL);
+			glDepthRangef(0.0f, 1.0f);
+		}
+		else
+		{
+			glDisable(GL_DEPTH_TEST);
+		}
 
 		mCurrentRenderState.mDepthTest = value;
 	}

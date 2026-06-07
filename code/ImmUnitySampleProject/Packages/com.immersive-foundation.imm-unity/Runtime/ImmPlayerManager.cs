@@ -355,6 +355,26 @@ namespace ImmPlayer
 
         public bool UsesCommandBufferRendering => _useCommandBufferRendering;
 
+        public bool IsReadyForDocumentLoad
+        {
+            get
+            {
+                if (!_isInitialized)
+                    return false;
+
+                return RequiresNativeDocumentLoadReady() ? ImmNativePlugin.IsReadyForDocumentLoad() != 0 : true;
+            }
+        }
+
+        private static bool RequiresNativeDocumentLoadReady()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return true;
+#else
+            return false;
+#endif
+        }
+
         private static bool IsAppleMetalRuntime()
         {
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
@@ -371,14 +391,13 @@ namespace ImmPlayer
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
 
-            // Unity's DX11 command-buffer plugin event renders into the camera target as
-            // a texture-style render target, even for Game cameras. Passing false here
-            // produces a vertically inverted Game View once the native DX depth convention
-            // is correct again. Keep the env overrides above so future backend work can
-            // deliberately test both projection conventions without changing code.
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
-                return true;
-
+            // This intentionally matches the February upside-down VR fix:
+            // Unity can mark Game cameras as stereo/XR-active even when we are
+            // validating the editor Game view. Treating those cameras as
+            // texture-style projections flips the IMM scene vertically on DX11.
+            // SceneView is the only built-in camera path that needs Unity's
+            // render-into-texture projection here; use the env flags above for
+            // backend experiments instead of widening this condition.
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
@@ -398,10 +417,22 @@ namespace ImmPlayer
         {
             if (!_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
                 return;
-            if (!HasRenderableDocument())
-                return;
 
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
+
+            if (!IsReadyForDocumentLoad)
+            {
+                // GLES on Android needs native renderer initialization to
+                // complete from Unity's render-thread plugin callback, where
+                // the GL context is current. Queue this pre-load event before a
+                // document exists so LoadFromFile cannot race renderer creation.
+                info.CommandBuffer.Clear();
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, info.CameraId << 8);
+                return;
+            }
+
+            if (!HasRenderableDocument())
+                return;
 
             int stereoMode = (int)StereoMode.Mono;
             if (cam.stereoEnabled)

@@ -5,6 +5,9 @@
 #if defined(__APPLE__)
 #include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
 #endif
+#if defined(__ANDROID__) || defined(ANDROID)
+#include <android/log.h>
+#endif
 
 #include <cstdlib>
 #include <vector>
@@ -22,18 +25,30 @@ namespace ImmShared
 
         void Info(const char *str) override
         {
+#if defined(__ANDROID__) || defined(ANDROID)
+            // Android initializes the Unity GLES renderer from the render thread.
+            // Avoid piLog's wide printf path here: renderer capability strings
+            // are already narrow C strings and a format failure in this callback
+            // aborts the app before document loading can even begin.
+            __android_log_print(ANDROID_LOG_INFO, "ImmRenderReporter", "%s", (str == nullptr) ? "(null)" : str);
+#else
             piString wstr;
             wstr.InitCopyS(str);
             mLog->Printf(LT_MESSAGE, L"%s", wstr.GetS());
             wstr.End();
+#endif
         }
 
         void Error(const char *str, int) override
         {
+#if defined(__ANDROID__) || defined(ANDROID)
+            __android_log_print(ANDROID_LOG_ERROR, "ImmRenderReporter", "%s", (str == nullptr) ? "(null)" : str);
+#else
             piString wstr;
             wstr.InitCopyS(str);
             mLog->Printf(LT_ERROR, L"%s", wstr.GetS());
             wstr.End();
+#endif
         }
 
         void Begin(uint64_t memCurrent, uint64_t memPeak, int texCurrent, int texPeak) override
@@ -546,6 +561,19 @@ namespace ImmShared
         conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
+#if defined(ANDROID) || defined(__ANDROID__)
+        if (mConfig.rendererApi == piRenderer::API::GLES)
+        {
+            // Android/GLES static paint uses the 28-byte packed vertex format,
+            // which does not carry the authored view direction used by
+            // direction-sensitive strokes. Without that term, paint looks like
+            // its normals/facing are wrong. Pretessellated Android GLES keeps
+            // mDir in the vertex stream and preserves the original fade term.
+            // Do not apply this to Android Vulkan until its pretessellated
+            // SPIR-V path is implemented.
+            conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Pretessellated;
+        }
+#endif
 
         if (!mPlayer.Init(mRenderer, mSoundBackend->GetEngine(), &mLog, &mTimer, &conf))
         {

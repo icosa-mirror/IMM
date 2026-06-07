@@ -1428,18 +1428,69 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        const bool skipPaint = iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT");
+        const bool skipPicture = iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE");
+        const bool skipSound = iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND");
+        const bool skipModel = iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL");
+        const bool isGles = mRenderer->GetAPI() == piRenderer::API::GLES;
+
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan ||
+            isGles)
         {
-            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            // Unity Android OpenXR/GLES renders the authored 360 picture layer
+            // as the scene background. Drawing it after paint hides otherwise
+            // valid paint draw calls in the headset, which made validation show
+            // only the background despite nonzero paintDrawCalls. Keep GLES on
+            // the same background-first path as Vulkan so foreground paint is
+            // composed over the sky dome.
+            if (!skipPicture)
+            {
+                if (isGles)
+                {
+                    // On Unity Android OpenXR/GLES the 360 picture layer is an
+                    // infinite background. Letting that pass test/write depth can
+                    // reject all subsequent paint even though paint draw calls are
+                    // still issued. Render the background as color-only, then put
+                    // depth back for paint/model geometry. If 2D picture depth is
+                    // needed on this path later, split 360 and 2D picture passes
+                    // rather than removing this state reset.
+                    mRenderer->SetState(piSTATE_DEPTH_TEST, false);
+                    mRenderer->SetWriteMask(true, false, false, false, false);
+                }
+                mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                if (isGles)
+                {
+                    mRenderer->SetWriteMask(true, false, false, false, true);
+                    mRenderer->SetState(piSTATE_DEPTH_TEST, true);
+                    mRenderer->Clear(nullptr, nullptr, nullptr, nullptr, true);
+                }
+            }
+            if (isGles)
+            {
+                // Unity/OpenXR and the background pass both share this GLES
+                // context with IMM. Reassert the full paint boundary state here
+                // so opaque paint writes depth consistently on Adreno. IMM uses
+                // shader-written gl_SampleMask for alpha coverage
+                // (CUSTOM_ALPHA_TO_COVERAGE==1), so hardware alpha-to-coverage
+                // must stay disabled or opaque/depth behavior can depend on
+                // ambient Unity XR state.
+                mRenderer->SetWriteMask(true, false, false, false, true);
+                mRenderer->SetState(piSTATE_BLEND, false);
+                mRenderer->SetState(piSTATE_ALPHA_TO_COVERAGE, false);
+                mRenderer->SetState(piSTATE_DEPTH_TEST, true);
+                mRenderer->SetState(piSTATE_DEPTH_CLAMP, true);
+                mRenderer->SetState(piSTATE_FRONT_FACE, true);
+                mRenderer->SetState(piSTATE_CULL_FACE, true);
+            }
+            if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         }
         else
         {
-            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!skipPicture) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         }
-        mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!skipSound) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!skipModel) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
         if (mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES)
         {

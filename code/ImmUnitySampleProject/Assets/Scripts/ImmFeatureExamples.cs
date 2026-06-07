@@ -278,7 +278,7 @@ namespace ImmPlayer
             }
             else
             {
-                LoadFromFileSystem();
+                yield return StartCoroutine(LoadFromFileSystem());
             }
 
             if (_doc == null)
@@ -334,26 +334,45 @@ namespace ImmPlayer
                 File.WriteAllBytes(destPath, data);
                 Debug.Log($"{DiagPrefix}Copied to: {destPath}");
 
+                yield return StartCoroutine(WaitForNativeDocumentLoadReady());
                 _doc = ImmPlayerManager.Instance.LoadDocument(destPath);
             }
         }
 
-        private void LoadFromFileSystem()
+        private IEnumerator LoadFromFileSystem()
         {
             if (string.IsNullOrEmpty(directoryPath))
             {
                 Debug.LogError($"{DiagPrefix}Directory path is empty");
-                return;
+                yield break;
             }
 
             string path = Path.Combine(directoryPath, selectedFileName);
             if (!File.Exists(path))
             {
                 Debug.LogError($"{DiagPrefix}File not found: {path}");
-                return;
+                yield break;
             }
 
+            yield return StartCoroutine(WaitForNativeDocumentLoadReady());
             _doc = ImmPlayerManager.Instance.LoadDocument(path);
+        }
+
+        private IEnumerator WaitForNativeDocumentLoadReady()
+        {
+            const int maxFrames = 240;
+            for (int frame = 0; frame < maxFrames; ++frame)
+            {
+                if (ImmPlayerManager.Instance.IsReadyForDocumentLoad)
+                    yield break;
+
+                yield return null;
+            }
+
+            // Android Unity completes IMM's GLES renderer from a render-thread
+            // plugin event. If this fires, the camera did not deliver that event
+            // within the startup window, so loading now would be a native crash.
+            Debug.LogError($"{DiagPrefix}Native IMM renderer was not ready for document load after {maxFrames} frames");
         }
 
         public void UnloadDocument()

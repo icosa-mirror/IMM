@@ -24,6 +24,9 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void Debug();
 
+        [DllImport(DllName)]
+        public static extern int IsReadyForDocumentLoad();
+
 #if UNITY_IOS && !UNITY_EDITOR
         [DllImport(DllName)]
         public static extern void ImmUnityRegisterRenderingPlugin();

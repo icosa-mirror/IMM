@@ -95,9 +95,6 @@ void main()
 	
 	vec3 cpos = (layer.mLayerToViewer * vec4(pos, 1.0)).xyz;
 
- 
- 	vg.mask = (inColAlpha.w>0.999) ? layer.mID : inInfo;
-
 	// directional stroke
     float f = 1.0;
 	vec3 ori = inOri;
@@ -109,7 +106,12 @@ void main()
         f = f*f;
     }
 
-    vg.col_tra.w = inColAlpha.w * f * layer.mOpacity;
+    float alpha = inColAlpha.w * f * layer.mOpacity;
+    vg.col_tra.w = alpha;
+    // Authored-opaque strokes can become partially covered after directional
+    // facing is applied. Use the final coverage alpha here; using the raw brush
+    // alpha reintroduces the Metal-era opaque-paint sample-mask bug.
+ 	vg.mask = (alpha > 0.999) ? layer.mID : inInfo;
 	#if COLOR_COMPRESSED==0
     vg.col_tra.xyz = inColAlpha.xyz * inColAlpha.xyz;
 	#endif
