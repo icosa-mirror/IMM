@@ -121,7 +121,7 @@ jobs:
 
     - name: Run native Godot smoke test
       shell: pwsh
-      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -LogDir artifacts\godot-smoke-native
+      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -LogDir artifacts\godot-smoke-native -RendererApi 2
 
     - name: Smoke Windows Godot Vulkan playback
       if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
