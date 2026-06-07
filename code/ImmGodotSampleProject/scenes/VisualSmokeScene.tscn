@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://d1fu5tw07wef5"]
 
-[ext_resource type="Script" uid="uid://rx5l80kkurxv" path="res://scripts/visual_smoke_controller.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/visual_smoke_controller.gd" id="1"]
 
 [node name="VisualSmokeScene" type="Node3D" unique_id=635583988]
 script = ExtResource("1")

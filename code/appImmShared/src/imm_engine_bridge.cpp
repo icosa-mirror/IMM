@@ -556,7 +556,12 @@ namespace ImmShared
         const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
                                          mConfig.rendererApi == piRenderer::API::Metal ||
                                          mConfig.rendererApi == piRenderer::API::Vulkan);
-        conf.depthBuffer = usesZeroToOneDepth ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
+        // Keep this matched with the standalone viewer. DepthBuffer describes
+        // the renderer's clear/compare convention, not the host projection clip
+        // range. Regressing hosted Metal/Vulkan to Linear10 can still submit
+        // paint draw calls, but the foreground fails depth visibility and only
+        // the 360 background appears in Godot.
+        conf.depthBuffer = DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
@@ -564,13 +569,10 @@ namespace ImmShared
 #if defined(ANDROID) || defined(__ANDROID__)
         if (mConfig.rendererApi == piRenderer::API::GLES)
         {
-            // Android/GLES static paint uses the 28-byte packed vertex format,
-            // which does not carry the authored view direction used by
-            // direction-sensitive strokes. Without that term, paint looks like
-            // its normals/facing are wrong. Pretessellated Android GLES keeps
-            // mDir in the vertex stream and preserves the original fade term.
-            // Do not apply this to Android Vulkan until its pretessellated
-            // SPIR-V path is implemented.
+            // Android/GLES static paint uses the packed vertex path, which can
+            // submit valid draw calls while producing no visible foreground in
+            // plugin-owned render targets. Pretessellated paint keeps the
+            // authored stroke geometry explicit.
             conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Pretessellated;
         }
 #endif

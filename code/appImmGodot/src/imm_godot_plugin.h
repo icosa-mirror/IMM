@@ -146,6 +146,22 @@ extern "C"
         int transformOverrideEnabled;
     };
 
+    struct ImmGodotRenderPerformanceInfo
+    {
+        int numDrawCalls;
+        int numDrawCallsCulled;
+        int numPaintDrawCalls;
+        int numPictureDrawCalls;
+        int numPicture2DDrawCalls;
+        int numPicture360DrawCalls;
+        int numPicture360EquirectDrawCalls;
+        int numPicture360CubemapDrawCalls;
+        int numModelDrawCalls;
+        int numTriangles;
+        int numTrianglesCulled;
+        uint64_t validationTimeFrame;
+    };
+
     struct ImmGodotSpawnArea
     {
         enum Type : uint32_t
@@ -226,6 +242,7 @@ extern "C"
                                               float viewportHeight,
                                               float minDepth,
                                               float maxDepth);
+    IMMGODOT_EXPORT int ImmGodot_GetRenderPerformanceInfo(ImmGodotRenderPerformanceInfo *info);
 
     IMMGODOT_EXPORT int ImmGodot_LoadFromFile(char *fileName);
     IMMGODOT_EXPORT void ImmGodot_Unload(int id);

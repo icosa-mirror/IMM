@@ -1433,9 +1433,11 @@ namespace ImmPlayer
         const bool skipSound = iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND");
         const bool skipModel = iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL");
         const bool isGles = mRenderer->GetAPI() == piRenderer::API::GLES;
+        const bool renderPictureBeforePaint = mRenderer->GetAPI() == piRenderer::API::Vulkan ||
+                                              isGles;
+        const bool renderPictureColorOnly = isGles;
 
-        if (mRenderer->GetAPI() == piRenderer::API::Vulkan ||
-            isGles)
+        if (renderPictureBeforePaint)
         {
             // Unity Android OpenXR/GLES renders the authored 360 picture layer
             // as the scene background. Drawing it after paint hides otherwise
@@ -1445,7 +1447,7 @@ namespace ImmPlayer
             // composed over the sky dome.
             if (!skipPicture)
             {
-                if (isGles)
+                if (renderPictureColorOnly)
                 {
                     // On Unity Android OpenXR/GLES the 360 picture layer is an
                     // infinite background. Letting that pass test/write depth can
@@ -1458,7 +1460,7 @@ namespace ImmPlayer
                     mRenderer->SetWriteMask(true, false, false, false, false);
                 }
                 mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-                if (isGles)
+                if (renderPictureColorOnly)
                 {
                     mRenderer->SetWriteMask(true, false, false, false, true);
                     mRenderer->SetState(piSTATE_DEPTH_TEST, true);

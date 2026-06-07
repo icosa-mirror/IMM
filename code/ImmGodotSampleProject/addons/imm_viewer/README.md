@@ -28,3 +28,23 @@ This addon provides the native `ImmViewerNode` and `ImmViewerCompositorEffect` u
 6. Save the scene and press Run.
 
 The node loads `sample1.imm`, queues the camera each frame, and the compositor effect renders the IMM output into the active Godot camera.
+
+## Foreground Regression Check
+
+If Godot shows the blurred 360 background but not authored foreground paint, first check the shared bridge depth convention in `code/appImmShared/src/imm_engine_bridge.cpp`. Hosted Metal/Vulkan still use zero-to-one clip/projection matrices, but the player depth buffer convention must remain `DepthBuffer::Linear01`, matching the standalone viewer.
+
+Run the authored-spawn visual smoke capture and inspect the PNG for foreground content:
+
+```sh
+IMM_GODOT_VISUAL_SMOKE=1 \
+IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES=0 \
+IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA=1 \
+IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME=240 \
+IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-foreground-check/spawn.png" \
+/Applications/Godot.app/Contents/MacOS/Godot \
+  --path code/ImmGodotSampleProject \
+  --rendering-driver metal \
+  --rendering-method forward_plus \
+  --scene res://scenes/VisualSmokeScene.tscn \
+  --fixed-fps 30
+```

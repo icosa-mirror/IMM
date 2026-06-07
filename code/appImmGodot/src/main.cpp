@@ -397,6 +397,27 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_RenderCamera(int cameraID,
     return result;
 }
 
+extern "C" IMMGODOT_EXPORT int ImmGodot_GetRenderPerformanceInfo(ImmGodotRenderPerformanceInfo *info)
+{
+    if (info == nullptr || !gBridge.IsInitialized() || gBridge.GetPlayer() == nullptr)
+        return -1;
+
+    const Player::PerformanceInfo &nativeInfo = iPlayer().GetPerformanceInfoForFrame();
+    info->numDrawCalls = nativeInfo.numDrawCalls;
+    info->numDrawCallsCulled = nativeInfo.numDrawCallsCulled;
+    info->numPaintDrawCalls = nativeInfo.numPaintDrawCalls;
+    info->numPictureDrawCalls = nativeInfo.numPictureDrawCalls;
+    info->numPicture2DDrawCalls = nativeInfo.numPicture2DDrawCalls;
+    info->numPicture360DrawCalls = nativeInfo.numPicture360DrawCalls;
+    info->numPicture360EquirectDrawCalls = nativeInfo.numPicture360EquirectDrawCalls;
+    info->numPicture360CubemapDrawCalls = nativeInfo.numPicture360CubemapDrawCalls;
+    info->numModelDrawCalls = nativeInfo.numModelDrawCalls;
+    info->numTriangles = nativeInfo.numTriangles;
+    info->numTrianglesCulled = nativeInfo.numTrianglesCulled;
+    info->validationTimeFrame = nativeInfo.validationTimeFrame;
+    return 0;
+}
+
 extern "C" IMMGODOT_EXPORT int ImmGodot_LoadFromFile(char *fileName)
 {
     if (fileName == nullptr || fileName[0] == '\0')

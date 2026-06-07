@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://dxrq2se1fvtxw"]
 
-[ext_resource type="Script" uid="uid://bhunfscvj5yb7" path="res://scripts/sample_scene_controller.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/sample_scene_controller.gd" id="1"]
 
 [sub_resource type="ImmViewerCompositorEffect" id="ImmViewerCompositorEffect_xc5g8"]
 

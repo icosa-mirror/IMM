@@ -134,6 +134,7 @@ func _setup_compositor() -> bool:
 func _run_visual_smoke() -> void:
 	var failures: Array[String] = []
 	status_label.visible = false
+	var prefer_spawn_area := _visual_smoke_prefers_spawn_area()
 
 	if not _setup_viewer():
 		failures.append("ImmViewerNode setup failed")
@@ -182,7 +183,8 @@ func _run_visual_smoke() -> void:
 			if viewer.is_sequence_ready():
 				sequence_ready = true
 				_apply_forced_player_frame(forced_player_frame)
-				if _frame_camera_from_document():
+				_select_visual_smoke_spawn_area()
+				if _frame_camera_from_document(prefer_spawn_area):
 					_queue_active_camera()
 					break
 			_queue_active_camera()
@@ -199,9 +201,10 @@ func _run_visual_smoke() -> void:
 			if viewer.is_sequence_ready():
 				sequence_ready = true
 				_apply_forced_player_frame(forced_player_frame)
-			if sequence_ready:
-				_frame_camera_from_document()
-			_queue_active_camera()
+				_select_visual_smoke_spawn_area()
+				if sequence_ready:
+					_frame_camera_from_document(prefer_spawn_area)
+				_queue_active_camera()
 
 	if not viewer.is_loaded():
 		failures.append("ImmViewer did not load %s" % str(viewer.get("document_path")))
@@ -213,6 +216,10 @@ func _run_visual_smoke() -> void:
 	var render_diagnostics: Dictionary = viewer.get_render_diagnostics()
 	if int(render_diagnostics.get("last_camera_id", -1)) != CAMERA_ID:
 		failures.append("render diagnostics did not observe camera %d" % CAMERA_ID)
+	if int(render_diagnostics.get("num_paint_draw_calls", 0)) <= 0:
+		failures.append("render diagnostics did not report foreground paint draw calls")
+	if int(render_diagnostics.get("num_draw_calls", 0)) <= 0:
+		failures.append("render diagnostics did not report IMM draw calls")
 
 	var compositor_diagnostics: Dictionary = _compositor_effect.get_diagnostics() if _compositor_effect != null else {}
 	if compositor_diagnostics.is_empty():
@@ -398,7 +405,7 @@ func _frame_camera_from_document(prefer_spawn_area: bool = true) -> bool:
 	if bounds.is_empty():
 		return false
 
-	var center: Vector3 = bounds.get("center", Vector3.ZERO)
+	var center: Vector3 = _native_point_to_godot(bounds.get("center", Vector3.ZERO))
 	var size: Vector3 = bounds.get("size", Vector3.ONE)
 	var radius: float = max(max(size.x, size.y), size.z) * 0.5
 	if radius <= 0.001:
@@ -419,6 +426,29 @@ func _frame_camera_from_document(prefer_spawn_area: bool = true) -> bool:
 	])
 	return true
 
+func _visual_smoke_prefers_spawn_area() -> bool:
+	return OS.get_environment("IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA") == "1"
+
+func _select_visual_smoke_spawn_area() -> void:
+	var requested_index: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_SPAWN_INDEX", -1)
+	if requested_index < 0:
+		return
+	var spawn_ids: PackedInt32Array = PackedInt32Array(viewer.get_spawn_area_ids())
+	if spawn_ids.is_empty():
+		return
+	var current_index: int = int(viewer.get_active_spawn_area_index())
+	var target_index: int = clampi(requested_index, 0, spawn_ids.size() - 1)
+	while current_index >= 0 and current_index != target_index:
+		viewer.next_spawn_area()
+		current_index = int(viewer.get_active_spawn_area_index())
+	var spawn_info: Dictionary = viewer.get_active_spawn_area_info()
+	print("IMM Godot %s visual smoke selected spawn index=%d id=%s name=%s" % [
+		_selected_renderer_name(),
+		target_index,
+		str(spawn_info.get("id", "")),
+		str(spawn_info.get("name", "")),
+	])
+
 func _spawn_area_transform_from_info(info: Dictionary) -> Transform3D:
 	var transform: Dictionary = info.get("transform", {})
 	var basis := Basis(
@@ -427,6 +457,9 @@ func _spawn_area_transform_from_info(info: Dictionary) -> Transform3D:
 		transform.get("basis_z", Vector3.BACK)
 	)
 	return Transform3D(basis.orthonormalized(), transform.get("position", Vector3.ZERO))
+
+func _native_point_to_godot(point: Vector3) -> Vector3:
+	return Vector3(point.x, point.y, -point.z)
 
 func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 	var width := image.get_width()

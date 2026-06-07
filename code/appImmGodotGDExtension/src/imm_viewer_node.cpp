@@ -925,6 +925,22 @@ Dictionary ImmViewerNode::get_render_diagnostics() const
     result["adapter_last_render_result"] = adapter_last_render_result;
     result["adapter_last_viewport_width"] = adapter_last_viewport.width;
     result["adapter_last_viewport_height"] = adapter_last_viewport.height;
+    ImmGodotRenderPerformanceInfo performance_info = {};
+    if (ImmGodot_GetRenderPerformanceInfo(&performance_info) == 0)
+    {
+        result["num_draw_calls"] = performance_info.numDrawCalls;
+        result["num_draw_calls_culled"] = performance_info.numDrawCallsCulled;
+        result["num_paint_draw_calls"] = performance_info.numPaintDrawCalls;
+        result["num_picture_draw_calls"] = performance_info.numPictureDrawCalls;
+        result["num_picture_2d_draw_calls"] = performance_info.numPicture2DDrawCalls;
+        result["num_picture_360_draw_calls"] = performance_info.numPicture360DrawCalls;
+        result["num_picture_360_equirect_draw_calls"] = performance_info.numPicture360EquirectDrawCalls;
+        result["num_picture_360_cubemap_draw_calls"] = performance_info.numPicture360CubemapDrawCalls;
+        result["num_model_draw_calls"] = performance_info.numModelDrawCalls;
+        result["num_triangles"] = performance_info.numTriangles;
+        result["num_triangles_culled"] = performance_info.numTrianglesCulled;
+        result["validation_time_frame"] = static_cast<int64_t>(performance_info.validationTimeFrame);
+    }
     return result;
 }
 
