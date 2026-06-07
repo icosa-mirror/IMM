@@ -33,6 +33,11 @@ GODOT_ADDON_README = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/README
 GODOT_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
 GODOT_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/VisualSmokeScene.tscn"
+UNITY_PLAYER_MANAGER = ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs"
+UNITY_XR_SETTINGS = ROOT / "code/ImmUnitySampleProject/Assets/XR/XRGeneralSettingsPerBuildTarget.asset"
+UNITY_XR_BOOTSTRAP = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs"
+UNITY_XR_BOOTSTRAP_META = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs.meta"
+UNITY_VR_SCENE = ROOT / "code/ImmUnitySampleProject/Assets/Scenes/SampleSceneVR.unity"
 GODOT_EXTENSION_SOURCES = [
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp",
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm",
@@ -448,6 +453,61 @@ def verify_shared_engine_bridge() -> None:
     print("Shared IMM engine bridge audio fallback ok", flush=True)
 
 
+def verify_unity_projection_guard() -> None:
+    manager = UNITY_PLAYER_MANAGER.read_text(encoding="utf-8")
+    for token in [
+        "IMM_UNITY_FORCE_BACKBUFFER_PROJECTION",
+        "IMM_UNITY_FORCE_TEXTURE_PROJECTION",
+        "GraphicsDeviceType.Direct3D11",
+        "has ping-ponged",
+        "legacy reverse-depth convention",
+        "stereoEnabled as a",
+        "CameraType.SceneView",
+    ]:
+        if token not in manager:
+            raise RuntimeError(f"Unity projection guard is missing token: {token}")
+    if not re.search(r"GraphicsDeviceType\.Direct3D11\)\s*\r?\n\s*return true;", manager):
+        raise RuntimeError("Unity D3D11 must use render-into-texture projection to avoid upside-down command-buffer rendering")
+    print("Unity D3D11 projection guard ok", flush=True)
+
+
+def verify_unity_xr_scene_bootstrap() -> None:
+    settings = UNITY_XR_SETTINGS.read_text(encoding="utf-8")
+    bootstrap = UNITY_XR_BOOTSTRAP.read_text(encoding="utf-8")
+    bootstrap_meta = UNITY_XR_BOOTSTRAP_META.read_text(encoding="utf-8")
+    vr_scene = UNITY_VR_SCENE.read_text(encoding="utf-8")
+
+    if "m_InitManagerOnStart: 1" in settings:
+        raise RuntimeError("Unity XR manager must not initialize on startup; XR should be scene-controlled")
+    for token in [
+        "m_InitManagerOnStart: 0",
+        "Standalone Settings",
+        "Android Settings",
+    ]:
+        if token not in settings:
+            raise RuntimeError(f"Unity XR settings are missing manual-start token: {token}")
+    for token in [
+        "XrSceneBootstrap",
+        "InitializeLoader",
+        "StartSubsystems",
+        "StopSubsystems",
+        "DeinitializeLoader",
+        "project-wide XR auto-start disabled",
+    ]:
+        if token not in bootstrap:
+            raise RuntimeError(f"Unity XR scene bootstrap is missing token: {token}")
+
+    guid_match = re.search(r"^guid:\s*([0-9a-f]{32})\s*$", bootstrap_meta, re.MULTILINE)
+    if not guid_match:
+        raise RuntimeError("Unity XR scene bootstrap meta is missing a script guid")
+    bootstrap_guid = guid_match.group(1)
+    if bootstrap_guid not in vr_scene:
+        raise RuntimeError("SampleSceneVR must reference XrSceneBootstrap")
+    if bootstrap_guid in (ROOT / "code/ImmUnitySampleProject/Assets/Scenes/SampleScene.unity").read_text(encoding="utf-8"):
+        raise RuntimeError("Desktop SampleScene must not reference XrSceneBootstrap")
+    print("Unity XR scene bootstrap ok", flush=True)
+
+
 def verify_powershell_syntax() -> None:
     powershell = shutil.which("pwsh") or shutil.which("powershell")
     if powershell is None:
@@ -616,6 +676,8 @@ def main() -> int:
     verify_windows_build_wiring()
     verify_runtime_dependency_sources()
     verify_shared_engine_bridge()
+    verify_unity_projection_guard()
+    verify_unity_xr_scene_bootstrap()
     verify_powershell_syntax()
     run([sys.executable, str(extension_dir / "verify_sample_api.py")])
     run(

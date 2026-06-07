@@ -338,6 +338,7 @@ GameObject:
   - component: {fileID: 1009379717}
   - component: {fileID: 1009379716}
   - component: {fileID: 1009379718}
+  - component: {fileID: 1009379719}
   m_Layer: 0
   m_Name: IMM
   m_TagString: Untagged
@@ -436,6 +437,18 @@ MonoBehaviour:
   layers: []
   spawnAreas: []
   layerList: []
+--- !u!114 &1009379719
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1009379714}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7fb1d3d8ac6a4c9488ccfa625ab7d8f1, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &2142085716
 GameObject:
   m_ObjectHideFlags: 0

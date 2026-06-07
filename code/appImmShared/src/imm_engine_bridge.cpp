@@ -556,12 +556,11 @@ namespace ImmShared
         const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
                                          mConfig.rendererApi == piRenderer::API::Metal ||
                                          mConfig.rendererApi == piRenderer::API::Vulkan);
-        // Keep this matched with the standalone viewer. DepthBuffer describes
-        // the renderer's clear/compare convention, not the host projection clip
-        // range. Regressing hosted Metal/Vulkan to Linear10 can still submit
-        // paint draw calls, but the foreground fails depth visibility and only
-        // the 360 background appears in Godot.
-        conf.depthBuffer = DepthBuffer::Linear01;
+        // DepthBuffer describes the renderer's clear/compare convention, not
+        // the host projection clip range. Hosted D3D11 in Unity still needs
+        // the legacy Linear10 path; hosted Metal/Vulkan use Linear01 so paint
+        // depth remains visible when composited into their external targets.
+        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;

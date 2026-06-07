@@ -391,13 +391,20 @@ namespace ImmPlayer
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
 
-            // This intentionally matches the February upside-down VR fix:
+            // Do not remove this D3D11 branch while fixing Android, Metal,
+            // Vulkan, or XR projection regressions. This path has ping-ponged:
+            // using false here fixed some non-D3D11 cases but makes Windows
+            // Unity/DX11 command-buffer rendering upside down. The native DX
+            // path intentionally keeps its legacy reverse-depth convention, and
+            // Unity's D3D11 command-buffer plugin event needs texture-style GPU
+            // projection orientation to stay upright.
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
+                return true;
+
             // Unity can mark Game cameras as stereo/XR-active even when we are
-            // validating the editor Game view. Treating those cameras as
-            // texture-style projections flips the IMM scene vertically on DX11.
-            // SceneView is the only built-in camera path that needs Unity's
-            // render-into-texture projection here; use the env flags above for
-            // backend experiments instead of widening this condition.
+            // validating the editor Game view. Do not use stereoEnabled as a
+            // proxy for render-into-texture projection; SceneView is the only
+            // built-in non-D3D11 camera path that needs it here.
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
