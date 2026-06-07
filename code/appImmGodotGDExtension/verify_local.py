@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import configparser
+import json
 import os
 import platform
 import re
@@ -38,6 +39,7 @@ UNITY_XR_SETTINGS = ROOT / "code/ImmUnitySampleProject/Assets/XR/XRGeneralSettin
 UNITY_XR_BOOTSTRAP = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs"
 UNITY_XR_BOOTSTRAP_META = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs.meta"
 UNITY_VR_SCENE = ROOT / "code/ImmUnitySampleProject/Assets/Scenes/SampleSceneVR.unity"
+WINDOWS_OPENGL_VR_SETTINGS = ROOT / "code/appImmViewer/exe/settings-opengl-vr.json"
 GODOT_EXTENSION_SOURCES = [
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp",
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm",
@@ -508,6 +510,21 @@ def verify_unity_xr_scene_bootstrap() -> None:
     print("Unity XR scene bootstrap ok", flush=True)
 
 
+def verify_windows_viewer_vr_settings() -> None:
+    settings = json.loads(WINDOWS_OPENGL_VR_SETTINGS.read_text(encoding="utf-8"))
+    rendering = settings.get("Rendering", {})
+    if rendering.get("EnableVR") is not True:
+        raise RuntimeError("settings-opengl-vr.json must enable VR")
+    if rendering.get("RenderingAPI") != "OpenGL":
+        raise RuntimeError("settings-opengl-vr.json must use OpenGL for the legacy Windows VR path")
+    if rendering.get("XRRuntime") != "Legacy":
+        raise RuntimeError("settings-opengl-vr.json must use the legacy Windows VR runtime")
+    load_files = settings.get("File", {}).get("Load", [])
+    if "../../../exampleImmFiles/sample1.imm" not in load_files:
+        raise RuntimeError("settings-opengl-vr.json must load the local sample1.imm")
+    print("Windows standalone OpenGL VR settings ok", flush=True)
+
+
 def verify_powershell_syntax() -> None:
     powershell = shutil.which("pwsh") or shutil.which("powershell")
     if powershell is None:
@@ -678,6 +695,7 @@ def main() -> int:
     verify_shared_engine_bridge()
     verify_unity_projection_guard()
     verify_unity_xr_scene_bootstrap()
+    verify_windows_viewer_vr_settings()
     verify_powershell_syntax()
     run([sys.executable, str(extension_dir / "verify_sample_api.py")])
     run(

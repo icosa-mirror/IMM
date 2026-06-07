@@ -195,7 +195,7 @@ jobs:
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         Write-PackagedViewerSettings code/appImmViewer/exe/settings.json "settings.json" "OpenGL" $false
         Write-PackagedViewerSettings code/appImmViewer/exe/settings-vulkan-smoke.json "settings-vulkan.json" "Vulkan" $false
-        Write-PackagedViewerSettings code/appImmViewer/exe/settings.json "settings-opengl-vr.json" "OpenGL" $true
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings-opengl-vr.json "settings-opengl-vr.json" "OpenGL" $true
 
     - name: Upload Windows Viewer Executable
       uses: actions/upload-artifact@v4
