@@ -119,9 +119,9 @@ jobs:
       shell: pwsh
       run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
 
-    - name: Check Godot GDExtension staging
+    - name: Run native Godot smoke test
       shell: pwsh
-      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight
+      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -LogDir artifacts\godot-smoke-native
 
     - name: Smoke Windows Godot Vulkan playback
       if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
@@ -136,7 +136,7 @@ jobs:
       with:
         name: ImmGodotSmokeLogs-Windows
         path: |
-          artifacts/godot-extension-preflight
+          artifacts/godot-smoke-native
           artifacts/godot-smoke-windows-vulkan
         if-no-files-found: ignore
         retention-days: 7
@@ -494,6 +494,65 @@ jobs:
         path: artifacts/Internal-ImmGodotGDExtension-macOS-platform
         if-no-files-found: error
         retention-days: 1
+
+    - name: Download Godot
+      run: |
+        set -euo pipefail
+        zip_name="Godot_v${GODOT_VERSION}_macos.universal.zip"
+        curl -fsSL -o godot.zip \
+          "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/${zip_name}"
+        unzip -q godot.zip
+        godot_app=$(find . -maxdepth 2 -name "Godot_v*.app" | head -1)
+        if [ -z "$godot_app" ]; then
+          echo "Godot app not found after extracting ${zip_name}"
+          exit 1
+        fi
+        godot_exe="${godot_app}/Contents/MacOS/Godot"
+        chmod +x "$godot_exe"
+        echo "GODOT_EXE=$(pwd)/${godot_exe}" >> "$GITHUB_ENV"
+
+    - name: Run native Godot smoke test
+      shell: pwsh
+      run: |
+        pwsh code/projects/windows/run-godot-smoke.ps1 `
+          -Configuration Release `
+          -GodotExe "$env:GODOT_EXE" `
+          -RequireExtension `
+          -LogDir artifacts/godot-smoke-native
+
+    - name: Run Godot visual smoke test
+      run: |
+        set -euo pipefail
+        sed -i '' 's|^run/main_scene=.*|run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"|' \
+          code/ImmGodotSampleProject/project.godot
+        mkdir -p artifacts/godot-visual-smoke
+        set +e
+        output=$(IMM_GODOT_VISUAL_SMOKE=1 \
+          IMM_GODOT_VISUAL_SMOKE_PNG="$(pwd)/artifacts/godot-visual-smoke/frame.png" \
+          "$GODOT_EXE" --path "$(pwd)/code/ImmGodotSampleProject" 2>&1)
+        exit_code=$?
+        set -e
+        echo "$output"
+        echo "$output" > artifacts/godot-visual-smoke/output.log
+        if [ $exit_code -ne 0 ]; then
+          echo "Godot visual smoke exited with code ${exit_code}"
+          exit $exit_code
+        fi
+        if ! echo "$output" | grep -q "IMM Godot Metal visual smoke passed"; then
+          echo "Godot visual smoke did not print success marker"
+          exit 1
+        fi
+
+    - name: Upload Godot smoke artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotSmokeLogs-macOS
+        path: |
+          artifacts/godot-smoke-native
+          artifacts/godot-visual-smoke
+        if-no-files-found: ignore
+        retention-days: 7
 
     - name: Sign macOS Metal viewer app (if unsigned)
       run: |

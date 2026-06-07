@@ -39,64 +39,69 @@ function Resolve-GodotExe([string]$requested) {
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
-$sampleProject = Join-Path $repoRoot "code\ImmGodotSampleProject"
+$sampleProject = Join-Path $repoRoot "code" "ImmGodotSampleProject"
 $smokeScript = "res://scripts/smoke_test_runner.gd"
+$platform = if ($IsMacOS) { "macos" } elseif ($IsWindows) { "windows" } else { throw "Unsupported platform for Godot smoke test" }
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
-$extensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$variant"
-$extensionDll = Join-Path $extensionDir "imm_godot_extension.dll"
+$extensionDir = Join-Path $sampleProject "addons" "imm_viewer" "bin" $platform $variant
+$extensionDll = Join-Path $extensionDir (if ($IsMacOS) { "libimm_godot_extension.dylib" } else { "imm_godot_extension.dll" })
 $editorVariant = if ($Configuration -eq "Release") { "debug" } else { $variant }
-$editorExtensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$editorVariant"
-$editorExtensionDll = Join-Path $editorExtensionDir "imm_godot_extension.dll"
+$editorExtensionDir = Join-Path $sampleProject "addons" "imm_viewer" "bin" $platform $editorVariant
+$editorExtensionDll = Join-Path $editorExtensionDir (if ($IsMacOS) { "libimm_godot_extension.dylib" } else { "imm_godot_extension.dll" })
 
 if ($LogDir) {
     $LogDir = (New-Item -ItemType Directory -Force $LogDir).FullName
 }
 
 if ($RequireExtension) {
-    $requiredDlls = @(
-        "imm_godot_extension.dll",
-        "ImmGodotPlugin.dll",
-        "Audio360.dll",
-        "opus.dll",
-        "opusenc.dll",
-        "vorbisenc.dll",
-        "zlib1.dll",
-        "jpeg62.dll",
-        "libpng16.dll",
-        "ogg.dll",
-        "vorbis.dll"
-    )
-    $missingDlls = @()
-    foreach ($dll in $requiredDlls) {
-        $candidate = Join-Path $extensionDir $dll
+    $requiredFiles = if ($IsMacOS) {
+        @("libimm_godot_extension.dylib", "libImmGodotPlugin.dylib")
+    } else {
+        @(
+            "imm_godot_extension.dll",
+            "ImmGodotPlugin.dll",
+            "Audio360.dll",
+            "opus.dll",
+            "opusenc.dll",
+            "vorbisenc.dll",
+            "zlib1.dll",
+            "jpeg62.dll",
+            "libpng16.dll",
+            "ogg.dll",
+            "vorbis.dll"
+        )
+    }
+    $missingFiles = @()
+    foreach ($f in $requiredFiles) {
+        $candidate = Join-Path $extensionDir $f
         if (-not (Test-Path $candidate)) {
-            $missingDlls += $candidate
+            $missingFiles += $candidate
         }
     }
     if ($LogDir) {
-        $inventory = @("Expected staged DLLs:")
-        foreach ($dll in $requiredDlls) {
-            $candidate = Join-Path $extensionDir $dll
+        $inventory = @("Expected staged extension files:")
+        foreach ($f in $requiredFiles) {
+            $candidate = Join-Path $extensionDir $f
             if (Test-Path $candidate) {
                 $item = Get-Item $candidate
                 $inventory += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
             }
             else {
-                $inventory += ("MISSING`t{0}" -f $dll)
+                $inventory += ("MISSING`t{0}" -f $f)
             }
         }
-        $inventory | Out-File -FilePath (Join-Path $LogDir "godot-extension-dlls.txt") -Encoding utf8
+        $inventory | Out-File -FilePath (Join-Path $LogDir "godot-extension-files.txt") -Encoding utf8
     }
-    if ($missingDlls.Count -gt 0) {
-        throw "Godot GDExtension runtime DLLs are missing:`n  $($missingDlls -join "`n  ")"
+    if ($missingFiles.Count -gt 0) {
+        throw "Godot GDExtension runtime files are missing:`n  $($missingFiles -join "`n  ")"
     }
 
     if ($editorExtensionDir -ne $extensionDir) {
         New-Item -ItemType Directory -Force $editorExtensionDir | Out-Null
-        foreach ($dll in $requiredDlls) {
-            Copy-Item -Force (Join-Path $extensionDir $dll) (Join-Path $editorExtensionDir $dll)
+        foreach ($f in $requiredFiles) {
+            Copy-Item -Force (Join-Path $extensionDir $f) (Join-Path $editorExtensionDir $f)
         }
-        Write-Host "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup: $editorExtensionDir"
+        Write-Host "Mirrored $Configuration GDExtension files for Godot editor feature lookup: $editorExtensionDir"
     }
 }
 
