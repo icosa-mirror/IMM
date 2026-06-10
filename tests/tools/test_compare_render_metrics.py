@@ -66,36 +66,60 @@ def main() -> int:
             height,
             bytes(channel for pixel in pixels for channel in pixel),
         )
-        contract_path.write_text(
-            json.dumps(
-                {
-                    "schema": "imm-render-baseline-contract-v1",
-                    "baseline": "synthetic",
-                    "validation": {
-                        "format": "ppm-p6",
-                        "requires_dimensions": {"width": width, "height": height},
-                        "minimum_non_black_pixels": 1,
-                        "minimum_near_visible_pixels": 1,
-                        "minimum_luma_span": 16,
-                        "requires_orientation_metrics": True,
-                        "requires_color_metrics": True,
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-
         reference = compare_render_metrics.collect_metrics(reference_path)
         same = compare_render_metrics.collect_metrics(reference_path)
         flipped = compare_render_metrics.collect_metrics(flipped_path)
         dark = compare_render_metrics.collect_metrics(dark_path)
         png = compare_render_metrics.collect_metrics(png_path)
 
+        contract = {
+            "schema": "imm-render-baseline-contract-v1",
+            "baseline": "synthetic",
+            "validation": {
+                "format": "ppm-p6",
+                "requires_dimensions": {"width": width, "height": height},
+                "minimum_non_black_pixels": 1,
+                "minimum_near_visible_pixels": 1,
+                "minimum_luma_span": 16,
+                "requires_orientation_metrics": True,
+                "requires_color_metrics": True,
+                "expected_visible_centroid_normalized": {
+                    "x": {"min": reference["visible_centroid"]["x_normalized"] - 0.05, "max": reference["visible_centroid"]["x_normalized"] + 0.05},
+                    "y": {"min": reference["visible_centroid"]["y_normalized"] - 0.05, "max": reference["visible_centroid"]["y_normalized"] + 0.05},
+                },
+                "expected_vertical_luma_profile": {
+                    "values": reference["vertical_luma_profile"],
+                    "tolerance": 0.06,
+                },
+                "expected_quadrant_luma_share": {
+                    "values": reference["quadrant_luma_share"],
+                    "tolerance": 0.06,
+                },
+                "expected_visible_channel_means": {
+                    "values": reference["visible_channel_means"],
+                    "tolerance": 16,
+                },
+                "expected_visible_luma_mean": {
+                    "min": reference["visible_luma_mean"] - 16,
+                    "max": reference["visible_luma_mean"] + 16,
+                },
+            },
+        }
+        contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
         assert not compare_render_metrics.compare_metrics(reference, same)
         assert png["format"] == "png"
         assert png["non_black_pixels"] == reference["non_black_pixels"]
         assert not compare_render_metrics.compare_metrics(reference, png)
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), reference) == []
+        assert any(
+            "vertical luma profile" in error or "visible centroid" in error or "quadrant luma share" in error
+            for error in compare_render_metrics.validate_contract(contract, flipped)
+        )
+        assert any(
+            "visible luma mean" in error or "channel mean" in error
+            for error in compare_render_metrics.validate_contract(contract, dark)
+        )
         assert any("vertical luma profile" in error or "centroid" in error for error in compare_render_metrics.compare_metrics(reference, flipped))
         assert any("visible luma mean" in error for error in compare_render_metrics.compare_metrics(reference, dark))
 

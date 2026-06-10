@@ -381,6 +381,85 @@ def validate_contract(contract: dict, candidate: dict) -> list[str]:
         if candidate.get("visible_luma_mean", 0) <= 0:
             errors.append("candidate visible luma mean must be positive")
 
+    expected_centroid = validation.get("expected_visible_centroid_normalized")
+    if isinstance(expected_centroid, dict):
+        centroid = candidate.get("visible_centroid") or {}
+        for axis in ["x", "y"]:
+            axis_key = f"{axis}_normalized"
+            expected_axis = expected_centroid.get(axis)
+            actual = centroid.get(axis_key)
+            if isinstance(expected_axis, dict) and actual is not None:
+                minimum = expected_axis.get("min")
+                maximum = expected_axis.get("max")
+                if minimum is not None and actual < minimum:
+                    errors.append(f"visible centroid {axis_key} {actual:.3f} is below contract minimum {minimum:.3f}")
+                if maximum is not None and actual > maximum:
+                    errors.append(f"visible centroid {axis_key} {actual:.3f} is above contract maximum {maximum:.3f}")
+
+    expected_profile = validation.get("expected_vertical_luma_profile")
+    if isinstance(expected_profile, dict):
+        values = expected_profile.get("values")
+        tolerance = float(expected_profile.get("tolerance", 0))
+        actual_profile = candidate.get("vertical_luma_profile") or []
+        if isinstance(values, list):
+            if len(actual_profile) != len(values):
+                errors.append(f"vertical luma profile has {len(actual_profile)} bins, expected {len(values)}")
+            else:
+                for index, expected_value in enumerate(values):
+                    actual = actual_profile[index]
+                    diff = abs(actual - float(expected_value))
+                    if diff > tolerance:
+                        errors.append(
+                            f"vertical luma profile bin {index} differs by {diff:.3f}: "
+                            f"expected={float(expected_value):.3f} candidate={actual:.3f}"
+                        )
+
+    expected_quadrants = validation.get("expected_quadrant_luma_share")
+    if isinstance(expected_quadrants, dict):
+        tolerance = float(expected_quadrants.get("tolerance", 0))
+        values = expected_quadrants.get("values")
+        actual_quadrants = candidate.get("quadrant_luma_share") or {}
+        if isinstance(values, dict):
+            for key, expected_value in values.items():
+                if key not in actual_quadrants:
+                    errors.append(f"quadrant luma share is missing {key}")
+                    continue
+                actual = actual_quadrants[key]
+                diff = abs(actual - float(expected_value))
+                if diff > tolerance:
+                    errors.append(
+                        f"quadrant luma share {key} differs by {diff:.3f}: "
+                        f"expected={float(expected_value):.3f} candidate={actual:.3f}"
+                    )
+
+    expected_channels = validation.get("expected_visible_channel_means")
+    if isinstance(expected_channels, dict):
+        tolerance = float(expected_channels.get("tolerance", 0))
+        values = expected_channels.get("values")
+        actual_channels = candidate.get("visible_channel_means") or {}
+        if isinstance(values, dict):
+            for channel, expected_value in values.items():
+                if channel not in actual_channels:
+                    errors.append(f"visible channel means is missing {channel}")
+                    continue
+                actual = actual_channels[channel]
+                diff = abs(actual - float(expected_value))
+                if diff > tolerance:
+                    errors.append(
+                        f"visible {channel} channel mean differs by {diff:.3f}: "
+                        f"expected={float(expected_value):.3f} candidate={actual:.3f}"
+                    )
+
+    expected_luma = validation.get("expected_visible_luma_mean")
+    if isinstance(expected_luma, dict):
+        actual = candidate.get("visible_luma_mean", 0)
+        minimum = expected_luma.get("min")
+        maximum = expected_luma.get("max")
+        if minimum is not None and actual < minimum:
+            errors.append(f"visible luma mean {actual:.3f} is below contract minimum {minimum:.3f}")
+        if maximum is not None and actual > maximum:
+            errors.append(f"visible luma mean {actual:.3f} is above contract maximum {maximum:.3f}")
+
     return errors
 
 
