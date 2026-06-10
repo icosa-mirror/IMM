@@ -1133,17 +1133,26 @@ jobs:
           --json-output release-assets/matrix-audit.json \
           --markdown-output release-assets/matrix-audit.md
 
+    - name: Generate release IMM baseline actual
+      run: |
+        python tests/tools/generate_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --output release-assets/sample1.actual.json
+
     - name: Write release baseline drift report
       run: |
-        python tests/tools/verify_imm_baseline.py \
-          exampleImmFiles/sample1.imm \
-          --baseline tests/baselines/content/sample1.json \
-          --write-actual release-assets/sample1.actual.json
         python tests/tools/write_baseline_drift_report.py \
           --expected tests/baselines/content/sample1.json \
           --actual release-assets/sample1.actual.json \
           --json-output release-assets/baseline-drift.json \
           --markdown-output release-assets/baseline-drift.md
+
+    - name: Verify release IMM baseline
+      run: |
+        python tests/tools/verify_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --baseline tests/baselines/content/sample1.json \
+          --write-actual release-assets/sample1.actual.json
 
     - name: Write release validation manifest
       run: |
