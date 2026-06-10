@@ -773,6 +773,13 @@ jobs:
     - name: Verify ImmUnity package layout
       run: python tests/tools/verify_package_layout.py unity artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
 
+    - name: Verify Unity package import harness
+      run: >
+        python tests/tools/verify_engine_package_import.py unity
+        --stroke-package artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader
+        --player-package artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity
+        --workspace artifacts/UnityPackageImportHarness
+
     - name: Write ImmUnity package manifest
       run: python tests/tools/write_ci_manifest.py --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
 
@@ -904,6 +911,12 @@ jobs:
 
     - name: Verify Godot addon package layout
       run: python tests/tools/verify_package_layout.py godot artifacts/ImmGodotGDExtension
+
+    - name: Verify Godot package import harness
+      run: >
+        python tests/tools/verify_engine_package_import.py godot
+        --package artifacts/ImmGodotGDExtension
+        --workspace artifacts/GodotPackageImportHarness
 
     - name: Write Godot addon package manifest
       run: python tests/tools/write_ci_manifest.py --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension

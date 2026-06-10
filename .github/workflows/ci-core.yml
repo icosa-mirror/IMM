@@ -81,6 +81,13 @@ jobs:
             code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity \
             --expected-name com.immersive-foundation.imm-unity
 
+      - name: Verify Unity source import harness
+        run: >
+          python tests/tools/verify_engine_package_import.py unity
+          --stroke-package code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader
+          --player-package code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity
+          --workspace artifacts/UnitySourceImportHarness
+
       - name: Verify Godot addon source manifest
         run: |
           test -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
@@ -89,6 +96,12 @@ jobs:
           grep -q 'windows.release.x86_64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
           grep -q 'macos.release.arm64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
           grep -q 'android.debug.arm64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Verify Godot source import harness
+        run: >
+          python tests/tools/verify_engine_package_import.py godot
+          --package code/ImmGodotSampleProject
+          --workspace artifacts/GodotSourceImportHarness
 
       - name: Write CI manifest
         if: always()

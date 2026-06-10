@@ -14,13 +14,13 @@ REQUIRED_JOBS = {
         "build-android": ["Write Android viewer artifact manifest", "Collect Android viewer artifact summary"],
         "build-macos": ["Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
         "build-ios": ["Link-check iOS Unity plugin"],
-        "package-unity-plugins": ["Verify stroke reader Unity package layout", "Write ImmUnity package manifest", "Collect ImmUnity package summary"],
-        "package-godot-extension": ["Verify Godot addon package layout", "Write Godot addon package manifest", "Collect Godot addon package summary"],
+        "package-unity-plugins": ["Verify stroke reader Unity package layout", "Verify Unity package import harness", "Write ImmUnity package manifest", "Collect ImmUnity package summary"],
+        "package-godot-extension": ["Verify Godot addon package layout", "Verify Godot package import harness", "Write Godot addon package manifest", "Collect Godot addon package summary"],
         "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release validation manifest", "Collect release artifact summary"],
     },
     ".github/workflows/ci-core.yml": {
         "baseline-content": ["Verify sample1 IMM baseline", "Write CI manifest", "Collect artifact summary"],
-        "package-source-layout": ["Verify Unity stroke reader package source", "Verify Godot addon source manifest", "Collect artifact summary"],
+        "package-source-layout": ["Verify Unity stroke reader package source", "Verify Unity source import harness", "Verify Godot addon source manifest", "Verify Godot source import harness", "Collect artifact summary"],
         "matrix-status": ["Verify matrix status coverage", "Write CI manifest", "Collect artifact summary"],
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
     },
@@ -31,8 +31,8 @@ REQUIRED_JOBS = {
         "android-godot-vulkan": ["Preflight Android Godot device", "Run Android Godot Vulkan smoke", "Write CI manifest"],
     },
     ".github/workflows/ci-engine.yml": {
-        "unity-package-import": ["Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest"],
-        "godot-package-import": ["Run Godot local verifier", "Write CI manifest"],
+        "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest"],
+        "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Write CI manifest"],
