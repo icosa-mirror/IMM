@@ -22,7 +22,7 @@
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Standalone Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Hosted workflow has an opt-in GPU smoke and ci-gpu.yml defines the self-hosted Vulkan runner lane."
+      "reason": "Hosted workflow has an opt-in GPU smoke and CI GPU Matrix defines the Windows Vulkan lane."
     },
     {
       "product": "standalone",
@@ -59,7 +59,7 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Standalone GLES",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds the APK and ci-device.yml defines the self-hosted GLES runtime lane."
+      "reason": "Hosted CI builds the APK and ci-device.yml defines a GitHub-hosted Android GLES runtime lane."
     },
     {
       "product": "standalone",
@@ -70,7 +70,7 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Standalone Vulkan",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml defines the self-hosted Vulkan runtime lane."
+      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml defines a GitHub-hosted Android Vulkan runtime lane."
     },
     {
       "product": "standalone",
@@ -177,7 +177,7 @@
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Godot Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "GPU smoke is gated in build.yml and defined as a self-hosted GPU job in ci-gpu.yml."
+      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows."
     },
     {
       "product": "godot",
@@ -188,7 +188,7 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Godot Vulkan",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds Android GDExtension artifacts and ci-device.yml defines the device Vulkan smoke lane."
+      "reason": "Hosted CI builds Android GDExtension artifacts and ci-device.yml defines a GitHub-hosted Android Godot Vulkan smoke lane."
     },
     {
       "product": "godot",

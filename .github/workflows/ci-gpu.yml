@@ -18,12 +18,33 @@ jobs:
   windows-standalone-vulkan:
     name: Windows Standalone Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: [self-hosted, windows, gpu, vulkan]
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Vulkan tools
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk --no-progress -y
+          $sdk = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdk) {
+            throw "Vulkan SDK install directory was not found under C:\VulkanSDK"
+          }
+          $bin = Join-Path $sdk.FullName "Bin"
+          if (-not (Test-Path (Join-Path $bin "glslangValidator.exe"))) {
+            throw "glslangValidator.exe was not found in $bin"
+          }
+          if (-not (Test-Path (Join-Path $bin "spirv-val.exe"))) {
+            throw "spirv-val.exe was not found in $bin"
+          }
+          "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Preflight GPU runner
         shell: pwsh
@@ -201,12 +222,47 @@ jobs:
   windows-godot-vulkan:
     name: Windows Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: [self-hosted, windows, gpu, godot, vulkan]
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Vulkan tools
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk --no-progress -y
+          $sdk = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdk) {
+            throw "Vulkan SDK install directory was not found under C:\VulkanSDK"
+          }
+          $bin = Join-Path $sdk.FullName "Bin"
+          if (-not (Test-Path (Join-Path $bin "glslangValidator.exe"))) {
+            throw "glslangValidator.exe was not found in $bin"
+          }
+          if (-not (Test-Path (Join-Path $bin "spirv-val.exe"))) {
+            throw "spirv-val.exe was not found in $bin"
+          }
+          "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Download Godot 4.5
+        shell: pwsh
+        run: |
+          $version = "4.5-stable"
+          $zipName = "Godot_v$($version)_win64.exe.zip"
+          $url = "https://github.com/godotengine/godot-builds/releases/download/$version/$zipName"
+          Invoke-WebRequest -Uri $url -OutFile $zipName
+          Expand-Archive -Path $zipName -DestinationPath godot
+          $godotExe = Get-ChildItem -Path godot -Filter "Godot*.exe" | Select-Object -First 1
+          if (-not $godotExe) {
+            throw "Godot executable not found after extracting $zipName"
+          }
+          "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Preflight Godot Vulkan runner
         shell: pwsh

@@ -53,10 +53,10 @@ REQUIRED_JOBS = {
 
 REQUIRED_RUNS_ON = {
     ".github/workflows/ci-device.yml": {
-        "android-standalone-gles": {"self-hosted", "android-device"},
-        "android-standalone-vulkan": {"self-hosted", "android-device", "vulkan"},
+        "android-standalone-gles": {"ubuntu-latest"},
+        "android-standalone-vulkan": {"ubuntu-latest"},
         "android-openxr-probe": {"self-hosted", "quest", "openxr"},
-        "android-godot-vulkan": {"self-hosted", "android-device", "godot", "vulkan"},
+        "android-godot-vulkan": {"ubuntu-latest"},
         "android-quest-vr": {"self-hosted", "quest", "vr"},
         "ios-device-smoke": {"self-hosted", "macos", "ios-device"},
     },
@@ -66,10 +66,10 @@ REQUIRED_RUNS_ON = {
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-vulkan": {"self-hosted", "windows", "gpu", "vulkan"},
+        "windows-standalone-vulkan": {"windows-latest"},
         "windows-standalone-openxr-vr": {"self-hosted", "windows", "gpu", "vr", "openxr"},
         "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
-        "windows-godot-vulkan": {"self-hosted", "windows", "gpu", "godot", "vulkan"},
+        "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
         "macos-godot-metal": {"self-hosted", "macos", "gpu", "metal", "godot"},
     },

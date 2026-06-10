@@ -30,6 +30,8 @@ function Resolve-Adb([string]$Requested) {
         return (Resolve-Path $Requested).Path
     }
 
+    $adbExecutable = if ($IsWindows) { "adb.exe" } else { "adb" }
+
     $cmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($cmd) {
         return $cmd.Source
@@ -39,8 +41,8 @@ function Resolve-Adb([string]$Requested) {
     if (Test-Path $localProperties) {
         $sdkLine = Get-Content $localProperties | Where-Object { $_ -match "^sdk\.dir=" } | Select-Object -First 1
         if ($sdkLine) {
-            $sdkDir = ($sdkLine -replace "^sdk\.dir=", "").Replace("\\", "\")
-            $candidate = Join-Path $sdkDir "platform-tools\adb.exe"
+            $sdkDir = ($sdkLine -replace "^sdk\.dir=", "").Replace("\\", [IO.Path]::DirectorySeparatorChar)
+            $candidate = Join-Path $sdkDir (Join-Path "platform-tools" $adbExecutable)
             if (Test-Path $candidate) {
                 return (Resolve-Path $candidate).Path
             }
@@ -48,7 +50,7 @@ function Resolve-Adb([string]$Requested) {
     }
 
     if ($env:ANDROID_SDK_ROOT) {
-        $candidate = Join-Path $env:ANDROID_SDK_ROOT "platform-tools\adb.exe"
+        $candidate = Join-Path $env:ANDROID_SDK_ROOT (Join-Path "platform-tools" $adbExecutable)
         if (Test-Path $candidate) {
             return (Resolve-Path $candidate).Path
         }
@@ -90,12 +92,13 @@ if (-not $LogDir) {
 
 $adbPath = Resolve-Adb $Adb
 $logDirectory = (New-Item -ItemType Directory -Force $LogDir).FullName
-$apk = Join-Path $PSScriptRoot "appImmViewer\$BuildDir\outputs\apk\debug\appImmViewer-debug.apk"
+$apk = Join-Path $PSScriptRoot (Join-Path "appImmViewer" $BuildDir "outputs" "apk" "debug" "appImmViewer-debug.apk")
+$gradleWrapper = if ($IsWindows) { ".\gradlew.bat" } else { "./gradlew" }
 
 if (-not $SkipBuild) {
     Push-Location $PSScriptRoot
     try {
-        & .\gradlew.bat :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug -PimmNonVr=ON "-PimmRendererApi=$RendererApi" "-PimmBuildDir=$BuildDir"
+        & $gradleWrapper :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug -PimmNonVr=ON "-PimmRendererApi=$RendererApi" "-PimmBuildDir=$BuildDir"
         if ($LASTEXITCODE -ne 0) {
             throw "Android $RendererApi APK build failed with exit code $LASTEXITCODE"
         }

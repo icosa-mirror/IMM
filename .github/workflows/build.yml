@@ -440,7 +440,7 @@ jobs:
   build-macos:
     name: macOS
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
-    runs-on: macos-latest
+    runs-on: macos-14
     env:
       GODOT_CPP_REF: godot-4.5-stable
       GODOT_VERSION: 4.5-stable
@@ -641,7 +641,7 @@ jobs:
   build-ios:
     name: iOS
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
     - name: Checkout repository
