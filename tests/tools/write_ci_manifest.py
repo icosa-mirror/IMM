@@ -8,6 +8,9 @@ import hashlib
 import json
 import os
 import platform
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -21,11 +24,86 @@ def sha256_file(path: Path) -> str:
 
 def collect_file(path: Path, root: Path) -> dict:
     stat = path.stat()
+    try:
+        display_path = path.relative_to(root).as_posix()
+    except ValueError:
+        display_path = path.as_posix()
     return {
-        "path": path.relative_to(root).as_posix(),
+        "path": display_path,
         "byte_size": stat.st_size,
         "sha256": sha256_file(path),
     }
+
+
+def run_version(command: list[str], timeout_seconds: int = 10) -> dict:
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        return {
+            "command": command,
+            "exit_code": completed.returncode,
+            "stdout": completed.stdout.strip()[-2000:],
+            "stderr": completed.stderr.strip()[-2000:],
+        }
+    except Exception as exc:
+        return {
+            "command": command,
+            "exit_code": None,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+def tool_info(name: str, command: list[str] | None = None) -> dict:
+    path = shutil.which(name)
+    info = {"name": name, "path": path, "found": path is not None}
+    if path and command:
+        info["version"] = run_version(command)
+    return info
+
+
+def collect_tool_versions() -> dict:
+    tools = {
+        "python": {"path": sys.executable, "version": run_version([sys.executable, "--version"])},
+        "git": tool_info("git", ["git", "--version"]),
+        "cmake": tool_info("cmake", ["cmake", "--version"]),
+        "java": tool_info("java", ["java", "-version"]),
+        "gradle": tool_info("gradle", ["gradle", "--version"]),
+        "adb": tool_info("adb", ["adb", "version"]),
+        "xcodebuild": tool_info("xcodebuild", ["xcodebuild", "-version"]),
+        "xcrun": tool_info("xcrun", ["xcrun", "--version"]),
+        "msbuild": tool_info("msbuild", ["msbuild", "-version"]),
+        "glslangValidator": tool_info("glslangValidator", ["glslangValidator", "--version"]),
+        "spirv-val": tool_info("spirv-val", ["spirv-val", "--version"]),
+        "scons": tool_info("scons", ["scons", "--version"]),
+        "godot": tool_info("godot", ["godot", "--version"]),
+    }
+    for env_name, key in [("UNITY_EXE", "unity"), ("GODOT_EXE", "godot_env"), ("ANDROID_HOME", "android_home"), ("ANDROID_SDK_ROOT", "android_sdk_root"), ("ANDROID_NDK_HOME", "android_ndk_home")]:
+        value = os.environ.get(env_name)
+        tools[key] = {"env": env_name, "set": value is not None, "value": value or ""}
+    return tools
+
+
+def collect_fixtures(paths: list[Path], root: Path) -> list[dict]:
+    fixtures = []
+    seen: set[Path] = set()
+    for path in paths:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.is_file():
+            fixtures.append(collect_file(resolved, root))
+    return fixtures
+
+
+def default_fixtures(root: Path) -> list[Path]:
+    sample = root / "exampleImmFiles" / "sample1.imm"
+    return [sample] if sample.exists() else []
 
 
 def main() -> int:
@@ -37,6 +115,8 @@ def main() -> int:
     parser.add_argument("--mode", required=True)
     parser.add_argument("--renderer", required=True)
     parser.add_argument("--status", default="passed")
+    parser.add_argument("--failure-class", default="", choices=["", "build", "packaging", "api", "content-parse", "visual", "audio", "runtime-launch", "vr-device-infrastructure", "release-validation", "unknown"])
+    parser.add_argument("--fixture", action="append", default=[], help="Fixture file to hash into the manifest")
     parser.add_argument("--include", action="append", default=[], help="File or directory to hash into the manifest")
     args = parser.parse_args()
 
@@ -50,6 +130,11 @@ def main() -> int:
             for child in sorted(p for p in path.rglob("*") if p.is_file()):
                 files.append(collect_file(child, root))
 
+    fixture_paths = [Path(item) for item in args.fixture] if args.fixture else default_fixtures(root)
+    failure_class = args.failure_class
+    if args.status != "passed" and not failure_class:
+        failure_class = "unknown"
+
     manifest = {
         "schema": "imm-ci-artifact-manifest-v1",
         "product": args.product,
@@ -57,18 +142,35 @@ def main() -> int:
         "mode": args.mode,
         "renderer": args.renderer,
         "status": args.status,
+        "classification": {
+            "result": args.status,
+            "failure_class": failure_class,
+        },
+        "matrix": {
+            "product": args.product,
+            "platform": args.platform_name,
+            "mode": args.mode,
+            "renderer": args.renderer,
+            "github_job": os.environ.get("GITHUB_JOB", ""),
+            "workflow": os.environ.get("GITHUB_WORKFLOW", ""),
+        },
         "git": {
             "sha": os.environ.get("GITHUB_SHA", ""),
             "ref": os.environ.get("GITHUB_REF", ""),
             "workflow": os.environ.get("GITHUB_WORKFLOW", ""),
             "job": os.environ.get("GITHUB_JOB", ""),
             "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+            "repository": os.environ.get("GITHUB_REPOSITORY", ""),
         },
         "runner": {
             "os": os.environ.get("RUNNER_OS", platform.system()),
             "arch": os.environ.get("RUNNER_ARCH", platform.machine()),
             "name": os.environ.get("RUNNER_NAME", ""),
+            "labels": os.environ.get("RUNNER_LABELS", ""),
         },
+        "tool_versions": collect_tool_versions(),
+        "fixtures": collect_fixtures(fixture_paths, root),
         "files": files,
     }
 

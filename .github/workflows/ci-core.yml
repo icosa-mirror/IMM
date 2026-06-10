@@ -152,6 +152,7 @@ jobs:
         run: |
           python tests/tools/test_compare_render_metrics.py
           python tests/tools/test_preflight_runner.py
+          python tests/tools/test_write_ci_manifest.py
 
       - name: Write CI manifest
         if: always()
