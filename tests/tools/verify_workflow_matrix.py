@@ -7,8 +7,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import yaml
-
 
 REQUIRED_JOBS = {
     ".github/workflows/build.yml": {
@@ -73,6 +71,48 @@ def runs_on_labels(value: object) -> set[str]:
     return set()
 
 
+def load_workflow(path: Path) -> dict:
+    """Load enough workflow structure for this verifier without external deps."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    jobs: dict[str, dict] = {}
+    current_job: str | None = None
+    in_steps = False
+
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent == 2 and stripped.endswith(":") and not stripped.startswith("-"):
+            name = stripped[:-1]
+            if name not in {"on", "env", "permissions", "defaults", "concurrency", "jobs"}:
+                current_job = name
+                jobs[current_job] = {"steps": [], "runs-on": None}
+                in_steps = False
+            continue
+
+        if current_job is None:
+            continue
+
+        if indent == 4 and stripped.startswith("runs-on:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value.startswith("[") and value.endswith("]"):
+                jobs[current_job]["runs-on"] = [item.strip() for item in value[1:-1].split(",") if item.strip()]
+            else:
+                jobs[current_job]["runs-on"] = value
+            continue
+
+        if indent == 4 and stripped == "steps:":
+            in_steps = True
+            continue
+
+        if in_steps and indent >= 4 and stripped.startswith("- name:"):
+            jobs[current_job]["steps"].append({"name": stripped.split(":", 1)[1].strip().strip("'\"")})
+
+    return {"jobs": jobs}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -86,7 +126,7 @@ def main() -> int:
         if not workflow_path.exists():
             errors.append(f"Missing workflow: {workflow_rel}")
             continue
-        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
         for job_name, required_steps in jobs.items():
             job = actual_jobs.get(job_name)
