@@ -28,6 +28,28 @@ REQUIRED_ROWS = {
     ("godot", "windows", "vr"),
     ("godot", "android", "vr"),
 }
+KNOWN_HOSTED_GATES = {
+    "Build / Android",
+    "Build / macOS",
+    "Build / Package Unity Plugins and CI Core Matrix / Package Source Layout",
+    "Build / Windows",
+    "Build / Windows and CI Core Matrix / Godot Local Verifier",
+    "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
+    "CI Core Matrix / Godot Local Verifier",
+    "CI Core Matrix / Package Source Layout",
+    "Godot local verifier checks Unity XR scene bootstrap",
+    "Godot local verifier checks Windows standalone OpenGL VR settings",
+}
+KNOWN_HARDWARE_GATES = {
+    "CI Device Matrix / Android Godot Vulkan",
+    "CI Device Matrix / Android Quest VR",
+    "CI Device Matrix / Android Standalone GLES",
+    "CI Device Matrix / Android Standalone Vulkan",
+    "CI Engine Matrix / Unity Package Import",
+    "CI GPU Matrix / macOS Godot Metal",
+    "CI GPU Matrix / Windows Godot Vulkan",
+    "CI GPU Matrix / Windows Standalone Vulkan",
+}
 
 
 def main() -> int:
@@ -81,6 +103,13 @@ def main() -> int:
             supported_count += 1
             if not row.get("hosted_gate") and not row.get("hardware_gate"):
                 errors.append(f"Supported row {key} must name a hosted_gate or hardware_gate")
+
+        hosted_gate = row.get("hosted_gate")
+        if hosted_gate is not None and hosted_gate not in KNOWN_HOSTED_GATES:
+            errors.append(f"Row {key} references unknown hosted_gate: {hosted_gate}")
+        hardware_gate = row.get("hardware_gate")
+        if hardware_gate is not None and hardware_gate not in KNOWN_HARDWARE_GATES:
+            errors.append(f"Row {key} references unknown hardware_gate: {hardware_gate}")
 
         if status in {"deferred", "unsupported", "waived"} and not row.get("reason"):
             errors.append(f"{status} row {key} must explain why it is not fully gated")

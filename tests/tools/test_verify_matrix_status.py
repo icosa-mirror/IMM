@@ -39,6 +39,15 @@ def main() -> int:
         waived = run_verify(temp_path, "--release")
         assert waived.returncode == 0, waived.stderr
 
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "matrix_status.json"
+        data = json.loads(source.read_text(encoding="utf-8"))
+        data["rows"][0]["hosted_gate"] = "Build / Imaginary"
+        temp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        unknown = run_verify(temp_path)
+        assert unknown.returncode != 0, "unknown hosted gate should fail matrix status verification"
+        assert "references unknown hosted_gate" in unknown.stderr
+
     print("Matrix status release policy tests passed")
     return 0
 
