@@ -37,9 +37,10 @@ REQUIRED_JOBS = {
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Run Godot Vulkan smoke", "Write CI manifest", "Collect artifact summary"],
-        "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Stage Vulkan capture evidence", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against DirectX baseline", "Write CI manifest", "Collect artifact summary"],
+        "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write CI manifest", "Collect artifact summary"],
+        "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report"],
     },
 }
 

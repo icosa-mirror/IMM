@@ -47,6 +47,10 @@ jobs:
           --contract tests\baselines\render\windows-directx-sample1.json
           --json-output artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
 
+      - name: Stage Vulkan capture evidence
+        shell: pwsh
+        run: Copy-Item -Force .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
+
       - name: Write CI manifest
         if: always()
         shell: pwsh
@@ -87,9 +91,31 @@ jobs:
         shell: pwsh
         run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
 
-      - name: Run Godot Vulkan smoke
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture DirectX reference
         shell: pwsh
-        run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension -RendererApi 5 -Headed -LogDir artifacts\godot-smoke-windows-vulkan
+        run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+      - name: Run Godot Vulkan visual baseline smoke
+        shell: pwsh
+        run: >
+          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
+          -Configuration Release
+          -SkipBuild
+          -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+          -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          -LogDir artifacts\godot-smoke-windows-vulkan
+
+      - name: Compare Godot Vulkan render metrics against DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          --reference .\build\baseline-captures\windows-directx-playerframe60.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
+          --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-directx-render-metrics.json
 
       - name: Write CI manifest
         if: always()
@@ -150,6 +176,12 @@ jobs:
             > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1
           grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
 
+      - name: Record Godot Metal render metrics
+        run: >
+          python3 tests/tools/compare_render_metrics.py
+          artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+          --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+
       - name: Write CI manifest
         if: always()
         run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
@@ -163,5 +195,39 @@ jobs:
         with:
           name: macOSGodotMetal-GPU
           path: artifacts/godot-smoke-macos-metal
+          if-no-files-found: ignore
+          retention-days: 14
+
+  gpu-evidence-report:
+    name: GPU Evidence Report
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci'))
+    runs-on: ubuntu-latest
+    needs:
+      - windows-standalone-vulkan
+      - windows-godot-vulkan
+      - macos-godot-metal
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download GPU artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/gpu-evidence/input
+
+      - name: Verify GPU matrix evidence
+        run: >
+          python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --gate-prefix "CI GPU Matrix /"
+          --evidence-root artifacts/gpu-evidence/input
+          --json-output artifacts/gpu-evidence/matrix-evidence.json
+          --markdown-output artifacts/gpu-evidence/matrix-evidence.md
+
+      - name: Upload GPU evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPUMatrixEvidence
+          path: artifacts/gpu-evidence
           if-no-files-found: ignore
           retention-days: 14
