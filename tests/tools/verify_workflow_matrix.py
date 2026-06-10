@@ -117,6 +117,16 @@ def load_workflow(path: Path) -> dict:
     return {"jobs": jobs}
 
 
+def verify_manifest_status_arguments(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for index, line in enumerate(lines):
+        if "tests/tools/write_ci_manifest.py" not in line and "tests\\tools\\write_ci_manifest.py" not in line:
+            continue
+        window = "\n".join(lines[index : min(index + 4, len(lines))])
+        if "--status" not in window:
+            errors.append(f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass --status")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -130,6 +140,7 @@ def main() -> int:
         if not workflow_path.exists():
             errors.append(f"Missing workflow: {workflow_rel}")
             continue
+        verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
         for job_name, required_steps in jobs.items():

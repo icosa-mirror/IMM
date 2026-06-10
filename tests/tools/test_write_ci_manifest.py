@@ -35,6 +35,8 @@ def main() -> int:
                 "non-vr",
                 "--renderer",
                 "directx",
+                "--status",
+                "success",
                 "--fixture",
                 str(fixture),
                 "--include",
@@ -50,6 +52,32 @@ def main() -> int:
         assert manifest["tool_versions"]["python"]["version"]["exit_code"] == 0
         assert manifest["fixtures"][0]["sha256"]
         assert manifest["files"][0]["sha256"]
+
+        failed_output = Path(temp_dir) / "failed-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_ci_manifest.py",
+                "--output",
+                str(failed_output),
+                "--repo-root",
+                str(root),
+                "--product",
+                "standalone",
+                "--platform-name",
+                "windows",
+                "--mode",
+                "non-vr",
+                "--renderer",
+                "directx",
+                "--status",
+                "failure",
+            ],
+            check=True,
+        )
+        failed_manifest = json.loads(failed_output.read_text(encoding="utf-8"))
+        assert failed_manifest["classification"]["result"] == "failed"
+        assert failed_manifest["classification"]["failure_class"] == "unknown"
 
     print("CI manifest tests passed")
     return 0

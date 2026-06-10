@@ -106,6 +106,19 @@ def default_fixtures(root: Path) -> list[Path]:
     return [sample] if sample.exists() else []
 
 
+def normalize_status(status: str) -> str:
+    normalized = status.strip().lower()
+    if normalized in {"", "success", "succeeded", "pass"}:
+        return "passed"
+    if normalized in {"failure", "failed", "error"}:
+        return "failed"
+    if normalized in {"cancelled", "canceled"}:
+        return "cancelled"
+    if normalized == "skipped":
+        return "skipped"
+    return normalized
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -131,8 +144,9 @@ def main() -> int:
                 files.append(collect_file(child, root))
 
     fixture_paths = [Path(item) for item in args.fixture] if args.fixture else default_fixtures(root)
+    status = normalize_status(args.status)
     failure_class = args.failure_class
-    if args.status != "passed" and not failure_class:
+    if status != "passed" and not failure_class:
         failure_class = "unknown"
 
     manifest = {
@@ -141,9 +155,9 @@ def main() -> int:
         "platform": args.platform_name,
         "mode": args.mode,
         "renderer": args.renderer,
-        "status": args.status,
+        "status": status,
         "classification": {
-            "result": args.status,
+            "result": status,
             "failure_class": failure_class,
         },
         "matrix": {

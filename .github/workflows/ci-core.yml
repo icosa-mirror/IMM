@@ -36,6 +36,7 @@ jobs:
         if: always()
         run: |
           python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
             --output artifacts/baseline-content/manifest.json \
             --product baseline \
             --platform-name all \
@@ -108,6 +109,7 @@ jobs:
         run: |
           mkdir -p artifacts/package-source-layout
           python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
             --output artifacts/package-source-layout/manifest.json \
             --product packages \
             --platform-name all \
@@ -162,6 +164,7 @@ jobs:
         if: always()
         run: |
           python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
             --output artifacts/matrix-status/manifest.json \
             --product matrix \
             --platform-name all \
@@ -206,6 +209,7 @@ jobs:
         if: always()
         run: |
           python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
             --output artifacts/godot-local-verifier/manifest.json \
             --product godot \
             --platform-name all \

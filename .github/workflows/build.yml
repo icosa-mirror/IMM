@@ -220,7 +220,7 @@ jobs:
 
     - name: Write Windows viewer artifact manifest
       shell: pwsh
-      run: python tests\tools\write_ci_manifest.py --output viewer_artifact\manifest.json --product standalone --platform-name windows --mode packaged --renderer mixed --include viewer_artifact
+      run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --output viewer_artifact\manifest.json --product standalone --platform-name windows --mode packaged --renderer mixed --include viewer_artifact
 
     - name: Collect Windows viewer artifact summary
       shell: pwsh
@@ -383,7 +383,7 @@ jobs:
         cp "${vulkan_apk[0]}" "$staging/ImmViewer-Android-Vulkan.apk"
 
     - name: Write Android viewer artifact manifest
-      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmViewer-Android/manifest.json --product standalone --platform-name android --mode packaged --renderer mixed --include artifacts/ImmViewer-Android
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/ImmViewer-Android/manifest.json --product standalone --platform-name android --mode packaged --renderer mixed --include artifacts/ImmViewer-Android
 
     - name: Collect Android viewer artifact summary
       run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-Android --require-manifest --output artifacts/ImmViewer-Android/artifact-summary.json
@@ -550,7 +550,7 @@ jobs:
         test -x "$staging/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
 
     - name: Write macOS viewer artifact manifest
-      run: python3 tests/tools/write_ci_manifest.py --output artifacts/ImmViewer-macOS/manifest.json --product standalone --platform-name macos --mode packaged --renderer metal --include artifacts/ImmViewer-macOS
+      run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/ImmViewer-macOS/manifest.json --product standalone --platform-name macos --mode packaged --renderer metal --include artifacts/ImmViewer-macOS
 
     - name: Collect macOS viewer artifact summary
       run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-macOS --require-manifest --output artifacts/ImmViewer-macOS/artifact-summary.json
@@ -758,7 +758,7 @@ jobs:
       run: python tests/tools/verify_package_layout.py unity artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
 
     - name: Write stroke reader Unity package manifest
-      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmStrokeReaderPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmStrokeReaderPlugin-Unity
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/ImmStrokeReaderPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmStrokeReaderPlugin-Unity
 
     - name: Collect stroke reader Unity package summary
       run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmStrokeReaderPlugin-Unity --require-manifest --output artifacts/ImmStrokeReaderPlugin-Unity/artifact-summary.json
@@ -784,7 +784,7 @@ jobs:
         --workspace artifacts/UnityPackageImportHarness
 
     - name: Write ImmUnity package manifest
-      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
 
     - name: Collect ImmUnity package summary
       run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmPlayerPlugin-Unity --require-manifest --output artifacts/ImmPlayerPlugin-Unity/artifact-summary.json
@@ -922,7 +922,7 @@ jobs:
         --workspace artifacts/GodotPackageImportHarness
 
     - name: Write Godot addon package manifest
-      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension
 
     - name: Collect Godot addon package summary
       run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmGodotGDExtension --require-manifest --output artifacts/ImmGodotGDExtension/artifact-summary.json
@@ -1130,6 +1130,7 @@ jobs:
     - name: Write release validation manifest
       run: |
         python tests/tools/write_ci_manifest.py \
+          --status "${{ job.status }}" \
           --output release-assets/release-validation-manifest.json \
           --product release \
           --platform-name all \
