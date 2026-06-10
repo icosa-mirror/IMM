@@ -996,6 +996,20 @@ static uint8_t iFloatToByte(float value)
     return (uint8_t)(value * 255.0f + 0.5f);
 }
 
+static uint8_t iLinearFloatToSrgbByte(float value)
+{
+    if (value <= 0.0f)
+    {
+        return 0;
+    }
+    if (value >= 1.0f)
+    {
+        return 255;
+    }
+    const float encoded = value < 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+    return iFloatToByte(encoded);
+}
+
 static bool iPathHasExtension(const char *path, const char *extension)
 {
     if (!path || !extension)
@@ -1038,9 +1052,9 @@ static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int wi
         for (int x = 0; x < width; ++x)
         {
             const uint32_t pixel = srcRow[x];
-            dstRow[3 * x + 0] = iFloatToByte(iDecodeUnsignedFloat(pixel & 0x7ffu, 6));
-            dstRow[3 * x + 1] = iFloatToByte(iDecodeUnsignedFloat((pixel >> 11u) & 0x7ffu, 6));
-            dstRow[3 * x + 2] = iFloatToByte(iDecodeUnsignedFloat((pixel >> 22u) & 0x3ffu, 5));
+            dstRow[3 * x + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(pixel & 0x7ffu, 6));
+            dstRow[3 * x + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((pixel >> 11u) & 0x7ffu, 6));
+            dstRow[3 * x + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((pixel >> 22u) & 0x3ffu, 5));
         }
     }
 }

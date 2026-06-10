@@ -4100,7 +4100,7 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
     return true;
 }
 
-static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter, void *rawData = nullptr, size_t rawDataSize = 0)
 {
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
         texture->info.mFormat != piRenderer::Format::C3_11_11_10_FLOAT ||
@@ -4379,6 +4379,10 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
         return false;
     }
     const size_t pixelCount = (size_t)texture->info.mXres * (size_t)texture->info.mYres;
+    if (rawData && rawDataSize >= (size_t)size)
+    {
+        std::memcpy(rawData, mapped, (size_t)size);
+    }
     if (texture->vkFormat == VK_FORMAT_B10G11R11_UFLOAT_PACK32)
     {
         iConvertB10G11R11ToRgba8(texture->data, (const uint8_t *)mapped, pixelCount);
@@ -6982,6 +6986,15 @@ void piRendererVulkan::GetTextureContent(piTexture me, void *data, const Format 
 {
     if (!me || !data)
     {
+        return;
+    }
+    if (fmt == Format::C3_11_11_10_FLOAT && me->info.mFormat == Format::C3_11_11_10_FLOAT && me->image != 0 && mState && mState->gpuPaintDrawCount > 0)
+    {
+        const size_t rawDataSize = (size_t)me->info.mXres * (size_t)me->info.mYres * 4u;
+        if (!iReadBackTextureImage(mState, me, mReporter, data, rawDataSize))
+        {
+            iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::TextureReadback, "Vulkan texture GPU readback failed");
+        }
         return;
     }
     if (me->image != 0 && mState && mState->gpuPaintDrawCount > 0 && !iReadBackTextureImage(mState, me, mReporter))
