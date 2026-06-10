@@ -345,6 +345,7 @@ Add these files/directories:
 - `tests/tools/verify_imm_baseline.py`
 - `tests/tools/compare_render_metrics.py`
 - `tests/tools/collect_ci_artifacts.py`
+- `tests/tools/verify_matrix_evidence.py`
 - `tests/unity/` minimal Unity test project or package import harness
 - `tests/godot/` minimal Godot package import harness if the existing `code/ImmGodotSampleProject` is too broad for package-import checks
 
@@ -376,6 +377,8 @@ artifacts/
 - pass/fail classification
 
 `tests/tools/collect_ci_artifacts.py` writes `artifact-summary.json` files that summarize uploaded directories, embedded manifests, preflight diagnostics, and metrics JSON. Hosted core and package artifacts include these summaries so release audits can inspect a run without unpacking every artifact by hand.
+
+`tests/tools/verify_matrix_evidence.py` consumes those artifact summaries and `tests/matrix_status.json` to write `matrix-evidence.json` and `matrix-evidence.md`. Hardware-scoped reports require each supported self-hosted row to have a passing manifest, passing preflight evidence, render metrics and captures for visual rows, and passing VR/OpenXR contract evidence for VR rows. This makes nightly and release evidence review human-readable while keeping the gate machine-checkable.
 
 ## Gating Policy
 

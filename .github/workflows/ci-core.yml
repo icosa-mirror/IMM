@@ -175,6 +175,7 @@ jobs:
           python tests/tools/test_preflight_runner.py
           python tests/tools/test_verify_release_assets.py
           python tests/tools/test_verify_log_markers.py
+          python tests/tools/test_verify_matrix_evidence.py
           python tests/tools/test_write_matrix_audit_report.py
           python tests/tools/test_write_ci_manifest.py
           python tests/tools/test_verify_matrix_status.py
