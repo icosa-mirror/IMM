@@ -33,6 +33,8 @@
       "hosted_gate": "Godot local verifier checks Windows standalone OpenGL VR settings",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
+      "owner_decision": "Defer PC VR runtime validation until a labeled self-hosted Windows VR runner is registered.",
+      "promotion_criteria": "Promote to supported after a GitHub Actions Windows VR lane runs on headset hardware and validates document load, stereo mode, and frame submission on this row.",
       "reason": "Packaged VR settings are validated, but a PC VR headset runtime smoke job still needs a labeled self-hosted VR runner."
     },
     {
@@ -66,6 +68,8 @@
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Quest VR",
       "baseline": "tests/baselines/content/sample1.json",
+      "owner_decision": "Keep Android VR deferred until the Quest VR lane has a successful hardware run with runtime evidence.",
+      "promotion_criteria": "Promote to supported after CI Device Matrix / Android Quest VR passes on a Quest runner and artifacts show OpenXR initialization, stereo view enumeration, document load, and frame submission.",
       "reason": "Hosted CI builds the VR APK and ci-device.yml defines a Quest VR self-hosted lane with VR-manifest OpenXR probing; full stereo frame submission still needs a passing hardware run before this row can be promoted to supported."
     },
     {
@@ -77,6 +81,7 @@
       "hosted_gate": null,
       "hardware_gate": null,
       "baseline": null,
+      "owner_decision": "Standalone iOS is not a supported product surface until a viewer target is added.",
       "reason": "No standalone iOS viewer target is currently present in the repository."
     },
     {
@@ -99,6 +104,7 @@
       "hosted_gate": null,
       "hardware_gate": null,
       "baseline": null,
+      "owner_decision": "Standalone macOS VR is not a supported product surface until a macOS XR target is added.",
       "reason": "No macOS standalone XR target is currently present in the repository."
     },
     {
@@ -121,6 +127,8 @@
       "hosted_gate": "Godot local verifier checks Unity XR scene bootstrap",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
+      "owner_decision": "Defer Unity VR runtime validation until a self-hosted Unity VR runner and sample scene smoke are available.",
+      "promotion_criteria": "Promote to supported after CI Engine Matrix includes a Unity OpenXR VR lane that passes on headset hardware with stereo matrices, document load, and frame submission evidence.",
       "reason": "XR scene/static checks exist; a self-hosted Unity VR runtime lane still needs to be added once runner labels are available."
     },
     {
@@ -165,6 +173,7 @@
       "hosted_gate": null,
       "hardware_gate": null,
       "baseline": null,
+      "owner_decision": "Godot iOS packaging is not a supported product surface until an iOS GDExtension packaging target exists.",
       "reason": "No iOS Godot GDExtension packaging target is currently present in the repository."
     },
     {
@@ -187,6 +196,8 @@
       "hosted_gate": null,
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
+      "owner_decision": "Defer Godot Windows XR until non-VR Godot renderer parity is stable and a Windows VR runner is registered.",
+      "promotion_criteria": "Promote to supported after a CI Godot OpenXR Windows VR lane passes on headset hardware with package import, document load, stereo rendering, and frame submission evidence.",
       "reason": "Godot XR validation is intentionally deferred until non-VR Godot renderer parity is stable."
     },
     {
@@ -198,6 +209,8 @@
       "hosted_gate": null,
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
+      "owner_decision": "Defer Godot Quest XR until Android Godot non-VR runtime smoke is stable and a Godot Quest XR lane is added.",
+      "promotion_criteria": "Promote to supported after a CI Godot Quest OpenXR lane passes on hardware with addon import, document load, stereo rendering, and frame submission evidence.",
       "reason": "Quest Godot XR validation is deferred until Android Godot non-VR runtime smoke is stable."
     }
   ]
