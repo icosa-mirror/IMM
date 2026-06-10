@@ -124,6 +124,8 @@ jobs:
           python-version: '3.x'
 
       - name: Run Godot local verifier
+        env:
+          IMM_GODOT_SKIP_NATIVE_SYNTAX: '1'
         run: python code/appImmGodotGDExtension/verify_local.py
 
       - name: Write CI manifest

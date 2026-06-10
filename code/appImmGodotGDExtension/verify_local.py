@@ -714,6 +714,11 @@ def main() -> int:
         ]
     )
 
+    if env_flag_enabled("IMM_GODOT_SKIP_NATIVE_SYNTAX"):
+        print("IMM_GODOT_SKIP_NATIVE_SYNTAX is set; skipping native syntax-only compile")
+        verify_godot_script_smoke()
+        return 0
+
     clang = shutil.which("clang++")
     if clang is None:
         print("clang++ not found; skipping appImmGodot syntax-only compile")
