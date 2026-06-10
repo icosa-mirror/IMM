@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.XR;
 
 namespace ImmPlayer
 {
@@ -11,6 +13,7 @@ namespace ImmPlayer
         private const string FramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string QuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
+        private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
         private const float MinDominantShare = 0.35f;
@@ -33,6 +36,7 @@ namespace ImmPlayer
 
         private string _capturePath;
         private bool _compositionProbeEnabled;
+        private bool _xrProbeEnabled;
         private Camera _compositionCamera;
         private GameObject _frontProbe;
         private GameObject _rearOccludedProbe;
@@ -42,6 +46,7 @@ namespace ImmPlayer
         {
             int frameCount = 180;
             _compositionProbeEnabled = IsEnvEnabled(CompositionProbeEnv);
+            _xrProbeEnabled = IsEnvEnabled(XrProbeEnv);
             if (_compositionProbeEnabled)
             {
                 if (!CreateCompositionProbes())
@@ -131,6 +136,12 @@ namespace ImmPlayer
                     yield break;
                 }
                 Debug.Log($"{Prefix}scene composition probe passed");
+            }
+
+            if (_xrProbeEnabled && !ValidateXrProbe())
+            {
+                QuitIfRequested(5);
+                yield break;
             }
 
             string fullPath = Path.GetFullPath(_capturePath);
@@ -255,6 +266,39 @@ namespace ImmPlayer
         {
             string value = Environment.GetEnvironmentVariable(name);
             return !string.IsNullOrEmpty(value) && value != "0" && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ValidateXrProbe()
+        {
+            var displays = new List<XRDisplaySubsystem>();
+            SubsystemManager.GetInstances(displays);
+
+            int runningDisplays = 0;
+            for (int i = 0; i < displays.Count; ++i)
+            {
+                if (displays[i] != null && displays[i].running)
+                    ++runningDisplays;
+            }
+
+            Debug.Log($"{Prefix}xr enabled={XRSettings.enabled} deviceActive={XRSettings.isDeviceActive} loadedDevice={XRSettings.loadedDeviceName} stereoMode={XRSettings.stereoRenderingMode} displays={displays.Count} runningDisplays={runningDisplays}");
+            if (!XRSettings.enabled)
+            {
+                Debug.LogError($"{Prefix}xr probe failed: XRSettings.enabled is false");
+                return false;
+            }
+            if (!XRSettings.isDeviceActive)
+            {
+                Debug.LogError($"{Prefix}xr probe failed: XR device is not active");
+                return false;
+            }
+            if (runningDisplays <= 0)
+            {
+                Debug.LogError($"{Prefix}xr probe failed: no running XR display subsystem");
+                return false;
+            }
+
+            Debug.Log($"{Prefix}xr probe passed");
+            return true;
         }
 
         private struct CompositionRegionResult

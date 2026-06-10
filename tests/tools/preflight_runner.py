@@ -87,7 +87,20 @@ def command_info(name: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--profile", required=True, choices=["android-device", "ios-device", "macos-godot-metal", "windows-gpu-vulkan", "windows-godot-vulkan", "unity"])
+    parser.add_argument(
+        "--profile",
+        required=True,
+        choices=[
+            "android-device",
+            "ios-device",
+            "macos-godot-metal",
+            "windows-gpu-vulkan",
+            "windows-godot-vulkan",
+            "unity",
+            "unity-windows-directx",
+            "unity-windows-openxr-vr",
+        ],
+    )
     parser.add_argument("--require-command", action="append", default=[])
     parser.add_argument("--require-env", action="append", default=[])
     parser.add_argument("--adb-devices", action="store_true")

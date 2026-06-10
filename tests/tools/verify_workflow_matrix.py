@@ -36,7 +36,9 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Record Unity DirectX composition metrics", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
+        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Upload engine evidence report"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Stage Vulkan capture evidence", "Write CI manifest", "Collect artifact summary"],
@@ -58,6 +60,7 @@ REQUIRED_RUNS_ON = {
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"self-hosted", "unity"},
         "unity-windows-directx-composition": {"self-hosted", "windows", "unity", "gpu"},
+        "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-vulkan": {"self-hosted", "windows", "gpu", "vulkan"},

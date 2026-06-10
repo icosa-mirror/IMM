@@ -14,11 +14,13 @@ namespace ImmPlayer.Editor
         {
             "Assets/Scenes/SampleScene.unity"
         };
+        private const string VrSmokeScene = "Assets/Scenes/SampleSceneVR.unity";
         private const string EditorSmokeCapturePathEnv = "IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH";
         private const string RuntimeSmokeCapturePathEnv = "IMM_UNITY_SMOKE_CAPTURE_PATH";
         private const string RuntimeSmokeFramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string RuntimeSmokeQuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string RuntimeSmokeCompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
+        private const string RuntimeSmokeXrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string EditorSmokeActiveKey = "IMM_EDITOR_SMOKE_ACTIVE";
         private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
@@ -114,7 +116,7 @@ namespace ImmPlayer.Editor
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneOSX, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneOSX, new[] { GraphicsDeviceType.Metal });
 
-            RunEditorPlayModeSmoke("macOS", Path.Combine("..", "build", "unity-smoke", "macos-editor-playmode.png"), false);
+            RunEditorPlayModeSmoke("macOS", SmokeScenes[0], Path.Combine("..", "build", "unity-smoke", "macos-editor-playmode.png"), false, false);
         }
 
         public static void RunWindowsDirectXEditorPlayModeSmoke()
@@ -124,10 +126,24 @@ namespace ImmPlayer.Editor
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
 
-            RunEditorPlayModeSmoke("Windows DirectX", Path.Combine("..", "build", "unity-smoke", "windows-directx-editor-playmode.png"), true);
+            RunEditorPlayModeSmoke("Windows DirectX", SmokeScenes[0], Path.Combine("..", "build", "unity-smoke", "windows-directx-editor-playmode.png"), true, false);
         }
 
-        private static void RunEditorPlayModeSmoke(string label, string defaultCapturePath, bool enableCompositionProbe)
+        public static void RunWindowsOpenXREditorPlayModeSmoke()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
+            if (!File.Exists(VrSmokeScene))
+            {
+                throw new FileNotFoundException($"Required VR smoke scene is missing: {VrSmokeScene}", VrSmokeScene);
+            }
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
+
+            RunEditorPlayModeSmoke("Windows OpenXR VR", VrSmokeScene, Path.Combine("..", "build", "unity-smoke", "windows-openxr-vr-editor-playmode.png"), false, true);
+        }
+
+        private static void RunEditorPlayModeSmoke(string label, string scenePath, string defaultCapturePath, bool enableCompositionProbe, bool enableXrProbe)
         {
             string capturePath = Environment.GetEnvironmentVariable(EditorSmokeCapturePathEnv);
             if (string.IsNullOrEmpty(capturePath))
@@ -157,6 +173,7 @@ namespace ImmPlayer.Editor
             }
             Environment.SetEnvironmentVariable(RuntimeSmokeQuitEnv, "0");
             Environment.SetEnvironmentVariable(RuntimeSmokeCompositionProbeEnv, enableCompositionProbe ? "1" : string.Empty);
+            Environment.SetEnvironmentVariable(RuntimeSmokeXrProbeEnv, enableXrProbe ? "1" : string.Empty);
 
             string nativeLogPath = Path.GetFullPath("imm_player_log.txt");
             if (File.Exists(nativeLogPath))
@@ -169,7 +186,7 @@ namespace ImmPlayer.Editor
             SessionState.SetString(EditorSmokeNativeLogPathKey, nativeLogPath);
             SessionState.SetString(EditorSmokeStartTicksKey, DateTime.UtcNow.Ticks.ToString());
 
-            EditorSceneManager.OpenScene(SmokeScenes[0]);
+            EditorSceneManager.OpenScene(scenePath);
 
             s_EditorSmokeCapturePath = capturePath;
             s_EditorSmokeStartTimeUtc = DateTime.UtcNow;

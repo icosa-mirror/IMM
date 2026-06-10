@@ -123,13 +123,11 @@
       "platform": "windows",
       "mode": "vr",
       "renderer": "openxr",
-      "status": "deferred",
+      "status": "supported",
       "hosted_gate": "Godot local verifier checks Unity XR scene bootstrap",
-      "hardware_gate": null,
+      "hardware_gate": "CI Engine Matrix / Unity Windows OpenXR VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "owner_decision": "Defer Unity VR runtime validation until a self-hosted Unity VR runner and sample scene smoke are available.",
-      "promotion_criteria": "Promote to supported after CI Engine Matrix includes a Unity OpenXR VR lane that passes on headset hardware with stereo matrices, document load, and frame submission evidence.",
-      "reason": "XR scene/static checks exist; a self-hosted Unity VR runtime lane still needs to be added once runner labels are available."
+      "reason": "XR scene/static checks exist and ci-engine.yml defines a self-hosted Windows Unity OpenXR VR lane that runs the VR scene, requires active XR display evidence, captures an image, and verifies XR log contract markers."
     },
     {
       "product": "godot",

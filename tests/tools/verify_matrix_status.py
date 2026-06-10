@@ -46,6 +46,7 @@ KNOWN_HARDWARE_GATES = {
     "CI Device Matrix / Android Standalone GLES",
     "CI Device Matrix / Android Standalone Vulkan",
     "CI Engine Matrix / Unity Package Import",
+    "CI Engine Matrix / Unity Windows OpenXR VR",
     "CI GPU Matrix / macOS Godot Metal",
     "CI GPU Matrix / Windows Godot Vulkan",
     "CI GPU Matrix / Windows Standalone Vulkan",

@@ -120,6 +120,66 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  unity-windows-openxr-vr:
+    name: Unity Windows OpenXR VR
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
+    runs-on: [self-hosted, windows, unity, vr]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Unity OpenXR VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-openxr-vr --output artifacts\unity-windows-openxr-vr\preflight.json --require-env UNITY_EXE
+
+      - name: Run Unity OpenXR VR smoke
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts\unity-windows-openxr-vr | Out-Null
+          $env:IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH = (Resolve-Path artifacts\unity-windows-openxr-vr).Path + "\unity-windows-openxr-vr.png"
+          & $env:UNITY_EXE -batchmode -projectPath code\ImmUnitySampleProject -executeMethod ImmPlayer.Editor.BuildAutomation.RunWindowsOpenXREditorPlayModeSmoke -logFile artifacts\unity-windows-openxr-vr\unity-editor.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unity OpenXR VR smoke failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Record Unity OpenXR VR metrics
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr.png
+          --json-output artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr-metrics.json
+
+      - name: Verify Unity OpenXR VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-openxr-vr\unity-editor.log
+          --label unity-windows-openxr-vr
+          --require "[IMM_UNITY_SMOKE] xr probe passed"
+          --require "[IMM_EDITOR_SMOKE] passed:"
+          --forbid "[IMM_UNITY_SMOKE] xr probe failed"
+          --output artifacts\unity-windows-openxr-vr\unity-openxr-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\unity-windows-openxr-vr\manifest.json --product unity --platform-name windows --mode vr --renderer openxr --include artifacts\unity-windows-openxr-vr
+
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-openxr-vr --require-manifest --output artifacts\unity-windows-openxr-vr\artifact-summary.json
+
+      - name: Upload Unity OpenXR VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsOpenXRVR
+          path: artifacts/unity-windows-openxr-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
   godot-package-import:
     name: Godot Package Import
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
@@ -158,5 +218,40 @@ jobs:
         with:
           name: GodotPackageImport
           path: artifacts/godot-package-import
+          if-no-files-found: ignore
+          retention-days: 14
+
+  engine-evidence-report:
+    name: Engine Evidence Report
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci'))
+    runs-on: ubuntu-latest
+    needs:
+      - unity-package-import
+      - unity-windows-directx-composition
+      - unity-windows-openxr-vr
+      - godot-package-import
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download engine artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/engine-evidence/input
+
+      - name: Verify engine matrix evidence
+        run: >
+          python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --gate-prefix "CI Engine Matrix /"
+          --evidence-root artifacts/engine-evidence/input
+          --json-output artifacts/engine-evidence/matrix-evidence.json
+          --markdown-output artifacts/engine-evidence/matrix-evidence.md
+
+      - name: Upload engine evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineMatrixEvidence
+          path: artifacts/engine-evidence
           if-no-files-found: ignore
           retention-days: 14

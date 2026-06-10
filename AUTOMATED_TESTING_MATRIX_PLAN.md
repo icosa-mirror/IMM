@@ -531,7 +531,7 @@ Exit criteria:
 | Standalone macOS non-VR | Metal app build and validation exist | Need formal render metrics baseline |
 | Standalone macOS VR | No target identified | Mark unsupported |
 | Unity packages | Multi-platform package assembly exists | Need Unity import/API tests from packaged artifacts |
-| Unity VR | Plugin/runtime likely capable on supported platforms | Need explicit OpenXR scene and hardware CI |
+| Unity VR | OpenXR sample scene and self-hosted Windows Unity VR CI lane exist | Need passing headset-run artifacts before release evidence can be considered complete |
 | Godot package | GDExtension packaging exists | Need package import test and hardware visual gates |
 | Godot VR | Not yet established | Defer until non-VR Godot parity is stable |
 | Baseline source of truth | Existing sample and render captures exist | Need committed canonical JSON and render metrics |
