@@ -51,12 +51,25 @@ jobs:
 
       - name: Stage Vulkan capture evidence
         shell: pwsh
-        run: Copy-Item -Force .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
+        run: |
+          Copy-Item -Force .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
+          Copy-Item -Force .\build\baseline-captures\windows-directx-playerframe60.ppm artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm
+
+      - name: Write Vulkan render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
+          --reference-capture artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm
+          --candidate-capture artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
+          --output-dir artifacts\windows-standalone-vulkan\captures
+          --markdown-output artifacts\windows-standalone-vulkan\render-report.md
 
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-vulkan\manifest.json --product standalone --platform-name windows --mode non-vr --renderer vulkan --include build\baseline-captures --include code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-vulkan\manifest.json --product standalone --platform-name windows --mode non-vr --renderer vulkan --include artifacts\windows-standalone-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -69,9 +82,7 @@ jobs:
           name: WindowsStandaloneVulkan-GPU
           path: |
             artifacts/windows-standalone-vulkan
-            build/baseline-captures
             code/appImmViewer/exe/debug.txt
-            code/appImmViewer/exe/vulkan_sample1_smoke.ppm
           if-no-files-found: ignore
           retention-days: 14
 
