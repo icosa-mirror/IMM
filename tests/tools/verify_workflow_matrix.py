@@ -21,7 +21,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-core.yml": {
         "baseline-content": ["Verify sample1 IMM baseline", "Write CI manifest", "Collect artifact summary"],
         "package-source-layout": ["Verify Unity stroke reader package source", "Verify Unity source import harness", "Verify Godot addon source manifest", "Verify Godot source import harness", "Collect artifact summary"],
-        "matrix-status": ["Verify matrix status coverage", "Verify workflow matrix wiring", "Run CI tool self-tests", "Write CI manifest", "Collect artifact summary"],
+        "matrix-status": ["Verify matrix status coverage", "Verify workflow matrix wiring", "Write matrix audit report", "Run CI tool self-tests", "Write CI manifest", "Collect artifact summary"],
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-device.yml": {

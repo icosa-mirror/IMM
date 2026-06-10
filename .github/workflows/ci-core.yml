@@ -152,6 +152,12 @@ jobs:
       - name: Verify workflow matrix wiring
         run: python tests/tools/verify_workflow_matrix.py
 
+      - name: Write matrix audit report
+        run: >
+          python tests/tools/write_matrix_audit_report.py tests/matrix_status.json
+          --json-output artifacts/matrix-status/matrix-audit.json
+          --markdown-output artifacts/matrix-status/matrix-audit.md
+
       - name: Run CI tool self-tests
         run: |
           python tests/tools/test_collect_ci_artifacts.py
@@ -159,6 +165,7 @@ jobs:
           python tests/tools/test_preflight_runner.py
           python tests/tools/test_verify_release_assets.py
           python tests/tools/test_verify_log_markers.py
+          python tests/tools/test_write_matrix_audit_report.py
           python tests/tools/test_write_ci_manifest.py
           python tests/tools/test_verify_matrix_status.py
 
@@ -174,6 +181,8 @@ jobs:
             --mode status \
             --renderer none \
             --include tests/matrix_status.json \
+            --include artifacts/matrix-status/matrix-audit.json \
+            --include artifacts/matrix-status/matrix-audit.md \
             --include AUTOMATED_TESTING_MATRIX_PLAN.md
 
       - name: Collect artifact summary
