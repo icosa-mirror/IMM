@@ -6,10 +6,16 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '17 2 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   windows-standalone-vulkan:
     name: Windows Standalone Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
     runs-on: [self-hosted, windows, gpu, vulkan]
     steps:
       - name: Checkout repository
@@ -65,6 +71,7 @@ jobs:
 
   windows-godot-vulkan:
     name: Windows Godot Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
     runs-on: [self-hosted, windows, gpu, godot, vulkan]
     steps:
       - name: Checkout repository
@@ -104,6 +111,7 @@ jobs:
 
   macos-godot-metal:
     name: macOS Godot Metal
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
     runs-on: [self-hosted, macos, gpu, metal, godot]
     steps:
       - name: Checkout repository

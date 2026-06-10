@@ -6,10 +6,16 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '11 4 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   unity-package-import:
     name: Unity Package Import
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
     runs-on: [self-hosted, unity]
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +62,7 @@ jobs:
 
   godot-package-import:
     name: Godot Package Import
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

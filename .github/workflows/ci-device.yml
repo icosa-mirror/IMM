@@ -6,10 +6,16 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '43 3 * * *'
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   android-standalone-gles:
     name: Android Standalone GLES
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: [self-hosted, android-device]
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +48,7 @@ jobs:
 
   android-standalone-vulkan:
     name: Android Standalone Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: [self-hosted, android-device, vulkan]
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +81,7 @@ jobs:
 
   android-openxr-probe:
     name: Android OpenXR Probe
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: [self-hosted, quest, openxr]
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +132,7 @@ jobs:
 
   android-godot-vulkan:
     name: Android Godot Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: [self-hosted, android-device, godot, vulkan]
     steps:
       - uses: actions/checkout@v4
@@ -156,6 +165,7 @@ jobs:
 
   android-quest-vr:
     name: Android Quest VR
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: [self-hosted, quest, vr]
     steps:
       - uses: actions/checkout@v4
@@ -204,6 +214,7 @@ jobs:
 
   ios-device-smoke:
     name: iOS Device Smoke
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: [self-hosted, macos, ios-device]
     steps:
       - uses: actions/checkout@v4
