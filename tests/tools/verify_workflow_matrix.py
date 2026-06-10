@@ -12,7 +12,7 @@ REQUIRED_JOBS = {
     ".github/workflows/build.yml": {
         "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Write Windows DirectX render report", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
         "build-android": ["Write Android viewer artifact manifest", "Collect Android viewer artifact summary"],
-        "build-macos": ["Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
+        "build-macos": ["Smoke macOS Metal standalone viewer", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
         "build-ios": ["Link-check iOS Unity plugin"],
         "package-unity-plugins": ["Verify stroke reader Unity package layout", "Verify Unity package import harness", "Write ImmUnity package manifest", "Collect ImmUnity package summary"],
         "package-godot-extension": ["Verify Godot addon package layout", "Verify Godot package import harness", "Write Godot addon package manifest", "Collect Godot addon package summary"],
