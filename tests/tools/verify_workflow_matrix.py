@@ -29,7 +29,7 @@ REQUIRED_JOBS = {
         "android-standalone-vulkan": ["Preflight Android Vulkan device", "Run Android Vulkan smoke", "Record Android Vulkan screenshot metrics", "Write CI manifest", "Collect artifact summary"],
         "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Verify OpenXR log contract", "Write CI manifest", "Collect artifact summary"],
         "android-godot-vulkan": ["Preflight Android Godot device", "Run Android Godot Vulkan smoke", "Record Android Godot Vulkan screenshot metrics", "Write CI manifest", "Collect artifact summary"],
-        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR OpenXR smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR app smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
         "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest", "Collect artifact summary"],
         "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report"],
     },

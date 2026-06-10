@@ -138,6 +138,9 @@ bool shutdownRequested = false;
 bool didProcessUnloadOnBackPress = false;
 
 bool isUserEntitled = false;
+static bool sLoggedVrSmokeViewerInitialized = false;
+static bool sLoggedVrSmokeLoadingSubmit = false;
+static bool sLoggedVrSmokeDocumentSubmit = false;
 
 short framesSinceStart = -1;
 
@@ -2322,6 +2325,11 @@ void android_main( struct android_app * app )
                 }
 
                 ALOGV("    Initialized Quill Viewer");
+                if (!sLoggedVrSmokeViewerInitialized)
+                {
+                    sLoggedVrSmokeViewerInitialized = true;
+                    ALOGV("IMM_ANDROID_VR_SMOKE viewer_initialized");
+                }
             }
             else
             {
@@ -2463,6 +2471,15 @@ void android_main( struct android_app * app )
                 frameDesc.Layers = layers;
 
                 vrapi_SubmitFrame2(appState.Ovr, &frameDesc);
+                if (!sLoggedVrSmokeLoadingSubmit)
+                {
+                    sLoggedVrSmokeLoadingSubmit = true;
+                    ALOGV("IMM_ANDROID_VR_SMOKE loading_frame_submitted frame=%lld layerCount=%d documentLoading=%d downloading=%d",
+                          static_cast<long long>(appState.FrameIndex),
+                          frameDesc.LayerCount,
+                          immPlayer.viewer->IsDocumentLoading(docID) ? 1 : 0,
+                          isDownloadingDocument ? 1 : 0);
+                }
             }
             else if (immPlayer.viewer->IsDocumentLoaded(docID))
             {
@@ -2477,6 +2494,15 @@ void android_main( struct android_app * app )
 
                 // Hand over the eye images to the time warp.
                 vrapi_SubmitFrame2(appState.Ovr, &frameDesc);
+                if (!sLoggedVrSmokeDocumentSubmit)
+                {
+                    sLoggedVrSmokeDocumentSubmit = true;
+                    ALOGV("IMM_ANDROID_VR_SMOKE document_frame_submitted frame=%lld layerCount=%d useMultiview=%d loadState=%s",
+                          static_cast<long long>(appState.FrameIndex),
+                          frameDesc.LayerCount,
+                          appState.UseMultiview ? 1 : 0,
+                          LoadingStateToString(immPlayer.viewer->GetDocumentLoadState(docID)));
+                }
             }
             else
             {

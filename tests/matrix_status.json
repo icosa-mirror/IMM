@@ -77,11 +77,22 @@
       "renderer": "openxr",
       "status": "deferred",
       "hosted_gate": "Build / Android",
+      "hardware_gate": "CI Device Matrix / Android OpenXR Probe",
+      "baseline": "tests/baselines/content/sample1.json",
+      "owner_decision": "Keep Android OpenXR VR deferred until the app has an OpenXR document/frame path beyond component probing.",
+      "promotion_criteria": "Promote to supported after a CI Device Matrix Android OpenXR app lane passes on a Quest runner and artifacts show OpenXR initialization, stereo view enumeration, document load, and frame submission.",
+      "reason": "ci-device.yml defines an Android OpenXR component probe with runtime initialization and stereo view enumeration; the standalone Quest app runtime path currently uses the GLES/VRAPI row."
+    },
+    {
+      "product": "standalone",
+      "platform": "android",
+      "mode": "vr",
+      "renderer": "gles",
+      "status": "supported",
+      "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Quest VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "owner_decision": "Keep Android VR deferred until the Quest VR lane has a successful hardware run with runtime evidence.",
-      "promotion_criteria": "Promote to supported after CI Device Matrix / Android Quest VR passes on a Quest runner and artifacts show OpenXR initialization, stereo view enumeration, document load, and frame submission.",
-      "reason": "Hosted CI builds the VR APK and ci-device.yml defines a Quest VR self-hosted lane with VR-manifest OpenXR probing; full stereo frame submission still needs a passing hardware run before this row can be promoted to supported."
+      "reason": "Hosted CI builds the Quest-style APK and ci-device.yml defines a self-hosted Quest VR app smoke that requires VRAPI entry, sample1 IMM load from assets, CPU/GPU load completion, and IMM_ANDROID_VR_SMOKE document-frame submission markers."
     },
     {
       "product": "standalone",

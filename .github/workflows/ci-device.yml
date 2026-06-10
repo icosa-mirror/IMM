@@ -186,31 +186,34 @@ jobs:
       - name: Preflight Quest VR device
         shell: pwsh
         run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-quest-vr\preflight.json --require-command adb --adb-devices --adb-health
-      - name: Run Quest VR OpenXR smoke
+      - name: Run Quest VR app smoke
         shell: pwsh
-        run: .\code\projects\android\run-android-openxr-probe-smoke.ps1 -VrManifest -AttemptQuestUnblock -LogDir artifacts\android-quest-vr\logs
+        run: .\code\projects\android\run-android-quest-vr-smoke.ps1 -AttemptQuestUnblock -LogDir artifacts\android-quest-vr\logs
       - name: Verify Quest VR log contract
         shell: pwsh
         run: >
           python tests\tools\verify_log_markers.py
           --log artifacts\android-quest-vr\logs\logcat.txt
           --label android-quest-vr
-          --require "IMM_ANDROID_OPENXR_PROBE begin"
-          --require "IMM_ANDROID_OPENXR_PROBE initializeLoaderResult=0 resultName=XR_SUCCESS"
-          --require "IMM_ANDROID_OPENXR_PROBE enumerateExtensionsResult=0 resultName=XR_SUCCESS"
-          --require "IMM_ANDROID_OPENXR_PROBE createInstanceResult=0 resultName=XR_SUCCESS"
-          --require "IMM_ANDROID_OPENXR_PROBE getHmdSystemResult=0 resultName=XR_SUCCESS"
-          --require "IMM_ANDROID_OPENXR_PROBE enumerateStereoViewsFillResult=0 resultName=XR_SUCCESS"
-          --require "IMM_ANDROID_OPENXR_PROBE destroyInstanceResult=0 resultName=XR_SUCCESS"
-          --require "IMM_ANDROID_OPENXR_PROBE end"
+          --require "android_app_entry()"
+          --require "AppState UseMultiview"
+          --require "vrapi_EnterVrMode()"
+          --require "Checking for sample1.imm"
+          --require "Loading Quill:"
+          --require "Initialized Quill Viewer"
+          --require "IMM_ANDROID_VR_SMOKE viewer_initialized"
+          --require "Loaded in CPU"
+          --require "Loaded in GPU"
+          --require "loading completed... vrapi_SetClockLevels"
+          --require "IMM_ANDROID_VR_SMOKE document_frame_submitted"
           --forbid "Fatal signal"
-          --forbid "Launch is blocked because"
-          --forbid "RequiresControllersLaunchInterceptor"
-          --output artifacts\android-quest-vr\openxr-log-contract.json
+          --forbid "FAILED to open sample1.imm"
+          --forbid "Can't init Quill Viewer"
+          --output artifacts\android-quest-vr\quest-vr-log-contract.json
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\android-quest-vr\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include artifacts\android-quest-vr
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\android-quest-vr\manifest.json --product standalone --platform-name android --mode vr --renderer gles --include artifacts\android-quest-vr
       - name: Collect artifact summary
         if: always()
         shell: pwsh

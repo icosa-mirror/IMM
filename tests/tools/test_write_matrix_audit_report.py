@@ -36,8 +36,8 @@ def main() -> int:
         assert completed.returncode == 0, completed.stderr
         audit = json.loads(json_output.read_text(encoding="utf-8"))
         assert audit["schema"] == "imm-testing-matrix-audit-v1"
-        assert audit["summary"]["row_count"] == 19
-        assert audit["summary"]["supported_count"] == 12
+        assert audit["summary"]["row_count"] == 20
+        assert audit["summary"]["supported_count"] == 13
         assert audit["summary"]["release_blocker_count"] == 4
         assert "standalone/android/vr/openxr" in audit["summary"]["release_blockers"]
 

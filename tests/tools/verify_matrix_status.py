@@ -42,6 +42,7 @@ KNOWN_HOSTED_GATES = {
 }
 KNOWN_HARDWARE_GATES = {
     "CI Device Matrix / Android Godot Vulkan",
+    "CI Device Matrix / Android OpenXR Probe",
     "CI Device Matrix / Android Quest VR",
     "CI Device Matrix / Android Standalone GLES",
     "CI Device Matrix / Android Standalone Vulkan",
