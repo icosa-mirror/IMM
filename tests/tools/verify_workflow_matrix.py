@@ -35,7 +35,7 @@ REQUIRED_JOBS = {
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest"],
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Write CI manifest"],
+        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Write CI manifest"],
         "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Run Godot Vulkan smoke", "Write CI manifest"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Write CI manifest"],
     },

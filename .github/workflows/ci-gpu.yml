@@ -33,6 +33,14 @@ jobs:
         shell: pwsh
         run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
 
+      - name: Compare Vulkan render metrics against DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+          --reference .\build\baseline-captures\windows-directx-playerframe60.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
+          --json-output artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
+
       - name: Write CI manifest
         if: always()
         shell: pwsh

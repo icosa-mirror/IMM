@@ -4,8 +4,12 @@
   "fixture": "exampleImmFiles/sample1.imm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
+    "minimum_luma_span": 16,
+    "minimum_near_visible_pixels": 1000,
     "minimum_non_black_pixels": 1,
     "reference_metrics_artifact": "ImmViewer-macOS",
+    "requires_color_metrics": true,
+    "requires_orientation_metrics": true,
     "requires_nonblank_capture": true
   }
 }

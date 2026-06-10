@@ -95,7 +95,10 @@ jobs:
 
     - name: Record Windows DirectX render metrics
       shell: pwsh
-      run: python tests\tools\compare_render_metrics.py .\build\baseline-captures\windows-directx-playerframe60.ppm --json-output artifacts\render-metrics\windows-directx-playerframe60.json
+      run: >
+        python tests\tools\compare_render_metrics.py .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --contract tests\baselines\render\windows-directx-sample1.json
+        --json-output artifacts\render-metrics\windows-directx-playerframe60.json
 
     - name: Upload Windows DirectX baseline artifacts
       uses: actions/upload-artifact@v4
