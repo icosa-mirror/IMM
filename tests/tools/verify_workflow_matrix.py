@@ -16,7 +16,7 @@ REQUIRED_JOBS = {
         "build-ios": ["Link-check iOS Unity plugin"],
         "package-unity-plugins": ["Verify stroke reader Unity package layout", "Verify Unity package import harness", "Write ImmUnity package manifest", "Collect ImmUnity package summary"],
         "package-godot-extension": ["Verify Godot addon package layout", "Verify Godot package import harness", "Write Godot addon package manifest", "Collect Godot addon package summary"],
-        "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release validation manifest", "Collect release artifact summary"],
+        "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release validation manifest", "Collect release artifact summary", "Create GitHub release"],
     },
     ".github/workflows/ci-core.yml": {
         "baseline-content": ["Verify sample1 IMM baseline", "Write CI manifest", "Collect artifact summary"],

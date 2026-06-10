@@ -1170,7 +1170,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n' \
+        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n\nValidation\n\nRelease validation manifest and artifact summary are attached as JSON assets.\n' \
           "${{ steps.release_meta.outputs.stroke_url }}" \
           "${{ steps.release_meta.outputs.unity_url }}")"
         gh release create "${{ steps.release_meta.outputs.release_tag }}" \
@@ -1187,7 +1187,8 @@ jobs:
           release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
           release-assets/ImmViewer-Windows/sample1.imm \
-          release-assets/release-validation-manifest.json
+          release-assets/release-validation-manifest.json \
+          release-assets/release-artifact-summary.json
 
   publish-upm:
     name: Publish UPM Branch
