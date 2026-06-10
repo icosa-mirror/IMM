@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 import compare_render_metrics
+import write_render_report
 
 
 def write_ppm(path: Path, width: int, height: int, pixels: list[tuple[int, int, int]]) -> None:
@@ -51,6 +52,7 @@ def main() -> int:
         reference_path = temp / "reference.ppm"
         flipped_path = temp / "flipped.ppm"
         dark_path = temp / "dark.ppm"
+        png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
         contract_path = temp / "contract.json"
 
@@ -58,6 +60,12 @@ def main() -> int:
         write_ppm(reference_path, width, height, pixels)
         write_ppm(flipped_path, width, height, flip_vertical(width, height, pixels))
         write_ppm(dark_path, width, height, darken(pixels))
+        write_render_report.write_png(
+            png_path,
+            width,
+            height,
+            bytes(channel for pixel in pixels for channel in pixel),
+        )
         contract_path.write_text(
             json.dumps(
                 {
@@ -81,8 +89,12 @@ def main() -> int:
         same = compare_render_metrics.collect_metrics(reference_path)
         flipped = compare_render_metrics.collect_metrics(flipped_path)
         dark = compare_render_metrics.collect_metrics(dark_path)
+        png = compare_render_metrics.collect_metrics(png_path)
 
         assert not compare_render_metrics.compare_metrics(reference, same)
+        assert png["format"] == "png"
+        assert png["non_black_pixels"] == reference["non_black_pixels"]
+        assert not compare_render_metrics.compare_metrics(reference, png)
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), reference) == []
         assert any("vertical luma profile" in error or "centroid" in error for error in compare_render_metrics.compare_metrics(reference, flipped))
         assert any("visible luma mean" in error for error in compare_render_metrics.compare_metrics(reference, dark))

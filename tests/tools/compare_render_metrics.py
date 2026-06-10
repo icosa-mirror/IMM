@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import struct
 import hashlib
 import json
 import math
 import sys
+import zlib
 from pathlib import Path
 
 
@@ -19,30 +21,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def read_ppm_metrics(path: Path) -> dict:
-    with path.open("rb") as handle:
-        magic = handle.readline().strip()
-        if magic != b"P6":
-            raise ValueError(f"{path} is not a binary PPM (P6)")
-
-        tokens: list[bytes] = []
-        while len(tokens) < 3:
-            line = handle.readline()
-            if not line:
-                raise ValueError(f"{path} ended before PPM header was complete")
-            line = line.split(b"#", 1)[0].strip()
-            if line:
-                tokens.extend(line.split())
-
-        width, height, max_value = (int(token) for token in tokens[:3])
-        if max_value != 255:
-            raise ValueError(f"{path} has unsupported PPM max value {max_value}")
-        pixels = handle.read()
-
-    expected_bytes = width * height * 3
-    if len(pixels) != expected_bytes:
-        raise ValueError(f"{path} has {len(pixels)} pixel bytes, expected {expected_bytes}")
-
+def compute_rgb_metrics(width: int, height: int, pixels: bytes, format_name: str) -> dict:
     non_black = 0
     near_visible = 0
     min_luma = 255
@@ -136,7 +115,7 @@ def read_ppm_metrics(path: Path) -> dict:
     luma_variance = max(0.0, (luma_sq_sum / pixel_count) - (luma_mean * luma_mean))
 
     return {
-        "format": "ppm-p6",
+        "format": format_name,
         "metrics_version": 2,
         "width": width,
         "height": height,
@@ -158,6 +137,135 @@ def read_ppm_metrics(path: Path) -> dict:
     }
 
 
+def read_ppm_metrics(path: Path) -> dict:
+    with path.open("rb") as handle:
+        magic = handle.readline().strip()
+        if magic != b"P6":
+            raise ValueError(f"{path} is not a binary PPM (P6)")
+
+        tokens: list[bytes] = []
+        while len(tokens) < 3:
+            line = handle.readline()
+            if not line:
+                raise ValueError(f"{path} ended before PPM header was complete")
+            line = line.split(b"#", 1)[0].strip()
+            if line:
+                tokens.extend(line.split())
+
+        width, height, max_value = (int(token) for token in tokens[:3])
+        if max_value != 255:
+            raise ValueError(f"{path} has unsupported PPM max value {max_value}")
+        pixels = handle.read()
+
+    expected_bytes = width * height * 3
+    if len(pixels) != expected_bytes:
+        raise ValueError(f"{path} has {len(pixels)} pixel bytes, expected {expected_bytes}")
+    return compute_rgb_metrics(width, height, pixels, "ppm-p6")
+
+
+def paeth_predictor(left: int, up: int, upper_left: int) -> int:
+    prediction = left + up - upper_left
+    pa = abs(prediction - left)
+    pb = abs(prediction - up)
+    pc = abs(prediction - upper_left)
+    if pa <= pb and pa <= pc:
+        return left
+    if pb <= pc:
+        return up
+    return upper_left
+
+
+def unfilter_png_scanlines(data: bytes, width: int, height: int, bytes_per_pixel: int) -> bytes:
+    stride = width * bytes_per_pixel
+    expected = height * (stride + 1)
+    if len(data) != expected:
+        raise ValueError(f"PNG decompressed payload has {len(data)} bytes, expected {expected}")
+
+    rows = []
+    offset = 0
+    previous = bytearray(stride)
+    for _ in range(height):
+        filter_type = data[offset]
+        offset += 1
+        raw = bytearray(data[offset : offset + stride])
+        offset += stride
+
+        for i in range(stride):
+            left = raw[i - bytes_per_pixel] if i >= bytes_per_pixel else 0
+            up = previous[i]
+            upper_left = previous[i - bytes_per_pixel] if i >= bytes_per_pixel else 0
+            if filter_type == 0:
+                value = raw[i]
+            elif filter_type == 1:
+                value = raw[i] + left
+            elif filter_type == 2:
+                value = raw[i] + up
+            elif filter_type == 3:
+                value = raw[i] + ((left + up) // 2)
+            elif filter_type == 4:
+                value = raw[i] + paeth_predictor(left, up, upper_left)
+            else:
+                raise ValueError(f"Unsupported PNG scanline filter {filter_type}")
+            raw[i] = value & 0xFF
+
+        rows.append(bytes(raw))
+        previous = raw
+    return b"".join(rows)
+
+
+def read_png_metrics(path: Path) -> dict:
+    data = path.read_bytes()
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError(f"{path} is not a PNG")
+
+    width = 0
+    height = 0
+    bit_depth = 0
+    color_type = 0
+    compression = 0
+    filter_method = 0
+    interlace = 0
+    compressed = bytearray()
+    offset = 8
+    while offset + 8 <= len(data):
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        kind = data[offset + 4 : offset + 8]
+        payload_start = offset + 8
+        payload_end = payload_start + length
+        if payload_end + 4 > len(data):
+            raise ValueError(f"{path} has a truncated PNG chunk")
+        payload = data[payload_start:payload_end]
+        offset = payload_end + 4
+
+        if kind == b"IHDR":
+            width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(">IIBBBBB", payload)
+        elif kind == b"IDAT":
+            compressed.extend(payload)
+        elif kind == b"IEND":
+            break
+
+    if width <= 0 or height <= 0:
+        raise ValueError(f"{path} is missing a valid PNG IHDR")
+    if bit_depth != 8 or color_type not in {2, 6} or compression != 0 or filter_method != 0 or interlace != 0:
+        raise ValueError(
+            f"{path} uses unsupported PNG encoding: bit_depth={bit_depth} color_type={color_type} "
+            f"compression={compression} filter={filter_method} interlace={interlace}"
+        )
+
+    bytes_per_pixel = 3 if color_type == 2 else 4
+    raw = unfilter_png_scanlines(zlib.decompress(bytes(compressed)), width, height, bytes_per_pixel)
+    if color_type == 2:
+        rgb = raw
+    else:
+        rgb = bytearray(width * height * 3)
+        for index in range(width * height):
+            rgb[index * 3 + 0] = raw[index * 4 + 0]
+            rgb[index * 3 + 1] = raw[index * 4 + 1]
+            rgb[index * 3 + 2] = raw[index * 4 + 2]
+        rgb = bytes(rgb)
+    return compute_rgb_metrics(width, height, rgb, "png")
+
+
 def collect_metrics(path: Path) -> dict:
     data = {
         "schema": "imm-render-metrics-v1",
@@ -169,12 +277,7 @@ def collect_metrics(path: Path) -> dict:
     if suffix == ".ppm":
         data.update(read_ppm_metrics(path))
     elif suffix == ".png":
-        with path.open("rb") as handle:
-            signature = handle.read(8)
-        if signature != b"\x89PNG\r\n\x1a\n":
-            raise ValueError(f"{path} is not a PNG")
-        data["format"] = "png"
-        data["note"] = "PNG identity recorded; install a richer image dependency if pixel metrics are required."
+        data.update(read_png_metrics(path))
     else:
         raise ValueError(f"Unsupported render capture format: {path.suffix}")
     return data
@@ -182,12 +285,12 @@ def collect_metrics(path: Path) -> dict:
 
 def compare_metrics(reference: dict, candidate: dict) -> list[str]:
     errors = []
-    for key in ["format", "width", "height"]:
+    for key in ["width", "height"]:
         if key in reference and key in candidate and reference[key] != candidate[key]:
             errors.append(f"{key} differs: reference={reference[key]!r} candidate={candidate[key]!r}")
-    if candidate.get("format") == "ppm-p6" and candidate.get("non_black_pixels", 0) <= 0:
+    if candidate.get("format") in {"ppm-p6", "png"} and candidate.get("non_black_pixels", 0) <= 0:
         errors.append("candidate capture has no non-black pixels")
-    if reference.get("format") == "ppm-p6" and candidate.get("format") == "ppm-p6":
+    if reference.get("format") in {"ppm-p6", "png"} and candidate.get("format") in {"ppm-p6", "png"}:
         ref_visible = reference.get("non_black_pixels", 0)
         cand_visible = candidate.get("non_black_pixels", 0)
         if ref_visible > 0:
