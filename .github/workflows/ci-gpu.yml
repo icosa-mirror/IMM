@@ -73,6 +73,63 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  windows-standalone-openxr-vr:
+    name: Windows Standalone OpenXR VR
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: [self-hosted, windows, gpu, vr, openxr]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Windows OpenXR VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-openxr-vr --output artifacts\windows-standalone-openxr-vr\preflight.json --require-command msbuild
+
+      - name: Run Windows OpenXR VR smoke
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\run-windows-openxr-vr-smoke.ps1 -Configuration Release -LogDir artifacts\windows-standalone-openxr-vr
+
+      - name: Verify Windows OpenXR VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\windows-standalone-openxr-vr\debug.txt
+          --label windows-standalone-openxr-vr
+          --require "XR Runtime: OpenXR"
+          --require "Rendering in VR: yes"
+          --require "IMM_OPENXR_STANDALONE createInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE getHmdSystemResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE enumerateStereoViewsFillResult=0"
+          --require "IMM_OPENXR_STANDALONE createSessionResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE beginSessionResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE waitFrameResult=0 resultName=XR_SUCCESS shouldRender=1"
+          --require "IMM_OPENXR_STANDALONE beginFrameResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE endFrameResult=0 resultName=XR_SUCCESS layerCount=1 projectionViews=2"
+          --require "OpenXR standalone startup probe passed"
+          --forbid "OpenXR standalone startup probe failed"
+          --forbid "Cannot do VR"
+          --output artifacts\windows-standalone-openxr-vr\openxr-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\windows-standalone-openxr-vr\manifest.json --product standalone --platform-name windows --mode vr --renderer openxr --include artifacts\windows-standalone-openxr-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-openxr-vr --require-manifest --output artifacts\windows-standalone-openxr-vr\artifact-summary.json
+
+      - name: Upload OpenXR VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneOpenXRVR-GPU
+          path: artifacts/windows-standalone-openxr-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
   windows-godot-vulkan:
     name: Windows Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
@@ -204,6 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - windows-standalone-vulkan
+      - windows-standalone-openxr-vr
       - windows-godot-vulkan
       - macos-godot-metal
     steps:

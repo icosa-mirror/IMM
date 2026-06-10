@@ -524,7 +524,7 @@ Exit criteria:
 | Requirement | Current state | Gap |
 |---|---|---|
 | Standalone Windows non-VR | Builds, DirectX baseline capture, gated Vulkan smoke variable exists | Need formal baseline metrics and self-hosted GPU requirement |
-| Standalone Windows VR | Packaged settings exist | Need PC VR runtime smoke |
+| Standalone Windows VR | Packaged legacy OpenGL VR settings exist; Windows OpenXR standalone VR smoke lane exists with session/stereo/frame contract markers | Need legacy OpenGL headset frame-submission evidence or an owner decision to retire/waive that renderer row |
 | Standalone Android non-VR | Builds GLES/Vulkan APKs; smoke scripts exist | Need GitHub self-hosted device runner |
 | Standalone Android VR | Builds Quest-style APK | Need Quest runtime smoke and stereo/OpenXR markers |
 | Standalone iOS | No standalone viewer target identified | Mark unsupported or add target |

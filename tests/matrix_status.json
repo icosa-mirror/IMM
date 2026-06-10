@@ -39,6 +39,17 @@
     },
     {
       "product": "standalone",
+      "platform": "windows",
+      "mode": "vr",
+      "renderer": "openxr",
+      "status": "supported",
+      "hosted_gate": null,
+      "hardware_gate": "CI GPU Matrix / Windows Standalone OpenXR VR",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "ci-gpu.yml defines a self-hosted Windows OpenXR VR smoke lane that launches the standalone viewer with settings-openxr-probe.json and requires OpenXR instance, session, stereo view, swapchain, wait/begin/end frame, and two-projection-view frame evidence."
+    },
+    {
+      "product": "standalone",
       "platform": "android",
       "mode": "non-vr",
       "renderer": "gles",
