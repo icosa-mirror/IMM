@@ -1106,6 +1106,7 @@ jobs:
         python tests/tools/verify_package_layout.py godot release-assets/ImmPlayerPlugin-Godot
         python tests/tools/verify_viewer_artifact.py windows release-assets/ImmViewer-Windows
         python tests/tools/verify_viewer_artifact.py macos release-assets/ImmViewer-macOS
+        python tests/tools/verify_release_assets.py release-assets
 
     - name: Zip Windows viewer artifacts
       shell: bash
@@ -1145,6 +1146,7 @@ jobs:
       run: |
         python tests/tools/collect_ci_artifacts.py \
           --artifact-dir release-assets \
+          --require-manifest \
           --output release-assets/release-artifact-summary.json
 
     - name: Compute release metadata
