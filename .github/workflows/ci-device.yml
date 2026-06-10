@@ -84,11 +84,29 @@ jobs:
         run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-openxr-probe\preflight.json --require-command adb --adb-devices --adb-health
       - name: Run Android OpenXR probe smoke
         shell: pwsh
-        run: .\code\projects\android\run-android-openxr-probe-smoke.ps1
+        run: .\code\projects\android\run-android-openxr-probe-smoke.ps1 -LogDir artifacts\android-openxr-probe\logs
+      - name: Verify OpenXR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\android-openxr-probe\logs\logcat.txt
+          --label android-openxr-probe
+          --require "IMM_ANDROID_OPENXR_PROBE begin"
+          --require "IMM_ANDROID_OPENXR_PROBE initializeLoaderResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE enumerateExtensionsResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE createInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE getHmdSystemResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE enumerateStereoViewsFillResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE destroyInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE end"
+          --forbid "Fatal signal"
+          --forbid "Launch is blocked because"
+          --forbid "RequiresControllersLaunchInterceptor"
+          --output artifacts\android-openxr-probe\openxr-log-contract.json
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --output artifacts\android-openxr-probe\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include code\projects\android\logs
+        run: python tests\tools\write_ci_manifest.py --output artifacts\android-openxr-probe\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include artifacts\android-openxr-probe
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -149,6 +167,24 @@ jobs:
       - name: Run Quest VR OpenXR smoke
         shell: pwsh
         run: .\code\projects\android\run-android-openxr-probe-smoke.ps1 -VrManifest -AttemptQuestUnblock -LogDir artifacts\android-quest-vr\logs
+      - name: Verify Quest VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\android-quest-vr\logs\logcat.txt
+          --label android-quest-vr
+          --require "IMM_ANDROID_OPENXR_PROBE begin"
+          --require "IMM_ANDROID_OPENXR_PROBE initializeLoaderResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE enumerateExtensionsResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE createInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE getHmdSystemResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE enumerateStereoViewsFillResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE destroyInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE end"
+          --forbid "Fatal signal"
+          --forbid "Launch is blocked because"
+          --forbid "RequiresControllersLaunchInterceptor"
+          --output artifacts\android-quest-vr\openxr-log-contract.json
       - name: Write CI manifest
         if: always()
         shell: pwsh

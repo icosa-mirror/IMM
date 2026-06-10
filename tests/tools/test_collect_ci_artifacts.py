@@ -47,6 +47,10 @@ def main() -> int:
         artifact = root / "artifact"
         artifact.mkdir()
         (artifact / "manifest.json").write_text(json.dumps(valid_manifest()) + "\n", encoding="utf-8")
+        (artifact / "openxr-log-contract.json").write_text(
+            json.dumps({"schema": "imm-log-marker-contract-v1", "passed": True}) + "\n",
+            encoding="utf-8",
+        )
 
         ok = run_collect(
             "--repo-root",
@@ -61,6 +65,7 @@ def main() -> int:
         summary = json.loads((artifact / "artifact-summary.json").read_text(encoding="utf-8"))
         assert summary["passed"] is True
         assert summary["artifacts"][0]["manifests"][0]["content"]["schema"] == "imm-ci-artifact-manifest-v1"
+        assert summary["artifacts"][0]["contracts"][0]["content"]["schema"] == "imm-log-marker-contract-v1"
 
         broken = root / "broken"
         broken.mkdir()

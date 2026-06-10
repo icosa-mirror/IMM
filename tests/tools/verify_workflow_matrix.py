@@ -27,9 +27,9 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Preflight Android device", "Run Android GLES smoke", "Write CI manifest", "Collect artifact summary"],
         "android-standalone-vulkan": ["Preflight Android Vulkan device", "Run Android Vulkan smoke", "Write CI manifest", "Collect artifact summary"],
-        "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Write CI manifest", "Collect artifact summary"],
+        "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Verify OpenXR log contract", "Write CI manifest", "Collect artifact summary"],
         "android-godot-vulkan": ["Preflight Android Godot device", "Run Android Godot Vulkan smoke", "Write CI manifest", "Collect artifact summary"],
-        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR OpenXR smoke", "Write CI manifest", "Collect artifact summary"],
+        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR OpenXR smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
         "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-engine.yml": {

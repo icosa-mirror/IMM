@@ -38,6 +38,7 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
     manifest_paths = [p for p in files if p.name == "manifest.json"]
     preflight_paths = [p for p in files if p.name == "preflight.json"]
     metrics_paths = [p for p in files if p.suffix.lower() == ".json" and "metric" in p.name.lower()]
+    contract_paths = [p for p in files if p.suffix.lower() == ".json" and "contract" in p.name.lower()]
     return {
         "path": path.relative_to(root).as_posix(),
         "file_count": len(files),
@@ -57,6 +58,13 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
             for p in preflight_paths
         ],
         "metrics": [collect_file(p, root) for p in metrics_paths],
+        "contracts": [
+            {
+                "file": p.relative_to(root).as_posix(),
+                "content": load_json(p),
+            }
+            for p in contract_paths
+        ],
     }
 
 
