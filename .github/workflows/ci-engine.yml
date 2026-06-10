@@ -60,6 +60,66 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  unity-windows-directx-composition:
+    name: Unity Windows DirectX Composition
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
+    runs-on: [self-hosted, windows, unity, gpu]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Unity DirectX runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json --require-env UNITY_EXE
+
+      - name: Run Unity DirectX composition smoke
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
+          $env:IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH = (Resolve-Path artifacts\unity-windows-directx-composition).Path + "\unity-windows-directx-composition.png"
+          & $env:UNITY_EXE -batchmode -projectPath code\ImmUnitySampleProject -executeMethod ImmPlayer.Editor.BuildAutomation.RunWindowsDirectXEditorPlayModeSmoke -logFile artifacts\unity-windows-directx-composition\unity-editor.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unity DirectX composition smoke failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Record Unity DirectX composition metrics
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
+
+      - name: Verify Unity DirectX composition log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-directx-composition\unity-editor.log
+          --label unity-windows-directx-composition
+          --require "[IMM_UNITY_SMOKE] scene composition probe passed"
+          --require "[IMM_EDITOR_SMOKE] passed:"
+          --forbid "[IMM_UNITY_SMOKE] scene composition probe failed"
+          --output artifacts\unity-windows-directx-composition\unity-composition-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts\unity-windows-directx-composition
+
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-directx-composition --require-manifest --output artifacts\unity-windows-directx-composition\artifact-summary.json
+
+      - name: Upload Unity DirectX composition artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsDirectXComposition
+          path: artifacts/unity-windows-directx-composition
+          if-no-files-found: ignore
+          retention-days: 14
+
   godot-package-import:
     name: Godot Package Import
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')

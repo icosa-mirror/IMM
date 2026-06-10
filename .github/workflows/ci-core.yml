@@ -179,6 +179,7 @@ jobs:
           python tests/tools/test_write_matrix_audit_report.py
           python tests/tools/test_write_ci_manifest.py
           python tests/tools/test_verify_matrix_status.py
+          python tests/tools/test_composition_probe_contracts.py
 
       - name: Write CI manifest
         if: always()

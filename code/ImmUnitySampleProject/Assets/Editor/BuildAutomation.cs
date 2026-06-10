@@ -18,6 +18,7 @@ namespace ImmPlayer.Editor
         private const string RuntimeSmokeCapturePathEnv = "IMM_UNITY_SMOKE_CAPTURE_PATH";
         private const string RuntimeSmokeFramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string RuntimeSmokeQuitEnv = "IMM_UNITY_SMOKE_QUIT";
+        private const string RuntimeSmokeCompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
         private const string EditorSmokeActiveKey = "IMM_EDITOR_SMOKE_ACTIVE";
         private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
@@ -113,10 +114,25 @@ namespace ImmPlayer.Editor
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneOSX, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneOSX, new[] { GraphicsDeviceType.Metal });
 
+            RunEditorPlayModeSmoke("macOS", Path.Combine("..", "build", "unity-smoke", "macos-editor-playmode.png"), false);
+        }
+
+        public static void RunWindowsDirectXEditorPlayModeSmoke()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
+
+            RunEditorPlayModeSmoke("Windows DirectX", Path.Combine("..", "build", "unity-smoke", "windows-directx-editor-playmode.png"), true);
+        }
+
+        private static void RunEditorPlayModeSmoke(string label, string defaultCapturePath, bool enableCompositionProbe)
+        {
             string capturePath = Environment.GetEnvironmentVariable(EditorSmokeCapturePathEnv);
             if (string.IsNullOrEmpty(capturePath))
             {
-                capturePath = Path.GetFullPath(Path.Combine("..", "build", "unity-smoke", "macos-editor-playmode.png"));
+                capturePath = Path.GetFullPath(defaultCapturePath);
             }
             else
             {
@@ -140,6 +156,7 @@ namespace ImmPlayer.Editor
                 Environment.SetEnvironmentVariable(RuntimeSmokeFramesEnv, "360");
             }
             Environment.SetEnvironmentVariable(RuntimeSmokeQuitEnv, "0");
+            Environment.SetEnvironmentVariable(RuntimeSmokeCompositionProbeEnv, enableCompositionProbe ? "1" : string.Empty);
 
             string nativeLogPath = Path.GetFullPath("imm_player_log.txt");
             if (File.Exists(nativeLogPath))
@@ -163,7 +180,7 @@ namespace ImmPlayer.Editor
             EditorApplication.playModeStateChanged -= OnEditorPlayModeSmokeStateChanged;
             EditorApplication.playModeStateChanged += OnEditorPlayModeSmokeStateChanged;
 
-            UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] entering play mode capture={capturePath}");
+            UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] entering {label} play mode capture={capturePath}");
             EditorApplication.EnterPlaymode();
         }
 

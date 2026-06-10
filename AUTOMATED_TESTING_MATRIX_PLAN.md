@@ -64,12 +64,15 @@ Reference captures should not require exact full-frame hashes unless the rendere
 - non-background pixel count
 - visible content bounding rectangle
 - luma/color distribution
+- projected scene-composition probes that prove ordinary engine geometry can both occlude and be occluded by IMM paint/background layers
+- per-region occlusion leakage thresholds, so a probe color appearing somewhere else in the frame does not mask incorrect compositing in the region where it should be hidden
 - known blank-frame rejection
 - old-known-bad hash rejection
 - renderer-specific diagnostic markers
 - optional perceptual image delta threshold for stable render paths
 
 The render baseline is used to validate standalone Vulkan, Godot Vulkan/Metal visual paths, and device screenshots where exact pixel parity is not realistic.
+Windows Unity DirectX is the initial known-good baseline for engine composition order: Unity/Godot visual smokes add front, rear-visible, and rear-occluded scene geometry probes and fail when projected screen regions do not match the expected compositing order.
 
 ## Runner Tiers
 
@@ -110,6 +113,7 @@ Use these validation classes consistently across products.
 | Non-VR launch | Process starts, loads fixture, reaches ready state | Partial: hosted where no GPU/device is needed | Required |
 | VR launch | Runtime initializes XR/OpenXR/Oculus path and loads fixture | No, except static probe | Required |
 | Visual output | Structured render metrics against render baseline | Partial: macOS Metal hosted, Windows DirectX capture hosted | Required for Vulkan/Godot/device paths |
+| Engine scene composition | Front scene geometry occludes paint, rear scene geometry is hidden by paint/background, exposed rear geometry remains visible | Unity DirectX composition smoke where a self-hosted Unity runner is available | Required for Unity/Godot renderer paths that composite IMM content into an engine scene |
 | Audio | Decode count, backend selected, play accepted, teardown clean | Required where existing smoke supports it | Required |
 | Repeated lifecycle | load/unload/reload, app relaunch, resource teardown | Required where existing smoke supports it | Required |
 

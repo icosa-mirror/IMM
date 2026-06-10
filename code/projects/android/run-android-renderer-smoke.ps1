@@ -135,11 +135,19 @@ $logPath = Join-Path $logDirectory "logcat.txt"
 $pidPath = Join-Path $logDirectory "pidof_after.txt"
 $activityPath = Join-Path $logDirectory "activity_after.txt"
 $powerPath = Join-Path $logDirectory "power_after.txt"
+$screencapPath = Join-Path $logDirectory "screencap_after.png"
+$deviceScreencapPath = "/sdcard/imm_$($RendererApi.ToLowerInvariant())_smoke_screencap.png"
 
 & $adbPath logcat -d | Out-File -FilePath $logPath -Encoding utf8
 & $adbPath shell pidof org.linuxfoundation.imm.player | Out-File -FilePath $pidPath -Encoding utf8
 & $adbPath shell dumpsys activity activities | Out-File -FilePath $activityPath -Encoding utf8
 & $adbPath shell dumpsys power | Out-File -FilePath $powerPath -Encoding utf8
+& $adbPath shell screencap -p $deviceScreencapPath | Out-Null
+& $adbPath pull $deviceScreencapPath $screencapPath | Out-Null
+& $adbPath shell rm $deviceScreencapPath | Out-Null
+if (-not (Test-Path $screencapPath) -or (Get-Item $screencapPath).Length -le 0) {
+    throw "Android $RendererApi smoke screenshot was not captured: $screencapPath"
+}
 
 $log = Get-Content $logPath -Raw
 $activityText = Get-Content $activityPath -Raw
@@ -193,3 +201,4 @@ foreach ($marker in $forbiddenMarkers) {
 Write-Host "Android $RendererApi smoke passed"
 Write-Host "Log: $logPath"
 Write-Host "Activity dump: $activityPath"
+Write-Host "Screenshot: $screencapPath"
