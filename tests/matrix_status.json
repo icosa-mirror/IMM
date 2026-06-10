@@ -212,13 +212,11 @@
       "platform": "windows",
       "mode": "vr",
       "renderer": "openxr",
-      "status": "deferred",
+      "status": "supported",
       "hosted_gate": null,
-      "hardware_gate": null,
+      "hardware_gate": "CI GPU Matrix / Windows Godot OpenXR VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "owner_decision": "Defer Godot Windows XR until non-VR Godot renderer parity is stable and a Windows VR runner is registered.",
-      "promotion_criteria": "Promote to supported after a CI Godot OpenXR Windows VR lane passes on headset hardware with package import, document load, stereo rendering, and frame submission evidence.",
-      "reason": "Godot XR validation is intentionally deferred until non-VR Godot renderer parity is stable."
+      "reason": "ci-gpu.yml defines a self-hosted Windows Godot OpenXR VR lane that launches OpenXRSmokeScene.tscn, initializes Godot OpenXR, enables XR viewport rendering, loads sample1 through ImmViewerNode, requires compositor/frame diagnostics, and verifies IMM_GODOT_OPENXR_SMOKE contract markers."
     },
     {
       "product": "godot",

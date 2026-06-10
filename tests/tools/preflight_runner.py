@@ -96,6 +96,7 @@ def main() -> int:
             "macos-godot-metal",
             "windows-gpu-vulkan",
             "windows-godot-vulkan",
+            "windows-godot-openxr-vr",
             "windows-openxr-vr",
             "unity",
             "unity-windows-directx",

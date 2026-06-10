@@ -50,6 +50,7 @@ KNOWN_HARDWARE_GATES = {
     "CI Engine Matrix / Unity Windows OpenXR VR",
     "CI GPU Matrix / macOS Godot Metal",
     "CI GPU Matrix / Windows Godot Vulkan",
+    "CI GPU Matrix / Windows Godot OpenXR VR",
     "CI GPU Matrix / Windows Standalone OpenXR VR",
     "CI GPU Matrix / Windows Standalone Vulkan",
 }

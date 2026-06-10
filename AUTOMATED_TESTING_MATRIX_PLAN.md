@@ -98,7 +98,7 @@ Self-hosted jobs run `tests/tools/preflight_runner.py` before the expensive smok
 | Unity non-VR | Build native plugin DLL and UPM package; run Unity batchmode sample tests on self-hosted Unity runner | Build `.so`; validate package import and Android player build | Build static library; validate package import and iOS player build | Build bundle/static plugin; validate package import and macOS player build |
 | Unity VR | Unity OpenXR sample scene smoke on self-hosted Windows VR runner | Unity Quest/OpenXR build and device smoke | Unity iOS XR only if supported by product roadmap | Track as unsupported unless a macOS XR target exists |
 | Godot non-VR | Build GDExtension; run preflight/script smoke on hosted; run headed Vulkan visual smoke on GPU runner | Build Android GDExtension; export APK; run Vulkan visual smoke on device | Track as unsupported until iOS Godot extension packaging exists | Build GDExtension; run Metal visual smoke and capture |
-| Godot VR | Godot OpenXR scene smoke on self-hosted Windows VR runner after non-VR renderer parity is stable | Godot OpenXR/Quest smoke after Android Godot non-VR is stable | Track as unsupported until iOS Godot XR target exists | Track as unsupported unless Godot macOS XR target exists |
+| Godot VR | Godot OpenXR scene smoke on self-hosted Windows VR runner with XR initialization, document load, compositor diagnostics, and log-contract markers | Godot OpenXR/Quest smoke after Android Godot non-VR is stable | Track as unsupported until iOS Godot XR target exists | Track as unsupported unless Godot macOS XR target exists |
 
 ## Validation Matrix
 
@@ -533,7 +533,7 @@ Exit criteria:
 | Unity packages | Multi-platform package assembly exists | Need Unity import/API tests from packaged artifacts |
 | Unity VR | OpenXR sample scene and self-hosted Windows Unity VR CI lane exist | Need passing headset-run artifacts before release evidence can be considered complete |
 | Godot package | GDExtension packaging exists | Need package import test and hardware visual gates |
-| Godot VR | Not yet established | Defer until non-VR Godot parity is stable |
+| Godot VR | Windows OpenXR scene and self-hosted smoke lane are defined with XR initialization, document load, compositor diagnostics, and log-contract markers | Need first passing Windows VR hardware run; Android Godot XR remains deferred |
 | Baseline source of truth | Existing sample and render captures exist | Need committed canonical JSON and render metrics |
 
 ## Definition Of Done
