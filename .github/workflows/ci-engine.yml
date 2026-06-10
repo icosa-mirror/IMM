@@ -92,6 +92,16 @@ jobs:
           artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
           --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
 
+      - name: Write Unity DirectX composition report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
+          --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --output-dir artifacts\unity-windows-directx-composition\captures
+          --markdown-output artifacts\unity-windows-directx-composition\render-report.md
+
       - name: Verify Unity DirectX composition log contract
         shell: pwsh
         run: >
@@ -151,6 +161,16 @@ jobs:
           python tests\tools\compare_render_metrics.py
           artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr.png
           --json-output artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr-metrics.json
+
+      - name: Write Unity OpenXR VR render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr-metrics.json
+          --candidate-capture artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr.png
+          --output-dir artifacts\unity-windows-openxr-vr\captures
+          --markdown-output artifacts\unity-windows-openxr-vr\render-report.md
 
       - name: Verify Unity OpenXR VR log contract
         shell: pwsh

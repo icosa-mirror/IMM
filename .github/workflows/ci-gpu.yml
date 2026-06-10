@@ -378,6 +378,15 @@ jobs:
           artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
           --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
 
+      - name: Write Godot Metal render report
+        if: always()
+        run: >
+          python3 tests/tools/write_render_report.py
+          --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+          --candidate-capture artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+          --output-dir artifacts/godot-smoke-macos-metal/captures
+          --markdown-output artifacts/godot-smoke-macos-metal/render-report.md
+
       - name: Write CI manifest
         if: always()
         run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
