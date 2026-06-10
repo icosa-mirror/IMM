@@ -15,6 +15,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Preflight Android device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-standalone-gles\preflight.json --require-command adb --adb-devices
       - name: Run Android GLES smoke
         shell: pwsh
         run: .\code\projects\android\run-android-gles-smoke.ps1
@@ -40,6 +43,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Preflight Android Vulkan device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-standalone-vulkan\preflight.json --require-command adb --adb-devices
       - name: Run Android Vulkan smoke
         shell: pwsh
         run: .\code\projects\android\run-android-vulkan-smoke.ps1
@@ -65,6 +71,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Preflight Quest OpenXR device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-openxr-probe\preflight.json --require-command adb --adb-devices
       - name: Run Android OpenXR probe smoke
         shell: pwsh
         run: .\code\projects\android\run-android-openxr-probe-smoke.ps1
@@ -90,6 +99,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Preflight Android Godot device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-godot-vulkan\preflight.json --require-command adb --require-env GODOT_EXE --adb-devices
       - name: Run Android Godot Vulkan smoke
         shell: pwsh
         run: .\code\projects\android\run-godot-android-vulkan-smoke.ps1

@@ -21,6 +21,9 @@ jobs:
           python tests/tools/verify_package_layout.py unity code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
           python tests/tools/verify_package_layout.py unity code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
 
+      - name: Preflight Unity runner
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-package-import/preflight.json --require-env UNITY_EXE
+
       - name: Run Unity batchmode package import tests
         shell: bash
         run: |

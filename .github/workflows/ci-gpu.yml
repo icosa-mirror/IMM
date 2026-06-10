@@ -17,6 +17,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Preflight GPU runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command msbuild --require-command glslangValidator --require-command spirv-val
+
       - name: Build Windows viewer
         working-directory: code/projects/windows
         run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
@@ -56,6 +60,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Preflight Godot Vulkan runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-command msbuild --require-env GODOT_EXE
+
       - name: Build Godot extension
         shell: pwsh
         run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
@@ -86,6 +94,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Preflight Godot Metal runner
+        run: python3 tests/tools/preflight_runner.py --profile macos-godot-metal --output artifacts/godot-smoke-macos-metal/preflight.json --require-command cmake --require-command git --require-env GODOT_EXE
 
       - name: Configure macOS build
         run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON

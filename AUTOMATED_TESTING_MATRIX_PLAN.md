@@ -84,6 +84,8 @@ The render baseline is used to validate standalone Vulkan, Godot Vulkan/Metal vi
 
 All tiers are still GitHub CI because self-hosted runners are invoked by GitHub Actions jobs and report checks on the same workflow.
 
+Self-hosted jobs run `tests/tools/preflight_runner.py` before the expensive smoke steps. The preflight writes `preflight.json` into the job artifact, checks required commands such as `adb`, `msbuild`, `cmake`, `glslangValidator`, and `spirv-val`, checks required environment variables such as `GODOT_EXE` or `UNITY_EXE`, and records `adb devices -l` for Android/Quest lanes. This keeps infrastructure failures distinct from product regressions.
+
 ## Product Matrix
 
 | Product surface | Windows | Android | iOS | macOS |
