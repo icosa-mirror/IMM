@@ -89,6 +89,24 @@ jobs:
       with:
         python-version: '3.x'
 
+    - name: Verify IMM content baseline
+      shell: pwsh
+      run: python tests\tools\verify_imm_baseline.py exampleImmFiles\sample1.imm --baseline tests\baselines\content\sample1.json --write-actual artifacts\baseline-content\sample1.actual.json
+
+    - name: Record Windows DirectX render metrics
+      shell: pwsh
+      run: python tests\tools\compare_render_metrics.py .\build\baseline-captures\windows-directx-playerframe60.ppm --json-output artifacts\render-metrics\windows-directx-playerframe60.json
+
+    - name: Upload Windows DirectX baseline artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Windows-DirectX-Baseline
+        path: |
+          build/baseline-captures
+          artifacts/render-metrics
+        if-no-files-found: error
+        retention-days: 14
+
     - name: Install SCons
       shell: pwsh
       run: python -m pip install scons
@@ -713,6 +731,9 @@ jobs:
         cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader "$staging/"
         cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/README.md "$staging/README.md"
 
+    - name: Verify stroke reader Unity package layout
+      run: python tests/tools/verify_package_layout.py unity artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+
     - name: Stage ImmUnity Unity package
       shell: bash
       run: |
@@ -722,6 +743,9 @@ jobs:
         mkdir -p "$staging"
         cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity "$staging/"
         cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/README.md "$staging/README.md"
+
+    - name: Verify ImmUnity package layout
+      run: python tests/tools/verify_package_layout.py unity artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
@@ -845,6 +869,9 @@ jobs:
         test -f "$addon/bin/macos/release/libImmGodotPlugin.dylib"
         test -f "$addon/bin/android/debug/libimm_godot_extension.arm64.so"
         test -f "$addon/bin/android/debug/libImmGodotPlugin.so"
+
+    - name: Verify Godot addon package layout
+      run: python tests/tools/verify_package_layout.py godot artifacts/ImmGodotGDExtension
 
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4

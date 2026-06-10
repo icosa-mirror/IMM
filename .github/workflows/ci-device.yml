@@ -1,0 +1,85 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Device Matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 3 * * *'
+
+jobs:
+  android-standalone-gles:
+    name: Android Standalone GLES
+    runs-on: [self-hosted, android-device]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run Android GLES smoke
+        shell: pwsh
+        run: .\code\projects\android\run-android-gles-smoke.ps1
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidStandaloneGLES-Device
+          path: code/projects/android/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-standalone-vulkan:
+    name: Android Standalone Vulkan
+    runs-on: [self-hosted, android-device, vulkan]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run Android Vulkan smoke
+        shell: pwsh
+        run: .\code\projects\android\run-android-vulkan-smoke.ps1
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidStandaloneVulkan-Device
+          path: code/projects/android/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-openxr-probe:
+    name: Android OpenXR Probe
+    runs-on: [self-hosted, quest, openxr]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run Android OpenXR probe smoke
+        shell: pwsh
+        run: .\code\projects\android\run-android-openxr-probe-smoke.ps1
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidOpenXRProbe-Device
+          path: code/projects/android/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-godot-vulkan:
+    name: Android Godot Vulkan
+    runs-on: [self-hosted, android-device, godot, vulkan]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Run Android Godot Vulkan smoke
+        shell: pwsh
+        run: .\code\projects\android\run-godot-android-vulkan-smoke.ps1
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidGodotVulkan-Device
+          path: code/projects/android/logs
+          if-no-files-found: ignore
+          retention-days: 14

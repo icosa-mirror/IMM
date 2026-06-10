@@ -1,0 +1,114 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI GPU Matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+
+jobs:
+  windows-standalone-vulkan:
+    name: Windows Standalone Vulkan
+    runs-on: [self-hosted, windows, gpu, vulkan]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture DirectX baseline
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+      - name: Run Vulkan smoke against baseline
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+      - name: Upload GPU artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneVulkan-GPU
+          path: |
+            build/baseline-captures
+            code/appImmViewer/exe/debug.txt
+            code/appImmViewer/exe/vulkan_sample1_smoke.ppm
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-godot-vulkan:
+    name: Windows Godot Vulkan
+    runs-on: [self-hosted, windows, gpu, godot, vulkan]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Godot extension
+        shell: pwsh
+        run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
+
+      - name: Run Godot Vulkan smoke
+        shell: pwsh
+        run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension -RendererApi 5 -Headed -LogDir artifacts\godot-smoke-windows-vulkan
+
+      - name: Upload Godot Vulkan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsGodotVulkan-GPU
+          path: artifacts/godot-smoke-windows-vulkan
+          if-no-files-found: ignore
+          retention-days: 14
+
+  macos-godot-metal:
+    name: macOS Godot Metal
+    runs-on: [self-hosted, macos, gpu, metal, godot]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure macOS build
+        run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
+
+      - name: Build macOS Godot native plugin
+        run: cmake --build build/macos --target ImmGodotPlugin --config Release
+
+      - name: Build macOS Godot GDExtension
+        run: |
+          set -euo pipefail
+          python3 -m pip install --break-system-packages scons
+          if [ ! -d thirdparty/godot-cpp ]; then
+            git clone --depth 1 --branch godot-4.5-stable https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
+          fi
+          arch="$(uname -m)"
+          python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
+          python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$PWD/thirdparty/godot-cpp" imm_godot_lib="$PWD/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$PWD/build/macos/godot/libImmGodotPlugin.dylib"
+
+      - name: Run Godot Metal visual smoke
+        run: |
+          set -euo pipefail
+          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable on this self-hosted runner}"
+          mkdir -p artifacts/godot-smoke-macos-metal
+          IMM_GODOT_VISUAL_SMOKE=1 \
+          IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
+          "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
+            > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1
+          grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
+
+      - name: Upload Godot Metal artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOSGodotMetal-GPU
+          path: artifacts/godot-smoke-macos-metal
+          if-no-files-found: ignore
+          retention-days: 14

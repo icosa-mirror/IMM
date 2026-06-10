@@ -1,0 +1,11 @@
+{
+  "baseline": "macos-metal-sample1",
+  "capture_source": "validateAppImmViewerMetalPlayback",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "minimum_non_black_pixels": 1,
+    "reference_metrics_artifact": "ImmViewer-macOS",
+    "requires_nonblank_capture": true
+  }
+}

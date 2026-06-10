@@ -1,0 +1,148 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Core Matrix
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+  workflow_dispatch:
+
+jobs:
+  baseline-content:
+    name: Baseline Content
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify sample1 IMM baseline
+        run: |
+          python tests/tools/verify_imm_baseline.py \
+            exampleImmFiles/sample1.imm \
+            --baseline tests/baselines/content/sample1.json \
+            --write-actual artifacts/baseline-content/sample1.actual.json
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          python tests/tools/write_ci_manifest.py \
+            --output artifacts/baseline-content/manifest.json \
+            --product baseline \
+            --platform-name all \
+            --mode content \
+            --renderer none \
+            --include exampleImmFiles/sample1.imm \
+            --include tests/baselines/content/sample1.json
+
+      - name: Upload baseline artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaselineContent-sample1
+          path: artifacts/baseline-content
+          if-no-files-found: ignore
+          retention-days: 14
+
+  package-source-layout:
+    name: Package Source Layout
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify Unity stroke reader package source
+        run: |
+          python tests/tools/verify_package_layout.py unity \
+            code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader \
+            --expected-name com.immersive-foundation.imm-stroke-reader
+
+      - name: Verify Unity player package source
+        run: |
+          python tests/tools/verify_package_layout.py unity \
+            code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity \
+            --expected-name com.immersive-foundation.imm-unity
+
+      - name: Verify Godot addon source manifest
+        run: |
+          test -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          test -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd
+          grep -q 'compatibility_minimum="4.5"' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          grep -q 'windows.release.x86_64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          grep -q 'macos.release.arm64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          grep -q 'android.debug.arm64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          mkdir -p artifacts/package-source-layout
+          python tests/tools/write_ci_manifest.py \
+            --output artifacts/package-source-layout/manifest.json \
+            --product packages \
+            --platform-name all \
+            --mode source-layout \
+            --renderer native \
+            --include code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/package.json \
+            --include code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/package.json \
+            --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Upload package layout artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PackageSourceLayout
+          path: artifacts/package-source-layout
+          if-no-files-found: ignore
+          retention-days: 14
+
+  godot-local-verifier:
+    name: Godot Local Verifier
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Godot local verifier
+        run: python code/appImmGodotGDExtension/verify_local.py
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          python tests/tools/write_ci_manifest.py \
+            --output artifacts/godot-local-verifier/manifest.json \
+            --product godot \
+            --platform-name all \
+            --mode local-verifier \
+            --renderer preflight \
+            --include code/appImmGodotGDExtension/verify_local.py \
+            --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Upload Godot verifier artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GodotLocalVerifier
+          path: artifacts/godot-local-verifier
+          if-no-files-found: ignore
+          retention-days: 14

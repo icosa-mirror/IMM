@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Engine Matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '11 4 * * *'
+
+jobs:
+  unity-package-import:
+    name: Unity Package Import
+    runs-on: [self-hosted, unity]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify source package layout
+        run: |
+          python tests/tools/verify_package_layout.py unity code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+          python tests/tools/verify_package_layout.py unity code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+
+      - name: Run Unity batchmode package import tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${UNITY_EXE:?UNITY_EXE must point to the Unity editor executable on this self-hosted runner}"
+          "$UNITY_EXE" -batchmode -quit -projectPath code/ImmUnitySampleProject -runTests -testPlatform editmode -testResults artifacts/unity-editmode-results.xml
+
+      - name: Upload Unity results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityPackageImport
+          path: artifacts
+          if-no-files-found: ignore
+          retention-days: 14
+
+  godot-package-import:
+    name: Godot Package Import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Godot local verifier
+        run: python code/appImmGodotGDExtension/verify_local.py

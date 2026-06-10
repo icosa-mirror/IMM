@@ -1,0 +1,15 @@
+{
+  "baseline": "windows-directx-sample1",
+  "capture_source": "code/appImmViewer/scripts/capture_windows_directx_baseline.ps1",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "format": "ppm-p6",
+    "minimum_non_black_pixels": 1,
+    "reference_metrics_artifact": "ImmViewer-Windows-DirectX-Baseline",
+    "requires_dimensions": {
+      "height": 720,
+      "width": 1280
+    }
+  }
+}
