@@ -21,7 +21,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-core.yml": {
         "baseline-content": ["Verify sample1 IMM baseline", "Write CI manifest", "Collect artifact summary"],
         "package-source-layout": ["Verify Unity stroke reader package source", "Verify Unity source import harness", "Verify Godot addon source manifest", "Verify Godot source import harness", "Collect artifact summary"],
-        "matrix-status": ["Verify matrix status coverage", "Write CI manifest", "Collect artifact summary"],
+        "matrix-status": ["Verify matrix status coverage", "Verify workflow matrix wiring", "Run CI tool self-tests", "Write CI manifest", "Collect artifact summary"],
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-device.yml": {
@@ -29,6 +29,8 @@ REQUIRED_JOBS = {
         "android-standalone-vulkan": ["Preflight Android Vulkan device", "Run Android Vulkan smoke", "Write CI manifest"],
         "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Write CI manifest"],
         "android-godot-vulkan": ["Preflight Android Godot device", "Run Android Godot Vulkan smoke", "Write CI manifest"],
+        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR OpenXR smoke", "Write CI manifest"],
+        "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest"],
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest"],
@@ -47,6 +49,8 @@ REQUIRED_RUNS_ON = {
         "android-standalone-vulkan": {"self-hosted", "android-device", "vulkan"},
         "android-openxr-probe": {"self-hosted", "quest", "openxr"},
         "android-godot-vulkan": {"self-hosted", "android-device", "godot", "vulkan"},
+        "android-quest-vr": {"self-hosted", "quest", "vr"},
+        "ios-device-smoke": {"self-hosted", "macos", "ios-device"},
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"self-hosted", "unity"},

@@ -64,9 +64,9 @@
       "renderer": "openxr",
       "status": "deferred",
       "hosted_gate": "Build / Android",
-      "hardware_gate": "CI Device Matrix / Android OpenXR Probe",
+      "hardware_gate": "CI Device Matrix / Android Quest VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds the VR APK and the OpenXR probe lane exists; full stereo frame validation needs a Quest VR runtime job."
+      "reason": "Hosted CI builds the VR APK and ci-device.yml defines a Quest VR self-hosted lane with VR-manifest OpenXR probing; full stereo frame submission still needs a passing hardware run before this row can be promoted to supported."
     },
     {
       "product": "standalone",

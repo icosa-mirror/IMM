@@ -148,6 +148,11 @@ jobs:
       - name: Verify workflow matrix wiring
         run: python tests/tools/verify_workflow_matrix.py
 
+      - name: Run CI tool self-tests
+        run: |
+          python tests/tools/test_compare_render_metrics.py
+          python tests/tools/test_preflight_runner.py
+
       - name: Write CI manifest
         if: always()
         run: |

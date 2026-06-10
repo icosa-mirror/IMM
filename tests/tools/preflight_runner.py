@@ -36,6 +36,35 @@ def run_command(command: list[str], timeout_seconds: int = 20) -> dict:
         }
 
 
+def parse_adb_devices(output: str) -> list[dict]:
+    devices = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line or line.startswith("List of devices"):
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        devices.append({"serial": parts[0], "state": parts[1], "details": parts[2:]})
+    return devices
+
+
+def adb_shell(adb: str, args: list[str], timeout_seconds: int = 20) -> dict:
+    return run_command([adb, "shell", *args], timeout_seconds=timeout_seconds)
+
+
+def collect_adb_health(adb: str) -> dict:
+    health = {
+        "battery": adb_shell(adb, ["dumpsys", "battery"]),
+        "power": adb_shell(adb, ["dumpsys", "power"]),
+        "activity": adb_shell(adb, ["dumpsys", "activity", "activities"]),
+        "packages": {},
+    }
+    for package in ["org.linuxfoundation.imm.player", "org.linuxfoundation.imm.godot.sample"]:
+        health["packages"][package] = adb_shell(adb, ["pm", "path", package])
+    return health
+
+
 def command_info(name: str) -> dict:
     path = shutil.which(name)
     info = {"name": name, "path": path, "found": path is not None}
@@ -58,10 +87,11 @@ def command_info(name: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--profile", required=True, choices=["android-device", "macos-godot-metal", "windows-gpu-vulkan", "windows-godot-vulkan", "unity"])
+    parser.add_argument("--profile", required=True, choices=["android-device", "ios-device", "macos-godot-metal", "windows-gpu-vulkan", "windows-godot-vulkan", "unity"])
     parser.add_argument("--require-command", action="append", default=[])
     parser.add_argument("--require-env", action="append", default=[])
     parser.add_argument("--adb-devices", action="store_true")
+    parser.add_argument("--adb-health", action="store_true")
     args = parser.parse_args()
 
     commands = [command_info(name) for name in args.require_command]
@@ -97,10 +127,13 @@ def main() -> int:
         if adb:
             adb_result = run_command([adb, "devices", "-l"])
             diagnostics["checks"]["adb_devices"] = adb_result
+            diagnostics["checks"]["adb_device_list"] = parse_adb_devices(adb_result.get("stdout", ""))
             if adb_result.get("exit_code") != 0:
                 errors.append("adb devices failed")
-            elif "\tdevice" not in adb_result.get("stdout", ""):
+            elif not any(device["state"] == "device" for device in diagnostics["checks"]["adb_device_list"]):
                 errors.append("adb reported no attached device in device state")
+            if args.adb_health:
+                diagnostics["checks"]["adb_health"] = collect_adb_health(adb)
         else:
             errors.append("adb device check requested but adb is missing")
 

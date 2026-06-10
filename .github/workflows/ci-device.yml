@@ -17,7 +17,7 @@ jobs:
           submodules: recursive
       - name: Preflight Android device
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-standalone-gles\preflight.json --require-command adb --adb-devices
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-standalone-gles\preflight.json --require-command adb --adb-devices --adb-health
       - name: Run Android GLES smoke
         shell: pwsh
         run: .\code\projects\android\run-android-gles-smoke.ps1
@@ -45,7 +45,7 @@ jobs:
           submodules: recursive
       - name: Preflight Android Vulkan device
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-standalone-vulkan\preflight.json --require-command adb --adb-devices
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-standalone-vulkan\preflight.json --require-command adb --adb-devices --adb-health
       - name: Run Android Vulkan smoke
         shell: pwsh
         run: .\code\projects\android\run-android-vulkan-smoke.ps1
@@ -73,7 +73,7 @@ jobs:
           submodules: recursive
       - name: Preflight Quest OpenXR device
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-openxr-probe\preflight.json --require-command adb --adb-devices
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-openxr-probe\preflight.json --require-command adb --adb-devices --adb-health
       - name: Run Android OpenXR probe smoke
         shell: pwsh
         run: .\code\projects\android\run-android-openxr-probe-smoke.ps1
@@ -101,7 +101,7 @@ jobs:
           submodules: recursive
       - name: Preflight Android Godot device
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-godot-vulkan\preflight.json --require-command adb --require-env GODOT_EXE --adb-devices
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-godot-vulkan\preflight.json --require-command adb --require-env GODOT_EXE --adb-devices --adb-health
       - name: Run Android Godot Vulkan smoke
         shell: pwsh
         run: .\code\projects\android\run-godot-android-vulkan-smoke.ps1
@@ -117,5 +117,57 @@ jobs:
           path: |
             artifacts/android-godot-vulkan
             code/projects/android/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-quest-vr:
+    name: Android Quest VR
+    runs-on: [self-hosted, quest, vr]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Preflight Quest VR device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-quest-vr\preflight.json --require-command adb --adb-devices --adb-health
+      - name: Run Quest VR OpenXR smoke
+        shell: pwsh
+        run: .\code\projects\android\run-android-openxr-probe-smoke.ps1 -VrManifest -AttemptQuestUnblock -LogDir artifacts\android-quest-vr\logs
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --output artifacts\android-quest-vr\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include artifacts\android-quest-vr
+      - name: Upload Quest VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidQuestVR-Device
+          path: artifacts/android-quest-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ios-device-smoke:
+    name: iOS Device Smoke
+    runs-on: [self-hosted, macos, ios-device]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Preflight iOS device runner
+        run: python3 tests/tools/preflight_runner.py --profile ios-device --output artifacts/ios-device-smoke/preflight.json --require-command xcrun --require-command xcodebuild
+      - name: Verify iOS package target
+        run: |
+          set -euo pipefail
+          cmake -S code/projects/ios -B build/ios -G Xcode
+          cmake --build build/ios --target ImmUnityIOSLinkSmoke --config Release
+      - name: Write CI manifest
+        if: always()
+        run: python3 tests/tools/write_ci_manifest.py --output artifacts/ios-device-smoke/manifest.json --product unity --platform-name ios --mode package-import --renderer native --include build/ios
+      - name: Upload iOS device smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOSDeviceSmoke
+          path: artifacts/ios-device-smoke
           if-no-files-found: ignore
           retention-days: 14
