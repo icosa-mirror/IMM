@@ -215,6 +215,10 @@ jobs:
         Write-PackagedViewerSettings code/appImmViewer/exe/settings-vulkan-smoke.json "settings-vulkan.json" "Vulkan" $false
         Write-PackagedViewerSettings code/appImmViewer/exe/settings-opengl-vr.json "settings-opengl-vr.json" "OpenGL" $true
 
+    - name: Write Windows viewer artifact manifest
+      shell: pwsh
+      run: python tests\tools\write_ci_manifest.py --output viewer_artifact\manifest.json --product standalone --platform-name windows --mode packaged --renderer mixed --include viewer_artifact
+
     - name: Upload Windows Viewer Executable
       uses: actions/upload-artifact@v4
       with:
@@ -370,6 +374,9 @@ jobs:
         cp "${default_apk[0]}" "$staging/ImmViewer-Android-OpenGL.apk"
         cp "${vr_apk[0]}" "$staging/ImmViewer-Android-OpenGL-VR.apk"
         cp "${vulkan_apk[0]}" "$staging/ImmViewer-Android-Vulkan.apk"
+
+    - name: Write Android viewer artifact manifest
+      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmViewer-Android/manifest.json --product standalone --platform-name android --mode packaged --renderer mixed --include artifacts/ImmViewer-Android
 
     - name: Upload Android Viewer APKs
       uses: actions/upload-artifact@v4
@@ -531,6 +538,9 @@ jobs:
         ditto "$app" "$staging/appImmViewerMetal.app"
         test -f "$staging/appImmViewerMetal.app/Contents/Info.plist"
         test -x "$staging/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
+
+    - name: Write macOS viewer artifact manifest
+      run: python3 tests/tools/write_ci_manifest.py --output artifacts/ImmViewer-macOS/manifest.json --product standalone --platform-name macos --mode packaged --renderer metal --include artifacts/ImmViewer-macOS
 
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
@@ -734,6 +744,9 @@ jobs:
     - name: Verify stroke reader Unity package layout
       run: python tests/tools/verify_package_layout.py unity artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
 
+    - name: Write stroke reader Unity package manifest
+      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmStrokeReaderPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmStrokeReaderPlugin-Unity
+
     - name: Stage ImmUnity Unity package
       shell: bash
       run: |
@@ -746,6 +759,9 @@ jobs:
 
     - name: Verify ImmUnity package layout
       run: python tests/tools/verify_package_layout.py unity artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+
+    - name: Write ImmUnity package manifest
+      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
@@ -873,6 +889,9 @@ jobs:
     - name: Verify Godot addon package layout
       run: python tests/tools/verify_package_layout.py godot artifacts/ImmGodotGDExtension
 
+    - name: Write Godot addon package manifest
+      run: python tests/tools/write_ci_manifest.py --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension
+
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4
       with:
@@ -999,6 +1018,9 @@ jobs:
       actions: read
 
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Download Unity stroke reader package
       uses: actions/download-artifact@v4
       with:
@@ -1035,6 +1057,19 @@ jobs:
         name: ImmPlayerPlugin-Godot
         path: release-assets/ImmPlayerPlugin-Godot
 
+    - name: Verify release matrix status
+      run: python tests/tools/verify_matrix_status.py tests/matrix_status.json
+
+    - name: Verify downloaded release assets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+        python tests/tools/verify_package_layout.py godot release-assets/ImmPlayerPlugin-Godot
+        python tests/tools/verify_viewer_artifact.py windows release-assets/ImmViewer-Windows
+        python tests/tools/verify_viewer_artifact.py macos release-assets/ImmViewer-macOS
+
     - name: Zip Windows viewer artifacts
       shell: bash
       run: |
@@ -1053,6 +1088,21 @@ jobs:
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk
+
+    - name: Write release validation manifest
+      run: |
+        python tests/tools/write_ci_manifest.py \
+          --output release-assets/release-validation-manifest.json \
+          --product release \
+          --platform-name all \
+          --mode release \
+          --renderer native \
+          --include tests/matrix_status.json \
+          --include release-assets/ImmViewer-Windows \
+          --include release-assets/ImmViewer-macOS \
+          --include release-assets/ImmViewer-Android \
+          --include release-assets/ImmPlayerPlugin-Godot \
+          --include release-assets/upm
 
     - name: Compute release metadata
       id: release_meta
@@ -1093,7 +1143,8 @@ jobs:
           release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
-          release-assets/ImmViewer-Windows/sample1.imm
+          release-assets/ImmViewer-Windows/sample1.imm \
+          release-assets/release-validation-manifest.json
 
   publish-upm:
     name: Publish UPM Branch
