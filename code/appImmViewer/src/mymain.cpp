@@ -1421,6 +1421,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mSettings.End();
             return false;
         }
+        mLog.Printf(LT_MESSAGE,
+                    L"IMM_LEGACY_VR_SMOKE hmd_initialized type=%d renderSize=%dx%d pixelDensity=%.3f",
+                    static_cast<int>(mHMD->mType),
+                    mHMD->mInfo.mVRXres,
+                    mHMD->mInfo.mVRYres,
+                    pd);
         mStereoMode = ImmPlayer::StereoMode::Preferred;
         mRenderSize = ivec2(mHMD->mInfo.mVRXres, mHMD->mInfo.mVRYres);
 
@@ -1709,6 +1715,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     float renderFps = 0.0;
     int totalFrames = 0;
     int done = 0;
+    bool loggedLegacyVrSmokeFrameSubmitted = false;
     bool doSave = true;
     double oldTime;
     bool enabled = true;
@@ -1906,6 +1913,18 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mRenderer->DettachShader();
 
             mHMD->EndFrame();
+            if (!loggedLegacyVrSmokeFrameSubmitted)
+            {
+                loggedLegacyVrSmokeFrameSubmitted = true;
+                mLog.Printf(LT_MESSAGE,
+                            L"IMM_LEGACY_VR_SMOKE frame_submitted frame=%d stereoMode=%d renderSize=%dx%d tid0=%d tid1=%d",
+                            frameid,
+                            static_cast<int>(mStereoMode),
+                            mRenderSize.x,
+                            mRenderSize.y,
+                            tid[0],
+                            tid[1]);
+            }
 
             mRenderer->SwapBuffers();
         }

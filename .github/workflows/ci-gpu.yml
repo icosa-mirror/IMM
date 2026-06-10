@@ -130,6 +130,59 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  windows-standalone-opengl-vr:
+    name: Windows Standalone OpenGL VR
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: [self-hosted, windows, gpu, vr, opengl]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Windows OpenGL VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-opengl-vr --output artifacts\windows-standalone-opengl-vr\preflight.json --require-command msbuild
+
+      - name: Run Windows OpenGL VR smoke
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\run-windows-opengl-vr-smoke.ps1 -Configuration Release -LogDir artifacts\windows-standalone-opengl-vr
+
+      - name: Verify Windows OpenGL VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\windows-standalone-opengl-vr\debug.txt
+          --label windows-standalone-opengl-vr
+          --require "Rendering Backened: OpenGL"
+          --require "XR Runtime: Legacy"
+          --require "Rendering in VR: yes"
+          --require "IMM_LEGACY_VR_SMOKE hmd_initialized"
+          --require "Viewer initialized"
+          --require "IMM_LEGACY_VR_SMOKE frame_submitted"
+          --forbid "Cannot do VR"
+          --forbid "Viewer init failed"
+          --forbid "Failed to create render target"
+          --output artifacts\windows-standalone-opengl-vr\opengl-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\windows-standalone-opengl-vr\manifest.json --product standalone --platform-name windows --mode vr --renderer opengl --include artifacts\windows-standalone-opengl-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-opengl-vr --require-manifest --output artifacts\windows-standalone-opengl-vr\artifact-summary.json
+
+      - name: Upload OpenGL VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneOpenGLVR-GPU
+          path: artifacts/windows-standalone-opengl-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
   windows-godot-vulkan:
     name: Windows Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
@@ -324,6 +377,7 @@ jobs:
     needs:
       - windows-standalone-vulkan
       - windows-standalone-openxr-vr
+      - windows-standalone-opengl-vr
       - windows-godot-vulkan
       - windows-godot-openxr-vr
       - macos-godot-metal

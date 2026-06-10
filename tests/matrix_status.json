@@ -29,13 +29,11 @@
       "platform": "windows",
       "mode": "vr",
       "renderer": "opengl",
-      "status": "deferred",
+      "status": "supported",
       "hosted_gate": "Godot local verifier checks Windows standalone OpenGL VR settings",
-      "hardware_gate": null,
+      "hardware_gate": "CI GPU Matrix / Windows Standalone OpenGL VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "owner_decision": "Defer PC VR runtime validation until a labeled self-hosted Windows VR runner is registered.",
-      "promotion_criteria": "Promote to supported after a GitHub Actions Windows VR lane runs on headset hardware and validates document load, stereo mode, and frame submission on this row.",
-      "reason": "Packaged VR settings are validated, but a PC VR headset runtime smoke job still needs a labeled self-hosted VR runner."
+      "reason": "Packaged VR settings are validated and ci-gpu.yml defines a self-hosted Windows OpenGL VR smoke lane that launches settings-opengl-vr.json, requires legacy HMD initialization, viewer initialization, and IMM_LEGACY_VR_SMOKE frame-submission markers."
     },
     {
       "product": "standalone",

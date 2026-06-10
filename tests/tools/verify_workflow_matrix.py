@@ -43,6 +43,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Stage Vulkan capture evidence", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-openxr-vr": ["Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-opengl-vr": ["Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against DirectX baseline", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write CI manifest", "Collect artifact summary"],
@@ -67,6 +68,7 @@ REQUIRED_RUNS_ON = {
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-vulkan": {"self-hosted", "windows", "gpu", "vulkan"},
         "windows-standalone-openxr-vr": {"self-hosted", "windows", "gpu", "vr", "openxr"},
+        "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
         "windows-godot-vulkan": {"self-hosted", "windows", "gpu", "godot", "vulkan"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
         "macos-godot-metal": {"self-hosted", "macos", "gpu", "metal", "godot"},
