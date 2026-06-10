@@ -39,7 +39,7 @@ jobs:
 
       - name: Run Vulkan smoke against baseline
         shell: pwsh
-        run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+        run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts
 
       - name: Compare Vulkan render metrics against DirectX baseline
         shell: pwsh

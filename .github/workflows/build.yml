@@ -70,7 +70,16 @@ jobs:
     - name: Smoke Windows Vulkan standalone viewer
       if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       shell: pwsh
-      run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+      run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts
+
+    - name: Compare Windows Vulkan render metrics
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: >
+        python tests\tools\compare_render_metrics.py .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+        --reference .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --contract tests\baselines\render\windows-directx-sample1.json
+        --json-output artifacts\render-metrics\vulkan-vs-directx-playerframe60.json
 
     - name: Upload Windows Vulkan standalone smoke logs
       if: failure()
@@ -79,6 +88,7 @@ jobs:
         name: ImmViewerVulkanSmokeLogs-Windows
         path: |
           build/baseline-captures
+          artifacts/render-metrics
           code/appImmViewer/exe/debug.txt
           code/appImmViewer/exe/vulkan_sample1_smoke.ppm
         if-no-files-found: ignore
