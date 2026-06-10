@@ -10,19 +10,19 @@ from pathlib import Path
 
 REQUIRED_JOBS = {
     ".github/workflows/build.yml": {
-        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Write Windows viewer artifact manifest"],
-        "build-android": ["Write Android viewer artifact manifest"],
-        "build-macos": ["Write macOS viewer artifact manifest"],
+        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
+        "build-android": ["Write Android viewer artifact manifest", "Collect Android viewer artifact summary"],
+        "build-macos": ["Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
         "build-ios": ["Link-check iOS Unity plugin"],
-        "package-unity-plugins": ["Verify stroke reader Unity package layout", "Write ImmUnity package manifest"],
-        "package-godot-extension": ["Verify Godot addon package layout", "Write Godot addon package manifest"],
-        "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release validation manifest"],
+        "package-unity-plugins": ["Verify stroke reader Unity package layout", "Write ImmUnity package manifest", "Collect ImmUnity package summary"],
+        "package-godot-extension": ["Verify Godot addon package layout", "Write Godot addon package manifest", "Collect Godot addon package summary"],
+        "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release validation manifest", "Collect release artifact summary"],
     },
     ".github/workflows/ci-core.yml": {
-        "baseline-content": ["Verify sample1 IMM baseline", "Write CI manifest"],
-        "package-source-layout": ["Verify Unity stroke reader package source", "Verify Godot addon source manifest"],
-        "matrix-status": ["Verify matrix status coverage", "Write CI manifest"],
-        "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest"],
+        "baseline-content": ["Verify sample1 IMM baseline", "Write CI manifest", "Collect artifact summary"],
+        "package-source-layout": ["Verify Unity stroke reader package source", "Verify Godot addon source manifest", "Collect artifact summary"],
+        "matrix-status": ["Verify matrix status coverage", "Write CI manifest", "Collect artifact summary"],
+        "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Preflight Android device", "Run Android GLES smoke", "Write CI manifest"],

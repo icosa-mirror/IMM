@@ -219,6 +219,10 @@ jobs:
       shell: pwsh
       run: python tests\tools\write_ci_manifest.py --output viewer_artifact\manifest.json --product standalone --platform-name windows --mode packaged --renderer mixed --include viewer_artifact
 
+    - name: Collect Windows viewer artifact summary
+      shell: pwsh
+      run: python tests\tools\collect_ci_artifacts.py --artifact-dir viewer_artifact --require-manifest --output viewer_artifact\artifact-summary.json
+
     - name: Upload Windows Viewer Executable
       uses: actions/upload-artifact@v4
       with:
@@ -377,6 +381,9 @@ jobs:
 
     - name: Write Android viewer artifact manifest
       run: python tests/tools/write_ci_manifest.py --output artifacts/ImmViewer-Android/manifest.json --product standalone --platform-name android --mode packaged --renderer mixed --include artifacts/ImmViewer-Android
+
+    - name: Collect Android viewer artifact summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-Android --require-manifest --output artifacts/ImmViewer-Android/artifact-summary.json
 
     - name: Upload Android Viewer APKs
       uses: actions/upload-artifact@v4
@@ -541,6 +548,9 @@ jobs:
 
     - name: Write macOS viewer artifact manifest
       run: python3 tests/tools/write_ci_manifest.py --output artifacts/ImmViewer-macOS/manifest.json --product standalone --platform-name macos --mode packaged --renderer metal --include artifacts/ImmViewer-macOS
+
+    - name: Collect macOS viewer artifact summary
+      run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-macOS --require-manifest --output artifacts/ImmViewer-macOS/artifact-summary.json
 
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
@@ -747,6 +757,9 @@ jobs:
     - name: Write stroke reader Unity package manifest
       run: python tests/tools/write_ci_manifest.py --output artifacts/ImmStrokeReaderPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmStrokeReaderPlugin-Unity
 
+    - name: Collect stroke reader Unity package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmStrokeReaderPlugin-Unity --require-manifest --output artifacts/ImmStrokeReaderPlugin-Unity/artifact-summary.json
+
     - name: Stage ImmUnity Unity package
       shell: bash
       run: |
@@ -762,6 +775,9 @@ jobs:
 
     - name: Write ImmUnity package manifest
       run: python tests/tools/write_ci_manifest.py --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
+
+    - name: Collect ImmUnity package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmPlayerPlugin-Unity --require-manifest --output artifacts/ImmPlayerPlugin-Unity/artifact-summary.json
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
@@ -891,6 +907,9 @@ jobs:
 
     - name: Write Godot addon package manifest
       run: python tests/tools/write_ci_manifest.py --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension
+
+    - name: Collect Godot addon package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmGodotGDExtension --require-manifest --output artifacts/ImmGodotGDExtension/artifact-summary.json
 
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4
@@ -1105,6 +1124,12 @@ jobs:
           --include release-assets/ImmViewer-Android \
           --include release-assets/ImmPlayerPlugin-Godot \
           --include release-assets/upm
+
+    - name: Collect release artifact summary
+      run: |
+        python tests/tools/collect_ci_artifacts.py \
+          --artifact-dir release-assets \
+          --output release-assets/release-artifact-summary.json
 
     - name: Compute release metadata
       id: release_meta

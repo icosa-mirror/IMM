@@ -44,6 +44,10 @@ jobs:
             --include exampleImmFiles/sample1.imm \
             --include tests/baselines/content/sample1.json
 
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/baseline-content --require-manifest --output artifacts/baseline-content/artifact-summary.json
+
       - name: Upload baseline artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,6 +104,10 @@ jobs:
             --include code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/package.json \
             --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
 
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/package-source-layout --require-manifest --output artifacts/package-source-layout/artifact-summary.json
+
       - name: Upload package layout artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -138,6 +146,10 @@ jobs:
             --renderer none \
             --include tests/matrix_status.json \
             --include AUTOMATED_TESTING_MATRIX_PLAN.md
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/matrix-status --require-manifest --output artifacts/matrix-status/artifact-summary.json
 
       - name: Upload matrix status artifacts
         if: always()
@@ -178,6 +190,10 @@ jobs:
             --renderer preflight \
             --include code/appImmGodotGDExtension/verify_local.py \
             --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-local-verifier --require-manifest --output artifacts/godot-local-verifier/artifact-summary.json
 
       - name: Upload Godot verifier artifacts
         if: always()

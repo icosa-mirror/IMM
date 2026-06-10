@@ -375,6 +375,8 @@ artifacts/
 - artifact hashes
 - pass/fail classification
 
+`tests/tools/collect_ci_artifacts.py` writes `artifact-summary.json` files that summarize uploaded directories, embedded manifests, preflight diagnostics, and metrics JSON. Hosted core and package artifacts include these summaries so release audits can inspect a run without unpacking every artifact by hand.
+
 ## Gating Policy
 
 Machine-readable support status lives in `tests/matrix_status.json`. CI verifies that every planned product/platform/mode has either a supported gate, a deferred reason, an unsupported reason, or an explicit waiver. Treat this file as the release audit source for rows that cannot yet run on hosted CI.
