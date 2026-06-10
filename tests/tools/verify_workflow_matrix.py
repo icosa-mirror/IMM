@@ -10,7 +10,7 @@ from pathlib import Path
 
 REQUIRED_JOBS = {
     ".github/workflows/build.yml": {
-        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
+        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Write Windows DirectX render report", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
         "build-android": ["Write Android viewer artifact manifest", "Collect Android viewer artifact summary"],
         "build-macos": ["Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
         "build-ios": ["Link-check iOS Unity plugin"],
