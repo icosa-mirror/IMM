@@ -51,6 +51,8 @@ def main() -> int:
             json.dumps({"schema": "imm-log-marker-contract-v1", "passed": True}) + "\n",
             encoding="utf-8",
         )
+        (artifact / "capture.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        (artifact / "capture.ppm").write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
 
         ok = run_collect(
             "--repo-root",
@@ -66,6 +68,11 @@ def main() -> int:
         assert summary["passed"] is True
         assert summary["artifacts"][0]["manifests"][0]["content"]["schema"] == "imm-ci-artifact-manifest-v1"
         assert summary["artifacts"][0]["contracts"][0]["content"]["schema"] == "imm-log-marker-contract-v1"
+        assert len(summary["artifacts"][0]["captures"]) == 2
+        report = (artifact / "validation-report.md").read_text(encoding="utf-8")
+        assert "# IMM Validation Report" in report
+        assert "![artifact/capture.png]" in report
+        assert "- [artifact/capture.ppm]" in report
 
         broken = root / "broken"
         broken.mkdir()

@@ -37,6 +37,7 @@ jobs:
         run: |
           python tests/tools/write_ci_manifest.py \
             --status "${{ job.status }}" \
+            --failure-class content-parse \
             --output artifacts/baseline-content/manifest.json \
             --product baseline \
             --platform-name all \
@@ -110,6 +111,7 @@ jobs:
           mkdir -p artifacts/package-source-layout
           python tests/tools/write_ci_manifest.py \
             --status "${{ job.status }}" \
+            --failure-class packaging \
             --output artifacts/package-source-layout/manifest.json \
             --product packages \
             --platform-name all \
@@ -165,6 +167,7 @@ jobs:
         run: |
           python tests/tools/write_ci_manifest.py \
             --status "${{ job.status }}" \
+            --failure-class release-validation \
             --output artifacts/matrix-status/manifest.json \
             --product matrix \
             --platform-name all \
@@ -210,6 +213,7 @@ jobs:
         run: |
           python tests/tools/write_ci_manifest.py \
             --status "${{ job.status }}" \
+            --failure-class api \
             --output artifacts/godot-local-verifier/manifest.json \
             --product godot \
             --platform-name all \

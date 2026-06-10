@@ -40,7 +40,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class api --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
       - name: Collect artifact summary
         if: always()
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-package-import --require-manifest --output artifacts/unity-package-import/artifact-summary.json
@@ -80,7 +80,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --output artifacts/godot-package-import/manifest.json --product godot --platform-name all --mode package-import --renderer preflight --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class api --output artifacts/godot-package-import/manifest.json --product godot --platform-name all --mode package-import --renderer preflight --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
       - name: Collect artifact summary
         if: always()
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-package-import --require-manifest --output artifacts/godot-package-import/artifact-summary.json

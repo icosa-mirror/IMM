@@ -146,7 +146,9 @@ def main() -> int:
     fixture_paths = [Path(item) for item in args.fixture] if args.fixture else default_fixtures(root)
     status = normalize_status(args.status)
     failure_class = args.failure_class
-    if status != "passed" and not failure_class:
+    if status == "passed":
+        failure_class = ""
+    elif not failure_class:
         failure_class = "unknown"
 
     manifest = {

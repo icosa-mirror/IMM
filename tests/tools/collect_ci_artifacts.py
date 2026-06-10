@@ -10,6 +10,10 @@ import os
 from pathlib import Path
 
 
+EMBEDDABLE_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+CAPTURE_SUFFIXES = EMBEDDABLE_IMAGE_SUFFIXES | {".ppm"}
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -39,6 +43,7 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
     preflight_paths = [p for p in files if p.name == "preflight.json"]
     metrics_paths = [p for p in files if p.suffix.lower() == ".json" and "metric" in p.name.lower()]
     contract_paths = [p for p in files if p.suffix.lower() == ".json" and "contract" in p.name.lower()]
+    capture_paths = [p for p in files if p.suffix.lower() in CAPTURE_SUFFIXES]
     return {
         "path": path.relative_to(root).as_posix(),
         "file_count": len(files),
@@ -65,6 +70,7 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
             }
             for p in contract_paths
         ],
+        "captures": [collect_file(p, root) for p in capture_paths],
     }
 
 
@@ -88,6 +94,132 @@ def validate_manifest(manifest: object, path: str) -> list[str]:
             if not matrix.get(key):
                 errors.append(f"Manifest missing matrix.{key}: {path}")
     return errors
+
+
+def markdown_table(rows: list[list[str]]) -> list[str]:
+    if not rows:
+        return []
+    widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
+    lines = []
+    header = rows[0]
+    lines.append("| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(header)) + " |")
+    lines.append("| " + " | ".join("-" * widths[index] for index in range(len(header))) + " |")
+    for row in rows[1:]:
+        lines.append("| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |")
+    return lines
+
+
+def relative_link(target: str, report_dir: Path, root: Path) -> str:
+    path = (root / target).resolve()
+    try:
+        return path.relative_to(report_dir.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def render_validation_report(summary: dict, report_path: Path, root: Path) -> str:
+    report_dir = report_path.parent
+    lines = [
+        "# IMM Validation Report",
+        "",
+        f"- Workflow: {summary['git'].get('workflow', '') or 'local'}",
+        f"- Job: {summary['git'].get('job', '') or 'local'}",
+        f"- Git SHA: {summary['git'].get('sha', '') or 'unknown'}",
+        f"- Result: {'passed' if summary.get('passed') else 'failed'}",
+        "",
+    ]
+    errors = summary.get("errors", [])
+    if errors:
+        lines.append("## Errors")
+        lines.extend(f"- {error}" for error in errors)
+        lines.append("")
+
+    artifacts = summary.get("artifacts", [])
+    rows = [["Artifact", "Files", "Bytes", "Manifests", "Preflights", "Metrics", "Contracts", "Captures"]]
+    for artifact in artifacts:
+        rows.append(
+            [
+                str(artifact.get("path", "")),
+                str(artifact.get("file_count", 0)),
+                str(artifact.get("total_bytes", 0)),
+                str(len(artifact.get("manifests", []))),
+                str(len(artifact.get("preflights", []))),
+                str(len(artifact.get("metrics", []))),
+                str(len(artifact.get("contracts", []))),
+                str(len(artifact.get("captures", []))),
+            ]
+        )
+    lines.append("## Artifact Summary")
+    lines.extend(markdown_table(rows))
+    lines.append("")
+
+    for artifact in artifacts:
+        artifact_path = artifact.get("path", "")
+        lines.append(f"## {artifact_path}")
+        manifest_rows = [["Manifest", "Result", "Failure Class", "Product", "Platform", "Mode", "Renderer"]]
+        for manifest in artifact.get("manifests", []):
+            content = manifest.get("content") if isinstance(manifest, dict) else None
+            if not isinstance(content, dict):
+                manifest_rows.append([str(manifest.get("file", "")), "invalid", "", "", "", "", ""])
+                continue
+            classification = content.get("classification", {}) if isinstance(content.get("classification"), dict) else {}
+            matrix = content.get("matrix", {}) if isinstance(content.get("matrix"), dict) else {}
+            manifest_rows.append(
+                [
+                    str(manifest.get("file", "")),
+                    str(classification.get("result", "")),
+                    str(classification.get("failure_class", "")),
+                    str(matrix.get("product", "")),
+                    str(matrix.get("platform", "")),
+                    str(matrix.get("mode", "")),
+                    str(matrix.get("renderer", "")),
+                ]
+            )
+        if len(manifest_rows) > 1:
+            lines.extend(markdown_table(manifest_rows))
+            lines.append("")
+
+        preflight_rows = [["Preflight", "Passed", "Errors"]]
+        for preflight in artifact.get("preflights", []):
+            content = preflight.get("content") if isinstance(preflight, dict) else None
+            if isinstance(content, dict):
+                preflight_rows.append([str(preflight.get("file", "")), str(content.get("passed", "")), str(len(content.get("errors", [])))])
+            else:
+                preflight_rows.append([str(preflight.get("file", "")), "invalid", ""])
+        if len(preflight_rows) > 1:
+            lines.extend(markdown_table(preflight_rows))
+            lines.append("")
+
+        contract_rows = [["Contract", "Passed", "Errors"]]
+        for contract in artifact.get("contracts", []):
+            content = contract.get("content") if isinstance(contract, dict) else None
+            if isinstance(content, dict):
+                contract_rows.append([str(contract.get("file", "")), str(content.get("passed", "")), str(len(content.get("errors", [])))])
+            else:
+                contract_rows.append([str(contract.get("file", "")), "invalid", ""])
+        if len(contract_rows) > 1:
+            lines.extend(markdown_table(contract_rows))
+            lines.append("")
+
+        if artifact.get("metrics"):
+            lines.append("### Metrics")
+            for metric in artifact["metrics"]:
+                link = relative_link(metric["path"], report_dir, root)
+                lines.append(f"- [{metric['path']}]({link})")
+            lines.append("")
+
+        if artifact.get("captures"):
+            lines.append("### Captures")
+            for capture in artifact["captures"]:
+                link = relative_link(capture["path"], report_dir, root)
+                suffix = Path(capture["path"]).suffix.lower()
+                if suffix in EMBEDDABLE_IMAGE_SUFFIXES:
+                    lines.append(f"![{capture['path']}]({link})")
+                else:
+                    lines.append(f"- [{capture['path']}]({link})")
+            lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def main() -> int:
@@ -134,6 +266,8 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    report_path = args.output.with_name("validation-report.md")
+    report_path.write_text(render_validation_report(summary, report_path, root), encoding="utf-8", newline="\n")
 
     if errors:
         for error in errors:
@@ -141,6 +275,7 @@ def main() -> int:
         return 1
 
     print(f"Artifact summary written: {args.output}")
+    print(f"Validation report written: {report_path}")
     return 0
 
 

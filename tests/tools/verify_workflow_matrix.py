@@ -125,6 +125,8 @@ def verify_manifest_status_arguments(path: Path, workflow_rel: str, errors: list
         window = "\n".join(lines[index : min(index + 4, len(lines))])
         if "--status" not in window:
             errors.append(f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass --status")
+        if "--failure-class" not in window:
+            errors.append(f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass --failure-class")
 
 
 def main() -> int:

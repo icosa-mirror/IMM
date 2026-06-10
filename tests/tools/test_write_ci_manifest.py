@@ -37,6 +37,8 @@ def main() -> int:
                 "directx",
                 "--status",
                 "success",
+                "--failure-class",
+                "visual",
                 "--fixture",
                 str(fixture),
                 "--include",
@@ -47,6 +49,7 @@ def main() -> int:
         manifest = json.loads(output.read_text(encoding="utf-8"))
         assert manifest["schema"] == "imm-ci-artifact-manifest-v1"
         assert manifest["classification"]["result"] == "passed"
+        assert manifest["classification"]["failure_class"] == ""
         assert manifest["matrix"]["product"] == "standalone"
         assert manifest["matrix"]["renderer"] == "directx"
         assert manifest["tool_versions"]["python"]["version"]["exit_code"] == 0
@@ -72,12 +75,14 @@ def main() -> int:
                 "directx",
                 "--status",
                 "failure",
+                "--failure-class",
+                "content-parse",
             ],
             check=True,
         )
         failed_manifest = json.loads(failed_output.read_text(encoding="utf-8"))
         assert failed_manifest["classification"]["result"] == "failed"
-        assert failed_manifest["classification"]["failure_class"] == "unknown"
+        assert failed_manifest["classification"]["failure_class"] == "content-parse"
 
     print("CI manifest tests passed")
     return 0
