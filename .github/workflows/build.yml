@@ -1058,7 +1058,9 @@ jobs:
         path: release-assets/ImmPlayerPlugin-Godot
 
     - name: Verify release matrix status
-      run: python tests/tools/verify_matrix_status.py tests/matrix_status.json
+      run: |
+        python tests/tools/verify_matrix_status.py tests/matrix_status.json
+        python tests/tools/verify_workflow_matrix.py
 
     - name: Verify downloaded release assets
       shell: bash

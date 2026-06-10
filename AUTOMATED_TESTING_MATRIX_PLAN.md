@@ -379,6 +379,8 @@ artifacts/
 
 Machine-readable support status lives in `tests/matrix_status.json`. CI verifies that every planned product/platform/mode has either a supported gate, a deferred reason, an unsupported reason, or an explicit waiver. Treat this file as the release audit source for rows that cannot yet run on hosted CI.
 
+Workflow wiring is checked by `tests/tools/verify_workflow_matrix.py`. It fails CI if required matrix jobs, self-hosted labels, preflight steps, package verifiers, artifact manifests, or release verification steps drift out of the workflow YAML.
+
 ### Pull Requests
 
 Required:

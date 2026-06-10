@@ -124,6 +124,9 @@ jobs:
       - name: Verify matrix status coverage
         run: python tests/tools/verify_matrix_status.py tests/matrix_status.json
 
+      - name: Verify workflow matrix wiring
+        run: python tests/tools/verify_workflow_matrix.py
+
       - name: Write CI manifest
         if: always()
         run: |
