@@ -240,6 +240,17 @@ jobs:
           --contract tests\baselines\render\windows-directx-sample1.json
           --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-directx-render-metrics.json
 
+      - name: Write Godot Vulkan render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-directx-render-metrics.json
+          --reference-capture .\build\baseline-captures\windows-directx-playerframe60.ppm
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          --output-dir artifacts\godot-smoke-windows-vulkan\captures
+          --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
+
       - name: Write CI manifest
         if: always()
         shell: pwsh
