@@ -18,11 +18,42 @@ jobs:
   unity-package-import:
     name: Unity Package Import
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
-    runs-on: [self-hosted, unity]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Resolve Unity editor (hosted)
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:UNITY_EXE)) {
+            $candidateRoots = @(
+              Join-Path $env:ProgramFiles "Unity\Hub\Editor",
+              Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor",
+              Join-Path $env:ProgramFiles "Unity"
+            )
+            $paths = @()
+            foreach ($root in $candidateRoots) {
+              if (Test-Path $root) {
+                $versions = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+                foreach ($version in $versions) {
+                  $candidate = Join-Path (Join-Path $version.FullName "Editor") "Unity.exe"
+                  if (Test-Path $candidate) {
+                    $paths += $candidate
+                  }
+                }
+              }
+            }
+            if ($paths.Count -eq 0 -and (Test-Path (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe"))) {
+              $paths += (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe")
+            }
+            if ($paths.Count -eq 0) {
+              throw "UNITY_EXE is not set and no Unity editor was discovered under standard installer paths."
+            }
+            $unityExe = $paths[0]
+            "UNITY_EXE=$unityExe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
 
       - name: Verify source package layout
         run: |
@@ -43,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          : "${UNITY_EXE:?UNITY_EXE must point to the Unity editor executable on this self-hosted runner}"
+          : "${UNITY_EXE:?UNITY_EXE must point to the Unity editor executable}"
           "$UNITY_EXE" -batchmode -quit -projectPath code/ImmUnitySampleProject -runTests -testPlatform editmode -testResults artifacts/unity-editmode-results.xml
 
       - name: Write CI manifest
@@ -65,11 +96,42 @@ jobs:
   unity-windows-directx-composition:
     name: Unity Windows DirectX Composition
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
-    runs-on: [self-hosted, windows, unity, gpu]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Resolve Unity editor (hosted)
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:UNITY_EXE)) {
+            $candidateRoots = @(
+              Join-Path $env:ProgramFiles "Unity\Hub\Editor",
+              Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor",
+              Join-Path $env:ProgramFiles "Unity"
+            )
+            $paths = @()
+            foreach ($root in $candidateRoots) {
+              if (Test-Path $root) {
+                $versions = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+                foreach ($version in $versions) {
+                  $candidate = Join-Path (Join-Path $version.FullName "Editor") "Unity.exe"
+                  if (Test-Path $candidate) {
+                    $paths += $candidate
+                  }
+                }
+              }
+            }
+            if ($paths.Count -eq 0 -and (Test-Path (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe"))) {
+              $paths += (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe")
+            }
+            if ($paths.Count -eq 0) {
+              throw "UNITY_EXE is not set and no Unity editor was discovered under standard installer paths."
+            }
+            $unityExe = $paths[0]
+            "UNITY_EXE=$unityExe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
 
       - name: Preflight Unity DirectX runner
         shell: pwsh

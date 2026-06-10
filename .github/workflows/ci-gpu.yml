@@ -393,12 +393,27 @@ jobs:
   macos-godot-metal:
     name: macOS Godot Metal
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: [self-hosted, macos, gpu, metal, godot]
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Download Godot for macOS
+        run: |
+          set -euo pipefail
+          version="${GODOT_VERSION:-4.5-stable}"
+          zip_name="Godot_v${version}_macos.universal.zip"
+          url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$url" -o "$zip_name"
+          unzip -q "$zip_name"
+          godot_exe="$(find godot -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
+          if [ -z "$godot_exe" ]; then
+            echo "Godot executable not found after extracting $zip_name" >&2
+            exit 1
+          fi
+          echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
 
       - name: Preflight Godot Metal runner
         run: python3 tests/tools/preflight_runner.py --profile macos-godot-metal --output artifacts/godot-smoke-macos-metal/preflight.json --require-command cmake --require-command git --require-env GODOT_EXE
@@ -423,7 +438,7 @@ jobs:
       - name: Run Godot Metal visual smoke
         run: |
           set -euo pipefail
-          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable on this self-hosted runner}"
+          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
           mkdir -p artifacts/godot-smoke-macos-metal
           IMM_GODOT_VISUAL_SMOKE=1 \
           IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \

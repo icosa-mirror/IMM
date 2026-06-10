@@ -58,11 +58,11 @@ REQUIRED_RUNS_ON = {
         "android-openxr-probe": {"self-hosted", "quest", "openxr"},
         "android-godot-vulkan": {"ubuntu-latest"},
         "android-quest-vr": {"self-hosted", "quest", "vr"},
-        "ios-device-smoke": {"self-hosted", "macos", "ios-device"},
+        "ios-device-smoke": {"macos-14"},
     },
     ".github/workflows/ci-engine.yml": {
-        "unity-package-import": {"self-hosted", "unity"},
-        "unity-windows-directx-composition": {"self-hosted", "windows", "unity", "gpu"},
+        "unity-package-import": {"windows-latest"},
+        "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
@@ -71,7 +71,7 @@ REQUIRED_RUNS_ON = {
         "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
         "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
-        "macos-godot-metal": {"self-hosted", "macos", "gpu", "metal", "godot"},
+        "macos-godot-metal": {"macos-14"},
     },
 }
 REQUIRED_WORKFLOW_TRIGGERS = {

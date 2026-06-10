@@ -142,7 +142,7 @@
       "hosted_gate": "Build / Package Unity Plugins and CI Core Matrix / Package Source Layout",
       "hardware_gate": "CI Engine Matrix / Unity Package Import",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI assembles multi-platform UPM packages and verifies package layout; engine import runs on self-hosted Unity."
+      "reason": "Hosted CI assembles multi-platform UPM packages and verifies package layout; non-VR Unity jobs now run on GitHub-hosted Windows with Unity editor available via UNITY_EXE."
     },
     {
       "product": "unity",
@@ -211,7 +211,7 @@
       "hosted_gate": "Build / macOS",
       "hardware_gate": "CI GPU Matrix / macOS Godot Metal",
       "baseline": "tests/baselines/render/macos-metal-sample1.json",
-      "reason": "Hosted CI builds macOS Godot artifacts; self-hosted GPU lane exists for the visual Metal smoke."
+      "reason": "Hosted CI builds macOS Godot artifacts and CI GPU Matrix runs the visual Metal smoke on a hosted macOS runner."
     },
     {
       "product": "godot",
