@@ -25,21 +25,21 @@ REQUIRED_JOBS = {
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-device.yml": {
-        "android-standalone-gles": ["Preflight Android device", "Run Android GLES smoke", "Write CI manifest"],
-        "android-standalone-vulkan": ["Preflight Android Vulkan device", "Run Android Vulkan smoke", "Write CI manifest"],
-        "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Write CI manifest"],
-        "android-godot-vulkan": ["Preflight Android Godot device", "Run Android Godot Vulkan smoke", "Write CI manifest"],
-        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR OpenXR smoke", "Write CI manifest"],
-        "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest"],
+        "android-standalone-gles": ["Preflight Android device", "Run Android GLES smoke", "Write CI manifest", "Collect artifact summary"],
+        "android-standalone-vulkan": ["Preflight Android Vulkan device", "Run Android Vulkan smoke", "Write CI manifest", "Collect artifact summary"],
+        "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Write CI manifest", "Collect artifact summary"],
+        "android-godot-vulkan": ["Preflight Android Godot device", "Run Android Godot Vulkan smoke", "Write CI manifest", "Collect artifact summary"],
+        "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR OpenXR smoke", "Write CI manifest", "Collect artifact summary"],
+        "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-engine.yml": {
-        "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest"],
-        "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest"],
+        "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
+        "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Write CI manifest"],
-        "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Run Godot Vulkan smoke", "Write CI manifest"],
-        "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Write CI manifest"],
+        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Run Godot Vulkan smoke", "Write CI manifest", "Collect artifact summary"],
+        "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Write CI manifest", "Collect artifact summary"],
     },
 }
 

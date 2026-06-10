@@ -60,6 +60,28 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
     }
 
 
+def validate_manifest(manifest: object, path: str) -> list[str]:
+    if manifest is None:
+        return [f"Manifest is not valid JSON: {path}"]
+    if not isinstance(manifest, dict):
+        return [f"Manifest JSON is not an object: {path}"]
+    errors = []
+    if manifest.get("schema") != "imm-ci-artifact-manifest-v1":
+        errors.append(f"Manifest has unexpected schema: {path}")
+    for key in ["classification", "matrix", "git", "runner", "tool_versions", "fixtures", "files"]:
+        if key not in manifest:
+            errors.append(f"Manifest missing {key}: {path}")
+    classification = manifest.get("classification", {})
+    if isinstance(classification, dict) and not classification.get("result"):
+        errors.append(f"Manifest missing classification.result: {path}")
+    matrix = manifest.get("matrix", {})
+    if isinstance(matrix, dict):
+        for key in ["product", "platform", "mode", "renderer"]:
+            if not matrix.get(key):
+                errors.append(f"Manifest missing matrix.{key}: {path}")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -82,6 +104,9 @@ def main() -> int:
         artifact = collect_artifact_dir(path, root)
         if args.require_manifest and not artifact["manifests"]:
             errors.append(f"Artifact directory has no manifest.json: {item}")
+        if args.require_manifest:
+            for manifest in artifact["manifests"]:
+                errors.extend(validate_manifest(manifest["content"], manifest["file"]))
         artifacts.append(artifact)
 
     summary = {

@@ -25,6 +25,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\android-standalone-gles\manifest.json --product standalone --platform-name android --mode non-vr --renderer gles --include code\projects\android\logs
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-standalone-gles --require-manifest --output artifacts\android-standalone-gles\artifact-summary.json
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,6 +57,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\android-standalone-vulkan\manifest.json --product standalone --platform-name android --mode non-vr --renderer vulkan --include code\projects\android\logs
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-standalone-vulkan --require-manifest --output artifacts\android-standalone-vulkan\artifact-summary.json
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -81,6 +89,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\android-openxr-probe\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include code\projects\android\logs
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-openxr-probe --require-manifest --output artifacts\android-openxr-probe\artifact-summary.json
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -109,6 +121,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\android-godot-vulkan\manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include code\projects\android\logs
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-godot-vulkan --require-manifest --output artifacts\android-godot-vulkan\artifact-summary.json
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,6 +153,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\android-quest-vr\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include artifacts\android-quest-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-quest-vr --require-manifest --output artifacts\android-quest-vr\artifact-summary.json
       - name: Upload Quest VR artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -163,6 +183,9 @@ jobs:
       - name: Write CI manifest
         if: always()
         run: python3 tests/tools/write_ci_manifest.py --output artifacts/ios-device-smoke/manifest.json --product unity --platform-name ios --mode package-import --renderer native --include build/ios
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ios-device-smoke --require-manifest --output artifacts/ios-device-smoke/artifact-summary.json
       - name: Upload iOS device smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4

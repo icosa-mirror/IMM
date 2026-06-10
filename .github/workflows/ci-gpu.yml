@@ -45,6 +45,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\windows-standalone-vulkan\manifest.json --product standalone --platform-name windows --mode non-vr --renderer vulkan --include build\baseline-captures --include code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-vulkan --require-manifest --output artifacts\windows-standalone-vulkan\artifact-summary.json
 
       - name: Upload GPU artifacts
         if: always()
@@ -84,6 +88,10 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\write_ci_manifest.py --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\godot-smoke-windows-vulkan --require-manifest --output artifacts\godot-smoke-windows-vulkan\artifact-summary.json
 
       - name: Upload Godot Vulkan artifacts
         if: always()
@@ -137,6 +145,9 @@ jobs:
       - name: Write CI manifest
         if: always()
         run: python3 tests/tools/write_ci_manifest.py --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-smoke-macos-metal --require-manifest --output artifacts/godot-smoke-macos-metal/artifact-summary.json
 
       - name: Upload Godot Metal artifacts
         if: always()
