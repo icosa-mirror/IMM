@@ -109,6 +109,42 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  matrix-status:
+    name: Matrix Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify matrix status coverage
+        run: python tests/tools/verify_matrix_status.py tests/matrix_status.json
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          python tests/tools/write_ci_manifest.py \
+            --output artifacts/matrix-status/manifest.json \
+            --product matrix \
+            --platform-name all \
+            --mode status \
+            --renderer none \
+            --include tests/matrix_status.json \
+            --include AUTOMATED_TESTING_MATRIX_PLAN.md
+
+      - name: Upload matrix status artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MatrixStatus
+          path: artifacts/matrix-status
+          if-no-files-found: ignore
+          retention-days: 14
+
   godot-local-verifier:
     name: Godot Local Verifier
     runs-on: ubuntu-latest

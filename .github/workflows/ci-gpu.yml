@@ -29,12 +29,18 @@ jobs:
         shell: pwsh
         run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
 
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --output artifacts\windows-standalone-vulkan\manifest.json --product standalone --platform-name windows --mode non-vr --renderer vulkan --include build\baseline-captures --include code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+
       - name: Upload GPU artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: WindowsStandaloneVulkan-GPU
           path: |
+            artifacts/windows-standalone-vulkan
             build/baseline-captures
             code/appImmViewer/exe/debug.txt
             code/appImmViewer/exe/vulkan_sample1_smoke.ppm
@@ -57,6 +63,11 @@ jobs:
       - name: Run Godot Vulkan smoke
         shell: pwsh
         run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension -RendererApi 5 -Headed -LogDir artifacts\godot-smoke-windows-vulkan
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan
 
       - name: Upload Godot Vulkan artifacts
         if: always()
@@ -103,6 +114,10 @@ jobs:
           "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
             > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1
           grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
+
+      - name: Write CI manifest
+        if: always()
+        run: python3 tests/tools/write_ci_manifest.py --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
 
       - name: Upload Godot Metal artifacts
         if: always()

@@ -28,6 +28,10 @@ jobs:
           : "${UNITY_EXE:?UNITY_EXE must point to the Unity editor executable on this self-hosted runner}"
           "$UNITY_EXE" -batchmode -quit -projectPath code/ImmUnitySampleProject -runTests -testPlatform editmode -testResults artifacts/unity-editmode-results.xml
 
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
+
       - name: Upload Unity results
         if: always()
         uses: actions/upload-artifact@v4
@@ -54,3 +58,16 @@ jobs:
         env:
           IMM_GODOT_SKIP_NATIVE_SYNTAX: '1'
         run: python code/appImmGodotGDExtension/verify_local.py
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --output artifacts/godot-package-import/manifest.json --product godot --platform-name all --mode package-import --renderer preflight --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Upload Godot package import artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GodotPackageImport
+          path: artifacts/godot-package-import
+          if-no-files-found: ignore
+          retention-days: 14

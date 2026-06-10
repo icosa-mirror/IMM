@@ -375,6 +375,8 @@ artifacts/
 
 ## Gating Policy
 
+Machine-readable support status lives in `tests/matrix_status.json`. CI verifies that every planned product/platform/mode has either a supported gate, a deferred reason, an unsupported reason, or an explicit waiver. Treat this file as the release audit source for rows that cannot yet run on hosted CI.
+
 ### Pull Requests
 
 Required:

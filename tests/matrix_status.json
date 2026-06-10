@@ -1,0 +1,204 @@
+{
+  "schema": "imm-testing-matrix-status-v1",
+  "updated": "2026-06-10",
+  "rows": [
+    {
+      "product": "standalone",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "directx",
+      "status": "supported",
+      "hosted_gate": "Build / Windows",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/render/windows-directx-sample1.json",
+      "reason": "Windows hosted CI builds the viewer, captures the DirectX baseline, records render metrics, and uploads ImmViewer-Windows-DirectX-Baseline."
+    },
+    {
+      "product": "standalone",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
+      "hardware_gate": "CI GPU Matrix / Windows Standalone Vulkan",
+      "baseline": "tests/baselines/render/windows-directx-sample1.json",
+      "reason": "Hosted workflow has an opt-in GPU smoke and ci-gpu.yml defines the self-hosted Vulkan runner lane."
+    },
+    {
+      "product": "standalone",
+      "platform": "windows",
+      "mode": "vr",
+      "renderer": "opengl",
+      "status": "deferred",
+      "hosted_gate": "Godot local verifier checks Windows standalone OpenGL VR settings",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Packaged VR settings are validated, but a PC VR headset runtime smoke job still needs a labeled self-hosted VR runner."
+    },
+    {
+      "product": "standalone",
+      "platform": "android",
+      "mode": "non-vr",
+      "renderer": "gles",
+      "status": "supported",
+      "hosted_gate": "Build / Android",
+      "hardware_gate": "CI Device Matrix / Android Standalone GLES",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted CI builds the APK and ci-device.yml defines the self-hosted GLES runtime lane."
+    },
+    {
+      "product": "standalone",
+      "platform": "android",
+      "mode": "non-vr",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": "Build / Android",
+      "hardware_gate": "CI Device Matrix / Android Standalone Vulkan",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml defines the self-hosted Vulkan runtime lane."
+    },
+    {
+      "product": "standalone",
+      "platform": "android",
+      "mode": "vr",
+      "renderer": "openxr",
+      "status": "deferred",
+      "hosted_gate": "Build / Android",
+      "hardware_gate": "CI Device Matrix / Android OpenXR Probe",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted CI builds the VR APK and the OpenXR probe lane exists; full stereo frame validation needs a Quest VR runtime job."
+    },
+    {
+      "product": "standalone",
+      "platform": "ios",
+      "mode": "non-vr",
+      "renderer": "native",
+      "status": "unsupported",
+      "hosted_gate": null,
+      "hardware_gate": null,
+      "baseline": null,
+      "reason": "No standalone iOS viewer target is currently present in the repository."
+    },
+    {
+      "product": "standalone",
+      "platform": "macos",
+      "mode": "non-vr",
+      "renderer": "metal",
+      "status": "supported",
+      "hosted_gate": "Build / macOS",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/render/macos-metal-sample1.json",
+      "reason": "Hosted macOS CI builds the Metal app, runs validation, and uploads ImmViewer-macOS."
+    },
+    {
+      "product": "standalone",
+      "platform": "macos",
+      "mode": "vr",
+      "renderer": "native",
+      "status": "unsupported",
+      "hosted_gate": null,
+      "hardware_gate": null,
+      "baseline": null,
+      "reason": "No macOS standalone XR target is currently present in the repository."
+    },
+    {
+      "product": "unity",
+      "platform": "all",
+      "mode": "non-vr",
+      "renderer": "native",
+      "status": "supported",
+      "hosted_gate": "Build / Package Unity Plugins and CI Core Matrix / Package Source Layout",
+      "hardware_gate": "CI Engine Matrix / Unity Package Import",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted CI assembles multi-platform UPM packages and verifies package layout; engine import runs on self-hosted Unity."
+    },
+    {
+      "product": "unity",
+      "platform": "windows",
+      "mode": "vr",
+      "renderer": "openxr",
+      "status": "deferred",
+      "hosted_gate": "Godot local verifier checks Unity XR scene bootstrap",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "XR scene/static checks exist; a self-hosted Unity VR runtime lane still needs to be added once runner labels are available."
+    },
+    {
+      "product": "godot",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "preflight",
+      "status": "supported",
+      "hosted_gate": "Build / Windows and CI Core Matrix / Godot Local Verifier",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted CI validates GDExtension build/staging preflight and local API parity."
+    },
+    {
+      "product": "godot",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
+      "hardware_gate": "CI GPU Matrix / Windows Godot Vulkan",
+      "baseline": "tests/baselines/render/windows-directx-sample1.json",
+      "reason": "GPU smoke is gated in build.yml and defined as a self-hosted GPU job in ci-gpu.yml."
+    },
+    {
+      "product": "godot",
+      "platform": "android",
+      "mode": "non-vr",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": "Build / Android",
+      "hardware_gate": "CI Device Matrix / Android Godot Vulkan",
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Hosted CI builds Android GDExtension artifacts and ci-device.yml defines the device Vulkan smoke lane."
+    },
+    {
+      "product": "godot",
+      "platform": "ios",
+      "mode": "non-vr",
+      "renderer": "native",
+      "status": "unsupported",
+      "hosted_gate": null,
+      "hardware_gate": null,
+      "baseline": null,
+      "reason": "No iOS Godot GDExtension packaging target is currently present in the repository."
+    },
+    {
+      "product": "godot",
+      "platform": "macos",
+      "mode": "non-vr",
+      "renderer": "metal",
+      "status": "supported",
+      "hosted_gate": "Build / macOS",
+      "hardware_gate": "CI GPU Matrix / macOS Godot Metal",
+      "baseline": "tests/baselines/render/macos-metal-sample1.json",
+      "reason": "Hosted CI builds macOS Godot artifacts; self-hosted GPU lane exists for the visual Metal smoke."
+    },
+    {
+      "product": "godot",
+      "platform": "windows",
+      "mode": "vr",
+      "renderer": "openxr",
+      "status": "deferred",
+      "hosted_gate": null,
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Godot XR validation is intentionally deferred until non-VR Godot renderer parity is stable."
+    },
+    {
+      "product": "godot",
+      "platform": "android",
+      "mode": "vr",
+      "renderer": "openxr",
+      "status": "deferred",
+      "hosted_gate": null,
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "Quest Godot XR validation is deferred until Android Godot non-VR runtime smoke is stable."
+    }
+  ]
+}
