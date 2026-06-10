@@ -29,22 +29,26 @@
       "platform": "windows",
       "mode": "vr",
       "renderer": "opengl",
-      "status": "supported",
+      "status": "deferred",
       "hosted_gate": "Godot local verifier checks Windows standalone OpenGL VR settings",
       "hardware_gate": "CI GPU Matrix / Windows Standalone OpenGL VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Packaged VR settings are validated and ci-gpu.yml defines a self-hosted Windows OpenGL VR smoke lane that launches settings-opengl-vr.json, requires legacy HMD initialization, viewer initialization, and IMM_LEGACY_VR_SMOKE frame-submission markers."
+      "reason": "Packaged VR settings are validated and ci-gpu.yml defines a self-hosted Windows OpenGL VR smoke lane that launches settings-opengl-vr.json, requires legacy HMD initialization, viewer initialization, and IMM_LEGACY_VR_SMOKE frame-submission markers.",
+      "owner_decision": "VR deferred until headset-capable runners are available for Windows OpenGL VR smoke. Enable with CI_ENABLE_VR_CHECKS=true.",
+      "promotion_criteria": "Reinstate as supported once a supported Windows OpenGL VR runner is available and this lane passes image/log contract evidence."
     },
     {
       "product": "standalone",
       "platform": "windows",
       "mode": "vr",
       "renderer": "openxr",
-      "status": "supported",
+      "status": "deferred",
       "hosted_gate": null,
       "hardware_gate": "CI GPU Matrix / Windows Standalone OpenXR VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "ci-gpu.yml defines a self-hosted Windows OpenXR VR smoke lane that launches the standalone viewer with settings-openxr-probe.json and requires OpenXR instance, session, stereo view, swapchain, wait/begin/end frame, and two-projection-view frame evidence."
+      "reason": "ci-gpu.yml defines a self-hosted Windows OpenXR VR smoke lane that launches the standalone viewer with settings-openxr-probe.json and requires OpenXR instance, session, stereo view, swapchain, wait/begin/end frame, and two-projection-view frame evidence.",
+      "owner_decision": "VR deferred until headset-capable runners are available for Windows OpenXR VR smoke. Enable with CI_ENABLE_VR_CHECKS=true.",
+      "promotion_criteria": "Reinstate as supported once a supported Windows OpenXR VR runner is available and this lane passes image/log contract evidence."
     },
     {
       "product": "standalone",
@@ -86,11 +90,13 @@
       "platform": "android",
       "mode": "vr",
       "renderer": "gles",
-      "status": "supported",
+      "status": "deferred",
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Quest VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds the Quest-style APK and ci-device.yml defines a self-hosted Quest VR app smoke that requires VRAPI entry, sample1 IMM load from assets, CPU/GPU load completion, and IMM_ANDROID_VR_SMOKE document-frame submission markers."
+      "reason": "Hosted CI builds the Quest-style APK and ci-device.yml defines a self-hosted Quest VR app smoke that requires VRAPI entry, sample1 IMM load from assets, CPU/GPU load completion, and IMM_ANDROID_VR_SMOKE document-frame submission markers.",
+      "owner_decision": "VR deferred until Quest/VR-capable Android device runners are available. Enable with CI_ENABLE_VR_CHECKS=true.",
+      "promotion_criteria": "Reinstate as supported after Quest hardware-lane evidence returns image/log markers for load/render/composition with passing contracts."
     },
     {
       "product": "standalone",
@@ -143,11 +149,13 @@
       "platform": "windows",
       "mode": "vr",
       "renderer": "openxr",
-      "status": "supported",
+      "status": "deferred",
       "hosted_gate": "Godot local verifier checks Unity XR scene bootstrap",
       "hardware_gate": "CI Engine Matrix / Unity Windows OpenXR VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "XR scene/static checks exist and ci-engine.yml defines a self-hosted Windows Unity OpenXR VR lane that runs the VR scene, requires active XR display evidence, captures an image, and verifies XR log contract markers."
+      "reason": "XR scene/static checks exist and ci-engine.yml defines a self-hosted Windows Unity OpenXR VR lane that runs the VR scene, requires active XR display evidence, captures an image, and verifies XR log contract markers.",
+      "owner_decision": "VR deferred until headset-capable runners are available for Unity OpenXR validation. Enable with CI_ENABLE_VR_CHECKS=true.",
+      "promotion_criteria": "Reinstate as supported once Windows Unity OpenXR runner is available and this lane passes image/log contract evidence."
     },
     {
       "product": "godot",
@@ -210,11 +218,13 @@
       "platform": "windows",
       "mode": "vr",
       "renderer": "openxr",
-      "status": "supported",
+      "status": "deferred",
       "hosted_gate": null,
       "hardware_gate": "CI GPU Matrix / Windows Godot OpenXR VR",
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "ci-gpu.yml defines a self-hosted Windows Godot OpenXR VR lane that launches OpenXRSmokeScene.tscn, initializes Godot OpenXR, enables XR viewport rendering, loads sample1 through ImmViewerNode, requires compositor/frame diagnostics, and verifies IMM_GODOT_OPENXR_SMOKE contract markers."
+      "reason": "ci-gpu.yml defines a self-hosted Windows Godot OpenXR VR lane that launches OpenXRSmokeScene.tscn, initializes Godot OpenXR, enables XR viewport rendering, loads sample1 through ImmViewerNode, requires compositor/frame diagnostics, and verifies IMM_GODOT_OPENXR_SMOKE contract markers.",
+      "owner_decision": "VR deferred until headset-capable runners are available for Windows Godot OpenXR smoke. Enable with CI_ENABLE_VR_CHECKS=true.",
+      "promotion_criteria": "Reinstate as supported once a Windows Godot OpenXR runner is available and this lane passes image/log contract evidence."
     },
     {
       "product": "godot",

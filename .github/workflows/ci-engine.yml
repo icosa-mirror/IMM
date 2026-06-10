@@ -134,7 +134,8 @@ jobs:
 
   unity-windows-openxr-vr:
     name: Unity Windows OpenXR VR
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, unity, vr]
     steps:
       - uses: actions/checkout@v4

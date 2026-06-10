@@ -88,7 +88,8 @@ jobs:
 
   windows-standalone-openxr-vr:
     name: Windows Standalone OpenXR VR
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, gpu, vr, openxr]
     steps:
       - name: Checkout repository
@@ -145,7 +146,8 @@ jobs:
 
   windows-standalone-opengl-vr:
     name: Windows Standalone OpenGL VR
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, gpu, vr, opengl]
     steps:
       - name: Checkout repository
@@ -271,7 +273,8 @@ jobs:
 
   windows-godot-openxr-vr:
     name: Windows Godot OpenXR VR
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, gpu, godot, vr, openxr]
     steps:
       - name: Checkout repository

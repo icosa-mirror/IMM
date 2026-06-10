@@ -109,7 +109,8 @@ jobs:
 
   android-openxr-probe:
     name: Android OpenXR Probe
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, quest, openxr]
     steps:
       - uses: actions/checkout@v4
@@ -206,7 +207,8 @@ jobs:
 
   android-quest-vr:
     name: Android Quest VR
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, quest, vr]
     steps:
       - uses: actions/checkout@v4
