@@ -39,6 +39,7 @@ def artifact(
     *,
     with_capture: bool = False,
     with_metrics: bool = False,
+    with_report: bool = False,
     with_contract: bool = False,
     with_preflight: bool = True,
 ) -> dict:
@@ -49,6 +50,7 @@ def artifact(
         "manifests": [{"file": "manifest.json", "content": manifest(product, platform, mode, renderer)}],
         "preflights": [{"file": "preflight.json", "content": {"passed": True, "errors": []}}] if with_preflight else [],
         "metrics": [{"path": "render-metrics.json", "byte_size": 12, "sha256": "abc"}] if with_metrics else [],
+        "reports": [{"path": "render-report.md", "byte_size": 12, "sha256": "ghi"}] if with_report else [],
         "contracts": [{"file": "openxr-log-contract.json", "content": {"passed": True, "errors": []}}] if with_contract else [],
         "captures": [{"path": "capture.png", "byte_size": 8, "sha256": "def"}] if with_capture else [],
     }
@@ -151,7 +153,7 @@ def main() -> int:
         write_summary(
             passing_summary,
             [
-                artifact("standalone", "windows", "non-vr", "vulkan", with_capture=True, with_metrics=True),
+                artifact("standalone", "windows", "non-vr", "vulkan", with_capture=True, with_metrics=True, with_report=True),
                 artifact("standalone", "android", "vr", "openxr", with_contract=True),
             ],
         )
@@ -173,6 +175,7 @@ def main() -> int:
         failed = run_verify(matrix_path, failing_summary, temp / "failing-output")
         assert failed.returncode != 0, "missing visual/VR evidence should fail"
         assert "missing capture image/frame evidence" in failed.stdout
+        assert "missing human-readable render report evidence" in failed.stdout
         assert "missing passing VR/OpenXR contract evidence" in failed.stdout
 
         gpu_only = run_verify(

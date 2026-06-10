@@ -107,6 +107,7 @@ def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], lis
                         "artifact": artifact.get("path", ""),
                         "manifest": manifest.get("file", ""),
                         "metrics": artifact.get("metrics", []),
+                        "reports": artifact.get("reports", []),
                         "captures": artifact.get("captures", []),
                         "contracts": artifact.get("contracts", []),
                         "passing_contracts": passing_contracts(artifact),
@@ -145,8 +146,15 @@ def evaluate_row(row: dict, evidence: list[dict]) -> dict:
     if is_visual_row(row):
         if not any(item["metrics"] for item in evidence):
             errors.append("missing render metrics evidence")
+        if not any(item["reports"] for item in evidence):
+            errors.append("missing human-readable render report evidence")
         if not any(item["captures"] for item in evidence):
             errors.append("missing capture image/frame evidence")
+        if not any(
+            any(str(capture.get("path", "")).lower().endswith((".png", ".jpg", ".jpeg", ".webp")) for capture in item["captures"])
+            for item in evidence
+        ):
+            errors.append("missing viewable PNG/JPEG/WebP capture evidence")
 
     if is_vr_row(row) and not any(item["passing_contracts"] for item in evidence):
         errors.append("missing passing VR/OpenXR contract evidence")
@@ -210,7 +218,7 @@ def write_reports(results: dict, json_output: Path, markdown_output: Path) -> No
         if not row["evidence"]:
             continue
         lines.append(f"## {row['key']}")
-        evidence_table = [["Summary", "Artifact", "Manifest", "Preflights", "Metrics", "Contracts", "Captures"]]
+        evidence_table = [["Summary", "Artifact", "Manifest", "Preflights", "Metrics", "Reports", "Contracts", "Captures"]]
         for item in row["evidence"]:
             evidence_table.append(
                 [
@@ -219,6 +227,7 @@ def write_reports(results: dict, json_output: Path, markdown_output: Path) -> No
                     str(item["manifest"]),
                     str(len(item["passing_preflights"])),
                     str(len(item["metrics"])),
+                    str(len(item["reports"])),
                     str(len(item["passing_contracts"])),
                     str(len(item["captures"])),
                 ]

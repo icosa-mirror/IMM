@@ -53,6 +53,7 @@ def main() -> int:
         )
         (artifact / "capture.png").write_bytes(b"\x89PNG\r\n\x1a\n")
         (artifact / "capture.ppm").write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
+        (artifact / "render-report.md").write_text("# Render Validation Report\n", encoding="utf-8")
 
         ok = run_collect(
             "--repo-root",
@@ -69,8 +70,10 @@ def main() -> int:
         assert summary["artifacts"][0]["manifests"][0]["content"]["schema"] == "imm-ci-artifact-manifest-v1"
         assert summary["artifacts"][0]["contracts"][0]["content"]["schema"] == "imm-log-marker-contract-v1"
         assert len(summary["artifacts"][0]["captures"]) == 2
+        assert summary["artifacts"][0]["reports"][0]["path"] == "artifact/render-report.md"
         report = (artifact / "validation-report.md").read_text(encoding="utf-8")
         assert "# IMM Validation Report" in report
+        assert "Reports" in report
         assert "![artifact/capture.png]" in report
         assert "- [artifact/capture.ppm]" in report
 

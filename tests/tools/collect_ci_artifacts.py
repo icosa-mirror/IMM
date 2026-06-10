@@ -44,6 +44,7 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
     metrics_paths = [p for p in files if p.suffix.lower() == ".json" and "metric" in p.name.lower()]
     contract_paths = [p for p in files if p.suffix.lower() == ".json" and "contract" in p.name.lower()]
     capture_paths = [p for p in files if p.suffix.lower() in CAPTURE_SUFFIXES]
+    report_paths = [p for p in files if p.suffix.lower() == ".md" and "report" in p.name.lower()]
     return {
         "path": path.relative_to(root).as_posix(),
         "file_count": len(files),
@@ -63,6 +64,7 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
             for p in preflight_paths
         ],
         "metrics": [collect_file(p, root) for p in metrics_paths],
+        "reports": [collect_file(p, root) for p in report_paths],
         "contracts": [
             {
                 "file": p.relative_to(root).as_posix(),
@@ -135,7 +137,7 @@ def render_validation_report(summary: dict, report_path: Path, root: Path) -> st
         lines.append("")
 
     artifacts = summary.get("artifacts", [])
-    rows = [["Artifact", "Files", "Bytes", "Manifests", "Preflights", "Metrics", "Contracts", "Captures"]]
+    rows = [["Artifact", "Files", "Bytes", "Manifests", "Preflights", "Metrics", "Reports", "Contracts", "Captures"]]
     for artifact in artifacts:
         rows.append(
             [
@@ -145,6 +147,7 @@ def render_validation_report(summary: dict, report_path: Path, root: Path) -> st
                 str(len(artifact.get("manifests", []))),
                 str(len(artifact.get("preflights", []))),
                 str(len(artifact.get("metrics", []))),
+                str(len(artifact.get("reports", []))),
                 str(len(artifact.get("contracts", []))),
                 str(len(artifact.get("captures", []))),
             ]
@@ -206,6 +209,13 @@ def render_validation_report(summary: dict, report_path: Path, root: Path) -> st
             for metric in artifact["metrics"]:
                 link = relative_link(metric["path"], report_dir, root)
                 lines.append(f"- [{metric['path']}]({link})")
+            lines.append("")
+
+        if artifact.get("reports"):
+            lines.append("### Reports")
+            for report in artifact["reports"]:
+                link = relative_link(report["path"], report_dir, root)
+                lines.append(f"- [{report['path']}]({link})")
             lines.append("")
 
         if artifact.get("captures"):
