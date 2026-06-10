@@ -16,7 +16,7 @@ REQUIRED_JOBS = {
         "build-ios": ["Link-check iOS Unity plugin"],
         "package-unity-plugins": ["Verify stroke reader Unity package layout", "Verify Unity package import harness", "Write ImmUnity package manifest", "Collect ImmUnity package summary"],
         "package-godot-extension": ["Verify Godot addon package layout", "Verify Godot package import harness", "Write Godot addon package manifest", "Collect Godot addon package summary"],
-        "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release validation manifest", "Collect release artifact summary", "Create GitHub release"],
+        "release": ["Verify release matrix status", "Verify downloaded release assets", "Write release matrix audit report", "Write release baseline drift report", "Write release validation manifest", "Collect release artifact summary", "Create GitHub release"],
     },
     ".github/workflows/ci-core.yml": {
         "baseline-content": ["Verify sample1 IMM baseline", "Write baseline drift report", "Write CI manifest", "Collect artifact summary"],
@@ -150,6 +150,20 @@ def verify_hardware_workflow_triggers(path: Path, workflow_rel: str, label: str,
             errors.append(f"{workflow_rel} missing trigger/guard token: {token}")
 
 
+def verify_release_assets(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/build.yml":
+        return
+    text = path.read_text(encoding="utf-8")
+    for asset in [
+        "release-assets/matrix-audit.json",
+        "release-assets/matrix-audit.md",
+        "release-assets/baseline-drift.json",
+        "release-assets/baseline-drift.md",
+    ]:
+        if asset not in text:
+            errors.append(f"{workflow_rel} release job must attach/include {asset}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -167,6 +181,7 @@ def main() -> int:
         required_label = REQUIRED_WORKFLOW_TRIGGERS.get(workflow_rel)
         if required_label:
             verify_hardware_workflow_triggers(workflow_path, workflow_rel, required_label, errors)
+        verify_release_assets(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
         for job_name, required_steps in jobs.items():

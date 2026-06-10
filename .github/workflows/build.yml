@@ -1127,6 +1127,24 @@ jobs:
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk
 
+    - name: Write release matrix audit report
+      run: |
+        python tests/tools/write_matrix_audit_report.py tests/matrix_status.json \
+          --json-output release-assets/matrix-audit.json \
+          --markdown-output release-assets/matrix-audit.md
+
+    - name: Write release baseline drift report
+      run: |
+        python tests/tools/verify_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --baseline tests/baselines/content/sample1.json \
+          --write-actual release-assets/sample1.actual.json
+        python tests/tools/write_baseline_drift_report.py \
+          --expected tests/baselines/content/sample1.json \
+          --actual release-assets/sample1.actual.json \
+          --json-output release-assets/baseline-drift.json \
+          --markdown-output release-assets/baseline-drift.md
+
     - name: Write release validation manifest
       run: |
         python tests/tools/write_ci_manifest.py \
@@ -1142,6 +1160,10 @@ jobs:
           --include release-assets/ImmViewer-macOS \
           --include release-assets/ImmViewer-Android \
           --include release-assets/ImmPlayerPlugin-Godot \
+          --include release-assets/matrix-audit.json \
+          --include release-assets/matrix-audit.md \
+          --include release-assets/baseline-drift.json \
+          --include release-assets/baseline-drift.md \
           --include release-assets/upm
 
     - name: Collect release artifact summary
@@ -1174,7 +1196,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n\nValidation\n\nRelease validation manifest and artifact summary are attached as JSON assets.\n' \
+        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n\nValidation\n\nRelease validation manifest, artifact summary, matrix audit, and baseline drift reports are attached.\n' \
           "${{ steps.release_meta.outputs.stroke_url }}" \
           "${{ steps.release_meta.outputs.unity_url }}")"
         gh release create "${{ steps.release_meta.outputs.release_tag }}" \
@@ -1192,7 +1214,11 @@ jobs:
           release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
           release-assets/ImmViewer-Windows/sample1.imm \
           release-assets/release-validation-manifest.json \
-          release-assets/release-artifact-summary.json
+          release-assets/release-artifact-summary.json \
+          release-assets/matrix-audit.json \
+          release-assets/matrix-audit.md \
+          release-assets/baseline-drift.json \
+          release-assets/baseline-drift.md
 
   publish-upm:
     name: Publish UPM Branch
