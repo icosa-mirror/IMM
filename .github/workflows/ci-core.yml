@@ -32,6 +32,15 @@ jobs:
             --baseline tests/baselines/content/sample1.json \
             --write-actual artifacts/baseline-content/sample1.actual.json
 
+      - name: Write baseline drift report
+        if: always()
+        run: >
+          python tests/tools/write_baseline_drift_report.py
+          --expected tests/baselines/content/sample1.json
+          --actual artifacts/baseline-content/sample1.actual.json
+          --json-output artifacts/baseline-content/baseline-drift.json
+          --markdown-output artifacts/baseline-content/baseline-drift.md
+
       - name: Write CI manifest
         if: always()
         run: |
@@ -161,6 +170,7 @@ jobs:
       - name: Run CI tool self-tests
         run: |
           python tests/tools/test_collect_ci_artifacts.py
+          python tests/tools/test_write_baseline_drift_report.py
           python tests/tools/test_compare_render_metrics.py
           python tests/tools/test_preflight_runner.py
           python tests/tools/test_verify_release_assets.py
