@@ -1043,11 +1043,12 @@ static bool iPathHasExtension(const char *path, const char *extension)
     return true;
 }
 
-static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int width, int height)
+static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     for (int y = 0; y < height; ++y)
     {
-        const uint32_t *srcRow = pixels + (size_t)y * (size_t)width;
+        const int srcY = flipVertical ? (height - 1 - y) : y;
+        const uint32_t *srcRow = pixels + (size_t)srcY * (size_t)width;
         uint8_t *dstRow = dstRGB + (size_t)y * (size_t)width * 3u;
         for (int x = 0; x < width; ++x)
         {
@@ -1059,7 +1060,7 @@ static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int wi
     }
 }
 
-static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (!path || !path[0] || !pixels || width <= 0 || height <= 0)
     {
@@ -1079,7 +1080,7 @@ static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width
         fclose(file);
         return false;
     }
-    iDecodeRG11B10Pixels(rgb, pixels, width, height);
+    iDecodeRG11B10Pixels(rgb, pixels, width, height, flipVertical);
     const bool ok = fwrite(rgb, 3u, (size_t)width * (size_t)height, file) == (size_t)width * (size_t)height;
     free(rgb);
 
@@ -1087,7 +1088,7 @@ static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width
     return ok;
 }
 
-static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (!path || !path[0] || !pixels || width <= 0 || height <= 0)
     {
@@ -1099,7 +1100,7 @@ static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width
     {
         return false;
     }
-    iDecodeRG11B10Pixels(rgb, pixels, width, height);
+    iDecodeRG11B10Pixels(rgb, pixels, width, height, flipVertical);
 
     wchar_t *widePath = pistr2ws(path);
     if (!widePath)
@@ -1117,13 +1118,13 @@ static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width
     return ok;
 }
 
-static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (iPathHasExtension(path, ".png"))
     {
-        return iWriteRG11B10PNG(path, pixels, width, height);
+        return iWriteRG11B10PNG(path, pixels, width, height, flipVertical);
     }
-    return iWriteRG11B10PPM(path, pixels, width, height);
+    return iWriteRG11B10PPM(path, pixels, width, height, flipVertical);
 }
 
 static bool iFileExistsUtf8(const char *path)
@@ -2070,7 +2071,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 #endif
                                     free(wideCapturePath);
                                 }
-                                if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y))
+                                const bool flipValidationCapture = mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES;
+                                if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y, flipValidationCapture))
                                 {
                                     if (iFileExistsUtf8(validationCapturePath))
                                     {
