@@ -9,7 +9,7 @@ jobs:
   android-standalone-gles:
     name: Android Standalone GLES
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,13 +62,21 @@ jobs:
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
-          if ! timeout 300 adb wait-for-device; then
+          device_ready=0
+          for i in $(seq 1 60); do
+            if adb get-state 2>/dev/null | grep -q "device"; then
+              device_ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$device_ready" -ne 1 ]; then
             echo "Android emulator did not appear as an adb device"
             tail -n 200 "$ARTIFACT_DIR/emulator.log"
             exit 1
           fi
           for i in $(seq 1 180); do
-            boot_completed="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$boot_completed" = "1" ]; then
               break
             fi
@@ -146,7 +154,7 @@ jobs:
   android-standalone-vulkan:
     name: Android Standalone Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,13 +207,21 @@ jobs:
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
-          if ! timeout 300 adb wait-for-device; then
+          device_ready=0
+          for i in $(seq 1 60); do
+            if adb get-state 2>/dev/null | grep -q "device"; then
+              device_ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$device_ready" -ne 1 ]; then
             echo "Android emulator did not appear as an adb device"
             tail -n 200 "$ARTIFACT_DIR/emulator.log"
             exit 1
           fi
           for i in $(seq 1 180); do
-            boot_completed="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$boot_completed" = "1" ]; then
               break
             fi
@@ -331,7 +347,7 @@ jobs:
   android-godot-vulkan:
     name: Android Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -356,16 +372,23 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
-      - name: Download Godot for Linux export
+      - name: Download Godot for Android export
         shell: bash
         run: |
           set -euo pipefail
           GODOT_VERSION="4.5-stable"
           GODOT_TEMPLATE_VERSION="${GODOT_VERSION/-/.}"
-          mkdir -p godot-linux
-          curl -fL --retry 5 --retry-delay 2 --retry-all-errors -o godot-linux.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
-          unzip -q godot-linux.zip -d godot-linux
-          GODOT_EXE="$(find godot-linux -type f -name "Godot_v${GODOT_VERSION}_linux*" | head -n 1)"
+          if [ "$(uname -s)" = "Darwin" ]; then
+            GODOT_ZIP="Godot_v${GODOT_VERSION}_macos.universal.zip"
+            GODOT_EXE_PATTERN="*/Godot.app/Contents/MacOS/Godot"
+          else
+            GODOT_ZIP="Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+            GODOT_EXE_PATTERN="*Godot_v${GODOT_VERSION}_linux*"
+          fi
+          mkdir -p godot-android-export
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors -o godot-android-export.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/${GODOT_ZIP}"
+          unzip -q godot-android-export.zip -d godot-android-export
+          GODOT_EXE="$(find godot-android-export -path "$GODOT_EXE_PATTERN" -type f | head -n 1)"
           if [ -z "$GODOT_EXE" ] || [ ! -f "$GODOT_EXE" ]; then
             echo "Could not locate downloaded Godot executable"
             exit 1
@@ -407,13 +430,21 @@ jobs:
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
-          if ! timeout 300 adb wait-for-device; then
+          device_ready=0
+          for i in $(seq 1 60); do
+            if adb get-state 2>/dev/null | grep -q "device"; then
+              device_ready=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$device_ready" -ne 1 ]; then
             echo "Android emulator did not appear as an adb device"
             tail -n 200 "$ARTIFACT_DIR/emulator.log"
             exit 1
           fi
           for i in $(seq 1 180); do
-            boot_completed="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$boot_completed" = "1" ]; then
               break
             fi
