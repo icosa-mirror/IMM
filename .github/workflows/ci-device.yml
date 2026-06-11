@@ -602,7 +602,7 @@ jobs:
           retention-days: 14
 
       - name: Hide per-lane device artifacts
-        if: always()
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: >
