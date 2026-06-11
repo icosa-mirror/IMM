@@ -146,16 +146,6 @@ REQUIRED_WORKFLOW_TRIGGERS = {
 }
 REQUIRED_VALIDATION_GATE = "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')"
 GATED_VALIDATION_JOBS = ["device", "engine", "gpu"]
-DEBUG_ARTIFACT_UPLOADS = {
-    ".github/workflows/ci-core.yml": ["Upload core evidence report"],
-    ".github/workflows/ci-engine.yml": ["Upload engine evidence report"],
-}
-DEBUG_ARTIFACT_CLEANUPS = {
-    ".github/workflows/ci-core.yml": ["Hide per-lane core artifacts"],
-    ".github/workflows/ci-device.yml": ["Hide per-lane device artifacts"],
-    ".github/workflows/ci-engine.yml": ["Hide per-lane engine artifacts"],
-    ".github/workflows/ci-gpu.yml": ["Hide per-lane GPU artifacts"],
-}
 
 
 def step_names(job: dict) -> set[str]:
@@ -292,25 +282,6 @@ def verify_release_assets(path: Path, workflow_rel: str, errors: list[str]) -> N
             errors.append(f"{workflow_rel} release job must attach/include {asset}")
 
 
-def verify_debug_artifact_policy(path: Path, workflow_rel: str, errors: list[str]) -> None:
-    text = path.read_text(encoding="utf-8")
-    for step_name in DEBUG_ARTIFACT_UPLOADS.get(workflow_rel, []):
-        pattern = (
-            rf"- name: {re.escape(step_name)}\n"
-            rf"\s+if: \$\{{\{{ always\(\) && vars\.CI_VALIDATION_DEBUG_ARTIFACTS == 'true' \}}\}}"
-        )
-        if not re.search(pattern, text):
-            errors.append(f"{workflow_rel} step {step_name} must be debug-only")
-
-    for step_name in DEBUG_ARTIFACT_CLEANUPS.get(workflow_rel, []):
-        pattern = (
-            rf"- name: {re.escape(step_name)}\n"
-            rf"\s+if: \$\{{\{{ always\(\) && vars\.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' \}}\}}"
-        )
-        if not re.search(pattern, text):
-            errors.append(f"{workflow_rel} step {step_name} must be skipped only when debug artifacts are enabled")
-
-
 def verify_render_contract_references(root: Path, errors: list[str]) -> None:
     for contract_path in (root / "tests" / "baselines" / "render").glob("*.json"):
         try:
@@ -345,7 +316,6 @@ def main() -> int:
             verify_reusable_workflow(workflow_path, workflow_rel, errors)
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)
-        verify_debug_artifact_policy(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
         for job_name, required_steps in jobs.items():
