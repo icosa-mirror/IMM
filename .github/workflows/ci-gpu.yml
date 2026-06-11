@@ -65,11 +65,15 @@ jobs:
           }
           $swiftShaderDir = Join-Path $env:GITHUB_WORKSPACE "swiftshader-vulkan"
           New-Item -ItemType Directory -Force -Path $swiftShaderDir | Out-Null
-          Copy-Item -Force $icd.FullName (Join-Path $swiftShaderDir "vk_swiftshader_icd.json")
-          Copy-Item -Force $sourceDll (Join-Path $swiftShaderDir "vk_swiftshader.dll")
+          $workspaceDll = Join-Path $swiftShaderDir "vk_swiftshader.dll"
           $workspaceIcd = Join-Path $swiftShaderDir "vk_swiftshader_icd.json"
+          Copy-Item -Force $sourceDll $workspaceDll
+          $icdJson = Get-Content -Raw $icd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $workspaceDll
+          $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           $swiftShaderDir | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Preflight GPU runner
@@ -86,8 +90,13 @@ jobs:
             "vulkaninfo not found" | Out-File -FilePath $out
             exit 0
           }
+          "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES" | Out-File -FilePath $out
+          "VK_DRIVER_FILES=$env:VK_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "VK_ADD_DRIVER_FILES=$env:VK_ADD_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "ICD exists=$(Test-Path $env:VK_ICD_FILENAMES)" | Out-File -FilePath $out -Append
+          Get-Content -Raw $env:VK_ICD_FILENAMES | Out-File -FilePath $out -Append
           $env:VK_LOADER_DEBUG = "error,warn"
-          & $vulkanInfo.Source --summary *> $out
+          & $vulkanInfo.Source --summary *>> $out
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
 
@@ -319,11 +328,15 @@ jobs:
           }
           $swiftShaderDir = Join-Path $env:GITHUB_WORKSPACE "swiftshader-vulkan"
           New-Item -ItemType Directory -Force -Path $swiftShaderDir | Out-Null
-          Copy-Item -Force $icd.FullName (Join-Path $swiftShaderDir "vk_swiftshader_icd.json")
-          Copy-Item -Force $sourceDll (Join-Path $swiftShaderDir "vk_swiftshader.dll")
+          $workspaceDll = Join-Path $swiftShaderDir "vk_swiftshader.dll"
           $workspaceIcd = Join-Path $swiftShaderDir "vk_swiftshader_icd.json"
+          Copy-Item -Force $sourceDll $workspaceDll
+          $icdJson = Get-Content -Raw $icd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $workspaceDll
+          $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           $swiftShaderDir | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Download Godot 4.5
@@ -358,8 +371,13 @@ jobs:
             "vulkaninfo not found" | Out-File -FilePath $out
             exit 0
           }
+          "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES" | Out-File -FilePath $out
+          "VK_DRIVER_FILES=$env:VK_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "VK_ADD_DRIVER_FILES=$env:VK_ADD_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "ICD exists=$(Test-Path $env:VK_ICD_FILENAMES)" | Out-File -FilePath $out -Append
+          Get-Content -Raw $env:VK_ICD_FILENAMES | Out-File -FilePath $out -Append
           $env:VK_LOADER_DEBUG = "error,warn"
-          & $vulkanInfo.Source --summary *> $out
+          & $vulkanInfo.Source --summary *>> $out
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
 
