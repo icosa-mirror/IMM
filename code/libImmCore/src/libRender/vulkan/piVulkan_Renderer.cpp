@@ -1306,6 +1306,7 @@ struct piVulkanState
     piTexture externalFrameColorTexture = nullptr;
     piTexture externalFrameDepthTexture = nullptr;
     piRTarget externalFrameRenderTarget = nullptr;
+    bool externalFrameColorNeedsShaderRead = true;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -6584,7 +6585,8 @@ void piRendererVulkan::EndExternalImageFrame(void)
         return;
     }
 
-    if (mState->externalFrameColorTexture &&
+    if (mState->externalFrameColorNeedsShaderRead &&
+        mState->externalFrameColorTexture &&
         !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))
     {
         iError(mReporter, "Vulkan renderer failed to transition external image frame for host sampling");
@@ -6605,6 +6607,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
         DestroyTexture(mState->externalFrameColorTexture);
         mState->externalFrameColorTexture = nullptr;
     }
+    mState->externalFrameColorNeedsShaderRead = true;
 }
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers)
@@ -6655,6 +6658,77 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
 {
     return BeginExternalImageFrameWithView(image, imageView, vkFormat, width, height, 1, false);
+}
+
+bool piRendererVulkan::BeginExternalImageFrame(void *colorImage,
+                                               void *colorImageView,
+                                               uint32_t colorFormat,
+                                               void *depthImage,
+                                               void *depthImageView,
+                                               uint32_t depthFormat,
+                                               int width,
+                                               int height)
+{
+    EndExternalImageFrame();
+    if (!mState || colorImage == nullptr || colorImageView == nullptr || colorFormat == 0 ||
+        depthImage == nullptr || depthImageView == nullptr || depthFormat == 0 ||
+        width <= 0 || height <= 0)
+    {
+        return false;
+    }
+
+    piTextureS *colorTexture = new piTextureS();
+    colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, 1, 1, 1, 0 };
+    colorTexture->filter = TextureFilter::NONE;
+    colorTexture->wrap = TextureWrap::CLAMP;
+    colorTexture->dataSize = (size_t)width * (size_t)height * 4u;
+    colorTexture->data = (uint8_t *)std::calloc(1, colorTexture->dataSize);
+    colorTexture->externalHandle = reinterpret_cast<uint64_t>(colorImage);
+    colorTexture->image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(colorImage));
+    colorTexture->imageView = static_cast<VkImageView>(reinterpret_cast<uintptr_t>(colorImageView));
+    colorTexture->vkFormat = static_cast<VkFormat>(colorFormat);
+    colorTexture->imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    colorTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    piTextureS *depthTexture = new piTextureS();
+    depthTexture->info = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, 1, 1, 0 };
+    depthTexture->filter = TextureFilter::NONE;
+    depthTexture->wrap = TextureWrap::CLAMP;
+    depthTexture->dataSize = (size_t)width * (size_t)height * 4u;
+    depthTexture->data = (uint8_t *)std::calloc(1, depthTexture->dataSize);
+    depthTexture->externalHandle = reinterpret_cast<uint64_t>(depthImage);
+    depthTexture->image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(depthImage));
+    depthTexture->imageView = static_cast<VkImageView>(reinterpret_cast<uintptr_t>(depthImageView));
+    depthTexture->vkFormat = static_cast<VkFormat>(depthFormat);
+    depthTexture->imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    depthTexture->imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    if (!colorTexture->data || !depthTexture->data)
+    {
+        if (colorTexture->data) std::free(colorTexture->data);
+        if (depthTexture->data) std::free(depthTexture->data);
+        delete colorTexture;
+        delete depthTexture;
+        return false;
+    }
+    ++mState->liveTextures;
+    ++mState->liveTextures;
+
+    piRTarget renderTarget = CreateRenderTarget(colorTexture, nullptr, nullptr, nullptr, depthTexture);
+    if (!renderTarget || !SetRenderTarget(renderTarget))
+    {
+        if (renderTarget) DestroyRenderTarget(renderTarget);
+        DestroyTexture(depthTexture);
+        DestroyTexture(colorTexture);
+        return false;
+    }
+
+    mState->externalFrameColorTexture = colorTexture;
+    mState->externalFrameDepthTexture = depthTexture;
+    mState->externalFrameRenderTarget = renderTarget;
+    mState->externalFrameColorNeedsShaderRead = false;
+    iReport(mReporter, "Vulkan renderer began external image frame with host depth");
+    return true;
 }
 
 bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, int width, int height, int arrayLayers, bool ownsImageView)

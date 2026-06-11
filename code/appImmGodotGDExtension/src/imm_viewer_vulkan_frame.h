@@ -12,6 +12,9 @@ namespace godot
                                                uint64_t color_image_handle,
                                                uint64_t color_image_view_handle,
                                                uint32_t color_format,
+                                               uint64_t depth_image_handle,
+                                               uint64_t depth_image_view_handle,
+                                               uint32_t depth_format,
                                                int width,
                                                int height);
     void ImmViewerGodotEndVulkanTextureFrame();

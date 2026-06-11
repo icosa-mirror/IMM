@@ -37,6 +37,7 @@ public:
     void *GetContext(void) override;
     bool BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
+    bool BeginExternalImageFrame(void *colorImage, void *colorImageView, uint32_t colorFormat, void *depthImage, void *depthImageView, uint32_t depthFormat, int width, int height);
     void EndExternalImageFrame(void);
 
     void StartPerformanceMeasure(void) override;
