@@ -25,6 +25,7 @@ REQUIRED_JOBS = {
         "package-source-layout": ["Verify Unity stroke reader package source", "Verify Unity source import harness", "Verify Godot addon source manifest", "Verify Godot source import harness", "Collect artifact summary"],
         "matrix-status": ["Verify matrix status coverage", "Verify workflow matrix wiring", "Write matrix audit report", "Run CI tool self-tests", "Write CI manifest", "Collect artifact summary"],
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
+        "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report", "Hide per-lane core artifacts"],
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Write CI manifest", "Collect artifact summary"],
@@ -33,14 +34,14 @@ REQUIRED_JOBS = {
         "android-godot-vulkan": ["Check Firebase Test Lab configuration", "Build Android Godot APK", "Run Android Godot Vulkan smoke in Firebase Test Lab", "Record Android Godot Vulkan screenshot metrics", "Write Android Godot Vulkan screenshot report", "Write CI manifest", "Collect artifact summary"],
         "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR app smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
         "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest", "Collect artifact summary"],
-        "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report"],
+        "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report", "Hide per-lane device artifacts"],
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Record Unity DirectX composition metrics", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
-        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Upload engine evidence report"],
+        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Upload engine evidence report", "Hide per-lane engine artifacts"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": ["Preflight DirectX runner", "Build Windows viewer", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
@@ -51,7 +52,7 @@ REQUIRED_JOBS = {
         "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against committed DirectX baseline", "Write Godot Vulkan render report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
-        "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report"],
+        "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
     },
 }
 
@@ -60,7 +61,7 @@ REQUIRED_RUNS_ON = {
         "android-standalone-gles": {"ubuntu-latest"},
         "android-standalone-vulkan": {"ubuntu-latest"},
         "android-openxr-probe": {"self-hosted", "quest", "openxr"},
-        "android-godot-vulkan": {"ubuntu-latest"},
+        "android-godot-vulkan": {"windows-latest"},
         "android-quest-vr": {"self-hosted", "quest", "vr"},
         "ios-device-smoke": {"macos-14"},
     },
@@ -86,6 +87,7 @@ REQUIRED_JOB_TIMEOUTS = {
         "package-source-layout",
         "matrix-status",
         "godot-local-verifier",
+        "core-evidence-report",
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles",

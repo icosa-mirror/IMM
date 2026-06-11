@@ -21,6 +21,7 @@ def main() -> int:
         reference = temp / "reference.ppm"
         candidate = temp / "candidate.ppm"
         metrics = temp / "metrics.json"
+        status = temp / "composition-status.json"
         images = temp / "images"
         report = temp / "render-report.md"
 
@@ -35,6 +36,10 @@ def main() -> int:
                     "candidate": {"width": 2, "height": 2, "non_black_pixels": 4, "near_visible_pixels": 4, "visible_luma_mean": 89.0},
                 }
             ),
+            encoding="utf-8",
+        )
+        status.write_text(
+            json.dumps({"rendering": "success", "compositing": "expected_failed", "failure_class": "compositing", "failures": ["scene composition PPM front occluder probe failed"]}),
             encoding="utf-8",
         )
 
@@ -52,6 +57,8 @@ def main() -> int:
                 str(images),
                 "--markdown-output",
                 str(report),
+                "--status-json",
+                str(status),
             ],
             check=False,
             capture_output=True,
@@ -65,6 +72,9 @@ def main() -> int:
         assert "![Reference]" in text
         assert "![Candidate]" in text
         assert "visible_luma_mean" in text
+        assert "Rendering: success" in text
+        assert "Compositing: expected_failed" in text
+        assert "scene composition PPM front occluder probe failed" in text
 
     print("Render report tests passed")
     return 0

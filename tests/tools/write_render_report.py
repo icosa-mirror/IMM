@@ -82,13 +82,28 @@ def metric_value(metrics: dict, section: str, key: str) -> str:
     return str(value)
 
 
-def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]]) -> None:
+def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]], status: dict | None = None) -> None:
     lines = [
         "# Render Validation Report",
         "",
         f"- Result: {'passed' if metrics.get('passed') else 'failed'}",
         "",
     ]
+    if status:
+        lines.extend(
+            [
+                "## Status",
+                f"- Rendering: {status.get('rendering', '')}",
+                f"- Compositing: {status.get('compositing', '')}",
+                f"- Failure class: {status.get('failure_class', '')}",
+                "",
+            ]
+        )
+        failures = status.get("failures") or []
+        if failures:
+            lines.append("### Composition Failures")
+            lines.extend(f"- {failure}" for failure in failures)
+            lines.append("")
     errors = metrics.get("errors") or []
     if errors:
         lines.append("## Errors")
@@ -134,6 +149,12 @@ def load_metrics(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def load_status(path: Path | None) -> dict | None:
+    if path is None or not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def append_capture(images: list[tuple[str, Path]], label: str, capture: Path | None, output_dir: Path, errors: list[str]) -> None:
     if capture is None:
         return
@@ -148,6 +169,7 @@ def main() -> int:
     parser.add_argument("--metrics-json", type=Path, required=True)
     parser.add_argument("--candidate-capture", type=Path, required=True)
     parser.add_argument("--reference-capture", type=Path)
+    parser.add_argument("--status-json", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--markdown-output", type=Path, required=True)
     args = parser.parse_args()
@@ -159,7 +181,7 @@ def main() -> int:
     append_capture(images, "Candidate", args.candidate_capture, args.output_dir, errors)
     if errors:
         metrics["passed"] = False
-    write_report(metrics, args.markdown_output, images)
+    write_report(metrics, args.markdown_output, images, load_status(args.status_json))
     print(f"Render report written: {args.markdown_output}")
     return 0
 

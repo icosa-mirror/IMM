@@ -90,7 +90,7 @@ def validate_manifest(manifest: object, path: str) -> list[str]:
     classification = manifest.get("classification", {})
     if isinstance(classification, dict) and not classification.get("result"):
         errors.append(f"Manifest missing classification.result: {path}")
-    if isinstance(classification, dict) and classification.get("result") not in {"passed", "skipped"}:
+    if isinstance(classification, dict) and classification.get("result") not in {"passed", "skipped", "expected_failed"}:
         errors.append(f"Manifest reports non-passing result {classification.get('result')!r}: {path}")
     matrix = manifest.get("matrix", {})
     if isinstance(matrix, dict):

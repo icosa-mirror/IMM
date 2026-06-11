@@ -5,6 +5,10 @@ name: CI GPU Matrix
 on:
   workflow_call:
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   windows-standalone-directx:
     name: Windows Standalone DirectX
@@ -688,13 +692,25 @@ jobs:
           --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-committed-directx-render-metrics.json
           --reference-capture .\tests\baselines\render\windows-directx-sample1.ppm
           --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          --status-json artifacts\godot-smoke-windows-vulkan\composition-status.json
           --output-dir artifacts\godot-smoke-windows-vulkan\captures
           --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
 
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan
+        run: |
+          $status = "${{ job.status }}"
+          $failureClass = "visual"
+          $compositionStatusPath = "artifacts\godot-smoke-windows-vulkan\composition-status.json"
+          if (Test-Path $compositionStatusPath) {
+            $compositionStatus = Get-Content -Raw $compositionStatusPath | ConvertFrom-Json
+            if ($compositionStatus.compositing -eq "expected_failed" -and $compositionStatus.rendering -eq "success") {
+              $status = "expected_failed"
+              $failureClass = "compositing"
+            }
+          }
+          python tests\tools\write_ci_manifest.py --status "$status" --failure-class "$failureClass" --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -903,3 +919,18 @@ jobs:
           path: artifacts/gpu-evidence
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Hide per-lane GPU artifacts
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name WindowsStandaloneDirectX-GPU
+          --name WindowsStandaloneVulkan-GPU
+          --name WindowsStandaloneOpenGL-GPU
+          --name WindowsStandaloneOpenXRVR-GPU
+          --name WindowsStandaloneOpenGLVR-GPU
+          --name WindowsGodotVulkan-GPU
+          --name WindowsGodotOpenXRVR-GPU
+          --name macOSGodotMetal-GPU

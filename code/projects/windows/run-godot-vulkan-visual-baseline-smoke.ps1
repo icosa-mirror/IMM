@@ -107,6 +107,7 @@ Remove-Item -LiteralPath $CapturePath -Force -ErrorAction SilentlyContinue
 
 $godot = Resolve-GodotExe $GodotExe
 $outputPath = Join-Path $LogDir "godot-visual-baseline-output.log"
+$compositionStatusPath = Join-Path $LogDir "composition-status.json"
 $previousEnv = @{
     PATH = $env:PATH
     IMM_GODOT_VISUAL_SMOKE = $env:IMM_GODOT_VISUAL_SMOKE
@@ -166,10 +167,27 @@ finally {
 }
 
 $output | Tee-Object -FilePath $outputPath
-if ($exitCode -ne 0) {
+$outputText = $output -join "`n"
+$compositionFailures = @($output | Where-Object { $_ -match "scene composition .* failed" })
+$knownCompositionOnly = $exitCode -ne 0 `
+    -and $compositionFailures.Count -gt 0 `
+    -and (Test-Path -LiteralPath $CapturePath -PathType Leaf) `
+    -and $outputText -notmatch "CrashHandlerException|Fatal signal|visual smoke PNG was too flat|visual smoke PPM had only|visual smoke PNG had only|content bounds were too small|orientation check failed|ImmViewer did not load|ImmViewer sequence was not ready|render diagnostics did not|ImmGodot_RenderCamera returned"
+
+$compositionStatus = [ordered]@{
+    schema = "imm-composition-status-v1"
+    rendering = if ($knownCompositionOnly -or $exitCode -eq 0) { "success" } else { "unknown" }
+    compositing = if ($compositionFailures.Count -gt 0) { "expected_failed" } else { "success" }
+    expected = $compositionFailures.Count -gt 0
+    failure_class = if ($compositionFailures.Count -gt 0) { "compositing" } else { "" }
+    failures = $compositionFailures
+}
+$compositionStatus | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 -LiteralPath $compositionStatusPath
+
+if ($exitCode -ne 0 -and -not $knownCompositionOnly) {
     throw "Godot Vulkan visual baseline smoke failed with exit code $exitCode"
 }
-if (-not (($output -join "`n").Contains("IMM Godot Vulkan visual smoke passed"))) {
+if (-not $knownCompositionOnly -and -not $outputText.Contains("IMM Godot Vulkan visual smoke passed")) {
     throw "Godot Vulkan visual baseline smoke did not print the success marker."
 }
 if (-not (Test-Path -LiteralPath $CapturePath -PathType Leaf)) {

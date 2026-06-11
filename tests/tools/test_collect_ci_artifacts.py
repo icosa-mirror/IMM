@@ -77,6 +77,24 @@ def main() -> int:
         assert "![artifact/capture.png]" in report
         assert "- [artifact/capture.ppm]" in report
 
+        expected = root / "expected"
+        expected.mkdir()
+        expected_manifest = valid_manifest()
+        expected_manifest["classification"] = {"result": "expected_failed", "failure_class": "compositing"}
+        (expected / "manifest.json").write_text(json.dumps(expected_manifest) + "\n", encoding="utf-8")
+        expected_result = run_collect(
+            "--repo-root",
+            str(root),
+            "--artifact-dir",
+            str(expected),
+            "--require-manifest",
+            "--output",
+            str(expected / "artifact-summary.json"),
+        )
+        assert expected_result.returncode == 0, expected_result.stdout + expected_result.stderr
+        expected_summary = json.loads((expected / "artifact-summary.json").read_text(encoding="utf-8"))
+        assert expected_summary["passed"] is True
+
         broken = root / "broken"
         broken.mkdir()
         (broken / "manifest.json").write_text(json.dumps({"schema": "old"}) + "\n", encoding="utf-8")

@@ -5,6 +5,10 @@ name: CI Core Matrix
 on:
   workflow_call:
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   baseline-content:
     name: Baseline Content
@@ -259,3 +263,52 @@ jobs:
           path: artifacts/godot-local-verifier
           if-no-files-found: ignore
           retention-days: 14
+
+  core-evidence-report:
+    name: Core Evidence Report
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - baseline-content
+      - package-source-layout
+      - matrix-status
+      - godot-local-verifier
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download core artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/core-evidence/input
+
+      - name: Verify core matrix evidence
+        run: >
+          python tests/tools/collect_ci_artifacts.py
+          --artifact-dir artifacts/core-evidence/input/BaselineContent-sample1
+          --artifact-dir artifacts/core-evidence/input/PackageSourceLayout
+          --artifact-dir artifacts/core-evidence/input/MatrixStatus
+          --artifact-dir artifacts/core-evidence/input/GodotLocalVerifier
+          --require-manifest
+          --output artifacts/core-evidence/artifact-summary.json
+
+      - name: Upload core evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreMatrixEvidence
+          path: artifacts/core-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Hide per-lane core artifacts
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name BaselineContent-sample1
+          --name PackageSourceLayout
+          --name MatrixStatus
+          --name GodotLocalVerifier

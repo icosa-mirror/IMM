@@ -5,6 +5,10 @@ name: CI Engine Matrix
 on:
   workflow_call:
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   unity-package-import:
     name: Unity Package Import
@@ -339,3 +343,14 @@ jobs:
           path: artifacts/engine-evidence
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Hide per-lane engine artifacts
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name UnityPackageImport
+          --name UnityWindowsDirectXComposition
+          --name UnityWindowsOpenXRVR
+          --name GodotPackageImport

@@ -116,6 +116,8 @@ def normalize_status(status: str) -> str:
         return "cancelled"
     if normalized == "skipped":
         return "skipped"
+    if normalized in {"expected_failed", "expected-failed", "expected_failure", "expected-failure"}:
+        return "expected_failed"
     return normalized
 
 
@@ -128,7 +130,7 @@ def main() -> int:
     parser.add_argument("--mode", required=True)
     parser.add_argument("--renderer", required=True)
     parser.add_argument("--status", default="passed")
-    parser.add_argument("--failure-class", default="", choices=["", "build", "packaging", "api", "content-parse", "visual", "audio", "runtime-launch", "vr-device-infrastructure", "release-validation", "unknown"])
+    parser.add_argument("--failure-class", default="", choices=["", "build", "packaging", "api", "content-parse", "visual", "compositing", "audio", "runtime-launch", "vr-device-infrastructure", "release-validation", "unknown"])
     parser.add_argument("--fixture", action="append", default=[], help="Fixture file to hash into the manifest")
     parser.add_argument("--include", action="append", default=[], help="File or directory to hash into the manifest")
     args = parser.parse_args()

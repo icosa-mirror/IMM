@@ -5,6 +5,10 @@ name: CI Device Matrix
 on:
   workflow_call:
 
+permissions:
+  actions: write
+  contents: read
+
 env:
   FTL_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
@@ -297,7 +301,7 @@ jobs:
   android-godot-vulkan:
     name: Android Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -309,11 +313,37 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Set up Android SDK
-        shell: bash
-        run: bash tests/tools/setup_android_sdk.sh
+        shell: pwsh
+        run: |
+          $sdkRoot = $env:ANDROID_SDK_ROOT
+          if (-not $sdkRoot) {
+            $sdkRoot = $env:ANDROID_HOME
+          }
+          if (-not $sdkRoot -or -not (Test-Path $sdkRoot)) {
+            throw "ANDROID_SDK_ROOT/ANDROID_HOME is not available on the Windows runner."
+          }
+          "ANDROID_SDK_ROOT=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANDROID_HOME=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$sdkRoot\cmdline-tools\latest\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          "$sdkRoot\platform-tools" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install Android SDK components
-        shell: bash
-        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        shell: pwsh
+        run: |
+          $sdkManager = Join-Path $env:ANDROID_SDK_ROOT "cmdline-tools\latest\bin\sdkmanager.bat"
+          if (-not (Test-Path $sdkManager)) {
+            throw "sdkmanager not found at $sdkManager"
+          }
+          $packages = @("ndk;26.1.10909125", "ndk;28.1.13356709", "platform-tools", "platforms;android-34", "build-tools;34.0.0")
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            "y" | & $sdkManager --licenses
+            & $sdkManager --install @packages
+            if ($LASTEXITCODE -eq 0) {
+              exit 0
+            }
+            Write-Warning "sdkmanager install attempt $attempt failed with $LASTEXITCODE"
+            Start-Sleep -Seconds (10 * $attempt)
+          }
+          throw "Failed to install Android SDK components after retries."
       - name: Check Firebase Test Lab configuration
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
@@ -343,64 +373,63 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
       - name: Download Godot for Android export
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          GODOT_VERSION="4.5-stable"
-          GODOT_TEMPLATE_VERSION="${GODOT_VERSION/-/.}"
-          if [ "$(uname -s)" = "Darwin" ]; then
-            GODOT_ZIP="Godot_v${GODOT_VERSION}_macos.universal.zip"
-            GODOT_EXE_PATTERN="*/Godot.app/Contents/MacOS/Godot"
-          else
-            GODOT_ZIP="Godot_v${GODOT_VERSION}_linux.x86_64.zip"
-            GODOT_EXE_PATTERN="*Godot_v${GODOT_VERSION}_linux*"
-          fi
-          mkdir -p godot-android-export
-          curl -fL --retry 5 --retry-delay 2 --retry-all-errors -o godot-android-export.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/${GODOT_ZIP}"
-          unzip -q godot-android-export.zip -d godot-android-export
-          GODOT_EXE="$(find godot-android-export -path "$GODOT_EXE_PATTERN" -type f | head -n 1)"
-          if [ -z "$GODOT_EXE" ] || [ ! -f "$GODOT_EXE" ]; then
-            echo "Could not locate downloaded Godot executable"
-            exit 1
-          fi
-          chmod +x "$GODOT_EXE"
-          echo "GODOT_EXE=$PWD/$GODOT_EXE" >> "$GITHUB_ENV"
-          curl -fL --retry 5 --retry-delay 2 --retry-all-errors -o godot-export-templates.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
-          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}"
-          unzip -q godot-export-templates.zip -d "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}"
-          if [ -d "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates" ]; then
-            mv "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates/"* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/"
-            rmdir "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates"
-          fi
+          $version = "4.5-stable"
+          $templateVersion = $version.Replace("-", ".")
+          $zipName = "Godot_v$($version)_win64.exe.zip"
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/$version/$zipName" -OutFile godot-android-export.zip
+          Expand-Archive -Path godot-android-export.zip -DestinationPath godot-android-export
+          $godotExe = Get-ChildItem -Path godot-android-export -Filter "Godot*.exe" -Recurse | Select-Object -First 1
+          if (-not $godotExe) {
+            throw "Could not locate downloaded Godot executable"
+          }
+          "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/$version/Godot_v$($version)_export_templates.tpz" -OutFile godot-export-templates.zip
+          $templateDir = Join-Path $env:APPDATA "Godot\export_templates\$templateVersion"
+          New-Item -ItemType Directory -Force -Path $templateDir | Out-Null
+          tar -xf godot-export-templates.zip -C $templateDir
+          $nested = Join-Path $templateDir "templates"
+          if (Test-Path $nested) {
+            Get-ChildItem -Path $nested | Move-Item -Destination $templateDir -Force
+            Remove-Item -LiteralPath $nested -Force
+          }
       - name: Build Android Godot APK
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts/android-godot-vulkan"
-          mkdir -p "$ARTIFACT_DIR"
-          cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
-          perl -0pi -e 's#run/main_scene="res://scenes/SampleScene\.tscn"#run/main_scene="res://scenes/VisualSmokeScene.tscn"#' code/ImmGodotSampleProject/project.godot
-          grep -q 'run/main_scene="res://scenes/VisualSmokeScene.tscn"' code/ImmGodotSampleProject/project.godot
-          "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --import
-          "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$ARTIFACT_DIR/imm-godot-sample-debug.apk"
-          rm -f code/ImmGodotSampleProject/sample1.imm
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\android-godot-vulkan"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+          Copy-Item exampleImmFiles\sample1.imm code\ImmGodotSampleProject\sample1.imm -Force
+          $projectPath = "code\ImmGodotSampleProject\project.godot"
+          $project = Get-Content -Raw $projectPath
+          $project = $project -replace 'run/main_scene="res://scenes/SampleScene\.tscn"', 'run/main_scene="res://scenes/VisualSmokeScene.tscn"'
+          Set-Content -Encoding utf8 -NoNewline -Path $projectPath -Value $project
+          if (-not ((Get-Content -Raw $projectPath).Contains('run/main_scene="res://scenes/VisualSmokeScene.tscn"'))) {
+            throw "Failed to update Godot main scene for Android visual smoke"
+          }
+          & $env:GODOT_EXE --headless --path code/ImmGodotSampleProject --import
+          if ($LASTEXITCODE -ne 0) { throw "Godot import failed with $LASTEXITCODE" }
+          & $env:GODOT_EXE --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$artifactDir\imm-godot-sample-debug.apk"
+          if ($LASTEXITCODE -ne 0) { throw "Godot Android export failed with $LASTEXITCODE" }
+          Remove-Item code\ImmGodotSampleProject\sample1.imm -Force -ErrorAction SilentlyContinue
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
         timeout-minutes: 30
-        shell: bash
-        run: >
-          python tests/tools/run_firebase_test_lab_android.py
-          --project "$FTL_PROJECT_ID"
-          --results-bucket "$FTL_RESULTS_BUCKET"
-          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-godot-vulkan"
-          --device "$FTL_DEVICE"
-          --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk
-          --test-type robo
-          --artifact-dir artifacts/android-godot-vulkan
-          --timeout 5m
-          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files
-          --required-marker "IMM Godot Vulkan visual smoke passed"
-          --required-marker "Loaded in CPU"
-          --required-marker "Loaded in GPU"
+        shell: pwsh
+        run: |
+          $resultsDir = "imm-$($env:GITHUB_RUN_ID)-$($env:GITHUB_RUN_ATTEMPT)-android-godot-vulkan"
+          python tests/tools/run_firebase_test_lab_android.py `
+            --project "$env:FTL_PROJECT_ID" `
+            --results-bucket "$env:FTL_RESULTS_BUCKET" `
+            --results-dir "$resultsDir" `
+            --device "$env:FTL_DEVICE" `
+            --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk `
+            --test-type robo `
+            --artifact-dir artifacts/android-godot-vulkan `
+            --timeout 5m `
+            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files `
+            --required-marker "IMM Godot Vulkan visual smoke passed" `
+            --required-marker "Loaded in CPU" `
+            --required-marker "Loaded in GPU"
           --required-marker "Vulkan renderer submitted picture draw commands"
           --required-marker "Vulkan renderer submitted static paint draw commands"
           --required-marker "last_vulkan_frame_started"
@@ -564,3 +593,16 @@ jobs:
           path: artifacts/device-evidence
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Hide per-lane device artifacts
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name AndroidStandaloneGLES-Device
+          --name AndroidStandaloneVulkan-Device
+          --name AndroidOpenXRProbe-Device
+          --name AndroidGodotVulkan-Device
+          --name AndroidQuestVR-Device
+          --name iOSDeviceSmoke

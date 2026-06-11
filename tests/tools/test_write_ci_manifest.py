@@ -84,6 +84,34 @@ def main() -> int:
         assert failed_manifest["classification"]["result"] == "failed"
         assert failed_manifest["classification"]["failure_class"] == "content-parse"
 
+        expected_output = Path(temp_dir) / "expected-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_ci_manifest.py",
+                "--output",
+                str(expected_output),
+                "--repo-root",
+                str(root),
+                "--product",
+                "godot",
+                "--platform-name",
+                "windows",
+                "--mode",
+                "non-vr",
+                "--renderer",
+                "vulkan",
+                "--status",
+                "expected_failed",
+                "--failure-class",
+                "compositing",
+            ],
+            check=True,
+        )
+        expected_manifest = json.loads(expected_output.read_text(encoding="utf-8"))
+        assert expected_manifest["classification"]["result"] == "expected_failed"
+        assert expected_manifest["classification"]["failure_class"] == "compositing"
+
     print("CI manifest tests passed")
     return 0
 
