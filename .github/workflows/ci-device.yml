@@ -44,9 +44,17 @@ jobs:
             echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set"
             exit 1
           fi
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
 
           if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
+            echo "no" | avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
+          fi
+          avdmanager list avd | tee "$ARTIFACT_DIR/avd-list.txt"
+          if [ ! -f "$ANDROID_AVD_HOME/imm-ci-avd.ini" ]; then
+            echo "AVD imm-ci-avd was not created under $ANDROID_AVD_HOME"
+            find "$HOME/.android" -maxdepth 3 -type f -print || true
+            exit 1
           fi
 
           nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
@@ -172,9 +180,17 @@ jobs:
             echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set"
             exit 1
           fi
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
 
           if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
+            echo "no" | avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
+          fi
+          avdmanager list avd | tee "$ARTIFACT_DIR/avd-list.txt"
+          if [ ! -f "$ANDROID_AVD_HOME/imm-ci-avd.ini" ]; then
+            echo "AVD imm-ci-avd was not created under $ANDROID_AVD_HOME"
+            find "$HOME/.android" -maxdepth 3 -type f -print || true
+            exit 1
           fi
 
           nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
@@ -371,9 +387,17 @@ jobs:
             echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set"
             exit 1
           fi
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
 
           if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
+            echo "no" | avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
+          fi
+          avdmanager list avd | tee "$ARTIFACT_DIR/avd-list.txt"
+          if [ ! -f "$ANDROID_AVD_HOME/imm-ci-avd.ini" ]; then
+            echo "AVD imm-ci-avd was not created under $ANDROID_AVD_HOME"
+            find "$HOME/.android" -maxdepth 3 -type f -print || true
+            exit 1
           fi
 
           nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &

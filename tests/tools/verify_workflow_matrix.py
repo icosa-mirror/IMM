@@ -42,10 +42,10 @@ REQUIRED_JOBS = {
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Upload engine evidence report"],
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-vulkan": ["Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Stage Vulkan capture evidence", "Write Vulkan render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Stage Vulkan capture evidence", "Write Vulkan render report", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-openxr-vr": ["Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-opengl-vr": ["Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against DirectX baseline", "Write Godot Vulkan render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against DirectX baseline", "Write Godot Vulkan render report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report"],

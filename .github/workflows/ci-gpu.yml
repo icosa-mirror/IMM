@@ -37,44 +37,35 @@ jobs:
           "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           $bin | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Resolve SwiftShader Vulkan ICD
+      - name: Install Mesa lavapipe
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-mesa
+
+      - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
         run: |
-          $roots = @(
-            (Join-Path $env:ProgramFiles "Google\Chrome\Application"),
-            (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application"),
-            (Join-Path $env:ProgramFiles "Microsoft\Edge\Application"),
-            (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application")
-          )
-          $icd = $null
-          foreach ($root in $roots) {
-            if (Test-Path $root) {
-              $icd = Get-ChildItem -Path $root -Recurse -Filter "vk_swiftshader_icd.json" -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($icd) {
-                break
-              }
-            }
+          $mingwRoot = "C:\msys64\mingw64"
+          $sourceIcd = Join-Path $mingwRoot "share\vulkan\icd.d\lvp_icd.x86_64.json"
+          $sourceDll = Join-Path $mingwRoot "bin\vulkan_lvp.dll"
+          if (-not (Test-Path $sourceIcd)) {
+            throw "Mesa lavapipe ICD was not found at $sourceIcd"
           }
-          if (-not $icd) {
-            throw "SwiftShader Vulkan ICD was not found in Chrome or Edge installation directories."
-          }
-          $sourceDir = Split-Path -Parent $icd.FullName
-          $sourceDll = Join-Path $sourceDir "vk_swiftshader.dll"
           if (-not (Test-Path $sourceDll)) {
-            throw "SwiftShader DLL was not found next to $($icd.FullName)"
+            throw "Mesa lavapipe DLL was not found at $sourceDll"
           }
-          $swiftShaderDir = Join-Path $env:GITHUB_WORKSPACE "swiftshader-vulkan"
-          New-Item -ItemType Directory -Force -Path $swiftShaderDir | Out-Null
-          $workspaceDll = Join-Path $swiftShaderDir "vk_swiftshader.dll"
-          $workspaceIcd = Join-Path $swiftShaderDir "vk_swiftshader_icd.json"
-          Copy-Item -Force $sourceDll $workspaceDll
-          $icdJson = Get-Content -Raw $icd.FullName | ConvertFrom-Json
-          $icdJson.ICD.library_path = $workspaceDll
+          $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
+          New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
+          $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
+          $icdJson = Get-Content -Raw $sourceIcd | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll
           $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $swiftShaderDir | Out-File -FilePath $env:GITHUB_PATH -Append
+          (Join-Path $mingwRoot "bin") | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Preflight GPU runner
         shell: pwsh
@@ -300,44 +291,35 @@ jobs:
           "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           $bin | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Resolve SwiftShader Vulkan ICD
+      - name: Install Mesa lavapipe
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-mesa
+
+      - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
         run: |
-          $roots = @(
-            (Join-Path $env:ProgramFiles "Google\Chrome\Application"),
-            (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application"),
-            (Join-Path $env:ProgramFiles "Microsoft\Edge\Application"),
-            (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application")
-          )
-          $icd = $null
-          foreach ($root in $roots) {
-            if (Test-Path $root) {
-              $icd = Get-ChildItem -Path $root -Recurse -Filter "vk_swiftshader_icd.json" -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($icd) {
-                break
-              }
-            }
+          $mingwRoot = "C:\msys64\mingw64"
+          $sourceIcd = Join-Path $mingwRoot "share\vulkan\icd.d\lvp_icd.x86_64.json"
+          $sourceDll = Join-Path $mingwRoot "bin\vulkan_lvp.dll"
+          if (-not (Test-Path $sourceIcd)) {
+            throw "Mesa lavapipe ICD was not found at $sourceIcd"
           }
-          if (-not $icd) {
-            throw "SwiftShader Vulkan ICD was not found in Chrome or Edge installation directories."
-          }
-          $sourceDir = Split-Path -Parent $icd.FullName
-          $sourceDll = Join-Path $sourceDir "vk_swiftshader.dll"
           if (-not (Test-Path $sourceDll)) {
-            throw "SwiftShader DLL was not found next to $($icd.FullName)"
+            throw "Mesa lavapipe DLL was not found at $sourceDll"
           }
-          $swiftShaderDir = Join-Path $env:GITHUB_WORKSPACE "swiftshader-vulkan"
-          New-Item -ItemType Directory -Force -Path $swiftShaderDir | Out-Null
-          $workspaceDll = Join-Path $swiftShaderDir "vk_swiftshader.dll"
-          $workspaceIcd = Join-Path $swiftShaderDir "vk_swiftshader_icd.json"
-          Copy-Item -Force $sourceDll $workspaceDll
-          $icdJson = Get-Content -Raw $icd.FullName | ConvertFrom-Json
-          $icdJson.ICD.library_path = $workspaceDll
+          $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
+          New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
+          $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
+          $icdJson = Get-Content -Raw $sourceIcd | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll
           $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $swiftShaderDir | Out-File -FilePath $env:GITHUB_PATH -Append
+          (Join-Path $mingwRoot "bin") | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Download Godot 4.5
         shell: pwsh
