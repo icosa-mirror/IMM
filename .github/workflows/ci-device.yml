@@ -46,8 +46,7 @@ jobs:
           fi
 
           if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            device_id="$(avdmanager list device | awk -F'id: ' '/id:/{sub(/,.*/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}')"
-            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "$device_id" --force
+            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
           fi
 
           nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
@@ -171,8 +170,7 @@ jobs:
           fi
 
           if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            device_id="$(avdmanager list device | awk -F'id: ' '/id:/{sub(/,.*/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}')"
-            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "$device_id" --force
+            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
           fi
 
           nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
@@ -336,18 +334,24 @@ jobs:
         run: |
           set -euo pipefail
           GODOT_VERSION="4.5-stable"
+          GODOT_TEMPLATE_VERSION="${GODOT_VERSION/-/.}"
           mkdir -p godot-linux
-          curl -L -o godot-linux.tar.xz "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_${GODOT_VERSION}_linux.x86_64.zip"
-          unzip -q godot-linux.tar.xz -d godot-linux
-          GODOT_EXE="$(find godot-linux -type f -name "Godot_${GODOT_VERSION}_linux*" | head -n 1)"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors -o godot-linux.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot-linux.zip -d godot-linux
+          GODOT_EXE="$(find godot-linux -type f -name "Godot_v${GODOT_VERSION}_linux*" | head -n 1)"
           if [ -z "$GODOT_EXE" ] || [ ! -f "$GODOT_EXE" ]; then
             echo "Could not locate downloaded Godot executable"
             exit 1
           fi
           chmod +x "$GODOT_EXE"
           echo "GODOT_EXE=$PWD/$GODOT_EXE" >> "$GITHUB_ENV"
-          curl -L -o godot-export-templates.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_${GODOT_VERSION}_export_templates.tpz"
-          unzip -q godot-export-templates.zip -d "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors -o godot-export-templates.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}"
+          unzip -q godot-export-templates.zip -d "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}"
+          if [ -d "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates" ]; then
+            mv "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates/"* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/"
+            rmdir "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates"
+          fi
       - name: Start Android emulator
         shell: bash
         run: |
@@ -361,8 +365,7 @@ jobs:
           fi
 
           if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            device_id="$(avdmanager list device | awk -F'id: ' '/id:/{sub(/,.*/, "", $2); gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit}')"
-            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "$device_id" --force
+            avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
           fi
 
           nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
