@@ -240,11 +240,57 @@ if ($ReferencePath) {
 }
 
 Remove-Item -LiteralPath $debugLog -Force -ErrorAction SilentlyContinue
-$process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
-Start-Sleep -Seconds $PresentSeconds
-if (-not $process.HasExited) {
-    Stop-Process -Id $process.Id -Force
-    Start-Sleep -Seconds 1
+$previousLiveEnv = @{
+    IMM_VIEWER_VALIDATE_FRAME = $env:IMM_VIEWER_VALIDATE_FRAME
+    IMM_VIEWER_VALIDATE_MAX_FRAME = $env:IMM_VIEWER_VALIDATE_MAX_FRAME
+    IMM_VIEWER_VALIDATE_FIXED_DT = $env:IMM_VIEWER_VALIDATE_FIXED_DT
+    IMM_VIEWER_VALIDATE_MIN_NONZERO = $env:IMM_VIEWER_VALIDATE_MIN_NONZERO
+    IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_TRIANGLES = $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES
+    IMM_VIEWER_VALIDATE_PLAYER_FRAME = $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME
+    IMM_VIEWER_VALIDATE_CAPTURE_PATH = $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH
+    IMM_VIEWER_VALIDATE_DISABLE_AUDIO = $env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO
+}
+
+$env:IMM_VIEWER_VALIDATE_FRAME = "0"
+$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "$MaxFrame"
+$env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
+$env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
+$env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
+$env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES = "1"
+$env:IMM_VIEWER_VALIDATE_CAPTURE_PATH = $null
+$env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO = "1"
+
+try {
+    $process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
+    $timedOut = -not $process.WaitForExit($PresentSeconds * 1000)
+    if ($timedOut) {
+        if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force
+            Start-Sleep -Seconds 1
+        }
+        throw "Live-present smoke timed out after $PresentSeconds seconds"
+    }
+    if ($process.ExitCode -ne 0) {
+        throw "Live-present smoke failed with exit code $($process.ExitCode)"
+    }
+}
+finally {
+    foreach ($entry in $previousLiveEnv.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item -Path "env:$($entry.Key)" -ErrorAction SilentlyContinue
+        }
+        else {
+            Set-Item -Path "env:$($entry.Key)" -Value $entry.Value
+        }
+    }
 }
 if (-not (Test-Path $debugLog)) {
     throw "Viewer did not write live-present debug log: $debugLog"
