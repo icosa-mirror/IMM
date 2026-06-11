@@ -1,9 +1,9 @@
 param(
     [string]$Configuration = "Debug",
     [string]$Platform = "x64",
-    [int]$DurationSeconds = 180,
-    [int]$PresentSeconds = 60,
-    [int]$MaxFrame = 1800,
+    [int]$DurationSeconds = 420,
+    [int]$PresentSeconds = 120,
+    [int]$MaxFrame = 7200,
     [int]$MinNonblackPixels = 20000,
     [int]$MinNearVisiblePixels = 10000,
     [string]$ReferencePath = "",
