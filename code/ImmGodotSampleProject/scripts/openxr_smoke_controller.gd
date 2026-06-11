@@ -20,7 +20,7 @@ func _run() -> void:
 	var failures: Array[String] = []
 	print("IMM_GODOT_OPENXR_SMOKE begin")
 
-	var xr_interface := XRServer.find_interface("OpenXR")
+	var xr_interface: XRInterface = XRServer.find_interface("OpenXR")
 	if xr_interface == null:
 		failures.append("OpenXR interface was not found")
 	else:
@@ -29,7 +29,7 @@ func _run() -> void:
 			str(xr_interface.is_initialized()),
 		])
 		if not xr_interface.is_initialized():
-			var initialized := xr_interface.initialize()
+			var initialized: bool = xr_interface.initialize()
 			print("IMM_GODOT_OPENXR_SMOKE initialize_result=%s" % str(initialized))
 			if not initialized:
 				failures.append("OpenXR interface initialize() returned false")
@@ -60,8 +60,8 @@ func _run() -> void:
 	if load_result < 0:
 		failures.append("load_document returned %d" % load_result)
 
-	var ready := false
-	var deadline_msec := Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
+	var ready: bool = false
+	var deadline_msec: int = Time.get_ticks_msec() + int(MAX_READY_SECONDS * 1000.0)
 	while Time.get_ticks_msec() < deadline_msec:
 		_queue_xr_camera()
 		if _viewer.is_loaded() and _viewer.is_sequence_ready():
@@ -104,7 +104,7 @@ func _run() -> void:
 
 func _setup_viewer(failures: Array[String]) -> bool:
 	if not ClassDB.class_exists("ImmViewerCompositorEffect"):
-		var extension_status := GDExtensionManager.load_extension(EXTENSION_PATH)
+		var extension_status: int = GDExtensionManager.load_extension(EXTENSION_PATH)
 		if extension_status != OK and extension_status != ERR_ALREADY_EXISTS:
 			failures.append("Failed to load %s: %d" % [EXTENSION_PATH, int(extension_status)])
 			return false
@@ -129,7 +129,7 @@ func _setup_viewer(failures: Array[String]) -> bool:
 	if _compositor_effect == null:
 		failures.append("Failed to instantiate ImmViewerCompositorEffect")
 		return false
-	var compositor := Compositor.new()
+	var compositor: Compositor = Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
 	xr_camera.compositor = compositor
 	print("IMM_GODOT_OPENXR_SMOKE viewer_initialized")
@@ -138,9 +138,9 @@ func _setup_viewer(failures: Array[String]) -> bool:
 func _queue_xr_camera() -> void:
 	if _viewer == null:
 		return
-	var viewport_size := get_viewport().get_visible_rect().size
-	var width := max(int(viewport_size.x), 1)
-	var height := max(int(viewport_size.y), 1)
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	var width: int = maxi(int(viewport_size.x), 1)
+	var height: int = maxi(int(viewport_size.y), 1)
 	_viewer.queue_render_camera_transform(xr_camera.global_transform, width, height, xr_camera.fov, CAMERA_ID)
 
 func _finish(
@@ -161,4 +161,3 @@ func _finish(
 		push_error(failure)
 	print("IMM_GODOT_OPENXR_SMOKE failed")
 	get_tree().quit(1)
-

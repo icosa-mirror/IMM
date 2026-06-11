@@ -406,6 +406,8 @@ jobs:
           ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts/android-godot-vulkan"
           mkdir -p "$ARTIFACT_DIR"
           cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
+          perl -0pi -e 's#run/main_scene="res://scenes/SampleScene\.tscn"#run/main_scene="res://scenes/VisualSmokeScene.tscn"#' code/ImmGodotSampleProject/project.godot
+          grep -q 'run/main_scene="res://scenes/VisualSmokeScene.tscn"' code/ImmGodotSampleProject/project.godot
           "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --import
           "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$ARTIFACT_DIR/imm-godot-sample-debug.apk"
           rm -f code/ImmGodotSampleProject/sample1.imm
