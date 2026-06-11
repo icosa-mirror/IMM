@@ -488,7 +488,9 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     {
         const int render_width = render_request.width > 0 ? render_request.width : target_size.x;
         const int render_height = render_request.height > 0 ? render_request.height : target_size.y;
-        const bool can_direct_vulkan_color_target = vulkan_instance_handle != 0 &&
+        const bool direct_vulkan_depth_composition_enabled = std::getenv("IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION") != nullptr;
+        const bool can_direct_vulkan_color_target = direct_vulkan_depth_composition_enabled &&
+                                                   vulkan_instance_handle != 0 &&
                                                    vulkan_physical_device_handle != 0 &&
                                                    vulkan_device_handle != 0 &&
                                                    vulkan_queue_handle != 0 &&
