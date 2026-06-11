@@ -407,9 +407,16 @@ jobs:
           if (-not ((Get-Content -Raw $projectPath).Contains('run/main_scene="res://scenes/VisualSmokeScene.tscn"'))) {
             throw "Failed to update Godot main scene for Android visual smoke"
           }
-          & $env:GODOT_EXE --headless --path code/ImmGodotSampleProject --import
+          $godotEditorArgs = @(
+            "--headless",
+            "--display-driver", "headless",
+            "--rendering-driver", "opengl3",
+            "--rendering-method", "gl_compatibility",
+            "--path", "code/ImmGodotSampleProject"
+          )
+          & $env:GODOT_EXE @godotEditorArgs --import
           if ($LASTEXITCODE -ne 0) { throw "Godot import failed with $LASTEXITCODE" }
-          & $env:GODOT_EXE --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$artifactDir\imm-godot-sample-debug.apk"
+          & $env:GODOT_EXE @godotEditorArgs --export-debug "Android Debug" "$artifactDir\imm-godot-sample-debug.apk"
           if ($LASTEXITCODE -ne 0) { throw "Godot Android export failed with $LASTEXITCODE" }
           Remove-Item code\ImmGodotSampleProject\sample1.imm -Force -ErrorAction SilentlyContinue
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
