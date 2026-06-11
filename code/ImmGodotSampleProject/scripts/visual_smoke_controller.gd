@@ -279,6 +279,9 @@ func _run_visual_smoke() -> void:
 		if selected_renderer_api == IMM_RENDERER_API_METAL and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
 			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % orientation_luma_delta)
 		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PNG")
+		var screenshot_dir := screenshot_path.get_base_dir()
+		if not screenshot_dir.is_empty():
+			DirAccess.make_dir_recursive_absolute(screenshot_dir)
 		var save_result := image.save_png(screenshot_path)
 		if save_result != OK:
 			failures.append("Failed to save visual smoke PNG %s: %d" % [screenshot_path, int(save_result)])

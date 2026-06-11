@@ -85,6 +85,7 @@ $apk = Join-Path $project (Join-Path "build" "android" "imm-godot-sample-debug.a
 $logDirectory = (New-Item -ItemType Directory -Force $LogDir).FullName
 $logPath = Join-Path $logDirectory "logcat.txt"
 $pngPath = Join-Path $logDirectory "vulkan_visual_smoke.png"
+$devicePngPath = "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/vulkan_visual_smoke.png"
 
 $godotPath = Resolve-Tool $GodotExe "godot" "Godot"
 $adbPath = Resolve-Adb $Adb
@@ -132,7 +133,7 @@ if ($LASTEXITCODE -ne 0) {
 Start-Sleep -Seconds $WaitSeconds
 
 & $adbPath logcat -d | Out-File -FilePath $logPath -Encoding utf8
-& $adbPath exec-out run-as org.linuxfoundation.imm.godot.sample cat files/vulkan_visual_smoke.png > $pngPath
+& $adbPath pull $devicePngPath $pngPath | Out-Null
 & $adbPath shell am force-stop org.linuxfoundation.imm.godot.sample | Out-Null
 
 $log = Get-Content $logPath -Raw

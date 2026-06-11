@@ -5,6 +5,11 @@ name: CI Device Matrix
 on:
   workflow_call:
 
+env:
+  FTL_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
+  FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
+  FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
+
 jobs:
   android-standalone-gles:
     name: Android Standalone GLES
@@ -33,99 +38,81 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
-      - name: Start Android emulator
+          sdkmanager --install "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
         shell: bash
         run: |
           set -euo pipefail
-          ARTIFACT_DIR="artifacts/android-standalone-gles"
-          mkdir -p "$ARTIFACT_DIR"
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
-          if [ -z "$SDK_ROOT" ]; then
-            echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set"
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          mkdir -p "$ANDROID_AVD_HOME"
-
-          if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            echo "no" | avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
-          fi
-          avdmanager list avd | tee "$ARTIFACT_DIR/avd-list.txt"
-          if [ ! -f "$ANDROID_AVD_HOME/imm-ci-avd.ini" ]; then
-            echo "AVD imm-ci-avd was not created under $ANDROID_AVD_HOME"
-            find "$HOME/.android" -maxdepth 3 -type f -print || true
-            exit 1
-          fi
-
-          "$SDK_ROOT/emulator/emulator" -accel-check > "$ARTIFACT_DIR/emulator-accel-check.txt" 2>&1 || true
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -accel off -gpu swiftshader_indirect > "$ARTIFACT_DIR/emulator.log" 2>&1 &
-          emulator_pid=$!
-          echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
-
-          device_ready=0
-          for i in $(seq 1 60); do
-            if adb get-state 2>/dev/null | grep -q "device"; then
-              device_ready=1
-              break
-            fi
-            sleep 5
-          done
-          if [ "$device_ready" -ne 1 ]; then
-            echo "Android emulator did not appear as an adb device"
-            tail -n 200 "$ARTIFACT_DIR/emulator.log"
-            exit 1
-          fi
-          for i in $(seq 1 300); do
-            boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-            if [ "$boot_completed" = "1" ]; then
-              break
-            fi
-            if [ "$i" -eq 300 ]; then
-              echo "Android emulator did not finish booting"
-              tail -n 200 "$ARTIFACT_DIR/emulator.log"
-              exit 1
-            fi
-            sleep 2
-          done
-      - name: Preflight Android device
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Build Android GLES APKs
+        working-directory: code/projects/android
         shell: bash
         run: |
-          python - <<'PY'
-          import pathlib
-          import subprocess
-
-          pathlib.Path("artifacts/android-standalone-gles/preflight.json").parent.mkdir(parents=True, exist_ok=True)
-          subprocess.check_call(
-              [
-                  "python",
-                  "tests/tools/preflight_runner.py",
-                  "--profile", "android-device",
-                  "--output", "artifacts/android-standalone-gles/preflight.json",
-                  "--require-command", "adb",
-                  "--adb-devices",
-                  "--adb-health",
-              ]
-          )
-          PY
-      - name: Run Android GLES smoke
-        shell: pwsh
-        run: pwsh -NoProfile -File code/projects/android/run-android-gles-smoke.ps1 -LogDir artifacts/android-standalone-gles/logs
-      - name: Record Android GLES screenshot metrics
-        shell: pwsh
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=GLES -PimmBuildDir=build_gles_ftl
+      - name: Run Android GLES smoke in Firebase Test Lab
+        shell: bash
         run: >
-          python tests/tools/compare_render_metrics.py
-          artifacts/android-standalone-gles/logs/screencap_after.png
-          --json-output artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-standalone-gles"
+          --device "$FTL_DEVICE"
+          --app code/projects/android/appImmViewer/build_gles_ftl/outputs/apk/debug/appImmViewer-debug.apk
+          --test code/projects/android/appImmViewer/build_gles_ftl/outputs/apk/androidTest/debug/appImmViewer-debug-androidTest.apk
+          --test-type instrumentation
+          --artifact-dir artifacts/android-standalone-gles
+          --timeout 5m
+          --environment-variable renderer=GLES,waitSeconds=25
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player.test/files/imm-ftl
+          --required-marker "IMM Android renderer API: GLES"
+          --required-marker "IMMAVAL loadPath result=1"
+          --required-marker "Loaded in CPU"
+          --required-marker "Loaded in GPU"
+          --required-capture-name screencap_after.png
+          --client-label "IMM Android Standalone GLES"
+      - name: Record Android GLES screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName --json-output artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+          } else {
+            New-Item -ItemType Directory -Force artifacts/android-standalone-gles | Out-Null
+            '{"passed":false,"errors":["missing Firebase Test Lab screencap_after.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+          }
       - name: Write Android GLES screenshot report
         if: always()
         shell: pwsh
-        run: >
-          python tests/tools/write_render_report.py
-          --metrics-json artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
-          --candidate-capture artifacts/android-standalone-gles/logs/screencap_after.png
-          --output-dir artifacts/android-standalone-gles/captures
-          --markdown-output artifacts/android-standalone-gles/render-report.md
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-gles/missing-screencap_after.png" }
+          python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-gles/android-gles-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-gles/captures --markdown-output artifacts/android-standalone-gles/render-report.md
       - name: Write CI manifest
         if: always()
         shell: pwsh
@@ -135,14 +122,6 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/android-standalone-gles --require-manifest --output artifacts/android-standalone-gles/artifact-summary.json
-      - name: Stop Android emulator
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f "artifacts/android-standalone-gles/emulator.pid" ]; then
-            kill "$(cat artifacts/android-standalone-gles/emulator.pid)" || true
-          fi
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -179,96 +158,85 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
-      - name: Start Android emulator
+          sdkmanager --install "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
         shell: bash
         run: |
           set -euo pipefail
-          ARTIFACT_DIR="artifacts/android-standalone-vulkan"
-          mkdir -p "$ARTIFACT_DIR"
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
-          if [ -z "$SDK_ROOT" ]; then
-            echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set"
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          mkdir -p "$ANDROID_AVD_HOME"
-
-          if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            echo "no" | avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
-          fi
-          avdmanager list avd | tee "$ARTIFACT_DIR/avd-list.txt"
-          if [ ! -f "$ANDROID_AVD_HOME/imm-ci-avd.ini" ]; then
-            echo "AVD imm-ci-avd was not created under $ANDROID_AVD_HOME"
-            find "$HOME/.android" -maxdepth 3 -type f -print || true
-            exit 1
-          fi
-
-          "$SDK_ROOT/emulator/emulator" -accel-check > "$ARTIFACT_DIR/emulator-accel-check.txt" 2>&1 || true
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -accel off -gpu swiftshader_indirect > "$ARTIFACT_DIR/emulator.log" 2>&1 &
-          emulator_pid=$!
-          echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
-
-          device_ready=0
-          for i in $(seq 1 60); do
-            if adb get-state 2>/dev/null | grep -q "device"; then
-              device_ready=1
-              break
-            fi
-            sleep 5
-          done
-          if [ "$device_ready" -ne 1 ]; then
-            echo "Android emulator did not appear as an adb device"
-            tail -n 200 "$ARTIFACT_DIR/emulator.log"
-            exit 1
-          fi
-          for i in $(seq 1 300); do
-            boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-            if [ "$boot_completed" = "1" ]; then
-              break
-            fi
-            if [ "$i" -eq 300 ]; then
-              echo "Android emulator did not finish booting"
-              tail -n 200 "$ARTIFACT_DIR/emulator.log"
-              exit 1
-            fi
-            sleep 2
-          done
-      - name: Preflight Android Vulkan device
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Build Android Vulkan APKs
+        working-directory: code/projects/android
         shell: bash
         run: |
-          python - <<'PY'
-          import subprocess
-          subprocess.check_call(
-              [
-                  "python",
-                  "tests/tools/preflight_runner.py",
-                  "--profile", "android-device",
-                  "--output", "artifacts/android-standalone-vulkan/preflight.json",
-                  "--require-command", "adb",
-                  "--adb-devices",
-                  "--adb-health",
-              ]
-          )
-          PY
-      - name: Run Android Vulkan smoke
-        shell: pwsh
-        run: pwsh -NoProfile -File code/projects/android/run-android-vulkan-smoke.ps1 -LogDir artifacts/android-standalone-vulkan/logs
-      - name: Record Android Vulkan screenshot metrics
-        shell: pwsh
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan_ftl
+      - name: Run Android Vulkan smoke in Firebase Test Lab
+        shell: bash
         run: >
-          python tests/tools/compare_render_metrics.py
-          artifacts/android-standalone-vulkan/logs/screencap_after.png
-          --json-output artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-standalone-vulkan"
+          --device "$FTL_DEVICE"
+          --app code/projects/android/appImmViewer/build_vulkan_ftl/outputs/apk/debug/appImmViewer-debug.apk
+          --test code/projects/android/appImmViewer/build_vulkan_ftl/outputs/apk/androidTest/debug/appImmViewer-debug-androidTest.apk
+          --test-type instrumentation
+          --artifact-dir artifacts/android-standalone-vulkan
+          --timeout 5m
+          --environment-variable renderer=Vulkan,waitSeconds=25
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player.test/files/imm-ftl
+          --required-marker "IMM Android renderer API: Vulkan"
+          --required-marker "IMMAVAL loadPath result=1"
+          --required-marker "Loaded in CPU"
+          --required-marker "Loaded in GPU"
+          --required-marker "Vulkan renderer created Android surface"
+          --required-marker "Vulkan renderer initialized with owned device"
+          --required-marker "Vulkan renderer submitted picture draw commands"
+          --required-marker "Vulkan renderer submitted static paint draw commands"
+          --required-capture-name screencap_after.png
+          --client-label "IMM Android Standalone Vulkan"
+      - name: Record Android Vulkan screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName --json-output artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+          } else {
+            New-Item -ItemType Directory -Force artifacts/android-standalone-vulkan | Out-Null
+            '{"passed":false,"errors":["missing Firebase Test Lab screencap_after.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+          }
       - name: Write Android Vulkan screenshot report
         if: always()
         shell: pwsh
-        run: >
-          python tests/tools/write_render_report.py
-          --metrics-json artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
-          --candidate-capture artifacts/android-standalone-vulkan/logs/screencap_after.png
-          --output-dir artifacts/android-standalone-vulkan/captures
-          --markdown-output artifacts/android-standalone-vulkan/render-report.md
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-vulkan/missing-screencap_after.png" }
+          python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-vulkan/captures --markdown-output artifacts/android-standalone-vulkan/render-report.md
       - name: Write CI manifest
         if: always()
         shell: pwsh
@@ -277,14 +245,6 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/android-standalone-vulkan --require-manifest --output artifacts/android-standalone-vulkan/artifact-summary.json
-      - name: Stop Android emulator
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f "artifacts/android-standalone-vulkan/emulator.pid" ]; then
-            kill "$(cat artifacts/android-standalone-vulkan/emulator.pid)" || true
-          fi
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -373,7 +333,35 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
+          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
       - name: Download Godot for Android export
         shell: bash
         run: |
@@ -404,96 +392,55 @@ jobs:
             mv "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates/"* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/"
             rmdir "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_VERSION}/templates"
           fi
-      - name: Start Android emulator
+      - name: Build Android Godot APK
         shell: bash
         run: |
           set -euo pipefail
           ARTIFACT_DIR="artifacts/android-godot-vulkan"
           mkdir -p "$ARTIFACT_DIR"
-          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
-          if [ -z "$SDK_ROOT" ]; then
-            echo "ANDROID_SDK_ROOT/ANDROID_HOME is not set"
-            exit 1
-          fi
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
-          mkdir -p "$ANDROID_AVD_HOME"
-
-          if ! avdmanager list avd | grep -q "Name: imm-ci-avd"; then
-            echo "no" | avdmanager create avd -n imm-ci-avd -k "system-images;android-34;google_apis;arm64-v8a" -d "pixel_2" --force
-          fi
-          avdmanager list avd | tee "$ARTIFACT_DIR/avd-list.txt"
-          if [ ! -f "$ANDROID_AVD_HOME/imm-ci-avd.ini" ]; then
-            echo "AVD imm-ci-avd was not created under $ANDROID_AVD_HOME"
-            find "$HOME/.android" -maxdepth 3 -type f -print || true
-            exit 1
-          fi
-
-          "$SDK_ROOT/emulator/emulator" -accel-check > "$ARTIFACT_DIR/emulator-accel-check.txt" 2>&1 || true
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -accel off -gpu swiftshader_indirect > "$ARTIFACT_DIR/emulator.log" 2>&1 &
-          emulator_pid=$!
-          echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
-
-          device_ready=0
-          for i in $(seq 1 60); do
-            if adb get-state 2>/dev/null | grep -q "device"; then
-              device_ready=1
-              break
-            fi
-            sleep 5
-          done
-          if [ "$device_ready" -ne 1 ]; then
-            echo "Android emulator did not appear as an adb device"
-            tail -n 200 "$ARTIFACT_DIR/emulator.log"
-            exit 1
-          fi
-          for i in $(seq 1 300); do
-            boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-            if [ "$boot_completed" = "1" ]; then
-              break
-            fi
-            if [ "$i" -eq 300 ]; then
-              echo "Android emulator did not finish booting"
-              tail -n 200 "$ARTIFACT_DIR/emulator.log"
-              exit 1
-            fi
-            sleep 2
-          done
-      - name: Preflight Android Godot device
+          cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
+          "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --import
+          "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$ARTIFACT_DIR/imm-godot-sample-debug.apk"
+          rm -f code/ImmGodotSampleProject/sample1.imm
+      - name: Run Android Godot Vulkan smoke in Firebase Test Lab
         shell: bash
-        run: |
-          python - <<'PY'
-          import subprocess
-          subprocess.check_call(
-              [
-                  "python",
-                  "tests/tools/preflight_runner.py",
-                  "--profile", "android-device",
-                  "--output", "artifacts/android-godot-vulkan/preflight.json",
-                  "--require-command", "adb",
-                  "--require-env", "GODOT_EXE",
-                  "--adb-devices",
-                  "--adb-health",
-              ]
-          )
-          PY
-      - name: Run Android Godot Vulkan smoke
-        shell: pwsh
-        run: pwsh -NoProfile -File code/projects/android/run-godot-android-vulkan-smoke.ps1 -LogDir artifacts/android-godot-vulkan/logs
-      - name: Record Android Godot Vulkan screenshot metrics
-        shell: pwsh
         run: >
-          python tests/tools/compare_render_metrics.py
-          artifacts/android-godot-vulkan/logs/vulkan_visual_smoke.png
-          --json-output artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-godot-vulkan"
+          --device "$FTL_DEVICE"
+          --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk
+          --test-type robo
+          --artifact-dir artifacts/android-godot-vulkan
+          --timeout 5m
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files
+          --required-marker "IMM Godot Vulkan visual smoke passed"
+          --required-marker "Loaded in CPU"
+          --required-marker "Loaded in GPU"
+          --required-marker "Vulkan renderer submitted picture draw commands"
+          --required-marker "Vulkan renderer submitted static paint draw commands"
+          --required-marker "last_vulkan_frame_started"
+          --required-capture-name vulkan_visual_smoke.png
+          --client-label "IMM Android Godot Vulkan"
+      - name: Record Android Godot Vulkan screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName --json-output artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
+          } else {
+            New-Item -ItemType Directory -Force artifacts/android-godot-vulkan | Out-Null
+            '{"passed":false,"errors":["missing Firebase Test Lab vulkan_visual_smoke.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
+          }
       - name: Write Android Godot Vulkan screenshot report
         if: always()
         shell: pwsh
-        run: >
-          python tests/tools/write_render_report.py
-          --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
-          --candidate-capture artifacts/android-godot-vulkan/logs/vulkan_visual_smoke.png
-          --output-dir artifacts/android-godot-vulkan/captures
-          --markdown-output artifacts/android-godot-vulkan/render-report.md
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-godot-vulkan/missing-vulkan_visual_smoke.png" }
+          python tests/tools/write_render_report.py --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-godot-vulkan/captures --markdown-output artifacts/android-godot-vulkan/render-report.md
       - name: Write CI manifest
         if: always()
         shell: pwsh
@@ -502,14 +449,6 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/android-godot-vulkan --require-manifest --output artifacts/android-godot-vulkan/artifact-summary.json
-      - name: Stop Android emulator
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -f "artifacts/android-godot-vulkan/emulator.pid" ]; then
-            kill "$(cat artifacts/android-godot-vulkan/emulator.pid)" || true
-          fi
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
