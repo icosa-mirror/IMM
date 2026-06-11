@@ -20,7 +20,8 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: bash tests/tools/setup_android_sdk.sh
       - name: Install Android SDK components
         shell: bash
         run: |
@@ -156,7 +157,8 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: bash tests/tools/setup_android_sdk.sh
       - name: Install Android SDK components
         shell: bash
         run: |
@@ -340,7 +342,8 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        shell: bash
+        run: bash tests/tools/setup_android_sdk.sh
       - name: Install Android SDK components
         shell: bash
         run: |
