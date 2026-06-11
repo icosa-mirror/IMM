@@ -76,6 +76,21 @@ jobs:
         shell: pwsh
         run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command msbuild --require-command glslangValidator --require-command spirv-val --require-env VK_ICD_FILENAMES
 
+      - name: Capture Vulkan diagnostics
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
+          $out = "artifacts\windows-standalone-vulkan\vulkaninfo.txt"
+          $vulkanInfo = Get-Command vulkaninfo -ErrorAction SilentlyContinue
+          if (-not $vulkanInfo) {
+            "vulkaninfo not found" | Out-File -FilePath $out
+            exit 0
+          }
+          $env:VK_LOADER_DEBUG = "error,warn"
+          & $vulkanInfo.Source --summary *> $out
+          "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
+          exit 0
+
       - name: Build Windows viewer
         working-directory: code/projects/windows
         run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
@@ -332,6 +347,21 @@ jobs:
       - name: Preflight Godot Vulkan runner
         shell: pwsh
         run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-command msbuild --require-command scons --require-env GODOT_EXE --require-env VK_ICD_FILENAMES
+
+      - name: Capture Godot Vulkan diagnostics
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\godot-smoke-windows-vulkan | Out-Null
+          $out = "artifacts\godot-smoke-windows-vulkan\vulkaninfo.txt"
+          $vulkanInfo = Get-Command vulkaninfo -ErrorAction SilentlyContinue
+          if (-not $vulkanInfo) {
+            "vulkaninfo not found" | Out-File -FilePath $out
+            exit 0
+          }
+          $env:VK_LOADER_DEBUG = "error,warn"
+          & $vulkanInfo.Source --summary *> $out
+          "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
+          exit 0
 
       - name: Build Godot extension
         shell: pwsh

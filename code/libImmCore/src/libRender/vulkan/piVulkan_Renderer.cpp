@@ -1557,6 +1557,13 @@ static void iError(piRenderer::piReporter *reporter, const char *message)
     }
 }
 
+static void iErrorVk(piRenderer::piReporter *reporter, const char *message, VkResult result)
+{
+    char buffer[256];
+    std::snprintf(buffer, sizeof(buffer), "%s (VkResult %d)", message, (int)result);
+    iError(reporter, buffer);
+}
+
 static void iUnsupported(piVulkanState *state, piRenderer::piReporter *reporter, piVulkanUnsupportedFeature feature, const char *message)
 {
     const int index = (int)feature;
@@ -5424,7 +5431,7 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     VkResult result = state->vkCreateInstance(&instanceInfo, nullptr, &state->instance);
     if (result != VK_SUCCESS)
     {
-        iError(reporter, "Vulkan renderer failed to create VkInstance");
+        iErrorVk(reporter, "Vulkan renderer failed to create VkInstance", result);
         return false;
     }
     state->ownsInstance = true;
@@ -5526,7 +5533,7 @@ static bool iCreateOwnedVulkanDevice(piVulkanState *state, piRenderer::piReporte
     result = state->vkCreateDevice(state->physicalDevice, &deviceInfo, nullptr, &state->device);
     if (result != VK_SUCCESS)
     {
-        iError(reporter, "Vulkan renderer failed to create VkDevice");
+        iErrorVk(reporter, "Vulkan renderer failed to create VkDevice", result);
         return false;
     }
     state->ownsDevice = true;

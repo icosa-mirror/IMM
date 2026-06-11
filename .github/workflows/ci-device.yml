@@ -53,9 +53,13 @@ jobs:
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
-          adb wait-for-device
+          if ! timeout 300 adb wait-for-device; then
+            echo "Android emulator did not appear as an adb device"
+            tail -n 200 "$ARTIFACT_DIR/emulator.log"
+            exit 1
+          fi
           for i in $(seq 1 180); do
-            boot_completed="$(adb shell getprop sys.boot_completed | tr -d '\r')"
+            boot_completed="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$boot_completed" = "1" ]; then
               break
             fi
@@ -177,9 +181,13 @@ jobs:
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
-          adb wait-for-device
+          if ! timeout 300 adb wait-for-device; then
+            echo "Android emulator did not appear as an adb device"
+            tail -n 200 "$ARTIFACT_DIR/emulator.log"
+            exit 1
+          fi
           for i in $(seq 1 180); do
-            boot_completed="$(adb shell getprop sys.boot_completed | tr -d '\r')"
+            boot_completed="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$boot_completed" = "1" ]; then
               break
             fi
@@ -372,9 +380,13 @@ jobs:
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
-          adb wait-for-device
+          if ! timeout 300 adb wait-for-device; then
+            echo "Android emulator did not appear as an adb device"
+            tail -n 200 "$ARTIFACT_DIR/emulator.log"
+            exit 1
+          fi
           for i in $(seq 1 180); do
-            boot_completed="$(adb shell getprop sys.boot_completed | tr -d '\r')"
+            boot_completed="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [ "$boot_completed" = "1" ]; then
               break
             fi
