@@ -90,6 +90,11 @@ jobs:
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $registryPath = "HKCU:\Software\Khronos\Vulkan\Drivers"
+          New-Item -Path $registryPath -Force | Out-Null
+          reg add "HKCU\Software\Khronos\Vulkan\Drivers" /v "$workspaceIcd" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
+          "Registered HKCU Vulkan ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-ItemProperty -Path $registryPath | Out-String | Out-File -FilePath $setupLog -Append
           (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Preflight GPU runner
@@ -369,6 +374,11 @@ jobs:
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $registryPath = "HKCU:\Software\Khronos\Vulkan\Drivers"
+          New-Item -Path $registryPath -Force | Out-Null
+          reg add "HKCU\Software\Khronos\Vulkan\Drivers" /v "$workspaceIcd" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
+          "Registered HKCU Vulkan ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-ItemProperty -Path $registryPath | Out-String | Out-File -FilePath $setupLog -Append
           (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Download Godot 4.5
