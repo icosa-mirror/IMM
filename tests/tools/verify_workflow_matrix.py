@@ -54,10 +54,10 @@ REQUIRED_JOBS = {
 
 REQUIRED_RUNS_ON = {
     ".github/workflows/ci-device.yml": {
-        "android-standalone-gles": {"macos-14"},
-        "android-standalone-vulkan": {"macos-14"},
+        "android-standalone-gles": {"ubuntu-latest"},
+        "android-standalone-vulkan": {"ubuntu-latest"},
         "android-openxr-probe": {"self-hosted", "quest", "openxr"},
-        "android-godot-vulkan": {"macos-14"},
+        "android-godot-vulkan": {"ubuntu-latest"},
         "android-quest-vr": {"self-hosted", "quest", "vr"},
         "ios-device-smoke": {"macos-14"},
     },
