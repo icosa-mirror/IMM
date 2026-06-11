@@ -6,6 +6,70 @@ on:
   workflow_call:
 
 jobs:
+  windows-standalone-directx:
+    name: Windows Standalone DirectX
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Preflight DirectX runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-standalone-directx --output artifacts\windows-standalone-directx\preflight.json --require-command msbuild
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture DirectX sample1
+        timeout-minutes: 5
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\artifacts\windows-standalone-directx\windows-directx-sample1.ppm
+
+      - name: Compare DirectX render metrics against committed DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py artifacts\windows-standalone-directx\windows-directx-sample1.ppm
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
+          --json-output artifacts\windows-standalone-directx\directx-vs-committed-directx-render-metrics.json
+
+      - name: Write DirectX render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\windows-standalone-directx\directx-vs-committed-directx-render-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\windows-standalone-directx\windows-directx-sample1.ppm
+          --output-dir artifacts\windows-standalone-directx\captures
+          --markdown-output artifacts\windows-standalone-directx\render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-directx\manifest.json --product standalone --platform-name windows --mode non-vr --renderer directx --include artifacts\windows-standalone-directx
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-directx --require-manifest --output artifacts\windows-standalone-directx\artifact-summary.json
+
+      - name: Upload DirectX artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneDirectX-GPU
+          path: artifacts/windows-standalone-directx
+          if-no-files-found: ignore
+          retention-days: 14
+
   windows-standalone-vulkan:
     name: Windows Standalone Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
@@ -144,17 +208,17 @@ jobs:
         shell: pwsh
         run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -DurationSeconds 420 -PresentSeconds 120 -MaxFrame 7200
 
-      - name: Compare Vulkan render metrics against DirectX baseline
+      - name: Compare Vulkan render metrics against committed DirectX baseline
         if: always()
         shell: pwsh
         run: |
           $candidate = ".\code\appImmViewer\exe\vulkan_sample1_smoke.ppm"
-          $reference = ".\build\baseline-captures\windows-directx-playerframe60.ppm"
+          $reference = ".\tests\baselines\render\windows-directx-sample1.ppm"
           if ((Test-Path $candidate) -and (Test-Path $reference)) {
             python tests\tools\compare_render_metrics.py $candidate `
               --reference $reference `
               --contract tests\baselines\render\windows-directx-sample1.json `
-              --json-output artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
+              --json-output artifacts\windows-standalone-vulkan\vulkan-vs-committed-directx-render-metrics.json
           }
           else {
             Write-Host "Skipping Vulkan metrics comparison because capture evidence is incomplete."
@@ -175,6 +239,10 @@ jobs:
             @{
               Source = ".\build\baseline-captures\windows-directx-playerframe60.ppm"
               Target = "artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm"
+            },
+            @{
+              Source = ".\tests\baselines\render\windows-directx-sample1.ppm"
+              Target = "artifacts\windows-standalone-vulkan\windows-directx-sample1-committed.ppm"
             }
           )
           foreach ($capture in $captures) {
@@ -192,8 +260,8 @@ jobs:
         shell: pwsh
         run: >
           python tests\tools\write_render_report.py
-          --metrics-json artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
-          --reference-capture artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm
+          --metrics-json artifacts\windows-standalone-vulkan\vulkan-vs-committed-directx-render-metrics.json
+          --reference-capture artifacts\windows-standalone-vulkan\windows-directx-sample1-committed.ppm
           --candidate-capture artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
           --output-dir artifacts\windows-standalone-vulkan\captures
           --markdown-output artifacts\windows-standalone-vulkan\render-report.md
@@ -215,6 +283,110 @@ jobs:
           path: |
             artifacts/windows-standalone-vulkan
             code/appImmViewer/exe/debug.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-standalone-opengl:
+    name: Windows Standalone OpenGL
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Mesa llvmpipe OpenGL
+        id: msys2-standalone-opengl
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-mesa
+
+      - name: Configure Mesa llvmpipe OpenGL
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2-standalone-opengl.outputs.msys2-location }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-opengl | Out-Null
+          $setupLog = "artifacts\windows-standalone-opengl\opengl-driver-setup.txt"
+          $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "Search roots:" | Out-File -FilePath $setupLog -Append
+          $searchRoots | Out-File -FilePath $setupLog -Append
+          $openglDll = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "opengl32.dll" -ErrorAction SilentlyContinue }) |
+            Where-Object { $_.FullName -like "*\mingw64\bin\*" } |
+            Select-Object -First 1
+          if (-not $openglDll) {
+            throw "Mesa opengl32.dll was not found under: $($searchRoots -join ', ')"
+          }
+          $mesaBin = Split-Path -Parent $openglDll.FullName
+          $viewerDir = "code\appImmViewer\exe"
+          New-Item -ItemType Directory -Force -Path $viewerDir | Out-Null
+          Copy-Item -Force $openglDll.FullName (Join-Path $viewerDir "opengl32.dll")
+          "Selected Mesa OpenGL DLL=$($openglDll.FullName)" | Out-File -FilePath $setupLog -Append
+          "Viewer OpenGL DLL=$(Join-Path $viewerDir "opengl32.dll")" | Out-File -FilePath $setupLog -Append
+          $mesaBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          "GALLIUM_DRIVER=llvmpipe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LIBGL_ALWAYS_SOFTWARE=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Preflight OpenGL runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-standalone-opengl --output artifacts\windows-standalone-opengl\preflight.json --require-command msbuild
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture OpenGL sample1
+        timeout-minutes: 5
+        shell: pwsh
+        run: >
+          .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
+          -Configuration Release
+          -SkipBuild
+          -SettingsPath .\code\appImmViewer\exe\settings-baseline-opengl-sample1.json
+          -OutputPath .\artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+
+      - name: Compare OpenGL render metrics against committed DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
+          --json-output artifacts\windows-standalone-opengl\opengl-vs-committed-directx-render-metrics.json
+
+      - name: Write OpenGL render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\windows-standalone-opengl\opengl-vs-committed-directx-render-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+          --output-dir artifacts\windows-standalone-opengl\captures
+          --markdown-output artifacts\windows-standalone-opengl\render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-opengl\manifest.json --product standalone --platform-name windows --mode non-vr --renderer opengl --include artifacts\windows-standalone-opengl
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-opengl --require-manifest --output artifacts\windows-standalone-opengl\artifact-summary.json
+
+      - name: Upload OpenGL artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneOpenGL-GPU
+          path: artifacts/windows-standalone-opengl
           if-no-files-found: ignore
           retention-days: 14
 
@@ -496,25 +668,25 @@ jobs:
           .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
           -Configuration Release
           -SkipBuild
-          -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+          -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm
           -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
           -LogDir artifacts\godot-smoke-windows-vulkan
 
-      - name: Compare Godot Vulkan render metrics against DirectX baseline
+      - name: Compare Godot Vulkan render metrics against committed DirectX baseline
         shell: pwsh
         run: >
           python tests\tools\compare_render_metrics.py artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
-          --reference .\build\baseline-captures\windows-directx-playerframe60.ppm
+          --reference .\tests\baselines\render\windows-directx-sample1.ppm
           --contract tests\baselines\render\windows-directx-sample1.json
-          --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-directx-render-metrics.json
+          --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-committed-directx-render-metrics.json
 
       - name: Write Godot Vulkan render report
         if: always()
         shell: pwsh
         run: >
           python tests\tools\write_render_report.py
-          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-directx-render-metrics.json
-          --reference-capture .\build\baseline-captures\windows-directx-playerframe60.ppm
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-committed-directx-render-metrics.json
+          --reference-capture .\tests\baselines\render\windows-directx-sample1.ppm
           --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
           --output-dir artifacts\godot-smoke-windows-vulkan\captures
           --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
@@ -698,7 +870,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:
+      - windows-standalone-directx
       - windows-standalone-vulkan
+      - windows-standalone-opengl
       - windows-standalone-openxr-vr
       - windows-standalone-opengl-vr
       - windows-godot-vulkan

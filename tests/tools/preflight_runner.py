@@ -94,6 +94,8 @@ def main() -> int:
             "android-device",
             "ios-device",
             "macos-godot-metal",
+            "windows-standalone-directx",
+            "windows-standalone-opengl",
             "windows-gpu-vulkan",
             "windows-godot-vulkan",
             "windows-godot-openxr-vr",

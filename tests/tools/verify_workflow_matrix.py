@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ from pathlib import Path
 
 REQUIRED_JOBS = {
     ".github/workflows/build.yml": {
-        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Write Windows DirectX render report", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
+        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Compare Windows Vulkan render metrics against committed DirectX baseline", "Write Windows DirectX render report", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
         "build-android": ["Write Android viewer artifact manifest", "Collect Android viewer artifact summary"],
         "build-macos": ["Smoke macOS Metal standalone viewer", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
         "build-ios": ["Link-check iOS Unity plugin"],
@@ -42,10 +43,12 @@ REQUIRED_JOBS = {
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Upload engine evidence report"],
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against DirectX baseline", "Stage Vulkan capture evidence", "Write Vulkan render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-directx": ["Preflight DirectX runner", "Build Windows viewer", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against committed DirectX baseline", "Stage Vulkan capture evidence", "Write Vulkan render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-opengl": ["Install Mesa llvmpipe OpenGL", "Configure Mesa llvmpipe OpenGL", "Preflight OpenGL runner", "Build Windows viewer", "Capture OpenGL sample1", "Compare OpenGL render metrics against committed DirectX baseline", "Write OpenGL render report", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-openxr-vr": ["Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-opengl-vr": ["Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against DirectX baseline", "Write Godot Vulkan render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against committed DirectX baseline", "Write Godot Vulkan render report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report"],
@@ -67,7 +70,9 @@ REQUIRED_RUNS_ON = {
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
+        "windows-standalone-directx": {"windows-latest"},
         "windows-standalone-vulkan": {"windows-latest"},
+        "windows-standalone-opengl": {"windows-latest"},
         "windows-standalone-openxr-vr": {"self-hosted", "windows", "gpu", "vr", "openxr"},
         "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
         "windows-godot-vulkan": {"windows-latest"},
@@ -99,7 +104,9 @@ REQUIRED_JOB_TIMEOUTS = {
         "engine-evidence-report",
     },
     ".github/workflows/ci-gpu.yml": {
+        "windows-standalone-directx",
         "windows-standalone-vulkan",
+        "windows-standalone-opengl",
         "windows-standalone-openxr-vr",
         "windows-standalone-opengl-vr",
         "windows-godot-vulkan",
@@ -122,7 +129,9 @@ REQUIRED_STEP_TIMEOUTS = {
         "unity-windows-openxr-vr": {"Run Unity OpenXR VR smoke"},
     },
     ".github/workflows/ci-gpu.yml": {
+        "windows-standalone-directx": {"Capture DirectX sample1"},
         "windows-standalone-vulkan": {"Run Vulkan smoke against baseline"},
+        "windows-standalone-opengl": {"Capture OpenGL sample1"},
         "windows-standalone-openxr-vr": {"Run Windows OpenXR VR smoke"},
         "windows-standalone-opengl-vr": {"Run Windows OpenGL VR smoke"},
         "windows-godot-vulkan": {"Run Godot Vulkan visual baseline smoke"},
@@ -271,6 +280,23 @@ def verify_release_assets(path: Path, workflow_rel: str, errors: list[str]) -> N
             errors.append(f"{workflow_rel} release job must attach/include {asset}")
 
 
+def verify_render_contract_references(root: Path, errors: list[str]) -> None:
+    for contract_path in (root / "tests" / "baselines" / "render").glob("*.json"):
+        try:
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            errors.append(f"{contract_path.relative_to(root).as_posix()} is not valid JSON: {exc}")
+            continue
+        reference_capture = contract.get("reference_capture")
+        if not reference_capture:
+            continue
+        reference_path = root / str(reference_capture)
+        if not reference_path.exists():
+            errors.append(
+                f"{contract_path.relative_to(root).as_posix()} references missing capture: {reference_capture}"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -323,6 +349,8 @@ def main() -> int:
             errors.append(f"Missing workflow: {workflow_rel}")
             continue
         verify_consolidated_workflow(workflow_path, workflow_rel, workflow_files, errors)
+
+    verify_render_contract_references(root, errors)
 
     if errors:
         for error in errors:

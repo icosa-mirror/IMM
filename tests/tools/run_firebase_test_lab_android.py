@@ -69,11 +69,26 @@ def copy_results(bucket: str, results_dir: str, output_dir: Path) -> dict:
     }
 
 
-def write_summary(args: argparse.Namespace, gcloud_exit: int, copy_info: dict, errors: list[str], marker_matches: dict[str, list[str]], searched_logs: list[str], captures: list[Path]) -> Path:
+def is_tool_results_api_disabled(stderr_path: Path) -> bool:
+    text = decode_text(stderr_path)
+    return "toolresults.googleapis.com" in text and "SERVICE_DISABLED" in text
+
+
+def write_summary(
+    args: argparse.Namespace,
+    gcloud_exit: int,
+    gcloud_exit_ignored: bool,
+    copy_info: dict,
+    errors: list[str],
+    marker_matches: dict[str, list[str]],
+    searched_logs: list[str],
+    captures: list[Path],
+) -> Path:
     summary = {
         "schema": "imm-firebase-test-lab-result-v1",
-        "passed": gcloud_exit == 0 and not errors,
+        "passed": (gcloud_exit == 0 or gcloud_exit_ignored) and not errors,
         "gcloud_exit_code": gcloud_exit,
+        "gcloud_exit_ignored": gcloud_exit_ignored,
         "test_type": args.test_type,
         "project": args.project,
         "device": args.device,
@@ -145,7 +160,8 @@ def main() -> int:
         command.extend(["--client-details", f"matrixLabel={args.client_label}"])
 
     (args.artifact_dir / "gcloud-command.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8", newline="\n")
-    gcloud_exit = run(command, args.artifact_dir / "gcloud-firebase-test.stdout.json", args.artifact_dir / "gcloud-firebase-test.stderr.txt")
+    stderr_path = args.artifact_dir / "gcloud-firebase-test.stderr.txt"
+    gcloud_exit = run(command, args.artifact_dir / "gcloud-firebase-test.stdout.json", stderr_path)
 
     copy_info = copy_results(args.results_bucket, args.results_dir, args.artifact_dir)
     if copy_info["exit_code"] != 0:
@@ -165,8 +181,9 @@ def main() -> int:
         else:
             captures.extend(found)
 
-    write_summary(args, gcloud_exit, copy_info, errors, marker_matches, searched_logs, captures)
-    if gcloud_exit != 0:
+    gcloud_exit_ignored = gcloud_exit != 0 and is_tool_results_api_disabled(stderr_path) and not errors
+    write_summary(args, gcloud_exit, gcloud_exit_ignored, copy_info, errors, marker_matches, searched_logs, captures)
+    if gcloud_exit != 0 and not gcloud_exit_ignored:
         errors.append(f"gcloud firebase test android run exited with {gcloud_exit}")
     if errors:
         for error in errors:

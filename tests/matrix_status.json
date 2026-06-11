@@ -9,9 +9,9 @@
       "renderer": "directx",
       "status": "supported",
       "hosted_gate": "Build / Windows",
-      "hardware_gate": null,
+      "hardware_gate": "CI GPU Matrix / Windows Standalone DirectX",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Windows hosted CI builds the viewer, captures the DirectX baseline, records render metrics, and uploads ImmViewer-Windows-DirectX-Baseline."
+      "reason": "Windows hosted CI builds the viewer, validates DirectX render metrics against the committed Windows DirectX sample1 reference capture, and uploads live DirectX captures as diagnostic evidence."
     },
     {
       "product": "standalone",
@@ -22,7 +22,18 @@
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Standalone Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "Hosted workflow has an opt-in GPU smoke and CI GPU Matrix defines the Windows Vulkan lane."
+      "reason": "Hosted workflow has an opt-in GPU smoke and CI GPU Matrix defines the Windows Vulkan lane against the committed Windows DirectX sample1 reference capture."
+    },
+    {
+      "product": "standalone",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "opengl",
+      "status": "supported",
+      "hosted_gate": "Build / Windows",
+      "hardware_gate": "CI GPU Matrix / Windows Standalone OpenGL",
+      "baseline": "tests/baselines/render/windows-directx-sample1.json",
+      "reason": "Windows hosted CI packages the OpenGL non-VR viewer settings and CI GPU Matrix validates OpenGL sample1 rendering against the committed Windows DirectX sample1 reference capture."
     },
     {
       "product": "standalone",
@@ -177,7 +188,7 @@
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Godot Vulkan",
       "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows."
+      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows against the committed Windows DirectX sample1 reference capture."
     },
     {
       "product": "godot",

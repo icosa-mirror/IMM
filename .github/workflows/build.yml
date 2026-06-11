@@ -72,25 +72,25 @@ jobs:
       shell: pwsh
       run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts
 
-    - name: Compare Windows Vulkan render metrics
+    - name: Compare Windows Vulkan render metrics against committed DirectX baseline
       if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       shell: pwsh
       run: >
         python tests\tools\compare_render_metrics.py .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
-        --reference .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --reference tests\baselines\render\windows-directx-sample1.ppm
         --contract tests\baselines\render\windows-directx-sample1.json
-        --json-output artifacts\render-metrics\vulkan-vs-directx-playerframe60.json
+        --json-output artifacts\render-metrics\vulkan-vs-committed-directx.json
 
     - name: Write Windows Vulkan render report
       if: always() && env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       shell: pwsh
       run: >
         python tests\tools\write_render_report.py
-        --metrics-json artifacts\render-metrics\vulkan-vs-directx-playerframe60.json
-        --reference-capture .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --metrics-json artifacts\render-metrics\vulkan-vs-committed-directx.json
+        --reference-capture tests\baselines\render\windows-directx-sample1.ppm
         --candidate-capture .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
         --output-dir artifacts\render-metrics\captures
-        --markdown-output artifacts\render-metrics\vulkan-vs-directx-playerframe60.md
+        --markdown-output artifacts\render-metrics\vulkan-vs-committed-directx.md
 
     - name: Upload Windows Vulkan standalone smoke logs
       if: failure()
@@ -118,6 +118,7 @@ jobs:
       shell: pwsh
       run: >
         python tests\tools\compare_render_metrics.py .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --reference tests\baselines\render\windows-directx-sample1.ppm
         --contract tests\baselines\render\windows-directx-sample1.json
         --json-output artifacts\render-metrics\windows-directx-playerframe60.json
 
@@ -126,6 +127,7 @@ jobs:
       run: >
         python tests\tools\write_render_report.py
         --metrics-json artifacts\render-metrics\windows-directx-playerframe60.json
+        --reference-capture tests\baselines\render\windows-directx-sample1.ppm
         --candidate-capture .\build\baseline-captures\windows-directx-playerframe60.ppm
         --output-dir artifacts\render-metrics\captures
         --markdown-output artifacts\render-metrics\windows-directx-playerframe60.md

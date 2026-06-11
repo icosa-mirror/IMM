@@ -170,6 +170,7 @@ jobs:
           python tests/tools/test_compare_render_metrics.py
           python tests/tools/test_write_render_report.py
           python tests/tools/test_preflight_runner.py
+          python tests/tools/test_run_firebase_test_lab_android.py
           python tests/tools/test_verify_release_assets.py
           python tests/tools/test_verify_log_markers.py
           python tests/tools/test_verify_matrix_evidence.py

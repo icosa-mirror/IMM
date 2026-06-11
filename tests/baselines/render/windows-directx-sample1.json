@@ -2,6 +2,7 @@
   "baseline": "windows-directx-sample1",
   "capture_source": "code/appImmViewer/scripts/capture_windows_directx_baseline.ps1",
   "fixture": "exampleImmFiles/sample1.imm",
+  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "ppm-p6",
