@@ -26,7 +26,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
           set +o pipefail
           yes | sdkmanager --licenses
           sdkmanager_status=${PIPESTATUS[1]}
@@ -34,6 +33,7 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
+          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
       - name: Start Android emulator
         shell: bash
         run: |
@@ -171,7 +171,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
           set +o pipefail
           yes | sdkmanager --licenses
           sdkmanager_status=${PIPESTATUS[1]}
@@ -179,6 +178,7 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
+          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
       - name: Start Android emulator
         shell: bash
         run: |
@@ -364,7 +364,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
           set +o pipefail
           yes | sdkmanager --licenses
           sdkmanager_status=${PIPESTATUS[1]}
@@ -372,6 +371,7 @@ jobs:
           if [ "$sdkmanager_status" -ne 0 ]; then
             exit "$sdkmanager_status"
           fi
+          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
       - name: Download Godot for Android export
         shell: bash
         run: |

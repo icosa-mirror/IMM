@@ -2,6 +2,21 @@
 set -euo pipefail
 
 cmdline_tools_version="${ANDROID_CMDLINE_TOOLS_VERSION:-14742923}"
+existing_sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+if [ -n "$existing_sdk_root" ] && [ -x "$existing_sdk_root/cmdline-tools/latest/bin/sdkmanager" ]; then
+  {
+    echo "ANDROID_HOME=$existing_sdk_root"
+    echo "ANDROID_SDK_ROOT=$existing_sdk_root"
+  } >> "$GITHUB_ENV"
+  {
+    echo "$existing_sdk_root/cmdline-tools/latest/bin"
+    echo "$existing_sdk_root/platform-tools"
+    echo "$existing_sdk_root/emulator"
+  } >> "$GITHUB_PATH"
+  "$existing_sdk_root/cmdline-tools/latest/bin/sdkmanager" --version
+  exit 0
+fi
+
 case "$(uname -s)" in
   Darwin)
     cmdline_tools_platform="mac"
