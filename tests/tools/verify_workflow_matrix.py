@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -77,6 +78,8 @@ REQUIRED_RUNS_ON = {
 REQUIRED_WORKFLOW_TRIGGERS = {
     ".github/workflows/ci-validation.yml": ["ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
+REQUIRED_VALIDATION_GATE = "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')"
+GATED_VALIDATION_JOBS = ["device", "engine", "gpu"]
 
 
 def step_names(job: dict) -> set[str]:
@@ -167,6 +170,14 @@ def verify_consolidated_workflow(path: Path, workflow_rel: str, workflow_files: 
     for token in required_tokens:
         if token not in text:
             errors.append(f"{workflow_rel} missing trigger/guard token: {token}")
+    for job_name in GATED_VALIDATION_JOBS:
+        match = re.search(rf"^  {re.escape(job_name)}:\n(?P<body>(?:    .*\n?)*)", text, re.MULTILINE)
+        if not match:
+            errors.append(f"{workflow_rel} missing gated validation job: {job_name}")
+            continue
+        job_block = match.group("body")
+        if f"if: {REQUIRED_VALIDATION_GATE}" not in job_block:
+            errors.append(f"{workflow_rel} job {job_name} must be gated by [CI VALIDATION], schedule, or workflow_dispatch")
 
 
 def verify_release_assets(path: Path, workflow_rel: str, errors: list[str]) -> None:
