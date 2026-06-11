@@ -30,16 +30,7 @@ jobs:
         run: bash tests/tools/setup_android_sdk.sh
       - name: Install Android SDK components
         shell: bash
-        run: |
-          set -euo pipefail
-          set +o pipefail
-          yes | sdkmanager --licenses
-          sdkmanager_status=${PIPESTATUS[1]}
-          set -o pipefail
-          if [ "$sdkmanager_status" -ne 0 ]; then
-            exit "$sdkmanager_status"
-          fi
-          sdkmanager --install "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
       - name: Check Firebase Test Lab configuration
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
@@ -152,16 +143,7 @@ jobs:
         run: bash tests/tools/setup_android_sdk.sh
       - name: Install Android SDK components
         shell: bash
-        run: |
-          set -euo pipefail
-          set +o pipefail
-          yes | sdkmanager --licenses
-          sdkmanager_status=${PIPESTATUS[1]}
-          set -o pipefail
-          if [ "$sdkmanager_status" -ne 0 ]; then
-            exit "$sdkmanager_status"
-          fi
-          sdkmanager --install "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
       - name: Check Firebase Test Lab configuration
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
@@ -331,16 +313,7 @@ jobs:
         run: bash tests/tools/setup_android_sdk.sh
       - name: Install Android SDK components
         shell: bash
-        run: |
-          set -euo pipefail
-          set +o pipefail
-          yes | sdkmanager --licenses
-          sdkmanager_status=${PIPESTATUS[1]}
-          set -o pipefail
-          if [ "$sdkmanager_status" -ne 0 ]; then
-            exit "$sdkmanager_status"
-          fi
-          sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
       - name: Check Firebase Test Lab configuration
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
