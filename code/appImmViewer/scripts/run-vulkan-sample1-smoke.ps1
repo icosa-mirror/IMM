@@ -1,8 +1,9 @@
 param(
     [string]$Configuration = "Debug",
     [string]$Platform = "x64",
-    [int]$DurationSeconds = 45,
-    [int]$PresentSeconds = 8,
+    [int]$DurationSeconds = 180,
+    [int]$PresentSeconds = 60,
+    [int]$MaxFrame = 1800,
     [int]$MinNonblackPixels = 20000,
     [int]$MinNearVisiblePixels = 10000,
     [string]$ReferencePath = "",
@@ -149,7 +150,7 @@ $previousEnv = @{
 }
 
 $env:IMM_VIEWER_VALIDATE_FRAME = "0"
-$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "360"
+$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "$MaxFrame"
 $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
 $env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
 $env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"

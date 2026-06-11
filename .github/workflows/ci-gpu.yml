@@ -140,7 +140,7 @@ jobs:
 
       - name: Run Vulkan smoke against baseline
         shell: pwsh
-        run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts
+        run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -DurationSeconds 180 -PresentSeconds 60 -MaxFrame 1800
 
       - name: Compare Vulkan render metrics against DirectX baseline
         shell: pwsh
