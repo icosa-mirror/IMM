@@ -93,7 +93,7 @@ static int format2gl( piRenderer::Format format, int *bpp, int *mode, int *moInt
     case piRenderer::Format::C2_16_FLOAT:         *bpp =  4; *mode = GL_RG;               *moInternal = GL_RG16F;                *mode3 = GL_FLOAT;          break;
     case piRenderer::Format::C2_8_UNORM:          *bpp =  2; *mode = GL_RG; 	          *moInternal = GL_RG8;                  *mode3 = GL_UNSIGNED_BYTE;  if (compressed) *moInternal = GL_COMPRESSED_RGB; break;
 
-    case piRenderer::Format::C3_11_11_10_FLOAT:   *bpp =  4; *mode = GL_RGBA; 	          *moInternal = GL_R11F_G11F_B10F;       *mode3 = GL_UNSIGNED_BYTE; break;
+    case piRenderer::Format::C3_11_11_10_FLOAT:   *bpp =  4; *mode = GL_RGB; 	          *moInternal = GL_R11F_G11F_B10F;       *mode3 = GL_UNSIGNED_INT_10F_11F_11F_REV; break;
 
     case piRenderer::Format::C4_8_UNORM:          *bpp =  4; *mode = GL_RGBA; 	          *moInternal = GL_RGBA8;                *mode3 = GL_UNSIGNED_BYTE;  if (compressed) *moInternal = GL_COMPRESSED_RGBA; break;
     case piRenderer::Format::C4_8_UNORM_SRGB:     *bpp =  4; *mode = GL_SRGB_ALPHA; 	  *moInternal = GL_SRGB8_ALPHA8;         *mode3 = GL_UNSIGNED_BYTE;  if (compressed) *moInternal = GL_COMPRESSED_SRGB_ALPHA; break;

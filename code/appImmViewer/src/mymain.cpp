@@ -1651,11 +1651,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     const int vpmult = (mStereoMode == ImmPlayer::StereoMode::Preferred) ? 2 : 1;
+    const int renderSamples = validationRequested ? 1 : AA;
 
     if (mRenderer->GetAPI() != piRenderer::API::DX)
     {
-        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
+        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
+        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
         mLog.Printf(LT_MESSAGE, L"Creating render textures (%d x %d)", mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample);
         mColorTextureM = mRenderer->CreateTexture(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0);
         if (!mColorTextureM)
@@ -1672,8 +1673,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     }
     else
     {
-        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
+        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
+        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
         //const piRenderer::TextureInfo2 infozm = { piRenderer::TextureType::T2D, piRenderer::Format::D1_32_FLOAT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
         mColorTextureM = mRenderer->CreateTexture2(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 1 + 2);
         if (!mColorTextureM)
@@ -1703,7 +1704,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     mLog.Printf(LT_MESSAGE, L"Initializing resolve");
-    if (!mResolve.Init(mRenderer, mSuperSample, AA, Resolve::OutputEncoding::DisplaySrgb))
+    if (!mResolve.Init(mRenderer, mSuperSample, renderSamples, Resolve::OutputEncoding::DisplaySrgb))
     {
         mLog.Printf(LT_ERROR, L"Resolve init failed");
         mSettings.End();
