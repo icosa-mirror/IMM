@@ -90,7 +90,7 @@ jobs:
           --artifact-dir artifacts/android-standalone-gles
           --timeout 5m
           --environment-variable renderer=GLES,waitSeconds=25
-          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player.test/files/imm-ftl
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
           --required-marker "IMM Android renderer API: GLES"
           --required-marker "IMMAVAL loadPath result=1"
           --required-marker "Loaded in CPU"
@@ -212,7 +212,7 @@ jobs:
           --artifact-dir artifacts/android-standalone-vulkan
           --timeout 5m
           --environment-variable renderer=Vulkan,waitSeconds=25
-          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player.test/files/imm-ftl
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
           --required-marker "IMM Android renderer API: Vulkan"
           --required-marker "IMMAVAL loadPath result=1"
           --required-marker "Loaded in CPU"
@@ -403,7 +403,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ARTIFACT_DIR="artifacts/android-godot-vulkan"
+          ARTIFACT_DIR="$GITHUB_WORKSPACE/artifacts/android-godot-vulkan"
           mkdir -p "$ARTIFACT_DIR"
           cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
           "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --import

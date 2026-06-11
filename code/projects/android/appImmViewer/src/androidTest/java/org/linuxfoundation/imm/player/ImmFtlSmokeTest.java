@@ -30,10 +30,8 @@ public final class ImmFtlSmokeTest {
 
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         Context targetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
 
         runShell(device, "logcat -c");
-        runShell(device, "am force-stop " + PACKAGE_NAME);
 
         Intent intent = targetContext.getPackageManager().getLaunchIntentForPackage(PACKAGE_NAME);
         assertTrue("Launch intent not found for " + PACKAGE_NAME, intent != null);
@@ -43,7 +41,7 @@ public final class ImmFtlSmokeTest {
 
         SystemClock.sleep(waitSeconds * 1000L);
 
-        File artifactDir = new File(testContext.getExternalFilesDir(null), "imm-ftl");
+        File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
         assertTrue("Could not create artifact directory: " + artifactDir, artifactDir.mkdirs() || artifactDir.isDirectory());
 
         File screenshot = new File(artifactDir, "screencap_after.png");
