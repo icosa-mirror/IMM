@@ -9,6 +9,7 @@ jobs:
   baseline-content:
     name: Baseline Content
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -64,6 +65,7 @@ jobs:
   package-source-layout:
     name: Package Source Layout
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -139,6 +141,7 @@ jobs:
   matrix-status:
     name: Matrix Status
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -212,6 +215,7 @@ jobs:
   godot-local-verifier:
     name: Godot Local Verifier
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

@@ -15,6 +15,7 @@ jobs:
     name: Android Standalone GLES
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,6 +76,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=GLES -PimmBuildDir=build_gles_ftl
       - name: Run Android GLES smoke in Firebase Test Lab
+        timeout-minutes: 15
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -135,6 +137,7 @@ jobs:
     name: Android Standalone Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -195,6 +198,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan_ftl
       - name: Run Android Vulkan smoke in Firebase Test Lab
+        timeout-minutes: 15
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -259,6 +263,7 @@ jobs:
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, quest, openxr]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -267,6 +272,7 @@ jobs:
         shell: pwsh
         run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-openxr-probe\preflight.json --require-command adb --adb-devices --adb-health
       - name: Run Android OpenXR probe smoke
+        timeout-minutes: 10
         shell: pwsh
         run: .\code\projects\android\run-android-openxr-probe-smoke.ps1 -LogDir artifacts\android-openxr-probe\logs
       - name: Verify OpenXR log contract
@@ -310,6 +316,7 @@ jobs:
     name: Android Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -403,6 +410,7 @@ jobs:
           "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$ARTIFACT_DIR/imm-godot-sample-debug.apk"
           rm -f code/ImmGodotSampleProject/sample1.imm
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
+        timeout-minutes: 15
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -463,6 +471,7 @@ jobs:
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, quest, vr]
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -471,6 +480,7 @@ jobs:
         shell: pwsh
         run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-quest-vr\preflight.json --require-command adb --adb-devices --adb-health
       - name: Run Quest VR app smoke
+        timeout-minutes: 10
         shell: pwsh
         run: .\code\projects\android\run-android-quest-vr-smoke.ps1 -AttemptQuestUnblock -LogDir artifacts\android-quest-vr\logs
       - name: Verify Quest VR log contract
@@ -515,6 +525,7 @@ jobs:
     name: iOS Device Smoke
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
     runs-on: macos-14
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -545,6 +556,7 @@ jobs:
     name: Device Evidence Report
     if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci'))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - android-standalone-gles
       - android-standalone-vulkan

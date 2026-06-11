@@ -75,6 +75,61 @@ REQUIRED_RUNS_ON = {
         "macos-godot-metal": {"macos-14"},
     },
 }
+REQUIRED_JOB_TIMEOUTS = {
+    ".github/workflows/ci-core.yml": {
+        "baseline-content",
+        "package-source-layout",
+        "matrix-status",
+        "godot-local-verifier",
+    },
+    ".github/workflows/ci-device.yml": {
+        "android-standalone-gles",
+        "android-standalone-vulkan",
+        "android-openxr-probe",
+        "android-godot-vulkan",
+        "android-quest-vr",
+        "ios-device-smoke",
+        "device-evidence-report",
+    },
+    ".github/workflows/ci-engine.yml": {
+        "unity-package-import",
+        "unity-windows-directx-composition",
+        "unity-windows-openxr-vr",
+        "godot-package-import",
+        "engine-evidence-report",
+    },
+    ".github/workflows/ci-gpu.yml": {
+        "windows-standalone-vulkan",
+        "windows-standalone-openxr-vr",
+        "windows-standalone-opengl-vr",
+        "windows-godot-vulkan",
+        "windows-godot-openxr-vr",
+        "macos-godot-metal",
+        "gpu-evidence-report",
+    },
+}
+REQUIRED_STEP_TIMEOUTS = {
+    ".github/workflows/ci-device.yml": {
+        "android-standalone-gles": {"Run Android GLES smoke in Firebase Test Lab"},
+        "android-standalone-vulkan": {"Run Android Vulkan smoke in Firebase Test Lab"},
+        "android-openxr-probe": {"Run Android OpenXR probe smoke"},
+        "android-godot-vulkan": {"Run Android Godot Vulkan smoke in Firebase Test Lab"},
+        "android-quest-vr": {"Run Quest VR app smoke"},
+    },
+    ".github/workflows/ci-engine.yml": {
+        "unity-package-import": {"Run Unity batchmode package import tests"},
+        "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
+        "unity-windows-openxr-vr": {"Run Unity OpenXR VR smoke"},
+    },
+    ".github/workflows/ci-gpu.yml": {
+        "windows-standalone-vulkan": {"Run Vulkan smoke against baseline"},
+        "windows-standalone-openxr-vr": {"Run Windows OpenXR VR smoke"},
+        "windows-standalone-opengl-vr": {"Run Windows OpenGL VR smoke"},
+        "windows-godot-vulkan": {"Run Godot Vulkan visual baseline smoke"},
+        "windows-godot-openxr-vr": {"Run Godot OpenXR VR smoke"},
+        "macos-godot-metal": {"Run Godot Metal visual smoke"},
+    },
+}
 REQUIRED_WORKFLOW_TRIGGERS = {
     ".github/workflows/ci-validation.yml": ["ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
@@ -84,6 +139,17 @@ GATED_VALIDATION_JOBS = ["device", "engine", "gpu"]
 
 def step_names(job: dict) -> set[str]:
     return {step.get("name", "") for step in job.get("steps", []) if isinstance(step, dict)}
+
+
+def has_positive_timeout(value: object) -> bool:
+    try:
+        return int(str(value)) > 0
+    except ValueError:
+        return False
+
+
+def steps_by_name(job: dict) -> dict[str, dict]:
+    return {step.get("name", ""): step for step in job.get("steps", []) if isinstance(step, dict)}
 
 
 def runs_on_labels(value: object) -> set[str]:
@@ -99,6 +165,7 @@ def load_workflow(path: Path) -> dict:
     lines = path.read_text(encoding="utf-8").splitlines()
     jobs: dict[str, dict] = {}
     current_job: str | None = None
+    current_step: dict | None = None
     in_steps = False
 
     for raw in lines:
@@ -111,7 +178,8 @@ def load_workflow(path: Path) -> dict:
             name = stripped[:-1]
             if name not in {"on", "env", "permissions", "defaults", "concurrency", "jobs"}:
                 current_job = name
-                jobs[current_job] = {"steps": [], "runs-on": None}
+                jobs[current_job] = {"steps": [], "runs-on": None, "timeout-minutes": None}
+                current_step = None
                 in_steps = False
             continue
 
@@ -126,12 +194,21 @@ def load_workflow(path: Path) -> dict:
                 jobs[current_job]["runs-on"] = value
             continue
 
+        if indent == 4 and stripped.startswith("timeout-minutes:"):
+            jobs[current_job]["timeout-minutes"] = stripped.split(":", 1)[1].strip()
+            continue
+
         if indent == 4 and stripped == "steps:":
             in_steps = True
             continue
 
         if in_steps and indent >= 4 and stripped.startswith("- name:"):
-            jobs[current_job]["steps"].append({"name": stripped.split(":", 1)[1].strip().strip("'\"")})
+            current_step = {"name": stripped.split(":", 1)[1].strip().strip("'\""), "timeout-minutes": None}
+            jobs[current_job]["steps"].append(current_step)
+            continue
+
+        if in_steps and current_step is not None and indent >= 8 and stripped.startswith("timeout-minutes:"):
+            current_step["timeout-minutes"] = stripped.split(":", 1)[1].strip()
 
     return {"jobs": jobs}
 
@@ -222,6 +299,16 @@ def main() -> int:
             for required_step in required_steps:
                 if required_step not in names:
                     errors.append(f"{workflow_rel} job {job_name} missing step {required_step!r}")
+
+            if job_name in REQUIRED_JOB_TIMEOUTS.get(workflow_rel, set()) and not has_positive_timeout(job.get("timeout-minutes")):
+                errors.append(f"{workflow_rel} job {job_name} must set a positive timeout-minutes")
+
+            required_timeout_steps = REQUIRED_STEP_TIMEOUTS.get(workflow_rel, {}).get(job_name, set())
+            actual_steps = steps_by_name(job)
+            for step_name in required_timeout_steps:
+                step = actual_steps.get(step_name)
+                if step is not None and not has_positive_timeout(step.get("timeout-minutes")):
+                    errors.append(f"{workflow_rel} job {job_name} step {step_name!r} must set a positive timeout-minutes")
 
             required_labels = REQUIRED_RUNS_ON.get(workflow_rel, {}).get(job_name)
             if required_labels:

@@ -10,6 +10,7 @@ jobs:
     name: Unity Package Import
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,6 +63,7 @@ jobs:
         run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-package-import/preflight.json --require-env UNITY_EXE
 
       - name: Run Unity batchmode package import tests
+        timeout-minutes: 25
         shell: bash
         run: |
           set -euo pipefail
@@ -88,6 +90,7 @@ jobs:
     name: Unity Windows DirectX Composition
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,6 +132,7 @@ jobs:
         run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json --require-env UNITY_EXE
 
       - name: Run Unity DirectX composition smoke
+        timeout-minutes: 25
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
@@ -190,6 +194,7 @@ jobs:
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, unity, vr]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -200,6 +205,7 @@ jobs:
         run: python tests\tools\preflight_runner.py --profile unity-windows-openxr-vr --output artifacts\unity-windows-openxr-vr\preflight.json --require-env UNITY_EXE
 
       - name: Run Unity OpenXR VR smoke
+        timeout-minutes: 25
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts\unity-windows-openxr-vr | Out-Null
@@ -260,6 +266,7 @@ jobs:
     name: Godot Package Import
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -301,6 +308,7 @@ jobs:
     name: Engine Evidence Report
     if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci'))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs:
       - unity-package-import
       - unity-windows-directx-composition
