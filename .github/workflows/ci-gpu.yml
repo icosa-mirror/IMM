@@ -47,25 +47,44 @@ jobs:
       - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
         run: |
-          $mingwRoot = "C:\msys64\mingw64"
-          $sourceIcd = Join-Path $mingwRoot "share\vulkan\icd.d\lvp_icd.x86_64.json"
-          $sourceDll = Join-Path $mingwRoot "bin\vulkan_lvp.dll"
-          if (-not (Test-Path $sourceIcd)) {
-            throw "Mesa lavapipe ICD was not found at $sourceIcd"
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
+          $setupLog = "artifacts\windows-standalone-vulkan\vulkan-driver-setup.txt"
+          "Scanning C:\msys64 for Mesa lavapipe files" | Out-File -FilePath $setupLog
+          $icds = @(Get-ChildItem -Path "C:\msys64" -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue)
+          $dlls = @(Get-ChildItem -Path "C:\msys64" -Recurse -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue)
+          "ICD candidates:" | Out-File -FilePath $setupLog -Append
+          $icds.FullName | Out-File -FilePath $setupLog -Append
+          "DLL candidates:" | Out-File -FilePath $setupLog -Append
+          $dlls.FullName | Out-File -FilePath $setupLog -Append
+          $sourceIcd = $icds | Where-Object { $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Select-Object -First 1
           }
+          if (-not $sourceIcd) {
+            throw "Mesa lavapipe ICD was not found under C:\msys64"
+          }
+          $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
+          $sourceDll = Join-Path $driverRoot "bin\vulkan_lvp.dll"
           if (-not (Test-Path $sourceDll)) {
-            throw "Mesa lavapipe DLL was not found at $sourceDll"
+            $sourceDll = ($dlls | Where-Object { $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
+          }
+          if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
+            throw "Mesa lavapipe DLL was not found for $($sourceIcd.FullName)"
           }
           $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
           New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
           $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
-          $icdJson = Get-Content -Raw $sourceIcd | ConvertFrom-Json
-          $icdJson.ICD.library_path = $sourceDll
+          $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
           $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
+          "Selected ICD=$($sourceIcd.FullName)" | Out-File -FilePath $setupLog -Append
+          "Selected DLL=$sourceDll" | Out-File -FilePath $setupLog -Append
+          "Workspace ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-Content -Raw $workspaceIcd | Out-File -FilePath $setupLog -Append
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          (Join-Path $mingwRoot "bin") | Out-File -FilePath $env:GITHUB_PATH -Append
+          (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Preflight GPU runner
         shell: pwsh
@@ -301,25 +320,44 @@ jobs:
       - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
         run: |
-          $mingwRoot = "C:\msys64\mingw64"
-          $sourceIcd = Join-Path $mingwRoot "share\vulkan\icd.d\lvp_icd.x86_64.json"
-          $sourceDll = Join-Path $mingwRoot "bin\vulkan_lvp.dll"
-          if (-not (Test-Path $sourceIcd)) {
-            throw "Mesa lavapipe ICD was not found at $sourceIcd"
+          New-Item -ItemType Directory -Force -Path artifacts\godot-smoke-windows-vulkan | Out-Null
+          $setupLog = "artifacts\godot-smoke-windows-vulkan\vulkan-driver-setup.txt"
+          "Scanning C:\msys64 for Mesa lavapipe files" | Out-File -FilePath $setupLog
+          $icds = @(Get-ChildItem -Path "C:\msys64" -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue)
+          $dlls = @(Get-ChildItem -Path "C:\msys64" -Recurse -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue)
+          "ICD candidates:" | Out-File -FilePath $setupLog -Append
+          $icds.FullName | Out-File -FilePath $setupLog -Append
+          "DLL candidates:" | Out-File -FilePath $setupLog -Append
+          $dlls.FullName | Out-File -FilePath $setupLog -Append
+          $sourceIcd = $icds | Where-Object { $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Select-Object -First 1
           }
+          if (-not $sourceIcd) {
+            throw "Mesa lavapipe ICD was not found under C:\msys64"
+          }
+          $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
+          $sourceDll = Join-Path $driverRoot "bin\vulkan_lvp.dll"
           if (-not (Test-Path $sourceDll)) {
-            throw "Mesa lavapipe DLL was not found at $sourceDll"
+            $sourceDll = ($dlls | Where-Object { $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
+          }
+          if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
+            throw "Mesa lavapipe DLL was not found for $($sourceIcd.FullName)"
           }
           $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
           New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
           $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
-          $icdJson = Get-Content -Raw $sourceIcd | ConvertFrom-Json
-          $icdJson.ICD.library_path = $sourceDll
+          $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
           $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
+          "Selected ICD=$($sourceIcd.FullName)" | Out-File -FilePath $setupLog -Append
+          "Selected DLL=$sourceDll" | Out-File -FilePath $setupLog -Append
+          "Workspace ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-Content -Raw $workspaceIcd | Out-File -FilePath $setupLog -Append
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          (Join-Path $mingwRoot "bin") | Out-File -FilePath $env:GITHUB_PATH -Append
+          (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Download Godot 4.5
         shell: pwsh
