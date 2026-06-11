@@ -1,6 +1,5 @@
 static const char* shader_pip360Cubemap_fs = R"(
 
-#extension GL_NV_shadow_samplers_cube : enable
 #ifdef GL_OES_sample_variables
 #extension GL_OES_sample_variables : enable
 #endif
@@ -75,7 +74,7 @@ void main( void )
 {
     vec3 nor =  in_data.direction ;
 
-	vec4 te = textureCube(u_tex0, in_data.direction);
+	vec4 te = texture(u_tex0, in_data.direction);
     vec3 col = te.xyz;
 
 	#if COLOR_SPACE==0
