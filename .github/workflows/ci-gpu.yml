@@ -3,16 +3,7 @@
 name: CI GPU Matrix
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '17 2 * * *'
-  push:
-    branches:
-      - main
-      - feature/**
-  pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened, labeled]
+  workflow_call:
 
 jobs:
   windows-standalone-vulkan:
@@ -46,9 +37,32 @@ jobs:
           "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           $bin | Out-File -FilePath $env:GITHUB_PATH -Append
 
+      - name: Resolve SwiftShader Vulkan ICD
+        shell: pwsh
+        run: |
+          $roots = @(
+            (Join-Path $env:ProgramFiles "Google\Chrome\Application"),
+            (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application"),
+            (Join-Path $env:ProgramFiles "Microsoft\Edge\Application"),
+            (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application")
+          )
+          $icd = $null
+          foreach ($root in $roots) {
+            if (Test-Path $root) {
+              $icd = Get-ChildItem -Path $root -Recurse -Filter "vk_swiftshader_icd.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($icd) {
+                break
+              }
+            }
+          }
+          if (-not $icd) {
+            throw "SwiftShader Vulkan ICD was not found in Chrome or Edge installation directories."
+          }
+          "VK_ICD_FILENAMES=$($icd.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Preflight GPU runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command msbuild --require-command glslangValidator --require-command spirv-val
+        run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command msbuild --require-command glslangValidator --require-command spirv-val --require-env VK_ICD_FILENAMES
 
       - name: Build Windows viewer
         working-directory: code/projects/windows
@@ -250,6 +264,29 @@ jobs:
           "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           $bin | Out-File -FilePath $env:GITHUB_PATH -Append
 
+      - name: Resolve SwiftShader Vulkan ICD
+        shell: pwsh
+        run: |
+          $roots = @(
+            (Join-Path $env:ProgramFiles "Google\Chrome\Application"),
+            (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application"),
+            (Join-Path $env:ProgramFiles "Microsoft\Edge\Application"),
+            (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application")
+          )
+          $icd = $null
+          foreach ($root in $roots) {
+            if (Test-Path $root) {
+              $icd = Get-ChildItem -Path $root -Recurse -Filter "vk_swiftshader_icd.json" -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($icd) {
+                break
+              }
+            }
+          }
+          if (-not $icd) {
+            throw "SwiftShader Vulkan ICD was not found in Chrome or Edge installation directories."
+          }
+          "VK_ICD_FILENAMES=$($icd.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Download Godot 4.5
         shell: pwsh
         run: |
@@ -264,9 +301,13 @@ jobs:
           }
           "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      - name: Install SCons
+        shell: pwsh
+        run: python -m pip install scons
+
       - name: Preflight Godot Vulkan runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-command msbuild --require-env GODOT_EXE
+        run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-command msbuild --require-command scons --require-env GODOT_EXE --require-env VK_ICD_FILENAMES
 
       - name: Build Godot extension
         shell: pwsh
@@ -407,8 +448,9 @@ jobs:
           zip_name="Godot_v${version}_macos.universal.zip"
           url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
           curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$url" -o "$zip_name"
-          unzip -q "$zip_name"
-          godot_exe="$(find godot -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
+          mkdir -p godot-macos
+          unzip -q "$zip_name" -d godot-macos
+          godot_exe="$(find godot-macos -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
           if [ -z "$godot_exe" ]; then
             echo "Godot executable not found after extracting $zip_name" >&2
             exit 1

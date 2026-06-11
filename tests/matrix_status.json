@@ -140,9 +140,9 @@
       "renderer": "native",
       "status": "supported",
       "hosted_gate": "Build / Package Unity Plugins and CI Core Matrix / Package Source Layout",
-      "hardware_gate": "CI Engine Matrix / Unity Package Import",
+      "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI assembles multi-platform UPM packages and verifies package layout; non-VR Unity jobs now run on GitHub-hosted Windows with Unity editor available via UNITY_EXE."
+      "reason": "Hosted CI assembles multi-platform UPM packages and verifies package layout. Unity editor runtime checks remain in ci-engine.yml but require CI_ENABLE_UNITY_EDITOR_CHECKS=true because standard GitHub Windows runners do not provide a Unity editor or license."
     },
     {
       "product": "unity",

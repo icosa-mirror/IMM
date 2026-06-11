@@ -141,7 +141,7 @@ def evaluate_row(row: dict, evidence: list[dict]) -> dict:
         errors.append("missing passed manifest evidence")
 
     if row.get("hardware_gate") and not any(item["passing_preflights"] for item in evidence):
-        errors.append("missing passing self-hosted preflight evidence")
+        errors.append("missing passing runner preflight evidence")
 
     if is_visual_row(row):
         if not any(item["metrics"] for item in evidence):

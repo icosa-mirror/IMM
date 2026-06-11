@@ -3,21 +3,12 @@
 name: CI Engine Matrix
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '11 4 * * *'
-  push:
-    branches:
-      - main
-      - feature/**
-  pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened, labeled]
+  workflow_call:
 
 jobs:
   unity-package-import:
     name: Unity Package Import
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +86,7 @@ jobs:
 
   unity-windows-directx-composition:
     name: Unity Windows DirectX Composition
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

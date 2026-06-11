@@ -1,0 +1,37 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Validation Matrix
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  core:
+    name: Core
+    uses: ./.github/workflows/ci-core.yml
+    secrets: inherit
+
+  device:
+    name: Device
+    uses: ./.github/workflows/ci-device.yml
+    secrets: inherit
+
+  engine:
+    name: Engine
+    uses: ./.github/workflows/ci-engine.yml
+    secrets: inherit
+
+  gpu:
+    name: GPU
+    uses: ./.github/workflows/ci-gpu.yml
+    secrets: inherit

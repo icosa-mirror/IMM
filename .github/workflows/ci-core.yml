@@ -3,14 +3,7 @@
 name: CI Core Matrix
 
 on:
-  pull_request:
-    branches: [ main ]
-  push:
-    branches:
-      - main
-      - develop
-      - feature/**
-  workflow_dispatch:
+  workflow_call:
 
 jobs:
   baseline-content:

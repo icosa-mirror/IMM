@@ -75,9 +75,7 @@ REQUIRED_RUNS_ON = {
     },
 }
 REQUIRED_WORKFLOW_TRIGGERS = {
-    ".github/workflows/ci-gpu.yml": "gpu-ci",
-    ".github/workflows/ci-device.yml": "device-ci",
-    ".github/workflows/ci-engine.yml": "engine-ci",
+    ".github/workflows/ci-validation.yml": ["ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
 
 
@@ -147,18 +145,25 @@ def verify_manifest_status_arguments(path: Path, workflow_rel: str, errors: list
             errors.append(f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass --failure-class")
 
 
-def verify_hardware_workflow_triggers(path: Path, workflow_rel: str, label: str, errors: list[str]) -> None:
+def verify_reusable_workflow(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    text = path.read_text(encoding="utf-8")
+    if "workflow_call:" not in text:
+        errors.append(f"{workflow_rel} must be reusable through workflow_call")
+
+
+def verify_consolidated_workflow(path: Path, workflow_rel: str, workflow_files: list[str], errors: list[str]) -> None:
     text = path.read_text(encoding="utf-8")
     required_tokens = [
         "workflow_dispatch:",
         "schedule:",
         "push:",
         "- main",
+        "- develop",
         "- feature/**",
         "pull_request:",
         "types: [opened, synchronize, reopened, labeled]",
-        f"contains(github.event.pull_request.labels.*.name, '{label}')",
     ]
+    required_tokens.extend(f"uses: ./.github/workflows/{workflow_file}" for workflow_file in workflow_files)
     for token in required_tokens:
         if token not in text:
             errors.append(f"{workflow_rel} missing trigger/guard token: {token}")
@@ -191,10 +196,9 @@ def main() -> int:
         if not workflow_path.exists():
             errors.append(f"Missing workflow: {workflow_rel}")
             continue
+        if workflow_rel.startswith(".github/workflows/ci-") and workflow_rel != ".github/workflows/ci-validation.yml":
+            verify_reusable_workflow(workflow_path, workflow_rel, errors)
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
-        required_label = REQUIRED_WORKFLOW_TRIGGERS.get(workflow_rel)
-        if required_label:
-            verify_hardware_workflow_triggers(workflow_path, workflow_rel, required_label, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
@@ -214,6 +218,13 @@ def main() -> int:
                 missing_labels = required_labels - actual_labels
                 if missing_labels:
                     errors.append(f"{workflow_rel} job {job_name} missing runs-on labels: {sorted(missing_labels)}")
+
+    for workflow_rel, workflow_files in REQUIRED_WORKFLOW_TRIGGERS.items():
+        workflow_path = root / workflow_rel
+        if not workflow_path.exists():
+            errors.append(f"Missing workflow: {workflow_rel}")
+            continue
+        verify_consolidated_workflow(workflow_path, workflow_rel, workflow_files, errors)
 
     if errors:
         for error in errors:

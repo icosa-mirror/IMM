@@ -123,6 +123,26 @@ def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]
     report_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8", newline="\n")
 
 
+def load_metrics(path: Path) -> dict:
+    if not path.exists():
+        return {
+            "passed": False,
+            "errors": [f"missing metrics JSON: {path}"],
+            "reference": {},
+            "candidate": {},
+        }
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def append_capture(images: list[tuple[str, Path]], label: str, capture: Path | None, output_dir: Path, errors: list[str]) -> None:
+    if capture is None:
+        return
+    if not capture.exists():
+        errors.append(f"missing {label.lower()} capture: {capture}")
+        return
+    images.append((label, convert_capture(capture, output_dir)))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metrics-json", type=Path, required=True)
@@ -132,11 +152,13 @@ def main() -> int:
     parser.add_argument("--markdown-output", type=Path, required=True)
     args = parser.parse_args()
 
-    metrics = json.loads(args.metrics_json.read_text(encoding="utf-8"))
+    metrics = load_metrics(args.metrics_json)
+    errors = metrics.setdefault("errors", [])
     images: list[tuple[str, Path]] = []
-    if args.reference_capture:
-        images.append(("Reference", convert_capture(args.reference_capture, args.output_dir)))
-    images.append(("Candidate", convert_capture(args.candidate_capture, args.output_dir)))
+    append_capture(images, "Reference", args.reference_capture, args.output_dir, errors)
+    append_capture(images, "Candidate", args.candidate_capture, args.output_dir, errors)
+    if errors:
+        metrics["passed"] = False
     write_report(metrics, args.markdown_output, images)
     print(f"Render report written: {args.markdown_output}")
     return 0

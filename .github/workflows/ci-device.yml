@@ -3,16 +3,7 @@
 name: CI Device Matrix
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '43 3 * * *'
-  push:
-    branches:
-      - main
-      - feature/**
-  pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened, labeled]
+  workflow_call:
 
 jobs:
   android-standalone-gles:
@@ -35,7 +26,13 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
+          set +o pipefail
           yes | sdkmanager --licenses
+          sdkmanager_status=${PIPESTATUS[1]}
+          set -o pipefail
+          if [ "$sdkmanager_status" -ne 0 ]; then
+            exit "$sdkmanager_status"
+          fi
       - name: Start Android emulator
         shell: bash
         run: |
@@ -154,7 +151,13 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
+          set +o pipefail
           yes | sdkmanager --licenses
+          sdkmanager_status=${PIPESTATUS[1]}
+          set -o pipefail
+          if [ "$sdkmanager_status" -ne 0 ]; then
+            exit "$sdkmanager_status"
+          fi
       - name: Start Android emulator
         shell: bash
         run: |
@@ -321,7 +324,13 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager --install "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a" "emulator"
+          set +o pipefail
           yes | sdkmanager --licenses
+          sdkmanager_status=${PIPESTATUS[1]}
+          set -o pipefail
+          if [ "$sdkmanager_status" -ne 0 ]; then
+            exit "$sdkmanager_status"
+          fi
       - name: Download Godot for Linux export
         shell: bash
         run: |
@@ -500,7 +509,7 @@ jobs:
       - name: Verify iOS package target
         run: |
           set -euo pipefail
-          cmake -S code/projects/ios -B build/ios -G Xcode
+          cmake -S code/projects/ios -B build/ios -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64
           cmake --build build/ios --target ImmUnityIOSLinkSmoke --config Release
       - name: Write CI manifest
         if: always()
