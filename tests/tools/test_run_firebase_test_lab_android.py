@@ -35,6 +35,13 @@ def main() -> int:
         )
         assert tool.is_tool_results_api_disabled(stderr_path)
 
+        stderr_path.write_text(
+            "18:42:13 An infrastructure error occurred. Attempts exhausted.\n"
+            "ERROR: (gcloud.firebase.test.android.run) Firebase Test Lab infrastructure failure: Exhausted test run attempts\n",
+            encoding="utf-8",
+        )
+        assert tool.is_firebase_infrastructure_failure(stderr_path)
+
         args = Namespace(
             artifact_dir=root,
             project="imm-ci",

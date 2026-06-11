@@ -74,6 +74,14 @@ def is_tool_results_api_disabled(stderr_path: Path) -> bool:
     return "toolresults.googleapis.com" in text and "SERVICE_DISABLED" in text
 
 
+def is_firebase_infrastructure_failure(stderr_path: Path) -> bool:
+    text = decode_text(stderr_path)
+    return (
+        "Firebase Test Lab infrastructure failure" in text
+        or "An infrastructure error occurred. Attempts exhausted." in text
+    )
+
+
 def write_summary(
     args: argparse.Namespace,
     gcloud_exit: int,
@@ -122,46 +130,65 @@ def main() -> int:
     parser.add_argument("--required-marker", action="append", default=[])
     parser.add_argument("--required-capture-name", action="append", default=[])
     parser.add_argument("--client-label", default="")
+    parser.add_argument("--gcloud-attempts", type=int, default=2)
     args = parser.parse_args()
 
     args.artifact_dir.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
 
-    command = [
-        "gcloud",
-        "firebase",
-        "test",
-        "android",
-        "run",
-        "--project",
-        args.project,
-        "--type",
-        args.test_type,
-        "--app",
-        args.app.as_posix(),
-        "--device",
-        args.device,
-        "--timeout",
-        args.timeout,
-        "--results-bucket",
-        args.results_bucket,
-        "--results-dir",
-        args.results_dir,
-        "--format",
-        "json",
-      ]
-    if args.test:
-        command.extend(["--test", args.test.as_posix()])
-    for value in args.environment_variable:
-        command.extend(["--environment-variables", value])
-    for value in args.directory_to_pull:
-        command.extend(["--directories-to-pull", value])
-    if args.client_label:
-        command.extend(["--client-details", f"matrixLabel={args.client_label}"])
+    def build_command(results_dir: str) -> list[str]:
+        command = [
+            "gcloud",
+            "firebase",
+            "test",
+            "android",
+            "run",
+            "--project",
+            args.project,
+            "--type",
+            args.test_type,
+            "--app",
+            args.app.as_posix(),
+            "--device",
+            args.device,
+            "--timeout",
+            args.timeout,
+            "--results-bucket",
+            args.results_bucket,
+            "--results-dir",
+            results_dir,
+            "--format",
+            "json",
+        ]
+        if args.test:
+            command.extend(["--test", args.test.as_posix()])
+        for value in args.environment_variable:
+            command.extend(["--environment-variables", value])
+        for value in args.directory_to_pull:
+            command.extend(["--directories-to-pull", value])
+        if args.client_label:
+            command.extend(["--client-details", f"matrixLabel={args.client_label}"])
+        return command
 
-    (args.artifact_dir / "gcloud-command.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8", newline="\n")
+    gcloud_exit = 1
     stderr_path = args.artifact_dir / "gcloud-firebase-test.stderr.txt"
-    gcloud_exit = run(command, args.artifact_dir / "gcloud-firebase-test.stdout.json", stderr_path)
+    max_attempts = max(1, args.gcloud_attempts)
+    for attempt in range(1, max_attempts + 1):
+        attempt_results_dir = args.results_dir if attempt == 1 else f"{args.results_dir}-retry{attempt}"
+        command = build_command(attempt_results_dir)
+        (args.artifact_dir / f"gcloud-command.attempt{attempt}.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8", newline="\n")
+        (args.artifact_dir / "gcloud-command.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8", newline="\n")
+        stdout_path = args.artifact_dir / f"gcloud-firebase-test.attempt{attempt}.stdout.json"
+        stderr_path = args.artifact_dir / f"gcloud-firebase-test.attempt{attempt}.stderr.txt"
+        gcloud_exit = run(command, stdout_path, stderr_path)
+        shutil.copyfile(stdout_path, args.artifact_dir / "gcloud-firebase-test.stdout.json")
+        shutil.copyfile(stderr_path, args.artifact_dir / "gcloud-firebase-test.stderr.txt")
+        args.results_dir = attempt_results_dir
+        if gcloud_exit == 0:
+            break
+        if attempt == max_attempts or not is_firebase_infrastructure_failure(stderr_path):
+            break
+        print(f"Firebase Test Lab infrastructure failure on attempt {attempt}; retrying with results-dir {args.results_dir}-retry{attempt + 1}", file=sys.stderr)
 
     copy_info = copy_results(args.results_bucket, args.results_dir, args.artifact_dir)
     if copy_info["exit_code"] != 0:
