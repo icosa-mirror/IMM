@@ -90,11 +90,20 @@ jobs:
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $registryPath = "HKCU:\Software\Khronos\Vulkan\Drivers"
-          New-Item -Path $registryPath -Force | Out-Null
-          reg add "HKCU\Software\Khronos\Vulkan\Drivers" /v "$workspaceIcd" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
-          "Registered HKCU Vulkan ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
-          Get-ItemProperty -Path $registryPath | Out-String | Out-File -FilePath $setupLog -Append
+          $registryTargets = @(
+            "HKCU\Software\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
+          )
+          $icdTargets = @($workspaceIcd, $sourceIcd.FullName) | Select-Object -Unique
+          foreach ($registryTarget in $registryTargets) {
+            reg add $registryTarget /f | Out-File -FilePath $setupLog -Append
+            foreach ($icdTarget in $icdTargets) {
+              reg add $registryTarget /v "$icdTarget" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
+              "Registered Vulkan ICD $icdTarget in $registryTarget" | Out-File -FilePath $setupLog -Append
+            }
+            reg query $registryTarget | Out-File -FilePath $setupLog -Append
+          }
           (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Preflight GPU runner
@@ -374,11 +383,20 @@ jobs:
           "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
           "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $registryPath = "HKCU:\Software\Khronos\Vulkan\Drivers"
-          New-Item -Path $registryPath -Force | Out-Null
-          reg add "HKCU\Software\Khronos\Vulkan\Drivers" /v "$workspaceIcd" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
-          "Registered HKCU Vulkan ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
-          Get-ItemProperty -Path $registryPath | Out-String | Out-File -FilePath $setupLog -Append
+          $registryTargets = @(
+            "HKCU\Software\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
+          )
+          $icdTargets = @($workspaceIcd, $sourceIcd.FullName) | Select-Object -Unique
+          foreach ($registryTarget in $registryTargets) {
+            reg add $registryTarget /f | Out-File -FilePath $setupLog -Append
+            foreach ($icdTarget in $icdTargets) {
+              reg add $registryTarget /v "$icdTarget" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
+              "Registered Vulkan ICD $icdTarget in $registryTarget" | Out-File -FilePath $setupLog -Append
+            }
+            reg query $registryTarget | Out-File -FilePath $setupLog -Append
+          }
           (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Download Godot 4.5

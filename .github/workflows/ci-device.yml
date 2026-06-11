@@ -58,7 +58,7 @@ jobs:
             exit 1
           fi
 
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
+          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect -no-accel > "$ARTIFACT_DIR/emulator.log" 2>&1 &
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
@@ -203,7 +203,7 @@ jobs:
             exit 1
           fi
 
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
+          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect -no-accel > "$ARTIFACT_DIR/emulator.log" 2>&1 &
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
@@ -426,7 +426,7 @@ jobs:
             exit 1
           fi
 
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -gpu swiftshader_indirect -accel off > "$ARTIFACT_DIR/emulator.log" 2>&1 &
+          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect -no-accel > "$ARTIFACT_DIR/emulator.log" 2>&1 &
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
