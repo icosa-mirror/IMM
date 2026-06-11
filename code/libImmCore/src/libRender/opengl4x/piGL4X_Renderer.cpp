@@ -328,10 +328,13 @@ bool piRendererGL4X::Initialize(int id, const void **hwnd, int num, bool disable
     int nume = 0; glGetIntegerv(GL_NUM_EXTENSIONS, &nume);
     mFeatureVertexViewport = false;
     mFeatureViewportArray  = false;
+    mFeatureBindlessTexture = false;
     for (int i = 0; i<nume; i++)
     {
-        if( strcmp( (const char*)oglGetStringi(GL_EXTENSIONS, i), "GL_ARB_viewport_array"             ) == 0) mFeatureViewportArray  = true;
-        if( strcmp( (const char*)oglGetStringi(GL_EXTENSIONS, i), "GL_ARB_shader_viewport_layer_array") == 0) mFeatureVertexViewport = true;
+        const char *extensionName = (const char*)oglGetStringi(GL_EXTENSIONS, i);
+        if( strcmp( extensionName, "GL_ARB_viewport_array"             ) == 0) mFeatureViewportArray  = true;
+        if( strcmp( extensionName, "GL_ARB_shader_viewport_layer_array") == 0) mFeatureVertexViewport = true;
+        if( strcmp( extensionName, "GL_ARB_bindless_texture") == 0) mFeatureBindlessTexture = true;
     }
 
 
@@ -1419,7 +1422,7 @@ piTexture piRendererGL4X::CreateTexture( const wchar_t *key, const TextureInfo *
 
     }
 
-    if (oglGetTextureHandle)
+    if (mFeatureBindlessTexture && oglGetTextureHandle)
         me->mHandle = oglGetTextureHandle(me->mObjectID);
     else
         me->mHandle = 0;
@@ -1675,8 +1678,8 @@ static const char *vsExtraStr = "";
 static const char *fsExtraStr = "";
 #else
 static const char *versionStr = "#version 450 core\n";
-static const char *vsExtraStr = "#extension GL_ARB_shader_draw_parameters : enable\n#extension GL_ARB_bindless_texture : enable\n";
-static const char *fsExtraStr =                                                    "#extension GL_ARB_bindless_texture : enable\n";
+static const char *vsExtraStr = "#extension GL_ARB_shader_draw_parameters : enable\n";
+static const char *fsExtraStr = "";
 #endif
 
 static bool createOptionsString(char *buffer, const int bufferLength, const piShaderOptions *options )

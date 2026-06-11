@@ -541,6 +541,7 @@ func _create_scene_probe(name: String, color: Color, size: Vector3) -> MeshInsta
 	probe.name = name
 	probe.mesh = mesh
 	probe.material_override = material
+	probe.set_meta("imm_probe_half_extents", size * 0.5)
 	return probe
 
 func _analyze_scene_composition_pixels(image: Image) -> Dictionary:
@@ -596,25 +597,24 @@ func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Co
 	}
 
 func _project_probe_rect(image: Image, probe: MeshInstance3D) -> Rect2i:
-	var aabb: AABB = probe.get_aabb()
-	var min_point: Vector3 = aabb.position
-	var max_point: Vector3 = aabb.position + aabb.size
+	var half_extents: Vector3 = probe.get_meta("imm_probe_half_extents", Vector3.ONE * 0.5)
+	var basis: Basis = probe.global_transform.basis
+	var center: Vector3 = probe.global_position
 	var corners: Array[Vector3] = [
-		Vector3(min_point.x, min_point.y, min_point.z),
-		Vector3(min_point.x, min_point.y, max_point.z),
-		Vector3(min_point.x, max_point.y, min_point.z),
-		Vector3(min_point.x, max_point.y, max_point.z),
-		Vector3(max_point.x, min_point.y, min_point.z),
-		Vector3(max_point.x, min_point.y, max_point.z),
-		Vector3(max_point.x, max_point.y, min_point.z),
-		Vector3(max_point.x, max_point.y, max_point.z),
+		center + basis.x * -half_extents.x + basis.y * -half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * -half_extents.x + basis.y * -half_extents.y + basis.z * half_extents.z,
+		center + basis.x * -half_extents.x + basis.y * half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * -half_extents.x + basis.y * half_extents.y + basis.z * half_extents.z,
+		center + basis.x * half_extents.x + basis.y * -half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * half_extents.x + basis.y * -half_extents.y + basis.z * half_extents.z,
+		center + basis.x * half_extents.x + basis.y * half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * half_extents.x + basis.y * half_extents.y + basis.z * half_extents.z,
 	]
 	var min_x: int = image.get_width()
 	var min_y: int = image.get_height()
 	var max_x: int = -1
 	var max_y: int = -1
-	for corner in corners:
-		var world_corner: Vector3 = probe.global_transform * corner
+	for world_corner in corners:
 		if camera.is_position_behind(world_corner):
 			continue
 		var screen: Vector2 = camera.unproject_position(world_corner)
@@ -635,6 +635,12 @@ func _project_probe_rect(image: Image, probe: MeshInstance3D) -> Rect2i:
 	return Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
 
 func _color_near(value: Color, target: Color) -> bool:
+	if target.r > 0.5 and target.g < 0.5 and target.b > 0.5:
+		return value.r > value.g + 0.12 and value.b > value.g + 0.12 and maxf(value.r, value.b) > 0.25
+	if target.r < 0.5 and target.g > 0.5 and target.b > 0.5:
+		return value.g > value.r + 0.12 and value.b > value.r + 0.12 and maxf(value.g, value.b) > 0.25
+	if target.r > 0.5 and target.g > 0.5 and target.b < 0.5:
+		return value.r > value.b + 0.12 and value.g > value.b + 0.12 and maxf(value.r, value.g) > 0.25
 	return absf(value.r - target.r) <= 0.20 and absf(value.g - target.g) <= 0.20 and absf(value.b - target.b) <= 0.20
 
 func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:

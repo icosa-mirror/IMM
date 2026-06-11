@@ -216,6 +216,7 @@ protected:
 
 	bool mFeatureVertexViewport;
 	bool mFeatureViewportArray;
+    bool mFeatureBindlessTexture;
 
     piQuery mPerfQueries[2];
     int     mCurrentPerformanceQuery;

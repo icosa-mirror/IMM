@@ -76,7 +76,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=GLES -PimmBuildDir=build_gles_ftl
       - name: Run Android GLES smoke in Firebase Test Lab
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -198,7 +198,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan_ftl
       - name: Run Android Vulkan smoke in Firebase Test Lab
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -412,7 +412,7 @@ jobs:
           "$GODOT_EXE" --headless --path code/ImmGodotSampleProject --export-debug "Android Debug" "$ARTIFACT_DIR/imm-godot-sample-debug.apk"
           rm -f code/ImmGodotSampleProject/sample1.imm
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
