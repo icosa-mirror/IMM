@@ -9,7 +9,7 @@ jobs:
   android-standalone-gles:
     name: Android Standalone GLES
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,7 +58,8 @@ jobs:
             exit 1
           fi
 
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect -no-accel > "$ARTIFACT_DIR/emulator.log" 2>&1 &
+          "$SDK_ROOT/emulator/emulator" -accel-check > "$ARTIFACT_DIR/emulator-accel-check.txt" 2>&1 || true
+          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect > "$ARTIFACT_DIR/emulator.log" 2>&1 &
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
@@ -154,7 +155,7 @@ jobs:
   android-standalone-vulkan:
     name: Android Standalone Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -203,7 +204,8 @@ jobs:
             exit 1
           fi
 
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect -no-accel > "$ARTIFACT_DIR/emulator.log" 2>&1 &
+          "$SDK_ROOT/emulator/emulator" -accel-check > "$ARTIFACT_DIR/emulator-accel-check.txt" 2>&1 || true
+          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect > "$ARTIFACT_DIR/emulator.log" 2>&1 &
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
@@ -347,7 +349,7 @@ jobs:
   android-godot-vulkan:
     name: Android Godot Vulkan
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -426,7 +428,8 @@ jobs:
             exit 1
           fi
 
-          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect -no-accel > "$ARTIFACT_DIR/emulator.log" 2>&1 &
+          "$SDK_ROOT/emulator/emulator" -accel-check > "$ARTIFACT_DIR/emulator-accel-check.txt" 2>&1 || true
+          nohup "$SDK_ROOT/emulator/emulator" -avd imm-ci-avd -no-window -no-audio -no-boot-anim -no-snapshot -no-snapshot-save -no-metrics -gpu swiftshader_indirect > "$ARTIFACT_DIR/emulator.log" 2>&1 &
           emulator_pid=$!
           echo $emulator_pid > "$ARTIFACT_DIR/emulator.pid"
 
