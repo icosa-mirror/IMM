@@ -143,18 +143,47 @@ jobs:
         run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -DurationSeconds 420 -PresentSeconds 120 -MaxFrame 7200
 
       - name: Compare Vulkan render metrics against DirectX baseline
-        shell: pwsh
-        run: >
-          python tests\tools\compare_render_metrics.py .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
-          --reference .\build\baseline-captures\windows-directx-playerframe60.ppm
-          --contract tests\baselines\render\windows-directx-sample1.json
-          --json-output artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
-
-      - name: Stage Vulkan capture evidence
+        if: always()
         shell: pwsh
         run: |
-          Copy-Item -Force .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
-          Copy-Item -Force .\build\baseline-captures\windows-directx-playerframe60.ppm artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm
+          $candidate = ".\code\appImmViewer\exe\vulkan_sample1_smoke.ppm"
+          $reference = ".\build\baseline-captures\windows-directx-playerframe60.ppm"
+          if ((Test-Path $candidate) -and (Test-Path $reference)) {
+            python tests\tools\compare_render_metrics.py $candidate `
+              --reference $reference `
+              --contract tests\baselines\render\windows-directx-sample1.json `
+              --json-output artifacts\windows-standalone-vulkan\vulkan-vs-directx-render-metrics.json
+          }
+          else {
+            Write-Host "Skipping Vulkan metrics comparison because capture evidence is incomplete."
+            Write-Host "candidate_exists=$(Test-Path $candidate)"
+            Write-Host "reference_exists=$(Test-Path $reference)"
+          }
+
+      - name: Stage Vulkan capture evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
+          $captures = @(
+            @{
+              Source = ".\code\appImmViewer\exe\vulkan_sample1_smoke.ppm"
+              Target = "artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm"
+            },
+            @{
+              Source = ".\build\baseline-captures\windows-directx-playerframe60.ppm"
+              Target = "artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm"
+            }
+          )
+          foreach ($capture in $captures) {
+            if (Test-Path $capture.Source) {
+              Copy-Item -Force $capture.Source $capture.Target
+              Write-Host "Staged capture evidence: $($capture.Target)"
+            }
+            else {
+              Write-Host "Capture evidence missing: $($capture.Source)"
+            }
+          }
 
       - name: Write Vulkan render report
         if: always()

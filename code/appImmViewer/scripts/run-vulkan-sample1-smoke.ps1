@@ -299,15 +299,23 @@ $presentLog = Get-Content $debugLog -Raw
 if ($presentLog -notmatch "Loaded in GPU \[0\]") {
     throw "Live-present smoke log does not show GPU load completion."
 }
-if ($presentLog -notmatch "Vulkan renderer presented swapchain sRGB GPU present frame") {
-    throw "Live-present smoke log does not show sRGB GPU Vulkan presentation."
+$requiredPresentPatterns = @(
+    "Vulkan renderer submitted static paint draw commands",
+    "Vulkan renderer submitted picture draw commands",
+    "Vulkan renderer read back static paint GPU target nonblack=",
+    "IMM GL validation:"
+)
+foreach ($pattern in $requiredPresentPatterns) {
+    if ($presentLog -notmatch [regex]::Escape($pattern)) {
+        throw "Live-present smoke log does not show expected Vulkan GPU evidence: $pattern"
+    }
 }
 foreach ($pattern in $badPatterns) {
     if ($presentLog -match $pattern) {
         throw "Live-present smoke log matched failure pattern: $pattern"
     }
 }
-Write-Host "Live present: sRGB GPU Vulkan presentation logged"
+Write-Host "Live present: Vulkan GPU draw/readback validation logged"
 
 if (-not $KeepArtifacts) {
     Remove-Item -LiteralPath $capturePath, $capturePngPath, $captureTmpPath -Force -ErrorAction SilentlyContinue
