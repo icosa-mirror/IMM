@@ -51,8 +51,8 @@
     "minimum_non_black_pixels": 20000,
     "reference_metrics_artifact": "ImmViewer-macOS",
     "requires_dimensions": {
-      "height": 720,
-      "width": 1280
+      "height": 576,
+      "width": 1024
     },
     "requires_color_metrics": true,
     "requires_orientation_metrics": true,

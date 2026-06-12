@@ -825,9 +825,11 @@ jobs:
           mkdir -p artifacts/godot-smoke-macos-metal
           smoke_status=0
           IMM_GODOT_VISUAL_SMOKE=1 \
+          IMM_GODOT_VISUAL_SMOKE_WIDTH=1024 \
+          IMM_GODOT_VISUAL_SMOKE_HEIGHT=576 \
           IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA=1 \
           IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
-          "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --resolution 1280x720 --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
+          "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --resolution 1024x576 --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
             > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1 || smoke_status=$?
           python3 tests/tools/classify_godot_visual_smoke.py \
             --log artifacts/godot-smoke-macos-metal/godot-metal-smoke.log \
