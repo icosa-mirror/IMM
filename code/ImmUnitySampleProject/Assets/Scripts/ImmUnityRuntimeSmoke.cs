@@ -192,12 +192,27 @@ namespace ImmPlayer
             if (renderer == null)
                 return probe;
 
-            Shader shader = Shader.Find("Unlit/Color");
+            Shader shader = renderer.sharedMaterial != null ? renderer.sharedMaterial.shader : null;
+            if (shader == null)
+                shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
+                shader = Shader.Find("Unlit/Color");
             if (shader == null)
                 shader = Shader.Find("Standard");
+
+            if (shader == null)
+            {
+                Debug.LogError($"{Prefix}scene composition probe material failed: no shader found for {name}");
+                return probe;
+            }
+
             var material = new Material(shader);
-            material.color = color;
+            if (material.HasProperty("_BaseColor"))
+                material.SetColor("_BaseColor", color);
+            if (material.HasProperty("_Color"))
+                material.SetColor("_Color", color);
             renderer.sharedMaterial = material;
+            Debug.Log($"{Prefix}scene composition probe material {name} shader={shader.name}");
             return probe;
         }
 
