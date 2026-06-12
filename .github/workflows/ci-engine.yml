@@ -102,10 +102,9 @@ jobs:
         timeout-minutes: 25
         uses: game-ci/unity-test-runner@v4
         env:
-          UNITY_EMAIL: ${{ fromJSON(format('["unitytest@mikeage.net", "{0}"]', vars.UNITY_EMAIL))[secrets.UNITY_SERIAL != ''] }}
-          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
-          UNITY_PASSWORD: ${{ fromJSON(format('["DoNotStealThis1", "{0}"]', secrets.UNITY_PASSWORD))[secrets.UNITY_SERIAL != ''] }}
-          UNITY_LICENSE: ${{ fromJSON(format('[{0}, null]', toJSON(env.IMM_UNITY_FALLBACK_LICENSE)))[secrets.UNITY_SERIAL != ''] }}
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
         with:
           projectPath: code/ImmUnitySampleProject
           unityVersion: ${{ env.UNITY_VERSION }}
@@ -193,10 +192,9 @@ jobs:
         timeout-minutes: 25
         uses: game-ci/unity-builder@v4
         env:
-          UNITY_EMAIL: ${{ fromJSON(format('["unitytest@mikeage.net", "{0}"]', vars.UNITY_EMAIL))[secrets.UNITY_SERIAL != ''] }}
-          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
-          UNITY_PASSWORD: ${{ fromJSON(format('["DoNotStealThis1", "{0}"]', secrets.UNITY_PASSWORD))[secrets.UNITY_SERIAL != ''] }}
-          UNITY_LICENSE: ${{ fromJSON(format('[{0}, null]', toJSON(env.IMM_UNITY_FALLBACK_LICENSE)))[secrets.UNITY_SERIAL != ''] }}
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
           IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH: ${{ github.workspace }}\artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
         with:
           projectPath: code/ImmUnitySampleProject
