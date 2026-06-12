@@ -805,7 +805,7 @@ jobs:
   macos-godot-metal:
     name: macOS Godot Metal
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout repository
