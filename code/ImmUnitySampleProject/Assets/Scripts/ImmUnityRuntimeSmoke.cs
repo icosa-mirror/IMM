@@ -191,7 +191,7 @@ namespace ImmPlayer
         private static CompositionRegionResult AnalyzeProbeRegion(Color32[] pixels, int width, int height, Camera camera, GameObject probe, Color target)
         {
             if (camera == null || probe == null)
-                return new CompositionRegionResult("missing", 0, 0, 0.0f, RectInt.zero);
+                return new CompositionRegionResult("missing", 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
 
             Renderer renderer = probe.GetComponent<Renderer>();
             Bounds bounds = renderer != null ? renderer.bounds : new Bounds(probe.transform.position, Vector3.one * 0.25f);
@@ -225,7 +225,7 @@ namespace ImmPlayer
             }
 
             if (maxX < minX || maxY < minY)
-                return new CompositionRegionResult(probe.name, 0, 0, 0.0f, RectInt.zero);
+                return new CompositionRegionResult(probe.name, 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
 
             const int inset = 3;
             minX = Mathf.Clamp(minX + inset, 0, width - 1);
@@ -233,7 +233,7 @@ namespace ImmPlayer
             minY = Mathf.Clamp(minY + inset, 0, height - 1);
             maxY = Mathf.Clamp(maxY - inset, 0, height - 1);
             if (maxX < minX || maxY < minY)
-                return new CompositionRegionResult(probe.name, 0, 0, 0.0f, RectInt.zero);
+                return new CompositionRegionResult(probe.name, 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
 
             int total = 0;
             int matched = 0;
