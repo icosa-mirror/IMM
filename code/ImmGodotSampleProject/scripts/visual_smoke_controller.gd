@@ -12,6 +12,8 @@ const ANDROID_MAX_READY_SECONDS := 30.0
 const SPAWN_AREA_FRAME_WAIT_SECONDS := 2.0
 const RENDER_SETTLE_FRAMES := 30
 const DEFAULT_RELOAD_CYCLES := 1
+const DEFAULT_VISUAL_SMOKE_WIDTH := 1280
+const DEFAULT_VISUAL_SMOKE_HEIGHT := 720
 const MIN_CONTENT_PIXELS := 512
 const MIN_CONTENT_BOUNDS_SIZE := 12
 const MIN_LUMA_RANGE := 0.02
@@ -142,6 +144,7 @@ func _setup_compositor() -> bool:
 
 func _run_visual_smoke() -> void:
 	var failures: Array[String] = []
+	await _apply_visual_smoke_viewport_size()
 	status_label.visible = false
 	var prefer_spawn_area := _visual_smoke_prefers_spawn_area()
 
@@ -337,6 +340,23 @@ func _queue_active_camera() -> void:
 	var width: int = max(int(viewport_size.x), 1)
 	var height: int = max(int(viewport_size.y), 1)
 	viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID)
+
+func _apply_visual_smoke_viewport_size() -> void:
+	var width: int = max(_get_env_int("IMM_GODOT_VISUAL_SMOKE_WIDTH", DEFAULT_VISUAL_SMOKE_WIDTH), 1)
+	var height: int = max(_get_env_int("IMM_GODOT_VISUAL_SMOKE_HEIGHT", DEFAULT_VISUAL_SMOKE_HEIGHT), 1)
+	var target_size := Vector2i(width, height)
+	DisplayServer.window_set_size(target_size)
+	var window := get_window()
+	if window != null:
+		window.size = target_size
+	for _frame in range(3):
+		await get_tree().process_frame
+	var actual_size: Vector2 = get_viewport().get_visible_rect().size
+	print("IMM Godot %s visual smoke viewport size requested=%s actual=%s" % [
+		_selected_renderer_name(),
+		str(target_size),
+		str(actual_size),
+	])
 
 func _apply_forced_player_frame(player_frame: int) -> void:
 	if player_frame < 0:

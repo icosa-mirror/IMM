@@ -21,6 +21,7 @@
 #include <GLES3/gl3.h>
 
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <dirent.h>
 #include <mutex>
@@ -75,6 +76,7 @@ struct EngineState {
     bool viewerInitialized = false;
     bool firstFrame = true;
     uint32_t frameCount = 0;
+    bool validationCaptureWritten = false;
 
     std::wstring playerSpawnLocation = L"Default";
     ExePlayer::Settings::Rendering::Technique renderingTechnique =
@@ -100,6 +102,113 @@ EngineState gEngine;
 std::mutex gMessageMutex;
 std::wstring gPendingPath;
 bool gTriedAutoLoad = false;
+std::string gAssetDirectory;
+std::string gExternalFilesDirectory;
+
+static uint8_t iSaturateToByte(float value) {
+    if (value <= 0.0f) {
+        return 0;
+    }
+    if (value >= 1.0f) {
+        return 255;
+    }
+    return static_cast<uint8_t>(value * 255.0f + 0.5f);
+}
+
+static bool iWriteRgbPpm(const char *path, const uint8_t *rgb, int width, int height) {
+    if (!path || !path[0] || !rgb || width <= 0 || height <= 0) {
+        return false;
+    }
+    FILE *file = fopen(path, "wb");
+    if (!file) {
+        return false;
+    }
+    fprintf(file, "P6\n%d %d\n255\n", width, height);
+    const size_t expected = static_cast<size_t>(width) * static_cast<size_t>(height) * 3u;
+    const size_t written = fwrite(rgb, 1, expected, file);
+    fclose(file);
+    return written == expected;
+}
+
+static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical) {
+    if (!pixels || width <= 0 || height <= 0) {
+        return false;
+    }
+    std::vector<uint8_t> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    for (int y = 0; y < height; ++y) {
+        const int sourceY = flipVertical ? (height - 1 - y) : y;
+        for (int x = 0; x < width; ++x) {
+            const uint32_t value = pixels[static_cast<size_t>(sourceY) * width + x];
+            const uint32_t rBits = value & 0x7ffu;
+            const uint32_t gBits = (value >> 11) & 0x7ffu;
+            const uint32_t bBits = (value >> 22) & 0x3ffu;
+            const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
+            rgb[out + 0] = iSaturateToByte(static_cast<float>(rBits) / 2047.0f);
+            rgb[out + 1] = iSaturateToByte(static_cast<float>(gBits) / 2047.0f);
+            rgb[out + 2] = iSaturateToByte(static_cast<float>(bBits) / 1023.0f);
+        }
+    }
+    return iWriteRgbPpm(path, rgb.data(), width, height);
+}
+
+static bool iWriteGlesFramebufferPpm(const char *path, int width, int height) {
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u);
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    std::vector<uint8_t> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    for (int y = 0; y < height; ++y) {
+        const int sourceY = height - 1 - y;
+        for (int x = 0; x < width; ++x) {
+            const size_t in = (static_cast<size_t>(sourceY) * width + x) * 4u;
+            const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
+            rgb[out + 0] = rgba[in + 0];
+            rgb[out + 1] = rgba[in + 1];
+            rgb[out + 2] = rgba[in + 2];
+        }
+    }
+    return iWriteRgbPpm(path, rgb.data(), width, height);
+}
+
+static void writeValidationCaptureIfReady() {
+    if (gEngine.validationCaptureWritten || gEngine.frameCount < 60 || gExternalFilesDirectory.empty()) {
+        return;
+    }
+
+    const std::string artifactDir = gExternalFilesDirectory + "/imm-ftl";
+    mkdir(artifactDir.c_str(), 0777);
+    const std::string capturePath = artifactDir + "/native-render-after.ppm";
+
+    bool wrote = false;
+    if (gEngine.useVulkan) {
+        if (gEngine.renderer && gEngine.colorTexture) {
+            const size_t pixelCount = static_cast<size_t>(gEngine.width) * static_cast<size_t>(gEngine.height);
+            std::vector<uint32_t> pixels(pixelCount);
+            gEngine.renderer->GetTextureContent(gEngine.colorTexture, pixels.data(), piRenderer::Format::C3_11_11_10_FLOAT);
+            wrote = iWriteRG11B10Ppm(capturePath.c_str(), pixels.data(), gEngine.width, gEngine.height, false);
+        }
+    } else {
+        wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), gEngine.width, gEngine.height);
+    }
+
+    if (wrote) {
+        gEngine.validationCaptureWritten = true;
+        ALOGV("IMMAVAL native render capture written path=%s frame=%u size=%dx%d renderer=%s",
+              capturePath.c_str(),
+              gEngine.frameCount,
+              gEngine.width,
+              gEngine.height,
+              gEngine.useVulkan ? "Vulkan" : "GLES");
+    } else {
+        ALOGE("IMMAVAL native render capture failed path=%s frame=%u size=%dx%d renderer=%s",
+              capturePath.c_str(),
+              gEngine.frameCount,
+              gEngine.width,
+              gEngine.height,
+              gEngine.useVulkan ? "Vulkan" : "GLES");
+    }
+}
 
 bool iEqualsIgnoreCase(const char* a, const char* b) {
     if (!a || !b) {
@@ -124,9 +233,6 @@ public:
 };
 
 AndroidRenderReporter gRenderReporter;
-
-std::string gAssetDirectory;
-std::string gExternalFilesDirectory;
 
 #if defined(IMM_ANDROID_XR_RUNTIME_OPENXR)
 const char* XrResultName(XrResult result) {
@@ -772,6 +878,7 @@ bool loadPath(const std::wstring& path) {
     gEngine.viewerInitialized = success;
     gEngine.firstFrame = true;
     gEngine.frameCount = 0;
+    gEngine.validationCaptureWritten = false;
     ALOGV("IMMAVAL loadPath result=%d settings=%p", success ? 1 : 0, settings);
     return success;
 }
@@ -836,6 +943,7 @@ void renderFrame() {
                                ivec2(gEngine.width, gEngine.height), true, 8000, gEngine.firstFrame);
     gEngine.viewer->GlobalRender(vrToHead, projection);
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
+    writeValidationCaptureIfReady();
     if (gEngine.frameCount == 0 || gEngine.frameCount == 60) {
         ALOGV("IMMAVAL renderFrame frame=%u size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
               gEngine.frameCount,

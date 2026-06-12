@@ -1,6 +1,6 @@
 {
   "baseline": "android-standalone-vulkan-sample1",
-  "capture_source": "Firebase Test Lab screencap_after.png",
+  "capture_source": "Firebase Test Lab native-render-after.ppm",
   "fixture": "exampleImmFiles/sample1.imm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {

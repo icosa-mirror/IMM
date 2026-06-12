@@ -39,20 +39,22 @@ public final class ImmFtlSmokeTest {
         intent.putExtra("RenderingAPI", renderer);
         targetContext.startActivity(intent);
 
-        SystemClock.sleep(waitSeconds * 1000L);
-
         File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
         assertTrue("Could not create artifact directory: " + artifactDir, artifactDir.mkdirs() || artifactDir.isDirectory());
+
+        File nativeCapture = new File(artifactDir, "native-render-after.ppm");
+        String logcat = waitForNativeCapture(device, nativeCapture, waitSeconds);
 
         File screenshot = new File(artifactDir, "screencap_after.png");
         assertTrue("FTL screenshot capture failed", device.takeScreenshot(screenshot));
         assertTrue("FTL screenshot is empty", screenshot.isFile() && screenshot.length() > 0L);
 
-        String logcat = runShell(device, "logcat -d");
+        logcat = runShell(device, "logcat -d");
         writeText(new File(artifactDir, "logcat_after.txt"), logcat);
 
         requireMarker(logcat, "IMM Android renderer API: " + renderer);
         requireMarker(logcat, "IMMAVAL loadPath result=1");
+        requireMarker(logcat, "IMMAVAL native render capture written");
         requireMarker(logcat, "Loaded in CPU");
         requireMarker(logcat, "Loaded in GPU");
 
@@ -87,6 +89,20 @@ public final class ImmFtlSmokeTest {
 
     private static void forbidMarker(String logcat, String marker) {
         assertTrue("Forbidden log marker was present: " + marker, !logcat.contains(marker));
+    }
+
+    private static String waitForNativeCapture(UiDevice device, File capture, int waitSeconds) throws Exception {
+        long deadline = SystemClock.elapsedRealtime() + waitSeconds * 1000L;
+        String logcat = "";
+        while (SystemClock.elapsedRealtime() < deadline) {
+            logcat = runShell(device, "logcat -d");
+            if (capture.isFile() && capture.length() > 0L && logcat.contains("IMMAVAL native render capture written")) {
+                return logcat;
+            }
+            SystemClock.sleep(500L);
+        }
+        assertTrue("Native render capture was not written: " + capture + "\n" + logcat, false);
+        return logcat;
     }
 
     private static int parseInt(String value, int fallback) {

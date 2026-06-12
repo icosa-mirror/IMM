@@ -89,27 +89,28 @@ jobs:
           --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
           --required-marker "IMM Android renderer API: GLES"
           --required-marker "IMMAVAL loadPath result=1"
+          --required-marker "IMMAVAL native render capture written"
           --required-marker "Loaded in CPU"
           --required-marker "Loaded in GPU"
-          --required-capture-name screencap_after.png
+          --required-capture-name native-render-after.ppm
           --client-label "IMM Android Standalone GLES"
       - name: Record Android GLES screenshot metrics
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($capture) {
             python tests/tools/compare_render_metrics.py $capture.FullName --contract tests/baselines/render/android-standalone-gles-sample1.json --json-output artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
           } else {
             New-Item -ItemType Directory -Force artifacts/android-standalone-gles | Out-Null
-            '{"passed":false,"errors":["missing Firebase Test Lab screencap_after.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+            '{"passed":false,"errors":["missing Firebase Test Lab native-render-after.ppm"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
           }
       - name: Write Android GLES screenshot report
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
-          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-gles/missing-screencap_after.png" }
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-gles/missing-native-render-after.ppm" }
           python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-gles/android-gles-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-gles/captures --markdown-output artifacts/android-standalone-gles/render-report.md
       - name: Write CI manifest
         if: always()
@@ -202,31 +203,32 @@ jobs:
           --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
           --required-marker "IMM Android renderer API: Vulkan"
           --required-marker "IMMAVAL loadPath result=1"
+          --required-marker "IMMAVAL native render capture written"
           --required-marker "Loaded in CPU"
           --required-marker "Loaded in GPU"
           --required-marker "Vulkan renderer created Android surface"
           --required-marker "Vulkan renderer initialized with owned device"
           --required-marker "Vulkan renderer submitted picture draw commands"
           --required-marker "Vulkan renderer submitted static paint draw commands"
-          --required-capture-name screencap_after.png
+          --required-capture-name native-render-after.ppm
           --client-label "IMM Android Standalone Vulkan"
       - name: Record Android Vulkan screenshot metrics
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($capture) {
             python tests/tools/compare_render_metrics.py $capture.FullName --contract tests/baselines/render/android-standalone-vulkan-sample1.json --json-output artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
           } else {
             New-Item -ItemType Directory -Force artifacts/android-standalone-vulkan | Out-Null
-            '{"passed":false,"errors":["missing Firebase Test Lab screencap_after.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+            '{"passed":false,"errors":["missing Firebase Test Lab native-render-after.ppm"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
           }
       - name: Write Android Vulkan screenshot report
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter screencap_after.png -ErrorAction SilentlyContinue | Select-Object -First 1
-          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-vulkan/missing-screencap_after.png" }
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-vulkan/missing-native-render-after.ppm" }
           python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-vulkan/captures --markdown-output artifacts/android-standalone-vulkan/render-report.md
       - name: Write CI manifest
         if: always()
