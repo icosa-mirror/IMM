@@ -202,10 +202,17 @@ def find_metrics(root: Path) -> dict:
     return {}
 
 
-def effective_status(metrics: dict, status: dict) -> tuple[str, str]:
+def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, str]:
     errors = metrics.get("errors") or []
     if errors or metrics.get("passed") is False:
         return ("failed", "rendering")
+    classification = manifest.get("classification") or {}
+    result = classification.get("result")
+    failure_class = classification.get("failure_class", "")
+    if result in {"failed", "failure", "cancelled"}:
+        return ("failed", failure_class)
+    if result == "expected_failed":
+        return ("expected failure", failure_class)
     if status.get("compositing") == "expected_failed":
         return ("expected failure", "compositing")
     if status.get("rendering") == "success" or metrics.get("passed") is True:
@@ -264,19 +271,23 @@ def main() -> int:
     for key, report in discover_reports(input_root):
         metrics = find_metrics(report.parent)
         status = find_json(report.parent, "composition-status.json")
+        manifest = find_json(report.parent, "manifest.json")
         images = find_images_for_report(report, key)
-        if not metrics and not status and not images:
+        if not metrics and not status and not manifest and not images:
             continue
 
         visual_sections += 1
         name = display_name(key)
         section_slug = slugify(key)
-        result, failure_class = effective_status(metrics, status)
+        result, failure_class = effective_status(metrics, status, manifest)
         lines.append(f"## {name}")
         lines.append("")
         lines.append(f"- Result: {result}")
         if failure_class:
             lines.append(f"- Failure class: {failure_class}")
+        classification = manifest.get("classification") or {}
+        if classification:
+            lines.append(f"- Lane status: {classification.get('result', '')}")
         if status:
             lines.append(f"- Rendering: {status.get('rendering', '')}")
             lines.append(f"- Compositing: {status.get('compositing', '')}")
