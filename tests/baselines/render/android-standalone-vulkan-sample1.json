@@ -5,6 +5,28 @@
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "png",
+    "expected_luma_percentiles": {
+      "p01": {
+        "max": 15
+      },
+      "p05": {
+        "max": 25
+      },
+      "p50": {
+        "max": 80,
+        "min": 20
+      },
+      "p95": {
+        "min": 120
+      },
+      "p99": {
+        "min": 220
+      }
+    },
+    "expected_luma_stddev": {
+      "max": 75,
+      "min": 35
+    },
     "minimum_luma_span": 16,
     "minimum_near_visible_pixels": 20000,
     "minimum_non_black_pixels": 20000,

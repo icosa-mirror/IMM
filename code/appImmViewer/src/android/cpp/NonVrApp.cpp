@@ -105,7 +105,20 @@ bool gTriedAutoLoad = false;
 std::string gAssetDirectory;
 std::string gExternalFilesDirectory;
 
-static uint8_t iSaturateToByte(float value) {
+static float iDecodeUnsignedFloat(uint32_t bits, int mantissaBits) {
+    const uint32_t mantissaMask = (1u << mantissaBits) - 1u;
+    const uint32_t mantissa = bits & mantissaMask;
+    const uint32_t exponent = (bits >> mantissaBits) & 0x1fu;
+    if (exponent == 0) {
+        return ldexpf(static_cast<float>(mantissa) / static_cast<float>(1u << mantissaBits), -14);
+    }
+    if (exponent == 31) {
+        return 1.0f;
+    }
+    return ldexpf(1.0f + static_cast<float>(mantissa) / static_cast<float>(1u << mantissaBits), static_cast<int>(exponent) - 15);
+}
+
+static uint8_t iFloatToByte(float value) {
     if (value <= 0.0f) {
         return 0;
     }
@@ -113,6 +126,17 @@ static uint8_t iSaturateToByte(float value) {
         return 255;
     }
     return static_cast<uint8_t>(value * 255.0f + 0.5f);
+}
+
+static uint8_t iLinearFloatToSrgbByte(float value) {
+    if (value <= 0.0f) {
+        return 0;
+    }
+    if (value >= 1.0f) {
+        return 255;
+    }
+    const float encoded = value < 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+    return iFloatToByte(encoded);
 }
 
 static bool iWriteRgbPpm(const char *path, const uint8_t *rgb, int width, int height) {
@@ -165,13 +189,10 @@ static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width
         const int sourceY = flipVertical ? (height - 1 - y) : y;
         for (int x = 0; x < width; ++x) {
             const uint32_t value = pixels[static_cast<size_t>(sourceY) * width + x];
-            const uint32_t rBits = value & 0x7ffu;
-            const uint32_t gBits = (value >> 11) & 0x7ffu;
-            const uint32_t bBits = (value >> 22) & 0x3ffu;
             const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
-            rgb[out + 0] = iSaturateToByte(static_cast<float>(rBits) / 2047.0f);
-            rgb[out + 1] = iSaturateToByte(static_cast<float>(gBits) / 2047.0f);
-            rgb[out + 2] = iSaturateToByte(static_cast<float>(bBits) / 1023.0f);
+            rgb[out + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(value & 0x7ffu, 6));
+            rgb[out + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 11u) & 0x7ffu, 6));
+            rgb[out + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 22u) & 0x3ffu, 5));
         }
     }
     if (!iHasVisibleRgbContent(rgb.data(), width, height)) {

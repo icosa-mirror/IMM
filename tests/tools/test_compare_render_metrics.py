@@ -44,6 +44,10 @@ def darken(pixels: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
     return [(r // 3, g // 3, b // 3) for r, g, b in pixels]
 
 
+def compress_contrast(pixels: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+    return [(96 + r // 8, 96 + g // 8, 96 + b // 8) for r, g, b in pixels]
+
+
 def main() -> int:
     width = 8
     height = 8
@@ -52,6 +56,7 @@ def main() -> int:
         reference_path = temp / "reference.ppm"
         flipped_path = temp / "flipped.ppm"
         dark_path = temp / "dark.ppm"
+        compressed_path = temp / "compressed.ppm"
         png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
         contract_path = temp / "contract.json"
@@ -60,6 +65,7 @@ def main() -> int:
         write_ppm(reference_path, width, height, pixels)
         write_ppm(flipped_path, width, height, flip_vertical(width, height, pixels))
         write_ppm(dark_path, width, height, darken(pixels))
+        write_ppm(compressed_path, width, height, compress_contrast(pixels))
         write_render_report.write_png(
             png_path,
             width,
@@ -70,6 +76,7 @@ def main() -> int:
         same = compare_render_metrics.collect_metrics(reference_path)
         flipped = compare_render_metrics.collect_metrics(flipped_path)
         dark = compare_render_metrics.collect_metrics(dark_path)
+        compressed = compare_render_metrics.collect_metrics(compressed_path)
         png = compare_render_metrics.collect_metrics(png_path)
 
         contract = {
@@ -103,6 +110,16 @@ def main() -> int:
                     "min": reference["visible_luma_mean"] - 16,
                     "max": reference["visible_luma_mean"] + 16,
                 },
+                "expected_luma_stddev": {
+                    "min": max(0, reference["luma_stddev"] - 10),
+                    "max": reference["luma_stddev"] + 10,
+                },
+                "expected_luma_percentiles": {
+                    "p01": {"value": reference["luma_percentiles"]["p01"], "tolerance": 8},
+                    "p50": {"value": reference["luma_percentiles"]["p50"], "tolerance": 8},
+                    "p95": {"value": reference["luma_percentiles"]["p95"], "tolerance": 8},
+                    "p99": {"value": reference["luma_percentiles"]["p99"], "tolerance": 8},
+                },
             },
         }
         contract_path.write_text(json.dumps(contract), encoding="utf-8")
@@ -120,6 +137,10 @@ def main() -> int:
         assert any(
             "visible luma mean" in error or "channel mean" in error
             for error in compare_render_metrics.validate_contract(contract, dark)
+        )
+        assert any(
+            "luma stddev" in error or "luma percentile" in error
+            for error in compare_render_metrics.validate_contract(contract, compressed)
         )
         assert any("vertical luma profile" in error or "centroid" in error for error in compare_render_metrics.compare_metrics(reference, flipped))
         assert any("visible luma mean" in error for error in compare_render_metrics.compare_metrics(reference, dark))

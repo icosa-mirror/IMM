@@ -46,10 +46,13 @@ def compute_rgb_metrics(width: int, height: int, pixels: bytes, format_name: str
         "bottom_right": {"visible_pixels": 0, "luma_sum": 0},
     }
     vertical_bins = [{"visible_pixels": 0, "luma_sum": 0} for _ in range(5)]
+    luma_histogram = [0] * 256
+    visible_luma_histogram = [0] * 256
 
     for index in range(0, len(pixels), 3):
         r, g, b = pixels[index], pixels[index + 1], pixels[index + 2]
         luma = (r * 299 + g * 587 + b * 114) // 1000
+        luma_histogram[luma] += 1
         luma_sum += luma
         luma_sq_sum += luma * luma
         min_luma = min(min_luma, luma)
@@ -72,6 +75,7 @@ def compute_rgb_metrics(width: int, height: int, pixels: bytes, format_name: str
             visible_g_sum += g
             visible_b_sum += b
             visible_chroma_sum += max(r, g, b) - min(r, g, b)
+            visible_luma_histogram[luma] += 1
 
             top = y < height / 2
             left = x < width / 2
@@ -127,7 +131,9 @@ def compute_rgb_metrics(width: int, height: int, pixels: bytes, format_name: str
         "luma_span": max_luma - min_luma,
         "luma_mean": luma_mean,
         "luma_stddev": math.sqrt(luma_variance),
+        "luma_percentiles": histogram_percentiles(luma_histogram, pixel_count),
         "visible_luma_mean": visible_luma_mean,
+        "visible_luma_percentiles": histogram_percentiles(visible_luma_histogram, non_black),
         "visible_chroma_mean": visible_chroma_mean,
         "visible_centroid": visible_centroid,
         "visible_channel_means": visible_channel_means,
@@ -135,6 +141,30 @@ def compute_rgb_metrics(width: int, height: int, pixels: bytes, format_name: str
         "quadrant_luma_share": quadrant_luma_share,
         "vertical_luma_profile": vertical_luma_profile,
     }
+
+
+def histogram_percentiles(histogram: list[int], total: int) -> dict[str, int]:
+    if total <= 0:
+        return {}
+    targets = {
+        "p01": max(1, math.ceil(total * 0.01)),
+        "p05": max(1, math.ceil(total * 0.05)),
+        "p50": max(1, math.ceil(total * 0.50)),
+        "p95": max(1, math.ceil(total * 0.95)),
+        "p99": max(1, math.ceil(total * 0.99)),
+    }
+    values: dict[str, int] = {}
+    cumulative = 0
+    pending = dict(targets)
+    for value, count in enumerate(histogram):
+        cumulative += count
+        for key, target in list(pending.items()):
+            if cumulative >= target:
+                values[key] = value
+                del pending[key]
+        if not pending:
+            break
+    return values
 
 
 def read_ppm_metrics(path: Path) -> dict:
@@ -463,6 +493,68 @@ def validate_contract(contract: dict, candidate: dict) -> list[str]:
             errors.append(f"visible luma mean {actual:.3f} is below contract minimum {minimum:.3f}")
         if maximum is not None and actual > maximum:
             errors.append(f"visible luma mean {actual:.3f} is above contract maximum {maximum:.3f}")
+
+    expected_luma_stddev = validation.get("expected_luma_stddev")
+    if isinstance(expected_luma_stddev, dict):
+        actual = candidate.get("luma_stddev", 0)
+        minimum = expected_luma_stddev.get("min")
+        maximum = expected_luma_stddev.get("max")
+        if minimum is not None and actual < minimum:
+            errors.append(f"luma stddev {actual:.3f} is below contract minimum {minimum:.3f}")
+        if maximum is not None and actual > maximum:
+            errors.append(f"luma stddev {actual:.3f} is above contract maximum {maximum:.3f}")
+
+    expected_percentiles = validation.get("expected_luma_percentiles")
+    if isinstance(expected_percentiles, dict):
+        actual_percentiles = candidate.get("luma_percentiles") or {}
+        for key, expected in expected_percentiles.items():
+            actual = actual_percentiles.get(key)
+            if actual is None:
+                errors.append(f"luma percentile {key} is missing")
+                continue
+            if not isinstance(expected, dict):
+                continue
+            target = expected.get("value")
+            tolerance = expected.get("tolerance")
+            if target is not None and tolerance is not None:
+                diff = abs(actual - float(target))
+                if diff > float(tolerance):
+                    errors.append(
+                        f"luma percentile {key} differs by {diff:.3f}: "
+                        f"expected={float(target):.3f} candidate={actual:.3f}"
+                    )
+            minimum = expected.get("min")
+            maximum = expected.get("max")
+            if minimum is not None and actual < minimum:
+                errors.append(f"luma percentile {key} {actual:.3f} is below contract minimum {float(minimum):.3f}")
+            if maximum is not None and actual > maximum:
+                errors.append(f"luma percentile {key} {actual:.3f} is above contract maximum {float(maximum):.3f}")
+
+    expected_visible_percentiles = validation.get("expected_visible_luma_percentiles")
+    if isinstance(expected_visible_percentiles, dict):
+        actual_percentiles = candidate.get("visible_luma_percentiles") or {}
+        for key, expected in expected_visible_percentiles.items():
+            actual = actual_percentiles.get(key)
+            if actual is None:
+                errors.append(f"visible luma percentile {key} is missing")
+                continue
+            if not isinstance(expected, dict):
+                continue
+            target = expected.get("value")
+            tolerance = expected.get("tolerance")
+            if target is not None and tolerance is not None:
+                diff = abs(actual - float(target))
+                if diff > float(tolerance):
+                    errors.append(
+                        f"visible luma percentile {key} differs by {diff:.3f}: "
+                        f"expected={float(target):.3f} candidate={actual:.3f}"
+                    )
+            minimum = expected.get("min")
+            maximum = expected.get("max")
+            if minimum is not None and actual < minimum:
+                errors.append(f"visible luma percentile {key} {actual:.3f} is below contract minimum {float(minimum):.3f}")
+            if maximum is not None and actual > maximum:
+                errors.append(f"visible luma percentile {key} {actual:.3f} is above contract maximum {float(maximum):.3f}")
 
     return errors
 

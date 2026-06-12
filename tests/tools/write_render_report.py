@@ -82,6 +82,13 @@ def metric_value(metrics: dict, section: str, key: str) -> str:
     return str(value)
 
 
+def percentile_value(metrics: dict, section: str, key: str) -> str:
+    value = metrics.get(section, {}).get("luma_percentiles", {}).get(key)
+    if value is None:
+        return ""
+    return str(value)
+
+
 def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]], status: dict | None = None) -> None:
     lines = [
         "# Render Validation Report",
@@ -116,6 +123,11 @@ def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]
         ["height", metric_value(metrics, "reference", "height"), metric_value(metrics, "candidate", "height")],
         ["non_black_pixels", metric_value(metrics, "reference", "non_black_pixels"), metric_value(metrics, "candidate", "non_black_pixels")],
         ["near_visible_pixels", metric_value(metrics, "reference", "near_visible_pixels"), metric_value(metrics, "candidate", "near_visible_pixels")],
+        ["luma_stddev", metric_value(metrics, "reference", "luma_stddev"), metric_value(metrics, "candidate", "luma_stddev")],
+        ["luma_p01", percentile_value(metrics, "reference", "p01"), percentile_value(metrics, "candidate", "p01")],
+        ["luma_p50", percentile_value(metrics, "reference", "p50"), percentile_value(metrics, "candidate", "p50")],
+        ["luma_p95", percentile_value(metrics, "reference", "p95"), percentile_value(metrics, "candidate", "p95")],
+        ["luma_p99", percentile_value(metrics, "reference", "p99"), percentile_value(metrics, "candidate", "p99")],
         ["visible_luma_mean", metric_value(metrics, "reference", "visible_luma_mean"), metric_value(metrics, "candidate", "visible_luma_mean")],
         ["visible_chroma_mean", metric_value(metrics, "reference", "visible_chroma_mean"), metric_value(metrics, "candidate", "visible_chroma_mean")],
     ]
