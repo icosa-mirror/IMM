@@ -85,7 +85,7 @@ $apk = Join-Path $project (Join-Path "build" "android" "imm-godot-sample-debug.a
 $logDirectory = (New-Item -ItemType Directory -Force $LogDir).FullName
 $logPath = Join-Path $logDirectory "logcat.txt"
 $pngPath = Join-Path $logDirectory "vulkan_visual_smoke.png"
-$devicePngPath = "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/vulkan_visual_smoke.png"
+$devicePngPath = "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl/vulkan_visual_smoke.png"
 
 $godotPath = Resolve-Tool $GodotExe "godot" "Godot"
 $adbPath = Resolve-Adb $Adb

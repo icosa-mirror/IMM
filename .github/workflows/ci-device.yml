@@ -386,6 +386,7 @@ jobs:
           mv "$extension_path.tmp" "$extension_path"
           export_preset_path="$project_dir/export_presets.cfg"
           perl -0pi -e 's/package\/show_as_launcher_app=false/package\/show_as_launcher_app=true/g' "$export_preset_path"
+          perl -0pi -e 's#/sdcard/Android/data/org\.linuxfoundation\.imm\.godot\.sample/files/vulkan_visual_smoke\.png#/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl/vulkan_visual_smoke.png#g' "$export_preset_path"
           grep -q 'package/show_as_launcher_app=true' "$export_preset_path" || {
             echo "Failed to make Android Godot export launchable for Firebase Test Lab" >&2
             exit 1
@@ -419,7 +420,7 @@ jobs:
             --test-type robo \
             --artifact-dir artifacts/android-godot-vulkan \
             --timeout 7m \
-            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files \
+            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl \
             --required-marker "IMM Godot Vulkan visual smoke passed" \
             --required-marker "Loaded in CPU" \
             --required-marker "Loaded in GPU" \
