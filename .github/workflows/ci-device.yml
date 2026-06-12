@@ -11,7 +11,7 @@ permissions:
 
 env:
   FTL_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
-  FTL_GODOT_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GODOT_DEVICE || 'model=MediumPhone.arm,version=35,locale=en,orientation=landscape' }}
+  FTL_GODOT_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GODOT_DEVICE || 'model=akita,version=34,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
   FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
 
