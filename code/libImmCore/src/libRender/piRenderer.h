@@ -335,6 +335,7 @@ public:
     virtual void      Deinitialize( void ) = 0;
 	virtual bool      SupportsFeature(RendererFeature feature) = 0;
 	virtual API       GetAPI(void) = 0;
+	virtual bool      UsesExternalHostDepth(void) const { return false; }
     virtual void      Report( void ) = 0;
 	// GL
     virtual void      SetActiveWindow( int id ) = 0;

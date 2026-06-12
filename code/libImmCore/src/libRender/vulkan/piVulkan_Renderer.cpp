@@ -603,6 +603,20 @@ union VkClearValue
     float depthStencil[2];
 };
 
+struct VkClearAttachment
+{
+    VkImageAspectFlags aspectMask;
+    uint32_t colorAttachment;
+    VkClearValue clearValue;
+};
+
+struct VkClearRect
+{
+    VkRect2D rect;
+    uint32_t baseArrayLayer;
+    uint32_t layerCount;
+};
+
 struct VkRenderPassBeginInfo
 {
     VkStructureType sType;
@@ -733,6 +747,13 @@ struct VkSpecializationInfo
     const void *pMapEntries;
     size_t dataSize;
     const void *pData;
+};
+
+struct VkSpecializationMapEntry
+{
+    uint32_t constantID;
+    uint32_t offset;
+    size_t size;
 };
 
 struct VkPipelineShaderStageCreateInfo
@@ -1088,6 +1109,7 @@ typedef VkResult (*PFN_vkEndCommandBuffer)(VkCommandBuffer commandBuffer);
 typedef void (*PFN_vkCmdPipelineBarrier)(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const void *memoryBarriers, uint32_t bufferMemoryBarrierCount, const void *bufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *imageMemoryBarriers);
 typedef void (*PFN_vkCmdClearColorImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearColorValue *color, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
 typedef void (*PFN_vkCmdClearDepthStencilImage)(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout imageLayout, const VkClearDepthStencilValue *depthStencil, uint32_t rangeCount, const VkImageSubresourceRange *ranges);
+typedef void (*PFN_vkCmdClearAttachments)(VkCommandBuffer commandBuffer, uint32_t attachmentCount, const VkClearAttachment *attachments, uint32_t rectCount, const VkClearRect *rects);
 typedef void (*PFN_vkCmdCopyBufferToImage)(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdCopyImageToBuffer)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkBuffer dstBuffer, uint32_t regionCount, const VkBufferImageCopy *regions);
 typedef void (*PFN_vkCmdResolveImage)(VkCommandBuffer commandBuffer, VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout, uint32_t regionCount, const VkImageResolve *regions);
@@ -1172,6 +1194,7 @@ struct piShaderS
     VkCompareOp pipelineDepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     bool pipelineAlphaToCoverage = false;
     bool pipelineBlendEnabled = false;
+    bool pipelineHostDepthBackdrop = false;
     bool isPicture = false;
     bool isPicture2D = false;
 };
@@ -1222,10 +1245,12 @@ struct piRTargetS
     piTexture depth = nullptr;
     VkRenderPass renderPass = VK_NULL_RENDER_PASS;
     VkFramebuffer framebuffer = VK_NULL_FRAMEBUFFER;
+    uint32_t subpass = 0;
     uint32_t width = 0;
     uint32_t height = 0;
     uint32_t colorAttachmentCount = 0;
     bool hasDepth = false;
+    bool ownsRenderPassObjects = true;
 };
 
 struct piSamplerS
@@ -1296,6 +1321,8 @@ struct piVulkanState
     VkRenderPass swapchainRenderPass = VK_NULL_RENDER_PASS;
     VkCommandPool commandPool = VK_NULL_COMMAND_POOL;
     VkCommandBuffer commandBuffer = VK_NULL_COMMAND_BUFFER;
+    VkCommandBuffer hostPreviousCommandBuffer = VK_NULL_COMMAND_BUFFER;
+    piRTarget hostPreviousRenderTarget = nullptr;
     VkSemaphore imageAvailableSemaphore = VK_NULL_SEMAPHORE;
     VkSemaphore renderFinishedSemaphore = VK_NULL_SEMAPHORE;
     VkFence frameFence = VK_NULL_FENCE;
@@ -1306,6 +1333,10 @@ struct piVulkanState
     piTexture externalFrameColorTexture = nullptr;
     piTexture externalFrameDepthTexture = nullptr;
     piRTarget externalFrameRenderTarget = nullptr;
+    bool externalFrameUsesHostDepth = false;
+    bool externalFramePreservesHostColor = false;
+    bool hostRenderPassFrameActive = false;
+    bool hostRenderPassFrameReported = false;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -1362,6 +1393,7 @@ struct piVulkanState
     PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier = nullptr;
     PFN_vkCmdClearColorImage vkCmdClearColorImage = nullptr;
     PFN_vkCmdClearDepthStencilImage vkCmdClearDepthStencilImage = nullptr;
+    PFN_vkCmdClearAttachments vkCmdClearAttachments = nullptr;
     PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage = nullptr;
     PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer = nullptr;
     PFN_vkCmdResolveImage vkCmdResolveImage = nullptr;
@@ -1969,6 +2001,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCmdPipelineBarrier = (PFN_vkCmdPipelineBarrier)state->vkGetDeviceProcAddr(state->device, "vkCmdPipelineBarrier");
     state->vkCmdClearColorImage = (PFN_vkCmdClearColorImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearColorImage");
     state->vkCmdClearDepthStencilImage = (PFN_vkCmdClearDepthStencilImage)state->vkGetDeviceProcAddr(state->device, "vkCmdClearDepthStencilImage");
+    state->vkCmdClearAttachments = (PFN_vkCmdClearAttachments)state->vkGetDeviceProcAddr(state->device, "vkCmdClearAttachments");
     state->vkCmdCopyBufferToImage = (PFN_vkCmdCopyBufferToImage)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyBufferToImage");
     state->vkCmdCopyImageToBuffer = (PFN_vkCmdCopyImageToBuffer)state->vkGetDeviceProcAddr(state->device, "vkCmdCopyImageToBuffer");
     state->vkCmdResolveImage = (PFN_vkCmdResolveImage)state->vkGetDeviceProcAddr(state->device, "vkCmdResolveImage");
@@ -3503,8 +3536,11 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     const bool wireframe = rasterState && rasterState->wireframe;
     const bool depthClamp = rasterState && rasterState->depthClamp;
     const bool depthTest = target->hasDepth && state->currentDepthState && state->currentDepthState->depthEnable;
+    const bool useHostReverseZCompare = state->externalFrameUsesHostDepth &&
+                                        target == state->externalFrameRenderTarget &&
+                                        target->depth == state->externalFrameDepthTexture;
     const bool depthWrite = depthTest && state->depthWriteEnabled;
-    const VkCompareOp depthCompareOp = state->currentDepthState && !state->currentDepthState->lessEqual ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    const VkCompareOp depthCompareOp = useHostReverseZCompare || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
     piBlendState blendState = state->currentBlendState;
     const bool alphaToCoverage = blendState && blendState->alphaToCoverage;
     const bool blendEnabled = blendState && blendState->enabled0;
@@ -3585,7 +3621,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = shader->pipelineLayout;
     pipelineInfo.renderPass = target->renderPass;
-    pipelineInfo.subpass = 0;
+    pipelineInfo.subpass = target->subpass;
 
     const VkResult result = state->vkCreateGraphicsPipelines(state->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &shader->pipeline);
     if (result != VK_SUCCESS || shader->pipeline == VK_NULL_PIPELINE)
@@ -3616,8 +3652,9 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
 static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTarget target, piVertexArray vertexArray, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex, piRenderer::piReporter *reporter)
 {
+    const bool hostRenderPass = state && state->hostRenderPassFrameActive;
     if (!state || !shader || !target || !vertexArray || state->device == VK_NULL_DEVICE ||
-        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || (!hostRenderPass && state->frameFence == VK_NULL_FENCE) ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
@@ -3627,32 +3664,36 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     }
 
     const uint64_t timeout = 5000000000ull;
-    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-    if (result != VK_SUCCESS)
+    VkResult result = VK_SUCCESS;
+    if (!hostRenderPass)
     {
-        return false;
-    }
-    state->vkResetFences(state->device, 1, &state->frameFence);
-    state->vkResetCommandBuffer(state->commandBuffer, 0);
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
 
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-    if (result != VK_SUCCESS)
-    {
-        return false;
-    }
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
 
-    VkRenderPassBeginInfo renderPassBegin = {};
-    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassBegin.renderPass = target->renderPass;
-    renderPassBegin.framebuffer = target->framebuffer;
-    renderPassBegin.renderArea.offset.x = 0;
-    renderPassBegin.renderArea.offset.y = 0;
-    renderPassBegin.renderArea.extent.width = target->width;
-    renderPassBegin.renderArea.extent.height = target->height;
-    state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+        VkRenderPassBeginInfo renderPassBegin = {};
+        renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBegin.renderPass = target->renderPass;
+        renderPassBegin.framebuffer = target->framebuffer;
+        renderPassBegin.renderArea.offset.x = 0;
+        renderPassBegin.renderArea.offset.y = 0;
+        renderPassBegin.renderArea.extent.width = target->width;
+        renderPassBegin.renderArea.extent.height = target->height;
+        state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+    }
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
@@ -3674,8 +3715,12 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
     state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
     state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
-    state->vkCmdEndRenderPass(state->commandBuffer);
+    if (hostRenderPass)
+    {
+        return true;
+    }
 
+    state->vkCmdEndRenderPass(state->commandBuffer);
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
@@ -3798,7 +3843,15 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     {
         return false;
     }
-    if (shader->pipeline != VK_NULL_PIPELINE && shader->pipelineRenderPass == target->renderPass)
+    const bool useHostDepthTarget = state->externalFrameUsesHostDepth &&
+                                    target == state->externalFrameRenderTarget &&
+                                    target->depth == state->externalFrameDepthTexture;
+    const bool hostDepthBackdrop = useHostDepthTarget && !shader->isPicture2D;
+    const VkCompareOp depthCompareOp = useHostDepthTarget ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    if (shader->pipeline != VK_NULL_PIPELINE &&
+        shader->pipelineRenderPass == target->renderPass &&
+        shader->pipelineDepthCompareOp == depthCompareOp &&
+        shader->pipelineHostDepthBackdrop == hostDepthBackdrop)
     {
         return true;
     }
@@ -3828,6 +3881,14 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = shader->fragmentModule;
     stages[1].pName = "main";
+
+    const uint32_t hostDepthBackdropValue = hostDepthBackdrop ? 1u : 0u;
+    const VkSpecializationMapEntry hostDepthBackdropEntry = { 0u, 0u, sizeof(hostDepthBackdropValue) };
+    const VkSpecializationInfo hostDepthBackdropSpecialization = { 1u, &hostDepthBackdropEntry, sizeof(hostDepthBackdropValue), &hostDepthBackdropValue };
+    if (hostDepthBackdrop)
+    {
+        stages[0].pSpecializationInfo = &hostDepthBackdropSpecialization;
+    }
 
     VkVertexInputBindingDescription binding = {};
     binding.binding = 0;
@@ -3885,7 +3946,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = target->hasDepth ? 1 : 0;
     depthStencil.depthWriteEnable = 0;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthCompareOp = depthCompareOp;
 
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -3901,7 +3962,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = shader->pipelineLayout;
     pipelineInfo.renderPass = target->renderPass;
-    pipelineInfo.subpass = 0;
+    pipelineInfo.subpass = target->subpass;
 
     const VkResult result = state->vkCreateGraphicsPipelines(state->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &shader->pipeline);
     if (result != VK_SUCCESS || shader->pipeline == VK_NULL_PIPELINE)
@@ -3912,6 +3973,8 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
         return false;
     }
     shader->pipelineRenderPass = target->renderPass;
+    shader->pipelineDepthCompareOp = depthCompareOp;
+    shader->pipelineHostDepthBackdrop = hostDepthBackdrop;
     if (!state->picturePipelineReported)
     {
         iReport(reporter, "Vulkan renderer created picture graphics pipeline");
@@ -3922,6 +3985,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
 
 static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget target, const piVertexArray vertexArray, uint32_t num, uint32_t numInstances, uint32_t baseIndex, piRenderer::piReporter *reporter)
 {
+    const bool hostRenderPass = state && state->hostRenderPassFrameActive;
     if (!state || !shader || !target || !vertexArray || !vertexArray->vertexBuffer[0] || !vertexArray->indexBuffer ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
@@ -3931,32 +3995,36 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     }
 
     const uint64_t timeout = 5000000000ull;
-    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-    if (result != VK_SUCCESS)
+    VkResult result = VK_SUCCESS;
+    if (!hostRenderPass)
     {
-        return false;
-    }
-    state->vkResetFences(state->device, 1, &state->frameFence);
-    state->vkResetCommandBuffer(state->commandBuffer, 0);
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
 
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-    if (result != VK_SUCCESS)
-    {
-        return false;
-    }
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
 
-    VkRenderPassBeginInfo renderPassBegin = {};
-    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassBegin.renderPass = target->renderPass;
-    renderPassBegin.framebuffer = target->framebuffer;
-    renderPassBegin.renderArea.offset.x = 0;
-    renderPassBegin.renderArea.offset.y = 0;
-    renderPassBegin.renderArea.extent.width = target->width;
-    renderPassBegin.renderArea.extent.height = target->height;
-    state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+        VkRenderPassBeginInfo renderPassBegin = {};
+        renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBegin.renderPass = target->renderPass;
+        renderPassBegin.framebuffer = target->framebuffer;
+        renderPassBegin.renderArea.offset.x = 0;
+        renderPassBegin.renderArea.offset.y = 0;
+        renderPassBegin.renderArea.extent.width = target->width;
+        renderPassBegin.renderArea.extent.height = target->height;
+        state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+    }
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
@@ -3979,8 +4047,12 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
     state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
     state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, 0, 0);
-    state->vkCmdEndRenderPass(state->commandBuffer);
+    if (hostRenderPass)
+    {
+        return true;
+    }
 
+    state->vkCmdEndRenderPass(state->commandBuffer);
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
@@ -4014,6 +4086,7 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
 
 static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTarget target, uint32_t numInstances, piRenderer::piReporter *reporter)
 {
+    const bool hostRenderPass = state && state->hostRenderPassFrameActive;
     if (!state || !shader || !target || !state->vkCmdDraw ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
@@ -4023,32 +4096,36 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
     }
 
     const uint64_t timeout = 5000000000ull;
-    VkResult result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-    if (result != VK_SUCCESS)
+    VkResult result = VK_SUCCESS;
+    if (!hostRenderPass)
     {
-        return false;
-    }
-    state->vkResetFences(state->device, 1, &state->frameFence);
-    state->vkResetCommandBuffer(state->commandBuffer, 0);
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
 
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-    if (result != VK_SUCCESS)
-    {
-        return false;
-    }
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
 
-    VkRenderPassBeginInfo renderPassBegin = {};
-    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassBegin.renderPass = target->renderPass;
-    renderPassBegin.framebuffer = target->framebuffer;
-    renderPassBegin.renderArea.offset.x = 0;
-    renderPassBegin.renderArea.offset.y = 0;
-    renderPassBegin.renderArea.extent.width = target->width;
-    renderPassBegin.renderArea.extent.height = target->height;
-    state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+        VkRenderPassBeginInfo renderPassBegin = {};
+        renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassBegin.renderPass = target->renderPass;
+        renderPassBegin.framebuffer = target->framebuffer;
+        renderPassBegin.renderArea.offset.x = 0;
+        renderPassBegin.renderArea.offset.y = 0;
+        renderPassBegin.renderArea.extent.width = target->width;
+        renderPassBegin.renderArea.extent.height = target->height;
+        state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+    }
 
     VkViewport viewport = {};
     viewport.x = 0.0f;
@@ -4067,8 +4144,12 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->pictureDescriptorSet, 0, nullptr);
     state->vkCmdDraw(state->commandBuffer, 6, numInstances, 0, 0);
-    state->vkCmdEndRenderPass(state->commandBuffer);
+    if (hostRenderPass)
+    {
+        return true;
+    }
 
+    state->vkCmdEndRenderPass(state->commandBuffer);
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
@@ -5800,6 +5881,8 @@ bool piRendererVulkan::SupportsFeature(RendererFeature feature)
 
 piRenderer::API piRendererVulkan::GetAPI(void) { return API::Vulkan; }
 
+bool piRendererVulkan::UsesExternalHostDepth(void) const { return mState && mState->externalFrameUsesHostDepth; }
+
 void piRendererVulkan::Report(void)
 {
     if (!mState || !mReporter)
@@ -6573,12 +6656,17 @@ void piRendererVulkan::EndExternalImageFrame(void)
         return;
     }
 
+    const bool wasHostRenderPassFrame = mState->hostRenderPassFrameActive;
     if (mState->externalFrameColorTexture &&
+        !mState->externalFramePreservesHostColor &&
         !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))
     {
         iError(mReporter, "Vulkan renderer failed to transition external image frame for host sampling");
     }
-    SetRenderTarget(nullptr);
+    if (!wasHostRenderPassFrame)
+    {
+        SetRenderTarget(nullptr);
+    }
     if (mState->externalFrameRenderTarget)
     {
         DestroyRenderTarget(mState->externalFrameRenderTarget);
@@ -6594,6 +6682,90 @@ void piRendererVulkan::EndExternalImageFrame(void)
         DestroyTexture(mState->externalFrameColorTexture);
         mState->externalFrameColorTexture = nullptr;
     }
+    mState->externalFrameUsesHostDepth = false;
+    mState->externalFramePreservesHostColor = false;
+    mState->hostRenderPassFrameActive = false;
+    if (wasHostRenderPassFrame)
+    {
+        mState->commandBuffer = mState->hostPreviousCommandBuffer;
+        mState->hostPreviousCommandBuffer = VK_NULL_COMMAND_BUFFER;
+        SetRenderTarget(mState->hostPreviousRenderTarget);
+        mState->hostPreviousRenderTarget = nullptr;
+    }
+}
+
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, uint32_t subpass, int width, int height)
+{
+    EndExternalImageFrame();
+    if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
+    {
+        return false;
+    }
+
+    piTextureS *colorTexture = new piTextureS();
+    colorTexture->info = { TextureType::T2D, Format::C4_8_UNORM, width, height, 1, static_cast<int>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT), 1, 0 };
+    colorTexture->filter = TextureFilter::NONE;
+    colorTexture->wrap = TextureWrap::CLAMP;
+    colorTexture->vkFormat = static_cast<VkFormat>(colorVkFormat);
+    colorTexture->sampleCount = static_cast<VkSampleCountFlagBits>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT);
+    ++mState->liveTextures;
+
+    piRTargetS *target = new piRTargetS();
+    target->color[0] = colorTexture;
+    target->renderPass = static_cast<VkRenderPass>(reinterpret_cast<uintptr_t>(renderPass));
+    target->framebuffer = static_cast<VkFramebuffer>(reinterpret_cast<uintptr_t>(framebuffer));
+    target->subpass = subpass;
+    target->width = static_cast<uint32_t>(width);
+    target->height = static_cast<uint32_t>(height);
+    target->colorAttachmentCount = 1;
+    target->hasDepth = false;
+    target->ownsRenderPassObjects = false;
+    ++mState->liveRenderTargets;
+
+    mState->hostPreviousCommandBuffer = mState->commandBuffer;
+    mState->hostPreviousRenderTarget = mState->currentRenderTarget;
+    mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
+    mState->externalFrameColorTexture = colorTexture;
+    mState->externalFrameRenderTarget = target;
+    mState->externalFrameUsesHostDepth = false;
+    mState->externalFramePreservesHostColor = true;
+    mState->hostRenderPassFrameActive = true;
+    SetRenderTarget(target);
+
+    if (!mState->hostRenderPassFrameReported)
+    {
+        mState->hostRenderPassFrameReported = true;
+        iReport(mReporter, "Vulkan renderer began host render pass frame");
+    }
+    return true;
+}
+
+bool piRendererVulkan::DebugClearHostRenderPassColor(float red, float green, float blue, float alpha)
+{
+    if (!mState || !mState->hostRenderPassFrameActive || mState->commandBuffer == VK_NULL_COMMAND_BUFFER ||
+        !mState->externalFrameRenderTarget || !mState->vkCmdClearAttachments)
+    {
+        return false;
+    }
+
+    VkClearAttachment attachment = {};
+    attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    attachment.colorAttachment = 0;
+    attachment.clearValue.color.float32[0] = red;
+    attachment.clearValue.color.float32[1] = green;
+    attachment.clearValue.color.float32[2] = blue;
+    attachment.clearValue.color.float32[3] = alpha;
+
+    VkClearRect rect = {};
+    rect.rect.offset.x = 0;
+    rect.rect.offset.y = 0;
+    rect.rect.extent.width = mState->externalFrameRenderTarget->width;
+    rect.rect.extent.height = mState->externalFrameRenderTarget->height;
+    rect.baseArrayLayer = 0;
+    rect.layerCount = 1;
+
+    mState->vkCmdClearAttachments(mState->commandBuffer, 1, &attachment, 1, &rect);
+    return true;
 }
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers)
@@ -6627,7 +6799,7 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
         return false;
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, width, height, arrayLayers, false))
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, false, true))
     {
         mState->vkDestroyImageView(mState->device, imageView, nullptr);
         return false;
@@ -6643,10 +6815,82 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, width, height, 1, false);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true);
 }
 
-bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, int width, int height, int arrayLayers, bool ownsImageView)
+bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height)
+{
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true);
+}
+
+bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height)
+{
+    EndExternalImageFrame();
+    if (!mState || image == nullptr || width <= 0 || height <= 0 || vkFormat == 0 || !mState->vkCreateImageView)
+    {
+        return false;
+    }
+
+    VkImageViewCreateInfo colorViewInfo = {};
+    colorViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    colorViewInfo.image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
+    colorViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    colorViewInfo.format = static_cast<VkFormat>(vkFormat);
+    colorViewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    colorViewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    colorViewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    colorViewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    colorViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    colorViewInfo.subresourceRange.baseMipLevel = 0;
+    colorViewInfo.subresourceRange.levelCount = 1;
+    colorViewInfo.subresourceRange.baseArrayLayer = 0;
+    colorViewInfo.subresourceRange.layerCount = 1;
+
+    VkImageView colorImageView = VK_NULL_IMAGE_VIEW;
+    VkResult result = mState->vkCreateImageView(mState->device, &colorViewInfo, nullptr, &colorImageView);
+    if (result != VK_SUCCESS || colorImageView == VK_NULL_IMAGE_VIEW)
+    {
+        iError(mReporter, "Vulkan renderer failed to create Unity external color image view");
+        return false;
+    }
+
+    VkImageView depthImageView = VK_NULL_IMAGE_VIEW;
+    const bool useHostDepth = depthImage != nullptr && depthVkFormat != 0 && depthVkSamples == colorVkSamples;
+    if (depthImage != nullptr && depthVkFormat != 0 && depthVkSamples != colorVkSamples)
+    {
+        iError(mReporter, "Vulkan renderer skipping Unity external depth image because color/depth sample counts differ");
+    }
+    if (useHostDepth)
+    {
+        VkImageViewCreateInfo depthViewInfo = colorViewInfo;
+        depthViewInfo.image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(depthImage));
+        depthViewInfo.format = static_cast<VkFormat>(depthVkFormat);
+        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        result = mState->vkCreateImageView(mState->device, &depthViewInfo, nullptr, &depthImageView);
+        if (result != VK_SUCCESS || depthImageView == VK_NULL_IMAGE_VIEW)
+        {
+            mState->vkDestroyImageView(mState->device, colorImageView, nullptr);
+            iError(mReporter, "Vulkan renderer failed to create Unity external depth image view");
+            return false;
+        }
+    }
+
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false))
+    {
+        if (depthImageView != VK_NULL_IMAGE_VIEW)
+        {
+            mState->vkDestroyImageView(mState->device, depthImageView, nullptr);
+        }
+        mState->vkDestroyImageView(mState->device, colorImageView, nullptr);
+        return false;
+    }
+
+    iReport(mReporter, useHostDepth ? "Vulkan renderer began external image frame preserving host color with host depth" : "Vulkan renderer began external image frame preserving host color without host depth");
+    return true;
+}
+
+bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0)
@@ -6663,10 +6907,11 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     colorTexture->externalHandle = reinterpret_cast<uint64_t>(image);
     colorTexture->image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
     colorTexture->imageView = static_cast<VkImageView>(reinterpret_cast<uintptr_t>(imageView));
-    colorTexture->ownsImageView = ownsImageView;
+    colorTexture->ownsImageView = ownsColorImageView;
     colorTexture->vkFormat = static_cast<VkFormat>(vkFormat);
     colorTexture->imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     colorTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorTexture->sampleCount = static_cast<VkSampleCountFlagBits>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT);
     if (!colorTexture->data)
     {
         delete colorTexture;
@@ -6674,8 +6919,38 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     }
     ++mState->liveTextures;
 
-    const TextureInfo depthInfo = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, 1, 1, 0 };
-    piTexture depthTexture = CreateTexture(L"imm_external_image_depth", &depthInfo, false, TextureFilter::NONE, TextureWrap::CLAMP, 1.0f, nullptr);
+    const bool hasExternalDepth = depthImage != nullptr && depthImageView != nullptr && depthVkFormat != 0;
+    piTexture depthTexture = nullptr;
+    if (hasExternalDepth)
+    {
+        piTextureS *externalDepthTexture = new piTextureS();
+        externalDepthTexture->info = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, 1, 1, 0 };
+        externalDepthTexture->filter = TextureFilter::NONE;
+        externalDepthTexture->wrap = TextureWrap::CLAMP;
+        externalDepthTexture->dataSize = (size_t)width * (size_t)height * 4u;
+        externalDepthTexture->data = (uint8_t *)std::calloc(1, externalDepthTexture->dataSize);
+        externalDepthTexture->externalHandle = reinterpret_cast<uint64_t>(depthImage);
+        externalDepthTexture->image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(depthImage));
+        externalDepthTexture->imageView = static_cast<VkImageView>(reinterpret_cast<uintptr_t>(depthImageView));
+        externalDepthTexture->ownsImageView = ownsDepthImageView;
+        externalDepthTexture->vkFormat = static_cast<VkFormat>(depthVkFormat);
+        externalDepthTexture->imageUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        externalDepthTexture->imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        externalDepthTexture->sampleCount = static_cast<VkSampleCountFlagBits>(depthVkSamples != 0 ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT);
+        if (!externalDepthTexture->data)
+        {
+            DestroyTexture(colorTexture);
+            delete externalDepthTexture;
+            return false;
+        }
+        ++mState->liveTextures;
+        depthTexture = externalDepthTexture;
+    }
+    else
+    {
+        const TextureInfo depthInfo = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, static_cast<int>(colorTexture->sampleCount), 1, 0 };
+        depthTexture = CreateTexture(L"imm_external_image_depth", &depthInfo, false, TextureFilter::NONE, TextureWrap::CLAMP, 1.0f, nullptr);
+    }
     if (!depthTexture)
     {
         DestroyTexture(colorTexture);
@@ -6690,7 +6965,15 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
         DestroyTexture(colorTexture);
         return false;
     }
-    if (!iClearDepthTextureImage(mState, depthTexture, mReporter))
+    const float transparentBlack[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (clearColor && !iClearColorTextureImage(mState, colorTexture, transparentBlack, mReporter))
+    {
+        DestroyRenderTarget(renderTarget);
+        DestroyTexture(depthTexture);
+        DestroyTexture(colorTexture);
+        return false;
+    }
+    if (!hasExternalDepth && !iClearDepthTextureImage(mState, depthTexture, mReporter))
     {
         DestroyRenderTarget(renderTarget);
         DestroyTexture(depthTexture);
@@ -6701,7 +6984,9 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameDepthTexture = depthTexture;
     mState->externalFrameRenderTarget = renderTarget;
-    iReport(mReporter, "Vulkan renderer began external image frame");
+    mState->externalFrameUsesHostDepth = hasExternalDepth;
+    mState->externalFramePreservesHostColor = !clearColor;
+    iReport(mReporter, hasExternalDepth ? "Vulkan renderer began external image frame with host depth" : "Vulkan renderer began external image frame");
     return true;
 }
 
@@ -6757,7 +7042,7 @@ piRTarget piRendererVulkan::CreateRenderTarget(piTexture vtex0, piTexture vtex1,
 void piRendererVulkan::DestroyRenderTarget(piRTarget obj)
 {
     if (!obj) return;
-    if (mState && mState->device != VK_NULL_DEVICE)
+    if (mState && mState->device != VK_NULL_DEVICE && obj->ownsRenderPassObjects)
     {
         if (obj->framebuffer != VK_NULL_FRAMEBUFFER && mState->vkDestroyFramebuffer)
         {

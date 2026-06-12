@@ -988,26 +988,47 @@ namespace ImmPlayer
 
         //--- upload global info to the GPU --------------------------------------
 
-        iTraceUnityGlobalRender("before-update-frame-state");
-        mRenderer->UpdateBuffer(mFrameStateShaderConstans, &mFrameState, 0, sizeof(FrameState));
-        iTraceUnityGlobalRender("after-update-frame-state");
+        if (!iEnvFlagEnabled("IMM_UNITY_SKIP_FRAME_STATE_UPLOAD"))
+        {
+            iTraceUnityGlobalRender("before-update-frame-state");
+            mRenderer->UpdateBuffer(mFrameStateShaderConstans, &mFrameState, 0, sizeof(FrameState));
+            iTraceUnityGlobalRender("after-update-frame-state");
+        }
+        else
+        {
+            iTraceUnityGlobalRender("skip-update-frame-state");
+        }
 
         //------------------------------------------------------
         // view independant rendering here
         //------------------------------------------------------
 
-        mRenderer->AttachShaderConstants(mFrameStateShaderConstans, 0);
-        mRenderer->AttachShaderConstants(mLayerStateShaderConstans, 3);
-        mRenderer->AttachShaderConstants(mDisplayStateShaderConstans, 4);
-        mRenderer->AttachShaderConstants(mPassStateShaderConstans, 5);
-        mRenderer->AttachShaderConstants(mGlobalResourcesConstans, 7);
+        if (!iEnvFlagEnabled("IMM_UNITY_SKIP_SHADER_CONSTANT_ATTACH"))
+        {
+            mRenderer->AttachShaderConstants(mFrameStateShaderConstans, 0);
+            mRenderer->AttachShaderConstants(mLayerStateShaderConstans, 3);
+            mRenderer->AttachShaderConstants(mDisplayStateShaderConstans, 4);
+            mRenderer->AttachShaderConstants(mPassStateShaderConstans, 5);
+            mRenderer->AttachShaderConstants(mGlobalResourcesConstans, 7);
+        }
+        else
+        {
+            iTraceUnityGlobalRender("skip-attach-shader-constants");
+        }
 
-        iTraceUnityGlobalRender("before-prepare-display");
-        mLayerPaintRender->PrepareForDisplay(stereoMode);
-        mLayerRenderPicture.PrepareForDisplay(stereoMode);
-        mLayerRenderSound.PrepareForDisplay(stereoMode);
-        mLayerRenderModel.PrepareForDisplay(stereoMode);
-        iTraceUnityGlobalRender("after-prepare-display");
+        if (!iEnvFlagEnabled("IMM_UNITY_SKIP_LAYER_PREPARE_FOR_DISPLAY"))
+        {
+            iTraceUnityGlobalRender("before-prepare-display");
+            mLayerPaintRender->PrepareForDisplay(stereoMode);
+            mLayerRenderPicture.PrepareForDisplay(stereoMode);
+            mLayerRenderSound.PrepareForDisplay(stereoMode);
+            mLayerRenderModel.PrepareForDisplay(stereoMode);
+            iTraceUnityGlobalRender("after-prepare-display");
+        }
+        else
+        {
+            iTraceUnityGlobalRender("skip-prepare-display");
+        }
 
         mCurrentPerfInfo.numDrawCalls = 0;
         mCurrentPerfInfo.numDrawCallsCulled = 0;
@@ -1028,9 +1049,17 @@ namespace ImmPlayer
                 Document *doc = (Document *)mDocuments.GetAddress(i);
 
                 // update loading process ideally this happens only for the first camera. We need to have a frameID counter for that to detect changes in frameID
-                iTraceUnityGlobalRender("before-update-state-gpu");
-                const bool needRender = doc->UpdateStateGPU(mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mRenderer, mLog, mColorSpace);
-                iTraceUnityGlobalRender(needRender ? "after-update-state-gpu-ready" : "after-update-state-gpu-not-ready");
+                bool needRender = false;
+                if (!iEnvFlagEnabled("IMM_UNITY_SKIP_DOC_UPDATE_STATE_GPU"))
+                {
+                    iTraceUnityGlobalRender("before-update-state-gpu");
+                    needRender = doc->UpdateStateGPU(mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mRenderer, mLog, mColorSpace);
+                    iTraceUnityGlobalRender(needRender ? "after-update-state-gpu-ready" : "after-update-state-gpu-not-ready");
+                }
+                else
+                {
+                    iTraceUnityGlobalRender("skip-update-state-gpu");
+                }
                 anyDocReady |= needRender;
 
                 if (needRender)
