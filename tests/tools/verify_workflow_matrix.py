@@ -66,7 +66,7 @@ REQUIRED_RUNS_ON = {
         "ios-device-smoke": {"macos-14"},
     },
     ".github/workflows/ci-engine.yml": {
-        "unity-package-import": {"windows-latest"},
+        "unity-package-import": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },

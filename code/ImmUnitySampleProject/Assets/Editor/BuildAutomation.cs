@@ -25,6 +25,7 @@ namespace ImmPlayer.Editor
         private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
+        private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
 
         private static string s_EditorSmokeCapturePath;
         private static DateTime s_EditorSmokeStartTimeUtc;
@@ -145,7 +146,11 @@ namespace ImmPlayer.Editor
 
         private static void RunEditorPlayModeSmoke(string label, string scenePath, string defaultCapturePath, bool enableCompositionProbe, bool enableXrProbe)
         {
-            string capturePath = Environment.GetEnvironmentVariable(EditorSmokeCapturePathEnv);
+            string capturePath = GetCommandLineValue(EditorSmokeCapturePathArg);
+            if (string.IsNullOrEmpty(capturePath))
+            {
+                capturePath = Environment.GetEnvironmentVariable(EditorSmokeCapturePathEnv);
+            }
             if (string.IsNullOrEmpty(capturePath))
             {
                 capturePath = Path.GetFullPath(defaultCapturePath);
@@ -199,6 +204,20 @@ namespace ImmPlayer.Editor
 
             UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] entering {label} play mode capture={capturePath}");
             EditorApplication.EnterPlaymode();
+        }
+
+        private static string GetCommandLineValue(string key)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; ++i)
+            {
+                if (string.Equals(args[i], key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return args[i + 1];
+                }
+            }
+
+            return string.Empty;
         }
 
         [InitializeOnLoadMethod]
