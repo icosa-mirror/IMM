@@ -324,7 +324,7 @@ jobs:
           python tests\tools\compare_render_metrics.py
           artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
           --reference tests\baselines\render\windows-directx-sample1.ppm
-          --contract tests\baselines\render\windows-directx-sample1.json
+          --contract tests\baselines\render\unity-windows-directx-sample1.json
           --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
 
       - name: Write Unity DirectX composition report
