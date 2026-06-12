@@ -1,0 +1,15 @@
+{
+  "baseline": "android-standalone-vulkan-sample1",
+  "capture_source": "Firebase Test Lab screencap_after.png",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "format": "png",
+    "minimum_luma_span": 16,
+    "minimum_near_visible_pixels": 20000,
+    "minimum_non_black_pixels": 20000,
+    "requires_color_metrics": true,
+    "requires_orientation_metrics": true,
+    "requires_nonblank_capture": true
+  }
+}
