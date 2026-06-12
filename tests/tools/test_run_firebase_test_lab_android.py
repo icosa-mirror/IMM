@@ -53,6 +53,10 @@ def main() -> int:
         capture = root / "ftl-results/device/screencap_after.png"
         capture.parent.mkdir(parents=True)
         capture.write_bytes(b"png")
+        logcat = root / "ftl-results/device/logcat"
+        logcat.write_text("06-12 IMMAVAL renderFrame frame=60 drawCalls=12\n", encoding="utf-8")
+        diagnostics = tool.collect_diagnostic_lines(root / "ftl-results")
+        assert diagnostics == ["device/logcat: 06-12 IMMAVAL renderFrame frame=60 drawCalls=12"]
         summary_path = tool.write_summary(
             args,
             1,
@@ -62,11 +66,13 @@ def main() -> int:
             {"Loaded in CPU": ["device/logcat"]},
             ["device/logcat"],
             [capture],
+            diagnostics,
         )
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         assert summary["passed"] is True
         assert summary["gcloud_exit_code"] == 1
         assert summary["gcloud_exit_ignored"] is True
+        assert summary["diagnostic_lines"] == diagnostics
 
         args.additional_apk = [Path("godot-sample.apk")]
         args.app = Path("ftl-target.apk")

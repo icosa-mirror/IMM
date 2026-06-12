@@ -13,6 +13,17 @@ from pathlib import Path
 
 
 TEXT_SUFFIXES = {"", ".log", ".txt", ".xml", ".json"}
+DIAGNOSTIC_PATTERNS = [
+    "IMMAVAL",
+    "IMM Android",
+    "Loaded in CPU",
+    "Loaded in GPU",
+    "Vulkan renderer",
+    "native render capture",
+    "FATAL EXCEPTION",
+    "signal ",
+    "backtrace:",
+]
 
 
 def resolve_gcloud() -> str:
@@ -65,6 +76,25 @@ def find_text_with_markers(root: Path, markers: list[str]) -> tuple[dict[str, li
             if marker in text:
                 matches[marker].append(path.relative_to(root).as_posix())
     return matches, searched
+
+
+def collect_diagnostic_lines(root: Path, patterns: list[str] | None = None, limit: int = 80) -> list[str]:
+    if not root.exists():
+        return []
+    needles = patterns or DIAGNOSTIC_PATTERNS
+    lines: list[str] = []
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        if path.stat().st_size > 25 * 1024 * 1024:
+            continue
+        if path.suffix.lower() not in TEXT_SUFFIXES and "log" not in path.name.lower():
+            continue
+        relative = path.relative_to(root).as_posix()
+        for line in decode_text(path).splitlines():
+            if any(needle in line for needle in needles):
+                lines.append(f"{relative}: {line}")
+                if len(lines) >= limit:
+                    return lines
+    return lines
 
 
 def copy_results(bucket: str, results_dir: str, output_dir: Path) -> dict:
@@ -142,6 +172,7 @@ def write_summary(
     marker_matches: dict[str, list[str]],
     searched_logs: list[str],
     captures: list[Path],
+    diagnostic_lines: list[str],
 ) -> Path:
     summary = {
         "schema": "imm-firebase-test-lab-result-v1",
@@ -157,6 +188,7 @@ def write_summary(
         "required_markers": marker_matches,
         "searched_logs": searched_logs,
         "captures": [path.relative_to(args.artifact_dir).as_posix() for path in captures],
+        "diagnostic_lines": diagnostic_lines,
         "errors": errors,
     }
     path = args.artifact_dir / "firebase-test-lab-result.json"
@@ -214,6 +246,7 @@ def main() -> int:
 
     results_root = args.artifact_dir / "ftl-results"
     marker_matches, searched_logs = find_text_with_markers(results_root, args.required_marker)
+    diagnostic_lines = collect_diagnostic_lines(results_root)
     for marker, paths in marker_matches.items():
         if not paths:
             errors.append(f"Missing required Firebase Test Lab log marker: {marker}")
@@ -227,10 +260,14 @@ def main() -> int:
             captures.extend(found)
 
     gcloud_exit_ignored = gcloud_exit != 0 and is_tool_results_api_disabled(stderr_path) and not errors
-    write_summary(args, gcloud_exit, gcloud_exit_ignored, copy_info, errors, marker_matches, searched_logs, captures)
+    write_summary(args, gcloud_exit, gcloud_exit_ignored, copy_info, errors, marker_matches, searched_logs, captures, diagnostic_lines)
     if gcloud_exit != 0 and not gcloud_exit_ignored:
         errors.append(f"gcloud firebase test android run exited with {gcloud_exit}")
     if errors:
+        if diagnostic_lines:
+            print("Firebase Test Lab diagnostic log excerpt:", file=sys.stderr)
+            for line in diagnostic_lines:
+                print(line, file=sys.stderr)
         for error in errors:
             print(error, file=sys.stderr)
         return 1
