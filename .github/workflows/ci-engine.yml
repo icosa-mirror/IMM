@@ -188,29 +188,53 @@ jobs:
         shell: pwsh
         run: New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
 
-      - name: Run Unity DirectX composition smoke
+      - name: Build Unity DirectX smoke player
         timeout-minutes: 25
         uses: game-ci/unity-builder@v4
         env:
           UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
           UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
-          IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH: ${{ github.workspace }}\artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
         with:
           projectPath: code/ImmUnitySampleProject
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneWindows64
-          buildMethod: ImmPlayer.Editor.BuildAutomation.RunWindowsDirectXEditorPlayModeSmoke
-          manualExit: true
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
           enableGpu: true
-          customParameters: -logFile C:/github/workspace/artifacts/unity-windows-directx-composition/unity-editor.log -immSmokeCapturePath C:/github/workspace/artifacts/unity-windows-directx-composition/unity-windows-directx-composition.png
+          customParameters: -logFile C:/github/workspace/artifacts/unity-windows-directx-composition/unity-editor.log -immSmokePlayerPath C:/github/workspace/artifacts/unity-windows-directx-composition/player/ImmUnitySmoke.exe
+
+      - name: Run Unity DirectX composition smoke
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          $artifactDir = Resolve-Path artifacts\unity-windows-directx-composition
+          $player = Join-Path $artifactDir "player\ImmUnitySmoke.exe"
+          if (-not (Test-Path $player)) {
+            throw "Unity DirectX smoke player was not built: $player"
+          }
+          $env:IMM_UNITY_SMOKE_CAPTURE_PATH = Join-Path $artifactDir "unity-windows-directx-composition.png"
+          $env:IMM_UNITY_SMOKE_FRAMES = "360"
+          $env:IMM_UNITY_SMOKE_QUIT = "1"
+          $env:IMM_UNITY_SMOKE_COMPOSITION_PROBE = "1"
+          $playerLog = Join-Path $artifactDir "unity-player.log"
+          $process = Start-Process -FilePath $player -ArgumentList @("-logFile", $playerLog) -PassThru
+          if (-not $process.WaitForExit(240000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            throw "Unity DirectX smoke player timed out"
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Unity DirectX smoke player failed with exit code $($process.ExitCode)"
+          }
+          if (-not (Test-Path $env:IMM_UNITY_SMOKE_CAPTURE_PATH)) {
+            throw "Unity DirectX smoke capture was not written: $env:IMM_UNITY_SMOKE_CAPTURE_PATH"
+          }
 
       - name: Classify Unity DirectX composition status
         if: always()
         shell: pwsh
         run: >
           python tests\tools\classify_unity_visual_smoke.py
-          --log artifacts\unity-windows-directx-composition\unity-editor.log
+          --log artifacts\unity-windows-directx-composition\unity-player.log
           --capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
           --output artifacts\unity-windows-directx-composition\composition-status.json
 
@@ -239,9 +263,9 @@ jobs:
         shell: pwsh
         run: >
           python tests\tools\verify_log_markers.py
-          --log artifacts\unity-windows-directx-composition\unity-editor.log
+          --log artifacts\unity-windows-directx-composition\unity-player.log
           --label unity-windows-directx-composition
-          --require "[IMM_EDITOR_SMOKE] passed:"
+          --require "[IMM_UNITY_SMOKE] capture="
           --output artifacts\unity-windows-directx-composition\unity-composition-log-contract.json
 
       - name: Write CI manifest

@@ -29,7 +29,11 @@ def main() -> int:
         if "[IMM_UNITY_SMOKE] scene composition" in line and "failed" in line
     ]
     render_failures = [marker for marker in RENDER_FAILURE_MARKERS if marker in text]
-    rendering_succeeded = "[IMM_EDITOR_SMOKE] passed:" in text and args.capture.exists() and not render_failures
+    rendering_succeeded = (
+        ("[IMM_EDITOR_SMOKE] passed:" in text or "[IMM_UNITY_SMOKE] capture=" in text)
+        and args.capture.exists()
+        and not render_failures
+    )
 
     status = {
         "schema": "imm-composition-status-v1",

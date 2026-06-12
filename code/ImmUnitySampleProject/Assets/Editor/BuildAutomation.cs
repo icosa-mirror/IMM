@@ -26,6 +26,7 @@ namespace ImmPlayer.Editor
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
+        private const string EditorSmokePlayerPathArg = "-immSmokePlayerPath";
 
         private static string s_EditorSmokeCapturePath;
         private static DateTime s_EditorSmokeStartTimeUtc;
@@ -128,6 +129,29 @@ namespace ImmPlayer.Editor
             PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
 
             RunEditorPlayModeSmoke("Windows DirectX", SmokeScenes[0], Path.Combine("..", "build", "unity-smoke", "windows-directx-editor-playmode.png"), true, false);
+        }
+
+        public static void BuildWindowsDirectXSmokePlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
+
+            string outputPath = GetCommandLineValue(EditorSmokePlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "windows-directx-smoke-player", "ImmUnitySmoke.exe");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+
+            string outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+
+            BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development, "Windows DirectX smoke player");
         }
 
         public static void RunWindowsOpenXREditorPlayModeSmoke()
