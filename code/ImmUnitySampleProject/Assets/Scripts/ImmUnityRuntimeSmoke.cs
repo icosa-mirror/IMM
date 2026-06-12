@@ -90,14 +90,29 @@ namespace ImmPlayer
 
             yield return new WaitForEndOfFrame();
 
-            int width = Screen.width;
-            int height = Screen.height;
+            Camera captureCamera = _compositionCamera != null ? _compositionCamera : Camera.main;
+            if (captureCamera == null)
+            {
+                Debug.LogError($"{Prefix}missing capture camera");
+                QuitIfRequested(2);
+                yield break;
+            }
+
+            int width = CaptureWidth;
+            int height = CaptureHeight;
             if (width <= 0 || height <= 0)
             {
                 Debug.LogError($"{Prefix}invalid screen size {width}x{height}");
                 QuitIfRequested(2);
                 yield break;
             }
+
+            var renderTexture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture previousTarget = captureCamera.targetTexture;
+            captureCamera.targetTexture = renderTexture;
+            RenderTexture.active = renderTexture;
+            captureCamera.Render();
 
             var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
             tex.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
@@ -168,6 +183,10 @@ namespace ImmPlayer
 
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             Destroy(tex);
+            captureCamera.targetTexture = previousTarget;
+            RenderTexture.active = previousActive;
+            renderTexture.Release();
+            Destroy(renderTexture);
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             QuitIfRequested(0);
