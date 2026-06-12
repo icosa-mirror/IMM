@@ -455,6 +455,7 @@ jobs:
             --timeout 7m `
             --environment-variable waitSeconds=60 `
             --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files `
+            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.ftltest/files/imm-ftl `
             --required-marker "IMM Godot Vulkan visual smoke passed" `
             --required-marker "Loaded in CPU" `
             --required-marker "Loaded in GPU" `

@@ -18,3 +18,10 @@ android {
         versionName "1.0"
     }
 }
+
+dependencies {
+    implementation "junit:junit:4.13.2"
+    implementation "androidx.test:runner:1.6.2"
+    implementation "androidx.test.ext:junit:1.2.1"
+    implementation "androidx.test.uiautomator:uiautomator:2.3.0"
+}
