@@ -15,6 +15,13 @@ from pathlib import Path
 TEXT_SUFFIXES = {"", ".log", ".txt", ".xml", ".json"}
 
 
+def resolve_gcloud() -> str:
+    configured = os.environ.get("GCLOUD_BIN", "")
+    if configured:
+        return configured
+    return shutil.which("gcloud") or shutil.which("gcloud.cmd") or shutil.which("gcloud.bat") or "gcloud"
+
+
 def run(command: list[str], stdout_path: Path, stderr_path: Path) -> int:
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     with stdout_path.open("w", encoding="utf-8", newline="\n") as stdout, stderr_path.open("w", encoding="utf-8", newline="\n") as stderr:
@@ -59,7 +66,7 @@ def copy_results(bucket: str, results_dir: str, output_dir: Path) -> dict:
         shutil.rmtree(destination)
     destination.mkdir(parents=True, exist_ok=True)
     source = f"gs://{bucket}/{results_dir}"
-    completed = run_capture(["gcloud", "storage", "cp", "--recursive", source, str(destination)])
+    completed = run_capture([resolve_gcloud(), "storage", "cp", "--recursive", source, str(destination)])
     (output_dir / "gcloud-storage-cp.stdout.txt").write_text(completed.stdout, encoding="utf-8", newline="\n")
     (output_dir / "gcloud-storage-cp.stderr.txt").write_text(completed.stderr, encoding="utf-8", newline="\n")
     return {
@@ -138,7 +145,7 @@ def main() -> int:
 
     def build_command(results_dir: str) -> list[str]:
         command = [
-            "gcloud",
+            resolve_gcloud(),
             "firebase",
             "test",
             "android",

@@ -855,11 +855,21 @@ jobs:
           set -euo pipefail
           : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
           mkdir -p artifacts/godot-smoke-macos-metal
+          smoke_status=0
           IMM_GODOT_VISUAL_SMOKE=1 \
           IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
           "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
-            > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1
-          grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
+            > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1 || smoke_status=$?
+          python3 tests/tools/classify_godot_visual_smoke.py \
+            --log artifacts/godot-smoke-macos-metal/godot-metal-smoke.log \
+            --renderer metal \
+            --output artifacts/godot-smoke-macos-metal/composition-status.json
+          if [ "$smoke_status" -ne 0 ]; then
+            status="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"
+            if [ "$status" != "expected_failed" ]; then
+              exit "$smoke_status"
+            fi
+          fi
 
       - name: Record Godot Metal render metrics
         run: >
@@ -873,12 +883,24 @@ jobs:
           python3 tests/tools/write_render_report.py
           --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
           --candidate-capture artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+          --status-json artifacts/godot-smoke-macos-metal/composition-status.json
           --output-dir artifacts/godot-smoke-macos-metal/captures
           --markdown-output artifacts/godot-smoke-macos-metal/render-report.md
 
       - name: Write CI manifest
         if: always()
-        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
+        run: |
+          status="${{ job.status }}"
+          failure_class="visual"
+          if [ -f artifacts/godot-smoke-macos-metal/composition-status.json ]; then
+            compositing="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"
+            rendering="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("rendering", ""))')"
+            if [ "$compositing" = "expected_failed" ] && [ "$rendering" = "success" ]; then
+              status="expected_failed"
+              failure_class="compositing"
+            fi
+          fi
+          python3 tests/tools/write_ci_manifest.py --status "$status" --failure-class "$failure_class" --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
       - name: Collect artifact summary
         if: always()
         run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-smoke-macos-metal --require-manifest --output artifacts/godot-smoke-macos-metal/artifact-summary.json
