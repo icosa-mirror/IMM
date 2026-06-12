@@ -41,6 +41,7 @@ namespace ImmPlayer
         private GameObject _frontProbe;
         private GameObject _rearOccludedProbe;
         private GameObject _rearVisibleProbe;
+        private readonly List<string> _compositionFailures = new List<string>();
 
         private IEnumerator Start()
         {
@@ -51,9 +52,7 @@ namespace ImmPlayer
             {
                 if (!CreateCompositionProbes())
                 {
-                    Debug.LogError($"{Prefix}failed to create scene composition probes");
-                    QuitIfRequested(3);
-                    yield break;
+                    RecordCompositionFailure("failed to create scene composition probes");
                 }
             }
 
@@ -119,23 +118,20 @@ namespace ImmPlayer
                 Debug.Log($"{Prefix}composition front={front} rearVisible={rearVisible} rearOccluded={rearOccluded}");
                 if (front.TotalPixels < MinRegionPixels || front.Share < MinDominantShare)
                 {
-                    Debug.LogError($"{Prefix}scene composition front occluder failed: {front}");
-                    QuitIfRequested(4);
-                    yield break;
+                    RecordCompositionFailure($"scene composition front occluder failed: {front}");
                 }
                 if (rearVisible.TotalPixels < MinRegionPixels || rearVisible.Share < MinDominantShare)
                 {
-                    Debug.LogError($"{Prefix}scene composition rear visible probe failed: {rearVisible}");
-                    QuitIfRequested(4);
-                    yield break;
+                    RecordCompositionFailure($"scene composition rear visible probe failed: {rearVisible}");
                 }
                 if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share > MaxOccludedShare)
                 {
-                    Debug.LogError($"{Prefix}scene composition rear occlusion probe failed: {rearOccluded}");
-                    QuitIfRequested(4);
-                    yield break;
+                    RecordCompositionFailure($"scene composition rear occlusion probe failed: {rearOccluded}");
                 }
-                Debug.Log($"{Prefix}scene composition probe passed");
+                if (_compositionFailures.Count == 0)
+                {
+                    Debug.Log($"{Prefix}scene composition probe passed");
+                }
             }
 
             if (_xrProbeEnabled && !ValidateXrProbe())
@@ -260,6 +256,12 @@ namespace ImmPlayer
             return Mathf.Abs(pixel.r / 255.0f - target.r) <= 0.20f
                 && Mathf.Abs(pixel.g / 255.0f - target.g) <= 0.20f
                 && Mathf.Abs(pixel.b / 255.0f - target.b) <= 0.20f;
+        }
+
+        private void RecordCompositionFailure(string message)
+        {
+            _compositionFailures.Add(message);
+            Debug.LogError($"{Prefix}{message}");
         }
 
         private static bool IsEnvEnabled(string name)

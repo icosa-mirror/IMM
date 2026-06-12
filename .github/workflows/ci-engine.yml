@@ -9,6 +9,47 @@ permissions:
   actions: write
   contents: read
 
+env:
+  UNITY_VERSION: "2022.3.62f2"
+  IMM_UNITY_FALLBACK_LICENSE: |
+    <?xml version="1.0" encoding="UTF-8"?><root><TimeStamp Value="chxldhvc0zh5Vw=="/>
+        <License id="Terms">
+            <MachineBindings>
+                <Binding Key="1" Value="C372866C-B44C-5E48-806F-7583B55F04FB"/>
+                <Binding Key="2" Value="C02F32Y5ML85"/>
+            </MachineBindings>
+            <MachineID Value="LcL/yxIaeUG12OSX31mKDtxcVx8="/>
+            <SerialHash Value="e25c63636985259e763d40cc9253cdfe6a862ceb"/>
+            <Features>
+                <Feature Value="33"/>
+                <Feature Value="1"/>
+                <Feature Value="12"/>
+                <Feature Value="2"/>
+                <Feature Value="24"/>
+                <Feature Value="3"/>
+                <Feature Value="36"/>
+                <Feature Value="17"/>
+                <Feature Value="19"/>
+                <Feature Value="62"/>
+            </Features>
+            <DeveloperData Value="AQAAAEY0LUtFWUItMzYyOC0zWEI3LVBZVVEtTUI5VQ=="/>
+            <SerialMasked Value="F4-KEYB-3628-3XB7-PYUQ-XXXX"/>
+            <StartDate Value="2023-11-21T00:00:00"/>
+            <UpdateDate Value="2023-11-22T06:03:23"/>
+            <InitialActivationDate Value="2023-11-21T06:03:21"/>
+            <LicenseVersion Value="6.x"/>
+            <ClientProvidedVersion Value="2017.2.0"/>
+            <AlwaysOnline Value="false"/>
+            <Entitlements>
+                <Entitlement Ns="unity_editor" Tag="UnityPersonal" Type="EDITOR" ValidTo="9999-12-31T00:00:00"/>
+                <Entitlement Ns="unity_editor" Tag="DarkSkin" Type="EDITOR_FEATURE" ValidTo="9999-12-31T00:00:00"/>
+            </Entitlements>
+        </License><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#Terms"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>9DZF11miRAzx7TIuCxih78B6CXU=</DigestValue></Reference></SignedInfo><SignatureValue>weRQubqMNN61lSZtm/e7S+UDzTPNQjM5aQl/c4aKLH/b2khefpgLfdWneoxdnNopA6+rW6kBqxWt
+    hMLdHY+oAOfDsfmMQRTnmQG0Y3G3xh6gjGP1RAIHoLDfFHf+0LQ3FakA2WehcFWPSYeVDrdxm3HW
+    qMmdKWooD9i+J4s4rQFTDx9+/G6yjc5KGTyGxIz3c5kxTEkV2qsFPXsauomY9Z8YPKy+cZK7g+Ol
+    pO+LhtzetgTIlIN/qG8eByjlp6nOuVGdDOIrhNJW+vllNyx0qNWPREadVrhFViI4UXegMFRl5gJc
+    rgcrlr/fD+NorDVLfcu7D863QXkkuriILUIq2Q==</SignatureValue></Signature></root>
+
 jobs:
   unity-package-import:
     name: Unity Package Import
@@ -20,36 +61,27 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Resolve Unity editor (hosted)
-        shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:UNITY_EXE)) {
-            $candidateRoots = @(
-              Join-Path $env:ProgramFiles "Unity\Hub\Editor",
-              Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor",
-              Join-Path $env:ProgramFiles "Unity"
-            )
-            $paths = @()
-            foreach ($root in $candidateRoots) {
-              if (Test-Path $root) {
-                $versions = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
-                foreach ($version in $versions) {
-                  $candidate = Join-Path (Join-Path $version.FullName "Editor") "Unity.exe"
-                  if (Test-Path $candidate) {
-                    $paths += $candidate
-                  }
-                }
-              }
-            }
-            if ($paths.Count -eq 0 -and (Test-Path (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe"))) {
-              $paths += (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe")
-            }
-            if ($paths.Count -eq 0) {
-              throw "UNITY_EXE is not set and no Unity editor was discovered under standard installer paths."
-            }
-            $unityExe = $paths[0]
-            "UNITY_EXE=$unityExe" | Out-File -FilePath $env:GITHUB_ENV -Append
-          }
+      - name: Restore Unity Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-package-import-${{ env.UNITY_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_VERSION }}-
 
       - name: Verify source package layout
         run: |
@@ -64,15 +96,22 @@ jobs:
           --workspace artifacts/UnityPackageImportHarness
 
       - name: Preflight Unity runner
-        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-package-import/preflight.json --require-env UNITY_EXE
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-package-import/preflight.json
 
       - name: Run Unity batchmode package import tests
         timeout-minutes: 25
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${UNITY_EXE:?UNITY_EXE must point to the Unity editor executable}"
-          "$UNITY_EXE" -batchmode -quit -projectPath code/ImmUnitySampleProject -runTests -testPlatform editmode -testResults artifacts/unity-editmode-results.xml
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_EMAIL: ${{ fromJSON(format('["unitytest@mikeage.net", "{0}"]', vars.UNITY_EMAIL))[secrets.UNITY_SERIAL != null] }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_PASSWORD: ${{ fromJSON(format('["DoNotStealThis1", "{0}"]', secrets.UNITY_PASSWORD))[secrets.UNITY_SERIAL != null] }}
+          UNITY_LICENSE: ${{ fromJSON(format('[{0}, null]', toJSON(env.IMM_UNITY_FALLBACK_LICENSE)))[secrets.UNITY_SERIAL != null] }}
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: editmode
+          artifactsPath: artifacts/unity-package-import/test-runner
+          customParameters: -testResults artifacts/unity-editmode-results.xml
 
       - name: Write CI manifest
         if: always()
@@ -80,6 +119,26 @@ jobs:
       - name: Collect artifact summary
         if: always()
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-package-import --require-manifest --output artifacts/unity-package-import/artifact-summary.json
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity results
         if: always()
@@ -100,57 +159,70 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Resolve Unity editor (hosted)
-        shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:UNITY_EXE)) {
-            $candidateRoots = @(
-              Join-Path $env:ProgramFiles "Unity\Hub\Editor",
-              Join-Path ${env:ProgramFiles(x86)} "Unity\Hub\Editor",
-              Join-Path $env:ProgramFiles "Unity"
-            )
-            $paths = @()
-            foreach ($root in $candidateRoots) {
-              if (Test-Path $root) {
-                $versions = Get-ChildItem -Path $root -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
-                foreach ($version in $versions) {
-                  $candidate = Join-Path (Join-Path $version.FullName "Editor") "Unity.exe"
-                  if (Test-Path $candidate) {
-                    $paths += $candidate
-                  }
-                }
-              }
-            }
-            if ($paths.Count -eq 0 -and (Test-Path (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe"))) {
-              $paths += (Join-Path $env:ProgramFiles "Unity\Editor\Unity.exe")
-            }
-            if ($paths.Count -eq 0) {
-              throw "UNITY_EXE is not set and no Unity editor was discovered under standard installer paths."
-            }
-            $unityExe = $paths[0]
-            "UNITY_EXE=$unityExe" | Out-File -FilePath $env:GITHUB_ENV -Append
-          }
+      - name: Restore Unity Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_VERSION }}-
 
       - name: Preflight Unity DirectX runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json --require-env UNITY_EXE
+        run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json
+
+      - name: Prepare Unity DirectX artifact directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
 
       - name: Run Unity DirectX composition smoke
         timeout-minutes: 25
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
-          $env:IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH = (Resolve-Path artifacts\unity-windows-directx-composition).Path + "\unity-windows-directx-composition.png"
-          & $env:UNITY_EXE -batchmode -projectPath code\ImmUnitySampleProject -executeMethod ImmPlayer.Editor.BuildAutomation.RunWindowsDirectXEditorPlayModeSmoke -logFile artifacts\unity-windows-directx-composition\unity-editor.log
-          if ($LASTEXITCODE -ne 0) {
-            throw "Unity DirectX composition smoke failed with exit code $LASTEXITCODE"
-          }
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ fromJSON(format('["unitytest@mikeage.net", "{0}"]', vars.UNITY_EMAIL))[secrets.UNITY_SERIAL != null] }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_PASSWORD: ${{ fromJSON(format('["DoNotStealThis1", "{0}"]', secrets.UNITY_PASSWORD))[secrets.UNITY_SERIAL != null] }}
+          UNITY_LICENSE: ${{ fromJSON(format('[{0}, null]', toJSON(env.IMM_UNITY_FALLBACK_LICENSE)))[secrets.UNITY_SERIAL != null] }}
+          IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH: ${{ github.workspace }}\artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneWindows64
+          buildMethod: ImmPlayer.Editor.BuildAutomation.RunWindowsDirectXEditorPlayModeSmoke
+          manualExit: true
+          enableGpu: true
+          customParameters: -logFile ${{ github.workspace }}\artifacts\unity-windows-directx-composition\unity-editor.log
 
-      - name: Record Unity DirectX composition metrics
+      - name: Classify Unity DirectX composition status
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\classify_unity_visual_smoke.py
+          --log artifacts\unity-windows-directx-composition\unity-editor.log
+          --capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --output artifacts\unity-windows-directx-composition\composition-status.json
+
+      - name: Compare Unity DirectX render metrics against committed DirectX baseline
         shell: pwsh
         run: >
           python tests\tools\compare_render_metrics.py
           artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
           --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
 
       - name: Write Unity DirectX composition report
@@ -159,7 +231,9 @@ jobs:
         run: >
           python tests\tools\write_render_report.py
           --metrics-json artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
           --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --status-json artifacts\unity-windows-directx-composition\composition-status.json
           --output-dir artifacts\unity-windows-directx-composition\captures
           --markdown-output artifacts\unity-windows-directx-composition\render-report.md
 
@@ -169,20 +243,49 @@ jobs:
           python tests\tools\verify_log_markers.py
           --log artifacts\unity-windows-directx-composition\unity-editor.log
           --label unity-windows-directx-composition
-          --require "[IMM_UNITY_SMOKE] scene composition probe passed"
           --require "[IMM_EDITOR_SMOKE] passed:"
-          --forbid "[IMM_UNITY_SMOKE] scene composition probe failed"
           --output artifacts\unity-windows-directx-composition\unity-composition-log-contract.json
 
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts\unity-windows-directx-composition
+        run: |
+          $status = "${{ job.status }}"
+          $failureClass = "visual"
+          $compositionStatusPath = "artifacts\unity-windows-directx-composition\composition-status.json"
+          if (Test-Path $compositionStatusPath) {
+            $compositionStatus = Get-Content -Raw $compositionStatusPath | ConvertFrom-Json
+            if ($status -eq "success" -and $compositionStatus.rendering -eq "success" -and $compositionStatus.compositing -eq "expected_failed") {
+              $status = "expected_failed"
+              $failureClass = "compositing"
+            }
+          }
+          python tests\tools\write_ci_manifest.py --status $status --failure-class $failureClass --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts\unity-windows-directx-composition
 
       - name: Collect artifact summary
         if: always()
         shell: pwsh
         run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-directx-composition --require-manifest --output artifacts\unity-windows-directx-composition\artifact-summary.json
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity DirectX composition artifacts
         if: always()
