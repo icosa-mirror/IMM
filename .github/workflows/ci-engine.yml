@@ -270,6 +270,10 @@ jobs:
           $playerLog = Join-Path $artifactDir "unity-player.log"
           $playerArgs = @(
             "-logFile", $playerLog,
+            "-screen-width", "1280",
+            "-screen-height", "720",
+            "-screen-fullscreen", "0",
+            "-force-d3d11",
             "-immSmokeCapturePath", $env:IMM_UNITY_SMOKE_CAPTURE_PATH,
             "-immSmokeFrames", $env:IMM_UNITY_SMOKE_FRAMES,
             "-immSmokeQuit", $env:IMM_UNITY_SMOKE_QUIT,

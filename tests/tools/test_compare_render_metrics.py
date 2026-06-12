@@ -112,6 +112,7 @@ def main() -> int:
         assert png["non_black_pixels"] == reference["non_black_pixels"]
         assert not compare_render_metrics.compare_metrics(reference, png)
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), reference) == []
+        assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), png) == []
         assert any(
             "vertical luma profile" in error or "visible centroid" in error or "quadrant luma share" in error
             for error in compare_render_metrics.validate_contract(contract, flipped)

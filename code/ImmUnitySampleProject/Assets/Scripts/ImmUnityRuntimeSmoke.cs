@@ -23,6 +23,8 @@ namespace ImmPlayer
         private const int MinRegionPixels = 24;
         private const float MinDominantShare = 0.35f;
         private const float MaxOccludedShare = 0.12f;
+        private const int CaptureWidth = 1280;
+        private const int CaptureHeight = 720;
         private static readonly Color FrontProbeColor = new Color(1.0f, 0.0f, 1.0f, 1.0f);
         private static readonly Color RearOccludedProbeColor = new Color(0.0f, 1.0f, 1.0f, 1.0f);
         private static readonly Color RearVisibleProbeColor = new Color(1.0f, 1.0f, 0.0f, 1.0f);
@@ -57,6 +59,12 @@ namespace ImmPlayer
             int frameCount = 180;
             _compositionProbeEnabled = IsEnabled(CompositionProbeArg, CompositionProbeEnv);
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
+            if (Screen.width != CaptureWidth || Screen.height != CaptureHeight)
+            {
+                Debug.Log($"{Prefix}setting capture resolution {CaptureWidth}x{CaptureHeight} from {Screen.width}x{Screen.height}");
+                Screen.SetResolution(CaptureWidth, CaptureHeight, false);
+            }
+
             if (_compositionProbeEnabled)
             {
                 if (!CreateCompositionProbes())

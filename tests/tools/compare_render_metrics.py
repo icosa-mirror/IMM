@@ -339,6 +339,10 @@ def compare_metrics(reference: dict, candidate: dict) -> list[str]:
     return errors
 
 
+def formats_are_metric_equivalent(expected_format: object, candidate_format: object) -> bool:
+    return {expected_format, candidate_format} <= {"ppm-p6", "png"}
+
+
 def validate_contract(contract: dict, candidate: dict) -> list[str]:
     errors: list[str] = []
     validation = contract.get("validation", {})
@@ -346,7 +350,7 @@ def validate_contract(contract: dict, candidate: dict) -> list[str]:
         return ["render baseline contract is missing a validation object"]
 
     expected_format = validation.get("format")
-    if expected_format and candidate.get("format") != expected_format:
+    if expected_format and candidate.get("format") != expected_format and not formats_are_metric_equivalent(expected_format, candidate.get("format")):
         errors.append(f"format differs from contract: expected={expected_format!r} candidate={candidate.get('format')!r}")
 
     dimensions = validation.get("requires_dimensions")
