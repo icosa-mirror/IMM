@@ -68,6 +68,24 @@ def main() -> int:
         assert summary["gcloud_exit_code"] == 1
         assert summary["gcloud_exit_ignored"] is True
 
+        args.additional_apk = [Path("godot-sample.apk")]
+        args.app = Path("ftl-target.apk")
+        args.client_label = "IMM Android Godot Vulkan"
+        args.directory_to_pull = []
+        args.environment_variable = []
+        args.required_capture_name = []
+        args.required_marker = []
+        args.test = Path("ftl-test.apk")
+        args.timeout = "7m"
+
+        command = tool.build_firebase_command(args, "godot-results")
+        assert "--additional-apks" in command
+        additional_index = command.index("--additional-apks")
+        assert command[additional_index + 1] == "godot-sample.apk"
+        assert "--test" in command
+        test_index = command.index("--test")
+        assert command[test_index + 1] == "ftl-test.apk"
+
     print("Firebase Test Lab wrapper tests passed")
     return 0
 

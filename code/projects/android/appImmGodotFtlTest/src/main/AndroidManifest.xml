@@ -1,11 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <instrumentation
-        android:name="androidx.test.runner.AndroidJUnitRunner"
-        android:targetPackage="org.linuxfoundation.imm.godot.ftltest" />
-
     <application
         android:allowBackup="false"
-        android:label="IMM Godot FTL Test"
-        android:testOnly="true" />
+        android:label="IMM Godot FTL Test" />
 </manifest>

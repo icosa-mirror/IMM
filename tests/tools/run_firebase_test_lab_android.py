@@ -96,6 +96,43 @@ def is_firebase_infrastructure_failure(stderr_path: Path) -> bool:
     )
 
 
+def build_firebase_command(args: argparse.Namespace, results_dir: str) -> list[str]:
+    command = [
+        resolve_gcloud(),
+        "firebase",
+        "test",
+        "android",
+        "run",
+        "--project",
+        args.project,
+        "--type",
+        args.test_type,
+        "--app",
+        args.app.as_posix(),
+        "--device",
+        args.device,
+        "--timeout",
+        args.timeout,
+        "--results-bucket",
+        args.results_bucket,
+        "--results-dir",
+        results_dir,
+        "--format",
+        "json",
+    ]
+    if args.test:
+        command.extend(["--test", args.test.as_posix()])
+    if args.additional_apk:
+        command.extend(["--additional-apks", ",".join(Path(value).as_posix() for value in args.additional_apk)])
+    for value in args.environment_variable:
+        command.extend(["--environment-variables", value])
+    for value in args.directory_to_pull:
+        command.extend(["--directories-to-pull", value])
+    if args.client_label:
+        command.extend(["--client-details", f"matrixLabel={args.client_label}"])
+    return command
+
+
 def write_summary(
     args: argparse.Namespace,
     gcloud_exit: int,
@@ -136,6 +173,7 @@ def main() -> int:
     parser.add_argument("--device", required=True)
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--test", type=Path)
+    parser.add_argument("--additional-apk", action="append", default=[])
     parser.add_argument("--test-type", choices=["instrumentation", "robo"], default="instrumentation")
     parser.add_argument("--artifact-dir", type=Path, required=True)
     parser.add_argument("--timeout", default="5m")
@@ -150,46 +188,12 @@ def main() -> int:
     args.artifact_dir.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
 
-    def build_command(results_dir: str) -> list[str]:
-        command = [
-            resolve_gcloud(),
-            "firebase",
-            "test",
-            "android",
-            "run",
-            "--project",
-            args.project,
-            "--type",
-            args.test_type,
-            "--app",
-            args.app.as_posix(),
-            "--device",
-            args.device,
-            "--timeout",
-            args.timeout,
-            "--results-bucket",
-            args.results_bucket,
-            "--results-dir",
-            results_dir,
-            "--format",
-            "json",
-        ]
-        if args.test:
-            command.extend(["--test", args.test.as_posix()])
-        for value in args.environment_variable:
-            command.extend(["--environment-variables", value])
-        for value in args.directory_to_pull:
-            command.extend(["--directories-to-pull", value])
-        if args.client_label:
-            command.extend(["--client-details", f"matrixLabel={args.client_label}"])
-        return command
-
     gcloud_exit = 1
     stderr_path = args.artifact_dir / "gcloud-firebase-test.stderr.txt"
     max_attempts = max(1, args.gcloud_attempts)
     for attempt in range(1, max_attempts + 1):
         attempt_results_dir = args.results_dir if attempt == 1 else f"{args.results_dir}-retry{attempt}"
-        command = build_command(attempt_results_dir)
+        command = build_firebase_command(args, attempt_results_dir)
         (args.artifact_dir / f"gcloud-command.attempt{attempt}.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8", newline="\n")
         (args.artifact_dir / "gcloud-command.json").write_text(json.dumps(command, indent=2) + "\n", encoding="utf-8", newline="\n")
         stdout_path = args.artifact_dir / f"gcloud-firebase-test.attempt{attempt}.stdout.json"

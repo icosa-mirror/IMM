@@ -29,8 +29,8 @@ public final class GodotVulkanFtlSmokeTest {
         int waitSeconds = parseInt(args.getString("waitSeconds"), 60);
 
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
-        Context testContext = InstrumentationRegistry.getInstrumentation().getContext();
-        File artifactDir = new File(testContext.getExternalFilesDir(null), "imm-ftl");
+        Context targetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
         assertTrue("Could not create artifact directory: " + artifactDir, artifactDir.mkdirs() || artifactDir.isDirectory());
         File logcatPath = new File(artifactDir, "logcat_after.txt");
         File capturePath = new File(artifactDir, CAPTURE_NAME);
