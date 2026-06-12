@@ -15,6 +15,10 @@ on:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   core:
     name: Core
@@ -38,3 +42,49 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')
     uses: ./.github/workflows/ci-gpu.yml
     secrets: inherit
+
+  validation-evidence:
+    name: Validation Evidence
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - core
+      - device
+      - engine
+      - gpu
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download matrix evidence artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/validation-evidence/input
+
+      - name: Write validation visual evidence report
+        run: >
+          python tests/tools/write_visual_evidence_report.py
+          --input-root artifacts/validation-evidence/input
+          --output-dir artifacts/validation-evidence/view
+          --markdown-output artifacts/validation-evidence/view/VALIDATION_REPORT.md
+
+      - name: Upload validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: CIValidationEvidence
+          path: artifacts/validation-evidence/view
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Hide matrix implementation artifacts
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name CoreMatrixEvidence
+          --name DeviceMatrixEvidence
+          --name EngineValidationEvidence
+          --name EngineMatrixDebugArtifacts
+          --name GPUMatrixEvidence

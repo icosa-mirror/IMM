@@ -37,12 +37,20 @@ def relative_link(target: Path, report_path: Path) -> str:
     return target.resolve().relative_to(report_path.parent.resolve()).as_posix()
 
 
-def artifact_name(path: Path, input_root: Path) -> str:
-    try:
-        rel = path.relative_to(input_root)
-    except ValueError:
-        return path.name
-    return rel.parts[0] if rel.parts else path.name
+def display_name(path: Path) -> str:
+    return path.name.replace("-", " ").replace("_", " ").title()
+
+
+def discover_visual_roots(input_root: Path) -> list[Path]:
+    report_roots = {path.parent for path in input_root.rglob("render-report.md")}
+    roots = sorted(report_roots)
+    if roots:
+        return roots
+    return sorted(
+        path
+        for path in input_root.rglob("*")
+        if path.is_dir() and any(child.is_file() and child.suffix.lower() in IMAGE_SUFFIXES for child in path.iterdir())
+    )
 
 
 def main() -> int:
@@ -58,28 +66,27 @@ def main() -> int:
     capture_output_dir = output_dir / "captures"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    artifact_dirs = sorted(path for path in input_root.iterdir() if path.is_dir()) if input_root.exists() else []
     lines = [
-        "# IMM Engine Visual Evidence",
+        "# IMM CI Validation Evidence",
         "",
         "This artifact contains the human-readable render evidence and the images used by the CI validation.",
         "",
     ]
 
     visual_sections = 0
-    for artifact_dir in artifact_dirs:
-        reports = sorted(artifact_dir.rglob("render-report.md"))
-        images = sorted(path for path in artifact_dir.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
+    for visual_root in discover_visual_roots(input_root):
+        reports = sorted(visual_root.glob("render-report.md"))
+        images = sorted(path for path in visual_root.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES)
         if not reports and not images:
             continue
 
         visual_sections += 1
-        name = artifact_name(artifact_dir, input_root)
+        name = display_name(visual_root)
         lines.append(f"## {name}")
         lines.append("")
 
         for report in reports:
-            copied_report = output_dir / f"{name}-{report.name}"
+            copied_report = output_dir / f"{visual_root.name}-{report.name}"
             shutil.copy2(report, copied_report)
             lines.append(f"- Report: [{copied_report.name}]({relative_link(copied_report, report_path)})")
         if reports:
