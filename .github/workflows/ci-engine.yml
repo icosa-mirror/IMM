@@ -203,7 +203,7 @@ jobs:
           buildMethod: ImmPlayer.Editor.BuildAutomation.RunWindowsDirectXEditorPlayModeSmoke
           manualExit: true
           enableGpu: true
-          customParameters: -logFile ${{ github.workspace }}\artifacts\unity-windows-directx-composition\unity-editor.log -immSmokeCapturePath ${{ github.workspace }}\artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          customParameters: -logFile C:/github/workspace/artifacts/unity-windows-directx-composition/unity-editor.log -immSmokeCapturePath C:/github/workspace/artifacts/unity-windows-directx-composition/unity-windows-directx-composition.png
 
       - name: Classify Unity DirectX composition status
         if: always()
