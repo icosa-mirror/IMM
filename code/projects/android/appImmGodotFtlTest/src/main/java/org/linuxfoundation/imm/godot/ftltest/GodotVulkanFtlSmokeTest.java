@@ -36,7 +36,6 @@ public final class GodotVulkanFtlSmokeTest {
         File capturePath = new File(artifactDir, CAPTURE_NAME);
 
         runShell(device, "logcat -c");
-        runShell(device, "am force-stop " + PACKAGE_NAME);
 
         Intent intent = targetContext.getPackageManager().getLaunchIntentForPackage(PACKAGE_NAME);
         assertTrue("Launch intent not found for " + PACKAGE_NAME, intent != null);
@@ -45,7 +44,6 @@ public final class GodotVulkanFtlSmokeTest {
 
         String logcat = waitForSmoke(device, capturePath, waitSeconds);
         writeText(logcatPath, logcat);
-        runShell(device, "am force-stop " + PACKAGE_NAME);
 
         requireMarker(logcat, "IMM Godot Vulkan visual smoke passed");
         requireMarker(logcat, "Loaded in CPU");
