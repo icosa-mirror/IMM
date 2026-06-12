@@ -88,31 +88,16 @@ jobs:
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Vulkan tools
-        shell: pwsh
-        run: |
-          choco install vulkan-sdk --no-progress -y
-          $sdk = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $sdk) {
-            throw "Vulkan SDK install directory was not found under C:\VulkanSDK"
-          }
-          $bin = Join-Path $sdk.FullName "Bin"
-          if (-not (Test-Path (Join-Path $bin "glslangValidator.exe"))) {
-            throw "glslangValidator.exe was not found in $bin"
-          }
-          if (-not (Test-Path (Join-Path $bin "spirv-val.exe"))) {
-            throw "spirv-val.exe was not found in $bin"
-          }
-          "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $bin | Out-File -FilePath $env:GITHUB_PATH -Append
-
       - name: Install Mesa lavapipe
         id: msys2-standalone-vulkan
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          install: mingw-w64-x86_64-mesa
+          install: >-
+            mingw-w64-x86_64-glslang
+            mingw-w64-x86_64-mesa
+            mingw-w64-x86_64-spirv-tools
 
       - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
@@ -122,7 +107,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
           $setupLog = "artifacts\windows-standalone-vulkan\vulkan-driver-setup.txt"
           $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          $mingwBin = Join-Path ($searchRoots | Select-Object -First 1) "mingw64\bin"
+          if (Test-Path $mingwBin) {
+            $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
           "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
           "Search roots:" | Out-File -FilePath $setupLog -Append
           $searchRoots | Out-File -FilePath $setupLog -Append
           $icds = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue })
@@ -524,31 +514,16 @@ jobs:
       - name: Set up MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Vulkan tools
-        shell: pwsh
-        run: |
-          choco install vulkan-sdk --no-progress -y
-          $sdk = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
-          if (-not $sdk) {
-            throw "Vulkan SDK install directory was not found under C:\VulkanSDK"
-          }
-          $bin = Join-Path $sdk.FullName "Bin"
-          if (-not (Test-Path (Join-Path $bin "glslangValidator.exe"))) {
-            throw "glslangValidator.exe was not found in $bin"
-          }
-          if (-not (Test-Path (Join-Path $bin "spirv-val.exe"))) {
-            throw "spirv-val.exe was not found in $bin"
-          }
-          "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $bin | Out-File -FilePath $env:GITHUB_PATH -Append
-
       - name: Install Mesa lavapipe
         id: msys2-godot-vulkan
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          install: mingw-w64-x86_64-mesa
+          install: >-
+            mingw-w64-x86_64-glslang
+            mingw-w64-x86_64-mesa
+            mingw-w64-x86_64-spirv-tools
 
       - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
@@ -558,7 +533,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifacts\godot-smoke-windows-vulkan | Out-Null
           $setupLog = "artifacts\godot-smoke-windows-vulkan\vulkan-driver-setup.txt"
           $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          $mingwBin = Join-Path ($searchRoots | Select-Object -First 1) "mingw64\bin"
+          if (Test-Path $mingwBin) {
+            $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
           "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
           "Search roots:" | Out-File -FilePath $setupLog -Append
           $searchRoots | Out-File -FilePath $setupLog -Append
           $icds = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue })
