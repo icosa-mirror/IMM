@@ -18,7 +18,14 @@ TEXT_SUFFIXES = {"", ".log", ".txt", ".xml", ".json"}
 def resolve_gcloud() -> str:
     configured = os.environ.get("GCLOUD_BIN", "")
     if configured:
+        configured_path = Path(configured)
+        if configured_path.suffix.lower() == ".ps1":
+            cmd_path = configured_path.with_suffix(".cmd")
+            if cmd_path.exists():
+                return str(cmd_path)
         return configured
+    if os.name == "nt":
+        return shutil.which("gcloud.cmd") or shutil.which("gcloud.bat") or shutil.which("gcloud") or "gcloud.cmd"
     return shutil.which("gcloud") or shutil.which("gcloud.cmd") or shutil.which("gcloud.bat") or "gcloud"
 
 
