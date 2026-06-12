@@ -10,7 +10,8 @@ permissions:
   contents: read
 
 env:
-  FTL_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
+  FTL_GLES_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GLES_DEVICE || 'model=redfin,version=30,locale=en,orientation=landscape' }}
+  FTL_VULKAN_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_VULKAN_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
   FTL_GODOT_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GODOT_DEVICE || 'model=akita,version=34,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
   FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
@@ -79,7 +80,7 @@ jobs:
           --project "$FTL_PROJECT_ID"
           --results-bucket "$FTL_RESULTS_BUCKET"
           --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-standalone-gles"
-          --device "$FTL_DEVICE"
+          --device "$FTL_GLES_DEVICE"
           --app code/projects/android/appImmViewer/build_gles_ftl/outputs/apk/debug/appImmViewer-debug.apk
           --test code/projects/android/appImmViewer/build_gles_ftl/outputs/apk/androidTest/debug/appImmViewer-debug-androidTest.apk
           --test-type instrumentation
@@ -199,7 +200,7 @@ jobs:
           --project "$FTL_PROJECT_ID"
           --results-bucket "$FTL_RESULTS_BUCKET"
           --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-standalone-vulkan"
-          --device "$FTL_DEVICE"
+          --device "$FTL_VULKAN_DEVICE"
           --app code/projects/android/appImmViewer/build_vulkan_ftl/outputs/apk/debug/appImmViewer-debug.apk
           --test code/projects/android/appImmViewer/build_vulkan_ftl/outputs/apk/androidTest/debug/appImmViewer-debug-androidTest.apk
           --test-type instrumentation
