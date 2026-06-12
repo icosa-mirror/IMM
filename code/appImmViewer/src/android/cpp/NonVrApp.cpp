@@ -130,6 +130,32 @@ static bool iWriteRgbPpm(const char *path, const uint8_t *rgb, int width, int he
     return written == expected;
 }
 
+static bool iHasVisibleRgbContent(const uint8_t *rgb, int width, int height) {
+    if (!rgb || width <= 0 || height <= 0) {
+        return false;
+    }
+    uint8_t minLuma = 255;
+    uint8_t maxLuma = 0;
+    uint64_t visiblePixels = 0;
+    const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (size_t i = 0; i < pixelCount; ++i) {
+        const uint8_t r = rgb[i * 3u + 0];
+        const uint8_t g = rgb[i * 3u + 1];
+        const uint8_t b = rgb[i * 3u + 2];
+        const uint8_t luma = static_cast<uint8_t>((54u * r + 183u * g + 19u * b) >> 8);
+        if (luma < minLuma) {
+            minLuma = luma;
+        }
+        if (luma > maxLuma) {
+            maxLuma = luma;
+        }
+        if (luma > 32 && (r > 40 || g > 40 || b > 40)) {
+            ++visiblePixels;
+        }
+    }
+    return visiblePixels >= 20000 && (maxLuma - minLuma) >= 16;
+}
+
 static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical) {
     if (!pixels || width <= 0 || height <= 0) {
         return false;
@@ -147,6 +173,9 @@ static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width
             rgb[out + 1] = iSaturateToByte(static_cast<float>(gBits) / 2047.0f);
             rgb[out + 2] = iSaturateToByte(static_cast<float>(bBits) / 1023.0f);
         }
+    }
+    if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
+        return false;
     }
     return iWriteRgbPpm(path, rgb.data(), width, height);
 }
@@ -168,11 +197,34 @@ static bool iWriteGlesFramebufferPpm(const char *path, int width, int height) {
             rgb[out + 2] = rgba[in + 2];
         }
     }
+    if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
+        return false;
+    }
     return iWriteRgbPpm(path, rgb.data(), width, height);
 }
 
-static void writeValidationCaptureIfReady() {
+static bool isValidationFrameReady(const ImmPlayer::Player::PerformanceInfo &perf) {
+    return perf.validationTimeFrame >= 30 &&
+           perf.numDrawCalls > 0 &&
+           perf.numPaintDrawCalls > 0 &&
+           perf.numTriangles > 0;
+}
+
+static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceInfo &perf) {
     if (gEngine.validationCaptureWritten || gEngine.frameCount < 60 || gExternalFilesDirectory.empty()) {
+        return;
+    }
+    if (!isValidationFrameReady(perf)) {
+        if (gEngine.frameCount == 60 || gEngine.frameCount == 120 || gEngine.frameCount == 180) {
+            ALOGV("IMMAVAL native render capture waiting frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d renderer=%s",
+                  gEngine.frameCount,
+                  static_cast<unsigned long long>(perf.validationTimeFrame),
+                  perf.numDrawCalls,
+                  perf.numPaintDrawCalls,
+                  perf.numPictureDrawCalls,
+                  perf.numTriangles,
+                  gEngine.useVulkan ? "Vulkan" : "GLES");
+        }
         return;
     }
 
@@ -189,21 +241,32 @@ static void writeValidationCaptureIfReady() {
             wrote = iWriteRG11B10Ppm(capturePath.c_str(), pixels.data(), gEngine.width, gEngine.height, false);
         }
     } else {
+        glFinish();
         wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), gEngine.width, gEngine.height);
     }
 
     if (wrote) {
         gEngine.validationCaptureWritten = true;
-        ALOGV("IMMAVAL native render capture written path=%s frame=%u size=%dx%d renderer=%s",
+        ALOGV("IMMAVAL native render capture written path=%s frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s",
               capturePath.c_str(),
               gEngine.frameCount,
+              static_cast<unsigned long long>(perf.validationTimeFrame),
+              perf.numDrawCalls,
+              perf.numPaintDrawCalls,
+              perf.numPictureDrawCalls,
+              perf.numTriangles,
               gEngine.width,
               gEngine.height,
               gEngine.useVulkan ? "Vulkan" : "GLES");
     } else {
-        ALOGE("IMMAVAL native render capture failed path=%s frame=%u size=%dx%d renderer=%s",
+        ALOGE("IMMAVAL native render capture failed path=%s frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s",
               capturePath.c_str(),
               gEngine.frameCount,
+              static_cast<unsigned long long>(perf.validationTimeFrame),
+              perf.numDrawCalls,
+              perf.numPaintDrawCalls,
+              perf.numPictureDrawCalls,
+              perf.numTriangles,
               gEngine.width,
               gEngine.height,
               gEngine.useVulkan ? "Vulkan" : "GLES");
@@ -943,10 +1006,18 @@ void renderFrame() {
                                ivec2(gEngine.width, gEngine.height), true, 8000, gEngine.firstFrame);
     gEngine.viewer->GlobalRender(vrToHead, projection);
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
-    writeValidationCaptureIfReady();
+    const ImmPlayer::Player::PerformanceInfo &perf = gEngine.viewer->GetPerformanceInfoForFrame();
+    if (!gEngine.useVulkan) {
+        writeValidationCaptureIfReady(perf);
+    }
     if (gEngine.frameCount == 0 || gEngine.frameCount == 60) {
-        ALOGV("IMMAVAL renderFrame frame=%u size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
+        ALOGV("IMMAVAL renderFrame frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
               gEngine.frameCount,
+              static_cast<unsigned long long>(perf.validationTimeFrame),
+              perf.numDrawCalls,
+              perf.numPaintDrawCalls,
+              perf.numPictureDrawCalls,
+              perf.numTriangles,
               gEngine.width,
               gEngine.height,
               gEngine.useVulkan ? "Vulkan" : "GLES",
@@ -959,6 +1030,7 @@ void renderFrame() {
     if (gEngine.useVulkan) {
         gEngine.renderer->SetRenderTarget(nullptr);
         gEngine.renderer->SwapBuffers();
+        writeValidationCaptureIfReady(perf);
     } else {
         eglSwapBuffers(gEngine.display, gEngine.surface);
     }
