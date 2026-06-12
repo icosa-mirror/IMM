@@ -255,7 +255,7 @@ jobs:
           path: artifacts/unity-windows-directx-composition/player
 
       - name: Run Unity DirectX composition smoke
-        timeout-minutes: 5
+        timeout-minutes: 10
         shell: pwsh
         run: |
           $artifactDir = Resolve-Path artifacts\unity-windows-directx-composition
@@ -263,42 +263,51 @@ jobs:
           if (-not (Test-Path $player)) {
             throw "Unity DirectX smoke player was not built: $player"
           }
-          $env:IMM_UNITY_SMOKE_CAPTURE_PATH = Join-Path $artifactDir "unity-windows-directx-composition.png"
-          $env:IMM_UNITY_SMOKE_FRAMES = "360"
-          $env:IMM_UNITY_SMOKE_QUIT = "1"
-          $env:IMM_UNITY_SMOKE_COMPOSITION_PROBE = "1"
-          $playerLog = Join-Path $artifactDir "unity-player.log"
-          $playerArgs = @(
-            "-logFile", $playerLog,
-            "-screen-width", "1280",
-            "-screen-height", "720",
-            "-screen-fullscreen", "0",
-            "-force-d3d11",
-            "-immSmokeCapturePath", $env:IMM_UNITY_SMOKE_CAPTURE_PATH,
-            "-immSmokeFrames", $env:IMM_UNITY_SMOKE_FRAMES,
-            "-immSmokeQuit", $env:IMM_UNITY_SMOKE_QUIT,
-            "-immSmokeCompositionProbe", $env:IMM_UNITY_SMOKE_COMPOSITION_PROBE
-          )
-          $process = Start-Process -FilePath $player -ArgumentList $playerArgs -PassThru
-          if (-not $process.WaitForExit(240000)) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            if (Test-Path $playerLog) {
-              Get-Content $playerLog
+
+          function Invoke-UnitySmoke {
+            param(
+              [string] $CaptureName,
+              [string] $LogName,
+              [string] $CompositionProbe
+            )
+
+            $capturePath = Join-Path $artifactDir $CaptureName
+            $playerLog = Join-Path $artifactDir $LogName
+            $playerArgs = @(
+              "-logFile", $playerLog,
+              "-screen-width", "1280",
+              "-screen-height", "720",
+              "-screen-fullscreen", "0",
+              "-force-d3d11",
+              "-immSmokeCapturePath", $capturePath,
+              "-immSmokeFrames", "360",
+              "-immSmokeQuit", "1",
+              "-immSmokeCompositionProbe", $CompositionProbe
+            )
+            $process = Start-Process -FilePath $player -ArgumentList $playerArgs -PassThru
+            if (-not $process.WaitForExit(240000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              if (Test-Path $playerLog) {
+                Get-Content $playerLog
+              }
+              throw "Unity DirectX smoke player timed out for $CaptureName"
             }
-            throw "Unity DirectX smoke player timed out"
-          }
-          if ($process.ExitCode -ne 0) {
-            if (Test-Path $playerLog) {
-              Get-Content $playerLog
+            if ($process.ExitCode -ne 0) {
+              if (Test-Path $playerLog) {
+                Get-Content $playerLog
+              }
+              throw "Unity DirectX smoke player failed with exit code $($process.ExitCode) for $CaptureName"
             }
-            throw "Unity DirectX smoke player failed with exit code $($process.ExitCode)"
-          }
-          if (-not (Test-Path $env:IMM_UNITY_SMOKE_CAPTURE_PATH)) {
-            if (Test-Path $playerLog) {
-              Get-Content $playerLog
+            if (-not (Test-Path $capturePath)) {
+              if (Test-Path $playerLog) {
+                Get-Content $playerLog
+              }
+              throw "Unity DirectX smoke capture was not written: $capturePath"
             }
-            throw "Unity DirectX smoke capture was not written: $env:IMM_UNITY_SMOKE_CAPTURE_PATH"
           }
+
+          Invoke-UnitySmoke -CaptureName "unity-windows-directx-render.png" -LogName "unity-render-player.log" -CompositionProbe "0"
+          Invoke-UnitySmoke -CaptureName "unity-windows-directx-composition.png" -LogName "unity-player.log" -CompositionProbe "1"
 
       - name: Classify Unity DirectX composition status
         if: always()
@@ -313,7 +322,7 @@ jobs:
         shell: pwsh
         run: >
           python tests\tools\compare_render_metrics.py
-          artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
           --reference tests\baselines\render\windows-directx-sample1.ppm
           --contract tests\baselines\render\windows-directx-sample1.json
           --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
@@ -325,7 +334,7 @@ jobs:
           python tests\tools\write_render_report.py
           --metrics-json artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
           --reference-capture tests\baselines\render\windows-directx-sample1.ppm
-          --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
           --status-json artifacts\unity-windows-directx-composition\composition-status.json
           --output-dir artifacts\unity-windows-directx-composition\captures
           --markdown-output artifacts\unity-windows-directx-composition\render-report.md
