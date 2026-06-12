@@ -11,6 +11,7 @@ permissions:
 
 env:
   FTL_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
+  FTL_GODOT_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GODOT_DEVICE || 'model=MediumPhone.arm,version=35,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
   FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
 
@@ -415,7 +416,7 @@ jobs:
             --project "$FTL_PROJECT_ID" \
             --results-bucket "$FTL_RESULTS_BUCKET" \
             --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-godot-vulkan" \
-            --device "$FTL_DEVICE" \
+            --device "$FTL_GODOT_DEVICE" \
             --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk \
             --test-type robo \
             --artifact-dir artifacts/android-godot-vulkan \
