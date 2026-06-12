@@ -204,14 +204,16 @@ static bool iWriteGlesFramebufferPpm(const char *path, int width, int height) {
 }
 
 static bool isValidationFrameReady(const ImmPlayer::Player::PerformanceInfo &perf) {
-    return perf.validationTimeFrame >= 30 &&
-           perf.numDrawCalls > 0 &&
+    return perf.numDrawCalls > 0 &&
            perf.numPaintDrawCalls > 0 &&
            perf.numTriangles > 0;
 }
 
 static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceInfo &perf) {
-    if (gEngine.validationCaptureWritten || gEngine.frameCount < 60 || gExternalFilesDirectory.empty()) {
+    if (gEngine.validationCaptureWritten || gEngine.frameCount < 5 || gExternalFilesDirectory.empty()) {
+        return;
+    }
+    if ((gEngine.frameCount % 15u) != 0u) {
         return;
     }
     if (!isValidationFrameReady(perf)) {

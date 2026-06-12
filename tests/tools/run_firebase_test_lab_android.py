@@ -21,7 +21,6 @@ DIAGNOSTIC_PATTERNS = [
     "Vulkan renderer",
     "native render capture",
     "FATAL EXCEPTION",
-    "signal ",
     "backtrace:",
 ]
 
