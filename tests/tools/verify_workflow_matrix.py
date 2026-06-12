@@ -38,6 +38,7 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Upload Unity DirectX smoke player"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
@@ -67,6 +68,7 @@ REQUIRED_RUNS_ON = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"ubuntu-latest"},
+        "unity-windows-directx-player-build": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
@@ -100,6 +102,7 @@ REQUIRED_JOB_TIMEOUTS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import",
+        "unity-windows-directx-player-build",
         "unity-windows-directx-composition",
         "unity-windows-openxr-vr",
         "godot-package-import",

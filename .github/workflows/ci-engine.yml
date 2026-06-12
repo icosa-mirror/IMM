@@ -148,10 +148,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  unity-windows-directx-composition:
-    name: Unity Windows DirectX Composition
+  unity-windows-directx-player-build:
+    name: Unity Windows DirectX Player Build
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -181,12 +181,10 @@ jobs:
             UnityPackageCache-${{ env.UNITY_VERSION }}-
 
       - name: Preflight Unity DirectX runner
-        shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-windows-directx-player/preflight.json
 
       - name: Prepare Unity DirectX artifact directory
-        shell: pwsh
-        run: New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
+        run: mkdir -p artifacts/unity-windows-directx-player/player
 
       - name: Build Unity DirectX smoke player
         timeout-minutes: 25
@@ -200,8 +198,61 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneWindows64
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
-          enableGpu: true
-          customParameters: -logFile C:/github/workspace/artifacts/unity-windows-directx-composition/unity-editor.log -immSmokePlayerPath C:/github/workspace/artifacts/unity-windows-directx-composition/player/ImmUnitySmoke.exe
+          customParameters: -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity DirectX smoke player
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsDirectXPlayer
+          path: artifacts/unity-windows-directx-player/player
+          if-no-files-found: error
+          retention-days: 1
+
+  unity-windows-directx-composition:
+    name: Unity Windows DirectX Composition
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs: unity-windows-directx-player-build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Unity DirectX runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json
+
+      - name: Prepare Unity DirectX artifact directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
+
+      - name: Download Unity DirectX smoke player
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsDirectXPlayer
+          path: artifacts/unity-windows-directx-composition/player
 
       - name: Run Unity DirectX composition smoke
         timeout-minutes: 5
@@ -304,26 +355,6 @@ jobs:
         if: always()
         shell: pwsh
         run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-directx-composition --require-manifest --output artifacts\unity-windows-directx-composition\artifact-summary.json
-
-      - name: Save Unity PackageCache cache
-        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
-        with:
-          path: code/ImmUnitySampleProject/Library/PackageCache
-          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
-
-      - name: Save Unity Library cache
-        if: always() && steps.cache_library.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        env:
-          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
-        with:
-          path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity DirectX composition artifacts
         if: always()
@@ -492,6 +523,7 @@ jobs:
         run: >
           python tests/tools/delete_ci_artifacts.py
           --name UnityPackageImport
+          --name UnityWindowsDirectXPlayer
           --name UnityWindowsDirectXComposition
           --name UnityWindowsOpenXRVR
           --name GodotPackageImport
