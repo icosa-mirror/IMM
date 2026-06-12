@@ -92,6 +92,8 @@ def validate_manifest(manifest: object, path: str) -> list[str]:
         errors.append(f"Manifest missing classification.result: {path}")
     if isinstance(classification, dict) and classification.get("result") not in {"passed", "skipped", "expected_failed", "failed", "cancelled"}:
         errors.append(f"Manifest reports unknown result {classification.get('result')!r}: {path}")
+    if isinstance(classification, dict) and classification.get("result") in {"failed", "cancelled"}:
+        errors.append(f"Manifest reports {classification.get('result')} result: {path}")
     matrix = manifest.get("matrix", {})
     if isinstance(matrix, dict):
         for key in ["product", "platform", "mode", "renderer"]:

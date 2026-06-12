@@ -180,7 +180,7 @@ static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width
     return iWriteRgbPpm(path, rgb.data(), width, height);
 }
 
-static bool iWriteGlesFramebufferPpm(const char *path, int width, int height) {
+static bool iWriteGlesFramebufferPpm(const char *path, const char *rejectedPath, int width, int height) {
     if (width <= 0 || height <= 0) {
         return false;
     }
@@ -198,6 +198,9 @@ static bool iWriteGlesFramebufferPpm(const char *path, int width, int height) {
         }
     }
     if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
+        if (rejectedPath && rejectedPath[0]) {
+            iWriteRgbPpm(rejectedPath, rgb.data(), width, height);
+        }
         return false;
     }
     return iWriteRgbPpm(path, rgb.data(), width, height);
@@ -233,6 +236,7 @@ static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceIn
     const std::string artifactDir = gExternalFilesDirectory + "/imm-ftl";
     mkdir(artifactDir.c_str(), 0777);
     const std::string capturePath = artifactDir + "/native-render-after.ppm";
+    const std::string rejectedCapturePath = artifactDir + "/native-render-rejected.ppm";
 
     bool wrote = false;
     if (gEngine.useVulkan) {
@@ -244,7 +248,7 @@ static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceIn
         }
     } else {
         glFinish();
-        wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), gEngine.width, gEngine.height);
+        wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), rejectedCapturePath.c_str(), gEngine.width, gEngine.height);
     }
 
     if (wrote) {

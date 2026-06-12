@@ -95,6 +95,27 @@ def main() -> int:
         expected_summary = json.loads((expected / "artifact-summary.json").read_text(encoding="utf-8"))
         assert expected_summary["passed"] is True
 
+        failed_manifest_dir = root / "failed-manifest"
+        failed_manifest_dir.mkdir()
+        failed_manifest = valid_manifest()
+        failed_manifest["classification"] = {"result": "failed", "failure_class": "visual"}
+        (failed_manifest_dir / "manifest.json").write_text(json.dumps(failed_manifest) + "\n", encoding="utf-8")
+        failed_manifest_result = run_collect(
+            "--repo-root",
+            str(root),
+            "--artifact-dir",
+            str(failed_manifest_dir),
+            "--require-manifest",
+            "--output",
+            str(failed_manifest_dir / "artifact-summary.json"),
+        )
+        assert failed_manifest_result.returncode != 0, "failed manifest should fail --require-manifest validation"
+        failed_manifest_summary = json.loads((failed_manifest_dir / "artifact-summary.json").read_text(encoding="utf-8"))
+        assert failed_manifest_summary["passed"] is False
+        assert "Manifest reports failed result" in failed_manifest_result.stdout
+        failed_manifest_report = (failed_manifest_dir / "validation-report.md").read_text(encoding="utf-8")
+        assert "- Result: failed" in failed_manifest_report
+
         broken = root / "broken"
         broken.mkdir()
         (broken / "manifest.json").write_text(json.dumps({"schema": "old"}) + "\n", encoding="utf-8")
