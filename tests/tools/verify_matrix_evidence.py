@@ -79,6 +79,10 @@ def passing_preflights(artifact: dict) -> list[dict]:
     return preflights
 
 
+def has_firebase_test_lab_result(files: list[dict]) -> bool:
+    return any(str(item.get("path", "")).endswith("firebase-test-lab-result.json") for item in files)
+
+
 def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], list[dict]]:
     evidence: dict[tuple[str, str, str, str], list[dict]] = defaultdict(list)
     for summary in summaries:
@@ -113,6 +117,7 @@ def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], lis
                         "passing_contracts": passing_contracts(artifact),
                         "preflights": artifact.get("preflights", []),
                         "passing_preflights": passing_preflights(artifact),
+                        "files": content.get("files", []),
                     }
                 )
     return evidence
@@ -140,7 +145,9 @@ def evaluate_row(row: dict, evidence: list[dict]) -> dict:
     if not evidence:
         errors.append("missing passed manifest evidence")
 
-    if row.get("hardware_gate") and not any(item["passing_preflights"] for item in evidence):
+    has_preflight = any(item["passing_preflights"] for item in evidence)
+    has_firebase_result = any(has_firebase_test_lab_result(item.get("files", [])) for item in evidence)
+    if row.get("hardware_gate") and not has_preflight and not has_firebase_result:
         errors.append("missing passing runner preflight evidence")
 
     if is_visual_row(row):

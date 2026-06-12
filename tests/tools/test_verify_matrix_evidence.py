@@ -42,12 +42,16 @@ def artifact(
     with_report: bool = False,
     with_contract: bool = False,
     with_preflight: bool = True,
+    with_firebase_result: bool = False,
 ) -> dict:
+    artifact_manifest = manifest(product, platform, mode, renderer)
+    if with_firebase_result:
+        artifact_manifest["files"] = [{"path": "firebase-test-lab-result.json"}]
     return {
         "path": f"{product}-{platform}-{mode}-{renderer}",
         "file_count": 4,
         "total_bytes": 128,
-        "manifests": [{"file": "manifest.json", "content": manifest(product, platform, mode, renderer)}],
+        "manifests": [{"file": "manifest.json", "content": artifact_manifest}],
         "preflights": [{"file": "preflight.json", "content": {"passed": True, "errors": []}}] if with_preflight else [],
         "metrics": [{"path": "render-metrics.json", "byte_size": 12, "sha256": "abc"}] if with_metrics else [],
         "reports": [{"path": "render-report.md", "byte_size": 12, "sha256": "ghi"}] if with_report else [],
@@ -82,6 +86,17 @@ def write_matrix(path: Path) -> None:
                         "status": "supported",
                         "hosted_gate": "Build / Android",
                         "hardware_gate": "CI Device Matrix / Android Quest VR",
+                        "baseline": "tests/baselines/content/sample1.json",
+                        "reason": "test row",
+                    },
+                    {
+                        "product": "godot",
+                        "platform": "android",
+                        "mode": "non-vr",
+                        "renderer": "vulkan",
+                        "status": "supported",
+                        "hosted_gate": "Build / Android",
+                        "hardware_gate": "CI Device Matrix / Android Godot Vulkan",
                         "baseline": "tests/baselines/content/sample1.json",
                         "reason": "test row",
                     },
@@ -155,13 +170,14 @@ def main() -> int:
             [
                 artifact("standalone", "windows", "non-vr", "vulkan", with_capture=True, with_metrics=True, with_report=True),
                 artifact("standalone", "android", "vr", "openxr", with_contract=True),
+                artifact("godot", "android", "non-vr", "vulkan", with_capture=True, with_metrics=True, with_report=True, with_preflight=False, with_firebase_result=True),
             ],
         )
         passed = run_verify(matrix_path, passing_summary, temp / "passing-output")
         assert passed.returncode == 0, passed.stderr + passed.stdout
         passed_report = json.loads((temp / "passing-output/matrix-evidence.json").read_text(encoding="utf-8"))
         assert passed_report["passed"] is True
-        assert passed_report["required_row_count"] == 2
+        assert passed_report["required_row_count"] == 3
         assert "# IMM Matrix Evidence Report" in (temp / "passing-output/matrix-evidence.md").read_text(encoding="utf-8")
 
         failing_summary = temp / "failing-summary.json"
@@ -170,6 +186,7 @@ def main() -> int:
             [
                 artifact("standalone", "windows", "non-vr", "vulkan", with_capture=False, with_metrics=True),
                 artifact("standalone", "android", "vr", "openxr", with_contract=False),
+                artifact("godot", "android", "non-vr", "vulkan", with_capture=True, with_metrics=True, with_report=True, with_preflight=False),
             ],
         )
         failed = run_verify(matrix_path, failing_summary, temp / "failing-output")
@@ -177,6 +194,7 @@ def main() -> int:
         assert "missing capture image/frame evidence" in failed.stdout
         assert "missing human-readable render report evidence" in failed.stdout
         assert "missing passing VR/OpenXR contract evidence" in failed.stdout
+        assert "godot/android/non-vr/vulkan: missing passing runner preflight evidence" in failed.stdout
 
         gpu_only = run_verify(
             matrix_path,
