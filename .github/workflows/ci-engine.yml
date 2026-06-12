@@ -217,15 +217,31 @@ jobs:
           $env:IMM_UNITY_SMOKE_QUIT = "1"
           $env:IMM_UNITY_SMOKE_COMPOSITION_PROBE = "1"
           $playerLog = Join-Path $artifactDir "unity-player.log"
-          $process = Start-Process -FilePath $player -ArgumentList @("-logFile", $playerLog) -PassThru
+          $playerArgs = @(
+            "-logFile", $playerLog,
+            "-immSmokeCapturePath", $env:IMM_UNITY_SMOKE_CAPTURE_PATH,
+            "-immSmokeFrames", $env:IMM_UNITY_SMOKE_FRAMES,
+            "-immSmokeQuit", $env:IMM_UNITY_SMOKE_QUIT,
+            "-immSmokeCompositionProbe", $env:IMM_UNITY_SMOKE_COMPOSITION_PROBE
+          )
+          $process = Start-Process -FilePath $player -ArgumentList $playerArgs -PassThru
           if (-not $process.WaitForExit(240000)) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $playerLog) {
+              Get-Content $playerLog
+            }
             throw "Unity DirectX smoke player timed out"
           }
           if ($process.ExitCode -ne 0) {
+            if (Test-Path $playerLog) {
+              Get-Content $playerLog
+            }
             throw "Unity DirectX smoke player failed with exit code $($process.ExitCode)"
           }
           if (-not (Test-Path $env:IMM_UNITY_SMOKE_CAPTURE_PATH)) {
+            if (Test-Path $playerLog) {
+              Get-Content $playerLog
+            }
             throw "Unity DirectX smoke capture was not written: $env:IMM_UNITY_SMOKE_CAPTURE_PATH"
           }
 

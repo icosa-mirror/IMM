@@ -14,6 +14,11 @@ namespace ImmPlayer
         private const string QuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
+        private const string CapturePathArg = "-immSmokeCapturePath";
+        private const string FramesArg = "-immSmokeFrames";
+        private const string QuitArg = "-immSmokeQuit";
+        private const string CompositionProbeArg = "-immSmokeCompositionProbe";
+        private const string XrProbeArg = "-immSmokeXrProbe";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
         private const float MinDominantShare = 0.35f;
@@ -25,7 +30,11 @@ namespace ImmPlayer
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
-            string capturePath = Environment.GetEnvironmentVariable(CapturePathEnv);
+            string capturePath = GetCommandLineValue(CapturePathArg);
+            if (string.IsNullOrEmpty(capturePath))
+            {
+                capturePath = Environment.GetEnvironmentVariable(CapturePathEnv);
+            }
             if (string.IsNullOrEmpty(capturePath))
                 return;
 
@@ -46,8 +55,8 @@ namespace ImmPlayer
         private IEnumerator Start()
         {
             int frameCount = 180;
-            _compositionProbeEnabled = IsEnvEnabled(CompositionProbeEnv);
-            _xrProbeEnabled = IsEnvEnabled(XrProbeEnv);
+            _compositionProbeEnabled = IsEnabled(CompositionProbeArg, CompositionProbeEnv);
+            _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
             if (_compositionProbeEnabled)
             {
                 if (!CreateCompositionProbes())
@@ -56,7 +65,11 @@ namespace ImmPlayer
                 }
             }
 
-            string framesText = Environment.GetEnvironmentVariable(FramesEnv);
+            string framesText = GetCommandLineValue(FramesArg);
+            if (string.IsNullOrEmpty(framesText))
+            {
+                framesText = Environment.GetEnvironmentVariable(FramesEnv);
+            }
             if (!string.IsNullOrEmpty(framesText) && int.TryParse(framesText, out int parsedFrames))
             {
                 frameCount = Mathf.Max(1, parsedFrames);
@@ -264,9 +277,13 @@ namespace ImmPlayer
             Debug.LogError($"{Prefix}{message}");
         }
 
-        private static bool IsEnvEnabled(string name)
+        private static bool IsEnabled(string argName, string envName)
         {
-            string value = Environment.GetEnvironmentVariable(name);
+            string value = GetCommandLineValue(argName);
+            if (string.IsNullOrEmpty(value))
+            {
+                value = Environment.GetEnvironmentVariable(envName);
+            }
             return !string.IsNullOrEmpty(value) && value != "0" && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -328,11 +345,29 @@ namespace ImmPlayer
 
         private static void QuitIfRequested(int exitCode)
         {
-            string quit = Environment.GetEnvironmentVariable(QuitEnv);
+            string quit = GetCommandLineValue(QuitArg);
+            if (string.IsNullOrEmpty(quit))
+            {
+                quit = Environment.GetEnvironmentVariable(QuitEnv);
+            }
             if (quit == "1" || string.Equals(quit, "true", StringComparison.OrdinalIgnoreCase))
             {
                 Application.Quit(exitCode);
             }
+        }
+
+        private static string GetCommandLineValue(string key)
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; ++i)
+            {
+                if (string.Equals(args[i], key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return args[i + 1];
+                }
+            }
+
+            return string.Empty;
         }
     }
 }
