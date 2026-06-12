@@ -520,11 +520,28 @@ jobs:
           --json-output artifacts/engine-evidence/matrix-evidence.json
           --markdown-output artifacts/engine-evidence/matrix-evidence.md
 
-      - name: Upload engine evidence report
+      - name: Write engine visual evidence report
+        if: always()
+        run: >
+          python tests/tools/write_visual_evidence_report.py
+          --input-root artifacts/engine-evidence/input
+          --output-dir artifacts/engine-evidence/view
+          --markdown-output artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
+
+      - name: Upload engine visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineValidationEvidence
+          path: artifacts/engine-evidence/view
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload engine debug artifacts
         if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: EngineMatrixEvidence
+          name: EngineMatrixDebugArtifacts
           path: artifacts/engine-evidence
           if-no-files-found: ignore
           retention-days: 14

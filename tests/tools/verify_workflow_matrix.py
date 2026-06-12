@@ -42,7 +42,7 @@ REQUIRED_JOBS = {
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
-        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Upload engine evidence report", "Hide per-lane engine artifacts"],
+        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": ["Preflight DirectX runner", "Build Windows viewer", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
