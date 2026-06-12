@@ -99,6 +99,7 @@ jobs:
         run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-package-import/preflight.json
 
       - name: Run Unity batchmode package import tests
+        id: unity_package_import_tests
         timeout-minutes: 25
         uses: game-ci/unity-test-runner@v4
         env:
@@ -114,7 +115,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class api --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_package_import_tests.outcome }}" --failure-class api --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
       - name: Collect artifact summary
         if: always()
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-package-import --require-manifest --output artifacts/unity-package-import/artifact-summary.json
@@ -187,6 +188,7 @@ jobs:
         run: mkdir -p artifacts/unity-windows-directx-player/player
 
       - name: Build Unity DirectX smoke player
+        id: unity_directx_player_build
         timeout-minutes: 25
         uses: game-ci/unity-builder@v4
         env:
@@ -199,6 +201,14 @@ jobs:
           targetPlatform: StandaloneWindows64
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
           customParameters: -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_directx_player_build.outcome }}" --failure-class build --output artifacts/unity-windows-directx-player/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts/unity-windows-directx-player
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-windows-directx-player --require-manifest --output artifacts/unity-windows-directx-player/artifact-summary.json
 
       - name: Save Unity PackageCache cache
         if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
@@ -228,6 +238,15 @@ jobs:
           path: artifacts/unity-windows-directx-player/player
           if-no-files-found: error
           retention-days: 1
+
+      - name: Upload Unity DirectX build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsDirectXPlayerBuildEvidence
+          path: artifacts/unity-windows-directx-player
+          if-no-files-found: ignore
+          retention-days: 14
 
   unity-windows-directx-composition:
     name: Unity Windows DirectX Composition
@@ -500,6 +519,7 @@ jobs:
     timeout-minutes: 10
     needs:
       - unity-package-import
+      - unity-windows-directx-player-build
       - unity-windows-directx-composition
       - unity-windows-openxr-vr
       - godot-package-import
@@ -528,6 +548,39 @@ jobs:
           --output-dir artifacts/engine-evidence/view
           --markdown-output artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
 
+      - name: Write engine aggregate status manifests
+        if: always()
+        run: |
+          mkdir -p artifacts/engine-evidence/view/status-manifests/unity-non-vr
+          unity_status="passed"
+          unity_failure_class=""
+          for result in \
+            "${{ needs.unity-package-import.result }}" \
+            "${{ needs.unity-windows-directx-player-build.result }}" \
+            "${{ needs.unity-windows-directx-composition.result }}"
+          do
+            if [ "$result" = "failure" ]; then
+              unity_status="failed"
+              unity_failure_class="build"
+            elif [ "$result" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
+              unity_status="cancelled"
+              unity_failure_class="build"
+            fi
+          done
+          if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ]; then
+            python tests/tools/write_ci_manifest.py \
+              --status "$unity_status" \
+              --failure-class "$unity_failure_class" \
+              --output artifacts/engine-evidence/view/status-manifests/unity-non-vr/manifest.json \
+              --product unity \
+              --platform-name all \
+              --mode non-vr \
+              --renderer native \
+              --include artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
+          fi
+
       - name: Upload engine visual evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -554,6 +607,7 @@ jobs:
           python tests/tools/delete_ci_artifacts.py
           --name UnityPackageImport
           --name UnityWindowsDirectXPlayer
+          --name UnityWindowsDirectXPlayerBuildEvidence
           --name UnityWindowsDirectXComposition
           --name UnityWindowsOpenXRVR
           --name GodotPackageImport

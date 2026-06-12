@@ -13,6 +13,13 @@ from pathlib import Path
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 REPORT_SUFFIX = "-render-report.md"
+AGGREGATE_REPORT_NAMES = {
+    "VALIDATION_REPORT.md",
+    "ENGINE_VALIDATION_REPORT.md",
+    "DEVICE_VALIDATION_REPORT.md",
+    "GPU_VALIDATION_REPORT.md",
+    "CORE_VALIDATION_REPORT.md",
+}
 
 
 def normalize_label(value: str) -> str:
@@ -100,7 +107,7 @@ def relative_link(target: Path, report_path: Path) -> str:
 
 
 def display_name(key: str) -> str:
-    key = slugify(key).replace("direct-x", "directx").replace("open-gl", "opengl")
+    key = normalize_label(key.replace("/", "-")).replace("direct-x", "directx").replace("open-gl", "opengl")
     replacements = {
         "android": "Android",
         "directx": "DirectX",
@@ -124,6 +131,8 @@ def report_key(report: Path) -> str:
         return slugify(report.parent.name)
     if report.name.endswith(REPORT_SUFFIX):
         return slugify(report.name[: -len(REPORT_SUFFIX)])
+    if report.name in AGGREGATE_REPORT_NAMES:
+        return slugify(report.parent.name)
     return slugify(report.stem)
 
 
@@ -147,6 +156,193 @@ def discover_reports(input_root: Path) -> list[tuple[str, Path]]:
     return sorted(selected.items(), key=lambda item: display_name(item[0]))
 
 
+def matrix_key(row: dict) -> str:
+    return "/".join(
+        str(row.get(part, ""))
+        for part in ["product", "platform", "mode", "renderer"]
+    )
+
+
+def row_visual_requirement(row: dict) -> bool:
+    baseline = str(row.get("baseline") or "")
+    renderer = str(row.get("renderer") or "")
+    return baseline.startswith("tests/baselines/render/") or renderer in {"directx", "vulkan", "metal"}
+
+
+def row_matches_key(row: dict, observed_key: str) -> bool:
+    product = str(row.get("product") or "")
+    platform = str(row.get("platform") or "")
+    mode = str(row.get("mode") or "")
+    renderer = str(row.get("renderer") or "")
+    key = slugify(observed_key)
+    terms = [product, platform, renderer]
+    if product == "unity" and platform == "all":
+        terms = ["unity"]
+    if renderer == "native":
+        terms = [product, platform]
+    if renderer == "preflight":
+        terms = [product, platform]
+    if mode == "vr":
+        terms.append("vr")
+    return all(not term or term == "all" or slugify(term) in key for term in terms)
+
+
+def observed_matrix_results(input_root: Path, report_keys: set[str]) -> dict[str, set[str]]:
+    observed: dict[str, set[str]] = {key: {"present"} for key in report_keys}
+    for captures_dir in input_root.rglob("captures"):
+        if not captures_dir.is_dir():
+            continue
+        for child in captures_dir.iterdir():
+            if child.is_dir():
+                observed.setdefault(slugify(child.name), set()).add("present")
+    for manifest_path in input_root.rglob("manifest.json"):
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        matrix = manifest.get("matrix") if isinstance(manifest, dict) else None
+        if isinstance(matrix, dict):
+            key = slugify("-".join(str(matrix.get(part, "")) for part in ["product", "platform", "mode", "renderer"]))
+            classification = manifest.get("classification") if isinstance(manifest, dict) else None
+            result = ""
+            if isinstance(classification, dict):
+                result = str(classification.get("result") or "")
+            observed.setdefault(key, set()).add(result or "present")
+    return observed
+
+
+def row_observed_results(row: dict, observed: dict[str, set[str]]) -> set[str]:
+    results: set[str] = set()
+    for key, values in observed.items():
+        if row_matches_key(row, key):
+            results.update(values)
+    return results
+
+
+def coverage_status_for(row: dict, results: set[str]) -> str:
+    status = str(row.get("status") or "unknown")
+    if status == "deferred":
+        return "deferred"
+    if status == "unsupported":
+        return "unsupported"
+    if status != "supported":
+        return status
+    if not results:
+        return "missing evidence"
+    if results & {"failed", "failure", "cancelled"}:
+        return "failed"
+    if "expected_failed" in results:
+        return "expected failure"
+    if "passed" in results or "present" in results:
+        return "passed"
+    return "present"
+
+
+def matrix_coverage_rows(matrix_status: Path | None, input_root: Path, reports: list[tuple[str, Path]]) -> list[dict]:
+    if matrix_status is None:
+        return []
+    matrix = json.loads(matrix_status.read_text(encoding="utf-8"))
+    rows = matrix.get("rows", [])
+    if not isinstance(rows, list):
+        return []
+    observed = observed_matrix_results(input_root, {key for key, _report in reports})
+    coverage = []
+    for row in rows:
+        status = str(row.get("status") or "unknown")
+        coverage_status = coverage_status_for(row, row_observed_results(row, observed))
+        coverage.append(
+            {
+                "key": matrix_key(row),
+                "status": status,
+                "coverage_status": coverage_status,
+                "visual": row_visual_requirement(row),
+                "hosted_gate": row.get("hosted_gate") or "",
+                "hardware_gate": row.get("hardware_gate") or "",
+                "reason": row.get("owner_decision") or row.get("reason") or "",
+            }
+        )
+    return coverage
+
+
+def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
+    if not coverage:
+        return
+    supported = [row for row in coverage if row["status"] == "supported"]
+    missing = [row for row in supported if row["coverage_status"] == "missing evidence"]
+    failed = [row for row in supported if row["coverage_status"] == "failed"]
+    expected_failed = [row for row in supported if row["coverage_status"] == "expected failure"]
+    deferred = [row for row in coverage if row["status"] == "deferred"]
+    unsupported = [row for row in coverage if row["status"] == "unsupported"]
+    lines.extend(
+        [
+            "## Matrix Coverage",
+            "",
+            f"- Supported rows: {len(supported)}",
+            f"- Supported rows with evidence in this artifact: {len(supported) - len(missing)}",
+            f"- Supported rows missing evidence in this artifact: {len(missing)}",
+            f"- Supported rows failed: {len(failed)}",
+            f"- Supported rows expected-failed: {len(expected_failed)}",
+            f"- Deferred rows: {len(deferred)}",
+            f"- Unsupported rows: {len(unsupported)}",
+            "",
+            "| Row | Status | Evidence | Visual | Gate |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in coverage:
+        gate = row["hardware_gate"] or row["hosted_gate"]
+        lines.append(
+            f"| {row['key']} | {row['status']} | {row['coverage_status']} | {'yes' if row['visual'] else 'no'} | {gate} |"
+        )
+    lines.append("")
+    if missing:
+        lines.append("### Missing Supported Evidence")
+        for row in missing:
+            lines.append(f"- {row['key']}: {row['reason']}")
+        lines.append("")
+    if failed:
+        lines.append("### Failed Supported Evidence")
+        for row in failed:
+            lines.append(f"- {row['key']}: {row['reason']}")
+        lines.append("")
+    if expected_failed:
+        lines.append("### Expected-Failed Supported Evidence")
+        for row in expected_failed:
+            lines.append(f"- {row['key']}: {row['reason']}")
+        lines.append("")
+    if deferred:
+        lines.append("### Deferred")
+        for row in deferred:
+            lines.append(f"- {row['key']}: {row['reason']}")
+        lines.append("")
+    if unsupported:
+        lines.append("### Unsupported")
+        for row in unsupported:
+            lines.append(f"- {row['key']}: {row['reason']}")
+        lines.append("")
+
+
+def add_status_only_sections(lines: list[str], coverage: list[dict]) -> None:
+    rows = [
+        row for row in coverage
+        if row["status"] == "supported" and row["coverage_status"] != "missing evidence" and not row["visual"]
+    ]
+    if not rows:
+        return
+    lines.append("## Status-Only Evidence")
+    lines.append("")
+    for row in rows:
+        lines.append(f"### {display_name(row['key'])}")
+        lines.append("")
+        lines.append(f"- Result: {row['coverage_status']}")
+        gate = row["hardware_gate"] or row["hosted_gate"]
+        if gate:
+            lines.append(f"- Gate: {gate}")
+        if row["reason"]:
+            lines.append(f"- Scope: {row['reason']}")
+        lines.append("")
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -162,6 +358,8 @@ def image_roots_for_report(report: Path, key: str) -> list[Path]:
         if matching:
             return matching
         if any(path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES for path in captures.iterdir()):
+            return [captures]
+        if report.name in AGGREGATE_REPORT_NAMES:
             return [captures]
         if report.name != "render-report.md":
             return []
@@ -264,6 +462,7 @@ def main() -> int:
     parser.add_argument("--input-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--markdown-output", type=Path, required=True)
+    parser.add_argument("--matrix-status", type=Path)
     args = parser.parse_args()
 
     input_root = args.input_root.resolve()
@@ -272,15 +471,20 @@ def main() -> int:
     capture_output_dir = output_dir / "captures"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    reports = discover_reports(input_root)
+    coverage = matrix_coverage_rows(args.matrix_status, input_root, reports)
+
     lines = [
         "# IMM CI Validation Evidence",
         "",
         "This is the report to read first. It summarizes render correctness, known composition failures, and the captured images used as evidence.",
         "",
     ]
+    add_matrix_coverage(lines, coverage)
+    add_status_only_sections(lines, coverage)
 
     visual_sections = 0
-    for key, report in discover_reports(input_root):
+    for key, report in reports:
         metrics = find_metrics(report.parent)
         status = find_json(report.parent, "composition-status.json")
         manifest = find_json(report.parent, "manifest.json")

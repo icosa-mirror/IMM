@@ -770,6 +770,65 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  macos-standalone-metal:
+    name: macOS Standalone Metal
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: macos-14
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CMake
+        run: command -v cmake >/dev/null 2>&1 || brew install cmake
+
+      - name: Preflight macOS Metal runner
+        run: python3 tests/tools/preflight_runner.py --profile macos-standalone-metal --output artifacts/macos-standalone-metal/preflight.json --require-command cmake --require-command git
+
+      - name: Configure macOS build
+        run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
+
+      - name: Build macOS Metal standalone viewer
+        run: cmake --build build/macos --target appImmViewerMetal --config Release
+
+      - name: Smoke macOS Metal standalone viewer
+        timeout-minutes: 8
+        run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
+
+      - name: Record macOS Metal render metrics
+        run: >
+          python3 tests/tools/compare_render_metrics.py build/macos/metal-validation-captures/static.ppm
+          --contract tests/baselines/render/macos-standalone-metal-sample1.json
+          --json-output artifacts/macos-standalone-metal/macos-metal-render-metrics.json
+
+      - name: Write macOS Metal render report
+        if: always()
+        run: >
+          python3 tests/tools/write_render_report.py
+          --metrics-json artifacts/macos-standalone-metal/macos-metal-render-metrics.json
+          --candidate-capture build/macos/metal-validation-captures/static.ppm
+          --output-dir artifacts/macos-standalone-metal/captures
+          --markdown-output artifacts/macos-standalone-metal/render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/macos-standalone-metal/manifest.json --product standalone --platform-name macos --mode non-vr --renderer metal --include artifacts/macos-standalone-metal
+
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/macos-standalone-metal --require-manifest --output artifacts/macos-standalone-metal/artifact-summary.json
+
+      - name: Upload macOS Standalone Metal artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOSStandaloneMetal-GPU
+          path: artifacts/macos-standalone-metal
+          if-no-files-found: ignore
+          retention-days: 14
+
   macos-godot-metal:
     name: macOS Godot Metal
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
@@ -899,6 +958,7 @@ jobs:
       - windows-standalone-opengl-vr
       - windows-godot-vulkan
       - windows-godot-openxr-vr
+      - macos-standalone-metal
       - macos-godot-metal
     steps:
       - name: Checkout repository

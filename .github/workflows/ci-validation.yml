@@ -67,6 +67,7 @@ jobs:
           python tests/tools/write_visual_evidence_report.py
           --input-root artifacts/validation-evidence/input
           --output-dir artifacts/validation-evidence/view
+          --matrix-status tests/matrix_status.json
           --markdown-output artifacts/validation-evidence/view/VALIDATION_REPORT.md
 
       - name: Upload validation evidence

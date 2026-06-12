@@ -38,11 +38,11 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
-        "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Upload Unity DirectX smoke player"],
+        "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
-        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
+        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Write engine aggregate status manifests", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": ["Preflight DirectX runner", "Build Windows viewer", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
@@ -52,6 +52,7 @@ REQUIRED_JOBS = {
         "windows-standalone-opengl-vr": ["Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against committed DirectX baseline", "Write Godot Vulkan render report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "macos-standalone-metal": ["Preflight macOS Metal runner", "Configure macOS build", "Build macOS Metal standalone viewer", "Smoke macOS Metal standalone viewer", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
     },
@@ -80,6 +81,7 @@ REQUIRED_RUNS_ON = {
         "windows-standalone-opengl-vr": {"self-hosted", "windows", "gpu", "vr", "opengl"},
         "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
+        "macos-standalone-metal": {"macos-14"},
         "macos-godot-metal": {"macos-15"},
     },
 }
@@ -116,6 +118,7 @@ REQUIRED_JOB_TIMEOUTS = {
         "windows-standalone-opengl-vr",
         "windows-godot-vulkan",
         "windows-godot-openxr-vr",
+        "macos-standalone-metal",
         "macos-godot-metal",
         "gpu-evidence-report",
     },
@@ -141,6 +144,7 @@ REQUIRED_STEP_TIMEOUTS = {
         "windows-standalone-opengl-vr": {"Run Windows OpenGL VR smoke"},
         "windows-godot-vulkan": {"Run Godot Vulkan visual baseline smoke"},
         "windows-godot-openxr-vr": {"Run Godot OpenXR VR smoke"},
+        "macos-standalone-metal": {"Smoke macOS Metal standalone viewer"},
         "macos-godot-metal": {"Run Godot Metal visual smoke"},
     },
 }

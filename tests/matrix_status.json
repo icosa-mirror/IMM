@@ -129,7 +129,7 @@
       "status": "supported",
       "hosted_gate": "Build / macOS",
       "hardware_gate": null,
-      "baseline": "tests/baselines/render/macos-metal-sample1.json",
+      "baseline": "tests/baselines/render/macos-standalone-metal-sample1.json",
       "reason": "Hosted macOS CI builds the Metal app, runs validation, and uploads ImmViewer-macOS."
     },
     {
