@@ -408,24 +408,25 @@ jobs:
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
         timeout-minutes: 30
         shell: bash
-        run: >
-          python tests/tools/run_firebase_test_lab_android.py
-            --project "$FTL_PROJECT_ID"
-            --results-bucket "$FTL_RESULTS_BUCKET"
-            --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-godot-vulkan"
-            --device "$FTL_DEVICE"
-            --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk
-            --test-type robo
-            --artifact-dir artifacts/android-godot-vulkan
-            --timeout 7m
-            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files
-            --required-marker "IMM Godot Vulkan visual smoke passed"
-            --required-marker "Loaded in CPU"
-            --required-marker "Loaded in GPU"
-            --required-marker "Vulkan renderer submitted picture draw commands"
-            --required-marker "Vulkan renderer submitted static paint draw commands"
-            --required-marker "last_vulkan_frame_started"
-            --required-capture-name vulkan_visual_smoke.png
+        run: |
+          set -euo pipefail
+          python tests/tools/run_firebase_test_lab_android.py \
+            --project "$FTL_PROJECT_ID" \
+            --results-bucket "$FTL_RESULTS_BUCKET" \
+            --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-godot-vulkan" \
+            --device "$FTL_DEVICE" \
+            --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk \
+            --test-type robo \
+            --artifact-dir artifacts/android-godot-vulkan \
+            --timeout 7m \
+            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files \
+            --required-marker "IMM Godot Vulkan visual smoke passed" \
+            --required-marker "Loaded in CPU" \
+            --required-marker "Loaded in GPU" \
+            --required-marker "Vulkan renderer submitted picture draw commands" \
+            --required-marker "Vulkan renderer submitted static paint draw commands" \
+            --required-marker "last_vulkan_frame_started" \
+            --required-capture-name vulkan_visual_smoke.png \
             --client-label "IMM Android Godot Vulkan"
       - name: Record Android Godot Vulkan screenshot metrics
         if: always()
