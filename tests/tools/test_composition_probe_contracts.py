@@ -36,7 +36,10 @@ def main() -> int:
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
             "unity-windows-directx-composition",
-            "scene composition probe passed",
+            "classify_unity_visual_smoke.py",
+            "composition-status.json",
+            "expected_failed",
+            "Compare Unity DirectX render metrics against committed DirectX baseline",
             "unity-windows-directx-composition.png",
         ],
     }
