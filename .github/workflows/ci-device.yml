@@ -408,6 +408,13 @@ jobs:
           $extension = Get-Content $extensionPath
           $extension = $extension | Where-Object { $_ -notmatch '^(windows|macos)\.' }
           Set-Content -Encoding utf8 -Path $extensionPath -Value $extension
+          $exportPresetPath = Join-Path $projectDir "export_presets.cfg"
+          $exportPreset = Get-Content -Raw $exportPresetPath
+          $exportPreset = $exportPreset -replace 'package/show_as_launcher_app=false', 'package/show_as_launcher_app=true'
+          Set-Content -Encoding utf8 -NoNewline -Path $exportPresetPath -Value $exportPreset
+          if (-not ((Get-Content -Raw $exportPresetPath).Contains('package/show_as_launcher_app=true'))) {
+            throw "Failed to make Android Godot export launchable for Firebase Test Lab"
+          }
           $projectPath = Join-Path $projectDir "project.godot"
           $project = Get-Content -Raw $projectPath
           $project = $project -replace 'run/main_scene="res://scenes/SampleScene\.tscn"', 'run/main_scene="res://scenes/VisualSmokeScene.tscn"'
