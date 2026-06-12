@@ -433,10 +433,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Godot import failed with $LASTEXITCODE" }
           & $env:GODOT_EXE @godotEditorArgs --export-debug "Android Debug" "$artifactDir\imm-godot-sample-debug.apk"
           if ($LASTEXITCODE -ne 0) { throw "Godot Android export failed with $LASTEXITCODE" }
-      - name: Build Android Godot Firebase instrumentation APK
-        working-directory: code/projects/android
-        shell: pwsh
-        run: .\gradlew.bat :appImmGodotFtlTest:assembleDebug -PimmBuildDir=build_godot_ftl_test
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
         timeout-minutes: 30
         shell: pwsh
@@ -449,13 +445,10 @@ jobs:
             --results-dir "$resultsDir" `
             --device "$env:FTL_DEVICE" `
             --app artifacts/android-godot-vulkan/imm-godot-sample-debug.apk `
-            --test code/projects/android/appImmGodotFtlTest/build_godot_ftl_test/outputs/apk/debug/appImmGodotFtlTest-debug.apk `
-            --test-type instrumentation `
+            --test-type robo `
             --artifact-dir artifacts/android-godot-vulkan `
             --timeout 7m `
-            --environment-variable waitSeconds=60 `
             --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files `
-            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.ftltest/files/imm-ftl `
             --required-marker "IMM Godot Vulkan visual smoke passed" `
             --required-marker "Loaded in CPU" `
             --required-marker "Loaded in GPU" `
