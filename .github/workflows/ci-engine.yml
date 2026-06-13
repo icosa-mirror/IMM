@@ -107,7 +107,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
           UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
         with:
-          projectPath: code/ImmUnitySampleProject
+          projectPath: artifacts/UnityPackageImportHarness/unity-package-import
           unityVersion: ${{ env.UNITY_VERSION }}
           testMode: editmode
           artifactsPath: artifacts/unity-package-import/test-runner
@@ -187,6 +187,12 @@ jobs:
       - name: Prepare Unity DirectX artifact directory
         run: mkdir -p artifacts/unity-windows-directx-player/player
 
+      - name: Prepare Unity DirectX CI project
+        run: >
+          python tests/tools/prepare_unity_ci_project.py
+          --source code/ImmUnitySampleProject
+          --output artifacts/UnityDirectXSmokeProject
+
       - name: Build Unity DirectX smoke player
         id: unity_directx_player_build
         timeout-minutes: 25
@@ -196,7 +202,7 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
           UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
         with:
-          projectPath: code/ImmUnitySampleProject
+          projectPath: artifacts/UnityDirectXSmokeProject
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneWindows64
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
