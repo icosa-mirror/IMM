@@ -440,8 +440,10 @@ namespace ImmPlayer
                 return CameraEvent.BeforeImageEffectsOpaque;
             if (string.Equals(value, "AfterEverything", StringComparison.OrdinalIgnoreCase))
                 return CameraEvent.AfterEverything;
+            if (string.Equals(value, "BeforeForwardOpaque", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.BeforeForwardOpaque;
 
-            return CameraEvent.BeforeForwardOpaque;
+            return CameraEvent.AfterSkybox;
         }
 
         private static bool ShouldRenderCamera(Camera cam)
@@ -466,18 +468,14 @@ namespace ImmPlayer
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
 
-            // Do not widen this D3D11 branch while fixing Android, Metal,
-            // Vulkan, or XR projection regressions. This path has ping-ponged:
-            // D3D11 non-XR Game cameras need texture-style projection to avoid
-            // upside-down Windows desktop command-buffer rendering, but
-            // D3D11 XR/stereo Game cameras flip upside down if this is true. The
-            // native DX path intentionally keeps its legacy reverse-depth convention,
-            // so keep non-XR desktop and XR separate here.
+            // D3D11 desktop Game cameras currently render upright with the
+            // backbuffer projection path. Keep the env overrides above for
+            // capture/projection A/B tests and keep XR separate from this path.
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 &&
                 cam != null &&
                 cam.cameraType == CameraType.Game &&
                 !cam.stereoEnabled)
-                return true;
+                return false;
 
             // Unity can mark Game cameras as stereo/XR-active even when we are
             // validating the editor Game view. Do not use stereoEnabled as a
@@ -614,14 +612,14 @@ namespace ImmPlayer
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
-                bool forcePlainEvent = IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
-                bool bindCameraTarget = IsEnvFlagEnabled("IMM_UNITY_VK_BIND_CAMERA_TARGET");
+                bool useCustomBlit = IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT") && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
+                bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {
                     info.CommandBuffer.SetRenderTarget(cameraTarget);
                 }
-                if (!forcePlainEvent && _renderEventAndDataFunc != IntPtr.Zero)
+                if (useCustomBlit && _renderEventAndDataFunc != IntPtr.Zero)
                 {
                     if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(VulkanCustomBlitEventId))
                     {

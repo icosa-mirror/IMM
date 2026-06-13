@@ -30,6 +30,7 @@ public:
     bool SupportsFeature(RendererFeature feature) override;
     API GetAPI(void) override;
     bool UsesExternalHostDepth(void) const override;
+    bool IsExternalHostFrame(void) const override;
     void Report(void) override;
     void SetActiveWindow(int id) override;
     void Enable(void) override;
@@ -40,7 +41,7 @@ public:
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height);
     bool BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height);
-    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, uint32_t subpass, int width, int height);
+    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height);
     bool DebugClearHostRenderPassColor(float red, float green, float blue, float alpha);
     void EndExternalImageFrame(void);
 

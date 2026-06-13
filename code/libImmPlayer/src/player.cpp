@@ -191,6 +191,9 @@ namespace ImmPlayer
             mDepthState = renderer->CreateDepthState(true, (mDetphBufferMode==DepthBuffer::Linear01)?true:false); // set the second to true for non-unity DX. I know.
             if (!mDepthState) return false;
 
+            mBackgroundDepthState = renderer->CreateDepthState(false, true);
+            if (!mBackgroundDepthState) return false;
+
 #if CUSTOM_ALPHA_TO_COVERAGE==1
             mBlendState = renderer->CreateBlendState(false, false);
 #else
@@ -271,7 +274,7 @@ namespace ImmPlayer
         mRenderer->DestroyBuffer(mDisplayStateShaderConstans);
         mRenderer->DestroyBuffer(mPassStateShaderConstans);
 
-        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::Metal)
+        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::Metal || mRenderer->GetAPI() == piRenderer::API::Vulkan)
         {
             mRenderer->DestroyRasterState(mRasterState);
             mRasterState = nullptr;
@@ -279,6 +282,8 @@ namespace ImmPlayer
             mBlendState = nullptr;
             mRenderer->DestroyDepthState(mDepthState);
             mDepthState = nullptr;
+            mRenderer->DestroyDepthState(mBackgroundDepthState);
+            mBackgroundDepthState = nullptr;
         }
 
         mCommandList.End();
@@ -1381,10 +1386,62 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND")) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL")) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        const bool skipPaint = iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT");
+        const bool skipPicture = iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE");
+        const bool skipSound = iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND");
+        const bool skipModel = iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL");
+
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        {
+            if (mRenderer->UsesExternalHostDepth())
+            {
+                // When Unity supplies the host depth buffer, keep the normal
+                // IMM ordering: paint writes depth, then the 360 picture draws
+                // as the far background and depth testing keeps it behind paint.
+                if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                if (!skipPicture) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            }
+            else
+            {
+                // Without usable host depth, draw the authored 360 picture as
+                // a color background before paint. In Unity host render passes,
+                // keep depth disabled for both passes so overlay composition
+                // does not read or write Unity's depth attachment.
+                const bool hostOverlayWithoutDepth = mRenderer->IsExternalHostFrame();
+                if (hostOverlayWithoutDepth)
+                {
+                    mRenderer->SetDepthState(mBackgroundDepthState);
+                    mRenderer->SetWriteMask(true, false, false, false, false);
+                }
+                if (!skipPicture)
+                {
+                    if (!hostOverlayWithoutDepth)
+                    {
+                        mRenderer->SetDepthState(mBackgroundDepthState);
+                        mRenderer->SetWriteMask(true, false, false, false, false);
+                    }
+                    mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                    if (!hostOverlayWithoutDepth)
+                    {
+                        mRenderer->SetDepthState(mDepthState);
+                        mRenderer->SetWriteMask(true, false, false, false, true);
+                    }
+                }
+                if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                if (hostOverlayWithoutDepth)
+                {
+                    mRenderer->SetDepthState(mDepthState);
+                    mRenderer->SetWriteMask(true, false, false, false, true);
+                }
+            }
+        }
+        else
+        {
+            if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!skipPicture) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        if (!skipSound) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!skipModel) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
         if (mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES)
         {

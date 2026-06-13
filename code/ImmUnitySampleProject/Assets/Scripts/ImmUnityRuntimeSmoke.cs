@@ -98,25 +98,34 @@ namespace ImmPlayer
                 yield break;
             }
 
-            int width = CaptureWidth;
-            int height = CaptureHeight;
+            var tex = ScreenCapture.CaptureScreenshotAsTexture();
+            RenderTexture renderTexture = null;
+            RenderTexture previousActive = null;
+            RenderTexture previousTarget = null;
+            if (tex == null)
+            {
+                int fallbackWidth = CaptureWidth;
+                int fallbackHeight = CaptureHeight;
+                renderTexture = new RenderTexture(fallbackWidth, fallbackHeight, 24, RenderTextureFormat.ARGB32);
+                previousActive = RenderTexture.active;
+                previousTarget = captureCamera.targetTexture;
+                captureCamera.targetTexture = renderTexture;
+                RenderTexture.active = renderTexture;
+                captureCamera.Render();
+
+                tex = new Texture2D(fallbackWidth, fallbackHeight, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, fallbackWidth, fallbackHeight), 0, 0, false);
+                tex.Apply(false, false);
+            }
+
+            int width = tex.width;
+            int height = tex.height;
             if (width <= 0 || height <= 0)
             {
                 Debug.LogError($"{Prefix}invalid screen size {width}x{height}");
                 QuitIfRequested(2);
                 yield break;
             }
-
-            var renderTexture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
-            RenderTexture previousActive = RenderTexture.active;
-            RenderTexture previousTarget = captureCamera.targetTexture;
-            captureCamera.targetTexture = renderTexture;
-            RenderTexture.active = renderTexture;
-            captureCamera.Render();
-
-            var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
-            tex.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
-            tex.Apply(false, false);
 
             Color32[] pixels = tex.GetPixels32();
             ulong hash = 1469598103934665603UL;
@@ -183,10 +192,13 @@ namespace ImmPlayer
 
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             Destroy(tex);
-            captureCamera.targetTexture = previousTarget;
-            RenderTexture.active = previousActive;
-            renderTexture.Release();
-            Destroy(renderTexture);
+            if (renderTexture != null)
+            {
+                captureCamera.targetTexture = previousTarget;
+                RenderTexture.active = previousActive;
+                renderTexture.Release();
+                Destroy(renderTexture);
+            }
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             QuitIfRequested(0);
@@ -219,9 +231,7 @@ namespace ImmPlayer
             if (renderer == null)
                 return probe;
 
-            Shader shader = renderer.sharedMaterial != null ? renderer.sharedMaterial.shader : null;
-            if (shader == null)
-                shader = Shader.Find("Universal Render Pipeline/Unlit");
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null)
                 shader = Shader.Find("Unlit/Color");
             if (shader == null)

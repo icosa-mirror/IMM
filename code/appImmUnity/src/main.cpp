@@ -721,15 +721,19 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const int height = target.height;
     const uint32_t colorFormat = 44u; // VK_FORMAT_B8G8R8A8_UNORM; Unity's render pass defines pipeline compatibility.
     const uint32_t colorSamples = static_cast<uint32_t>(target.samples > 0 ? target.samples : 1);
+    const bool hasDepthAttachment = target.depth != nullptr;
+    const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
     if (sUnityVulkanRenderTargetDiagnosticCount < 24)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_HOST_RT_20260612] camera=%d colorRB=%p colorFormat=%u colorSamples=%u colorExtent=%dx%d cmd=%p renderPass=0x%llx framebuffer=0x%llx subpass=%d accessRenderBuffer=0",
+            L"[IMM_UNITY_VK_HOST_RT_20260612] camera=%d colorRB=%p colorFormat=%u colorSamples=%u depthAttachment=%d hostDepth=%d colorExtent=%dx%d cmd=%p renderPass=0x%llx framebuffer=0x%llx subpass=%d accessRenderBuffer=0",
             cameraID,
             colorTarget,
             static_cast<unsigned int>(colorFormat),
             static_cast<unsigned int>(colorSamples),
+            hasDepthAttachment ? 1 : 0,
+            useHostDepth ? 1 : 0,
             width,
             height,
             recordingState.commandBuffer,
@@ -746,6 +750,8 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
             reinterpret_cast<void *>(static_cast<uintptr_t>(recordingState.framebuffer)),
             colorFormat,
             colorSamples,
+            hasDepthAttachment,
+            useHostDepth,
             recordingState.subPassIndex >= 0 ? static_cast<uint32_t>(recordingState.subPassIndex) : 0u,
             width,
             height))

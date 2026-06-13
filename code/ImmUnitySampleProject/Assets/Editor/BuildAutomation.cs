@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
+using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace ImmPlayer.Editor
@@ -21,8 +22,13 @@ namespace ImmPlayer.Editor
         private const string RuntimeSmokeQuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string RuntimeSmokeCompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
         private const string RuntimeSmokeXrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
+        private const string EditorSmokeCaptureDelaySecondsEnv = "IMM_UNITY_EDITOR_SMOKE_CAPTURE_DELAY_SECONDS";
+        private const string EditorOverlayFixtureEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE";
+        private const string EditorOverlayFixtureSolidClearEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE_SOLID_CLEAR";
+        private const string EditorOverlayFixtureSecondCameraEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE_SECOND_CAMERA";
         private const string EditorSmokeActiveKey = "IMM_EDITOR_SMOKE_ACTIVE";
         private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
+        private const string EditorSmokeCaptureRequestedKey = "IMM_EDITOR_SMOKE_CAPTURE_REQUESTED";
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
@@ -131,6 +137,21 @@ namespace ImmPlayer.Editor
             RunEditorPlayModeSmoke("Windows DirectX", SmokeScenes[0], Path.Combine("..", "build", "unity-smoke", "windows-directx-editor-playmode.png"), true, false);
         }
 
+        public static void RunWindowsD3D11EditorPlayModeSmoke()
+        {
+            RunWindowsDirectXEditorPlayModeSmoke();
+        }
+
+        public static void RunWindowsVulkanEditorPlayModeSmoke()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Vulkan });
+
+            RunEditorPlayModeSmoke("Windows Vulkan", SmokeScenes[0], Path.Combine("..", "build", "unity-smoke", "windows-vulkan-editor-playmode.png"), true, false);
+        }
+
         public static void BuildWindowsDirectXSmokePlayer()
         {
             EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
@@ -216,6 +237,8 @@ namespace ImmPlayer.Editor
             SessionState.SetString(EditorSmokeStartTicksKey, DateTime.UtcNow.Ticks.ToString());
 
             EditorSceneManager.OpenScene(scenePath);
+            ConfigureSmokeMsaaIfRequested();
+            ConfigureEditorOverlayFixtureIfRequested();
 
             s_EditorSmokeCapturePath = capturePath;
             s_EditorSmokeStartTimeUtc = DateTime.UtcNow;
@@ -274,6 +297,92 @@ namespace ImmPlayer.Editor
             }
         }
 
+        private static void ConfigureEditorOverlayFixtureIfRequested()
+        {
+            string enabled = Environment.GetEnvironmentVariable(EditorOverlayFixtureEnv);
+            if (string.IsNullOrEmpty(enabled) || enabled == "0")
+                return;
+
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                cam = UnityEngine.Object.FindObjectOfType<Camera>();
+            }
+            if (cam == null)
+            {
+                UnityEngine.Debug.LogError("[IMM_EDITOR_OVERLAY_FIXTURE_20260612] failed: no camera found");
+                return;
+            }
+
+            string solidClear = Environment.GetEnvironmentVariable(EditorOverlayFixtureSolidClearEnv);
+            if (!string.IsNullOrEmpty(solidClear) && solidClear != "0")
+            {
+                cam.clearFlags = CameraClearFlags.SolidColor;
+                cam.backgroundColor = new Color(0.02f, 0.025f, 0.03f, 1.0f);
+            }
+
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "IMM Editor Overlay Fixture Cube";
+            cube.transform.position = cam.ViewportToWorldPoint(new Vector3(0.95f, 0.45f, 4.0f));
+            cube.transform.rotation = Quaternion.identity;
+            cube.transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
+
+            Shader shader = Shader.Find("Unlit/Color");
+            Material mat = shader != null ? new Material(shader) : new Material(Shader.Find("Standard"));
+            mat.color = new Color(1.0f, 0.05f, 0.02f, 1.0f);
+            Renderer renderer = cube.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = mat;
+            }
+
+            string secondCamera = Environment.GetEnvironmentVariable(EditorOverlayFixtureSecondCameraEnv);
+            if (!string.IsNullOrEmpty(secondCamera) && secondCamera != "0")
+            {
+                const int overlayLayer = 30;
+                cube.layer = overlayLayer;
+                cam.cullingMask = 0;
+
+                GameObject overlayCameraObject = new GameObject("IMM Editor Overlay Fixture Camera");
+                Camera overlayCamera = overlayCameraObject.AddComponent<Camera>();
+                overlayCamera.CopyFrom(cam);
+                overlayCamera.transform.SetPositionAndRotation(cam.transform.position, cam.transform.rotation);
+                overlayCamera.clearFlags = CameraClearFlags.Nothing;
+                overlayCamera.cullingMask = 1 << overlayLayer;
+                overlayCamera.depth = cam.depth + 1.0f;
+                overlayCamera.name = "IMM Overlay Fixture Camera";
+                UnityEngine.Debug.Log($"[IMM_EDITOR_OVERLAY_FIXTURE_20260612] overlayCamera={overlayCamera.name} depth={overlayCamera.depth} layer={overlayLayer}");
+            }
+
+            UnityEngine.Debug.Log($"[IMM_EDITOR_OVERLAY_FIXTURE_20260612] camera={cam.name} cubePos={cube.transform.position} cubeScale={cube.transform.localScale}");
+        }
+
+        private static void ConfigureSmokeMsaaIfRequested()
+        {
+            string noMsaa = Environment.GetEnvironmentVariable("IMM_UNITY_FORCE_NO_MSAA");
+            string forceMsaa = Environment.GetEnvironmentVariable("IMM_UNITY_FORCE_MSAA");
+            if ((string.IsNullOrEmpty(noMsaa) || noMsaa == "0") && string.IsNullOrEmpty(forceMsaa))
+            {
+                return;
+            }
+
+            int antiAliasing = 0;
+            if (!string.IsNullOrEmpty(forceMsaa))
+            {
+                int.TryParse(forceMsaa, out antiAliasing);
+                antiAliasing = Mathf.Max(0, antiAliasing);
+            }
+
+            QualitySettings.antiAliasing = antiAliasing;
+            Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+            foreach (Camera camera in cameras)
+            {
+                camera.allowMSAA = antiAliasing > 1;
+            }
+
+            UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE_MSAA_20260612] set camera MSAA for diagnostic smoke antiAliasing={antiAliasing}");
+        }
+
         private static void BuildPlayer(BuildTarget target, string outputPath, BuildOptions options, string label)
         {
             foreach (string scene in SmokeScenes)
@@ -307,7 +416,9 @@ namespace ImmPlayer.Editor
                 return;
 
             string nativeLogPath = SessionState.GetString(EditorSmokeNativeLogPathKey, string.Empty);
-            if (!string.IsNullOrEmpty(nativeLogPath) && File.Exists(nativeLogPath))
+            if (string.IsNullOrEmpty(s_EditorSmokeCapturePath) &&
+                !string.IsNullOrEmpty(nativeLogPath) &&
+                File.Exists(nativeLogPath))
             {
                 string nativeLog = File.ReadAllText(nativeLogPath);
                 if (nativeLog.Contains("Loaded in SPU!") &&
@@ -320,6 +431,25 @@ namespace ImmPlayer.Editor
                 }
             }
 
+            TimeSpan elapsed = DateTime.UtcNow - s_EditorSmokeStartTimeUtc;
+            double captureDelaySeconds = 8.0;
+            string captureDelayText = Environment.GetEnvironmentVariable(EditorSmokeCaptureDelaySecondsEnv);
+            if (!string.IsNullOrEmpty(captureDelayText) &&
+                double.TryParse(captureDelayText, out double configuredCaptureDelaySeconds) &&
+                configuredCaptureDelaySeconds >= 0.0)
+            {
+                captureDelaySeconds = configuredCaptureDelaySeconds;
+            }
+
+            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) &&
+                !SessionState.GetBool(EditorSmokeCaptureRequestedKey, false) &&
+                elapsed.TotalSeconds > captureDelaySeconds)
+            {
+                SessionState.SetBool(EditorSmokeCaptureRequestedKey, true);
+                UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] requesting editor fallback capture: {s_EditorSmokeCapturePath}");
+                UnityEngine.ScreenCapture.CaptureScreenshot(s_EditorSmokeCapturePath);
+            }
+
             if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
             {
                 s_EditorSmokeRequestedExit = true;
@@ -328,7 +458,6 @@ namespace ImmPlayer.Editor
                 return;
             }
 
-            TimeSpan elapsed = DateTime.UtcNow - s_EditorSmokeStartTimeUtc;
             if (elapsed.TotalSeconds > 90.0)
             {
                 s_EditorSmokeRequestedExit = true;
@@ -380,6 +509,7 @@ namespace ImmPlayer.Editor
         {
             SessionState.EraseBool(EditorSmokeActiveKey);
             SessionState.EraseString(EditorSmokeCapturePathKey);
+            SessionState.EraseBool(EditorSmokeCaptureRequestedKey);
             SessionState.EraseString(EditorSmokeNativeLogPathKey);
             SessionState.EraseString(EditorSmokeStartTicksKey);
         }

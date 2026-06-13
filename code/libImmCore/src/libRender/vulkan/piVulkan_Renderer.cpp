@@ -1225,6 +1225,8 @@ struct piBufferS
     piRenderer::BufferType type = piRenderer::BufferType::Static;
     piRenderer::BufferUse use = piRenderer::BufferUse::Vertex;
     VkBuffer buffer = VK_NULL_BUFFER;
+    VkBuffer descriptorBuffer = VK_NULL_BUFFER;
+    VkDeviceSize descriptorOffset = 0;
     VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
     VkBufferUsageFlags usage = 0;
 };
@@ -1337,6 +1339,11 @@ struct piVulkanState
     bool externalFramePreservesHostColor = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
+    VkBuffer hostTransientUniformBuffer = VK_NULL_BUFFER;
+    VkDeviceMemory hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
+    uint8_t *hostTransientUniformMapped = nullptr;
+    VkDeviceSize hostTransientUniformSize = 0;
+    VkDeviceSize hostTransientUniformOffset = 0;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -1579,6 +1586,22 @@ static void iReport(piRenderer::piReporter *reporter, const char *message)
     {
         reporter->Info(message);
     }
+}
+
+static void iDebugLog(const char *message)
+{
+    const char *path = std::getenv("IMM_VULKAN_DEBUG_LOG_PATH");
+    if (!path || !message)
+    {
+        return;
+    }
+    FILE *file = std::fopen(path, "ab");
+    if (!file)
+    {
+        return;
+    }
+    std::fprintf(file, "%s\n", message);
+    std::fclose(file);
 }
 
 static void iError(piRenderer::piReporter *reporter, const char *message)
@@ -2680,6 +2703,8 @@ static bool iCreateBufferObject(piVulkanState *state, piBuffer buffer, const voi
         buffer->buffer = VK_NULL_BUFFER;
         return false;
     }
+    buffer->descriptorBuffer = buffer->buffer;
+    buffer->descriptorOffset = 0;
 
     if (data && !iUploadBufferData(state, buffer, data, 0, buffer->size, reporter))
     {
@@ -2696,6 +2721,139 @@ static bool iCreateBufferObject(piVulkanState *state, piBuffer buffer, const voi
         state->bufferReported = true;
     }
     return true;
+}
+
+static bool iEnsureHostTransientUniformBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter)
+{
+    if (!state || state->device == VK_NULL_DEVICE)
+    {
+        return false;
+    }
+    if (state->hostTransientUniformBuffer != VK_NULL_BUFFER && state->hostTransientUniformMapped && state->hostTransientUniformSize >= size)
+    {
+        return true;
+    }
+    if (state->hostTransientUniformMapped)
+    {
+        state->vkUnmapMemory(state->device, state->hostTransientUniformMemory);
+        state->hostTransientUniformMapped = nullptr;
+    }
+    if (state->hostTransientUniformBuffer != VK_NULL_BUFFER && state->vkDestroyBuffer)
+    {
+        state->vkDestroyBuffer(state->device, state->hostTransientUniformBuffer, nullptr);
+        state->hostTransientUniformBuffer = VK_NULL_BUFFER;
+    }
+    if (state->hostTransientUniformMemory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
+    {
+        state->vkFreeMemory(state->device, state->hostTransientUniformMemory, nullptr);
+        state->hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
+    }
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkResult result = state->vkCreateBuffer(state->device, &bufferInfo, nullptr, &state->hostTransientUniformBuffer);
+    if (result != VK_SUCCESS || state->hostTransientUniformBuffer == VK_NULL_BUFFER)
+    {
+        iError(reporter, "Vulkan renderer failed to create host transient uniform buffer");
+        state->hostTransientUniformBuffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    VkMemoryRequirements requirements = {};
+    state->vkGetBufferMemoryRequirements(state->device, state->hostTransientUniformBuffer, &requirements);
+    uint32_t memoryTypeIndex = 0;
+    if (!iFindMemoryType(state, requirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &memoryTypeIndex))
+    {
+        iError(reporter, "Vulkan renderer failed to find host transient uniform buffer memory");
+        state->vkDestroyBuffer(state->device, state->hostTransientUniformBuffer, nullptr);
+        state->hostTransientUniformBuffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex = memoryTypeIndex;
+    result = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, &state->hostTransientUniformMemory);
+    if (result != VK_SUCCESS || state->hostTransientUniformMemory == VK_NULL_DEVICE_MEMORY)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate host transient uniform buffer memory");
+        state->vkDestroyBuffer(state->device, state->hostTransientUniformBuffer, nullptr);
+        state->hostTransientUniformBuffer = VK_NULL_BUFFER;
+        state->hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+    result = state->vkBindBufferMemory(state->device, state->hostTransientUniformBuffer, state->hostTransientUniformMemory, 0);
+    if (result != VK_SUCCESS)
+    {
+        iError(reporter, "Vulkan renderer failed to bind host transient uniform buffer memory");
+        state->vkDestroyBuffer(state->device, state->hostTransientUniformBuffer, nullptr);
+        state->vkFreeMemory(state->device, state->hostTransientUniformMemory, nullptr);
+        state->hostTransientUniformBuffer = VK_NULL_BUFFER;
+        state->hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+    void *mapped = nullptr;
+    result = state->vkMapMemory(state->device, state->hostTransientUniformMemory, 0, requirements.size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        iError(reporter, "Vulkan renderer failed to map host transient uniform buffer memory");
+        state->vkDestroyBuffer(state->device, state->hostTransientUniformBuffer, nullptr);
+        state->vkFreeMemory(state->device, state->hostTransientUniformMemory, nullptr);
+        state->hostTransientUniformBuffer = VK_NULL_BUFFER;
+        state->hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+    state->hostTransientUniformMapped = static_cast<uint8_t *>(mapped);
+    state->hostTransientUniformSize = requirements.size;
+    state->hostTransientUniformOffset = 0;
+    return true;
+}
+
+static VkDeviceSize iAlignVkDeviceSize(VkDeviceSize value, VkDeviceSize alignment)
+{
+    return (value + alignment - 1u) & ~(alignment - 1u);
+}
+
+static bool iAllocateHostTransientUniformSlice(piVulkanState *state, piBuffer buffer, const void *data, unsigned int len, piRenderer::piReporter *reporter)
+{
+    static const VkDeviceSize kAlignment = 256;
+    static const VkDeviceSize kHostTransientUniformSize = 8ull * 1024ull * 1024ull;
+    if (!state || !buffer || !data || len == 0)
+    {
+        return false;
+    }
+    if (!iEnsureHostTransientUniformBuffer(state, kHostTransientUniformSize, reporter))
+    {
+        return false;
+    }
+    VkDeviceSize offset = iAlignVkDeviceSize(state->hostTransientUniformOffset, kAlignment);
+    if (offset + buffer->size > state->hostTransientUniformSize)
+    {
+        iError(reporter, "Vulkan renderer host transient uniform buffer exhausted");
+        return false;
+    }
+    std::memset(state->hostTransientUniformMapped + offset, 0, buffer->size);
+    std::memcpy(state->hostTransientUniformMapped + offset, data, len);
+    buffer->descriptorBuffer = state->hostTransientUniformBuffer;
+    buffer->descriptorOffset = offset;
+    state->hostTransientUniformOffset = offset + buffer->size;
+    return true;
+}
+
+static VkDescriptorBufferInfo iDescriptorBufferInfo(piBuffer buffer)
+{
+    VkDescriptorBufferInfo info = {};
+    if (buffer)
+    {
+        info.buffer = buffer->descriptorBuffer != VK_NULL_BUFFER ? buffer->descriptorBuffer : buffer->buffer;
+        info.offset = buffer->descriptorOffset;
+        info.range = buffer->size;
+    }
+    return info;
 }
 
 static bool iLooksLikeSpirv(const uint8_t *code, int len)
@@ -2948,18 +3106,12 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     }
 
     VkDescriptorBufferInfo bufferInfos[6] = {};
-    bufferInfos[0].buffer = frameBuffer->buffer;
-    bufferInfos[0].range = frameBuffer->size;
-    bufferInfos[1].buffer = layerBuffer->buffer;
-    bufferInfos[1].range = layerBuffer->size;
-    bufferInfos[2].buffer = displayBuffer->buffer;
-    bufferInfos[2].range = displayBuffer->size;
-    bufferInfos[3].buffer = passBuffer->buffer;
-    bufferInfos[3].range = passBuffer->size;
-    bufferInfos[4].buffer = vertexData->buffer;
-    bufferInfos[4].range = vertexData->size;
-    bufferInfos[5].buffer = chunkBuffer->buffer;
-    bufferInfos[5].range = chunkBuffer->size;
+    bufferInfos[0] = iDescriptorBufferInfo(frameBuffer);
+    bufferInfos[1] = iDescriptorBufferInfo(layerBuffer);
+    bufferInfos[2] = iDescriptorBufferInfo(displayBuffer);
+    bufferInfos[3] = iDescriptorBufferInfo(passBuffer);
+    bufferInfos[4] = iDescriptorBufferInfo(vertexData);
+    bufferInfos[5] = iDescriptorBufferInfo(chunkBuffer);
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.sampler = blueNoise->sampler;
@@ -3152,12 +3304,9 @@ static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piRepo
     imageInfo.imageLayout = picture->imageLayout;
 
     VkDescriptorBufferInfo bufferInfos[3] = {};
-    bufferInfos[0].buffer = layerBuffer->buffer;
-    bufferInfos[0].range = layerBuffer->size;
-    bufferInfos[1].buffer = displayBuffer->buffer;
-    bufferInfos[1].range = displayBuffer->size;
-    bufferInfos[2].buffer = passBuffer->buffer;
-    bufferInfos[2].range = passBuffer->size;
+    bufferInfos[0] = iDescriptorBufferInfo(layerBuffer);
+    bufferInfos[1] = iDescriptorBufferInfo(displayBuffer);
+    bufferInfos[2] = iDescriptorBufferInfo(passBuffer);
 
     VkWriteDescriptorSet writes[4] = {};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -3535,10 +3684,11 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
     const bool wireframe = rasterState && rasterState->wireframe;
     const bool depthClamp = rasterState && rasterState->depthClamp;
-    const bool depthTest = target->hasDepth && state->currentDepthState && state->currentDepthState->depthEnable;
+    const bool mayUseDepth = target->hasDepth &&
+                             (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
+    const bool depthTest = mayUseDepth && state->currentDepthState && state->currentDepthState->depthEnable;
     const bool useHostReverseZCompare = state->externalFrameUsesHostDepth &&
-                                        target == state->externalFrameRenderTarget &&
-                                        target->depth == state->externalFrameDepthTexture;
+                                        target == state->externalFrameRenderTarget;
     const bool depthWrite = depthTest && state->depthWriteEnabled;
     const VkCompareOp depthCompareOp = useHostReverseZCompare || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
     piBlendState blendState = state->currentBlendState;
@@ -3844,12 +3994,17 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
         return false;
     }
     const bool useHostDepthTarget = state->externalFrameUsesHostDepth &&
-                                    target == state->externalFrameRenderTarget &&
-                                    target->depth == state->externalFrameDepthTexture;
+                                    target == state->externalFrameRenderTarget;
     const bool hostDepthBackdrop = useHostDepthTarget && !shader->isPicture2D;
+    const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+    const bool mayUseDepth = target->hasDepth &&
+                             (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
+    const bool depthTest = mayUseDepth && state->currentDepthState && state->currentDepthState->depthEnable;
     const VkCompareOp depthCompareOp = useHostDepthTarget ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
+        shader->pipelineSampleCount == sampleCount &&
+        shader->pipelineDepthTest == depthTest &&
         shader->pipelineDepthCompareOp == depthCompareOp &&
         shader->pipelineHostDepthBackdrop == hostDepthBackdrop)
     {
@@ -3920,7 +4075,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
 
     VkPipelineMultisampleStateCreateInfo multisample = {};
     multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisample.rasterizationSamples = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+    multisample.rasterizationSamples = sampleCount;
 
     VkPipelineColorBlendAttachmentState blendAttachment = {};
     blendAttachment.blendEnable = 1;
@@ -3944,7 +4099,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
 
     VkPipelineDepthStencilStateCreateInfo depthStencil = {};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = target->hasDepth ? 1 : 0;
+    depthStencil.depthTestEnable = depthTest ? 1 : 0;
     depthStencil.depthWriteEnable = 0;
     depthStencil.depthCompareOp = depthCompareOp;
 
@@ -3973,6 +4128,8 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
         return false;
     }
     shader->pipelineRenderPass = target->renderPass;
+    shader->pipelineSampleCount = sampleCount;
+    shader->pipelineDepthTest = depthTest;
     shader->pipelineDepthCompareOp = depthCompareOp;
     shader->pipelineHostDepthBackdrop = hostDepthBackdrop;
     if (!state->picturePipelineReported)
@@ -5804,6 +5961,23 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroySampler(mState->device, mState->presentSampler, nullptr);
             mState->presentSampler = VK_NULL_SAMPLER;
         }
+        if (mState->hostTransientUniformMapped)
+        {
+            mState->vkUnmapMemory(mState->device, mState->hostTransientUniformMemory);
+            mState->hostTransientUniformMapped = nullptr;
+        }
+        if (mState->hostTransientUniformBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+        {
+            mState->vkDestroyBuffer(mState->device, mState->hostTransientUniformBuffer, nullptr);
+            mState->hostTransientUniformBuffer = VK_NULL_BUFFER;
+        }
+        if (mState->hostTransientUniformMemory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, mState->hostTransientUniformMemory, nullptr);
+            mState->hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
+            mState->hostTransientUniformSize = 0;
+            mState->hostTransientUniformOffset = 0;
+        }
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
             mState->vkDestroyBuffer(mState->device, mState->stagingBuffer, nullptr);
@@ -5882,6 +6056,7 @@ bool piRendererVulkan::SupportsFeature(RendererFeature feature)
 piRenderer::API piRendererVulkan::GetAPI(void) { return API::Vulkan; }
 
 bool piRendererVulkan::UsesExternalHostDepth(void) const { return mState && mState->externalFrameUsesHostDepth; }
+bool piRendererVulkan::IsExternalHostFrame(void) const { return mState && mState->hostRenderPassFrameActive; }
 
 void piRendererVulkan::Report(void)
 {
@@ -6694,7 +6869,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
     }
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, uint32_t subpass, int width, int height)
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height)
 {
     EndExternalImageFrame();
     if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
@@ -6718,7 +6893,7 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     target->width = static_cast<uint32_t>(width);
     target->height = static_cast<uint32_t>(height);
     target->colorAttachmentCount = 1;
-    target->hasDepth = false;
+    target->hasDepth = hasDepthAttachment;
     target->ownsRenderPassObjects = false;
     ++mState->liveRenderTargets;
 
@@ -6727,15 +6902,16 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameRenderTarget = target;
-    mState->externalFrameUsesHostDepth = false;
+    mState->externalFrameUsesHostDepth = useHostDepth;
     mState->externalFramePreservesHostColor = true;
     mState->hostRenderPassFrameActive = true;
+    mState->hostTransientUniformOffset = 0;
     SetRenderTarget(target);
 
     if (!mState->hostRenderPassFrameReported)
     {
         mState->hostRenderPassFrameReported = true;
-        iReport(mReporter, "Vulkan renderer began host render pass frame");
+        iReport(mReporter, useHostDepth ? "Vulkan renderer began host render pass frame with host depth" : "Vulkan renderer began host render pass frame");
     }
     return true;
 }
@@ -7511,9 +7687,18 @@ void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, 
     (void)invalidate;
     if (!obj || !data || offset < 0 || len < 0 || (unsigned int)(offset + len) > obj->size) return;
     std::memcpy(obj->data + offset, data, (size_t)len);
+    if (mState && mState->hostRenderPassFrameActive && obj->use == BufferUse::Constant && offset == 0)
+    {
+        if (iAllocateHostTransientUniformSlice(mState, obj, obj->data, obj->size, mReporter))
+        {
+            return;
+        }
+    }
     if (mState)
     {
         iUploadBufferData(mState, obj, data, (unsigned int)offset, (unsigned int)len, mReporter);
+        obj->descriptorBuffer = obj->buffer;
+        obj->descriptorOffset = 0;
     }
 }
 void piRendererVulkan::AttachPixelPackBuffer(piBuffer obj) { (void)obj; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::PixelPackBuffer, "Vulkan pixel pack buffers are not implemented yet"); }
@@ -7632,6 +7817,16 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
             iEnsurePictureGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, mReporter) &&
             iSubmitPictureDraw(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, num, numInstances, baseIndex, mReporter))
         {
+            char message[256];
+            std::snprintf(message,
+                          sizeof(message),
+                          "[IMM_VK_COMPOSE_TRACE_20260612] picture_gpu host=%d num=%u instances=%u target=%ux%u",
+                          mState->hostRenderPassFrameActive ? 1 : 0,
+                          num,
+                          numInstances,
+                          mState->currentRenderTarget->width,
+                          mState->currentRenderTarget->height);
+            iDebugLog(message);
             mState->pendingPresentTexture = target;
             return;
         }
@@ -7645,6 +7840,16 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         mState->currentRenderTarget->color[0]->data && mState->textures[0] && mState->textures[0]->data &&
         mState->textures[0]->info.mXres > 0 && mState->textures[0]->info.mYres > 0)
     {
+        char fallbackMessage[256];
+        std::snprintf(fallbackMessage,
+                      sizeof(fallbackMessage),
+                      "[IMM_VK_COMPOSE_TRACE_20260612] picture_cpu_fallback host=%d num=%u instances=%u target=%ux%u",
+                      mState->hostRenderPassFrameActive ? 1 : 0,
+                      num,
+                      numInstances,
+                      mState->currentRenderTarget->width,
+                      mState->currentRenderTarget->height);
+        iDebugLog(fallbackMessage);
         piTexture target = mState->currentRenderTarget->color[0];
         piTexture source = mState->textures[0];
         const int targetWidth = target->info.mXres;
@@ -7746,6 +7951,17 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     }
     if (hasStaticPaintGpuPath)
     {
+        char message[256];
+        std::snprintf(message,
+                      sizeof(message),
+                      "[IMM_VK_COMPOSE_TRACE_20260612] paint_gpu host=%d num=%u instances=%u target=%ux%u drawCount=%u",
+                      mState->hostRenderPassFrameActive ? 1 : 0,
+                      num,
+                      numInstances,
+                      mState->currentRenderTarget->width,
+                      mState->currentRenderTarget->height,
+                      mState->gpuPaintDrawCount + 1u);
+        iDebugLog(message);
         mState->gpuPaintActive = true;
         ++mState->gpuPaintDrawCount;
     }
