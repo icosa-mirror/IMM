@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -77,7 +78,7 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
     }
     (packages / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    baseline_hash = baseline.read_bytes().hex()[:32]
+    baseline_hash = hashlib.sha256(baseline.read_bytes()).hexdigest()
     (assets / "PackageImportHarness.cs").write_text(
         "\n".join(
             [
