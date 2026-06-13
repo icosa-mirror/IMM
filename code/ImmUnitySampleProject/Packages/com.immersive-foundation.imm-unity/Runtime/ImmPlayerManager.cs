@@ -5,7 +5,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.XR;
 
 namespace ImmPlayer
 {
@@ -535,23 +534,7 @@ namespace ImmPlayer
             if (!HasRenderableDocument())
                 return;
 
-            int stereoMode = (int)StereoMode.Mono;
-            if (cam.stereoEnabled)
-            {
-                if (XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.MultiPass)
-                {
-                    stereoMode = (int)StereoMode.TwoPass;
-                }
-                else if (XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.SinglePass)
-                {
-                    stereoMode = (int)StereoMode.SinglePass;
-                }
-                else if (XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.SinglePassInstanced)
-                {
-                    // The native plugin doesn't support instanced single-pass; force two-pass.
-                    stereoMode = (int)StereoMode.TwoPass;
-                }
-            }
+            int stereoMode = ResolveStereoMode(cam);
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
             bool renderIntoTexture = UseRenderIntoTextureProjection(cam);
@@ -902,6 +885,23 @@ namespace ImmPlayer
             {
                 dst[i] = matrix[i];
             }
+        }
+
+        private static int ResolveStereoMode(Camera cam)
+        {
+            if (!cam.stereoEnabled)
+                return (int)StereoMode.Mono;
+
+            // Keep XRSettings optional so non-XR Unity package builds compile without XR package symbols.
+            Type xrSettingsType = Type.GetType("UnityEngine.XR.XRSettings, UnityEngine.XRModule");
+            object mode = xrSettingsType?.GetProperty("stereoRenderingMode")?.GetValue(null);
+            string modeName = mode?.ToString();
+
+            if (modeName == "SinglePass")
+                return (int)StereoMode.SinglePass;
+
+            // The native plugin doesn't support instanced single-pass; force two-pass.
+            return (int)StereoMode.TwoPass;
         }
 
         #endregion

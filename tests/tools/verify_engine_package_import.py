@@ -36,10 +36,6 @@ def ensure_path(path: Path, errors: list[str]) -> None:
         errors.append(f"Empty file: {path}")
 
 
-def file_uri(path: Path) -> str:
-    return path.resolve().as_uri()
-
-
 def load_json(path: Path, errors: list[str]) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -66,14 +62,16 @@ def verify_unity_package(path: Path, expected_name: str, required_files: list[st
 def write_unity_harness(workspace: Path, stroke_package: Path, player_package: Path, baseline: Path) -> Path:
     project = workspace / "unity-package-import"
     packages = project / "Packages"
-    assets = project / "Assets" / "Tests"
+    assets = project / "Assets" / "Tests" / "Editor"
     packages.mkdir(parents=True, exist_ok=True)
     assets.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(stroke_package, packages / UNITY_PACKAGE_NAMES["stroke"])
+    shutil.copytree(player_package, packages / UNITY_PACKAGE_NAMES["player"])
 
     manifest = {
         "dependencies": {
-            UNITY_PACKAGE_NAMES["stroke"]: file_uri(stroke_package),
-            UNITY_PACKAGE_NAMES["player"]: file_uri(player_package),
+            UNITY_PACKAGE_NAMES["stroke"]: f"file:{UNITY_PACKAGE_NAMES['stroke']}",
+            UNITY_PACKAGE_NAMES["player"]: f"file:{UNITY_PACKAGE_NAMES['player']}",
             "com.unity.test-framework": "1.1.33",
             "com.unity.modules.jsonserialize": "1.0.0",
         }
@@ -99,6 +97,32 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
                 "",
             ]
         ),
+        encoding="utf-8",
+    )
+    (assets / "PackageImportHarness.asmdef").write_text(
+        json.dumps(
+            {
+                "name": "Imm.PackageImport.Tests",
+                "references": [],
+                "includePlatforms": [
+                    "Editor",
+                ],
+                "excludePlatforms": [],
+                "allowUnsafeCode": False,
+                "overrideReferences": False,
+                "precompiledReferences": [],
+                "autoReferenced": True,
+                "defineConstraints": [],
+                "versionDefines": [],
+                "noEngineReferences": False,
+                "optionalUnityReferences": [
+                    "TestAssemblies",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return project
@@ -143,7 +167,8 @@ def verify_unity(args: argparse.Namespace) -> int:
             shutil.rmtree(args.workspace)
         project = write_unity_harness(args.workspace, stroke_package, player_package, baseline)
         ensure_file(project / "Packages" / "manifest.json", errors)
-        ensure_file(project / "Assets" / "Tests" / "PackageImportHarness.cs", errors)
+        ensure_file(project / "Assets" / "Tests" / "Editor" / "PackageImportHarness.cs", errors)
+        ensure_file(project / "Assets" / "Tests" / "Editor" / "PackageImportHarness.asmdef", errors)
 
     if errors:
         for error in errors:

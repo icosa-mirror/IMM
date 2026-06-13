@@ -3,7 +3,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Rendering;
-using UnityEngine.XR;
+using Type = System.Type;
 
 namespace ImmPlayer
 {
@@ -706,7 +706,7 @@ namespace ImmPlayer
                 out Pose targetPose))
             {
                 Pose finalPose = targetPose;
-                if (constrainViewpointRotationToYawInXR && XRSettings.enabled)
+                if (constrainViewpointRotationToYawInXR && IsXrSettingsEnabled())
                 {
                     Quaternion yawOnlyRotation = Quaternion.Euler(0.0f, targetPose.rotation.eulerAngles.y, 0.0f);
                     Vector3 headLocalPosition = target.InverseTransformPoint(head.position);
@@ -720,6 +720,13 @@ namespace ImmPlayer
 
                 target.SetPositionAndRotation(finalPose.position, finalPose.rotation);
             }
+        }
+
+        private static bool IsXrSettingsEnabled()
+        {
+            Type xrSettingsType = Type.GetType("UnityEngine.XR.XRSettings, UnityEngine.XRModule");
+            object value = xrSettingsType?.GetProperty("enabled")?.GetValue(null);
+            return value is bool enabled && enabled;
         }
 
         private Transform ResolveSpawnAreaTargetTransform()
@@ -805,4 +812,3 @@ namespace ImmPlayer
         }
     }
 }
-

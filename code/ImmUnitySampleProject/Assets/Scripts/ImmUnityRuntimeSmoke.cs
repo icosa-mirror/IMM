@@ -2,8 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using UnityEngine;
-using UnityEngine.XR;
 
 namespace ImmPlayer
 {
@@ -331,25 +331,21 @@ namespace ImmPlayer
 
         private static bool ValidateXrProbe()
         {
-            var displays = new List<XRDisplaySubsystem>();
-            SubsystemManager.GetInstances(displays);
+            bool enabled = GetXrSettingsBool("enabled");
+            bool deviceActive = GetXrSettingsBool("isDeviceActive");
+            string loadedDeviceName = GetXrSettingsString("loadedDeviceName");
+            string stereoRenderingMode = GetXrSettingsString("stereoRenderingMode");
+            int displayCount = CountXrDisplays(out int runningDisplays);
 
-            int runningDisplays = 0;
-            for (int i = 0; i < displays.Count; ++i)
-            {
-                if (displays[i] != null && displays[i].running)
-                    ++runningDisplays;
-            }
-
-            Debug.Log($"{Prefix}xr enabled={XRSettings.enabled} deviceActive={XRSettings.isDeviceActive} loadedDevice={XRSettings.loadedDeviceName} stereoMode={XRSettings.stereoRenderingMode} displays={displays.Count} runningDisplays={runningDisplays}");
-            if (!XRSettings.enabled)
+            Debug.Log($"{Prefix}xr enabled={enabled} deviceActive={deviceActive} loadedDevice={loadedDeviceName} stereoMode={stereoRenderingMode} displays={displayCount} runningDisplays={runningDisplays}");
+            if (!enabled)
             {
                 Debug.LogError($"{Prefix}xr probe failed: XRSettings.enabled is false");
                 return false;
             }
-            if (!XRSettings.isDeviceActive)
+            if (!deviceActive)
             {
-                Debug.LogError($"{Prefix}xr probe failed: XR device is not active");
+                Debug.LogError($"{Prefix}xr probe failed: XRSettings.isDeviceActive is false");
                 return false;
             }
             if (runningDisplays <= 0)
@@ -360,6 +356,55 @@ namespace ImmPlayer
 
             Debug.Log($"{Prefix}xr probe passed");
             return true;
+        }
+
+        private static bool GetXrSettingsBool(string propertyName)
+        {
+            object value = GetXrSettingsValue(propertyName);
+            return value is bool boolValue && boolValue;
+        }
+
+        private static string GetXrSettingsString(string propertyName)
+        {
+            object value = GetXrSettingsValue(propertyName);
+            return value != null ? value.ToString() : "<unavailable>";
+        }
+
+        private static object GetXrSettingsValue(string propertyName)
+        {
+            Type xrSettingsType = Type.GetType("UnityEngine.XR.XRSettings, UnityEngine.XRModule");
+            return xrSettingsType?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+        }
+
+        private static int CountXrDisplays(out int runningDisplays)
+        {
+            runningDisplays = 0;
+            Type displayType = Type.GetType("UnityEngine.XR.XRDisplaySubsystem, UnityEngine.XRModule");
+            if (displayType == null)
+                return 0;
+
+            Type listType = typeof(List<>).MakeGenericType(displayType);
+            object displays = Activator.CreateInstance(listType);
+            MethodInfo getInstances = null;
+            foreach (MethodInfo method in typeof(SubsystemManager).GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (method.Name == "GetInstances" && method.IsGenericMethodDefinition && method.GetParameters().Length == 1)
+                {
+                    getInstances = method.MakeGenericMethod(displayType);
+                    break;
+                }
+            }
+
+            getInstances?.Invoke(null, new[] { displays });
+            int count = 0;
+            PropertyInfo runningProperty = displayType.GetProperty("running");
+            foreach (object display in (IEnumerable)displays)
+            {
+                ++count;
+                if (display != null && runningProperty?.GetValue(display) is bool running && running)
+                    ++runningDisplays;
+            }
+            return count;
         }
 
         private struct CompositionRegionResult
