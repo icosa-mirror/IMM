@@ -203,9 +203,9 @@ static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width
         for (int x = 0; x < width; ++x) {
             const uint32_t value = pixels[static_cast<size_t>(sourceY) * width + x];
             const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
-            rgb[out + 0] = iFloatToByte(iDecodeUnsignedFloat(value & 0x7ffu, 6));
-            rgb[out + 1] = iFloatToByte(iDecodeUnsignedFloat((value >> 11u) & 0x7ffu, 6));
-            rgb[out + 2] = iFloatToByte(iDecodeUnsignedFloat((value >> 22u) & 0x3ffu, 5));
+            rgb[out + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(value & 0x7ffu, 6));
+            rgb[out + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 11u) & 0x7ffu, 6));
+            rgb[out + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 22u) & 0x3ffu, 5));
         }
     }
     if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
