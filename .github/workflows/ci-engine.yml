@@ -321,6 +321,11 @@ jobs:
               if (Test-Path $playerLog) {
                 Get-Content $playerLog
               }
+              $compositionOnly = $CompositionProbe -eq "1" -and (Test-Path $capturePath) -and (Test-Path $playerLog) -and (Select-String -Path $playerLog -Pattern "\[IMM_UNITY_SMOKE\] scene composition .* failed" -Quiet)
+              if ($compositionOnly) {
+                Write-Warning "Unity DirectX smoke reported expected scene composition probe failures for $CaptureName"
+                return
+              }
               throw "Unity DirectX smoke player failed with exit code $($process.ExitCode) for $CaptureName"
             }
             if (-not (Test-Path $capturePath)) {

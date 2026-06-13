@@ -219,6 +219,7 @@ func _run_visual_smoke() -> void:
 				_queue_active_camera()
 
 	if sequence_ready:
+		await _wait_for_forced_player_frame(forced_player_frame)
 		_setup_scene_composition_probe()
 		for _frame in range(6):
 			_queue_active_camera()
@@ -363,6 +364,26 @@ func _apply_forced_player_frame(player_frame: int) -> void:
 		return
 	var ticks_per_frame: int = IMM_TICKS_PER_SECOND / VISUAL_SMOKE_FRAME_RATE
 	viewer.set_time(int(player_frame * ticks_per_frame), 0)
+
+func _wait_for_forced_player_frame(player_frame: int) -> void:
+	if player_frame < 0:
+		return
+	var deadline_msec: int = Time.get_ticks_msec() + int(_max_ready_seconds() * 1000.0)
+	while Time.get_ticks_msec() < deadline_msec:
+		_apply_forced_player_frame(player_frame)
+		_queue_active_camera()
+		await get_tree().process_frame
+		var render_diagnostics: Dictionary = viewer.get_render_diagnostics()
+		if int(render_diagnostics.get("validation_time_frame", 0)) >= player_frame:
+			print("IMM Godot %s visual smoke reached validation player frame %d" % [
+				_selected_renderer_name(),
+				player_frame,
+			])
+			return
+	print("IMM Godot %s visual smoke did not observe validation player frame %d before capture" % [
+		_selected_renderer_name(),
+		player_frame,
+	])
 
 func _frame_interactive_camera() -> bool:
 	var deadline_msec: int = Time.get_ticks_msec() + int(SPAWN_AREA_FRAME_WAIT_SECONDS * 1000.0)
