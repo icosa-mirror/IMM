@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 @RunWith(AndroidJUnit4.class)
 public final class ImmFtlSmokeTest {
     private static final String PACKAGE_NAME = "org.linuxfoundation.imm.player";
+    private static final int VALIDATION_RENDER_WIDTH = 1280;
+    private static final int VALIDATION_RENDER_HEIGHT = 720;
 
     @Test
     public void rendersSampleFrame() throws Exception {
@@ -37,6 +39,8 @@ public final class ImmFtlSmokeTest {
         assertTrue("Launch intent not found for " + PACKAGE_NAME, intent != null);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         intent.putExtra("RenderingAPI", renderer);
+        intent.putExtra("ValidationRenderWidth", VALIDATION_RENDER_WIDTH);
+        intent.putExtra("ValidationRenderHeight", VALIDATION_RENDER_HEIGHT);
         targetContext.startActivity(intent);
 
         File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
@@ -53,6 +57,7 @@ public final class ImmFtlSmokeTest {
         writeText(new File(artifactDir, "logcat_after.txt"), logcat);
 
         requireMarker(logcat, "IMM Android renderer API: " + renderer);
+        requireMarker(logcat, "IMMAVAL validation render size: " + VALIDATION_RENDER_WIDTH + "x" + VALIDATION_RENDER_HEIGHT);
         requireMarker(logcat, "IMMAVAL loadPath result=1");
         requireMarker(logcat, "IMMAVAL native render capture written");
         requireMarker(logcat, "Loaded in CPU");

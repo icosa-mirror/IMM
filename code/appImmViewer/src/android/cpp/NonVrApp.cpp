@@ -59,6 +59,8 @@ struct EngineState {
     EGLContext context = EGL_NO_CONTEXT;
     int width = 0;
     int height = 0;
+    int validationRenderWidth = 0;
+    int validationRenderHeight = 0;
     bool hasWindow = false;
     bool running = false;
     bool useVulkan = false;
@@ -104,6 +106,14 @@ std::wstring gPendingPath;
 bool gTriedAutoLoad = false;
 std::string gAssetDirectory;
 std::string gExternalFilesDirectory;
+
+static int renderWidth() {
+    return gEngine.validationRenderWidth > 0 ? gEngine.validationRenderWidth : gEngine.width;
+}
+
+static int renderHeight() {
+    return gEngine.validationRenderHeight > 0 ? gEngine.validationRenderHeight : gEngine.height;
+}
 
 static float iDecodeUnsignedFloat(uint32_t bits, int mantissaBits) {
     const uint32_t mantissaMask = (1u << mantissaBits) - 1u;
@@ -262,14 +272,16 @@ static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceIn
     bool wrote = false;
     if (gEngine.useVulkan) {
         if (gEngine.renderer && gEngine.colorTexture) {
-            const size_t pixelCount = static_cast<size_t>(gEngine.width) * static_cast<size_t>(gEngine.height);
+            const int width = renderWidth();
+            const int height = renderHeight();
+            const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
             std::vector<uint32_t> pixels(pixelCount);
             gEngine.renderer->GetTextureContent(gEngine.colorTexture, pixels.data(), piRenderer::Format::C3_11_11_10_FLOAT);
-            wrote = iWriteRG11B10Ppm(capturePath.c_str(), pixels.data(), gEngine.width, gEngine.height, false);
+            wrote = iWriteRG11B10Ppm(capturePath.c_str(), pixels.data(), width, height, false);
         }
     } else {
         glFinish();
-        wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), rejectedCapturePath.c_str(), gEngine.width, gEngine.height);
+        wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), rejectedCapturePath.c_str(), renderWidth(), renderHeight());
     }
 
     if (wrote) {
@@ -282,8 +294,8 @@ static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceIn
               perf.numPaintDrawCalls,
               perf.numPictureDrawCalls,
               perf.numTriangles,
-              gEngine.width,
-              gEngine.height,
+              renderWidth(),
+              renderHeight(),
               gEngine.useVulkan ? "Vulkan" : "GLES");
     } else {
         ALOGE("IMMAVAL native render capture failed path=%s frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s",
@@ -294,8 +306,8 @@ static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceIn
               perf.numPaintDrawCalls,
               perf.numPictureDrawCalls,
               perf.numTriangles,
-              gEngine.width,
-              gEngine.height,
+              renderWidth(),
+              renderHeight(),
               gEngine.useVulkan ? "Vulkan" : "GLES");
     }
 }
@@ -827,7 +839,9 @@ bool ensureRenderTarget() {
     if (!gEngine.useVulkan) {
         return true;
     }
-    if (!gEngine.renderer || gEngine.width <= 0 || gEngine.height <= 0) {
+    const int width = renderWidth();
+    const int height = renderHeight();
+    if (!gEngine.renderer || width <= 0 || height <= 0) {
         return false;
     }
     if (gEngine.renderTarget) {
@@ -837,8 +851,8 @@ bool ensureRenderTarget() {
     const piRenderer::TextureInfo colorInfo = {
         piRenderer::TextureType::T2D,
         piRenderer::Format::C3_11_11_10_FLOAT,
-        gEngine.width,
-        gEngine.height,
+        width,
+        height,
         1,
         8,
         1,
@@ -847,8 +861,8 @@ bool ensureRenderTarget() {
     const piRenderer::TextureInfo depthInfo = {
         piRenderer::TextureType::T2D,
         piRenderer::Format::DS_24_8_UINT,
-        gEngine.width,
-        gEngine.height,
+        width,
+        height,
         1,
         8,
         1,
@@ -868,7 +882,7 @@ bool ensureRenderTarget() {
         return false;
     }
 
-    ALOGV("Android Vulkan render target ready %dx%d", gEngine.width, gEngine.height);
+    ALOGV("Android Vulkan render target ready %dx%d", width, height);
     return true;
 }
 
@@ -1012,7 +1026,7 @@ void renderFrame() {
     }
 
     if (!gEngine.useVulkan) {
-        glViewport(0, 0, gEngine.width, gEngine.height);
+        glViewport(0, 0, renderWidth(), renderHeight());
         glClearColor(0.05f, 0.05f, 0.05f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     } else if (!ensureRenderTarget() || !gEngine.renderer->SetRenderTarget(gEngine.renderTarget)) {
@@ -1025,14 +1039,16 @@ void renderFrame() {
     const float dtime = float(now - lastTime);
     lastTime = now;
 
-    const float aspect = (gEngine.height > 0) ? (float)gEngine.width / (float)gEngine.height : 1.0f;
+    const int width = renderWidth();
+    const int height = renderHeight();
+    const float aspect = (height > 0) ? (float)width / (float)height : 1.0f;
     const mat4x4 projection = setPerspective(50.0f, aspect, 0.01f, 1000.0f);
     const trans3d vrToHead = trans3d::identity();
 
     gEngine.viewer->GlobalWork(nullptr, false, vrToHead, nullptr, nullptr, gEngine.log, dtime,
-                               ivec2(gEngine.width, gEngine.height), true, 8000, gEngine.firstFrame);
+                               ivec2(width, height), true, 8000, gEngine.firstFrame);
     gEngine.viewer->GlobalRender(vrToHead, projection);
-    gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
+    gEngine.viewer->RenderMono(ivec2(width, height), vrToHead, 0);
     const ImmPlayer::Player::PerformanceInfo &perf = gEngine.viewer->GetPerformanceInfoForFrame();
     if (!gEngine.useVulkan) {
         writeValidationCaptureIfReady(perf);
@@ -1045,8 +1061,8 @@ void renderFrame() {
               perf.numPaintDrawCalls,
               perf.numPictureDrawCalls,
               perf.numTriangles,
-              gEngine.width,
-              gEngine.height,
+              width,
+              height,
               gEngine.useVulkan ? "Vulkan" : "GLES",
               gEngine.firstFrame ? 1 : 0,
               gEngine.renderTarget,
@@ -1298,6 +1314,24 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetRenderingApi(
         ALOGW("IMM Android ignoring unknown renderer API: %s", renderingApiUtf ? renderingApiUtf : "");
     }
     jni->ReleaseStringUTFChars(jRenderingApi, renderingApiUtf);
+}
+
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationRenderSize(
+    JNIEnv*,
+    jclass,
+    jint width,
+    jint height) {
+    if (width <= 0 || height <= 0) {
+        ALOGW("IMMAVAL ignoring invalid validation render size: %dx%d", width, height);
+        return;
+    }
+    if (gEngine.renderer) {
+        ALOGW("IMMAVAL validation render size change ignored after renderer initialization: %dx%d", width, height);
+        return;
+    }
+    gEngine.validationRenderWidth = width;
+    gEngine.validationRenderHeight = height;
+    ALOGV("IMMAVAL validation render size: %dx%d", width, height);
 }
 
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetEyeBufferScale(
