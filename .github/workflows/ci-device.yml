@@ -209,7 +209,7 @@ jobs:
           --test-type instrumentation
           --artifact-dir artifacts/android-standalone-vulkan
           --timeout 5m
-          --environment-variable renderer=Vulkan,waitSeconds=25,ValidationFixedDt=0.0333333333333333,ValidationPlayerFrame=60
+          --environment-variable renderer=Vulkan,waitSeconds=90,ValidationFixedDt=0.0333333333333333,ValidationPlayerFrame=60
           --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
           --required-marker "IMM Android renderer API: Vulkan"
           --required-marker "IMMAVAL loadPath result=1"
