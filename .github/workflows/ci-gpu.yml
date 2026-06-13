@@ -661,7 +661,7 @@ jobs:
         run: |
           python tests\tools\compare_render_metrics.py artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
             --reference .\tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\windows-directx-sample1.json `
+            --contract tests\baselines\render\godot-windows-vulkan-sample1.json `
             --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-committed-directx-render-metrics.json
 
       - name: Write Godot Vulkan render report

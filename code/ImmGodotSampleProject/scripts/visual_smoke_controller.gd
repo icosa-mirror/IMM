@@ -222,7 +222,6 @@ func _run_visual_smoke() -> void:
 		await _wait_for_forced_player_frame(forced_player_frame)
 		_setup_scene_composition_probe()
 		for _frame in range(6):
-			_apply_forced_player_frame(forced_player_frame)
 			_queue_active_camera()
 			await get_tree().process_frame
 
@@ -264,9 +263,6 @@ func _run_visual_smoke() -> void:
 	var screenshot_path: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_PNG", "")
 	var ppm_path: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_PPM", "")
 	if not screenshot_path.is_empty():
-		_apply_forced_player_frame(forced_player_frame)
-		_queue_active_camera()
-		await get_tree().process_frame
 		_apply_background_color()
 		await RenderingServer.frame_post_draw
 		var image: Image = get_viewport().get_texture().get_image()
@@ -297,9 +293,6 @@ func _run_visual_smoke() -> void:
 			print("IMM Godot %s visual smoke PNG: %s" % [selected_renderer_name, screenshot_path])
 
 	if not ppm_path.is_empty():
-		_apply_forced_player_frame(forced_player_frame)
-		_queue_active_camera()
-		await get_tree().process_frame
 		_apply_background_color()
 		await RenderingServer.frame_post_draw
 		var image: Image = get_viewport().get_texture().get_image()
@@ -375,7 +368,8 @@ func _apply_forced_player_frame(player_frame: int) -> void:
 func _wait_for_forced_player_frame(player_frame: int) -> void:
 	if player_frame < 0:
 		return
-	for _frame in range(3):
+	var deadline_msec: int = Time.get_ticks_msec() + int(_max_ready_seconds() * 1000.0)
+	while Time.get_ticks_msec() < deadline_msec:
 		_apply_forced_player_frame(player_frame)
 		_queue_active_camera()
 		await get_tree().process_frame
@@ -386,7 +380,7 @@ func _wait_for_forced_player_frame(player_frame: int) -> void:
 				player_frame,
 			])
 			return
-	print("IMM Godot %s visual smoke using set_time for player frame %d before capture" % [
+	print("IMM Godot %s visual smoke did not observe validation player frame %d before capture" % [
 		_selected_renderer_name(),
 		player_frame,
 	])
