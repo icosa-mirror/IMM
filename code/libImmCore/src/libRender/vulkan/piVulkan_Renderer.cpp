@@ -1731,9 +1731,9 @@ static void iConvertB10G11R11ToRgba8(uint8_t *dst, const uint8_t *src, size_t pi
         const uint32_t r = packed & 0x7ffu;
         const uint32_t g = (packed >> 11u) & 0x7ffu;
         const uint32_t b = (packed >> 22u) & 0x3ffu;
-        dst[i * 4u + 0u] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(r, 6));
-        dst[i * 4u + 1u] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(g, 6));
-        dst[i * 4u + 2u] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(b, 5));
+        dst[i * 4u + 0u] = iFloatToByte(iDecodeUnsignedFloat(r, 6));
+        dst[i * 4u + 1u] = iFloatToByte(iDecodeUnsignedFloat(g, 6));
+        dst[i * 4u + 2u] = iFloatToByte(iDecodeUnsignedFloat(b, 5));
         dst[i * 4u + 3u] = 255;
     }
 }
