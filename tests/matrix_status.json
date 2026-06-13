@@ -174,10 +174,10 @@
       "mode": "non-vr",
       "renderer": "preflight",
       "status": "supported",
-      "hosted_gate": "Build / Windows and CI Core Matrix / Godot Local Verifier",
+      "hosted_gate": "CI Core Matrix / Godot Local Verifier",
       "hardware_gate": null,
       "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI validates GDExtension build/staging preflight and local API parity."
+      "reason": "CI Core Matrix validates GDExtension build/staging preflight and local API parity."
     },
     {
       "product": "godot",
@@ -187,8 +187,8 @@
       "status": "supported",
       "hosted_gate": "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
       "hardware_gate": "CI GPU Matrix / Windows Godot Vulkan",
-      "baseline": "tests/baselines/render/windows-directx-sample1.json",
-      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows against the committed Windows DirectX sample1 reference capture."
+      "baseline": "tests/baselines/render/godot-windows-vulkan-sample1.json",
+      "reason": "GPU smoke is gated in build.yml and defined in CI GPU Matrix on GitHub-hosted Windows against the committed Windows DirectX sample1 reference capture with a Godot-specific render parity contract."
     },
     {
       "product": "godot",
