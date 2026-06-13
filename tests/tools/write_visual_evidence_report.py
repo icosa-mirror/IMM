@@ -107,7 +107,9 @@ def relative_link(target: Path, report_path: Path) -> str:
 
 
 def display_name(key: str) -> str:
-    key = normalize_label(key.replace("/", "-")).replace("direct-x", "directx").replace("open-gl", "opengl")
+    key = normalize_label(key.replace("/", "-"))
+    key = re.sub(r"(?i)direct[-_\s]*x", "directx", key)
+    key = re.sub(r"(?i)open[-_\s]*gl", "opengl", key)
     replacements = {
         "android": "Android",
         "directx": "DirectX",
@@ -153,6 +155,16 @@ def discover_reports(input_root: Path) -> list[tuple[str, Path]]:
         current = selected.get(key)
         if current is None or report_rank(report) < report_rank(current):
             selected[key] = report
+    for captures_dir in input_root.rglob("captures"):
+        if not captures_dir.is_dir():
+            continue
+        for child in captures_dir.iterdir():
+            if not child.is_dir():
+                continue
+            if not any(path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES for path in child.rglob("*")):
+                continue
+            key = slugify(child.name)
+            selected.setdefault(key, child)
     return sorted(selected.items(), key=lambda item: display_name(item[0]))
 
 
@@ -351,7 +363,17 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def artifact_root_for(report: Path) -> Path:
+    if report.is_dir():
+        if report.parent.name == "captures":
+            return report.parent.parent
+        return report
+    return report.parent
+
+
 def image_roots_for_report(report: Path, key: str) -> list[Path]:
+    if report.is_dir():
+        return [report]
     captures = report.parent / "captures"
     if captures.exists():
         matching = [path for path in captures.iterdir() if path.is_dir() and slugify(path.name) == key]
@@ -392,6 +414,21 @@ def find_json(root: Path, *names: str) -> dict:
     return {}
 
 
+def find_manifest(root: Path, key: str) -> dict:
+    fallback: dict = {}
+    for path in sorted(root.rglob("manifest.json")):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not fallback:
+            fallback = manifest
+        matrix = manifest.get("matrix") if isinstance(manifest, dict) else None
+        if isinstance(matrix, dict) and row_matches_key(matrix, key):
+            return manifest
+    return fallback
+
+
 def find_metrics(root: Path) -> dict:
     for path in sorted(root.glob("*metrics*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -411,6 +448,8 @@ def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, 
         return ("failed", failure_class)
     if result == "expected_failed":
         return ("expected failure", failure_class)
+    if result == "passed":
+        return ("passed", failure_class)
     if status.get("compositing") == "expected_failed":
         return ("expected failure", "compositing")
     if status.get("rendering") == "success" or metrics.get("passed") is True:
@@ -485,9 +524,10 @@ def main() -> int:
 
     visual_sections = 0
     for key, report in reports:
-        metrics = find_metrics(report.parent)
-        status = find_json(report.parent, "composition-status.json")
-        manifest = find_json(report.parent, "manifest.json")
+        root = artifact_root_for(report)
+        metrics = find_metrics(root)
+        status = find_json(root, "composition-status.json")
+        manifest = find_manifest(root, key)
         images = find_images_for_report(report, key)
         if not metrics and not status and not manifest and not images:
             continue

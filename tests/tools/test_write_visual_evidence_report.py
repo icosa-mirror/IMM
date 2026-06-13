@@ -58,7 +58,7 @@ def main() -> int:
                             "renderer": "native",
                             "status": "supported",
                             "hosted_gate": "CI Engine Matrix / Unity Package Import",
-                            "baseline": "tests/baselines/content/sample1.json",
+                            "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
                             "reason": "Unity package import is supported.",
                         },
                         {
@@ -117,12 +117,12 @@ def main() -> int:
         assert result.returncode == 0, result.stderr
         text = report.read_text(encoding="utf-8")
         assert "## Matrix Coverage" in text
-        assert "| unity/all/non-vr/native | supported | passed | no |" in text
+        assert "| unity/all/non-vr/native | supported | passed | yes |" in text
         assert "| standalone/macos/non-vr/metal | supported | missing evidence | yes |" in text
         assert "| godot/windows/vr/openxr | deferred | deferred | no |" in text
         assert "| standalone/ios/non-vr/native | unsupported | unsupported | no |" in text
-        assert "## Status-Only Evidence" in text
-        assert "### Unity All Non Vr Native" in text
+        assert "## Unity Windows DirectX Composition" in text
+        assert "![unity-windows-directx-composition.png]" in text
         assert "### Missing Supported Evidence" in text
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text
         assert "## Enginevalidationevidence" not in text
