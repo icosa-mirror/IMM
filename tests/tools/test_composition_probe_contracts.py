@@ -22,6 +22,7 @@ def main() -> int:
             "rearOccluded",
             "MaxOccludedShare",
             "OverlayProbeEnv",
+            "FlipTextureRowsForPng",
             "scene composition overlay rear probe failed",
             "scene composition overlay probe passed",
             "scene composition rear occlusion probe failed",

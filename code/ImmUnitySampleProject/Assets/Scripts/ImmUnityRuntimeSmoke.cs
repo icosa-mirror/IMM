@@ -201,6 +201,7 @@ namespace ImmPlayer
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
 
+            FlipTextureRowsForPng(tex, pixels, width, height);
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             Destroy(tex);
             if (renderTexture != null)
@@ -213,6 +214,18 @@ namespace ImmPlayer
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             QuitIfRequested(0);
+        }
+
+        private static void FlipTextureRowsForPng(Texture2D tex, Color32[] pixels, int width, int height)
+        {
+            var flipped = new Color32[pixels.Length];
+            for (int y = 0; y < height; ++y)
+            {
+                Array.Copy(pixels, y * width, flipped, (height - y - 1) * width, width);
+            }
+
+            tex.SetPixels32(flipped);
+            tex.Apply(false, false);
         }
 
         private bool CreateCompositionProbes()
