@@ -21,6 +21,7 @@ namespace ImmPlayer.Editor
         private const string RuntimeSmokeFramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string RuntimeSmokeQuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string RuntimeSmokeCompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
+        private const string RuntimeSmokeOverlayProbeEnv = "IMM_UNITY_SMOKE_OVERLAY_PROBE";
         private const string RuntimeSmokeXrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string EditorSmokeCaptureDelaySecondsEnv = "IMM_UNITY_EDITOR_SMOKE_CAPTURE_DELAY_SECONDS";
         private const string EditorOverlayFixtureEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE";
@@ -223,6 +224,7 @@ namespace ImmPlayer.Editor
             }
             Environment.SetEnvironmentVariable(RuntimeSmokeQuitEnv, "0");
             Environment.SetEnvironmentVariable(RuntimeSmokeCompositionProbeEnv, enableCompositionProbe ? "1" : string.Empty);
+            Environment.SetEnvironmentVariable(RuntimeSmokeOverlayProbeEnv, string.Empty);
             Environment.SetEnvironmentVariable(RuntimeSmokeXrProbeEnv, enableXrProbe ? "1" : string.Empty);
 
             string nativeLogPath = Path.GetFullPath("imm_player_log.txt");
@@ -351,6 +353,12 @@ namespace ImmPlayer.Editor
                 overlayCamera.cullingMask = 1 << overlayLayer;
                 overlayCamera.depth = cam.depth + 1.0f;
                 overlayCamera.name = "IMM Overlay Fixture Camera";
+                Environment.SetEnvironmentVariable(RuntimeSmokeOverlayProbeEnv, "1");
+                ImmPlayerManager manager = UnityEngine.Object.FindObjectOfType<ImmPlayerManager>();
+                if (manager != null)
+                {
+                    manager.SetRenderCamera(cam);
+                }
                 UnityEngine.Debug.Log($"[IMM_EDITOR_OVERLAY_FIXTURE_20260612] overlayCamera={overlayCamera.name} depth={overlayCamera.depth} layer={overlayLayer}");
             }
 

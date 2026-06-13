@@ -48,6 +48,7 @@ namespace ImmPlayer
         [SerializeField] private bool useLinearColorSpace = true;
         [SerializeField] private int antialiasingLevel = 8;
         [SerializeField] private string logFileName = "imm_player_log.txt";
+        [SerializeField] private Camera renderCamera = null;
 
         #endregion
 
@@ -446,9 +447,22 @@ namespace ImmPlayer
             return CameraEvent.AfterSkybox;
         }
 
-        private static bool ShouldRenderCamera(Camera cam)
+        public void SetRenderCamera(Camera camera)
+        {
+            renderCamera = camera;
+        }
+
+        public void ClearRenderCamera()
+        {
+            renderCamera = null;
+        }
+
+        private bool ShouldRenderCamera(Camera cam)
         {
             if (cam == null)
+                return false;
+
+            if (renderCamera != null && cam != renderCamera)
                 return false;
 
             if (IsEnvFlagEnabled("IMM_UNITY_GAME_CAMERAS_ONLY") && cam.cameraType != CameraType.Game)

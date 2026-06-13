@@ -13,11 +13,13 @@ namespace ImmPlayer
         private const string FramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string QuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
+        private const string OverlayProbeEnv = "IMM_UNITY_SMOKE_OVERLAY_PROBE";
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string CapturePathArg = "-immSmokeCapturePath";
         private const string FramesArg = "-immSmokeFrames";
         private const string QuitArg = "-immSmokeQuit";
         private const string CompositionProbeArg = "-immSmokeCompositionProbe";
+        private const string OverlayProbeArg = "-immSmokeOverlayProbe";
         private const string XrProbeArg = "-immSmokeXrProbe";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
@@ -47,6 +49,7 @@ namespace ImmPlayer
 
         private string _capturePath;
         private bool _compositionProbeEnabled;
+        private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
         private Camera _compositionCamera;
         private GameObject _frontProbe;
@@ -58,6 +61,7 @@ namespace ImmPlayer
         {
             int frameCount = 180;
             _compositionProbeEnabled = IsEnabled(CompositionProbeArg, CompositionProbeEnv);
+            _overlayProbeEnabled = IsEnabled(OverlayProbeArg, OverlayProbeEnv);
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
             if (Screen.width != CaptureWidth || Screen.height != CaptureHeight)
             {
@@ -169,13 +173,20 @@ namespace ImmPlayer
                 {
                     RecordCompositionFailure($"scene composition rear visible probe failed: {rearVisible}");
                 }
-                if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share > MaxOccludedShare)
+                if (_overlayProbeEnabled)
+                {
+                    if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share < MinDominantShare)
+                    {
+                        RecordCompositionFailure($"scene composition overlay rear probe failed: {rearOccluded}");
+                    }
+                }
+                else if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share > MaxOccludedShare)
                 {
                     RecordCompositionFailure($"scene composition rear occlusion probe failed: {rearOccluded}");
                 }
                 if (_compositionFailures.Count == 0)
                 {
-                    Debug.Log($"{Prefix}scene composition probe passed");
+                    Debug.Log($"{Prefix}{(_overlayProbeEnabled ? "scene composition overlay probe passed" : "scene composition probe passed")}");
                 }
             }
 
@@ -206,25 +217,52 @@ namespace ImmPlayer
 
         private bool CreateCompositionProbes()
         {
-            Camera cam = Camera.main;
+            Camera cam = _overlayProbeEnabled ? FindOverlayCompositionCamera() : Camera.main;
             if (cam == null)
                 return false;
 
             _compositionCamera = cam;
+            int probeLayer = _overlayProbeEnabled ? FirstVisibleLayer(cam.cullingMask, 0) : 0;
             Vector3 forward = cam.transform.forward.normalized;
             Vector3 right = cam.transform.right.normalized;
             Vector3 center = cam.transform.position + forward * 3.0f;
-            _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.50f - forward * 0.35f, cam.transform.rotation, new Vector3(0.55f, 0.55f, 0.06f));
-            _rearOccludedProbe = CreateProbe("IMM Scene Rear Occlusion Probe", RearOccludedProbeColor, center - forward * 0.95f, cam.transform.rotation, new Vector3(0.75f, 0.75f, 0.06f));
-            _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 0.75f + forward * 0.45f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f));
-            Debug.Log($"{Prefix}scene composition probes created center={center}");
+            _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.50f - forward * 0.35f, cam.transform.rotation, new Vector3(0.55f, 0.55f, 0.06f), probeLayer);
+            _rearOccludedProbe = CreateProbe("IMM Scene Rear Occlusion Probe", RearOccludedProbeColor, center - forward * 0.95f, cam.transform.rotation, new Vector3(0.75f, 0.75f, 0.06f), probeLayer);
+            _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 0.75f + forward * 0.45f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
+            Debug.Log($"{Prefix}scene composition probes created center={center} camera={cam.name} overlay={_overlayProbeEnabled} layer={probeLayer}");
             return true;
         }
 
-        private static GameObject CreateProbe(string name, Color color, Vector3 position, Quaternion rotation, Vector3 scale)
+        private static Camera FindOverlayCompositionCamera()
+        {
+            Camera[] cameras = FindObjectsOfType<Camera>();
+            Camera best = null;
+            for (int i = 0; i < cameras.Length; ++i)
+            {
+                Camera candidate = cameras[i];
+                if (candidate == null || candidate.cullingMask == 0)
+                    continue;
+                if (best == null || candidate.depth > best.depth)
+                    best = candidate;
+            }
+            return best != null ? best : Camera.main;
+        }
+
+        private static int FirstVisibleLayer(int cullingMask, int fallbackLayer)
+        {
+            for (int layer = 0; layer < 32; ++layer)
+            {
+                if ((cullingMask & (1 << layer)) != 0)
+                    return layer;
+            }
+            return fallbackLayer;
+        }
+
+        private static GameObject CreateProbe(string name, Color color, Vector3 position, Quaternion rotation, Vector3 scale, int layer)
         {
             GameObject probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
             probe.name = name;
+            probe.layer = layer;
             probe.transform.SetPositionAndRotation(position, rotation);
             probe.transform.localScale = scale;
             var renderer = probe.GetComponent<Renderer>();
@@ -283,10 +321,12 @@ namespace ImmPlayer
                 Vector3 screen = camera.WorldToScreenPoint(corner);
                 if (screen.z <= 0.0f)
                     continue;
-                minX = Mathf.Min(minX, Mathf.FloorToInt(screen.x));
-                minY = Mathf.Min(minY, Mathf.FloorToInt(screen.y));
-                maxX = Mathf.Max(maxX, Mathf.CeilToInt(screen.x));
-                maxY = Mathf.Max(maxY, Mathf.CeilToInt(screen.y));
+                float scaledX = screen.x * width / Mathf.Max(1, camera.pixelWidth);
+                float scaledY = screen.y * height / Mathf.Max(1, camera.pixelHeight);
+                minX = Mathf.Min(minX, Mathf.FloorToInt(scaledX));
+                minY = Mathf.Min(minY, Mathf.FloorToInt(scaledY));
+                maxX = Mathf.Max(maxX, Mathf.CeilToInt(scaledX));
+                maxY = Mathf.Max(maxY, Mathf.CeilToInt(scaledY));
             }
 
             if (maxX < minX || maxY < minY)
