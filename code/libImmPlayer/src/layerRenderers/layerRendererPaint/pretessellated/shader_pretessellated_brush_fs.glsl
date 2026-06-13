@@ -1,5 +1,4 @@
 static const char* shader_pretessellated_brush_fs = R"(
-#extension GL_ARB_bindless_texture : enable
 #ifdef GL_OES_sample_variables
 #extension GL_OES_sample_variables : enable
 #endif
@@ -22,10 +21,7 @@ layout (std140, row_major, binding=3) uniform LayersState
     uint   mID;
 }layer;
 
-layout(binding = 7) uniform GlobalResources
-{
-	uvec2 mTexBlueNoise;
-}globalResources;
+layout(binding = 7) uniform sampler2DArray mTexBlueNoise;
 
 
 in vec4 mpos;
@@ -49,7 +45,7 @@ int alpha2coverage(float al, ivec2 p, uint frameID, uint primitiveID)
 	// add dithering to the alpha value
 
     //vec2 q = vec2(p)+vec2(0,float((frameID)&7)*11.0); float ran = fract( 52.9829189*fract(dot(q,vec2(0.06711056,0.00583715)))); //   http://advances.realtimerendering.com/s2014/index.html
-	float ran = texelFetch( sampler2DArray(globalResources.mTexBlueNoise), ivec3(p,frameID)&63, 0 ).x;
+	float ran = texelFetch( mTexBlueNoise, ivec3(p,frameID)&63, 0 ).x;
 	
 	al = clamp( al + 0.99*(ran-0.5)/float(MSAASampleCount), 0.0, 1.0); // 0.99 is to make sure the dithering never makes the alpha leak to the previour or the next bucket
 

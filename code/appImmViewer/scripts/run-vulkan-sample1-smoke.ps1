@@ -1,8 +1,9 @@
 param(
     [string]$Configuration = "Debug",
     [string]$Platform = "x64",
-    [int]$DurationSeconds = 45,
-    [int]$PresentSeconds = 8,
+    [int]$DurationSeconds = 420,
+    [int]$PresentSeconds = 120,
+    [int]$MaxFrame = 7200,
     [int]$MinNonblackPixels = 20000,
     [int]$MinNearVisiblePixels = 10000,
     [string]$ReferencePath = "",
@@ -149,7 +150,7 @@ $previousEnv = @{
 }
 
 $env:IMM_VIEWER_VALIDATE_FRAME = "0"
-$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "360"
+$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "$MaxFrame"
 $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
 $env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
 $env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
@@ -239,11 +240,57 @@ if ($ReferencePath) {
 }
 
 Remove-Item -LiteralPath $debugLog -Force -ErrorAction SilentlyContinue
-$process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
-Start-Sleep -Seconds $PresentSeconds
-if (-not $process.HasExited) {
-    Stop-Process -Id $process.Id -Force
-    Start-Sleep -Seconds 1
+$previousLiveEnv = @{
+    IMM_VIEWER_VALIDATE_FRAME = $env:IMM_VIEWER_VALIDATE_FRAME
+    IMM_VIEWER_VALIDATE_MAX_FRAME = $env:IMM_VIEWER_VALIDATE_MAX_FRAME
+    IMM_VIEWER_VALIDATE_FIXED_DT = $env:IMM_VIEWER_VALIDATE_FIXED_DT
+    IMM_VIEWER_VALIDATE_MIN_NONZERO = $env:IMM_VIEWER_VALIDATE_MIN_NONZERO
+    IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = $env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS
+    IMM_VIEWER_VALIDATE_MIN_TRIANGLES = $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES
+    IMM_VIEWER_VALIDATE_PLAYER_FRAME = $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME
+    IMM_VIEWER_VALIDATE_CAPTURE_PATH = $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH
+    IMM_VIEWER_VALIDATE_DISABLE_AUDIO = $env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO
+}
+
+$env:IMM_VIEWER_VALIDATE_FRAME = "0"
+$env:IMM_VIEWER_VALIDATE_MAX_FRAME = "$MaxFrame"
+$env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
+$env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
+$env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
+$env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES = "1"
+$env:IMM_VIEWER_VALIDATE_CAPTURE_PATH = $null
+$env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO = "1"
+
+try {
+    $process = Start-Process -FilePath $viewerExe -ArgumentList @("settings-vulkan-smoke.json") -WorkingDirectory $viewerExeDir -WindowStyle Hidden -PassThru
+    $timedOut = -not $process.WaitForExit($PresentSeconds * 1000)
+    if ($timedOut) {
+        if (-not $process.HasExited) {
+            Stop-Process -Id $process.Id -Force
+            Start-Sleep -Seconds 1
+        }
+        throw "Live-present smoke timed out after $PresentSeconds seconds"
+    }
+    if ($process.ExitCode -ne 0) {
+        throw "Live-present smoke failed with exit code $($process.ExitCode)"
+    }
+}
+finally {
+    foreach ($entry in $previousLiveEnv.GetEnumerator()) {
+        if ($null -eq $entry.Value) {
+            Remove-Item -Path "env:$($entry.Key)" -ErrorAction SilentlyContinue
+        }
+        else {
+            Set-Item -Path "env:$($entry.Key)" -Value $entry.Value
+        }
+    }
 }
 if (-not (Test-Path $debugLog)) {
     throw "Viewer did not write live-present debug log: $debugLog"
@@ -252,15 +299,23 @@ $presentLog = Get-Content $debugLog -Raw
 if ($presentLog -notmatch "Loaded in GPU \[0\]") {
     throw "Live-present smoke log does not show GPU load completion."
 }
-if ($presentLog -notmatch "Vulkan renderer presented swapchain sRGB GPU present frame") {
-    throw "Live-present smoke log does not show sRGB GPU Vulkan presentation."
+$requiredPresentPatterns = @(
+    "Vulkan renderer submitted static paint draw commands",
+    "Vulkan renderer submitted picture draw commands",
+    "Vulkan renderer read back static paint GPU target nonblack=",
+    "IMM GL validation:"
+)
+foreach ($pattern in $requiredPresentPatterns) {
+    if ($presentLog -notmatch [regex]::Escape($pattern)) {
+        throw "Live-present smoke log does not show expected Vulkan GPU evidence: $pattern"
+    }
 }
 foreach ($pattern in $badPatterns) {
     if ($presentLog -match $pattern) {
         throw "Live-present smoke log matched failure pattern: $pattern"
     }
 }
-Write-Host "Live present: sRGB GPU Vulkan presentation logged"
+Write-Host "Live present: Vulkan GPU draw/readback validation logged"
 
 if (-not $KeepArtifacts) {
     Remove-Item -LiteralPath $capturePath, $capturePngPath, $captureTmpPath -Force -ErrorAction SilentlyContinue

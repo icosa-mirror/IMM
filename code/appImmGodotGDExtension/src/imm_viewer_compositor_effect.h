@@ -50,6 +50,7 @@ namespace godot
         bool _last_vulkan_frame_started = false;
         bool _ever_vulkan_frame_started = false;
         bool _last_composite_result = false;
+        bool _last_direct_vulkan_color_target = false;
         bool _last_had_intermediate_texture = false;
         int _last_intermediate_nonzero_bytes = -1;
         int _last_intermediate_total_bytes = 0;
@@ -64,8 +65,12 @@ namespace godot
         uint64_t _last_vulkan_device_handle = 0;
         uint64_t _last_vulkan_queue_handle = 0;
         uint64_t _last_vulkan_queue_family_index = 0;
+        uint64_t _last_vulkan_image_handle = 0;
         uint64_t _last_vulkan_image_view_handle = 0;
         uint32_t _last_vulkan_image_format = 0;
+        uint64_t _last_vulkan_depth_image_handle = 0;
+        uint64_t _last_vulkan_depth_image_view_handle = 0;
+        uint32_t _last_vulkan_depth_image_format = 0;
         RID _last_color_texture;
         Vector2i _last_internal_size;
         Vector2i _last_target_size;

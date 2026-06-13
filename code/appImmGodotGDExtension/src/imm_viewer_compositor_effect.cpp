@@ -370,6 +370,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
 
     RenderSceneBuffersRD *rd_scene_buffers = scene_buffers.is_valid() ? Object::cast_to<RenderSceneBuffersRD>(scene_buffers.ptr()) : nullptr;
     RID color_texture;
+    RID depth_texture;
     Vector2i internal_size;
     Vector2i target_size;
     int view_count = 0;
@@ -380,8 +381,12 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     uint64_t vulkan_device_handle = 0;
     uint64_t vulkan_queue_handle = 0;
     uint64_t vulkan_queue_family_index = 0;
+    uint64_t vulkan_image_handle = 0;
     uint64_t vulkan_image_view_handle = 0;
     uint32_t vulkan_image_format = 0;
+    uint64_t vulkan_depth_image_handle = 0;
+    uint64_t vulkan_depth_image_view_handle = 0;
+    uint32_t vulkan_depth_image_format = 0;
     const bool rd_clear_test = std::getenv("IMM_GODOT_RD_CLEAR_TEST") != nullptr;
     Error rd_clear_result = OK;
     bool rd_framebuffer_valid = false;
@@ -399,6 +404,15 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         {
             color_texture = rd_scene_buffers->get_texture(StringName("render_buffers"), StringName("color"));
         }
+        depth_texture = rd_scene_buffers->get_depth_layer(0, false);
+        if (!depth_texture.is_valid())
+        {
+            depth_texture = rd_scene_buffers->get_depth_texture(false);
+        }
+        if (!depth_texture.is_valid())
+        {
+            depth_texture = rd_scene_buffers->get_texture(StringName("render_buffers"), StringName("depth"));
+        }
         internal_size = rd_scene_buffers->get_internal_size();
         target_size = rd_scene_buffers->get_target_size();
         view_count = static_cast<int>(rd_scene_buffers->get_view_count());
@@ -414,8 +428,15 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
             if (color_texture.is_valid())
             {
                 color_texture_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, color_texture, 0);
+                vulkan_image_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE, color_texture, 0);
                 vulkan_image_view_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, color_texture, 0);
                 vulkan_image_format = static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, color_texture, 0));
+            }
+            if (depth_texture.is_valid())
+            {
+                vulkan_depth_image_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE, depth_texture, 0);
+                vulkan_depth_image_view_handle = rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, depth_texture, 0);
+                vulkan_depth_image_format = static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, depth_texture, 0));
             }
         }
     }
@@ -458,6 +479,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     bool metal_frame_started = false;
     bool vulkan_frame_started = false;
     bool composite_result = false;
+    bool direct_vulkan_color_target = false;
     bool had_intermediate_texture = false;
     int intermediate_nonzero_bytes = -1;
     int intermediate_total_bytes = 0;
@@ -466,20 +488,45 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     {
         const int render_width = render_request.width > 0 ? render_request.width : target_size.x;
         const int render_height = render_request.height > 0 ? render_request.height : target_size.y;
-        RID intermediate_texture = ensure_intermediate_texture(rendering_device, color_texture, render_width, render_height);
+        const bool direct_vulkan_depth_composition_enabled = std::getenv("IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION") != nullptr;
+        const bool can_direct_vulkan_color_target = direct_vulkan_depth_composition_enabled &&
+                                                   vulkan_instance_handle != 0 &&
+                                                   vulkan_physical_device_handle != 0 &&
+                                                   vulkan_device_handle != 0 &&
+                                                   vulkan_queue_handle != 0 &&
+                                                   color_texture_handle != 0 &&
+                                                   vulkan_image_handle != 0 &&
+                                                   vulkan_image_view_handle != 0 &&
+                                                   vulkan_image_format != 0 &&
+                                                   vulkan_depth_image_handle != 0 &&
+                                                   vulkan_depth_image_view_handle != 0 &&
+                                                   vulkan_depth_image_format != 0;
+        RID intermediate_texture;
+        if (!can_direct_vulkan_color_target)
+        {
+            intermediate_texture = ensure_intermediate_texture(rendering_device, color_texture, render_width, render_height);
+        }
         had_intermediate_texture = intermediate_texture.is_valid();
-        uint64_t render_texture_handle = had_intermediate_texture
+        uint64_t render_texture_handle = can_direct_vulkan_color_target
+                                             ? color_texture_handle
+                                             : (had_intermediate_texture
                                              ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, intermediate_texture, 0)
-                                             : 0;
-        uint64_t render_texture_vulkan_image_handle = had_intermediate_texture
+                                             : 0);
+        uint64_t render_texture_vulkan_image_handle = can_direct_vulkan_color_target
+                                                          ? vulkan_image_handle
+                                                          : (had_intermediate_texture
                                                           ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE, intermediate_texture, 0)
-                                                          : 0;
-        uint64_t render_texture_view_handle = had_intermediate_texture
+                                                          : 0);
+        uint64_t render_texture_view_handle = can_direct_vulkan_color_target
+                                                  ? vulkan_image_view_handle
+                                                  : (had_intermediate_texture
                                                   ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, intermediate_texture, 0)
-                                                  : 0;
-        const uint32_t render_texture_format = had_intermediate_texture
+                                                  : 0);
+        const uint32_t render_texture_format = can_direct_vulkan_color_target
+                                                   ? vulkan_image_format
+                                                   : (had_intermediate_texture
                                                    ? static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, intermediate_texture, 0))
-                                                   : 0;
+                                                   : 0);
         if (vulkan_instance_handle != 0 && vulkan_physical_device_handle != 0 && vulkan_device_handle != 0 && vulkan_queue_handle != 0)
         {
             vulkan_frame_started = ImmViewerGodotBeginVulkanTextureFrame(vulkan_instance_handle,
@@ -490,8 +537,12 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
                                                                          render_texture_vulkan_image_handle,
                                                                          render_texture_view_handle,
                                                                          render_texture_format,
+                                                                         can_direct_vulkan_color_target ? vulkan_depth_image_handle : 0,
+                                                                         can_direct_vulkan_color_target ? vulkan_depth_image_view_handle : 0,
+                                                                         can_direct_vulkan_color_target ? vulkan_depth_image_format : 0,
                                                                          render_width,
                                                                          render_height);
+            direct_vulkan_color_target = vulkan_frame_started && can_direct_vulkan_color_target;
         }
         if (!vulkan_frame_started)
         {
@@ -531,7 +582,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
                     }
                 }
             }
-            composite_result = composite_texture_to_color(rendering_device, intermediate_texture, color_texture);
+            composite_result = direct_vulkan_color_target || composite_texture_to_color(rendering_device, intermediate_texture, color_texture);
         }
         else
         {
@@ -557,6 +608,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _last_vulkan_frame_started = vulkan_frame_started;
         _ever_vulkan_frame_started = _ever_vulkan_frame_started || vulkan_frame_started;
         _last_composite_result = composite_result;
+        _last_direct_vulkan_color_target = direct_vulkan_color_target;
         _last_had_intermediate_texture = had_intermediate_texture;
         _last_intermediate_nonzero_bytes = intermediate_nonzero_bytes;
         _last_intermediate_total_bytes = intermediate_total_bytes;
@@ -571,8 +623,12 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _last_vulkan_device_handle = vulkan_device_handle;
         _last_vulkan_queue_handle = vulkan_queue_handle;
         _last_vulkan_queue_family_index = vulkan_queue_family_index;
+        _last_vulkan_image_handle = vulkan_image_handle;
         _last_vulkan_image_view_handle = vulkan_image_view_handle;
         _last_vulkan_image_format = vulkan_image_format;
+        _last_vulkan_depth_image_handle = vulkan_depth_image_handle;
+        _last_vulkan_depth_image_view_handle = vulkan_depth_image_view_handle;
+        _last_vulkan_depth_image_format = vulkan_depth_image_format;
         _last_color_texture = color_texture;
         _last_internal_size = internal_size;
         _last_target_size = target_size;
@@ -601,6 +657,7 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["last_vulkan_frame_started"] = _last_vulkan_frame_started;
     result["ever_vulkan_frame_started"] = _ever_vulkan_frame_started;
     result["last_composite_result"] = _last_composite_result;
+    result["last_direct_vulkan_color_target"] = _last_direct_vulkan_color_target;
     result["last_had_intermediate_texture"] = _last_had_intermediate_texture;
     result["last_intermediate_nonzero_bytes"] = _last_intermediate_nonzero_bytes;
     result["last_intermediate_total_bytes"] = _last_intermediate_total_bytes;
@@ -615,8 +672,12 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["last_vulkan_device_handle"] = _last_vulkan_device_handle;
     result["last_vulkan_queue_handle"] = _last_vulkan_queue_handle;
     result["last_vulkan_queue_family_index"] = _last_vulkan_queue_family_index;
+    result["last_vulkan_image_handle"] = _last_vulkan_image_handle;
     result["last_vulkan_image_view_handle"] = _last_vulkan_image_view_handle;
     result["last_vulkan_image_format"] = _last_vulkan_image_format;
+    result["last_vulkan_depth_image_handle"] = _last_vulkan_depth_image_handle;
+    result["last_vulkan_depth_image_view_handle"] = _last_vulkan_depth_image_view_handle;
+    result["last_vulkan_depth_image_format"] = _last_vulkan_depth_image_format;
     result["last_color_texture"] = _last_color_texture;
     result["last_internal_size"] = _last_internal_size;
     result["last_target_size"] = _last_target_size;

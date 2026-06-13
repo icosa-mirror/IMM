@@ -1,0 +1,619 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Engine Matrix
+
+on:
+  workflow_call:
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  UNITY_VERSION: "2022.3.62f2"
+  IMM_UNITY_FALLBACK_LICENSE: |
+    <?xml version="1.0" encoding="UTF-8"?><root><TimeStamp Value="chxldhvc0zh5Vw=="/>
+        <License id="Terms">
+            <MachineBindings>
+                <Binding Key="1" Value="C372866C-B44C-5E48-806F-7583B55F04FB"/>
+                <Binding Key="2" Value="C02F32Y5ML85"/>
+            </MachineBindings>
+            <MachineID Value="LcL/yxIaeUG12OSX31mKDtxcVx8="/>
+            <SerialHash Value="e25c63636985259e763d40cc9253cdfe6a862ceb"/>
+            <Features>
+                <Feature Value="33"/>
+                <Feature Value="1"/>
+                <Feature Value="12"/>
+                <Feature Value="2"/>
+                <Feature Value="24"/>
+                <Feature Value="3"/>
+                <Feature Value="36"/>
+                <Feature Value="17"/>
+                <Feature Value="19"/>
+                <Feature Value="62"/>
+            </Features>
+            <DeveloperData Value="AQAAAEY0LUtFWUItMzYyOC0zWEI3LVBZVVEtTUI5VQ=="/>
+            <SerialMasked Value="F4-KEYB-3628-3XB7-PYUQ-XXXX"/>
+            <StartDate Value="2023-11-21T00:00:00"/>
+            <UpdateDate Value="2023-11-22T06:03:23"/>
+            <InitialActivationDate Value="2023-11-21T06:03:21"/>
+            <LicenseVersion Value="6.x"/>
+            <ClientProvidedVersion Value="2017.2.0"/>
+            <AlwaysOnline Value="false"/>
+            <Entitlements>
+                <Entitlement Ns="unity_editor" Tag="UnityPersonal" Type="EDITOR" ValidTo="9999-12-31T00:00:00"/>
+                <Entitlement Ns="unity_editor" Tag="DarkSkin" Type="EDITOR_FEATURE" ValidTo="9999-12-31T00:00:00"/>
+            </Entitlements>
+        </License><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315#WithComments"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#Terms"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>9DZF11miRAzx7TIuCxih78B6CXU=</DigestValue></Reference></SignedInfo><SignatureValue>weRQubqMNN61lSZtm/e7S+UDzTPNQjM5aQl/c4aKLH/b2khefpgLfdWneoxdnNopA6+rW6kBqxWt
+    hMLdHY+oAOfDsfmMQRTnmQG0Y3G3xh6gjGP1RAIHoLDfFHf+0LQ3FakA2WehcFWPSYeVDrdxm3HW
+    qMmdKWooD9i+J4s4rQFTDx9+/G6yjc5KGTyGxIz3c5kxTEkV2qsFPXsauomY9Z8YPKy+cZK7g+Ol
+    pO+LhtzetgTIlIN/qG8eByjlp6nOuVGdDOIrhNJW+vllNyx0qNWPREadVrhFViI4UXegMFRl5gJc
+    rgcrlr/fD+NorDVLfcu7D863QXkkuriILUIq2Q==</SignatureValue></Signature></root>
+
+jobs:
+  unity-package-import:
+    name: Unity Package Import
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore Unity Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-package-import-${{ env.UNITY_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_VERSION }}-
+
+      - name: Verify source package layout
+        run: |
+          python tests/tools/verify_package_layout.py unity code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+          python tests/tools/verify_package_layout.py unity code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+
+      - name: Verify Unity package import harness
+        run: >
+          python tests/tools/verify_engine_package_import.py unity
+          --stroke-package code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader
+          --player-package code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity
+          --workspace artifacts/UnityPackageImportHarness
+
+      - name: Preflight Unity runner
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-package-import/preflight.json
+
+      - name: Run Unity batchmode package import tests
+        id: unity_package_import_tests
+        timeout-minutes: 25
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: artifacts/UnityPackageImportHarness/unity-package-import
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: editmode
+          artifactsPath: artifacts/unity-package-import/test-runner
+          customParameters: -testResults artifacts/unity-editmode-results.xml
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_package_import_tests.outcome }}" --failure-class api --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-package-import --require-manifest --output artifacts/unity-package-import/artifact-summary.json
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-package-import-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityPackageImport
+          path: artifacts
+          if-no-files-found: ignore
+          retention-days: 14
+
+  unity-windows-directx-player-build:
+    name: Unity Windows DirectX Player Build
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore Unity Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_VERSION }}-
+
+      - name: Preflight Unity DirectX runner
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-windows-directx-player/preflight.json
+
+      - name: Prepare Unity DirectX artifact directory
+        run: mkdir -p artifacts/unity-windows-directx-player/player
+
+      - name: Prepare Unity DirectX CI project
+        run: >
+          python tests/tools/prepare_unity_ci_project.py
+          --source code/ImmUnitySampleProject
+          --output artifacts/UnityDirectXSmokeProject
+
+      - name: Build Unity DirectX smoke player
+        id: unity_directx_player_build
+        timeout-minutes: 25
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: artifacts/UnityDirectXSmokeProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneWindows64
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
+          customParameters: -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_directx_player_build.outcome }}" --failure-class build --output artifacts/unity-windows-directx-player/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts/unity-windows-directx-player
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-windows-directx-player --require-manifest --output artifacts/unity-windows-directx-player/artifact-summary.json
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity DirectX smoke player
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsDirectXPlayer
+          path: artifacts/unity-windows-directx-player/player
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Unity DirectX build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsDirectXPlayerBuildEvidence
+          path: artifacts/unity-windows-directx-player
+          if-no-files-found: ignore
+          retention-days: 14
+
+  unity-windows-directx-composition:
+    name: Unity Windows DirectX Composition
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs: unity-windows-directx-player-build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Unity DirectX runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-directx --output artifacts\unity-windows-directx-composition\preflight.json
+
+      - name: Prepare Unity DirectX artifact directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force artifacts\unity-windows-directx-composition | Out-Null
+
+      - name: Download Unity DirectX smoke player
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsDirectXPlayer
+          path: artifacts/unity-windows-directx-composition/player
+
+      - name: Run Unity DirectX composition smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $artifactDir = Resolve-Path artifacts\unity-windows-directx-composition
+          $player = Join-Path $artifactDir "player\ImmUnitySmoke.exe"
+          if (-not (Test-Path $player)) {
+            throw "Unity DirectX smoke player was not built: $player"
+          }
+
+          function Invoke-UnitySmoke {
+            param(
+              [string] $CaptureName,
+              [string] $LogName,
+              [string] $CompositionProbe
+            )
+
+            $capturePath = Join-Path $artifactDir $CaptureName
+            $playerLog = Join-Path $artifactDir $LogName
+            $playerArgs = @(
+              "-logFile", $playerLog,
+              "-screen-width", "1280",
+              "-screen-height", "720",
+              "-screen-fullscreen", "0",
+              "-force-d3d11",
+              "-immSmokeCapturePath", $capturePath,
+              "-immSmokeFrames", "360",
+              "-immSmokeQuit", "1",
+              "-immSmokeCompositionProbe", $CompositionProbe
+            )
+            $process = Start-Process -FilePath $player -ArgumentList $playerArgs -PassThru
+            if (-not $process.WaitForExit(240000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              if (Test-Path $playerLog) {
+                Get-Content $playerLog
+              }
+              throw "Unity DirectX smoke player timed out for $CaptureName"
+            }
+            if ($process.ExitCode -ne 0) {
+              if (Test-Path $playerLog) {
+                Get-Content $playerLog
+              }
+              throw "Unity DirectX smoke player failed with exit code $($process.ExitCode) for $CaptureName"
+            }
+            if (-not (Test-Path $capturePath)) {
+              if (Test-Path $playerLog) {
+                Get-Content $playerLog
+              }
+              throw "Unity DirectX smoke capture was not written: $capturePath"
+            }
+          }
+
+          Invoke-UnitySmoke -CaptureName "unity-windows-directx-render.png" -LogName "unity-render-player.log" -CompositionProbe "0"
+          Invoke-UnitySmoke -CaptureName "unity-windows-directx-composition.png" -LogName "unity-player.log" -CompositionProbe "1"
+
+      - name: Classify Unity DirectX composition status
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\classify_unity_visual_smoke.py
+          --log artifacts\unity-windows-directx-composition\unity-player.log
+          --capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --output artifacts\unity-windows-directx-composition\composition-status.json
+
+      - name: Compare Unity DirectX render metrics against committed DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\unity-windows-directx-sample1.json
+          --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
+
+      - name: Write Unity DirectX composition report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
+          --status-json artifacts\unity-windows-directx-composition\composition-status.json
+          --output-dir artifacts\unity-windows-directx-composition\captures
+          --markdown-output artifacts\unity-windows-directx-composition\render-report.md
+
+      - name: Verify Unity DirectX composition log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-directx-composition\unity-player.log
+          --label unity-windows-directx-composition
+          --require "[IMM_UNITY_SMOKE] capture="
+          --output artifacts\unity-windows-directx-composition\unity-composition-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: |
+          $status = "${{ job.status }}"
+          $failureClass = "visual"
+          $compositionStatusPath = "artifacts\unity-windows-directx-composition\composition-status.json"
+          if (Test-Path $compositionStatusPath) {
+            $compositionStatus = Get-Content -Raw $compositionStatusPath | ConvertFrom-Json
+            if ($status -eq "success" -and $compositionStatus.rendering -eq "success" -and $compositionStatus.compositing -eq "expected_failed") {
+              $status = "expected_failed"
+              $failureClass = "compositing"
+            }
+          }
+          python tests\tools\write_ci_manifest.py --status $status --failure-class $failureClass --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts\unity-windows-directx-composition
+
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-directx-composition --require-manifest --output artifacts\unity-windows-directx-composition\artifact-summary.json
+
+      - name: Upload Unity DirectX composition artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsDirectXComposition
+          path: artifacts/unity-windows-directx-composition
+          if-no-files-found: ignore
+          retention-days: 14
+
+  unity-windows-openxr-vr:
+    name: Unity Windows OpenXR VR
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    runs-on: [self-hosted, windows, unity, vr]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Unity OpenXR VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-openxr-vr --output artifacts\unity-windows-openxr-vr\preflight.json --require-env UNITY_EXE
+
+      - name: Run Unity OpenXR VR smoke
+        timeout-minutes: 25
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts\unity-windows-openxr-vr | Out-Null
+          $env:IMM_UNITY_EDITOR_SMOKE_CAPTURE_PATH = (Resolve-Path artifacts\unity-windows-openxr-vr).Path + "\unity-windows-openxr-vr.png"
+          & $env:UNITY_EXE -batchmode -projectPath code\ImmUnitySampleProject -executeMethod ImmPlayer.Editor.BuildAutomation.RunWindowsOpenXREditorPlayModeSmoke -logFile artifacts\unity-windows-openxr-vr\unity-editor.log
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unity OpenXR VR smoke failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Record Unity OpenXR VR metrics
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr.png
+          --json-output artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr-metrics.json
+
+      - name: Write Unity OpenXR VR render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr-metrics.json
+          --candidate-capture artifacts\unity-windows-openxr-vr\unity-windows-openxr-vr.png
+          --output-dir artifacts\unity-windows-openxr-vr\captures
+          --markdown-output artifacts\unity-windows-openxr-vr\render-report.md
+
+      - name: Verify Unity OpenXR VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-openxr-vr\unity-editor.log
+          --label unity-windows-openxr-vr
+          --require "[IMM_UNITY_SMOKE] xr probe passed"
+          --require "[IMM_EDITOR_SMOKE] passed:"
+          --forbid "[IMM_UNITY_SMOKE] xr probe failed"
+          --output artifacts\unity-windows-openxr-vr\unity-openxr-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\unity-windows-openxr-vr\manifest.json --product unity --platform-name windows --mode vr --renderer openxr --include artifacts\unity-windows-openxr-vr
+
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-openxr-vr --require-manifest --output artifacts\unity-windows-openxr-vr\artifact-summary.json
+
+      - name: Upload Unity OpenXR VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsOpenXRVR
+          path: artifacts/unity-windows-openxr-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
+  godot-package-import:
+    name: Godot Package Import
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Godot local verifier
+        env:
+          IMM_GODOT_SKIP_NATIVE_SYNTAX: '1'
+        run: python code/appImmGodotGDExtension/verify_local.py
+
+      - name: Verify Godot package import harness
+        run: >
+          python tests/tools/verify_engine_package_import.py godot
+          --package code/ImmGodotSampleProject
+          --workspace artifacts/GodotPackageImportHarness
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class api --output artifacts/godot-package-import/manifest.json --product godot --platform-name all --mode package-import --renderer preflight --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-package-import --require-manifest --output artifacts/godot-package-import/artifact-summary.json
+
+      - name: Upload Godot package import artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GodotPackageImport
+          path: artifacts/godot-package-import
+          if-no-files-found: ignore
+          retention-days: 14
+
+  engine-evidence-report:
+    name: Engine Evidence Report
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - unity-package-import
+      - unity-windows-directx-player-build
+      - unity-windows-directx-composition
+      - unity-windows-openxr-vr
+      - godot-package-import
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download engine artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/engine-evidence/input
+
+      - name: Verify engine matrix evidence
+        run: >
+          python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --gate-prefix "CI Engine Matrix /"
+          --evidence-root artifacts/engine-evidence/input
+          --json-output artifacts/engine-evidence/matrix-evidence.json
+          --markdown-output artifacts/engine-evidence/matrix-evidence.md
+
+      - name: Write engine visual evidence report
+        if: always()
+        run: >
+          python tests/tools/write_visual_evidence_report.py
+          --input-root artifacts/engine-evidence/input
+          --output-dir artifacts/engine-evidence/view
+          --markdown-output artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
+
+      - name: Write engine aggregate status manifests
+        if: always()
+        run: |
+          mkdir -p artifacts/engine-evidence/view/status-manifests/unity-non-vr
+          unity_status="passed"
+          unity_failure_class=""
+          for result in \
+            "${{ needs.unity-package-import.result }}" \
+            "${{ needs.unity-windows-directx-player-build.result }}" \
+            "${{ needs.unity-windows-directx-composition.result }}"
+          do
+            if [ "$result" = "failure" ]; then
+              unity_status="failed"
+              unity_failure_class="build"
+            elif [ "$result" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
+              unity_status="cancelled"
+              unity_failure_class="build"
+            fi
+          done
+          if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ]; then
+            python tests/tools/write_ci_manifest.py \
+              --status "$unity_status" \
+              --failure-class "$unity_failure_class" \
+              --output artifacts/engine-evidence/view/status-manifests/unity-non-vr/manifest.json \
+              --product unity \
+              --platform-name all \
+              --mode non-vr \
+              --renderer native \
+              --include artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
+          fi
+
+      - name: Upload engine visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineValidationEvidence
+          path: artifacts/engine-evidence/view
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload engine debug artifacts
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineMatrixDebugArtifacts
+          path: artifacts/engine-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Hide per-lane engine artifacts
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name UnityPackageImport
+          --name UnityWindowsDirectXPlayer
+          --name UnityWindowsDirectXPlayerBuildEvidence
+          --name UnityWindowsDirectXComposition
+          --name UnityWindowsOpenXRVR
+          --name GodotPackageImport

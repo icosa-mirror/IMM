@@ -1,0 +1,9 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+config/name="IMM Godot Package Import Harness"
+run/main_scene="res://scenes/package_import_smoke.tscn"
+
+[rendering]
+renderer/rendering_method="forward_plus"

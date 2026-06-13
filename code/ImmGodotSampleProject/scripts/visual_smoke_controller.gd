@@ -12,15 +12,23 @@ const ANDROID_MAX_READY_SECONDS := 30.0
 const SPAWN_AREA_FRAME_WAIT_SECONDS := 2.0
 const RENDER_SETTLE_FRAMES := 30
 const DEFAULT_RELOAD_CYCLES := 1
+const DEFAULT_VISUAL_SMOKE_WIDTH := 1280
+const DEFAULT_VISUAL_SMOKE_HEIGHT := 720
 const MIN_CONTENT_PIXELS := 512
 const MIN_CONTENT_BOUNDS_SIZE := 12
 const MIN_LUMA_RANGE := 0.02
 const MIN_ORIENTATION_LUMA_DELTA := 0.05
+const MIN_SCENE_PROBE_REGION_PIXELS := 64
+const MIN_SCENE_PROBE_DOMINANT_SHARE := 0.35
+const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.12
 const IMM_TICKS_PER_SECOND := 12600
 const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
 const VISUAL_SMOKE_FRAME_RATE := 30
 const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
+const SCENE_FRONT_PROBE_COLOR := Color(1.0, 0.0, 1.0, 1.0)
+const SCENE_REAR_OCCLUDED_PROBE_COLOR := Color(0.0, 1.0, 1.0, 1.0)
+const SCENE_REAR_VISIBLE_PROBE_COLOR := Color(1.0, 1.0, 0.0, 1.0)
 
 @onready var camera: Camera3D = $CameraRig/Camera3D
 @onready var status_label: Label3D = $StatusLabel
@@ -31,6 +39,9 @@ var _world_environment: WorldEnvironment
 var _has_applied_background_color := false
 var _last_background_color := Color.BLACK
 var _interactive_camera_framed := false
+var _front_scene_probe: MeshInstance3D
+var _rear_occluded_scene_probe: MeshInstance3D
+var _rear_visible_scene_probe: MeshInstance3D
 
 func _ready() -> void:
 	if _should_run_visual_smoke():
@@ -84,7 +95,7 @@ func _run_interactive_playback() -> void:
 
 func _setup_extension() -> bool:
 	if not ClassDB.class_exists("ImmViewerCompositorEffect"):
-		var extension_status := GDExtensionManager.load_extension(EXTENSION_PATH)
+		var extension_status: int = GDExtensionManager.load_extension(EXTENSION_PATH)
 		if extension_status != OK and extension_status != ERR_ALREADY_EXISTS:
 			push_error("Failed to load %s: %d" % [EXTENSION_PATH, int(extension_status)])
 			return false
@@ -121,7 +132,7 @@ func _setup_compositor() -> bool:
 		push_error("Failed to instantiate ImmViewerCompositorEffect")
 		return false
 
-	var compositor := Compositor.new()
+	var compositor: Compositor = Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
 	camera.compositor = compositor
 	if _world_environment == null:
@@ -133,6 +144,7 @@ func _setup_compositor() -> bool:
 
 func _run_visual_smoke() -> void:
 	var failures: Array[String] = []
+	await _apply_visual_smoke_viewport_size()
 	status_label.visible = false
 	var prefer_spawn_area := _visual_smoke_prefers_spawn_area()
 
@@ -152,7 +164,7 @@ func _run_visual_smoke() -> void:
 
 	var selected_renderer_api := _selected_renderer_api()
 	var selected_renderer_name := _selected_renderer_name(selected_renderer_api)
-	var forced_player_frame := _get_env_int("IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME", DEFAULT_VISUAL_SMOKE_PLAYER_FRAME)
+	var forced_player_frame: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME", DEFAULT_VISUAL_SMOKE_PLAYER_FRAME)
 	viewer.renderer_api = selected_renderer_api
 	var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
 	if int(backend_diagnostics.get("renderer_api", -1)) != selected_renderer_api:
@@ -175,7 +187,7 @@ func _run_visual_smoke() -> void:
 			failures.append("load_document returned %d" % load_result)
 
 	var sequence_ready: bool = bool(viewer.is_sequence_ready())
-	var max_ready_seconds := _max_ready_seconds()
+	var max_ready_seconds: float = _max_ready_seconds()
 	var ready_deadline_msec: int = Time.get_ticks_msec() + int(max_ready_seconds * 1000.0)
 	while Time.get_ticks_msec() < ready_deadline_msec:
 		if viewer.is_loaded():
@@ -190,7 +202,7 @@ func _run_visual_smoke() -> void:
 			_queue_active_camera()
 		await get_tree().create_timer(0.05).timeout
 
-	var reload_cycles := _get_env_int("IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", DEFAULT_RELOAD_CYCLES)
+	var reload_cycles: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", DEFAULT_RELOAD_CYCLES)
 	if failures.is_empty() and sequence_ready and reload_cycles > 0:
 		sequence_ready = await _exercise_reload_cycles(reload_cycles, failures)
 
@@ -205,6 +217,12 @@ func _run_visual_smoke() -> void:
 				if sequence_ready:
 					_frame_camera_from_document(prefer_spawn_area)
 				_queue_active_camera()
+
+	if sequence_ready:
+		_setup_scene_composition_probe()
+		for _frame in range(6):
+			_queue_active_camera()
+			await get_tree().process_frame
 
 	if not viewer.is_loaded():
 		failures.append("ImmViewer did not load %s" % str(viewer.get("document_path")))
@@ -241,14 +259,16 @@ func _run_visual_smoke() -> void:
 		if int(compositor_diagnostics.get("last_render_result", -1)) < 0:
 			failures.append("ImmGodot_RenderCamera returned %d" % int(compositor_diagnostics.get("last_render_result", -1)))
 
-	var screenshot_path := _get_env_string("IMM_GODOT_VISUAL_SMOKE_PNG", "")
-	var ppm_path := _get_env_string("IMM_GODOT_VISUAL_SMOKE_PPM", "")
+	var screenshot_path: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_PNG", "")
+	var ppm_path: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_PPM", "")
 	if not screenshot_path.is_empty():
 		_apply_background_color()
 		await RenderingServer.frame_post_draw
-		var image := get_viewport().get_texture().get_image()
+		var image: Image = get_viewport().get_texture().get_image()
 		var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
+		var scene_composition_diagnostics := _analyze_scene_composition_pixels(image)
 		print("IMM Godot %s visual smoke content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
+		print("IMM Godot %s visual smoke scene composition diagnostics: %s" % [selected_renderer_name, str(scene_composition_diagnostics)])
 		if float(content_diagnostics.get("luma_range", 0.0)) < MIN_LUMA_RANGE:
 			failures.append("visual smoke PNG was too flat: luma range %.5f" % float(content_diagnostics.get("luma_range", 0.0)))
 		if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
@@ -258,9 +278,13 @@ func _run_visual_smoke() -> void:
 				str(content_diagnostics.get("content_bounds_width", 0)),
 				str(content_diagnostics.get("content_bounds_height", 0)),
 			])
-		var orientation_luma_delta := float(content_diagnostics.get("orientation_luma_delta", 0.0))
+		var orientation_luma_delta: float = float(content_diagnostics.get("orientation_luma_delta", 0.0))
 		if selected_renderer_api == IMM_RENDERER_API_METAL and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
 			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % orientation_luma_delta)
+		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PNG")
+		var screenshot_dir: String = screenshot_path.get_base_dir()
+		if not screenshot_dir.is_empty():
+			DirAccess.make_dir_recursive_absolute(screenshot_dir)
 		var save_result := image.save_png(screenshot_path)
 		if save_result != OK:
 			failures.append("Failed to save visual smoke PNG %s: %d" % [screenshot_path, int(save_result)])
@@ -270,11 +294,14 @@ func _run_visual_smoke() -> void:
 	if not ppm_path.is_empty():
 		_apply_background_color()
 		await RenderingServer.frame_post_draw
-		var image := get_viewport().get_texture().get_image()
+		var image: Image = get_viewport().get_texture().get_image()
 		var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
+		var scene_composition_diagnostics := _analyze_scene_composition_pixels(image)
 		print("IMM Godot %s visual smoke PPM content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
+		print("IMM Godot %s visual smoke PPM scene composition diagnostics: %s" % [selected_renderer_name, str(scene_composition_diagnostics)])
 		if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
 			failures.append("visual smoke PPM had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
+		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PPM")
 		var save_result := _save_ppm(image, ppm_path)
 		if save_result != OK:
 			failures.append("Failed to save visual smoke PPM %s: %d" % [ppm_path, int(save_result)])
@@ -314,10 +341,27 @@ func _queue_active_camera() -> void:
 	var height: int = max(int(viewport_size.y), 1)
 	viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID)
 
+func _apply_visual_smoke_viewport_size() -> void:
+	var width: int = max(_get_env_int("IMM_GODOT_VISUAL_SMOKE_WIDTH", DEFAULT_VISUAL_SMOKE_WIDTH), 1)
+	var height: int = max(_get_env_int("IMM_GODOT_VISUAL_SMOKE_HEIGHT", DEFAULT_VISUAL_SMOKE_HEIGHT), 1)
+	var target_size := Vector2i(width, height)
+	DisplayServer.window_set_size(target_size)
+	var window := get_window()
+	if window != null:
+		window.size = target_size
+	for _frame in range(3):
+		await get_tree().process_frame
+	var actual_size: Vector2 = get_viewport().get_visible_rect().size
+	print("IMM Godot %s visual smoke viewport size requested=%s actual=%s" % [
+		_selected_renderer_name(),
+		str(target_size),
+		str(actual_size),
+	])
+
 func _apply_forced_player_frame(player_frame: int) -> void:
 	if player_frame < 0:
 		return
-	var ticks_per_frame := IMM_TICKS_PER_SECOND / VISUAL_SMOKE_FRAME_RATE
+	var ticks_per_frame: int = IMM_TICKS_PER_SECOND / VISUAL_SMOKE_FRAME_RATE
 	viewer.set_time(int(player_frame * ticks_per_frame), 0)
 
 func _frame_interactive_camera() -> bool:
@@ -333,7 +377,7 @@ func _frame_camera_from_spawn_area() -> bool:
 	var spawn_info: Dictionary = viewer.get_active_spawn_area_info()
 	if spawn_info.is_empty():
 		return false
-	var spawn_transform := _spawn_area_transform_from_info(spawn_info)
+	var spawn_transform: Transform3D = _spawn_area_transform_from_info(spawn_info)
 	camera.global_transform = spawn_transform
 	camera.near = 0.01
 	camera.far = 10000.0
@@ -346,9 +390,9 @@ func _frame_camera_from_spawn_area() -> bool:
 	return true
 
 func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
-	var stayed_ready := true
+	var stayed_ready: bool = true
 	for cycle_index in range(cycle_count):
-		var selected_renderer_name := _selected_renderer_name()
+		var selected_renderer_name: String = _selected_renderer_name()
 		viewer.unload_document()
 		await get_tree().process_frame
 		if viewer.is_loaded():
@@ -364,8 +408,8 @@ func _exercise_reload_cycles(cycle_count: int, failures: Array[String]) -> bool:
 			stayed_ready = false
 			continue
 
-		var ready := false
-		var max_ready_seconds := _max_ready_seconds()
+		var ready: bool = false
+		var max_ready_seconds: float = _max_ready_seconds()
 		var ready_deadline_msec: int = Time.get_ticks_msec() + int(max_ready_seconds * 1000.0)
 		while Time.get_ticks_msec() < ready_deadline_msec:
 			if viewer.is_loaded():
@@ -451,7 +495,7 @@ func _select_visual_smoke_spawn_area() -> void:
 
 func _spawn_area_transform_from_info(info: Dictionary) -> Transform3D:
 	var transform: Dictionary = info.get("transform", {})
-	var basis := Basis(
+	var basis: Basis = Basis(
 		transform.get("basis_x", Vector3.RIGHT),
 		transform.get("basis_y", Vector3.UP),
 		transform.get("basis_z", Vector3.BACK)
@@ -461,28 +505,186 @@ func _spawn_area_transform_from_info(info: Dictionary) -> Transform3D:
 func _native_point_to_godot(point: Vector3) -> Vector3:
 	return Vector3(point.x, point.y, -point.z)
 
+func _setup_scene_composition_probe() -> void:
+	if _front_scene_probe != null and _rear_occluded_scene_probe != null and _rear_visible_scene_probe != null:
+		return
+	if viewer == null or not viewer.is_sequence_ready():
+		return
+
+	var bounds: Dictionary = viewer.get_bounding_box()
+	if bounds.is_empty():
+		return
+
+	var center: Vector3 = _native_point_to_godot(bounds.get("center", Vector3.ZERO))
+	var size: Vector3 = bounds.get("size", Vector3.ONE)
+	var radius: float = max(max(size.x, size.y), size.z) * 0.5
+	if radius <= 0.001:
+		radius = 1.0
+
+	var forward: Vector3 = (center - camera.global_position).normalized()
+	if forward.length() <= 0.001:
+		forward = -camera.global_transform.basis.z.normalized()
+	var right: Vector3 = camera.global_transform.basis.x.normalized()
+	var probe_size: float = maxf(radius * 0.22, 0.28)
+	var probe_depth: float = maxf(radius * 0.035, 0.035)
+
+	_front_scene_probe = _create_scene_probe("IMMSceneFrontOccluderProbe", SCENE_FRONT_PROBE_COLOR, Vector3(probe_size, probe_size, probe_depth))
+	add_child(_front_scene_probe)
+	_front_scene_probe.global_position = center - forward * max(radius * 0.20, 0.28) - right * max(radius * 0.18, 0.22)
+	_front_scene_probe.look_at(camera.global_position, Vector3.UP)
+
+	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(probe_size * 1.35, probe_size * 1.35, probe_depth))
+	add_child(_rear_occluded_scene_probe)
+	_rear_occluded_scene_probe.global_position = center + forward * max(radius * 0.28, 0.35)
+	_rear_occluded_scene_probe.look_at(camera.global_position, Vector3.UP)
+
+	_rear_visible_scene_probe = _create_scene_probe("IMMSceneRearVisibleProbe", SCENE_REAR_VISIBLE_PROBE_COLOR, Vector3(probe_size * 1.15, probe_size * 1.15, probe_depth))
+	add_child(_rear_visible_scene_probe)
+	_rear_visible_scene_probe.global_position = center + forward * max(radius * 0.18, 0.28) + right * max(radius * 0.68, 0.75)
+	_rear_visible_scene_probe.look_at(camera.global_position, Vector3.UP)
+	print("IMM Godot %s visual smoke scene composition probes: front=%s rear_occluded=%s rear_visible=%s size=%.3f" % [
+		_selected_renderer_name(),
+		str(_front_scene_probe.global_position),
+		str(_rear_occluded_scene_probe.global_position),
+		str(_rear_visible_scene_probe.global_position),
+		probe_size,
+	])
+
+func _create_scene_probe(name: String, color: Color, size: Vector3) -> MeshInstance3D:
+	var mesh: BoxMesh = BoxMesh.new()
+	mesh.size = size
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = color
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var probe: MeshInstance3D = MeshInstance3D.new()
+	probe.name = name
+	probe.mesh = mesh
+	probe.material_override = material
+	probe.set_meta("imm_probe_half_extents", size * 0.5)
+	return probe
+
+func _analyze_scene_composition_pixels(image: Image) -> Dictionary:
+	var front: Dictionary = _analyze_scene_probe_region(image, _front_scene_probe, SCENE_FRONT_PROBE_COLOR)
+	var rear_visible: Dictionary = _analyze_scene_probe_region(image, _rear_visible_scene_probe, SCENE_REAR_VISIBLE_PROBE_COLOR)
+	var rear_occluded: Dictionary = _analyze_scene_probe_region(image, _rear_occluded_scene_probe, SCENE_REAR_OCCLUDED_PROBE_COLOR)
+	return {
+		"front_probe": front,
+		"rear_visible_probe": rear_visible,
+		"rear_occluded_probe": rear_occluded,
+		"minimum_region_pixels": MIN_SCENE_PROBE_REGION_PIXELS,
+		"minimum_dominant_share": MIN_SCENE_PROBE_DOMINANT_SHARE,
+		"maximum_occluded_share": MAX_SCENE_PROBE_OCCLUDED_SHARE,
+	}
+
+func _append_scene_composition_failures(diagnostics: Dictionary, failures: Array[String], label: String) -> void:
+	var front: Dictionary = diagnostics.get("front_probe", {})
+	var rear_visible: Dictionary = diagnostics.get("rear_visible_probe", {})
+	var rear_occluded: Dictionary = diagnostics.get("rear_occluded_probe", {})
+	if int(front.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(front.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
+		failures.append("scene composition %s front occluder probe failed: %s" % [label, str(front)])
+	if int(rear_visible.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_visible.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
+		failures.append("scene composition %s rear visible probe failed: %s" % [label, str(rear_visible)])
+	if int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) > MAX_SCENE_PROBE_OCCLUDED_SHARE:
+		failures.append("scene composition %s rear occlusion leakage probe failed: %s" % [label, str(rear_occluded)])
+
+func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Color) -> Dictionary:
+	if probe == null:
+		return {
+			"name": "missing",
+			"total_pixels": 0,
+			"target_pixels": 0,
+			"target_share": 0.0,
+			"rect": Rect2i(),
+		}
+
+	var rect: Rect2i = _project_probe_rect(image, probe)
+	var total_pixels: int = 0
+	var target_pixels: int = 0
+	if rect.size.x > 0 and rect.size.y > 0:
+		for y in range(rect.position.y, rect.position.y + rect.size.y):
+			for x in range(rect.position.x, rect.position.x + rect.size.x):
+				total_pixels += 1
+				if _color_near(image.get_pixel(x, y), target):
+					target_pixels += 1
+	var target_share: float = float(target_pixels) / float(maxi(total_pixels, 1))
+	return {
+		"name": probe.name,
+		"total_pixels": total_pixels,
+		"target_pixels": target_pixels,
+		"target_share": target_share,
+		"rect": rect,
+	}
+
+func _project_probe_rect(image: Image, probe: MeshInstance3D) -> Rect2i:
+	var half_extents: Vector3 = probe.get_meta("imm_probe_half_extents", Vector3.ONE * 0.5)
+	var basis: Basis = probe.global_transform.basis
+	var center: Vector3 = probe.global_position
+	var corners: Array[Vector3] = [
+		center + basis.x * -half_extents.x + basis.y * -half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * -half_extents.x + basis.y * -half_extents.y + basis.z * half_extents.z,
+		center + basis.x * -half_extents.x + basis.y * half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * -half_extents.x + basis.y * half_extents.y + basis.z * half_extents.z,
+		center + basis.x * half_extents.x + basis.y * -half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * half_extents.x + basis.y * -half_extents.y + basis.z * half_extents.z,
+		center + basis.x * half_extents.x + basis.y * half_extents.y + basis.z * -half_extents.z,
+		center + basis.x * half_extents.x + basis.y * half_extents.y + basis.z * half_extents.z,
+	]
+	var min_x: int = image.get_width()
+	var min_y: int = image.get_height()
+	var max_x: int = -1
+	var max_y: int = -1
+	for world_corner in corners:
+		if camera.is_position_behind(world_corner):
+			continue
+		var screen: Vector2 = camera.unproject_position(world_corner)
+		min_x = min(min_x, int(floor(screen.x)))
+		min_y = min(min_y, int(floor(screen.y)))
+		max_x = max(max_x, int(ceil(screen.x)))
+		max_y = max(max_y, int(ceil(screen.y)))
+	if max_x < min_x or max_y < min_y:
+		return Rect2i()
+
+	var inset: int = 3
+	min_x = clampi(min_x + inset, 0, image.get_width() - 1)
+	max_x = clampi(max_x - inset, 0, image.get_width() - 1)
+	min_y = clampi(min_y + inset, 0, image.get_height() - 1)
+	max_y = clampi(max_y - inset, 0, image.get_height() - 1)
+	if max_x < min_x or max_y < min_y:
+		return Rect2i()
+	return Rect2i(min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+
+func _color_near(value: Color, target: Color) -> bool:
+	if target.r > 0.5 and target.g < 0.5 and target.b > 0.5:
+		return value.r > value.g + 0.12 and value.b > value.g + 0.12 and maxf(value.r, value.b) > 0.25
+	if target.r < 0.5 and target.g > 0.5 and target.b > 0.5:
+		return value.g > value.r + 0.12 and value.b > value.r + 0.12 and maxf(value.g, value.b) > 0.25
+	if target.r > 0.5 and target.g > 0.5 and target.b < 0.5:
+		return value.r > value.b + 0.12 and value.g > value.b + 0.12 and maxf(value.r, value.g) > 0.25
+	return absf(value.r - target.r) <= 0.20 and absf(value.g - target.g) <= 0.20 and absf(value.b - target.b) <= 0.20
+
 func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
-	var width := image.get_width()
-	var height := image.get_height()
-	var background_rgb := Vector3(background.r, background.g, background.b)
-	var content_pixels := 0
-	var min_x := width
-	var min_y := height
-	var max_x := -1
-	var max_y := -1
-	var min_luma := 1.0
-	var max_luma := 0.0
-	var upper_luma_sum := 0.0
-	var upper_luma_count := 0
-	var lower_luma_sum := 0.0
-	var lower_luma_count := 0
+	var width: int = image.get_width()
+	var height: int = image.get_height()
+	var background_rgb: Vector3 = Vector3(background.r, background.g, background.b)
+	var content_pixels: int = 0
+	var min_x: int = width
+	var min_y: int = height
+	var max_x: int = -1
+	var max_y: int = -1
+	var min_luma: float = 1.0
+	var max_luma: float = 0.0
+	var upper_luma_sum: float = 0.0
+	var upper_luma_count: int = 0
+	var lower_luma_sum: float = 0.0
+	var lower_luma_count: int = 0
 
 	for y in range(height):
 		for x in range(width):
-			var color := image.get_pixel(x, y)
-			var rgb := Vector3(color.r, color.g, color.b)
-			var distance := (rgb - background_rgb).length()
-			var luma := color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+			var color: Color = image.get_pixel(x, y)
+			var rgb: Vector3 = Vector3(color.r, color.g, color.b)
+			var distance: float = (rgb - background_rgb).length()
+			var luma: float = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
 			min_luma = min(min_luma, luma)
 			max_luma = max(max_luma, luma)
 			if distance > 0.08:
@@ -493,15 +695,15 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 				max_y = max(max_y, y)
 
 	if content_pixels > 0:
-		var split_y := int(floor(float(min_y + max_y) * 0.5))
+		var split_y: int = int(floor(float(min_y + max_y) * 0.5))
 		for y in range(min_y, max_y + 1):
 			for x in range(min_x, max_x + 1):
-				var color := image.get_pixel(x, y)
-				var rgb := Vector3(color.r, color.g, color.b)
-				var distance := (rgb - background_rgb).length()
+				var color: Color = image.get_pixel(x, y)
+				var rgb: Vector3 = Vector3(color.r, color.g, color.b)
+				var distance: float = (rgb - background_rgb).length()
 				if distance <= 0.08:
 					continue
-				var luma := color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
+				var luma: float = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722
 				if y <= split_y:
 					upper_luma_sum += luma
 					upper_luma_count += 1
@@ -509,8 +711,8 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 					lower_luma_sum += luma
 					lower_luma_count += 1
 
-	var upper_content_luma := upper_luma_sum / float(max(upper_luma_count, 1))
-	var lower_content_luma := lower_luma_sum / float(max(lower_luma_count, 1))
+	var upper_content_luma: float = upper_luma_sum / float(maxi(upper_luma_count, 1))
+	var lower_content_luma: float = lower_luma_sum / float(maxi(lower_luma_count, 1))
 
 	return {
 		"width": width,
@@ -529,13 +731,13 @@ func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 	}
 
 func _save_ppm(image: Image, path: String) -> int:
-	var file := FileAccess.open(path, FileAccess.WRITE)
+	var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
 	file.store_buffer(("P6\n%d %d\n255\n" % [image.get_width(), image.get_height()]).to_ascii_buffer())
 	for y in range(image.get_height()):
 		for x in range(image.get_width()):
-			var color := image.get_pixel(x, y)
+			var color: Color = image.get_pixel(x, y)
 			file.store_8(clampi(int(round(color.r * 255.0)), 0, 255))
 			file.store_8(clampi(int(round(color.g * 255.0)), 0, 255))
 			file.store_8(clampi(int(round(color.b * 255.0)), 0, 255))
@@ -549,13 +751,13 @@ func _update_status(message: String) -> void:
 	]
 
 func _selected_renderer_api() -> int:
-	var requested_api := _get_env_int("IMM_GODOT_VISUAL_RENDERER_API", -1)
+	var requested_api: int = _get_env_int("IMM_GODOT_VISUAL_RENDERER_API", -1)
 	if requested_api >= 0:
 		return requested_api
 	return IMM_RENDERER_API_METAL if OS.get_name() == "macOS" else IMM_RENDERER_API_VULKAN
 
 func _selected_renderer_name(renderer_api: int = -1) -> String:
-	var api := renderer_api if renderer_api >= 0 else _selected_renderer_api()
+	var api: int = renderer_api if renderer_api >= 0 else _selected_renderer_api()
 	if api == IMM_RENDERER_API_VULKAN:
 		return "Vulkan"
 	if api == IMM_RENDERER_API_METAL:
@@ -571,7 +773,7 @@ func _max_ready_seconds() -> float:
 	return ANDROID_MAX_READY_SECONDS if OS.get_name() == "Android" else MAX_READY_SECONDS
 
 func _prepare_android_sample_document() -> String:
-	var source_file := FileAccess.open(ANDROID_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
+	var source_file: FileAccess = FileAccess.open(ANDROID_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
 	if source_file == null:
 		push_error("Failed to open Android sample document %s: %s" % [
 			ANDROID_SAMPLE_DOCUMENT_PATH,
@@ -579,8 +781,8 @@ func _prepare_android_sample_document() -> String:
 		])
 		return ANDROID_SAMPLE_DOCUMENT_PATH
 
-	var data := source_file.get_buffer(source_file.get_length())
-	var target_file := FileAccess.open(ANDROID_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
+	var data: PackedByteArray = source_file.get_buffer(source_file.get_length())
+	var target_file: FileAccess = FileAccess.open(ANDROID_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
 	if target_file == null:
 		push_error("Failed to create Android sample document %s: %s" % [
 			ANDROID_USER_SAMPLE_DOCUMENT_PATH,
@@ -598,7 +800,7 @@ func _should_run_visual_smoke() -> bool:
 	return OS.get_cmdline_args().has("--imm-godot-visual-smoke")
 
 func _get_env_int(name: String, default_value: int) -> int:
-	var value := _get_env_string(name, "")
+	var value: String = _get_env_string(name, "")
 	if value.is_empty():
 		return default_value
 	if not value.is_valid_int():
@@ -606,10 +808,10 @@ func _get_env_int(name: String, default_value: int) -> int:
 	return max(int(value), 0)
 
 func _get_env_string(name: String, default_value: String) -> String:
-	var value := OS.get_environment(name)
+	var value: String = OS.get_environment(name)
 	if value.is_empty():
 		for argument in OS.get_cmdline_args():
-			var prefix := "--%s=" % name.to_lower().replace("_", "-")
+			var prefix: String = "--%s=" % name.to_lower().replace("_", "-")
 			if argument.begins_with(prefix):
 				value = argument.substr(prefix.length())
 				break

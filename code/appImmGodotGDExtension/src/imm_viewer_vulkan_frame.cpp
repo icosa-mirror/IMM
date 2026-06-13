@@ -12,6 +12,9 @@ namespace godot
                                                uint64_t color_image_handle,
                                                uint64_t color_image_view_handle,
                                                uint32_t color_format,
+                                               uint64_t depth_image_handle,
+                                               uint64_t depth_image_view_handle,
+                                               uint32_t depth_format,
                                                int width,
                                                int height)
     {
@@ -25,6 +28,9 @@ namespace godot
         frame.colorImage = reinterpret_cast<void *>(color_image_handle);
         frame.colorImageView = reinterpret_cast<void *>(color_image_view_handle);
         frame.colorFormat = color_format;
+        frame.depthImage = reinterpret_cast<void *>(depth_image_handle);
+        frame.depthImageView = reinterpret_cast<void *>(depth_image_view_handle);
+        frame.depthFormat = depth_format;
         frame.width = width;
         frame.height = height;
         return ImmGodot_BeginVulkanFrame(&frame) == 0;

@@ -1,0 +1,314 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Core Matrix
+
+on:
+  workflow_call:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  baseline-content:
+    name: Baseline Content
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify sample1 IMM baseline
+        run: |
+          python tests/tools/verify_imm_baseline.py \
+            exampleImmFiles/sample1.imm \
+            --baseline tests/baselines/content/sample1.json \
+            --write-actual artifacts/baseline-content/sample1.actual.json
+
+      - name: Write baseline drift report
+        if: always()
+        run: >
+          python tests/tools/write_baseline_drift_report.py
+          --expected tests/baselines/content/sample1.json
+          --actual artifacts/baseline-content/sample1.actual.json
+          --json-output artifacts/baseline-content/baseline-drift.json
+          --markdown-output artifacts/baseline-content/baseline-drift.md
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
+            --failure-class content-parse \
+            --output artifacts/baseline-content/manifest.json \
+            --product baseline \
+            --platform-name all \
+            --mode content \
+            --renderer none \
+            --include exampleImmFiles/sample1.imm \
+            --include tests/baselines/content/sample1.json
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/baseline-content --require-manifest --output artifacts/baseline-content/artifact-summary.json
+
+      - name: Upload baseline artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaselineContent-sample1
+          path: artifacts/baseline-content
+          if-no-files-found: ignore
+          retention-days: 14
+
+  package-source-layout:
+    name: Package Source Layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify Unity stroke reader package source
+        run: |
+          python tests/tools/verify_package_layout.py unity \
+            code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader \
+            --expected-name com.immersive-foundation.imm-stroke-reader
+
+      - name: Verify Unity player package source
+        run: |
+          python tests/tools/verify_package_layout.py unity \
+            code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity \
+            --expected-name com.immersive-foundation.imm-unity
+
+      - name: Verify Unity source import harness
+        run: >
+          python tests/tools/verify_engine_package_import.py unity
+          --stroke-package code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader
+          --player-package code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity
+          --workspace artifacts/UnitySourceImportHarness
+
+      - name: Verify Godot addon source manifest
+        run: |
+          test -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          test -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd
+          grep -q 'compatibility_minimum="4.5"' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          grep -q 'windows.release.x86_64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          grep -q 'macos.release.arm64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+          grep -q 'android.debug.arm64' code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Verify Godot source import harness
+        run: >
+          python tests/tools/verify_engine_package_import.py godot
+          --package code/ImmGodotSampleProject
+          --workspace artifacts/GodotSourceImportHarness
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          mkdir -p artifacts/package-source-layout
+          python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
+            --failure-class packaging \
+            --output artifacts/package-source-layout/manifest.json \
+            --product packages \
+            --platform-name all \
+            --mode source-layout \
+            --renderer native \
+            --include code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/package.json \
+            --include code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/package.json \
+            --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/package-source-layout --require-manifest --output artifacts/package-source-layout/artifact-summary.json
+
+      - name: Upload package layout artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PackageSourceLayout
+          path: artifacts/package-source-layout
+          if-no-files-found: ignore
+          retention-days: 14
+
+  matrix-status:
+    name: Matrix Status
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Verify matrix status coverage
+        run: python tests/tools/verify_matrix_status.py tests/matrix_status.json
+
+      - name: Verify workflow matrix wiring
+        run: python tests/tools/verify_workflow_matrix.py
+
+      - name: Write matrix audit report
+        run: >
+          python tests/tools/write_matrix_audit_report.py tests/matrix_status.json
+          --json-output artifacts/matrix-status/matrix-audit.json
+          --markdown-output artifacts/matrix-status/matrix-audit.md
+
+      - name: Run CI tool self-tests
+        run: |
+          python tests/tools/test_collect_ci_artifacts.py
+          python tests/tools/test_write_baseline_drift_report.py
+          python tests/tools/test_compare_render_metrics.py
+          python tests/tools/test_write_render_report.py
+          python tests/tools/test_preflight_runner.py
+          python tests/tools/test_run_firebase_test_lab_android.py
+          python tests/tools/test_verify_release_assets.py
+          python tests/tools/test_verify_log_markers.py
+          python tests/tools/test_verify_matrix_evidence.py
+          python tests/tools/test_write_matrix_audit_report.py
+          python tests/tools/test_write_ci_manifest.py
+          python tests/tools/test_verify_matrix_status.py
+          python tests/tools/test_composition_probe_contracts.py
+          python tests/tools/test_vr_probe_contracts.py
+          python tests/tools/test_standalone_openxr_vr_contracts.py
+          python tests/tools/test_android_quest_vr_contracts.py
+          python tests/tools/test_godot_openxr_vr_contracts.py
+          python tests/tools/test_standalone_opengl_vr_contracts.py
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
+            --failure-class release-validation \
+            --output artifacts/matrix-status/manifest.json \
+            --product matrix \
+            --platform-name all \
+            --mode status \
+            --renderer none \
+            --include tests/matrix_status.json \
+            --include artifacts/matrix-status/matrix-audit.json \
+            --include artifacts/matrix-status/matrix-audit.md \
+            --include AUTOMATED_TESTING_MATRIX_PLAN.md
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/matrix-status --require-manifest --output artifacts/matrix-status/artifact-summary.json
+
+      - name: Upload matrix status artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MatrixStatus
+          path: artifacts/matrix-status
+          if-no-files-found: ignore
+          retention-days: 14
+
+  godot-local-verifier:
+    name: Godot Local Verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Run Godot local verifier
+        env:
+          IMM_GODOT_SKIP_NATIVE_SYNTAX: '1'
+        run: python code/appImmGodotGDExtension/verify_local.py
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          python tests/tools/write_ci_manifest.py \
+            --status "${{ job.status }}" \
+            --failure-class api \
+            --output artifacts/godot-local-verifier/manifest.json \
+            --product godot \
+            --platform-name all \
+            --mode local-verifier \
+            --renderer preflight \
+            --include code/appImmGodotGDExtension/verify_local.py \
+            --include code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-local-verifier --require-manifest --output artifacts/godot-local-verifier/artifact-summary.json
+
+      - name: Upload Godot verifier artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GodotLocalVerifier
+          path: artifacts/godot-local-verifier
+          if-no-files-found: ignore
+          retention-days: 14
+
+  core-evidence-report:
+    name: Core Evidence Report
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - baseline-content
+      - package-source-layout
+      - matrix-status
+      - godot-local-verifier
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download core artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/core-evidence/input
+
+      - name: Verify core matrix evidence
+        run: >
+          python tests/tools/collect_ci_artifacts.py
+          --artifact-dir artifacts/core-evidence/input/BaselineContent-sample1
+          --artifact-dir artifacts/core-evidence/input/PackageSourceLayout
+          --artifact-dir artifacts/core-evidence/input/MatrixStatus
+          --artifact-dir artifacts/core-evidence/input/GodotLocalVerifier
+          --require-manifest
+          --output artifacts/core-evidence/artifact-summary.json
+
+      - name: Upload core evidence report
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreMatrixEvidence
+          path: artifacts/core-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Hide per-lane core artifacts
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name BaselineContent-sample1
+          --name PackageSourceLayout
+          --name MatrixStatus
+          --name GodotLocalVerifier

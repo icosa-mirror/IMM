@@ -996,6 +996,20 @@ static uint8_t iFloatToByte(float value)
     return (uint8_t)(value * 255.0f + 0.5f);
 }
 
+static uint8_t iLinearFloatToSrgbByte(float value)
+{
+    if (value <= 0.0f)
+    {
+        return 0;
+    }
+    if (value >= 1.0f)
+    {
+        return 255;
+    }
+    const float encoded = value < 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+    return iFloatToByte(encoded);
+}
+
 static bool iPathHasExtension(const char *path, const char *extension)
 {
     if (!path || !extension)
@@ -1029,23 +1043,24 @@ static bool iPathHasExtension(const char *path, const char *extension)
     return true;
 }
 
-static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int width, int height)
+static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     for (int y = 0; y < height; ++y)
     {
-        const uint32_t *srcRow = pixels + (size_t)y * (size_t)width;
+        const int srcY = flipVertical ? (height - 1 - y) : y;
+        const uint32_t *srcRow = pixels + (size_t)srcY * (size_t)width;
         uint8_t *dstRow = dstRGB + (size_t)y * (size_t)width * 3u;
         for (int x = 0; x < width; ++x)
         {
             const uint32_t pixel = srcRow[x];
-            dstRow[3 * x + 0] = iFloatToByte(iDecodeUnsignedFloat(pixel & 0x7ffu, 6));
-            dstRow[3 * x + 1] = iFloatToByte(iDecodeUnsignedFloat((pixel >> 11u) & 0x7ffu, 6));
-            dstRow[3 * x + 2] = iFloatToByte(iDecodeUnsignedFloat((pixel >> 22u) & 0x3ffu, 5));
+            dstRow[3 * x + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(pixel & 0x7ffu, 6));
+            dstRow[3 * x + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((pixel >> 11u) & 0x7ffu, 6));
+            dstRow[3 * x + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((pixel >> 22u) & 0x3ffu, 5));
         }
     }
 }
 
-static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (!path || !path[0] || !pixels || width <= 0 || height <= 0)
     {
@@ -1065,7 +1080,7 @@ static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width
         fclose(file);
         return false;
     }
-    iDecodeRG11B10Pixels(rgb, pixels, width, height);
+    iDecodeRG11B10Pixels(rgb, pixels, width, height, flipVertical);
     const bool ok = fwrite(rgb, 3u, (size_t)width * (size_t)height, file) == (size_t)width * (size_t)height;
     free(rgb);
 
@@ -1073,7 +1088,7 @@ static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width
     return ok;
 }
 
-static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (!path || !path[0] || !pixels || width <= 0 || height <= 0)
     {
@@ -1085,7 +1100,7 @@ static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width
     {
         return false;
     }
-    iDecodeRG11B10Pixels(rgb, pixels, width, height);
+    iDecodeRG11B10Pixels(rgb, pixels, width, height, flipVertical);
 
     wchar_t *widePath = pistr2ws(path);
     if (!widePath)
@@ -1103,13 +1118,13 @@ static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width
     return ok;
 }
 
-static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (iPathHasExtension(path, ".png"))
     {
-        return iWriteRG11B10PNG(path, pixels, width, height);
+        return iWriteRG11B10PNG(path, pixels, width, height, flipVertical);
     }
-    return iWriteRG11B10PPM(path, pixels, width, height);
+    return iWriteRG11B10PPM(path, pixels, width, height, flipVertical);
 }
 
 static bool iFileExistsUtf8(const char *path)
@@ -1421,6 +1436,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mSettings.End();
             return false;
         }
+        mLog.Printf(LT_MESSAGE,
+                    L"IMM_LEGACY_VR_SMOKE hmd_initialized type=%d renderSize=%dx%d pixelDensity=%.3f",
+                    static_cast<int>(mHMD->mType),
+                    mHMD->mInfo.mVRXres,
+                    mHMD->mInfo.mVRYres,
+                    pd);
         mStereoMode = ImmPlayer::StereoMode::Preferred;
         mRenderSize = ivec2(mHMD->mInfo.mVRXres, mHMD->mInfo.mVRYres);
 
@@ -1631,11 +1652,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     const int vpmult = (mStereoMode == ImmPlayer::StereoMode::Preferred) ? 2 : 1;
+    const int renderSamples = validationRequested ? 1 : AA;
 
     if (mRenderer->GetAPI() != piRenderer::API::DX)
     {
-        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
+        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
+        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
         mLog.Printf(LT_MESSAGE, L"Creating render textures (%d x %d)", mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample);
         mColorTextureM = mRenderer->CreateTexture(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0);
         if (!mColorTextureM)
@@ -1652,8 +1674,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     }
     else
     {
-        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
+        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
+        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
         //const piRenderer::TextureInfo2 infozm = { piRenderer::TextureType::T2D, piRenderer::Format::D1_32_FLOAT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
         mColorTextureM = mRenderer->CreateTexture2(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 1 + 2);
         if (!mColorTextureM)
@@ -1683,7 +1705,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     mLog.Printf(LT_MESSAGE, L"Initializing resolve");
-    if (!mResolve.Init(mRenderer, mSuperSample, AA, Resolve::OutputEncoding::DisplaySrgb))
+    if (!mResolve.Init(mRenderer, mSuperSample, renderSamples, Resolve::OutputEncoding::DisplaySrgb))
     {
         mLog.Printf(LT_ERROR, L"Resolve init failed");
         mSettings.End();
@@ -1709,6 +1731,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     float renderFps = 0.0;
     int totalFrames = 0;
     int done = 0;
+    bool loggedLegacyVrSmokeFrameSubmitted = false;
     bool doSave = true;
     double oldTime;
     bool enabled = true;
@@ -1906,6 +1929,18 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mRenderer->DettachShader();
 
             mHMD->EndFrame();
+            if (!loggedLegacyVrSmokeFrameSubmitted)
+            {
+                loggedLegacyVrSmokeFrameSubmitted = true;
+                mLog.Printf(LT_MESSAGE,
+                            L"IMM_LEGACY_VR_SMOKE frame_submitted frame=%d stereoMode=%d renderSize=%dx%d tid0=%d tid1=%d",
+                            frameid,
+                            static_cast<int>(mStereoMode),
+                            mRenderSize.x,
+                            mRenderSize.y,
+                            tid[0],
+                            tid[1]);
+            }
 
             mRenderer->SwapBuffers();
         }
@@ -2036,7 +2071,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 #endif
                                     free(wideCapturePath);
                                 }
-                                if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y))
+                                const bool flipValidationCapture = mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES;
+                                if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y, flipValidationCapture))
                                 {
                                     if (iFileExistsUtf8(validationCapturePath))
                                     {

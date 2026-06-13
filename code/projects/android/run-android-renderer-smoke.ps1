@@ -30,6 +30,8 @@ function Resolve-Adb([string]$Requested) {
         return (Resolve-Path $Requested).Path
     }
 
+    $adbExecutable = if ($IsWindows) { "adb.exe" } else { "adb" }
+
     $cmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($cmd) {
         return $cmd.Source
@@ -39,8 +41,8 @@ function Resolve-Adb([string]$Requested) {
     if (Test-Path $localProperties) {
         $sdkLine = Get-Content $localProperties | Where-Object { $_ -match "^sdk\.dir=" } | Select-Object -First 1
         if ($sdkLine) {
-            $sdkDir = ($sdkLine -replace "^sdk\.dir=", "").Replace("\\", "\")
-            $candidate = Join-Path $sdkDir "platform-tools\adb.exe"
+            $sdkDir = ($sdkLine -replace "^sdk\.dir=", "").Replace("\\", [IO.Path]::DirectorySeparatorChar)
+            $candidate = Join-Path $sdkDir (Join-Path "platform-tools" $adbExecutable)
             if (Test-Path $candidate) {
                 return (Resolve-Path $candidate).Path
             }
@@ -48,7 +50,7 @@ function Resolve-Adb([string]$Requested) {
     }
 
     if ($env:ANDROID_SDK_ROOT) {
-        $candidate = Join-Path $env:ANDROID_SDK_ROOT "platform-tools\adb.exe"
+        $candidate = Join-Path $env:ANDROID_SDK_ROOT (Join-Path "platform-tools" $adbExecutable)
         if (Test-Path $candidate) {
             return (Resolve-Path $candidate).Path
         }
@@ -90,12 +92,13 @@ if (-not $LogDir) {
 
 $adbPath = Resolve-Adb $Adb
 $logDirectory = (New-Item -ItemType Directory -Force $LogDir).FullName
-$apk = Join-Path $PSScriptRoot "appImmViewer\$BuildDir\outputs\apk\debug\appImmViewer-debug.apk"
+$apk = Join-Path $PSScriptRoot (Join-Path "appImmViewer" $BuildDir "outputs" "apk" "debug" "appImmViewer-debug.apk")
+$gradleWrapper = if ($IsWindows) { ".\gradlew.bat" } else { "./gradlew" }
 
 if (-not $SkipBuild) {
     Push-Location $PSScriptRoot
     try {
-        & .\gradlew.bat :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug -PimmNonVr=ON "-PimmRendererApi=$RendererApi" "-PimmBuildDir=$BuildDir"
+        & $gradleWrapper :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug -PimmNonVr=ON "-PimmRendererApi=$RendererApi" "-PimmBuildDir=$BuildDir"
         if ($LASTEXITCODE -ne 0) {
             throw "Android $RendererApi APK build failed with exit code $LASTEXITCODE"
         }
@@ -135,11 +138,19 @@ $logPath = Join-Path $logDirectory "logcat.txt"
 $pidPath = Join-Path $logDirectory "pidof_after.txt"
 $activityPath = Join-Path $logDirectory "activity_after.txt"
 $powerPath = Join-Path $logDirectory "power_after.txt"
+$screencapPath = Join-Path $logDirectory "screencap_after.png"
+$deviceScreencapPath = "/sdcard/imm_$($RendererApi.ToLowerInvariant())_smoke_screencap.png"
 
 & $adbPath logcat -d | Out-File -FilePath $logPath -Encoding utf8
 & $adbPath shell pidof org.linuxfoundation.imm.player | Out-File -FilePath $pidPath -Encoding utf8
 & $adbPath shell dumpsys activity activities | Out-File -FilePath $activityPath -Encoding utf8
 & $adbPath shell dumpsys power | Out-File -FilePath $powerPath -Encoding utf8
+& $adbPath shell screencap -p $deviceScreencapPath | Out-Null
+& $adbPath pull $deviceScreencapPath $screencapPath | Out-Null
+& $adbPath shell rm $deviceScreencapPath | Out-Null
+if (-not (Test-Path $screencapPath) -or (Get-Item $screencapPath).Length -le 0) {
+    throw "Android $RendererApi smoke screenshot was not captured: $screencapPath"
+}
 
 $log = Get-Content $logPath -Raw
 $activityText = Get-Content $activityPath -Raw
@@ -193,3 +204,4 @@ foreach ($marker in $forbiddenMarkers) {
 Write-Host "Android $RendererApi smoke passed"
 Write-Host "Log: $logPath"
 Write-Host "Activity dump: $activityPath"
+Write-Host "Screenshot: $screencapPath"

@@ -1,0 +1,628 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI Device Matrix
+
+on:
+  workflow_call:
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  FTL_GLES_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GLES_DEVICE || 'model=redfin,version=30,locale=en,orientation=landscape' }}
+  FTL_VULKAN_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_VULKAN_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
+  FTL_GODOT_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GODOT_DEVICE || 'model=akita,version=34,locale=en,orientation=landscape' }}
+  FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
+  FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
+
+jobs:
+  android-standalone-gles:
+    name: Android Standalone GLES
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Set up Android SDK
+        shell: bash
+        run: bash tests/tools/setup_android_sdk.sh
+      - name: Install Android SDK components
+        shell: bash
+        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Build Android GLES APKs
+        working-directory: code/projects/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=GLES -PimmBuildDir=build_gles_ftl
+      - name: Run Android GLES smoke in Firebase Test Lab
+        timeout-minutes: 30
+        shell: bash
+        run: >
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-standalone-gles"
+          --device "$FTL_GLES_DEVICE"
+          --app code/projects/android/appImmViewer/build_gles_ftl/outputs/apk/debug/appImmViewer-debug.apk
+          --test code/projects/android/appImmViewer/build_gles_ftl/outputs/apk/androidTest/debug/appImmViewer-debug-androidTest.apk
+          --test-type instrumentation
+          --artifact-dir artifacts/android-standalone-gles
+          --timeout 5m
+          --environment-variable renderer=GLES,waitSeconds=25
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
+          --required-marker "IMM Android renderer API: GLES"
+          --required-marker "IMMAVAL loadPath result=1"
+          --required-marker "IMMAVAL native render capture written"
+          --required-marker "Loaded in CPU"
+          --required-marker "Loaded in GPU"
+          --required-capture-name native-render-after.ppm
+          --client-label "IMM Android Standalone GLES"
+      - name: Record Android GLES screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) {
+            $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-rejected.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName --contract tests/baselines/render/android-standalone-gles-sample1.json --json-output artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+          } else {
+            New-Item -ItemType Directory -Force artifacts/android-standalone-gles | Out-Null
+            '{"passed":false,"errors":["missing Firebase Test Lab native-render-after.ppm"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+          }
+      - name: Write Android GLES screenshot report
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) {
+            $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-rejected.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-gles/missing-native-render-after.ppm" }
+          python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-gles/android-gles-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-gles/captures --markdown-output artifacts/android-standalone-gles/render-report.md
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: |
+          python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime-launch --output artifacts/android-standalone-gles/manifest.json --product standalone --platform-name android --mode non-vr --renderer gles --include artifacts/android-standalone-gles
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/android-standalone-gles --require-manifest --output artifacts/android-standalone-gles/artifact-summary.json
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidStandaloneGLES-Device
+          path: artifacts/android-standalone-gles
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-standalone-vulkan:
+    name: Android Standalone Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Set up Android SDK
+        shell: bash
+        run: bash tests/tools/setup_android_sdk.sh
+      - name: Install Android SDK components
+        shell: bash
+        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Build Android Vulkan APKs
+        working-directory: code/projects/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan_ftl
+      - name: Run Android Vulkan smoke in Firebase Test Lab
+        timeout-minutes: 30
+        shell: bash
+        run: >
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-standalone-vulkan"
+          --device "$FTL_VULKAN_DEVICE"
+          --app code/projects/android/appImmViewer/build_vulkan_ftl/outputs/apk/debug/appImmViewer-debug.apk
+          --test code/projects/android/appImmViewer/build_vulkan_ftl/outputs/apk/androidTest/debug/appImmViewer-debug-androidTest.apk
+          --test-type instrumentation
+          --artifact-dir artifacts/android-standalone-vulkan
+          --timeout 5m
+          --environment-variable renderer=Vulkan,waitSeconds=25
+          --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.player/files/imm-ftl
+          --required-marker "IMM Android renderer API: Vulkan"
+          --required-marker "IMMAVAL loadPath result=1"
+          --required-marker "IMMAVAL native render capture written"
+          --required-marker "Loaded in CPU"
+          --required-marker "Loaded in GPU"
+          --required-marker "Vulkan renderer created Android surface"
+          --required-marker "Vulkan renderer initialized with owned device"
+          --required-marker "Vulkan renderer submitted picture draw commands"
+          --required-marker "Vulkan renderer submitted static paint draw commands"
+          --required-capture-name native-render-after.ppm
+          --client-label "IMM Android Standalone Vulkan"
+      - name: Record Android Vulkan screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) {
+            $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-rejected.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName --contract tests/baselines/render/android-standalone-vulkan-sample1.json --json-output artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+          } else {
+            New-Item -ItemType Directory -Force artifacts/android-standalone-vulkan | Out-Null
+            '{"passed":false,"errors":["missing Firebase Test Lab native-render-after.ppm"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+          }
+      - name: Write Android Vulkan screenshot report
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-after.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) {
+            $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-rejected.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-vulkan/missing-native-render-after.ppm" }
+          python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-vulkan/captures --markdown-output artifacts/android-standalone-vulkan/render-report.md
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime-launch --output artifacts/android-standalone-vulkan/manifest.json --product standalone --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-standalone-vulkan
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/android-standalone-vulkan --require-manifest --output artifacts/android-standalone-vulkan/artifact-summary.json
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidStandaloneVulkan-Device
+          path: artifacts/android-standalone-vulkan
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-openxr-probe:
+    name: Android OpenXR Probe
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    runs-on: [self-hosted, quest, openxr]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Preflight Quest OpenXR device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-openxr-probe\preflight.json --require-command adb --adb-devices --adb-health
+      - name: Run Android OpenXR probe smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: .\code\projects\android\run-android-openxr-probe-smoke.ps1 -LogDir artifacts\android-openxr-probe\logs
+      - name: Verify OpenXR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\android-openxr-probe\logs\logcat.txt
+          --label android-openxr-probe
+          --require "IMM_ANDROID_OPENXR_PROBE begin"
+          --require "IMM_ANDROID_OPENXR_PROBE initializeLoaderResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE enumerateExtensionsResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE createInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE getHmdSystemResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE enumerateStereoViewsFillResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE destroyInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_ANDROID_OPENXR_PROBE end"
+          --forbid "Fatal signal"
+          --forbid "Launch is blocked because"
+          --forbid "RequiresControllersLaunchInterceptor"
+          --output artifacts\android-openxr-probe\openxr-log-contract.json
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\android-openxr-probe\manifest.json --product standalone --platform-name android --mode vr --renderer openxr --include artifacts\android-openxr-probe
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-openxr-probe --require-manifest --output artifacts\android-openxr-probe\artifact-summary.json
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidOpenXRProbe-Device
+          path: |
+            artifacts/android-openxr-probe
+            code/projects/android/logs
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-godot-vulkan:
+    name: Android Godot Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Set up Android SDK
+        shell: bash
+        run: bash tests/tools/setup_android_sdk.sh
+      - name: Install Android SDK components
+        shell: bash
+        run: bash tests/tools/install_android_sdk_components.sh "ndk;26.1.10909125" "ndk;28.1.13356709" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Download Godot for Android export
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="4.5-stable"
+          template_version="${version/-/.}"
+          zip_name="Godot_v${version}_linux.x86_64.zip"
+          curl -L "https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}" -o godot-android-export.zip
+          unzip -q godot-android-export.zip -d godot-android-export
+          godot_exe="$(find godot-android-export -type f -name 'Godot*' | head -n 1)"
+          if [ -z "$godot_exe" ]; then
+            echo "Could not locate downloaded Godot executable" >&2
+            exit 1
+          fi
+          chmod +x "$godot_exe"
+          echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
+          curl -L "https://github.com/godotengine/godot-builds/releases/download/${version}/Godot_v${version}_export_templates.tpz" -o godot-export-templates.zip
+          template_dir="$HOME/.local/share/godot/export_templates/$template_version"
+          mkdir -p "$template_dir"
+          unzip -q godot-export-templates.zip -d "$template_dir"
+          if [ -d "$template_dir/templates" ]; then
+            mv "$template_dir"/templates/* "$template_dir"/
+            rmdir "$template_dir/templates"
+          fi
+      - name: Build Android Godot APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="$GITHUB_WORKSPACE/artifacts/android-godot-vulkan"
+          mkdir -p "$artifact_dir"
+          project_dir="$RUNNER_TEMP/ImmGodotSampleProjectAndroidExport"
+          rm -rf "$project_dir"
+          cp -R code/ImmGodotSampleProject "$project_dir"
+          cp exampleImmFiles/sample1.imm "$project_dir/sample1.imm"
+          rm -f "$project_dir/scenes/SampleScene.tscn"
+          extension_path="$project_dir/addons/imm_viewer/imm_viewer.gdextension"
+          grep -Ev '^(windows|macos)\.' "$extension_path" > "$extension_path.tmp"
+          mv "$extension_path.tmp" "$extension_path"
+          export_preset_path="$project_dir/export_presets.cfg"
+          perl -0pi -e 's/package\/show_as_launcher_app=false/package\/show_as_launcher_app=true/g' "$export_preset_path"
+          perl -0pi -e 's#/sdcard/Android/data/org\.linuxfoundation\.imm\.godot\.sample/files/vulkan_visual_smoke\.png#/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl/vulkan_visual_smoke.png#g' "$export_preset_path"
+          grep -q 'package/show_as_launcher_app=true' "$export_preset_path" || {
+            echo "Failed to make Android Godot export launchable for Firebase Test Lab" >&2
+            exit 1
+          }
+          project_path="$project_dir/project.godot"
+          perl -0pi -e 's#run/main_scene="res://scenes/SampleScene\.tscn"#run/main_scene="res://scenes/VisualSmokeScene.tscn"#g' "$project_path"
+          grep -q 'run/main_scene="res://scenes/VisualSmokeScene.tscn"' "$project_path" || {
+            echo "Failed to update Godot main scene for Android visual smoke" >&2
+            exit 1
+          }
+          godot_editor_args=(
+            "--headless"
+            "--display-driver" "headless"
+            "--rendering-driver" "opengl3"
+            "--rendering-method" "gl_compatibility"
+            "--path" "$project_dir"
+          )
+          "$GODOT_EXE" "${godot_editor_args[@]}" --import
+          "$GODOT_EXE" "${godot_editor_args[@]}" --export-debug "Android Debug" "$artifact_dir/imm-godot-sample-debug.apk"
+      - name: Build Android Godot Firebase test APKs
+        working-directory: code/projects/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew :appImmGodotFtlTest:assembleDebug :appImmGodotFtlTest:assembleDebugAndroidTest -PimmBuildDir=build_godot_ftl_test
+      - name: Run Android Godot Vulkan smoke in Firebase Test Lab
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/tools/run_firebase_test_lab_android.py \
+            --project "$FTL_PROJECT_ID" \
+            --results-bucket "$FTL_RESULTS_BUCKET" \
+            --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-android-godot-vulkan" \
+            --device "$FTL_GODOT_DEVICE" \
+            --app code/projects/android/appImmGodotFtlTest/build_godot_ftl_test/outputs/apk/debug/appImmGodotFtlTest-debug.apk \
+            --test code/projects/android/appImmGodotFtlTest/build_godot_ftl_test/outputs/apk/androidTest/debug/appImmGodotFtlTest-debug-androidTest.apk \
+            --additional-apk artifacts/android-godot-vulkan/imm-godot-sample-debug.apk \
+            --test-type instrumentation \
+            --artifact-dir artifacts/android-godot-vulkan \
+            --timeout 7m \
+            --environment-variable waitSeconds=60 \
+            --directory-to-pull /sdcard/Android/data/org.linuxfoundation.imm.godot.ftltest/files/imm-ftl \
+            --required-marker "IMM Godot Vulkan visual smoke passed" \
+            --required-marker "Loaded in CPU" \
+            --required-marker "Loaded in GPU" \
+            --required-marker "Vulkan renderer submitted picture draw commands" \
+            --required-marker "Vulkan renderer submitted static paint draw commands" \
+            --required-marker "last_vulkan_frame_started" \
+            --required-capture-name vulkan_visual_smoke.png \
+            --client-label "IMM Android Godot Vulkan"
+      - name: Record Android Godot Vulkan screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName --json-output artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
+          } else {
+            New-Item -ItemType Directory -Force artifacts/android-godot-vulkan | Out-Null
+            '{"passed":false,"errors":["missing Firebase Test Lab vulkan_visual_smoke.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
+          }
+      - name: Write Android Godot Vulkan screenshot report
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-godot-vulkan/missing-vulkan_visual_smoke.png" }
+          python tests/tools/write_render_report.py --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-godot-vulkan/captures --markdown-output artifacts/android-godot-vulkan/render-report.md
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime-launch --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/android-godot-vulkan --require-manifest --output artifacts/android-godot-vulkan/artifact-summary.json
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidGodotVulkan-Device
+          path: artifacts/android-godot-vulkan
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-quest-vr:
+    name: Android Quest VR
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    runs-on: [self-hosted, quest, vr]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Preflight Quest VR device
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile android-device --output artifacts\android-quest-vr\preflight.json --require-command adb --adb-devices --adb-health
+      - name: Run Quest VR app smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: .\code\projects\android\run-android-quest-vr-smoke.ps1 -AttemptQuestUnblock -LogDir artifacts\android-quest-vr\logs
+      - name: Verify Quest VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\android-quest-vr\logs\logcat.txt
+          --label android-quest-vr
+          --require "android_app_entry()"
+          --require "AppState UseMultiview"
+          --require "vrapi_EnterVrMode()"
+          --require "Checking for sample1.imm"
+          --require "Loading Quill:"
+          --require "Initialized Quill Viewer"
+          --require "IMM_ANDROID_VR_SMOKE viewer_initialized"
+          --require "Loaded in CPU"
+          --require "Loaded in GPU"
+          --require "loading completed... vrapi_SetClockLevels"
+          --require "IMM_ANDROID_VR_SMOKE document_frame_submitted"
+          --forbid "Fatal signal"
+          --forbid "FAILED to open sample1.imm"
+          --forbid "Can't init Quill Viewer"
+          --output artifacts\android-quest-vr\quest-vr-log-contract.json
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\android-quest-vr\manifest.json --product standalone --platform-name android --mode vr --renderer gles --include artifacts\android-quest-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\android-quest-vr --require-manifest --output artifacts\android-quest-vr\artifact-summary.json
+      - name: Upload Quest VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AndroidQuestVR-Device
+          path: artifacts/android-quest-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
+  ios-device-smoke:
+    name: iOS Device Smoke
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Preflight iOS device runner
+        run: python3 tests/tools/preflight_runner.py --profile ios-device --output artifacts/ios-device-smoke/preflight.json --require-command xcrun --require-command xcodebuild
+      - name: Verify iOS package target
+        run: |
+          set -euo pipefail
+          cmake -S code/projects/ios -B build/ios -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build/ios --target ImmUnityIOSLinkSmoke --config Release
+      - name: Write CI manifest
+        if: always()
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ios-device-smoke/manifest.json --product unity --platform-name ios --mode package-import --renderer native --include build/ios
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ios-device-smoke --require-manifest --output artifacts/ios-device-smoke/artifact-summary.json
+      - name: Upload iOS device smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOSDeviceSmoke
+          path: artifacts/ios-device-smoke
+          if-no-files-found: ignore
+          retention-days: 14
+
+  device-evidence-report:
+    name: Device Evidence Report
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - android-standalone-gles
+      - android-standalone-vulkan
+      - android-openxr-probe
+      - android-godot-vulkan
+      - android-quest-vr
+      - ios-device-smoke
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download device artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/device-evidence/input
+
+      - name: Verify device matrix evidence
+        run: >
+          python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --gate-prefix "CI Device Matrix /"
+          --evidence-root artifacts/device-evidence/input
+          --json-output artifacts/device-evidence/matrix-evidence.json
+          --markdown-output artifacts/device-evidence/matrix-evidence.md
+
+      - name: Upload device evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeviceMatrixEvidence
+          path: artifacts/device-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Hide per-lane device artifacts
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name AndroidStandaloneGLES-Device
+          --name AndroidStandaloneVulkan-Device
+          --name AndroidOpenXRProbe-Device
+          --name AndroidGodotVulkan-Device
+          --name AndroidQuestVR-Device
+          --name iOSDeviceSmoke

@@ -28,6 +28,8 @@ function Resolve-Adb([string]$Requested) {
         return (Resolve-Path $Requested).Path
     }
 
+    $adbExecutable = if ($IsWindows) { "adb.exe" } else { "adb" }
+
     $cmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($cmd) {
         return $cmd.Source
@@ -37,8 +39,8 @@ function Resolve-Adb([string]$Requested) {
     if (Test-Path $localProperties) {
         $sdkLine = Get-Content $localProperties | Where-Object { $_ -match "^sdk\.dir=" } | Select-Object -First 1
         if ($sdkLine) {
-            $sdkDir = ($sdkLine -replace "^sdk\.dir=", "").Replace("\\", "\")
-            $candidate = Join-Path $sdkDir "platform-tools\adb.exe"
+            $sdkDir = ($sdkLine -replace "^sdk\.dir=", "").Replace("\\", [IO.Path]::DirectorySeparatorChar)
+            $candidate = Join-Path $sdkDir (Join-Path "platform-tools" $adbExecutable)
             if (Test-Path $candidate) {
                 return (Resolve-Path $candidate).Path
             }
@@ -46,7 +48,7 @@ function Resolve-Adb([string]$Requested) {
     }
 
     if ($env:ANDROID_SDK_ROOT) {
-        $candidate = Join-Path $env:ANDROID_SDK_ROOT "platform-tools\adb.exe"
+        $candidate = Join-Path $env:ANDROID_SDK_ROOT (Join-Path "platform-tools" $adbExecutable)
         if (Test-Path $candidate) {
             return (Resolve-Path $candidate).Path
         }
@@ -76,13 +78,14 @@ function Wait-ForDevice([string]$AdbPath, [int]$TimeoutSeconds) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
-$project = Join-Path $repoRoot "code\ImmGodotSampleProject"
-$sampleSource = Join-Path $repoRoot "exampleImmFiles\sample1.imm"
+$project = Join-Path $repoRoot (Join-Path "code" "ImmGodotSampleProject")
+$sampleSource = Join-Path $repoRoot (Join-Path "exampleImmFiles" "sample1.imm")
 $sampleTarget = Join-Path $project "sample1.imm"
-$apk = Join-Path $project "build\android\imm-godot-sample-debug.apk"
+$apk = Join-Path $project (Join-Path "build" "android" "imm-godot-sample-debug.apk")
 $logDirectory = (New-Item -ItemType Directory -Force $LogDir).FullName
 $logPath = Join-Path $logDirectory "logcat.txt"
 $pngPath = Join-Path $logDirectory "vulkan_visual_smoke.png"
+$devicePngPath = "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl/vulkan_visual_smoke.png"
 
 $godotPath = Resolve-Tool $GodotExe "godot" "Godot"
 $adbPath = Resolve-Adb $Adb
@@ -130,7 +133,7 @@ if ($LASTEXITCODE -ne 0) {
 Start-Sleep -Seconds $WaitSeconds
 
 & $adbPath logcat -d | Out-File -FilePath $logPath -Encoding utf8
-& $adbPath exec-out run-as org.linuxfoundation.imm.godot.sample cat files/vulkan_visual_smoke.png > $pngPath
+& $adbPath pull $devicePngPath $pngPath | Out-Null
 & $adbPath shell am force-stop org.linuxfoundation.imm.godot.sample | Out-Null
 
 $log = Get-Content $logPath -Raw

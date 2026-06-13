@@ -21,6 +21,7 @@
 #include <GLES3/gl3.h>
 
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <dirent.h>
 #include <mutex>
@@ -75,6 +76,7 @@ struct EngineState {
     bool viewerInitialized = false;
     bool firstFrame = true;
     uint32_t frameCount = 0;
+    bool validationCaptureWritten = false;
 
     std::wstring playerSpawnLocation = L"Default";
     ExePlayer::Settings::Rendering::Technique renderingTechnique =
@@ -100,6 +102,203 @@ EngineState gEngine;
 std::mutex gMessageMutex;
 std::wstring gPendingPath;
 bool gTriedAutoLoad = false;
+std::string gAssetDirectory;
+std::string gExternalFilesDirectory;
+
+static float iDecodeUnsignedFloat(uint32_t bits, int mantissaBits) {
+    const uint32_t mantissaMask = (1u << mantissaBits) - 1u;
+    const uint32_t mantissa = bits & mantissaMask;
+    const uint32_t exponent = (bits >> mantissaBits) & 0x1fu;
+    if (exponent == 0) {
+        return ldexpf(static_cast<float>(mantissa) / static_cast<float>(1u << mantissaBits), -14);
+    }
+    if (exponent == 31) {
+        return 1.0f;
+    }
+    return ldexpf(1.0f + static_cast<float>(mantissa) / static_cast<float>(1u << mantissaBits), static_cast<int>(exponent) - 15);
+}
+
+static uint8_t iFloatToByte(float value) {
+    if (value <= 0.0f) {
+        return 0;
+    }
+    if (value >= 1.0f) {
+        return 255;
+    }
+    return static_cast<uint8_t>(value * 255.0f + 0.5f);
+}
+
+static uint8_t iLinearFloatToSrgbByte(float value) {
+    if (value <= 0.0f) {
+        return 0;
+    }
+    if (value >= 1.0f) {
+        return 255;
+    }
+    const float encoded = value < 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+    return iFloatToByte(encoded);
+}
+
+static bool iWriteRgbPpm(const char *path, const uint8_t *rgb, int width, int height) {
+    if (!path || !path[0] || !rgb || width <= 0 || height <= 0) {
+        return false;
+    }
+    FILE *file = fopen(path, "wb");
+    if (!file) {
+        return false;
+    }
+    fprintf(file, "P6\n%d %d\n255\n", width, height);
+    const size_t expected = static_cast<size_t>(width) * static_cast<size_t>(height) * 3u;
+    const size_t written = fwrite(rgb, 1, expected, file);
+    fclose(file);
+    return written == expected;
+}
+
+static bool iHasVisibleRgbContent(const uint8_t *rgb, int width, int height) {
+    if (!rgb || width <= 0 || height <= 0) {
+        return false;
+    }
+    uint8_t minLuma = 255;
+    uint8_t maxLuma = 0;
+    uint64_t visiblePixels = 0;
+    const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+    for (size_t i = 0; i < pixelCount; ++i) {
+        const uint8_t r = rgb[i * 3u + 0];
+        const uint8_t g = rgb[i * 3u + 1];
+        const uint8_t b = rgb[i * 3u + 2];
+        const uint8_t luma = static_cast<uint8_t>((54u * r + 183u * g + 19u * b) >> 8);
+        if (luma < minLuma) {
+            minLuma = luma;
+        }
+        if (luma > maxLuma) {
+            maxLuma = luma;
+        }
+        if (luma > 32 && (r > 40 || g > 40 || b > 40)) {
+            ++visiblePixels;
+        }
+    }
+    return visiblePixels >= 20000 && (maxLuma - minLuma) >= 16;
+}
+
+static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical) {
+    if (!pixels || width <= 0 || height <= 0) {
+        return false;
+    }
+    std::vector<uint8_t> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    for (int y = 0; y < height; ++y) {
+        const int sourceY = flipVertical ? (height - 1 - y) : y;
+        for (int x = 0; x < width; ++x) {
+            const uint32_t value = pixels[static_cast<size_t>(sourceY) * width + x];
+            const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
+            rgb[out + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(value & 0x7ffu, 6));
+            rgb[out + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 11u) & 0x7ffu, 6));
+            rgb[out + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 22u) & 0x3ffu, 5));
+        }
+    }
+    if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
+        return false;
+    }
+    return iWriteRgbPpm(path, rgb.data(), width, height);
+}
+
+static bool iWriteGlesFramebufferPpm(const char *path, const char *rejectedPath, int width, int height) {
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    std::vector<uint8_t> rgba(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u);
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+    std::vector<uint8_t> rgb(static_cast<size_t>(width) * static_cast<size_t>(height) * 3u);
+    for (int y = 0; y < height; ++y) {
+        const int sourceY = height - 1 - y;
+        for (int x = 0; x < width; ++x) {
+            const size_t in = (static_cast<size_t>(sourceY) * width + x) * 4u;
+            const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
+            rgb[out + 0] = rgba[in + 0];
+            rgb[out + 1] = rgba[in + 1];
+            rgb[out + 2] = rgba[in + 2];
+        }
+    }
+    if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
+        if (rejectedPath && rejectedPath[0]) {
+            iWriteRgbPpm(rejectedPath, rgb.data(), width, height);
+        }
+        return false;
+    }
+    return iWriteRgbPpm(path, rgb.data(), width, height);
+}
+
+static bool isValidationFrameReady(const ImmPlayer::Player::PerformanceInfo &perf) {
+    return perf.numDrawCalls > 0 &&
+           perf.numPaintDrawCalls > 0 &&
+           perf.numTriangles > 0;
+}
+
+static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceInfo &perf) {
+    if (gEngine.validationCaptureWritten || gEngine.frameCount < 5 || gExternalFilesDirectory.empty()) {
+        return;
+    }
+    if ((gEngine.frameCount % 15u) != 0u) {
+        return;
+    }
+    if (!isValidationFrameReady(perf)) {
+        if (gEngine.frameCount == 60 || gEngine.frameCount == 120 || gEngine.frameCount == 180) {
+            ALOGV("IMMAVAL native render capture waiting frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d renderer=%s",
+                  gEngine.frameCount,
+                  static_cast<unsigned long long>(perf.validationTimeFrame),
+                  perf.numDrawCalls,
+                  perf.numPaintDrawCalls,
+                  perf.numPictureDrawCalls,
+                  perf.numTriangles,
+                  gEngine.useVulkan ? "Vulkan" : "GLES");
+        }
+        return;
+    }
+
+    const std::string artifactDir = gExternalFilesDirectory + "/imm-ftl";
+    mkdir(artifactDir.c_str(), 0777);
+    const std::string capturePath = artifactDir + "/native-render-after.ppm";
+    const std::string rejectedCapturePath = artifactDir + "/native-render-rejected.ppm";
+
+    bool wrote = false;
+    if (gEngine.useVulkan) {
+        if (gEngine.renderer && gEngine.colorTexture) {
+            const size_t pixelCount = static_cast<size_t>(gEngine.width) * static_cast<size_t>(gEngine.height);
+            std::vector<uint32_t> pixels(pixelCount);
+            gEngine.renderer->GetTextureContent(gEngine.colorTexture, pixels.data(), piRenderer::Format::C3_11_11_10_FLOAT);
+            wrote = iWriteRG11B10Ppm(capturePath.c_str(), pixels.data(), gEngine.width, gEngine.height, false);
+        }
+    } else {
+        glFinish();
+        wrote = iWriteGlesFramebufferPpm(capturePath.c_str(), rejectedCapturePath.c_str(), gEngine.width, gEngine.height);
+    }
+
+    if (wrote) {
+        gEngine.validationCaptureWritten = true;
+        ALOGV("IMMAVAL native render capture written path=%s frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s",
+              capturePath.c_str(),
+              gEngine.frameCount,
+              static_cast<unsigned long long>(perf.validationTimeFrame),
+              perf.numDrawCalls,
+              perf.numPaintDrawCalls,
+              perf.numPictureDrawCalls,
+              perf.numTriangles,
+              gEngine.width,
+              gEngine.height,
+              gEngine.useVulkan ? "Vulkan" : "GLES");
+    } else {
+        ALOGE("IMMAVAL native render capture failed path=%s frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s",
+              capturePath.c_str(),
+              gEngine.frameCount,
+              static_cast<unsigned long long>(perf.validationTimeFrame),
+              perf.numDrawCalls,
+              perf.numPaintDrawCalls,
+              perf.numPictureDrawCalls,
+              perf.numTriangles,
+              gEngine.width,
+              gEngine.height,
+              gEngine.useVulkan ? "Vulkan" : "GLES");
+    }
+}
 
 bool iEqualsIgnoreCase(const char* a, const char* b) {
     if (!a || !b) {
@@ -124,9 +323,6 @@ public:
 };
 
 AndroidRenderReporter gRenderReporter;
-
-std::string gAssetDirectory;
-std::string gExternalFilesDirectory;
 
 #if defined(IMM_ANDROID_XR_RUNTIME_OPENXR)
 const char* XrResultName(XrResult result) {
@@ -772,6 +968,7 @@ bool loadPath(const std::wstring& path) {
     gEngine.viewerInitialized = success;
     gEngine.firstFrame = true;
     gEngine.frameCount = 0;
+    gEngine.validationCaptureWritten = false;
     ALOGV("IMMAVAL loadPath result=%d settings=%p", success ? 1 : 0, settings);
     return success;
 }
@@ -836,9 +1033,18 @@ void renderFrame() {
                                ivec2(gEngine.width, gEngine.height), true, 8000, gEngine.firstFrame);
     gEngine.viewer->GlobalRender(vrToHead, projection);
     gEngine.viewer->RenderMono(ivec2(gEngine.width, gEngine.height), vrToHead, 0);
+    const ImmPlayer::Player::PerformanceInfo &perf = gEngine.viewer->GetPerformanceInfoForFrame();
+    if (!gEngine.useVulkan) {
+        writeValidationCaptureIfReady(perf);
+    }
     if (gEngine.frameCount == 0 || gEngine.frameCount == 60) {
-        ALOGV("IMMAVAL renderFrame frame=%u size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
+        ALOGV("IMMAVAL renderFrame frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
               gEngine.frameCount,
+              static_cast<unsigned long long>(perf.validationTimeFrame),
+              perf.numDrawCalls,
+              perf.numPaintDrawCalls,
+              perf.numPictureDrawCalls,
+              perf.numTriangles,
               gEngine.width,
               gEngine.height,
               gEngine.useVulkan ? "Vulkan" : "GLES",
@@ -851,6 +1057,7 @@ void renderFrame() {
     if (gEngine.useVulkan) {
         gEngine.renderer->SetRenderTarget(nullptr);
         gEngine.renderer->SwapBuffers();
+        writeValidationCaptureIfReady(perf);
     } else {
         eglSwapBuffers(gEngine.display, gEngine.surface);
     }

@@ -460,10 +460,12 @@ func _run() -> void:
         else:
             if not bool(post_load_compositor_diagnostics.get("last_vulkan_frame_started", false)):
                 failures.append("post-load Vulkan render did not start a Vulkan frame")
-            if not bool(post_load_compositor_diagnostics.get("last_had_intermediate_texture", false)):
-                failures.append("post-load Vulkan render did not allocate an intermediate texture")
+            var used_direct_target: bool = bool(post_load_compositor_diagnostics.get("last_direct_vulkan_color_target", false))
+            var used_intermediate_texture: bool = bool(post_load_compositor_diagnostics.get("last_had_intermediate_texture", false))
+            if not used_direct_target and not used_intermediate_texture:
+                failures.append("post-load Vulkan render used neither a direct Godot color/depth target nor an intermediate texture")
             if not bool(post_load_compositor_diagnostics.get("last_composite_result", false)):
-                failures.append("post-load Vulkan render did not composite into the Godot color texture")
+                failures.append("post-load Vulkan render did not present into the Godot color texture")
             if int(post_load_compositor_diagnostics.get("last_render_result", -1)) < 0:
                 failures.append("post-load ImmGodot_RenderCamera returned %d" % int(post_load_compositor_diagnostics.get("last_render_result", -1)))
             if int(post_load_compositor_diagnostics.get("last_render_camera_id", -1)) != CAMERA_ID:

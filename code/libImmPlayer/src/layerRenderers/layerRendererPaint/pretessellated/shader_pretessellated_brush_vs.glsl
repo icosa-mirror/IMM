@@ -24,17 +24,19 @@ layout (std140, row_major, binding=3) uniform LayersState
 }layer;
 
 
+struct display_eye_t
+{
+    //mat4x4      mMatrix_Prj;
+    //mat4x4      mMatrix_Cam;
+    mat4x4      mMatrix_CamPrj;
+    //mat4x4      mInvMatrix_Prj;
+    //mat4x4      mInvMatrix_Cam;
+    //mat4x4      mInvMatrix_CamPrj;
+};
+
 layout (std140, row_major, binding=4) uniform DisplayState
 {
-    struct
-    {
-        //mat4x4      mMatrix_Prj;
-        //mat4x4      mMatrix_Cam;
-        mat4x4      mMatrix_CamPrj;
-        //mat4x4      mInvMatrix_Prj;
-        //mat4x4      mInvMatrix_Cam;
-        //mat4x4      mInvMatrix_CamPrj;
-    }mEye[2];
+    display_eye_t mEye[2];
     vec2        mResolution;
 }display;
 
@@ -46,12 +48,14 @@ layout (std140, row_major, binding=5) uniform PassState
 	int kk3;
 }pass;
 
+struct chunk_data_entry_t
+{
+	uint mVertexOffset;
+};
+
 layout (std140, row_major, binding=9) uniform ChunkData
 {
-	struct
-	{
-		uint mVertexOffset;
-	}mData[128];
+	chunk_data_entry_t mData[128];
 }chunk_data;
 
 out V2CData

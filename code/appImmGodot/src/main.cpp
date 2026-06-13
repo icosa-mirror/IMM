@@ -283,13 +283,27 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFra
         return -1;
     }
     piRendererVulkan *renderer = static_cast<piRendererVulkan *>(gBridge.GetRenderer());
+    if (frame->depthImage != nullptr && frame->depthImageView != nullptr && frame->depthFormat != 0)
+    {
+        return renderer->BeginExternalImageFrame(frame->colorImage,
+                                                 frame->colorImageView,
+                                                 frame->colorFormat,
+                                                 frame->depthImage,
+                                                 frame->depthImageView,
+                                                 frame->depthFormat,
+                                                 frame->width,
+                                                 frame->height)
+                   ? 0
+                   : -1;
+    }
+
     return renderer->BeginExternalImageFrame(frame->colorImage,
-                                             frame->colorImageView,
-                                             frame->colorFormat,
-                                             frame->width,
-                                             frame->height)
-               ? 0
-               : -1;
+                                            frame->colorImageView,
+                                            frame->colorFormat,
+                                            frame->width,
+                                            frame->height)
+              ? 0
+              : -1;
 #else
     return -1;
 #endif

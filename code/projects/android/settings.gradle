@@ -16,5 +16,8 @@ project(':appImmViewer').projectDir = file('appImmViewer')
 include 'appImmGodot'
 project(':appImmGodot').projectDir = file('appImmGodot')
 
+include 'appImmGodotFtlTest'
+project(':appImmGodotFtlTest').projectDir = file('appImmGodotFtlTest')
+
 include 'appImmStrokeReader'
 project(':appImmStrokeReader').projectDir = file('../../appImmStrokeReader/Projects/Android')

@@ -77,6 +77,9 @@ extern "C"
         void *colorImage;
         void *colorImageView;
         uint32_t colorFormat;
+        void *depthImage;
+        void *depthImageView;
+        uint32_t depthFormat;
         int width;
         int height;
     };

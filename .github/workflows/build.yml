@@ -70,7 +70,27 @@ jobs:
     - name: Smoke Windows Vulkan standalone viewer
       if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
       shell: pwsh
-      run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -ReferencePath .\build\baseline-captures\windows-directx-playerframe60.ppm
+      run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts
+
+    - name: Compare Windows Vulkan render metrics against committed DirectX baseline
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: >
+        python tests\tools\compare_render_metrics.py .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+        --reference tests\baselines\render\windows-directx-sample1.ppm
+        --contract tests\baselines\render\windows-directx-sample1.json
+        --json-output artifacts\render-metrics\vulkan-vs-committed-directx.json
+
+    - name: Write Windows Vulkan render report
+      if: always() && env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: >
+        python tests\tools\write_render_report.py
+        --metrics-json artifacts\render-metrics\vulkan-vs-committed-directx.json
+        --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+        --candidate-capture .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+        --output-dir artifacts\render-metrics\captures
+        --markdown-output artifacts\render-metrics\vulkan-vs-committed-directx.md
 
     - name: Upload Windows Vulkan standalone smoke logs
       if: failure()
@@ -79,6 +99,7 @@ jobs:
         name: ImmViewerVulkanSmokeLogs-Windows
         path: |
           build/baseline-captures
+          artifacts/render-metrics
           code/appImmViewer/exe/debug.txt
           code/appImmViewer/exe/vulkan_sample1_smoke.ppm
         if-no-files-found: ignore
@@ -88,6 +109,38 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.x'
+
+    - name: Verify IMM content baseline
+      shell: pwsh
+      run: python tests\tools\verify_imm_baseline.py exampleImmFiles\sample1.imm --baseline tests\baselines\content\sample1.json --write-actual artifacts\baseline-content\sample1.actual.json
+
+    - name: Record Windows DirectX render metrics
+      shell: pwsh
+      run: >
+        python tests\tools\compare_render_metrics.py .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --reference tests\baselines\render\windows-directx-sample1.ppm
+        --contract tests\baselines\render\windows-directx-sample1.json
+        --json-output artifacts\render-metrics\windows-directx-playerframe60.json
+
+    - name: Write Windows DirectX render report
+      shell: pwsh
+      run: >
+        python tests\tools\write_render_report.py
+        --metrics-json artifacts\render-metrics\windows-directx-playerframe60.json
+        --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+        --candidate-capture .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --output-dir artifacts\render-metrics\captures
+        --markdown-output artifacts\render-metrics\windows-directx-playerframe60.md
+
+    - name: Upload Windows DirectX baseline artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Windows-DirectX-Baseline
+        path: |
+          build/baseline-captures
+          artifacts/render-metrics
+        if-no-files-found: error
+        retention-days: 14
 
     - name: Install SCons
       shell: pwsh
@@ -196,6 +249,14 @@ jobs:
         Write-PackagedViewerSettings code/appImmViewer/exe/settings.json "settings.json" "OpenGL" $false
         Write-PackagedViewerSettings code/appImmViewer/exe/settings-vulkan-smoke.json "settings-vulkan.json" "Vulkan" $false
         Write-PackagedViewerSettings code/appImmViewer/exe/settings-opengl-vr.json "settings-opengl-vr.json" "OpenGL" $true
+
+    - name: Write Windows viewer artifact manifest
+      shell: pwsh
+      run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output viewer_artifact\manifest.json --product standalone --platform-name windows --mode packaged --renderer mixed --include viewer_artifact
+
+    - name: Collect Windows viewer artifact summary
+      shell: pwsh
+      run: python tests\tools\collect_ci_artifacts.py --artifact-dir viewer_artifact --require-manifest --output viewer_artifact\artifact-summary.json
 
     - name: Upload Windows Viewer Executable
       uses: actions/upload-artifact@v4
@@ -353,6 +414,12 @@ jobs:
         cp "${vr_apk[0]}" "$staging/ImmViewer-Android-OpenGL-VR.apk"
         cp "${vulkan_apk[0]}" "$staging/ImmViewer-Android-Vulkan.apk"
 
+    - name: Write Android viewer artifact manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmViewer-Android/manifest.json --product standalone --platform-name android --mode packaged --renderer mixed --include artifacts/ImmViewer-Android
+
+    - name: Collect Android viewer artifact summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-Android --require-manifest --output artifacts/ImmViewer-Android/artifact-summary.json
+
     - name: Upload Android Viewer APKs
       uses: actions/upload-artifact@v4
       with:
@@ -375,7 +442,7 @@ jobs:
   build-macos:
     name: macOS
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
-    runs-on: macos-latest
+    runs-on: macos-14
     env:
       GODOT_CPP_REF: godot-4.5-stable
       GODOT_VERSION: 4.5-stable
@@ -402,7 +469,7 @@ jobs:
       run: cmake --build build/macos --target appImmViewerMetal --config Release
 
     - name: Smoke macOS Metal standalone viewer
-      run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalPlayback --config Release
+      run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
 
     - name: Install Godot GDExtension build tools
       run: python3 -m pip install --break-system-packages scons
@@ -514,6 +581,26 @@ jobs:
         test -f "$staging/appImmViewerMetal.app/Contents/Info.plist"
         test -x "$staging/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
 
+    - name: Record macOS Metal render metrics
+      run: >
+        python3 tests/tools/compare_render_metrics.py build/macos/metal-validation-captures/static.ppm
+        --contract tests/baselines/render/macos-metal-sample1.json
+        --json-output artifacts/ImmViewer-macOS/validation/macos-metal-static.json
+
+    - name: Write macOS Metal render report
+      run: >
+        python3 tests/tools/write_render_report.py
+        --metrics-json artifacts/ImmViewer-macOS/validation/macos-metal-static.json
+        --candidate-capture build/macos/metal-validation-captures/static.ppm
+        --output-dir artifacts/ImmViewer-macOS/validation/captures
+        --markdown-output artifacts/ImmViewer-macOS/validation/macos-metal-static.md
+
+    - name: Write macOS viewer artifact manifest
+      run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmViewer-macOS/manifest.json --product standalone --platform-name macos --mode packaged --renderer metal --include artifacts/ImmViewer-macOS
+
+    - name: Collect macOS viewer artifact summary
+      run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-macOS --require-manifest --output artifacts/ImmViewer-macOS/artifact-summary.json
+
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
       with:
@@ -556,7 +643,7 @@ jobs:
   build-ios:
     name: iOS
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
     - name: Checkout repository
@@ -713,6 +800,15 @@ jobs:
         cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader "$staging/"
         cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/README.md "$staging/README.md"
 
+    - name: Verify stroke reader Unity package layout
+      run: python tests/tools/verify_package_layout.py unity artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+
+    - name: Write stroke reader Unity package manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmStrokeReaderPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmStrokeReaderPlugin-Unity
+
+    - name: Collect stroke reader Unity package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmStrokeReaderPlugin-Unity --require-manifest --output artifacts/ImmStrokeReaderPlugin-Unity/artifact-summary.json
+
     - name: Stage ImmUnity Unity package
       shell: bash
       run: |
@@ -722,6 +818,22 @@ jobs:
         mkdir -p "$staging"
         cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity "$staging/"
         cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/README.md "$staging/README.md"
+
+    - name: Verify ImmUnity package layout
+      run: python tests/tools/verify_package_layout.py unity artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+
+    - name: Verify Unity package import harness
+      run: >
+        python tests/tools/verify_engine_package_import.py unity
+        --stroke-package artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader
+        --player-package artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity
+        --workspace artifacts/UnityPackageImportHarness
+
+    - name: Write ImmUnity package manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
+
+    - name: Collect ImmUnity package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmPlayerPlugin-Unity --require-manifest --output artifacts/ImmPlayerPlugin-Unity/artifact-summary.json
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
@@ -845,6 +957,21 @@ jobs:
         test -f "$addon/bin/macos/release/libImmGodotPlugin.dylib"
         test -f "$addon/bin/android/debug/libimm_godot_extension.arm64.so"
         test -f "$addon/bin/android/debug/libImmGodotPlugin.so"
+
+    - name: Verify Godot addon package layout
+      run: python tests/tools/verify_package_layout.py godot artifacts/ImmGodotGDExtension
+
+    - name: Verify Godot package import harness
+      run: >
+        python tests/tools/verify_engine_package_import.py godot
+        --package artifacts/ImmGodotGDExtension
+        --workspace artifacts/GodotPackageImportHarness
+
+    - name: Write Godot addon package manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension
+
+    - name: Collect Godot addon package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmGodotGDExtension --require-manifest --output artifacts/ImmGodotGDExtension/artifact-summary.json
 
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4
@@ -972,6 +1099,9 @@ jobs:
       actions: read
 
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Download Unity stroke reader package
       uses: actions/download-artifact@v4
       with:
@@ -1008,6 +1138,22 @@ jobs:
         name: ImmPlayerPlugin-Godot
         path: release-assets/ImmPlayerPlugin-Godot
 
+    - name: Verify release matrix status
+      run: |
+        python tests/tools/verify_matrix_status.py tests/matrix_status.json --release
+        python tests/tools/verify_workflow_matrix.py
+
+    - name: Verify downloaded release assets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+        python tests/tools/verify_package_layout.py godot release-assets/ImmPlayerPlugin-Godot
+        python tests/tools/verify_viewer_artifact.py windows release-assets/ImmViewer-Windows
+        python tests/tools/verify_viewer_artifact.py macos release-assets/ImmViewer-macOS
+        python tests/tools/verify_release_assets.py release-assets
+
     - name: Zip Windows viewer artifacts
       shell: bash
       run: |
@@ -1026,6 +1172,61 @@ jobs:
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk
         test -f release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk
+
+    - name: Write release matrix audit report
+      run: |
+        python tests/tools/write_matrix_audit_report.py tests/matrix_status.json \
+          --json-output release-assets/matrix-audit.json \
+          --markdown-output release-assets/matrix-audit.md
+
+    - name: Generate release IMM baseline actual
+      run: |
+        python tests/tools/generate_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --output release-assets/sample1.actual.json
+
+    - name: Write release baseline drift report
+      run: |
+        python tests/tools/write_baseline_drift_report.py \
+          --expected tests/baselines/content/sample1.json \
+          --actual release-assets/sample1.actual.json \
+          --json-output release-assets/baseline-drift.json \
+          --markdown-output release-assets/baseline-drift.md
+
+    - name: Verify release IMM baseline
+      run: |
+        python tests/tools/verify_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --baseline tests/baselines/content/sample1.json \
+          --write-actual release-assets/sample1.actual.json
+
+    - name: Write release validation manifest
+      run: |
+        python tests/tools/write_ci_manifest.py \
+          --status "${{ job.status }}" \
+          --failure-class release-validation \
+          --output release-assets/release-validation-manifest.json \
+          --product release \
+          --platform-name all \
+          --mode release \
+          --renderer native \
+          --include tests/matrix_status.json \
+          --include release-assets/ImmViewer-Windows \
+          --include release-assets/ImmViewer-macOS \
+          --include release-assets/ImmViewer-Android \
+          --include release-assets/ImmPlayerPlugin-Godot \
+          --include release-assets/matrix-audit.json \
+          --include release-assets/matrix-audit.md \
+          --include release-assets/baseline-drift.json \
+          --include release-assets/baseline-drift.md \
+          --include release-assets/upm
+
+    - name: Collect release artifact summary
+      run: |
+        python tests/tools/collect_ci_artifacts.py \
+          --artifact-dir release-assets \
+          --require-manifest \
+          --output release-assets/release-artifact-summary.json
 
     - name: Compute release metadata
       id: release_meta
@@ -1050,7 +1251,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n' \
+        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n\nValidation\n\nRelease validation manifest, artifact summary, matrix audit, and baseline drift reports are attached.\n' \
           "${{ steps.release_meta.outputs.stroke_url }}" \
           "${{ steps.release_meta.outputs.unity_url }}")"
         gh release create "${{ steps.release_meta.outputs.release_tag }}" \
@@ -1066,7 +1267,13 @@ jobs:
           release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk \
           release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
-          release-assets/ImmViewer-Windows/sample1.imm
+          release-assets/ImmViewer-Windows/sample1.imm \
+          release-assets/release-validation-manifest.json \
+          release-assets/release-artifact-summary.json \
+          release-assets/matrix-audit.json \
+          release-assets/matrix-audit.md \
+          release-assets/baseline-drift.json \
+          release-assets/baseline-drift.md
 
   publish-upm:
     name: Publish UPM Branch
