@@ -41,6 +41,8 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     const val EXTRA_RENDERING_API = "RenderingAPI"
     const val EXTRA_VALIDATION_RENDER_WIDTH = "ValidationRenderWidth"
     const val EXTRA_VALIDATION_RENDER_HEIGHT = "ValidationRenderHeight"
+    const val EXTRA_VALIDATION_FIXED_DT = "ValidationFixedDt"
+    const val EXTRA_VALIDATION_PLAYER_FRAME = "ValidationPlayerFrame"
     const val PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 0x1
 
     @JvmStatic external fun nativeSetAssetDirectory(assetsDir: String?)
@@ -49,6 +51,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     @JvmStatic external fun nativeSetQuillRenderingTechnique(renderingTechnique: Int)
     @JvmStatic external fun nativeSetRenderingApi(renderingApi: String?)
     @JvmStatic external fun nativeSetValidationRenderSize(width: Int, height: Int)
+    @JvmStatic external fun nativeSetValidationPlayback(fixedDt: Double, playerFrame: Long)
     @JvmStatic
     external fun nativeSetEyeBufferScale(
         scaleFactor: Float
@@ -86,6 +89,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
   override fun onCreate(savedInstanceState: Bundle?) {
     applyRenderingApiExtra(intent)
     applyValidationRenderSizeExtra(intent)
+    applyValidationPlaybackExtra(intent)
     super.onCreate(savedInstanceState)
 
     if (intent != null)
@@ -316,6 +320,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
       }
       applyRenderingApiExtra(intent)
       applyValidationRenderSizeExtra(intent)
+      applyValidationPlaybackExtra(intent)
       if (extras.containsKey(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)) {
         val spawnLocation = extras.getString(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)
         Log.d(TAG, "found player spawn location extra $spawnLocation")
@@ -357,6 +362,30 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     if (width > 0 && height > 0) {
       Log.d(TAG, "found validation render size ${width}x${height}")
       nativeSetValidationRenderSize(width, height)
+    }
+  }
+
+  private fun applyValidationPlaybackExtra(intent: Intent?) {
+    val extras = intent?.extras ?: return
+    if (!extras.containsKey(EXTRA_VALIDATION_FIXED_DT) && !extras.containsKey(EXTRA_VALIDATION_PLAYER_FRAME)) {
+      return
+    }
+
+    val fixedDt = when (val value = extras.get(EXTRA_VALIDATION_FIXED_DT)) {
+      is Double -> value
+      is Float -> value.toDouble()
+      is String -> value.toDoubleOrNull() ?: -1.0
+      else -> -1.0
+    }
+    val playerFrame = when (val value = extras.get(EXTRA_VALIDATION_PLAYER_FRAME)) {
+      is Long -> value
+      is Int -> value.toLong()
+      is String -> value.toLongOrNull() ?: -1L
+      else -> -1L
+    }
+    if (fixedDt >= 0.0 || playerFrame >= 0L) {
+      Log.d(TAG, "found validation playback fixedDt=$fixedDt playerFrame=$playerFrame")
+      nativeSetValidationPlayback(fixedDt, playerFrame)
     }
   }
 

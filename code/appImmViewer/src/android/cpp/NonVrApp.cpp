@@ -61,6 +61,9 @@ struct EngineState {
     int height = 0;
     int validationRenderWidth = 0;
     int validationRenderHeight = 0;
+    double validationFixedDt = -1.0;
+    uint64_t validationPlayerFrame = 0;
+    bool validationPlayerFrameEnabled = false;
     bool hasWindow = false;
     bool running = false;
     bool useVulkan = false;
@@ -200,9 +203,9 @@ static bool iWriteRG11B10Ppm(const char *path, const uint32_t *pixels, int width
         for (int x = 0; x < width; ++x) {
             const uint32_t value = pixels[static_cast<size_t>(sourceY) * width + x];
             const size_t out = (static_cast<size_t>(y) * width + x) * 3u;
-            rgb[out + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(value & 0x7ffu, 6));
-            rgb[out + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 11u) & 0x7ffu, 6));
-            rgb[out + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((value >> 22u) & 0x3ffu, 5));
+            rgb[out + 0] = iFloatToByte(iDecodeUnsignedFloat(value & 0x7ffu, 6));
+            rgb[out + 1] = iFloatToByte(iDecodeUnsignedFloat((value >> 11u) & 0x7ffu, 6));
+            rgb[out + 2] = iFloatToByte(iDecodeUnsignedFloat((value >> 22u) & 0x3ffu, 5));
         }
     }
     if (!iHasVisibleRgbContent(rgb.data(), width, height)) {
@@ -247,7 +250,18 @@ static void writeValidationCaptureIfReady(const ImmPlayer::Player::PerformanceIn
     if (gEngine.validationCaptureWritten || gEngine.frameCount < 5 || gExternalFilesDirectory.empty()) {
         return;
     }
-    if ((gEngine.frameCount % 15u) != 0u) {
+    if (gEngine.validationPlayerFrameEnabled && perf.validationTimeFrame < gEngine.validationPlayerFrame) {
+        if (gEngine.frameCount == 60 || gEngine.frameCount == 120 || gEngine.frameCount == 180) {
+            ALOGV("IMMAVAL native render capture waiting targetPlayerFrame=%llu frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d renderer=%s",
+                  static_cast<unsigned long long>(gEngine.validationPlayerFrame),
+                  gEngine.frameCount,
+                  static_cast<unsigned long long>(perf.validationTimeFrame),
+                  perf.numDrawCalls,
+                  perf.numPaintDrawCalls,
+                  perf.numPictureDrawCalls,
+                  perf.numTriangles,
+                  gEngine.useVulkan ? "Vulkan" : "GLES");
+        }
         return;
     }
     if (!isValidationFrameReady(perf)) {
@@ -1036,7 +1050,7 @@ void renderFrame() {
 
     const double now = gEngine.timer->GetTime();
     static double lastTime = now;
-    const float dtime = float(now - lastTime);
+    const float dtime = gEngine.validationFixedDt >= 0.0 ? static_cast<float>(gEngine.validationFixedDt) : float(now - lastTime);
     lastTime = now;
 
     const int width = renderWidth();
@@ -1333,6 +1347,24 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationRenderS
     ALOGV("IMMAVAL validation render size: %dx%d", width, height);
 }
 
+void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationPlayback(
+    JNIEnv*,
+    jclass,
+    jdouble fixedDt,
+    jlong playerFrame) {
+    if (fixedDt >= 0.0) {
+        gEngine.validationFixedDt = fixedDt;
+    }
+    if (playerFrame >= 0) {
+        gEngine.validationPlayerFrame = static_cast<uint64_t>(playerFrame);
+        gEngine.validationPlayerFrameEnabled = true;
+    }
+    ALOGV("IMMAVAL validation playback fixedDt=%.9f targetPlayerFrame=%llu enabled=%d",
+          gEngine.validationFixedDt,
+          static_cast<unsigned long long>(gEngine.validationPlayerFrame),
+          gEngine.validationPlayerFrameEnabled ? 1 : 0);
+}
+
 void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetEyeBufferScale(
     JNIEnv*,
     jclass,
@@ -1394,7 +1426,7 @@ void android_main(android_app* app) {
         // Update camera from touch input before rendering
         const double now = gEngine.timer->GetTime();
         static double lastTime = now;
-        const float dtime = float(now - lastTime);
+        const float dtime = gEngine.validationFixedDt >= 0.0 ? static_cast<float>(gEngine.validationFixedDt) : float(now - lastTime);
         lastTime = now;
         updateCameraFromTouch(dtime);
         

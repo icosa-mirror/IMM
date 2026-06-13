@@ -23,12 +23,16 @@ public final class ImmFtlSmokeTest {
     private static final String PACKAGE_NAME = "org.linuxfoundation.imm.player";
     private static final int VALIDATION_RENDER_WIDTH = 1280;
     private static final int VALIDATION_RENDER_HEIGHT = 720;
+    private static final double DEFAULT_VALIDATION_FIXED_DT = 0.0333333333333333;
+    private static final long DEFAULT_VALIDATION_PLAYER_FRAME = 60L;
 
     @Test
     public void rendersSampleFrame() throws Exception {
         Bundle args = InstrumentationRegistry.getArguments();
         String renderer = args.getString("renderer", "Vulkan");
         int waitSeconds = parseInt(args.getString("waitSeconds"), 25);
+        double validationFixedDt = parseDouble(args.getString("ValidationFixedDt"), DEFAULT_VALIDATION_FIXED_DT);
+        long validationPlayerFrame = parseLong(args.getString("ValidationPlayerFrame"), DEFAULT_VALIDATION_PLAYER_FRAME);
 
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         Context targetContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
@@ -41,6 +45,8 @@ public final class ImmFtlSmokeTest {
         intent.putExtra("RenderingAPI", renderer);
         intent.putExtra("ValidationRenderWidth", VALIDATION_RENDER_WIDTH);
         intent.putExtra("ValidationRenderHeight", VALIDATION_RENDER_HEIGHT);
+        intent.putExtra("ValidationFixedDt", validationFixedDt);
+        intent.putExtra("ValidationPlayerFrame", validationPlayerFrame);
         targetContext.startActivity(intent);
 
         File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
@@ -58,6 +64,7 @@ public final class ImmFtlSmokeTest {
 
         requireMarker(logcat, "IMM Android renderer API: " + renderer);
         requireMarker(logcat, "IMMAVAL validation render size: " + VALIDATION_RENDER_WIDTH + "x" + VALIDATION_RENDER_HEIGHT);
+        requireMarker(logcat, "IMMAVAL validation playback");
         requireMarker(logcat, "IMMAVAL loadPath result=1");
         requireMarker(logcat, "IMMAVAL native render capture written");
         requireMarker(logcat, "Loaded in CPU");
@@ -116,6 +123,28 @@ public final class ImmFtlSmokeTest {
         }
         try {
             return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static long parseLong(String value, long fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static double parseDouble(String value, double fallback) {
+        if (value == null || value.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return Double.parseDouble(value);
         } catch (NumberFormatException ignored) {
             return fallback;
         }
