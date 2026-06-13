@@ -63,9 +63,7 @@ def main() -> int:
         unity_vulkan = input_root / "EngineValidationEvidence" / "captures" / "unity-windows-vulkan-ordered-overlay"
         unity_vulkan.mkdir(parents=True)
         (unity_vulkan / "unity-windows-vulkan-ordered-overlay.png").write_bytes(PNG_1X1)
-        unity_vulkan_root = input_root / "EngineValidationEvidence" / "unity-windows-vulkan-ordered-overlay"
-        unity_vulkan_root.mkdir(parents=True)
-        (unity_vulkan_root / "composition-status.json").write_text(
+        (unity_vulkan / "composition-status.json").write_text(
             json.dumps(
                 {
                     "rendering": "success",
@@ -224,6 +222,9 @@ def main() -> int:
         assert "Depth interleaving: claimed" in text
         assert "![unity-windows-directx-composition.png]" in text
         assert "## Unity Windows Vulkan Ordered Overlay" in text
+        assert "Composition mode: ordered_overlay" in text
+        assert "Ordered overlay: success" in text
+        assert "Depth composition: not_claimed" in text
         assert "![unity-windows-vulkan-ordered-overlay.png]" in text
         assert "### Missing Supported Evidence" in text
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text

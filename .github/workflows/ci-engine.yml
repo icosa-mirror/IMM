@@ -848,8 +848,7 @@ jobs:
             "${{ needs.unity-package-import.result }}" \
             "${{ needs.unity-windows-directx-player-build.result }}" \
             "${{ needs.unity-windows-directx-composition.result }}" \
-            "${{ needs.unity-windows-vulkan-player-build.result }}" \
-            "${{ needs.unity-windows-vulkan-ordered-overlay.result }}"
+            "${{ needs.unity-windows-vulkan-player-build.result }}"
           do
             if [ "$result" = "failure" ]; then
               unity_status="failed"
@@ -859,6 +858,13 @@ jobs:
               unity_failure_class="build"
             fi
           done
+          if [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" = "failure" ]; then
+            unity_status="failed"
+            unity_failure_class="compositing"
+          elif [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
+            unity_status="cancelled"
+            unity_failure_class="compositing"
+          fi
           if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ] || \

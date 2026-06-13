@@ -303,7 +303,9 @@ namespace ImmPlayer
             cube.transform.rotation = Quaternion.identity;
             cube.transform.localScale = Vector3.one;
 
-            Shader shader = Shader.Find("Unlit/Color");
+            Shader shader = Resources.Load<Shader>("ImmUnitySmokeUnlitColor");
+            if (shader == null)
+                shader = Shader.Find("Unlit/Color");
             if (shader == null)
                 shader = Shader.Find("Standard");
             if (shader == null)

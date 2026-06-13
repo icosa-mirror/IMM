@@ -367,6 +367,8 @@ def sha256_file(path: Path) -> str:
 
 def artifact_root_for(report: Path) -> Path:
     if report.is_dir():
+        if (report / "composition-status.json").exists():
+            return report
         if report.parent.name == "captures":
             return report.parent.parent
         return report
@@ -454,6 +456,8 @@ def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, 
         return ("passed", failure_class)
     if status.get("compositing") == "expected_failed":
         return ("expected failure", "compositing")
+    if status.get("compositing") == "failed":
+        return ("failed", "compositing")
     if status.get("rendering") == "success" or metrics.get("passed") is True:
         return ("passed", "")
     return ("unknown", "")
@@ -579,6 +583,10 @@ def main() -> int:
             lines.append(f"### {image.name}")
             lines.append(f"![{image.name}]({relative_link(copied_image, report_path)})")
             lines.append("")
+        if status:
+            status_output = capture_output_dir / section_slug / "composition-status.json"
+            status_output.parent.mkdir(parents=True, exist_ok=True)
+            status_output.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
 
     if visual_sections == 0:
         lines.append("No visual render evidence was found in the downloaded artifacts.")
