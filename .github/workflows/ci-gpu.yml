@@ -999,4 +999,5 @@ jobs:
           --name WindowsStandaloneOpenGLVR-GPU
           --name WindowsGodotVulkan-GPU
           --name WindowsGodotOpenXRVR-GPU
+          --name macOSStandaloneMetal-GPU
           --name macOSGodotMetal-GPU

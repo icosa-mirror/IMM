@@ -39,6 +39,8 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     const val EXTRA_QUILL_EYE_BUFFER_SCALE = "QUILL_EYE_BUFFER_SCALE"
     const val EXTRA_QUILL_RENDERING_TECHNIQUE = "QUILL_RENDERING_TECHNIQUE"
     const val EXTRA_RENDERING_API = "RenderingAPI"
+    const val EXTRA_VALIDATION_RENDER_WIDTH = "ValidationRenderWidth"
+    const val EXTRA_VALIDATION_RENDER_HEIGHT = "ValidationRenderHeight"
     const val PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 0x1
 
     @JvmStatic external fun nativeSetAssetDirectory(assetsDir: String?)
@@ -46,6 +48,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     @JvmStatic external fun nativeSendMessage(message: String?, messageType: Int)
     @JvmStatic external fun nativeSetQuillRenderingTechnique(renderingTechnique: Int)
     @JvmStatic external fun nativeSetRenderingApi(renderingApi: String?)
+    @JvmStatic external fun nativeSetValidationRenderSize(width: Int, height: Int)
     @JvmStatic
     external fun nativeSetEyeBufferScale(
         scaleFactor: Float
@@ -82,6 +85,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
 
   override fun onCreate(savedInstanceState: Bundle?) {
     applyRenderingApiExtra(intent)
+    applyValidationRenderSizeExtra(intent)
     super.onCreate(savedInstanceState)
 
     if (intent != null)
@@ -311,6 +315,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
         }
       }
       applyRenderingApiExtra(intent)
+      applyValidationRenderSizeExtra(intent)
       if (extras.containsKey(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)) {
         val spawnLocation = extras.getString(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)
         Log.d(TAG, "found player spawn location extra $spawnLocation")
@@ -338,6 +343,20 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     if (renderingApi.isNotEmpty()) {
       Log.d(TAG, "found rendering API extra $renderingApi")
       nativeSetRenderingApi(renderingApi)
+    }
+  }
+
+  private fun applyValidationRenderSizeExtra(intent: Intent?) {
+    val extras = intent?.extras ?: return
+    if (!extras.containsKey(EXTRA_VALIDATION_RENDER_WIDTH) || !extras.containsKey(EXTRA_VALIDATION_RENDER_HEIGHT)) {
+      return
+    }
+
+    val width = extras.getInt(EXTRA_VALIDATION_RENDER_WIDTH, 0)
+    val height = extras.getInt(EXTRA_VALIDATION_RENDER_HEIGHT, 0)
+    if (width > 0 && height > 0) {
+      Log.d(TAG, "found validation render size ${width}x${height}")
+      nativeSetValidationRenderSize(width, height)
     }
   }
 

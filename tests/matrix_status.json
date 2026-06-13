@@ -69,8 +69,8 @@
       "status": "supported",
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Standalone GLES",
-      "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds the APK and ci-device.yml defines a GitHub-hosted Android GLES runtime lane."
+      "baseline": "tests/baselines/render/android-standalone-gles-sample1.json",
+      "reason": "Hosted CI builds the APK and ci-device.yml runs a Firebase Test Lab Android GLES runtime lane with a fixed 1280x720 validation render capture contract."
     },
     {
       "product": "standalone",
@@ -80,8 +80,8 @@
       "status": "supported",
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Standalone Vulkan",
-      "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml defines a GitHub-hosted Android Vulkan runtime lane."
+      "baseline": "tests/baselines/render/android-standalone-vulkan-sample1.json",
+      "reason": "Hosted CI builds the Vulkan APK and ci-device.yml runs a Firebase Test Lab Android Vulkan runtime lane with a fixed 1280x720 validation render capture contract."
     },
     {
       "product": "standalone",

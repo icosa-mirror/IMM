@@ -27,6 +27,10 @@
       "max": 75,
       "min": 35
     },
+    "requires_dimensions": {
+      "height": 720,
+      "width": 1280
+    },
     "minimum_luma_span": 16,
     "minimum_near_visible_pixels": 20000,
     "minimum_non_black_pixels": 20000,
