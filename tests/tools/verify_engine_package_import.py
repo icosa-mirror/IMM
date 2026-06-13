@@ -99,6 +99,35 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
         ),
         encoding="utf-8",
     )
+    (assets / "PackageImportHarness.asmdef").write_text(
+        json.dumps(
+            {
+                "name": "Imm.PackageImport.Tests",
+                "references": [
+                    "UnityEngine.TestRunner",
+                    "UnityEditor.TestRunner",
+                ],
+                "includePlatforms": [
+                    "Editor",
+                ],
+                "excludePlatforms": [],
+                "allowUnsafeCode": False,
+                "overrideReferences": False,
+                "precompiledReferences": [],
+                "autoReferenced": True,
+                "defineConstraints": [],
+                "versionDefines": [],
+                "noEngineReferences": False,
+                "optionalUnityReferences": [
+                    "TestAssemblies",
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return project
 
 
