@@ -461,10 +461,11 @@ def verify_unity_projection_guard() -> None:
         "IMM_UNITY_FORCE_BACKBUFFER_PROJECTION",
         "IMM_UNITY_FORCE_TEXTURE_PROJECTION",
         "GraphicsDeviceType.Direct3D11",
-        "has ping-ponged",
-        "legacy reverse-depth convention",
-        "D3D11 non-XR Game cameras",
-        "D3D11 XR/stereo Game cameras",
+        "backbuffer projection path",
+        "keep XR separate from this path",
+        "GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture)",
+        "D3D11 desktop Game cameras",
+        "Unity can mark Game cameras as stereo/XR-active",
         "!cam.stereoEnabled",
         "stereoEnabled as a",
         "CameraType.SceneView",
@@ -473,7 +474,7 @@ def verify_unity_projection_guard() -> None:
             raise RuntimeError(f"Unity projection guard is missing token: {token}")
     if re.search(r"GraphicsDeviceType\.Direct3D11\)\s*\r?\n\s*return true;", manager):
         raise RuntimeError("Unity D3D11 projection guard must not apply texture projection to XR/stereo Game cameras")
-    if not re.search(r"GraphicsDeviceType\.Direct3D11\s*&&\s*\r?\n\s*cam != null\s*&&\s*\r?\n\s*cam\.cameraType == CameraType\.Game\s*&&\s*\r?\n\s*!cam\.stereoEnabled\)\s*\r?\n\s*return true;", manager):
+    if not re.search(r"GraphicsDeviceType\.Direct3D11\s*&&\s*\r?\n\s*cam != null\s*&&\s*\r?\n\s*cam\.cameraType == CameraType\.Game\s*&&\s*\r?\n\s*!cam\.stereoEnabled\)\s*\r?\n\s*return false;", manager):
         raise RuntimeError("Unity D3D11 projection guard must be limited to non-XR Game cameras")
     print("Unity D3D11/XR projection guard ok", flush=True)
 
