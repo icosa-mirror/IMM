@@ -22,6 +22,12 @@ namespace ImmPlayer
         public static extern IntPtr GetRenderEventFunc();
 
         [DllImport(DllName)]
+        public static extern IntPtr GetRenderEventAndDataFunc();
+
+        [DllImport(DllName)]
+        public static extern int ConfigureVulkanRenderEvent(int eventId);
+
+        [DllImport(DllName)]
         public static extern void Debug();
 
         [DllImport(DllName)]
@@ -61,6 +67,9 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void GlobalWork(int enabled);
 
+        [DllImport(DllName)]
+        public static extern int PrepareCamera(int cameraID);
+
         /// <summary>
         /// Set camera matrices for rendering
         /// </summary>
@@ -77,6 +86,9 @@ namespace ImmPlayer
 
         [DllImport(DllName)]
         public static extern void SetCameraViewport(int cameraID, int width, int height);
+
+        [DllImport(DllName)]
+        public static extern void SetVulkanCameraRenderBuffers(int cameraID, IntPtr colorRenderBuffer, IntPtr depthRenderBuffer, int width, int height, int samples);
 
         #endregion
 

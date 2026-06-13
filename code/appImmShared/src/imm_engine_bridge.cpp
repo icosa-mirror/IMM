@@ -193,7 +193,44 @@ namespace ImmShared
         if (rightEyeProjection != nullptr) camera.rightEyeProjection = *rightEyeProjection;
     }
 
-    bool ImmEngineBridge::RenderCamera(int cameraID, const ViewportInfo &viewport, int eyeID, bool tickSound)
+    bool ImmEngineBridge::PrepareCamera(int cameraID)
+    {
+        if (!mPlayerInitialized || !mGraphicsInitialized || mRenderer == nullptr)
+            return false;
+
+        if (cameraID < 0 || cameraID >= kMaxCameras)
+        {
+            if (mLogInitialized)
+                mLog.Printf(LT_ERROR, L"Invalid cameraID: %d", cameraID);
+            return false;
+        }
+
+        const CameraState &camera = mCamera[cameraID];
+        if (camera.stereoType == 0)
+        {
+            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
+                                 fromMatrix(f2d(camera.world2Head)),
+                                 camera.headProjection,
+                                 StereoMode::None);
+        }
+        else if (camera.stereoType == 1)
+        {
+            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
+                                 fromMatrix(f2d(camera.world2Head)),
+                                 camera.headProjection,
+                                 StereoMode::Fallback);
+        }
+        else if (camera.stereoType == 2)
+        {
+            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
+                                 fromMatrix(f2d(camera.world2Head)),
+                                 camera.headProjection,
+                                 StereoMode::Preferred);
+        }
+        return true;
+    }
+
+    bool ImmEngineBridge::RenderPreparedCamera(int cameraID, const ViewportInfo &viewport, int eyeID, bool tickSound)
     {
         if (!mPlayerInitialized || !mGraphicsInitialized || mRenderer == nullptr)
             return false;
@@ -278,10 +315,6 @@ namespace ImmShared
         }
         if (camera.stereoType == 0)
         {
-            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
-                                 fromMatrix(f2d(camera.world2Head)),
-                                 camera.headProjection,
-                                 StereoMode::None);
             mPlayer.RenderMono(res, 0);
         }
         else if (camera.stereoType == 1)
@@ -292,11 +325,6 @@ namespace ImmShared
                     mLog.Printf(LT_ERROR, L"Invalid eyeID: %d", eyeID);
                 return false;
             }
-
-            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
-                                 fromMatrix(f2d(camera.world2Head)),
-                                 camera.headProjection,
-                                 StereoMode::Fallback);
 
             if (eyeID == 0)
             {
@@ -314,11 +342,6 @@ namespace ImmShared
             const float oldVp[6] = { viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth };
             const float newVp[6] = { viewport.x, viewport.y, viewport.width * 2.0f, viewport.height, viewport.minDepth, viewport.maxDepth };
             mRenderer->SetViewports(1, newVp);
-
-            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
-                                 fromMatrix(f2d(camera.world2Head)),
-                                 camera.headProjection,
-                                 StereoMode::Preferred);
 
             const mat4x4d headToLeftEye = f2d(camera.world2LeftEye) * invert(f2d(camera.world2Head));
             const mat4x4d headToRightEye = f2d(camera.world2RightEye) * invert(f2d(camera.world2Head));
@@ -360,6 +383,13 @@ namespace ImmShared
         }
 
         return true;
+    }
+
+    bool ImmEngineBridge::RenderCamera(int cameraID, const ViewportInfo &viewport, int eyeID, bool tickSound)
+    {
+        if (!PrepareCamera(cameraID))
+            return false;
+        return RenderPreparedCamera(cameraID, viewport, eyeID, tickSound);
     }
 
     Player *ImmEngineBridge::GetPlayer()

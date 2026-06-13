@@ -340,6 +340,7 @@ namespace ImmPlayer {
         ImmCore::piRasterState mRasterState = nullptr;
         ImmCore::piBlendState  mBlendState = nullptr;
         ImmCore::piDepthState  mDepthState = nullptr;
+        ImmCore::piDepthState  mBackgroundDepthState = nullptr;
 
         // state
         int        mSeed;

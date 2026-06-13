@@ -488,6 +488,9 @@ namespace ImmPlayer
 
         private void ApplyDocumentBackgroundColor()
         {
+            if (!string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("IMM_UNITY_SKIP_DOCUMENT_BACKGROUND_COLOR")))
+                return;
+
             Camera cam = backgroundCamera != null ? backgroundCamera : Camera.main;
             if (cam == null)
                 return;
