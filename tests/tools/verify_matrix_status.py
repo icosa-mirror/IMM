@@ -35,6 +35,7 @@ KNOWN_HOSTED_GATES = {
     "Build / Windows",
     "Build / Windows and CI Core Matrix / Godot Local Verifier",
     "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
+    "CI Engine Matrix / Unity Package Import and Unity Windows DirectX Composition",
     "CI Core Matrix / Godot Local Verifier",
     "CI Core Matrix / Package Source Layout",
     "Godot local verifier checks Unity XR scene bootstrap",

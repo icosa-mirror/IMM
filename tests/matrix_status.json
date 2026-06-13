@@ -150,10 +150,10 @@
       "mode": "non-vr",
       "renderer": "native",
       "status": "supported",
-      "hosted_gate": "Build / Package Unity Plugins and CI Core Matrix / Package Source Layout",
+      "hosted_gate": "CI Engine Matrix / Unity Package Import and Unity Windows DirectX Composition",
       "hardware_gate": null,
-      "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI assembles multi-platform UPM packages and verifies package layout. Unity editor runtime checks remain in ci-engine.yml but require CI_ENABLE_UNITY_EDITOR_CHECKS=true because standard GitHub Windows runners do not provide a Unity editor or license."
+      "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
+      "reason": "CI Engine Matrix runs Unity package import tests, builds a Windows DirectX smoke player on a hosted Linux runner, runs the player on a hosted Windows runner, compares the render capture against the committed Windows DirectX sample1 reference, and reports composition separately from render parity."
     },
     {
       "product": "unity",

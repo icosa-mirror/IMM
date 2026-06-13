@@ -231,7 +231,7 @@ jobs:
           key: UnityLibrary-windows-directx-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity DirectX smoke player
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: UnityWindowsDirectXPlayer
