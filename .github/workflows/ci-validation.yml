@@ -11,6 +11,7 @@ on:
       - main
       - develop
       - feature/**
+      - experiment/**
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
