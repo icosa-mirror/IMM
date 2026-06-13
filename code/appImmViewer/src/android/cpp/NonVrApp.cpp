@@ -1354,10 +1354,16 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationPlaybac
     jlong playerFrame) {
     if (fixedDt >= 0.0) {
         gEngine.validationFixedDt = fixedDt;
+        char fixedDtText[64];
+        snprintf(fixedDtText, sizeof(fixedDtText), "%.16g", gEngine.validationFixedDt);
+        setenv("IMM_VIEWER_VALIDATE_FIXED_DT", fixedDtText, 1);
     }
     if (playerFrame >= 0) {
         gEngine.validationPlayerFrame = static_cast<uint64_t>(playerFrame);
         gEngine.validationPlayerFrameEnabled = true;
+        char playerFrameText[32];
+        snprintf(playerFrameText, sizeof(playerFrameText), "%llu", static_cast<unsigned long long>(gEngine.validationPlayerFrame));
+        setenv("IMM_VIEWER_VALIDATE_PLAYER_FRAME", playerFrameText, 1);
     }
     ALOGV("IMMAVAL validation playback fixedDt=%.9f targetPlayerFrame=%llu enabled=%d",
           gEngine.validationFixedDt,
