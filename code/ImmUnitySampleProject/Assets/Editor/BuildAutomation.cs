@@ -176,6 +176,29 @@ namespace ImmPlayer.Editor
             BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development, "Windows DirectX smoke player");
         }
 
+        public static void BuildWindowsVulkanSmokePlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Vulkan });
+
+            string outputPath = GetCommandLineValue(EditorSmokePlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "windows-vulkan-smoke-player", "ImmUnitySmoke.exe");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+
+            string outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+
+            BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development, "Windows Vulkan smoke player");
+        }
+
         public static void RunWindowsOpenXREditorPlayModeSmoke()
         {
             EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");

@@ -14,6 +14,7 @@ namespace ImmPlayer
         private const string QuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
         private const string OverlayProbeEnv = "IMM_UNITY_SMOKE_OVERLAY_PROBE";
+        private const string OverlayFixtureEnv = "IMM_UNITY_SMOKE_OVERLAY_FIXTURE";
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string CapturePathArg = "-immSmokeCapturePath";
         private const string FramesArg = "-immSmokeFrames";
@@ -71,6 +72,10 @@ namespace ImmPlayer
 
             if (_compositionProbeEnabled)
             {
+                if (_overlayProbeEnabled)
+                {
+                    ConfigureRuntimeOverlayFixtureIfRequested();
+                }
                 if (!CreateCompositionProbes())
                 {
                     RecordCompositionFailure("failed to create scene composition probes");
@@ -102,7 +107,7 @@ namespace ImmPlayer
                 yield break;
             }
 
-            Texture2D tex = CaptureCameraTexture(captureCamera);
+            Texture2D tex = _overlayProbeEnabled ? CaptureOrderedCameraStackTexture(captureCamera) : CaptureCameraTexture(captureCamera);
 
             int width = tex.width;
             int height = tex.height;
@@ -219,6 +224,114 @@ namespace ImmPlayer
                 renderTexture.Release();
                 Destroy(renderTexture);
             }
+        }
+
+        private static Texture2D CaptureOrderedCameraStackTexture(Camera finalCamera)
+        {
+            Camera[] cameras = FindObjectsOfType<Camera>();
+            Array.Sort(cameras, (left, right) => left.depth.CompareTo(right.depth));
+
+            RenderTexture renderTexture = new RenderTexture(CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32);
+            RenderTexture previousActive = RenderTexture.active;
+            string previousForceTextureProjection = Environment.GetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION");
+            var previousTargets = new Dictionary<Camera, RenderTexture>();
+            try
+            {
+                Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", "1");
+                RenderTexture.active = renderTexture;
+                GL.Clear(true, true, Color.clear);
+
+                for (int i = 0; i < cameras.Length; ++i)
+                {
+                    Camera camera = cameras[i];
+                    if (camera == null || !camera.enabled || camera.targetTexture != null)
+                        continue;
+                    if (finalCamera != null && camera.targetDisplay != finalCamera.targetDisplay)
+                        continue;
+
+                    previousTargets[camera] = camera.targetTexture;
+                    camera.targetTexture = renderTexture;
+                    RenderTexture.active = renderTexture;
+                    camera.Render();
+                }
+
+                var tex = new Texture2D(CaptureWidth, CaptureHeight, TextureFormat.RGB24, false);
+                RenderTexture.active = renderTexture;
+                tex.ReadPixels(new Rect(0, 0, CaptureWidth, CaptureHeight), 0, 0, false);
+                tex.Apply(false, false);
+                return tex;
+            }
+            finally
+            {
+                if (previousForceTextureProjection == null)
+                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", null);
+                else
+                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", previousForceTextureProjection);
+                foreach (KeyValuePair<Camera, RenderTexture> entry in previousTargets)
+                {
+                    if (entry.Key != null)
+                        entry.Key.targetTexture = entry.Value;
+                }
+                RenderTexture.active = previousActive;
+                renderTexture.Release();
+                Destroy(renderTexture);
+            }
+        }
+
+        private static void ConfigureRuntimeOverlayFixtureIfRequested()
+        {
+            string enabled = Environment.GetEnvironmentVariable(OverlayFixtureEnv);
+            if (string.IsNullOrEmpty(enabled) || enabled == "0")
+                return;
+
+            Camera cam = Camera.main;
+            if (cam == null)
+                cam = FindObjectOfType<Camera>();
+            if (cam == null)
+            {
+                Debug.LogError($"{Prefix}overlay fixture failed: no camera found");
+                return;
+            }
+
+            const int overlayLayer = 30;
+            cam.cullingMask = 0;
+
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "IMM Runtime Overlay Fixture Cube";
+            cube.layer = overlayLayer;
+            cube.transform.position = cam.ViewportToWorldPoint(new Vector3(0.95f, 0.45f, 4.0f));
+            cube.transform.rotation = Quaternion.identity;
+            cube.transform.localScale = Vector3.one;
+
+            Shader shader = Shader.Find("Unlit/Color");
+            if (shader == null)
+                shader = Shader.Find("Standard");
+            if (shader == null)
+            {
+                Debug.LogError($"{Prefix}overlay fixture failed: no shader found");
+                return;
+            }
+
+            Material material = new Material(shader);
+            material.color = new Color(1.0f, 0.05f, 0.02f, 1.0f);
+            Renderer renderer = cube.GetComponent<Renderer>();
+            if (renderer != null)
+                renderer.sharedMaterial = material;
+
+            GameObject overlayCameraObject = new GameObject("IMM Runtime Overlay Fixture Camera");
+            Camera overlayCamera = overlayCameraObject.AddComponent<Camera>();
+            overlayCamera.CopyFrom(cam);
+            overlayCamera.transform.SetPositionAndRotation(cam.transform.position, cam.transform.rotation);
+            overlayCamera.clearFlags = CameraClearFlags.Nothing;
+            overlayCamera.cullingMask = 1 << overlayLayer;
+            overlayCamera.depth = cam.depth + 1.0f;
+            overlayCamera.name = "IMM Runtime Overlay Fixture Camera";
+
+            ImmPlayerManager manager = FindObjectOfType<ImmPlayerManager>();
+            if (manager != null)
+                manager.SetRenderCamera(cam);
+
+            Debug.Log($"{Prefix}overlay fixture created baseCamera={cam.name} overlayCamera={overlayCamera.name} layer={overlayLayer}");
         }
 
         private bool CreateCompositionProbes()

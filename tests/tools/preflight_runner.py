@@ -104,6 +104,7 @@ def main() -> int:
             "windows-openxr-vr",
             "unity",
             "unity-windows-directx",
+            "unity-windows-vulkan",
             "unity-windows-openxr-vr",
         ],
     )

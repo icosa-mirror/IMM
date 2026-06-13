@@ -40,6 +40,8 @@ REQUIRED_JOBS = {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Prepare Unity DirectX CI project", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-vulkan-player-build": ["Preflight Unity Vulkan runner", "Prepare Unity Vulkan CI project", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
+        "unity-windows-vulkan-ordered-overlay": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Write engine aggregate status manifests", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
@@ -71,6 +73,8 @@ REQUIRED_RUNS_ON = {
         "unity-package-import": {"ubuntu-latest"},
         "unity-windows-directx-player-build": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
+        "unity-windows-vulkan-player-build": {"ubuntu-latest"},
+        "unity-windows-vulkan-ordered-overlay": {"windows-latest"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
@@ -106,6 +110,8 @@ REQUIRED_JOB_TIMEOUTS = {
         "unity-package-import",
         "unity-windows-directx-player-build",
         "unity-windows-directx-composition",
+        "unity-windows-vulkan-player-build",
+        "unity-windows-vulkan-ordered-overlay",
         "unity-windows-openxr-vr",
         "godot-package-import",
         "engine-evidence-report",
@@ -134,6 +140,7 @@ REQUIRED_STEP_TIMEOUTS = {
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"Run Unity batchmode package import tests"},
         "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
+        "unity-windows-vulkan-ordered-overlay": {"Run Unity Vulkan ordered overlay smoke"},
         "unity-windows-openxr-vr": {"Run Unity OpenXR VR smoke"},
     },
     ".github/workflows/ci-gpu.yml": {

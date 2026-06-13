@@ -43,12 +43,16 @@ def main() -> int:
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
             "unity-windows-directx-composition",
+            "unity-windows-vulkan-ordered-overlay",
             "classify_unity_visual_smoke.py",
             "--composition-mode full_depth",
+            "--composition-mode ordered_overlay",
+            "IMM_UNITY_SMOKE_OVERLAY_FIXTURE",
             "composition-status.json",
             "expected_failed",
             "Compare Unity DirectX render metrics against committed DirectX baseline",
             "unity-windows-directx-composition.png",
+            "unity-windows-vulkan-ordered-overlay.png",
         ],
         ROOT / "tests/tools/composition_status.py": [
             "composition_mode",

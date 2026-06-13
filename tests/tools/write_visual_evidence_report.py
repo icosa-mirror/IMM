@@ -37,6 +37,7 @@ def normalize_label(value: str) -> str:
         "windows-standalone-opengl": "Windows-Standalone-OpenGL",
         "windows-standalone-vulkan": "Windows-Standalone-Vulkan",
         "unity-windows-directx-composition": "Unity-Windows-DirectX-Composition",
+        "unity-windows-vulkan-ordered-overlay": "Unity-Windows-Vulkan-Ordered-Overlay",
     }
     for old, new in replacements.items():
         normalized = normalized.replace(old, new)
@@ -58,6 +59,7 @@ def slugify(value: str) -> str:
         "androidstandalonevulkan": "android-standalone-vulkan",
         "macosgodotmetal": "macos-godot-metal",
         "unitywindowsdirectxcomposition": "unity-windows-directx-composition",
+        "unitywindowsvulkanorderedoverlay": "unity-windows-vulkan-ordered-overlay",
         "windowsgodotvulkan": "windows-godot-vulkan",
         "windowsstandalonedirectx": "windows-standalone-directx",
         "windowsstandaloneopengl": "windows-standalone-opengl",

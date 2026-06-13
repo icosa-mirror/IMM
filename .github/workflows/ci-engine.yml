@@ -409,6 +409,282 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  unity-windows-vulkan-player-build:
+    name: Unity Windows Vulkan Player Build
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Restore Unity Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-windows-vulkan-${{ env.UNITY_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_VERSION }}-
+
+      - name: Preflight Unity Vulkan runner
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-windows-vulkan-player/preflight.json
+
+      - name: Prepare Unity Vulkan artifact directory
+        run: mkdir -p artifacts/unity-windows-vulkan-player/player
+
+      - name: Prepare Unity Vulkan CI project
+        run: >
+          python tests/tools/prepare_unity_ci_project.py
+          --source code/ImmUnitySampleProject
+          --output artifacts/UnityVulkanSmokeProject
+
+      - name: Build Unity Vulkan smoke player
+        id: unity_vulkan_player_build
+        timeout-minutes: 25
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: artifacts/UnityVulkanSmokeProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneWindows64
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsVulkanSmokePlayer
+          customParameters: -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_vulkan_player_build.outcome }}" --failure-class build --output artifacts/unity-windows-vulkan-player/manifest.json --product unity --platform-name windows --mode non-vr --renderer vulkan --include artifacts/unity-windows-vulkan-player
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-windows-vulkan-player --require-manifest --output artifacts/unity-windows-vulkan-player/artifact-summary.json
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-windows-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity Vulkan smoke player
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsVulkanPlayer
+          path: artifacts/unity-windows-vulkan-player/player
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Unity Vulkan build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsVulkanPlayerBuildEvidence
+          path: artifacts/unity-windows-vulkan-player
+          if-no-files-found: ignore
+          retention-days: 14
+
+  unity-windows-vulkan-ordered-overlay:
+    name: Unity Windows Vulkan Ordered Overlay
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    needs: unity-windows-vulkan-player-build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Mesa lavapipe
+        id: msys2-unity-vulkan
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-mesa
+
+      - name: Configure Mesa lavapipe Vulkan ICD
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2-unity-vulkan.outputs.msys2-location }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\unity-windows-vulkan-ordered-overlay | Out-Null
+          $setupLog = "artifacts\unity-windows-vulkan-ordered-overlay\vulkan-driver-setup.txt"
+          $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          $mingwBin = Join-Path ($searchRoots | Select-Object -First 1) "mingw64\bin"
+          if (Test-Path $mingwBin) {
+            $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+          "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
+          $icds = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue })
+          $dlls = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue })
+          "ICD candidates:" | Out-File -FilePath $setupLog -Append
+          $icds.FullName | Out-File -FilePath $setupLog -Append
+          "DLL candidates:" | Out-File -FilePath $setupLog -Append
+          $dlls.FullName | Out-File -FilePath $setupLog -Append
+          $sourceIcd = $icds | Where-Object { $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Select-Object -First 1
+          }
+          if (-not $sourceIcd) {
+            throw "Mesa lavapipe ICD was not found under: $($searchRoots -join ', ')"
+          }
+          $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
+          $sourceDll = Join-Path $driverRoot "bin\vulkan_lvp.dll"
+          if (-not (Test-Path $sourceDll)) {
+            $sourceDll = ($dlls | Where-Object { $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
+          }
+          if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
+            throw "Mesa lavapipe DLL was not found for $($sourceIcd.FullName)"
+          }
+          $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
+          New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
+          $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
+          $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
+          $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
+          "Selected ICD=$($sourceIcd.FullName)" | Out-File -FilePath $setupLog -Append
+          "Selected DLL=$sourceDll" | Out-File -FilePath $setupLog -Append
+          "Workspace ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-Content -Raw $workspaceIcd | Out-File -FilePath $setupLog -Append
+          "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Preflight Unity Vulkan runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-vulkan --output artifacts\unity-windows-vulkan-ordered-overlay\preflight.json --require-env VK_ICD_FILENAMES
+
+      - name: Download Unity Vulkan smoke player
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsVulkanPlayer
+          path: artifacts/unity-windows-vulkan-ordered-overlay/player
+
+      - name: Run Unity Vulkan ordered overlay smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $artifactDir = Resolve-Path artifacts\unity-windows-vulkan-ordered-overlay
+          $player = Join-Path $artifactDir "player\ImmUnitySmoke.exe"
+          if (-not (Test-Path $player)) {
+            throw "Unity Vulkan smoke player was not built: $player"
+          }
+          $capturePath = Join-Path $artifactDir "unity-windows-vulkan-ordered-overlay.png"
+          $playerLog = Join-Path $artifactDir "unity-player.log"
+          $env:IMM_UNITY_SMOKE_OVERLAY_FIXTURE = "1"
+          $playerArgs = @(
+            "-logFile", $playerLog,
+            "-screen-width", "1280",
+            "-screen-height", "720",
+            "-screen-fullscreen", "0",
+            "-force-vulkan",
+            "-immSmokeCapturePath", $capturePath,
+            "-immSmokeFrames", "360",
+            "-immSmokeQuit", "1",
+            "-immSmokeCompositionProbe", "1",
+            "-immSmokeOverlayProbe", "1"
+          )
+          $process = Start-Process -FilePath $player -ArgumentList $playerArgs -PassThru
+          if (-not $process.WaitForExit(240000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $playerLog) {
+              Get-Content $playerLog
+            }
+            throw "Unity Vulkan ordered overlay smoke timed out"
+          }
+          if (Test-Path $playerLog) {
+            Get-Content $playerLog
+          }
+          if (-not (Test-Path $capturePath)) {
+            throw "Unity Vulkan ordered overlay capture was not written: $capturePath"
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Unity Vulkan ordered overlay smoke failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Classify Unity Vulkan ordered overlay status
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\classify_unity_visual_smoke.py
+          --log artifacts\unity-windows-vulkan-ordered-overlay\unity-player.log
+          --capture artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png
+          --composition-mode ordered_overlay
+          --output artifacts\unity-windows-vulkan-ordered-overlay\composition-status.json
+
+      - name: Stage Unity Vulkan ordered overlay capture evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $captureDir = "artifacts\unity-windows-vulkan-ordered-overlay\captures\unity-windows-vulkan-ordered-overlay"
+          New-Item -ItemType Directory -Force $captureDir | Out-Null
+          if (Test-Path "artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png") {
+            Copy-Item "artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png" (Join-Path $captureDir "unity-windows-vulkan-ordered-overlay.png") -Force
+          }
+
+      - name: Verify Unity Vulkan ordered overlay log contract
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-vulkan-ordered-overlay\unity-player.log
+          --label unity-windows-vulkan-ordered-overlay
+          --require "[IMM_UNITY_SMOKE] capture="
+          --require "scene composition overlay probe passed"
+          --output artifacts\unity-windows-vulkan-ordered-overlay\unity-vulkan-overlay-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts\unity-windows-vulkan-ordered-overlay\manifest.json --product unity --platform-name windows --mode non-vr --renderer vulkan --include artifacts\unity-windows-vulkan-ordered-overlay
+
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-vulkan-ordered-overlay --require-manifest --output artifacts\unity-windows-vulkan-ordered-overlay\artifact-summary.json
+
+      - name: Upload Unity Vulkan ordered overlay artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsVulkanOrderedOverlay
+          path: artifacts/unity-windows-vulkan-ordered-overlay
+          if-no-files-found: ignore
+          retention-days: 14
+
   unity-windows-openxr-vr:
     name: Unity Windows OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
@@ -533,6 +809,8 @@ jobs:
       - unity-package-import
       - unity-windows-directx-player-build
       - unity-windows-directx-composition
+      - unity-windows-vulkan-player-build
+      - unity-windows-vulkan-ordered-overlay
       - unity-windows-openxr-vr
       - godot-package-import
     steps:
@@ -569,7 +847,9 @@ jobs:
           for result in \
             "${{ needs.unity-package-import.result }}" \
             "${{ needs.unity-windows-directx-player-build.result }}" \
-            "${{ needs.unity-windows-directx-composition.result }}"
+            "${{ needs.unity-windows-directx-composition.result }}" \
+            "${{ needs.unity-windows-vulkan-player-build.result }}" \
+            "${{ needs.unity-windows-vulkan-ordered-overlay.result }}"
           do
             if [ "$result" = "failure" ]; then
               unity_status="failed"
@@ -581,7 +861,9 @@ jobs:
           done
           if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ]; then
+             [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-vulkan-player-build.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" != "skipped" ]; then
             python tests/tools/write_ci_manifest.py \
               --status "$unity_status" \
               --failure-class "$unity_failure_class" \
@@ -621,5 +903,8 @@ jobs:
           --name UnityWindowsDirectXPlayer
           --name UnityWindowsDirectXPlayerBuildEvidence
           --name UnityWindowsDirectXComposition
+          --name UnityWindowsVulkanPlayer
+          --name UnityWindowsVulkanPlayerBuildEvidence
+          --name UnityWindowsVulkanOrderedOverlay
           --name UnityWindowsOpenXRVR
           --name GodotPackageImport
