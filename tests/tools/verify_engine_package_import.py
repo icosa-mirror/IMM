@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import shutil
 import sys
@@ -36,10 +35,6 @@ def ensure_path(path: Path, errors: list[str]) -> None:
         errors.append(f"Empty file: {path}")
 
 
-def file_uri(path: Path) -> str:
-    return path.resolve().as_uri()
-
-
 def load_json(path: Path, errors: list[str]) -> dict:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -69,18 +64,20 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
     assets = project / "Assets" / "Tests"
     packages.mkdir(parents=True, exist_ok=True)
     assets.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(stroke_package, packages / UNITY_PACKAGE_NAMES["stroke"])
+    shutil.copytree(player_package, packages / UNITY_PACKAGE_NAMES["player"])
 
     manifest = {
         "dependencies": {
-            UNITY_PACKAGE_NAMES["stroke"]: file_uri(stroke_package),
-            UNITY_PACKAGE_NAMES["player"]: file_uri(player_package),
+            UNITY_PACKAGE_NAMES["stroke"]: f"file:{UNITY_PACKAGE_NAMES['stroke']}",
+            UNITY_PACKAGE_NAMES["player"]: f"file:{UNITY_PACKAGE_NAMES['player']}",
             "com.unity.test-framework": "1.1.33",
             "com.unity.modules.jsonserialize": "1.0.0",
         }
     }
     (packages / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    baseline_hash = hashlib.sha256(baseline.read_bytes()).hexdigest()
+    baseline_hash = baseline.read_bytes().hex()[:32]
     (assets / "PackageImportHarness.cs").write_text(
         "\n".join(
             [

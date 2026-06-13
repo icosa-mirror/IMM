@@ -1,7 +1,9 @@
 {
   "name": "ImmUnity.Runtime",
   "rootNamespace": "ImmPlayer",
-  "references": [],
+  "references": [
+    "UnityEngine.XRModule"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
