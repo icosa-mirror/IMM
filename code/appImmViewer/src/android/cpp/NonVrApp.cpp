@@ -1041,13 +1041,12 @@ void renderFrame() {
 
     const int width = renderWidth();
     const int height = renderHeight();
-    const float aspect = (height > 0) ? (float)width / (float)height : 1.0f;
-    const mat4x4 projection = setPerspective(50.0f, aspect, 0.01f, 1000.0f);
+    const vec4 monoProjectionFov = vec4(0.0f);
     const trans3d vrToHead = trans3d::identity();
 
     gEngine.viewer->GlobalWork(nullptr, false, vrToHead, nullptr, nullptr, gEngine.log, dtime,
                                ivec2(width, height), true, 8000, gEngine.firstFrame);
-    gEngine.viewer->GlobalRender(vrToHead, projection);
+    gEngine.viewer->GlobalRender(vrToHead, monoProjectionFov);
     gEngine.viewer->RenderMono(ivec2(width, height), vrToHead, 0);
     const ImmPlayer::Player::PerformanceInfo &perf = gEngine.viewer->GetPerformanceInfoForFrame();
     if (!gEngine.useVulkan) {

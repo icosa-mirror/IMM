@@ -104,7 +104,10 @@ jobs:
             $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter native-render-rejected.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
           }
           if ($capture) {
-            python tests/tools/compare_render_metrics.py $capture.FullName --contract tests/baselines/render/android-standalone-gles-sample1.json --json-output artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
+            python tests/tools/compare_render_metrics.py $capture.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/windows-directx-sample1.json `
+              --json-output artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
           } else {
             New-Item -ItemType Directory -Force artifacts/android-standalone-gles | Out-Null
             '{"passed":false,"errors":["missing Firebase Test Lab native-render-after.ppm"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-gles/android-gles-screenshot-metrics.json
@@ -228,7 +231,10 @@ jobs:
             $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter native-render-rejected.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
           }
           if ($capture) {
-            python tests/tools/compare_render_metrics.py $capture.FullName --contract tests/baselines/render/android-standalone-vulkan-sample1.json --json-output artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
+            python tests/tools/compare_render_metrics.py $capture.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/windows-directx-sample1.json `
+              --json-output artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json
           } else {
             New-Item -ItemType Directory -Force artifacts/android-standalone-vulkan | Out-Null
             '{"passed":false,"errors":["missing Firebase Test Lab native-render-after.ppm"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json

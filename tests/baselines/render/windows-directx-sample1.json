@@ -15,6 +15,12 @@
         "top_right": 0.424
       }
     },
+    "expected_spatial_luma_grid": {
+      "height": 18,
+      "max_mean_abs_delta": 0.04,
+      "min_correlation": 0.9,
+      "width": 32
+    },
     "expected_vertical_luma_profile": {
       "tolerance": 0.09,
       "values": [

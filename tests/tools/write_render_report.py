@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import struct
 import zlib
 from pathlib import Path
@@ -65,7 +66,11 @@ def convert_capture(capture: Path, output_dir: Path) -> Path:
         write_png(output, width, height, pixels)
         return output
     if capture.suffix.lower() == ".png":
-        return capture
+        output = output_dir / capture.name
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if capture.resolve() != output.resolve():
+            shutil.copy2(capture, output)
+        return output
     raise ValueError(f"Unsupported capture format for report image: {capture.suffix}")
 
 
@@ -84,6 +89,15 @@ def metric_value(metrics: dict, section: str, key: str) -> str:
 
 def percentile_value(metrics: dict, section: str, key: str) -> str:
     value = metrics.get(section, {}).get("luma_percentiles", {}).get(key)
+    if value is None:
+        return ""
+    return str(value)
+
+
+def top_level_metric(metrics: dict, section: str, key: str) -> str:
+    value = metrics.get(section, {}).get(key)
+    if isinstance(value, float):
+        return f"{value:.3f}"
     if value is None:
         return ""
     return str(value)
@@ -131,6 +145,14 @@ def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]
         ["visible_luma_mean", metric_value(metrics, "reference", "visible_luma_mean"), metric_value(metrics, "candidate", "visible_luma_mean")],
         ["visible_chroma_mean", metric_value(metrics, "reference", "visible_chroma_mean"), metric_value(metrics, "candidate", "visible_chroma_mean")],
     ]
+    if metrics.get("spatial_luma_grid"):
+        rows.extend(
+            [
+                ["spatial_grid_mean_abs_delta", "", top_level_metric(metrics, "spatial_luma_grid", "mean_abs_delta")],
+                ["spatial_grid_rmse", "", top_level_metric(metrics, "spatial_luma_grid", "rmse")],
+                ["spatial_grid_correlation", "", top_level_metric(metrics, "spatial_luma_grid", "correlation")],
+            ]
+        )
     widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
     lines.append("## Metrics")
     lines.append("| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(rows[0])) + " |")

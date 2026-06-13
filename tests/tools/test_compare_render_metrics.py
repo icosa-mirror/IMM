@@ -102,6 +102,12 @@ def main() -> int:
                     "values": reference["quadrant_luma_share"],
                     "tolerance": 0.06,
                 },
+                "expected_spatial_luma_grid": {
+                    "width": 4,
+                    "height": 4,
+                    "max_mean_abs_delta": 0.04,
+                    "min_correlation": 0.9,
+                },
                 "expected_visible_channel_means": {
                     "values": reference["visible_channel_means"],
                     "tolerance": 16,
@@ -130,6 +136,13 @@ def main() -> int:
         assert not compare_render_metrics.compare_metrics(reference, png)
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), reference) == []
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), png) == []
+        same_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, png_path, 4, 4)
+        flipped_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, flipped_path, 4, 4)
+        assert compare_render_metrics.validate_spatial_contract(contract, same_spatial) == []
+        assert any(
+            "spatial luma grid" in error
+            for error in compare_render_metrics.validate_spatial_contract(contract, flipped_spatial)
+        )
         assert any(
             "vertical luma profile" in error or "visible centroid" in error or "quadrant luma share" in error
             for error in compare_render_metrics.validate_contract(contract, flipped)

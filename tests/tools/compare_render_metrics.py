@@ -167,7 +167,7 @@ def histogram_percentiles(histogram: list[int], total: int) -> dict[str, int]:
     return values
 
 
-def read_ppm_metrics(path: Path) -> dict:
+def read_ppm_capture(path: Path) -> tuple[int, int, bytes, str]:
     with path.open("rb") as handle:
         magic = handle.readline().strip()
         if magic != b"P6":
@@ -190,7 +190,78 @@ def read_ppm_metrics(path: Path) -> dict:
     expected_bytes = width * height * 3
     if len(pixels) != expected_bytes:
         raise ValueError(f"{path} has {len(pixels)} pixel bytes, expected {expected_bytes}")
-    return compute_rgb_metrics(width, height, pixels, "ppm-p6")
+    return width, height, pixels, "ppm-p6"
+
+
+def read_ppm_metrics(path: Path) -> dict:
+    width, height, pixels, format_name = read_ppm_capture(path)
+    return compute_rgb_metrics(width, height, pixels, format_name)
+
+
+def luma_at(pixels: bytes, index: int) -> int:
+    base = index * 3
+    r, g, b = pixels[base], pixels[base + 1], pixels[base + 2]
+    return (r * 299 + g * 587 + b * 114) // 1000
+
+
+def compute_spatial_luma_grid(width: int, height: int, pixels: bytes, grid_width: int, grid_height: int) -> list[float]:
+    values: list[float] = []
+    for grid_y in range(grid_height):
+        y0 = grid_y * height // grid_height
+        y1 = (grid_y + 1) * height // grid_height
+        for grid_x in range(grid_width):
+            x0 = grid_x * width // grid_width
+            x1 = (grid_x + 1) * width // grid_width
+            total = 0
+            count = 0
+            for y in range(y0, y1):
+                row = y * width
+                for x in range(x0, x1):
+                    total += luma_at(pixels, row + x)
+                    count += 1
+            values.append((total / count / 255.0) if count else 0.0)
+    return values
+
+
+def compare_luma_grids(reference_grid: list[float], candidate_grid: list[float]) -> dict:
+    if len(reference_grid) != len(candidate_grid) or not reference_grid:
+        return {"mean_abs_delta": None, "rmse": None, "correlation": None}
+    mean_abs_delta = sum(abs(candidate - reference) for reference, candidate in zip(reference_grid, candidate_grid)) / len(reference_grid)
+    rmse = math.sqrt(sum((candidate - reference) ** 2 for reference, candidate in zip(reference_grid, candidate_grid)) / len(reference_grid))
+    ref_mean = sum(reference_grid) / len(reference_grid)
+    cand_mean = sum(candidate_grid) / len(candidate_grid)
+    ref_variance = sum((value - ref_mean) ** 2 for value in reference_grid)
+    cand_variance = sum((value - cand_mean) ** 2 for value in candidate_grid)
+    correlation = None
+    if ref_variance > 0.0 and cand_variance > 0.0:
+        covariance = sum((reference - ref_mean) * (candidate - cand_mean) for reference, candidate in zip(reference_grid, candidate_grid))
+        correlation = covariance / math.sqrt(ref_variance * cand_variance)
+    return {"mean_abs_delta": mean_abs_delta, "rmse": rmse, "correlation": correlation}
+
+
+def collect_spatial_metrics(reference_path: Path, candidate_path: Path, grid_width: int, grid_height: int) -> dict:
+    reference_width, reference_height, reference_pixels, _ = read_rgb_capture(reference_path)
+    candidate_width, candidate_height, candidate_pixels, _ = read_rgb_capture(candidate_path)
+    if reference_width != candidate_width or reference_height != candidate_height:
+        return {
+            "grid_width": grid_width,
+            "grid_height": grid_height,
+            "error": f"dimensions differ: reference={reference_width}x{reference_height} candidate={candidate_width}x{candidate_height}",
+        }
+    reference_grid = compute_spatial_luma_grid(reference_width, reference_height, reference_pixels, grid_width, grid_height)
+    candidate_grid = compute_spatial_luma_grid(candidate_width, candidate_height, candidate_pixels, grid_width, grid_height)
+    metrics = compare_luma_grids(reference_grid, candidate_grid)
+    metrics.update({"grid_width": grid_width, "grid_height": grid_height})
+    return metrics
+
+
+def read_rgb_capture(path: Path) -> tuple[int, int, bytes, str]:
+    suffix = path.suffix.lower()
+    if suffix == ".ppm":
+        return read_ppm_capture(path)
+    if suffix == ".png":
+        return read_png_capture(path)
+    raise ValueError(f"Unsupported render capture format: {path.suffix}")
 
 
 def paeth_predictor(left: int, up: int, upper_left: int) -> int:
@@ -243,7 +314,7 @@ def unfilter_png_scanlines(data: bytes, width: int, height: int, bytes_per_pixel
     return b"".join(rows)
 
 
-def read_png_metrics(path: Path) -> dict:
+def read_png_capture(path: Path) -> tuple[int, int, bytes, str]:
     data = path.read_bytes()
     if not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError(f"{path} is not a PNG")
@@ -293,7 +364,12 @@ def read_png_metrics(path: Path) -> dict:
             rgb[index * 3 + 1] = raw[index * 4 + 1]
             rgb[index * 3 + 2] = raw[index * 4 + 2]
         rgb = bytes(rgb)
-    return compute_rgb_metrics(width, height, rgb, "png")
+    return width, height, rgb, "png"
+
+
+def read_png_metrics(path: Path) -> dict:
+    width, height, pixels, format_name = read_png_capture(path)
+    return compute_rgb_metrics(width, height, pixels, format_name)
 
 
 def collect_metrics(path: Path) -> dict:
@@ -559,6 +635,39 @@ def validate_contract(contract: dict, candidate: dict) -> list[str]:
     return errors
 
 
+def validate_spatial_contract(contract: dict, spatial_metrics: dict | None) -> list[str]:
+    validation = contract.get("validation", {})
+    if not isinstance(validation, dict):
+        return []
+    expected_grid = validation.get("expected_spatial_luma_grid")
+    if not isinstance(expected_grid, dict):
+        return []
+    if not spatial_metrics:
+        return ["spatial luma grid comparison requires a reference capture"]
+    if spatial_metrics.get("error"):
+        return [f"spatial luma grid comparison failed: {spatial_metrics['error']}"]
+
+    errors: list[str] = []
+    mean_abs_delta = spatial_metrics.get("mean_abs_delta")
+    max_mean_abs_delta = expected_grid.get("max_mean_abs_delta")
+    if mean_abs_delta is None:
+        errors.append("spatial luma grid mean_abs_delta is missing")
+    elif max_mean_abs_delta is not None and mean_abs_delta > float(max_mean_abs_delta):
+        errors.append(
+            f"spatial luma grid mean_abs_delta {mean_abs_delta:.3f} exceeds contract maximum {float(max_mean_abs_delta):.3f}"
+        )
+
+    correlation = spatial_metrics.get("correlation")
+    min_correlation = expected_grid.get("min_correlation")
+    if correlation is None:
+        errors.append("spatial luma grid correlation is missing")
+    elif min_correlation is not None and correlation < float(min_correlation):
+        errors.append(
+            f"spatial luma grid correlation {correlation:.3f} is below contract minimum {float(min_correlation):.3f}"
+        )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("candidate", type=Path)
@@ -570,6 +679,7 @@ def main() -> int:
     candidate = collect_metrics(args.candidate)
     output = {"candidate": candidate}
     errors: list[str] = []
+    spatial_metrics = None
     if args.reference:
         reference = collect_metrics(args.reference)
         output["reference"] = reference
@@ -577,7 +687,15 @@ def main() -> int:
     if args.contract:
         contract = json.loads(args.contract.read_text(encoding="utf-8"))
         output["contract"] = {"path": args.contract.as_posix(), "schema": contract.get("schema"), "baseline": contract.get("baseline")}
+        validation = contract.get("validation", {})
+        expected_grid = validation.get("expected_spatial_luma_grid") if isinstance(validation, dict) else None
+        if isinstance(expected_grid, dict):
+            grid_width = int(expected_grid.get("width", 32))
+            grid_height = int(expected_grid.get("height", 18))
+            spatial_metrics = collect_spatial_metrics(args.reference, args.candidate, grid_width, grid_height) if args.reference else None
+            output["spatial_luma_grid"] = spatial_metrics
         errors.extend(validate_contract(contract, candidate))
+        errors.extend(validate_spatial_contract(contract, spatial_metrics))
     output["passed"] = not errors
     output["errors"] = errors
 
