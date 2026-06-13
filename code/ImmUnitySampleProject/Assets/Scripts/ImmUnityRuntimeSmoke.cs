@@ -102,25 +102,7 @@ namespace ImmPlayer
                 yield break;
             }
 
-            var tex = ScreenCapture.CaptureScreenshotAsTexture();
-            RenderTexture renderTexture = null;
-            RenderTexture previousActive = null;
-            RenderTexture previousTarget = null;
-            if (tex == null)
-            {
-                int fallbackWidth = CaptureWidth;
-                int fallbackHeight = CaptureHeight;
-                renderTexture = new RenderTexture(fallbackWidth, fallbackHeight, 24, RenderTextureFormat.ARGB32);
-                previousActive = RenderTexture.active;
-                previousTarget = captureCamera.targetTexture;
-                captureCamera.targetTexture = renderTexture;
-                RenderTexture.active = renderTexture;
-                captureCamera.Render();
-
-                tex = new Texture2D(fallbackWidth, fallbackHeight, TextureFormat.RGB24, false);
-                tex.ReadPixels(new Rect(0, 0, fallbackWidth, fallbackHeight), 0, 0, false);
-                tex.Apply(false, false);
-            }
+            Texture2D tex = CaptureCameraTexture(captureCamera);
 
             int width = tex.width;
             int height = tex.height;
@@ -201,31 +183,42 @@ namespace ImmPlayer
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
 
-            FlipTextureRowsForPng(tex, pixels, width, height);
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             Destroy(tex);
-            if (renderTexture != null)
-            {
-                captureCamera.targetTexture = previousTarget;
-                RenderTexture.active = previousActive;
-                renderTexture.Release();
-                Destroy(renderTexture);
-            }
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             QuitIfRequested(0);
         }
 
-        private static void FlipTextureRowsForPng(Texture2D tex, Color32[] pixels, int width, int height)
+        private static Texture2D CaptureCameraTexture(Camera captureCamera)
         {
-            var flipped = new Color32[pixels.Length];
-            for (int y = 0; y < height; ++y)
+            RenderTexture renderTexture = new RenderTexture(CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32);
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture previousTarget = captureCamera.targetTexture;
+            string previousForceTextureProjection = Environment.GetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION");
+            try
             {
-                Array.Copy(pixels, y * width, flipped, (height - y - 1) * width, width);
-            }
+                Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", "1");
+                captureCamera.targetTexture = renderTexture;
+                RenderTexture.active = renderTexture;
+                captureCamera.Render();
 
-            tex.SetPixels32(flipped);
-            tex.Apply(false, false);
+                var tex = new Texture2D(CaptureWidth, CaptureHeight, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, CaptureWidth, CaptureHeight), 0, 0, false);
+                tex.Apply(false, false);
+                return tex;
+            }
+            finally
+            {
+                if (previousForceTextureProjection == null)
+                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", null);
+                else
+                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", previousForceTextureProjection);
+                captureCamera.targetTexture = previousTarget;
+                RenderTexture.active = previousActive;
+                renderTexture.Release();
+                Destroy(renderTexture);
+            }
         }
 
         private bool CreateCompositionProbes()
@@ -282,7 +275,9 @@ namespace ImmPlayer
             if (renderer == null)
                 return probe;
 
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            Shader shader = Resources.Load<Shader>("ImmUnitySmokeUnlitColor");
+            if (shader == null)
+                shader = Shader.Find("Universal Render Pipeline/Unlit");
             if (shader == null)
                 shader = Shader.Find("Unlit/Color");
             if (shader == null)
