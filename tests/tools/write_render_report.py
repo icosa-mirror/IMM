@@ -115,7 +115,12 @@ def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]
             [
                 "## Status",
                 f"- Rendering: {status.get('rendering', '')}",
+                f"- Composition mode: {status.get('composition_mode', '')}",
+                f"- Composition contract: {status.get('composition_contract', '')}",
                 f"- Compositing: {status.get('compositing', '')}",
+                f"- Ordered overlay: {status.get('ordered_overlay', '')}",
+                f"- Depth composition: {status.get('depth_composition', '')}",
+                f"- Depth interleaving: {status.get('depth_interleaving', '')}",
                 f"- Failure class: {status.get('failure_class', '')}",
                 "",
             ]

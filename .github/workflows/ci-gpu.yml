@@ -893,6 +893,7 @@ jobs:
           python3 tests/tools/classify_godot_visual_smoke.py \
             --log artifacts/godot-smoke-macos-metal/godot-metal-smoke.log \
             --renderer metal \
+            --composition-mode full_depth \
             --output artifacts/godot-smoke-macos-metal/composition-status.json
           if [ "$smoke_status" -ne 0 ]; then
             status="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"

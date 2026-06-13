@@ -44,6 +44,22 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        (engine / "composition-status.json").write_text(
+            json.dumps(
+                {
+                    "rendering": "success",
+                    "composition_mode": "full_depth",
+                    "composition_contract": "depth_composition",
+                    "compositing": "expected_failed",
+                    "ordered_overlay": "not_tested",
+                    "depth_composition": "expected_failed",
+                    "depth_interleaving": "claimed",
+                    "failure_class": "compositing",
+                    "failures": ["scene composition rear occlusion probe failed"],
+                }
+            ),
+            encoding="utf-8",
+        )
 
         gpu = input_root / "GPUMatrixEvidence" / "WindowsGodotVulkan-GPU"
         gpu.mkdir(parents=True)
@@ -180,6 +196,11 @@ def main() -> int:
         assert "| godot/windows/non-vr/vulkan | supported | expected failure | yes |" in text
         assert "| standalone/ios/non-vr/native | unsupported | unsupported | no |" in text
         assert "## Unity Windows DirectX Composition" in text
+        assert "Composition mode: full_depth" in text
+        assert "Composition contract: depth_composition" in text
+        assert "Ordered overlay: not_tested" in text
+        assert "Depth composition: expected_failed" in text
+        assert "Depth interleaving: claimed" in text
         assert "![unity-windows-directx-composition.png]" in text
         assert "### Missing Supported Evidence" in text
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text

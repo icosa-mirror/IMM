@@ -346,6 +346,7 @@ jobs:
           python tests\tools\classify_unity_visual_smoke.py
           --log artifacts\unity-windows-directx-composition\unity-player.log
           --capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
+          --composition-mode full_depth
           --output artifacts\unity-windows-directx-composition\composition-status.json
 
       - name: Compare Unity DirectX render metrics against committed DirectX baseline

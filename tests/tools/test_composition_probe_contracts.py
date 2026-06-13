@@ -44,10 +44,19 @@ def main() -> int:
         ROOT / ".github/workflows/ci-engine.yml": [
             "unity-windows-directx-composition",
             "classify_unity_visual_smoke.py",
+            "--composition-mode full_depth",
             "composition-status.json",
             "expected_failed",
             "Compare Unity DirectX render metrics against committed DirectX baseline",
             "unity-windows-directx-composition.png",
+        ],
+        ROOT / "tests/tools/composition_status.py": [
+            "composition_mode",
+            "composition_contract",
+            "ordered_overlay",
+            "depth_composition",
+            "depth_interleaving",
+            "render_only",
         ],
     }
 

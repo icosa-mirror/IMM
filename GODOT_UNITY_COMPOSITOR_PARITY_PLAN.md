@@ -606,6 +606,14 @@ Ordered overlay/background milestone acceptance requires:
 - Mobile-class performance risk has been assessed with timing, frame-debugger/RenderDoc/AGI evidence, or a concrete bandwidth/synchronization analysis tied to the chosen path.
 - Captures have been opened and inspected against expected composition.
 
+Relationship to merged CI composition coverage:
+
+- The CI Engine Matrix now has a Unity Windows DirectX composition lane that builds/runs the Unity smoke player, compares the render capture against the committed DirectX baseline, writes a composition report, and classifies the known full-depth composition failure as `expected_failed` when rendering still passes.
+- That CI lane is a regression guard for Unity package import, DirectX render parity, smoke capture orientation/size, and the shared scene-probe contract. It does not prove the Unity Windows Vulkan ordered-overlay route.
+- The current Unity Vulkan overlay-camera evidence remains local evidence until a dedicated Vulkan overlay lane exists. A future automated lane should run `-force-vulkan` with the overlay probe enabled, use normal SampleScene MSAA settings, and require `compositing=success` for the ordered-overlay route rather than `expected_failed`.
+- Local Vulkan overlay captures and CI reports should keep using the same smoke log markers, projected probe regions, and render-metric reports so failures are comparable across local and CI evidence.
+- The visual smoke classifiers now use one shared composition-status vocabulary: `composition_mode=full_depth` for true depth-interleaving expectations, `composition_mode=ordered_overlay` for host-over-IMM render-order expectations, and `composition_mode=render_only` when composition is deliberately not tested. Reports retain the legacy `compositing` summary but also include `composition_contract`, `ordered_overlay`, `depth_composition`, and `depth_interleaving` so the tested contract is explicit.
+
 Full parity is complete only when:
 
 - Mono Godot rendering matches Unity's scene composition behavior for color, alpha, camera transform, projection, and depth.

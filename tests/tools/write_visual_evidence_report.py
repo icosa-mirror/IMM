@@ -546,7 +546,17 @@ def main() -> int:
             lines.append(f"- Lane status: {classification.get('result', '')}")
         if status:
             lines.append(f"- Rendering: {status.get('rendering', '')}")
+            if status.get("composition_mode"):
+                lines.append(f"- Composition mode: {status.get('composition_mode', '')}")
+            if status.get("composition_contract"):
+                lines.append(f"- Composition contract: {status.get('composition_contract', '')}")
             lines.append(f"- Compositing: {status.get('compositing', '')}")
+            if status.get("ordered_overlay"):
+                lines.append(f"- Ordered overlay: {status.get('ordered_overlay', '')}")
+            if status.get("depth_composition"):
+                lines.append(f"- Depth composition: {status.get('depth_composition', '')}")
+            if status.get("depth_interleaving"):
+                lines.append(f"- Depth interleaving: {status.get('depth_interleaving', '')}")
         lines.append("")
 
         errors = metrics.get("errors") or []

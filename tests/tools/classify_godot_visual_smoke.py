@@ -7,6 +7,8 @@ import argparse
 import json
 from pathlib import Path
 
+from composition_status import COMPOSITION_CONTRACTS, build_composition_fields, classification_succeeded
+
 
 RENDER_FAILURE_MARKERS = [
     "visual smoke PNG was too flat",
@@ -28,6 +30,7 @@ def main() -> int:
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--renderer", required=True, choices=["metal", "vulkan"])
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--composition-mode", choices=sorted(COMPOSITION_CONTRACTS), default="full_depth")
     args = parser.parse_args()
 
     text = args.log.read_text(encoding="utf-8", errors="ignore") if args.log.exists() else ""
@@ -45,18 +48,19 @@ def main() -> int:
         and not render_failures
     )
 
+    composition_fields = build_composition_fields(args.composition_mode, rendering_succeeded, composition_failures)
     status = {
         "schema": "imm-composition-status-v1",
         "rendering": "success" if rendering_succeeded else "failed",
-        "compositing": "expected_failed" if composition_failures else ("success" if rendering_succeeded else "unknown"),
         "failure_class": "compositing" if composition_failures else ("" if rendering_succeeded else "visual"),
         "failures": composition_failures + [f"rendering failure marker: {marker}" for marker in render_failures],
     }
+    status.update(composition_fields)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     print(f"Godot visual smoke status written: {args.output}")
 
-    if status["rendering"] == "success" and status["compositing"] in {"success", "expected_failed"}:
+    if classification_succeeded(status):
         return 0
     return 1
 

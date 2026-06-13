@@ -39,7 +39,19 @@ def main() -> int:
             encoding="utf-8",
         )
         status.write_text(
-            json.dumps({"rendering": "success", "compositing": "expected_failed", "failure_class": "compositing", "failures": ["scene composition PPM front occluder probe failed"]}),
+            json.dumps(
+                {
+                    "rendering": "success",
+                    "composition_mode": "full_depth",
+                    "composition_contract": "depth_composition",
+                    "compositing": "expected_failed",
+                    "ordered_overlay": "not_tested",
+                    "depth_composition": "expected_failed",
+                    "depth_interleaving": "claimed",
+                    "failure_class": "compositing",
+                    "failures": ["scene composition PPM front occluder probe failed"],
+                }
+            ),
             encoding="utf-8",
         )
 
@@ -73,7 +85,12 @@ def main() -> int:
         assert "![Candidate]" in text
         assert "visible_luma_mean" in text
         assert "Rendering: success" in text
+        assert "Composition mode: full_depth" in text
+        assert "Composition contract: depth_composition" in text
         assert "Compositing: expected_failed" in text
+        assert "Ordered overlay: not_tested" in text
+        assert "Depth composition: expected_failed" in text
+        assert "Depth interleaving: claimed" in text
         assert "scene composition PPM front occluder probe failed" in text
 
     print("Render report tests passed")
