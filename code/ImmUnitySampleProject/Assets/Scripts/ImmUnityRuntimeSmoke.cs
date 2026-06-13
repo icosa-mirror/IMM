@@ -70,18 +70,6 @@ namespace ImmPlayer
                 Screen.SetResolution(CaptureWidth, CaptureHeight, false);
             }
 
-            if (_compositionProbeEnabled)
-            {
-                if (_overlayProbeEnabled)
-                {
-                    ConfigureRuntimeOverlayFixtureIfRequested();
-                }
-                if (!CreateCompositionProbes())
-                {
-                    RecordCompositionFailure("failed to create scene composition probes");
-                }
-            }
-
             string framesText = GetCommandLineValue(FramesArg);
             if (string.IsNullOrEmpty(framesText))
             {
@@ -95,6 +83,24 @@ namespace ImmPlayer
             for (int i = 0; i < frameCount; ++i)
             {
                 yield return null;
+            }
+
+            yield return StabilizeSampleViewpoint();
+
+            if (_compositionProbeEnabled)
+            {
+                if (_overlayProbeEnabled)
+                {
+                    ConfigureRuntimeOverlayFixtureIfRequested();
+                }
+                if (!CreateCompositionProbes())
+                {
+                    RecordCompositionFailure("failed to create scene composition probes");
+                }
+                for (int i = 0; i < 5; ++i)
+                {
+                    yield return null;
+                }
             }
 
             yield return new WaitForEndOfFrame();
@@ -224,6 +230,30 @@ namespace ImmPlayer
                 renderTexture.Release();
                 Destroy(renderTexture);
             }
+        }
+
+        private static IEnumerator StabilizeSampleViewpoint()
+        {
+            ImmPlayerExample example = FindObjectOfType<ImmPlayerExample>();
+            if (example == null)
+                yield break;
+
+            const int maxAttempts = 180;
+            for (int i = 0; i < maxAttempts; ++i)
+            {
+                if (example.TrySetSmokeSpawnArea(0))
+                {
+                    Debug.Log($"{Prefix}smoke spawn area 0 applied after {i + 1} attempt(s)");
+                    for (int settleFrame = 0; settleFrame < 10; ++settleFrame)
+                    {
+                        yield return null;
+                    }
+                    yield break;
+                }
+                yield return null;
+            }
+
+            Debug.LogWarning($"{Prefix}smoke spawn area 0 was not available before capture");
         }
 
         private static Texture2D CaptureOrderedCameraStackTexture(Camera finalCamera)

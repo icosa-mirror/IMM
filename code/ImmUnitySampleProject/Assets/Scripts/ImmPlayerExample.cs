@@ -468,6 +468,19 @@ namespace ImmPlayer
             SetSpawnAreaByIndex(spawnAreaIndex);
         }
 
+        public bool TrySetSmokeSpawnArea(int spawnAreaIndex)
+        {
+            if (_currentDocument == null || !_currentDocument.IsLoaded)
+                return false;
+
+            SyncSpawnAreaSelection();
+            if (_spawnAreaIds.Length == 0)
+                return false;
+
+            SetSpawnAreaByIndex(spawnAreaIndex);
+            return true;
+        }
+
         /// <summary>
         /// Set playback volume
         /// </summary>
