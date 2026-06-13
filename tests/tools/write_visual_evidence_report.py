@@ -193,7 +193,7 @@ def row_matches_key(row: dict, observed_key: str) -> bool:
     if renderer == "native":
         terms = [product, platform]
     if renderer == "preflight":
-        terms = [product, platform]
+        terms = [product, renderer]
     if mode == "vr":
         terms.append("vr")
     return all(not term or term == "all" or slugify(term) in key for term in terms)

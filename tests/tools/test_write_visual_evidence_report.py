@@ -45,6 +45,42 @@ def main() -> int:
             encoding="utf-8",
         )
 
+        gpu = input_root / "GPUMatrixEvidence" / "WindowsGodotVulkan-GPU"
+        gpu.mkdir(parents=True)
+        (gpu / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {"result": "expected_failed", "failure_class": "compositing"},
+                    "matrix": {
+                        "product": "godot",
+                        "platform": "windows",
+                        "mode": "non-vr",
+                        "renderer": "vulkan",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        core = input_root / "CoreMatrixEvidence" / "godot-local-verifier"
+        core.mkdir(parents=True)
+        (core / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {"result": "passed"},
+                    "matrix": {
+                        "product": "godot",
+                        "platform": "all",
+                        "mode": "local-verifier",
+                        "renderer": "preflight",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
         matrix = temp / "matrix_status.json"
         matrix.write_text(
             json.dumps(
@@ -80,6 +116,26 @@ def main() -> int:
                             "hardware_gate": "CI GPU Matrix / Windows Godot OpenXR VR",
                             "baseline": "tests/baselines/content/sample1.json",
                             "owner_decision": "VR is deferred.",
+                        },
+                        {
+                            "product": "godot",
+                            "platform": "windows",
+                            "mode": "non-vr",
+                            "renderer": "preflight",
+                            "status": "supported",
+                            "hosted_gate": "CI Core Matrix / Godot Local Verifier",
+                            "baseline": "tests/baselines/content/sample1.json",
+                            "reason": "Godot preflight is supported.",
+                        },
+                        {
+                            "product": "godot",
+                            "platform": "windows",
+                            "mode": "non-vr",
+                            "renderer": "vulkan",
+                            "status": "supported",
+                            "hardware_gate": "CI GPU Matrix / Windows Godot Vulkan",
+                            "baseline": "tests/baselines/render/godot-windows-vulkan-sample1.json",
+                            "reason": "Godot Vulkan is supported.",
                         },
                         {
                             "product": "standalone",
@@ -120,6 +176,8 @@ def main() -> int:
         assert "| unity/all/non-vr/native | supported | passed | yes |" in text
         assert "| standalone/macos/non-vr/metal | supported | missing evidence | yes |" in text
         assert "| godot/windows/vr/openxr | deferred | deferred | no |" in text
+        assert "| godot/windows/non-vr/preflight | supported | passed | no |" in text
+        assert "| godot/windows/non-vr/vulkan | supported | expected failure | yes |" in text
         assert "| standalone/ios/non-vr/native | unsupported | unsupported | no |" in text
         assert "## Unity Windows DirectX Composition" in text
         assert "![unity-windows-directx-composition.png]" in text
