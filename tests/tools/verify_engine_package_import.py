@@ -62,7 +62,7 @@ def verify_unity_package(path: Path, expected_name: str, required_files: list[st
 def write_unity_harness(workspace: Path, stroke_package: Path, player_package: Path, baseline: Path) -> Path:
     project = workspace / "unity-package-import"
     packages = project / "Packages"
-    assets = project / "Assets" / "Tests"
+    assets = project / "Assets" / "Tests" / "Editor"
     packages.mkdir(parents=True, exist_ok=True)
     assets.mkdir(parents=True, exist_ok=True)
     shutil.copytree(stroke_package, packages / UNITY_PACKAGE_NAMES["stroke"])
@@ -103,10 +103,7 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
         json.dumps(
             {
                 "name": "Imm.PackageImport.Tests",
-                "references": [
-                    "UnityEngine.TestRunner",
-                    "UnityEditor.TestRunner",
-                ],
+                "references": [],
                 "includePlatforms": [
                     "Editor",
                 ],
@@ -170,7 +167,8 @@ def verify_unity(args: argparse.Namespace) -> int:
             shutil.rmtree(args.workspace)
         project = write_unity_harness(args.workspace, stroke_package, player_package, baseline)
         ensure_file(project / "Packages" / "manifest.json", errors)
-        ensure_file(project / "Assets" / "Tests" / "PackageImportHarness.cs", errors)
+        ensure_file(project / "Assets" / "Tests" / "Editor" / "PackageImportHarness.cs", errors)
+        ensure_file(project / "Assets" / "Tests" / "Editor" / "PackageImportHarness.asmdef", errors)
 
     if errors:
         for error in errors:

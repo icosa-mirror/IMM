@@ -1,9 +1,9 @@
-using System;
 using System.Collections;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Rendering;
+using Type = System.Type;
 
 namespace ImmPlayer
 {

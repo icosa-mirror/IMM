@@ -345,7 +345,7 @@ namespace ImmPlayer
             }
             if (!deviceActive)
             {
-                Debug.LogError($"{Prefix}xr probe failed: XR device is not active");
+                Debug.LogError($"{Prefix}xr probe failed: XRSettings.isDeviceActive is false");
                 return false;
             }
             if (runningDisplays <= 0)
