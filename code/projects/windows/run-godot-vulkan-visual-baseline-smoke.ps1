@@ -219,17 +219,22 @@ if (-not (Test-Path -LiteralPath $CapturePath -PathType Leaf)) {
     throw "Godot Vulkan visual baseline smoke did not write capture: $CapturePath"
 }
 
-try {
-    & (Join-Path $repoRoot "code\appImmViewer\scripts\compare-ppm-captures.ps1") `
-        -ReferencePath $ReferencePath `
-        -CandidatePath $CapturePath `
-        -MaxMeanAbsoluteError $MaxMeanAbsoluteError `
-        -MaxRootMeanSquareError $MaxRootMeanSquareError `
-        -MinVisibleOverlap $MinVisibleOverlap
+if ($CompositionMode -eq "ordered_overlay") {
+    Write-Output "Skipping DirectX baseline PPM comparison for ordered_overlay composition mode; ordered-overlay validation uses scene probes and render metrics."
 }
-catch {
-    if (-not $knownCompositionOnly) {
-        throw
+else {
+    try {
+        & (Join-Path $repoRoot "code\appImmViewer\scripts\compare-ppm-captures.ps1") `
+            -ReferencePath $ReferencePath `
+            -CandidatePath $CapturePath `
+            -MaxMeanAbsoluteError $MaxMeanAbsoluteError `
+            -MaxRootMeanSquareError $MaxRootMeanSquareError `
+            -MinVisibleOverlap $MinVisibleOverlap
     }
-    Write-Warning "Godot Vulkan capture differs from the DirectX baseline because the known scene compositing probe failed: $($_.Exception.Message)"
+    catch {
+        if (-not $knownCompositionOnly) {
+            throw
+        }
+        Write-Warning "Godot Vulkan capture differs from the DirectX baseline because the known scene compositing probe failed: $($_.Exception.Message)"
+    }
 }
