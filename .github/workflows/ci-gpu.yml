@@ -676,6 +676,36 @@ jobs:
           --output-dir artifacts\godot-smoke-windows-vulkan\captures
           --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
 
+      - name: Run Godot Vulkan ordered overlay smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: >
+          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
+          -Configuration Release
+          -SkipBuild
+          -CompositionMode ordered_overlay
+          -CapturePath artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          -LogDir artifacts\godot-smoke-windows-vulkan-ordered-overlay
+
+      - name: Record Godot Vulkan ordered overlay metrics
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
+
+      - name: Write Godot Vulkan ordered overlay report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          --status-json artifacts\godot-smoke-windows-vulkan-ordered-overlay\composition-status.json
+          --output-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay\captures
+          --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-report.md
+
       - name: Write CI manifest
         if: always()
         shell: pwsh
@@ -690,7 +720,7 @@ jobs:
               $failureClass = "compositing"
             }
           }
-          python tests\tools\write_ci_manifest.py --status "$status" --failure-class "$failureClass" --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan
+          python tests\tools\write_ci_manifest.py --status "$status" --failure-class "$failureClass" --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -701,7 +731,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: WindowsGodotVulkan-GPU
-          path: artifacts/godot-smoke-windows-vulkan
+          path: |
+            artifacts/godot-smoke-windows-vulkan
+            artifacts/godot-smoke-windows-vulkan-ordered-overlay
           if-no-files-found: ignore
           retention-days: 14
 

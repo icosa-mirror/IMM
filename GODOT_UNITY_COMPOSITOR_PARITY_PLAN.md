@@ -15,6 +15,15 @@ The desired Godot behavior is:
 - The compositor works for Vulkan first, then Metal if the same resource access is available.
 - Existing standalone, Unity, and Godot smoke paths keep their current behavior unless explicitly covered by the new compositor path.
 
+## Milestone Agreement
+
+We agreed to split compositor parity into two separate goals:
+
+- Immediate goal: ordered overlay/background composition for both Unity and Godot. IMM renders as the background or lower ordered layer, and normal Unity/Godot content renders visibly above it by host render order. Host scene depth is not used and is not claimed.
+- Deferred goal: full depth compositing for Unity and Godot. IMM and host geometry interleave by depth, with host geometry correctly occluding IMM where appropriate and IMM remaining visible where it is in front.
+
+Evidence and CI reports must state which goal is being tested. A passing ordered-overlay result must use `composition_mode=ordered_overlay`, must not imply depth interleaving, and must not be used as full-depth parity evidence. A full-depth result must use `composition_mode=full_depth`; known full-depth gaps can remain `expected_failed` while the ordered-overlay milestone is being implemented.
+
 The scope is not Godot-only once a fix touches shared IMM renderer, player, or shader code. Any change under `libImmCore`, `libImmPlayer`, or shared generated shaders must be treated as affecting all hosts that use that backend, including the Unity plugin on Vulkan. Godot-specific behavior must be gated at the Godot host boundary or by an explicit renderer capability/state that is only true for the relevant host integration path.
 
 The platform scope for shared-code changes is:
@@ -250,10 +259,12 @@ This is a deliberately scoped standalone milestone. It makes IMM useful in Unity
 Milestone status:
 
 - Defined, not yet complete.
-- Godot Vulkan has alpha/depth compositor evidence, but the ordered overlay fixture still needs its own explicit smoke and visual inspection.
-- Unity desktop Vulkan is the gating platform for this milestone because normal SampleScene MSAA output is still failing.
+- This is the immediate compositor milestone for both Unity and Godot.
+- Godot Vulkan has alpha/depth compositor evidence, but the ordered overlay fixture still needs its own explicit smoke and visual inspection before Godot can be counted as passing this milestone.
+- Unity desktop Vulkan ordered overlay still needs passing automated evidence in the final CI report; current failed Vulkan overlay images disprove completion.
 - The current Unity Vulkan host-command-buffer prototype can visibly write at `AfterEverything`, but that is too late for IMM-as-background with Unity elements over it.
 - Earlier useful render-order events (`AfterSkybox`, `AfterForwardOpaque`, `BeforeImageEffectsOpaque`, `BeforeForwardOpaque`) still produce blank/single-color captures even for a minimal magenta clear. That output is failure evidence, not a partial pass.
+- Full depth compositing is deferred and should stay out of the acceptance criteria for this milestone except as an explicitly documented non-goal.
 
 Performance contract:
 
@@ -288,6 +299,7 @@ Target behavior:
 - IMM renders as a background or ordered layer.
 - Unity/Godot elements can be rendered in front of IMM by render order.
 - Host depth is not considered.
+- This behavior is required for both Unity and Godot before the ordered-overlay milestone is complete.
 - IMM opacity and alpha still behave correctly.
 - Normal platform settings are used; in particular Unity Vulkan must work with the normal SampleScene MSAA configuration.
 - The implementation must not rely on a forced single-sample diagnostic path, CPU-visible copy chain, independent swapchain, or extra resolve as the claimed production route unless profiling proves the cost is acceptable on desktop and mobile.

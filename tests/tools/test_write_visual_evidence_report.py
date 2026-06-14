@@ -97,6 +97,31 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        godot_overlay = gpu / "godot-smoke-windows-vulkan-ordered-overlay"
+        godot_overlay_captures = godot_overlay / "captures"
+        godot_overlay_captures.mkdir(parents=True)
+        (godot_overlay_captures / "godot-vulkan-ordered-overlay.png").write_bytes(PNG_1X1)
+        (godot_overlay / "render-report.md").write_text(
+            "# IMM Render Report\n\n### godot-vulkan-ordered-overlay.png\n"
+            "![Godot](captures/godot-vulkan-ordered-overlay.png)\n",
+            encoding="utf-8",
+        )
+        (godot_overlay / "composition-status.json").write_text(
+            json.dumps(
+                {
+                    "rendering": "success",
+                    "composition_mode": "ordered_overlay",
+                    "composition_contract": "ordered_overlay",
+                    "compositing": "success",
+                    "ordered_overlay": "success",
+                    "depth_composition": "not_claimed",
+                    "depth_interleaving": "not_claimed",
+                    "failure_class": "",
+                    "failures": [],
+                }
+            ),
+            encoding="utf-8",
+        )
 
         core = input_root / "CoreMatrixEvidence" / "godot-local-verifier"
         core.mkdir(parents=True)
@@ -226,6 +251,8 @@ def main() -> int:
         assert "Ordered overlay: success" in text
         assert "Depth composition: not_claimed" in text
         assert "![unity-windows-vulkan-ordered-overlay.png]" in text
+        assert "## Windows Godot Vulkan Ordered Overlay" in text
+        assert "![godot-vulkan-ordered-overlay.png]" in text
         assert "### Missing Supported Evidence" in text
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text
         assert "## Enginevalidationevidence" not in text

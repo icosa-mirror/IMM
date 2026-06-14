@@ -10,6 +10,9 @@ param(
 
     [string]$LogDir = "",
 
+    [ValidateSet("full_depth", "ordered_overlay")]
+    [string]$CompositionMode = "full_depth",
+
     [int]$PlayerFrame = 60,
 
     [double]$MaxMeanAbsoluteError = 35.0,
@@ -115,7 +118,9 @@ $previousEnv = @{
     IMM_GODOT_VISUAL_SMOKE_PPM = $env:IMM_GODOT_VISUAL_SMOKE_PPM
     IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME
     IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA
+    IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE
     IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES
+    IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION = $env:IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION
     IMM_VIEWER_VALIDATE_FIXED_DT = $env:IMM_VIEWER_VALIDATE_FIXED_DT
     IMM_VIEWER_VALIDATE_PLAYER_FRAME = $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME
 }
@@ -127,7 +132,11 @@ try {
     $env:IMM_GODOT_VISUAL_SMOKE_PPM = $CapturePath
     $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = "$PlayerFrame"
     $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = "1"
+    $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $CompositionMode
     $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = "0"
+    if ($CompositionMode -eq "ordered_overlay") {
+        Remove-Item -Path "env:IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION" -ErrorAction SilentlyContinue
+    }
     $env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
     $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
 
@@ -175,21 +184,26 @@ finally {
 $output | Tee-Object -FilePath $outputPath
 $outputText = $output -join "`n"
 $compositionFailures = @($output | Where-Object { $_ -match "scene composition .* failed" })
-$knownCompositionOnly = $exitCode -ne 0 `
+$compositionContract = if ($CompositionMode -eq "ordered_overlay") { "ordered_overlay" } else { "depth_composition" }
+$failureStatus = if ($CompositionMode -eq "ordered_overlay") { "failed" } else { "expected_failed" }
+$knownCompositionOnly = $CompositionMode -eq "full_depth" `
+    -and $exitCode -ne 0 `
     -and $compositionFailures.Count -gt 0 `
     -and (Test-Path -LiteralPath $CapturePath -PathType Leaf) `
     -and $outputText -notmatch "CrashHandlerException|Fatal signal|visual smoke PNG was too flat|visual smoke PPM had only|visual smoke PNG had only|content bounds were too small|orientation check failed|ImmViewer did not load|ImmViewer sequence was not ready|render diagnostics did not|ImmGodot_RenderCamera returned"
+$renderingStatus = if ($knownCompositionOnly -or $exitCode -eq 0) { "success" } else { "unknown" }
+$compositingStatus = if ($compositionFailures.Count -gt 0) { $failureStatus } elseif ($renderingStatus -eq "success") { "success" } else { "unknown" }
 
 $compositionStatus = [ordered]@{
     schema = "imm-composition-status-v1"
-    rendering = if ($knownCompositionOnly -or $exitCode -eq 0) { "success" } else { "unknown" }
-    composition_mode = "full_depth"
-    composition_contract = "depth_composition"
-    compositing = if ($compositionFailures.Count -gt 0) { "expected_failed" } else { "success" }
-    ordered_overlay = "not_tested"
-    depth_composition = if ($compositionFailures.Count -gt 0) { "expected_failed" } else { "success" }
-    depth_interleaving = "claimed"
-    expected = $compositionFailures.Count -gt 0
+    rendering = $renderingStatus
+    composition_mode = $CompositionMode
+    composition_contract = $compositionContract
+    compositing = $compositingStatus
+    ordered_overlay = if ($CompositionMode -eq "ordered_overlay") { $compositingStatus } else { "not_tested" }
+    depth_composition = if ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "expected_failed" } else { "success" }
+    depth_interleaving = if ($CompositionMode -eq "ordered_overlay") { "not_claimed" } else { "claimed" }
+    expected = $CompositionMode -eq "full_depth" -and $compositionFailures.Count -gt 0
     failure_class = if ($compositionFailures.Count -gt 0) { "compositing" } else { "" }
     failures = $compositionFailures
 }

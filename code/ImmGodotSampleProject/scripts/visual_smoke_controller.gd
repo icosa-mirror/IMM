@@ -26,6 +26,8 @@ const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
 const VISUAL_SMOKE_FRAME_RATE := 30
 const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
+const COMPOSITION_MODE_FULL_DEPTH := "full_depth"
+const COMPOSITION_MODE_ORDERED_OVERLAY := "ordered_overlay"
 const SCENE_FRONT_PROBE_COLOR := Color(1.0, 0.0, 1.0, 1.0)
 const SCENE_REAR_OCCLUDED_PROBE_COLOR := Color(0.0, 1.0, 1.0, 1.0)
 const SCENE_REAR_VISIBLE_PROBE_COLOR := Color(1.0, 1.0, 0.0, 1.0)
@@ -134,6 +136,9 @@ func _setup_compositor() -> bool:
 
 	var compositor: Compositor = Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
+	if _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY:
+		_compositor_effect.set("effect_callback_type", CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_OPAQUE)
+		print("IMM Godot %s visual smoke ordered overlay compositor callback: PRE_OPAQUE" % _selected_renderer_name())
 	camera.compositor = compositor
 	if _world_environment == null:
 		_world_environment = WorldEnvironment.new()
@@ -494,6 +499,12 @@ func _frame_camera_from_document(prefer_spawn_area: bool = true) -> bool:
 func _visual_smoke_prefers_spawn_area() -> bool:
 	return OS.get_environment("IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA") == "1"
 
+func _visual_smoke_composition_mode() -> String:
+	var mode: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE", COMPOSITION_MODE_FULL_DEPTH)
+	if mode == COMPOSITION_MODE_ORDERED_OVERLAY:
+		return COMPOSITION_MODE_ORDERED_OVERLAY
+	return COMPOSITION_MODE_FULL_DEPTH
+
 func _select_visual_smoke_spawn_area() -> void:
 	var requested_index: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_SPAWN_INDEX", -1)
 	if requested_index < 0:
@@ -602,11 +613,15 @@ func _append_scene_composition_failures(diagnostics: Dictionary, failures: Array
 	var front: Dictionary = diagnostics.get("front_probe", {})
 	var rear_visible: Dictionary = diagnostics.get("rear_visible_probe", {})
 	var rear_occluded: Dictionary = diagnostics.get("rear_occluded_probe", {})
+	var ordered_overlay: bool = _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY
 	if int(front.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(front.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
 		failures.append("scene composition %s front occluder probe failed: %s" % [label, str(front)])
 	if int(rear_visible.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_visible.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
 		failures.append("scene composition %s rear visible probe failed: %s" % [label, str(rear_visible)])
-	if int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) > MAX_SCENE_PROBE_OCCLUDED_SHARE:
+	if ordered_overlay:
+		if int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
+			failures.append("scene composition %s ordered overlay rear probe failed: %s" % [label, str(rear_occluded)])
+	elif int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) > MAX_SCENE_PROBE_OCCLUDED_SHARE:
 		failures.append("scene composition %s rear occlusion leakage probe failed: %s" % [label, str(rear_occluded)])
 
 func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Color) -> Dictionary:
