@@ -19,8 +19,8 @@ const MIN_CONTENT_BOUNDS_SIZE := 12
 const MIN_LUMA_RANGE := 0.02
 const MIN_ORIENTATION_LUMA_DELTA := 0.05
 const MIN_SCENE_PROBE_REGION_PIXELS := 64
-const MIN_SCENE_PROBE_DOMINANT_SHARE := 0.35
-const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.35
+const MIN_SCENE_PROBE_DOMINANT_SHARE := 0.80
+const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.08
 const MIN_ORDERED_OVERLAY_IMM_PIXELS := 4096
 const IMM_TICKS_PER_SECOND := 12600
 const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
@@ -567,34 +567,28 @@ func _setup_scene_composition_probe() -> void:
 	if bounds.is_empty():
 		return
 
-	var center: Vector3 = _native_point_to_godot(bounds.get("center", Vector3.ZERO))
-	var size: Vector3 = bounds.get("size", Vector3.ONE)
-	var radius: float = max(max(size.x, size.y), size.z) * 0.5
-	if radius <= 0.001:
-		radius = 1.0
-
-	var forward: Vector3 = (center - camera.global_position).normalized()
-	if forward.length() <= 0.001:
-		forward = -camera.global_transform.basis.z.normalized()
+	var forward: Vector3 = -camera.global_transform.basis.z.normalized()
 	var right: Vector3 = camera.global_transform.basis.x.normalized()
-	var probe_size: float = maxf(radius * 0.22, 0.28)
-	var probe_depth: float = maxf(radius * 0.035, 0.035)
+	var up: Vector3 = camera.global_transform.basis.y.normalized()
+	var center: Vector3 = camera.global_position + forward * 3.0
+	var probe_size: float = 0.55
+	var probe_depth: float = 0.06
 
 	var ordered_overlay := _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY
 
-	_front_scene_probe = _create_scene_probe("IMMSceneFrontOccluderProbe", SCENE_FRONT_PROBE_COLOR, Vector3(probe_size, probe_size, probe_depth), ordered_overlay)
+	_front_scene_probe = _create_scene_probe("IMMSceneFrontOccluderProbe", SCENE_FRONT_PROBE_COLOR, Vector3(0.50, 0.50, probe_depth), ordered_overlay)
 	add_child(_front_scene_probe)
-	_front_scene_probe.global_position = center - forward * max(radius * 0.20, 0.28) - right * max(radius * 0.18, 0.22)
+	_front_scene_probe.global_position = center - right * 0.70 - up * 0.35 - forward * 1.00
 	_front_scene_probe.look_at(camera.global_position, Vector3.UP)
 
-	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(probe_size * 0.55, probe_size * 0.55, probe_depth), ordered_overlay)
+	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(0.75, 0.75, probe_depth), ordered_overlay)
 	add_child(_rear_occluded_scene_probe)
-	_rear_occluded_scene_probe.global_position = center + forward * max(radius * 0.24, 0.32) + right * max(radius * 0.22, 0.26)
+	_rear_occluded_scene_probe.global_position = center + forward * 0.95 + right * 0.25
 	_rear_occluded_scene_probe.look_at(camera.global_position, Vector3.UP)
 
-	_rear_visible_scene_probe = _create_scene_probe("IMMSceneRearVisibleProbe", SCENE_REAR_VISIBLE_PROBE_COLOR, Vector3(probe_size * 1.15, probe_size * 1.15, probe_depth), ordered_overlay)
+	_rear_visible_scene_probe = _create_scene_probe("IMMSceneRearVisibleProbe", SCENE_REAR_VISIBLE_PROBE_COLOR, Vector3(0.65, 0.65, probe_depth), ordered_overlay)
 	add_child(_rear_visible_scene_probe)
-	_rear_visible_scene_probe.global_position = center + forward * max(radius * 0.18, 0.28) + right * max(radius * 0.68, 0.75)
+	_rear_visible_scene_probe.global_position = center + right * 1.30 + up * 0.85 + forward * 0.35
 	_rear_visible_scene_probe.look_at(camera.global_position, Vector3.UP)
 	print("IMM Godot %s visual smoke scene composition probes: front=%s rear_occluded=%s rear_visible=%s size=%.3f" % [
 		_selected_renderer_name(),

@@ -30,8 +30,8 @@ namespace ImmPlayer
         private const string ExpectedGraphicsApiArg = "-immSmokeExpectedGraphicsApi";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
-        private const float MinDominantShare = 0.35f;
-        private const float MaxOccludedShare = 0.12f;
+        private const float MinDominantShare = 0.80f;
+        private const float MaxOccludedShare = 0.08f;
         private const float MinOrderedOverlayImmShare = 0.02f;
         private const int MinOrderedOverlayImmUniqueColors = 5000;
         private const float MinOrderedOverlayTopRightBrightToBottomRightRatio = 2.0f;
@@ -563,10 +563,11 @@ namespace ImmPlayer
             int probeLayer = _overlayProbeEnabled ? FirstVisibleLayer(cam.cullingMask, 0) : 0;
             Vector3 forward = cam.transform.forward.normalized;
             Vector3 right = cam.transform.right.normalized;
+            Vector3 up = cam.transform.up.normalized;
             Vector3 center = cam.transform.position + forward * 3.0f;
-            _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.50f - forward * 0.35f, cam.transform.rotation, new Vector3(0.55f, 0.55f, 0.06f), probeLayer);
+            _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.70f - up * 0.35f - forward * 1.00f, cam.transform.rotation, new Vector3(0.50f, 0.50f, 0.06f), probeLayer);
             _rearOccludedProbe = CreateProbe("IMM Scene Rear Occlusion Probe", RearOccludedProbeColor, center + forward * 0.95f + right * 0.25f, cam.transform.rotation, new Vector3(0.75f, 0.75f, 0.06f), probeLayer);
-            _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 0.75f + forward * 0.45f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
+            _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 1.30f + up * 0.85f + forward * 0.35f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
             Debug.Log($"{Prefix}scene composition probes created center={center} camera={cam.name} overlay={_overlayProbeEnabled} layer={probeLayer}");
             return true;
         }
