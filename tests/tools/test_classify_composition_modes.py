@@ -42,6 +42,30 @@ def run_unity_classifier(temp: Path, mode: str, log_text: str) -> tuple[int, dic
     return result.returncode, json.loads(output.read_text(encoding="utf-8"))
 
 
+def run_godot_classifier(temp: Path, mode: str, log_text: str) -> tuple[int, dict]:
+    log = temp / f"godot_{mode}.log"
+    output = temp / f"godot_{mode}.json"
+    log.write_text(log_text, encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "tests/tools/classify_godot_visual_smoke.py",
+            "--log",
+            str(log),
+            "--renderer",
+            "vulkan",
+            "--composition-mode",
+            mode,
+            "--output",
+            str(output),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, json.loads(output.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
@@ -60,7 +84,21 @@ def main() -> int:
         assert status["ordered_overlay"] == "not_tested"
         assert status["depth_interleaving"] == "expected_failed"
 
-        full_depth_pass_log = "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_pass.png width=1280 height=720"
+        full_depth_missing_probe_log = "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_missing_probe.png width=1280 height=720"
+        returncode, status = run_unity_classifier(temp, "full_depth", full_depth_missing_probe_log)
+        assert returncode == 0
+        assert status["composition_mode"] == "full_depth"
+        assert status["compositing"] == "expected_failed"
+        assert status["depth_composition"] == "expected_failed"
+        assert status["depth_interleaving"] == "expected_failed"
+        assert "scene composition full depth probe missing failed" in status["failures"]
+
+        full_depth_pass_log = "\n".join(
+            [
+                "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_pass.png width=1280 height=720",
+                "[IMM_UNITY_SMOKE] scene composition probe passed",
+            ]
+        )
         returncode, status = run_unity_classifier(temp, "full_depth", full_depth_pass_log)
         assert returncode == 0
         assert status["composition_mode"] == "full_depth"
@@ -127,6 +165,36 @@ def main() -> int:
         assert status["ordered_overlay"] == "not_tested"
         assert status["depth_composition"] == "not_tested"
         assert status["depth_interleaving"] == "not_claimed"
+
+        godot_missing_probe_log = "\n".join(
+            [
+                "IMM Godot Vulkan visual smoke content diagnostics: {}",
+                "IMM Godot Vulkan visual smoke render diagnostics: {}",
+                "IMM Godot Vulkan visual smoke compositor diagnostics: {}",
+            ]
+        )
+        returncode, status = run_godot_classifier(temp, "full_depth", godot_missing_probe_log)
+        assert returncode == 0
+        assert status["composition_mode"] == "full_depth"
+        assert status["compositing"] == "expected_failed"
+        assert status["depth_composition"] == "expected_failed"
+        assert status["depth_interleaving"] == "expected_failed"
+        assert "scene composition full depth probe missing failed" in status["failures"]
+
+        godot_full_depth_pass_log = "\n".join(
+            [
+                "IMM Godot Vulkan visual smoke content diagnostics: {}",
+                "IMM Godot Vulkan visual smoke render diagnostics: {}",
+                "IMM Godot Vulkan visual smoke compositor diagnostics: {}",
+                "IMM Godot Vulkan visual smoke scene composition diagnostics: {}",
+            ]
+        )
+        returncode, status = run_godot_classifier(temp, "full_depth", godot_full_depth_pass_log)
+        assert returncode == 0
+        assert status["composition_mode"] == "full_depth"
+        assert status["compositing"] == "success"
+        assert status["depth_composition"] == "success"
+        assert status["depth_interleaving"] == "success"
 
     print("Composition mode classifier tests passed")
     return 0

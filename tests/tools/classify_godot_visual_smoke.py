@@ -47,6 +47,15 @@ def main() -> int:
         and "visual smoke compositor diagnostics" in text
         and not render_failures
     )
+    if rendering_succeeded and not composition_failures:
+        has_scene_composition_diagnostics = (
+            "visual smoke scene composition diagnostics" in text
+            or "visual smoke PPM scene composition diagnostics" in text
+        )
+        if args.composition_mode == "full_depth" and not has_scene_composition_diagnostics:
+            composition_failures.append("scene composition full depth probe missing failed")
+        elif args.composition_mode == "ordered_overlay" and "ordered overlay IMM diagnostics" not in text:
+            composition_failures.append("scene composition ordered overlay probe missing failed")
 
     composition_fields = build_composition_fields(args.composition_mode, rendering_succeeded, composition_failures)
     status = {

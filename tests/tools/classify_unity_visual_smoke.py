@@ -38,6 +38,11 @@ def main() -> int:
         and args.capture.exists()
         and not render_failures
     )
+    if rendering_succeeded and not composition_failures:
+        if args.composition_mode == "full_depth" and "[IMM_UNITY_SMOKE] scene composition probe passed" not in text:
+            composition_failures.append("scene composition full depth probe missing failed")
+        elif args.composition_mode == "ordered_overlay" and "[IMM_UNITY_SMOKE] scene composition overlay probe passed" not in text:
+            composition_failures.append("scene composition ordered overlay probe missing failed")
 
     composition_fields = build_composition_fields(args.composition_mode, rendering_succeeded, composition_failures)
     status = {
