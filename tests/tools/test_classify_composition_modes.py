@@ -58,7 +58,17 @@ def main() -> int:
         assert status["compositing"] == "expected_failed"
         assert status["depth_composition"] == "expected_failed"
         assert status["ordered_overlay"] == "not_tested"
-        assert status["depth_interleaving"] == "claimed"
+        assert status["depth_interleaving"] == "expected_failed"
+
+        full_depth_pass_log = "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_pass.png width=1280 height=720"
+        returncode, status = run_unity_classifier(temp, "full_depth", full_depth_pass_log)
+        assert returncode == 0
+        assert status["composition_mode"] == "full_depth"
+        assert status["composition_contract"] == "depth_composition"
+        assert status["compositing"] == "success"
+        assert status["depth_composition"] == "success"
+        assert status["depth_interleaving"] == "success"
+        assert status["ordered_overlay"] == "not_tested"
 
         overlay_log = "\n".join(
             [

@@ -53,7 +53,7 @@ def main() -> int:
                     "compositing": "expected_failed",
                     "ordered_overlay": "not_tested",
                     "depth_composition": "expected_failed",
-                    "depth_interleaving": "claimed",
+                    "depth_interleaving": "expected_failed",
                     "failure_class": "compositing",
                     "failures": ["scene composition rear occlusion probe failed"],
                 }
@@ -244,7 +244,7 @@ def main() -> int:
         assert "Composition contract: depth_composition" in text
         assert "Ordered overlay: not_tested" in text
         assert "Depth composition: expected_failed" in text
-        assert "Depth interleaving: claimed" in text
+        assert "Depth interleaving: expected_failed" in text
         assert "![unity-windows-directx-composition.png]" in text
         assert "## Unity Windows Vulkan Ordered Overlay" in text
         assert "Composition mode: ordered_overlay" in text
