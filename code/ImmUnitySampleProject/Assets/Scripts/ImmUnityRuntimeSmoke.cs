@@ -637,20 +637,16 @@ namespace ImmPlayer
             if (camera == null || probe == null)
                 return new CompositionRegionResult("missing", 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
 
-            Renderer renderer = probe.GetComponent<Renderer>();
-            Bounds bounds = renderer != null ? renderer.bounds : new Bounds(probe.transform.position, Vector3.one * 0.25f);
-            Vector3 min = bounds.min;
-            Vector3 max = bounds.max;
+            Transform transform = probe.transform;
+            Vector3 center = transform.position;
+            Vector3 right = transform.right * (transform.localScale.x * 0.5f);
+            Vector3 up = transform.up * (transform.localScale.y * 0.5f);
             Vector3[] corners =
             {
-                new Vector3(min.x, min.y, min.z),
-                new Vector3(min.x, min.y, max.z),
-                new Vector3(min.x, max.y, min.z),
-                new Vector3(min.x, max.y, max.z),
-                new Vector3(max.x, min.y, min.z),
-                new Vector3(max.x, min.y, max.z),
-                new Vector3(max.x, max.y, min.z),
-                new Vector3(max.x, max.y, max.z),
+                center - right - up,
+                center - right + up,
+                center + right - up,
+                center + right + up,
             };
 
             int minX = width;

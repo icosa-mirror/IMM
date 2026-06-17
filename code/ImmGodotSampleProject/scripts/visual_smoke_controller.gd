@@ -677,13 +677,9 @@ func _project_probe_rect(image: Image, probe: MeshInstance3D) -> Rect2i:
 	var center: Vector3 = probe.global_position
 	var corners: Array[Vector3] = [
 		center + basis.x * -half_extents.x + basis.y * -half_extents.y + basis.z * -half_extents.z,
-		center + basis.x * -half_extents.x + basis.y * -half_extents.y + basis.z * half_extents.z,
 		center + basis.x * -half_extents.x + basis.y * half_extents.y + basis.z * -half_extents.z,
-		center + basis.x * -half_extents.x + basis.y * half_extents.y + basis.z * half_extents.z,
 		center + basis.x * half_extents.x + basis.y * -half_extents.y + basis.z * -half_extents.z,
-		center + basis.x * half_extents.x + basis.y * -half_extents.y + basis.z * half_extents.z,
 		center + basis.x * half_extents.x + basis.y * half_extents.y + basis.z * -half_extents.z,
-		center + basis.x * half_extents.x + basis.y * half_extents.y + basis.z * half_extents.z,
 	]
 	var min_x: int = image.get_width()
 	var min_y: int = image.get_height()
