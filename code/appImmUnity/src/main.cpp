@@ -683,7 +683,7 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
         return false;
     }
     const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
-    if (!colorTarget || target.width <= 0 || target.height <= 0)
+    if (target.width <= 0 || target.height <= 0)
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan host render skipped: missing render target for camera=%d", cameraID);
         return true;

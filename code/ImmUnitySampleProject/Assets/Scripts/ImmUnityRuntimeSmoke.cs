@@ -28,6 +28,8 @@ namespace ImmPlayer
         private const int MinRegionPixels = 24;
         private const float MinDominantShare = 0.35f;
         private const float MaxOccludedShare = 0.12f;
+        private const float MinOrderedOverlayImmShare = 0.02f;
+        private const int MinOrderedOverlayImmUniqueColors = 5000;
         private const int CaptureWidth = 1280;
         private const int CaptureHeight = 720;
         private static readonly Color FrontProbeColor = new Color(1.0f, 0.0f, 1.0f, 1.0f);
@@ -120,7 +122,7 @@ namespace ImmPlayer
                 yield break;
             }
 
-            Texture2D tex = _overlayProbeEnabled ? CaptureOrderedCameraStackTexture(captureCamera) : CaptureCameraTexture(captureCamera);
+            Texture2D tex = _overlayProbeEnabled ? CaptureScreenTexture() : CaptureCameraTexture(captureCamera);
 
             int width = tex.width;
             int height = tex.height;
@@ -175,6 +177,12 @@ namespace ImmPlayer
                 }
                 if (_overlayProbeEnabled)
                 {
+                    OrderedOverlayImmResult immResult = AnalyzeOrderedOverlayImmContent(pixels, width, height);
+                    Debug.Log($"{Prefix}composition orderedOverlayImm={immResult}");
+                    if (immResult.Share < MinOrderedOverlayImmShare || immResult.UniqueColors < MinOrderedOverlayImmUniqueColors)
+                    {
+                        RecordCompositionFailure($"scene composition ordered overlay IMM background failed: {immResult}");
+                    }
                     if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share < MinDominantShare)
                     {
                         RecordCompositionFailure($"scene composition overlay rear probe failed: {rearOccluded}");
@@ -237,6 +245,32 @@ namespace ImmPlayer
                 renderTexture.Release();
                 Destroy(renderTexture);
             }
+        }
+
+        private static Texture2D CaptureScreenTexture()
+        {
+            Texture2D screenTexture = ScreenCapture.CaptureScreenshotAsTexture();
+            if (screenTexture.width == CaptureWidth && screenTexture.height == CaptureHeight)
+                return screenTexture;
+
+            var resized = new Texture2D(CaptureWidth, CaptureHeight, TextureFormat.RGB24, false);
+            Color[] sourcePixels = screenTexture.GetPixels();
+            Color[] resizedPixels = new Color[CaptureWidth * CaptureHeight];
+            int sourceWidth = screenTexture.width;
+            int sourceHeight = screenTexture.height;
+            for (int y = 0; y < CaptureHeight; ++y)
+            {
+                int sourceY = Mathf.Clamp(Mathf.RoundToInt((y + 0.5f) * sourceHeight / CaptureHeight - 0.5f), 0, sourceHeight - 1);
+                for (int x = 0; x < CaptureWidth; ++x)
+                {
+                    int sourceX = Mathf.Clamp(Mathf.RoundToInt((x + 0.5f) * sourceWidth / CaptureWidth - 0.5f), 0, sourceWidth - 1);
+                    resizedPixels[y * CaptureWidth + x] = sourcePixels[sourceY * sourceWidth + sourceX];
+                }
+            }
+            resized.SetPixels(resizedPixels);
+            resized.Apply(false, false);
+            Destroy(screenTexture);
+            return resized;
         }
 
         private static IEnumerator StabilizeSampleViewpoint()
@@ -331,6 +365,11 @@ namespace ImmPlayer
             }
 
             const int overlayLayer = 30;
+            if (cam.clearFlags == CameraClearFlags.SolidColor)
+            {
+                cam.clearFlags = CameraClearFlags.Skybox;
+                Debug.Log($"{Prefix}overlay fixture restored skybox clear for AfterSkybox render event");
+            }
             cam.cullingMask = 0;
 
             GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -523,6 +562,50 @@ namespace ImmPlayer
                 && Mathf.Abs(pixel.b / 255.0f - target.b) <= 0.20f;
         }
 
+        private static OrderedOverlayImmResult AnalyzeOrderedOverlayImmContent(Color32[] pixels, int width, int height)
+        {
+            int candidate = 0;
+            var colors = new HashSet<int>();
+            int[] buckets = new int[64];
+            int bucketCount = 0;
+            for (int i = 0; i < pixels.Length; ++i)
+            {
+                Color32 pixel = pixels[i];
+                if (!IsLikelyImmOrderedOverlayPixel(pixel))
+                    continue;
+
+                ++candidate;
+                colors.Add((pixel.r << 16) | (pixel.g << 8) | pixel.b);
+                int bucket = ((pixel.r >> 6) << 4) | ((pixel.g >> 6) << 2) | (pixel.b >> 6);
+                if (buckets[bucket] == 0)
+                {
+                    buckets[bucket] = 1;
+                    ++bucketCount;
+                }
+            }
+
+            int total = Math.Max(1, width * height);
+            float share = (float)candidate / total;
+            return new OrderedOverlayImmResult(candidate, total, share, bucketCount, colors.Count);
+        }
+
+        private static bool IsLikelyImmOrderedOverlayPixel(Color32 pixel)
+        {
+            int max = Mathf.Max(pixel.r, Mathf.Max(pixel.g, pixel.b));
+            if (max <= 32)
+                return false;
+
+            if (IsNear(pixel, FrontProbeColor) ||
+                IsNear(pixel, RearOccludedProbeColor) ||
+                IsNear(pixel, RearVisibleProbeColor) ||
+                IsNear(pixel, new Color(1.0f, 0.05f, 0.02f, 1.0f)))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         private void RecordCompositionFailure(string message)
         {
             _compositionFailures.Add(message);
@@ -659,6 +742,29 @@ namespace ImmPlayer
             public override string ToString()
             {
                 return $"{Label} rect={Rect.x},{Rect.y},{Rect.width},{Rect.height} total={TotalPixels} matched={MatchedPixels} share={Share:F3}";
+            }
+        }
+
+        private struct OrderedOverlayImmResult
+        {
+            public OrderedOverlayImmResult(int candidatePixels, int totalPixels, float share, int colorBuckets, int uniqueColors)
+            {
+                CandidatePixels = candidatePixels;
+                TotalPixels = totalPixels;
+                Share = share;
+                ColorBuckets = colorBuckets;
+                UniqueColors = uniqueColors;
+            }
+
+            public int CandidatePixels { get; }
+            public int TotalPixels { get; }
+            public float Share { get; }
+            public int ColorBuckets { get; }
+            public int UniqueColors { get; }
+
+            public override string ToString()
+            {
+                return $"candidate={CandidatePixels} total={TotalPixels} share={Share:F4} colorBuckets={ColorBuckets} uniqueColors={UniqueColors}";
             }
         }
 

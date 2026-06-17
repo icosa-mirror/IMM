@@ -571,6 +571,7 @@ jobs:
           $capturePath = Join-Path $artifactDir "unity-windows-vulkan-ordered-overlay.png"
           $playerLog = Join-Path $artifactDir "unity-player.log"
           $env:IMM_UNITY_SMOKE_OVERLAY_FIXTURE = "1"
+          $env:IMM_UNITY_SKIP_DOCUMENT_BACKGROUND_COLOR = "1"
           $env:IMM_UNITY_EXPECT_GRAPHICS_API = "Vulkan"
           $playerArgs = @(
             "-logFile", $playerLog,
@@ -595,6 +596,11 @@ jobs:
           }
           if (Test-Path $playerLog) {
             Get-Content $playerLog
+          }
+          $nativeLog = Join-Path $env:TEMP "Immersive Foundation\IMM Unity Test\imm_player_log.txt"
+          if (Test-Path $nativeLog) {
+            Copy-Item $nativeLog (Join-Path $artifactDir "imm_player_log.txt") -Force
+            Get-Content $nativeLog
           }
           if (-not (Test-Path $capturePath)) {
             throw "Unity Vulkan ordered overlay capture was not written: $capturePath"
@@ -633,6 +639,20 @@ jobs:
           --require "[IMM_UNITY_SMOKE] capture="
           --require "scene composition overlay probe passed"
           --output artifacts\unity-windows-vulkan-ordered-overlay\unity-vulkan-overlay-log-contract.json
+
+      - name: Verify Unity Vulkan ordered overlay native render contract
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-vulkan-ordered-overlay\imm_player_log.txt
+          --label unity-windows-vulkan-ordered-overlay-native
+          --require "Unity Vulkan host render:"
+          --require "rendered=1"
+          --require "paintDrawCalls="
+          --require "picture360DrawCalls="
+          --forbid "Unity Vulkan host render skipped"
+          --output artifacts\unity-windows-vulkan-ordered-overlay\unity-vulkan-overlay-native-log-contract.json
 
       - name: Write CI manifest
         if: always()
