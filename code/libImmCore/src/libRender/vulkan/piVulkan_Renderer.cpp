@@ -1194,7 +1194,7 @@ struct piShaderS
     VkCompareOp pipelineDepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
     bool pipelineAlphaToCoverage = false;
     bool pipelineBlendEnabled = false;
-    bool pipelineHostDepthBackdrop = false;
+    uint32_t pipelineHostDepthBackdropMode = 0;
     bool isPicture = false;
     bool isPicture2D = false;
 };
@@ -1336,6 +1336,7 @@ struct piVulkanState
     piTexture externalFrameDepthTexture = nullptr;
     piRTarget externalFrameRenderTarget = nullptr;
     bool externalFrameUsesHostDepth = false;
+    bool externalFrameHostDepthReverseZ = false;
     bool externalFramePreservesHostColor = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
@@ -1475,6 +1476,7 @@ struct piVulkanState
     piBlendState currentBlendState = nullptr;
     piDepthState currentDepthState = nullptr;
     bool depthWriteEnabled = true;
+    bool depthTestEnabled = true;
     piTexture textures[16] = {};
     piSampler samplers[8] = {};
     piBuffer constantBuffers[16] = {};
@@ -3686,8 +3688,9 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     const bool depthClamp = rasterState && rasterState->depthClamp;
     const bool mayUseDepth = target->hasDepth &&
                              (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
-    const bool depthTest = mayUseDepth && state->currentDepthState && state->currentDepthState->depthEnable;
+    const bool depthTest = mayUseDepth && state->depthTestEnabled && state->currentDepthState && state->currentDepthState->depthEnable;
     const bool useHostReverseZCompare = state->externalFrameUsesHostDepth &&
+                                        state->externalFrameHostDepthReverseZ &&
                                         target == state->externalFrameRenderTarget;
     const bool depthWrite = depthTest && state->depthWriteEnabled;
     const VkCompareOp depthCompareOp = useHostReverseZCompare || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
@@ -3996,17 +3999,18 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     const bool useHostDepthTarget = state->externalFrameUsesHostDepth &&
                                     target == state->externalFrameRenderTarget;
     const bool hostDepthBackdrop = useHostDepthTarget && !shader->isPicture2D;
+    const uint32_t hostDepthBackdropMode = hostDepthBackdrop ? (state->externalFrameHostDepthReverseZ ? 1u : 2u) : 0u;
     const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
     const bool mayUseDepth = target->hasDepth &&
                              (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
-    const bool depthTest = mayUseDepth && state->currentDepthState && state->currentDepthState->depthEnable;
-    const VkCompareOp depthCompareOp = useHostDepthTarget ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    const bool depthTest = mayUseDepth && state->depthTestEnabled && state->currentDepthState && state->currentDepthState->depthEnable;
+    const VkCompareOp depthCompareOp = useHostDepthTarget && state->externalFrameHostDepthReverseZ ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
         shader->pipelineSampleCount == sampleCount &&
         shader->pipelineDepthTest == depthTest &&
         shader->pipelineDepthCompareOp == depthCompareOp &&
-        shader->pipelineHostDepthBackdrop == hostDepthBackdrop)
+        shader->pipelineHostDepthBackdropMode == hostDepthBackdropMode)
     {
         return true;
     }
@@ -4037,7 +4041,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     stages[1].module = shader->fragmentModule;
     stages[1].pName = "main";
 
-    const uint32_t hostDepthBackdropValue = hostDepthBackdrop ? 1u : 0u;
+    const uint32_t hostDepthBackdropValue = hostDepthBackdropMode;
     const VkSpecializationMapEntry hostDepthBackdropEntry = { 0u, 0u, sizeof(hostDepthBackdropValue) };
     const VkSpecializationInfo hostDepthBackdropSpecialization = { 1u, &hostDepthBackdropEntry, sizeof(hostDepthBackdropValue), &hostDepthBackdropValue };
     if (hostDepthBackdrop)
@@ -4131,7 +4135,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     shader->pipelineSampleCount = sampleCount;
     shader->pipelineDepthTest = depthTest;
     shader->pipelineDepthCompareOp = depthCompareOp;
-    shader->pipelineHostDepthBackdrop = hostDepthBackdrop;
+    shader->pipelineHostDepthBackdropMode = hostDepthBackdropMode;
     if (!state->picturePipelineReported)
     {
         iReport(reporter, "Vulkan renderer created picture graphics pipeline");
@@ -6858,6 +6862,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
         mState->externalFrameColorTexture = nullptr;
     }
     mState->externalFrameUsesHostDepth = false;
+    mState->externalFrameHostDepthReverseZ = false;
     mState->externalFramePreservesHostColor = false;
     mState->hostRenderPassFrameActive = false;
     if (wasHostRenderPassFrame)
@@ -6902,7 +6907,9 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameRenderTarget = target;
+    const bool useHostDepthReverseZ = std::getenv("IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z") != nullptr;
     mState->externalFrameUsesHostDepth = useHostDepth;
+    mState->externalFrameHostDepthReverseZ = useHostDepth && useHostDepthReverseZ;
     mState->externalFramePreservesHostColor = true;
     mState->hostRenderPassFrameActive = true;
     mState->hostTransientUniformOffset = 0;
@@ -6975,7 +6982,7 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
         return false;
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, false, true))
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, false, true, false))
     {
         mState->vkDestroyImageView(mState->device, imageView, nullptr);
         return false;
@@ -6991,12 +6998,12 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true, false);
 }
 
-bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height)
+bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height, bool clearExternalDepth)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, clearExternalDepth, clearExternalDepth);
 }
 
 bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height)
@@ -7052,7 +7059,7 @@ bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_
         }
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false))
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false, false))
     {
         if (depthImageView != VK_NULL_IMAGE_VIEW)
         {
@@ -7066,7 +7073,7 @@ bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_
     return true;
 }
 
-bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor)
+bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor, bool clearExternalDepth)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0)
@@ -7149,7 +7156,7 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
         DestroyTexture(colorTexture);
         return false;
     }
-    if (!hasExternalDepth && !iClearDepthTextureImage(mState, depthTexture, mReporter))
+    if ((!hasExternalDepth || clearExternalDepth) && !iClearDepthTextureImage(mState, depthTexture, mReporter))
     {
         DestroyRenderTarget(renderTarget);
         DestroyTexture(depthTexture);
@@ -7160,9 +7167,10 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameDepthTexture = depthTexture;
     mState->externalFrameRenderTarget = renderTarget;
-    mState->externalFrameUsesHostDepth = hasExternalDepth;
+    mState->externalFrameUsesHostDepth = hasExternalDepth && !clearExternalDepth;
+    mState->externalFrameHostDepthReverseZ = false;
     mState->externalFramePreservesHostColor = !clearColor;
-    iReport(mReporter, hasExternalDepth ? "Vulkan renderer began external image frame with host depth" : "Vulkan renderer began external image frame");
+    iReport(mReporter, hasExternalDepth ? (clearExternalDepth ? "Vulkan renderer began external image frame with owned external depth" : "Vulkan renderer began external image frame with host depth") : "Vulkan renderer began external image frame");
     return true;
 }
 
@@ -7284,7 +7292,17 @@ void piRendererVulkan::Clear(const float *color0, const float *color1, const flo
         iError(mReporter, "Vulkan renderer failed to clear GPU color render target");
     }
 }
-void piRendererVulkan::SetState(piState state, bool value) { (void)state; (void)value; }
+void piRendererVulkan::SetState(piState state, bool value)
+{
+    if (!mState)
+    {
+        return;
+    }
+    if (state == piSTATE_DEPTH_TEST)
+    {
+        mState->depthTestEnabled = value;
+    }
+}
 void piRendererVulkan::SetBlending(int buf, BlendEquation equRGB, BlendOperations srcRGB, BlendOperations dstRGB, BlendEquation equALP, BlendOperations srcALP, BlendOperations dstALP) { (void)buf; (void)equRGB; (void)srcRGB; (void)dstRGB; (void)equALP; (void)srcALP; (void)dstALP; }
 
 void piRendererVulkan::SetViewport(int id, const int *vp)

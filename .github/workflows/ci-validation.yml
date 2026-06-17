@@ -71,6 +71,12 @@ jobs:
           --matrix-status tests/matrix_status.json
           --markdown-output artifacts/validation-evidence/view/VALIDATION_REPORT.md
 
+      - name: Verify full depth validation evidence
+        if: needs.engine.result != 'skipped' && needs.gpu.result != 'skipped'
+        run: >
+          python tests/tools/verify_full_depth_evidence_report.py
+          --report artifacts/validation-evidence/view/VALIDATION_REPORT.md
+
       - name: Upload validation evidence
         uses: actions/upload-artifact@v4
         with:

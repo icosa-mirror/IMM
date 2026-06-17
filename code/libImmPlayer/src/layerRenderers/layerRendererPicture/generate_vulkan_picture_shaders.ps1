@@ -83,11 +83,22 @@ layout(location=0) in vec3 in_position;
 layout(location=1) in vec3 in_normal;
 layout(location=0) out vec3 out_direction;
 
+// 0 = normal projected depth, 1 = reverse-Z far backdrop, 2 = less/equal far backdrop.
+layout(constant_id = 0) const uint hostDepthBackdropMode = 0u;
+
 void main()
 {
     vec3 viewer_position = (layer.mLayerToViewer * vec4(in_position, 1.0)).xyz;
     out_direction = normalize(in_position);
     gl_Position = display.mEye[0].mMatrix_CamPrj * vec4(viewer_position, 1.0);
+    if (hostDepthBackdropMode == 1u)
+    {
+        gl_Position.z = 0.0;
+    }
+    else if (hostDepthBackdropMode == 2u)
+    {
+        gl_Position.z = gl_Position.w;
+    }
 }
 '@
 

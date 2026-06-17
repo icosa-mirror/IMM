@@ -1,5 +1,71 @@
 # IMM Compositor Parity And Platform Regression Plan
 
+## Goal Contract
+
+This document can be used as a goal only if the active milestone is named explicitly.
+
+There are two milestones:
+
+- **Immediate milestone: ordered overlay/background composition.**
+  IMM renders as the background or lower ordered layer, and normal Unity/Godot content renders visibly above it by host render order. Host depth is not used and is not claimed.
+- **Deferred milestone: full depth compositing.**
+  IMM and host geometry interleave by depth, with host geometry correctly occluding IMM where it is closer and IMM remaining visible where it is closer.
+
+Unless a task says otherwise, the active goal for this document is the immediate ordered-overlay milestone for both Unity and Godot. Full depth compositing remains deferred work and cannot block completion of the ordered-overlay milestone.
+
+## Ordered Overlay Completion Criteria
+
+The ordered-overlay milestone is complete only when all of the following are true:
+
+- Godot Vulkan ordered overlay has an automated CI lane or CI report section.
+- Unity Vulkan ordered overlay has an automated CI lane or CI report section.
+- Each ordered-overlay lane produces a capture image embedded in the final testing report.
+- Each embedded image has been opened and visually inspected against the expected layout.
+- Each image shows IMM picture/background content.
+- Each image shows IMM paint content where expected by the fixture.
+- Each image shows host-engine content visibly above IMM by render order.
+- Neither image is blank, single-color, host-only, IMM-only, flipped, or visibly mis-composited.
+- Each status JSON reports `composition_mode=ordered_overlay`.
+- Each status JSON reports `composition_contract=ordered_overlay`.
+- Each status JSON reports `ordered_overlay=success`.
+- Each status JSON reports `depth_composition=not_claimed`.
+- Each status JSON reports `depth_interleaving=not_claimed`.
+- Unity DirectX composition CI passes as a regression guard.
+- Existing Godot Vulkan alpha/depth CI lanes keep their current expected behavior.
+- Any shared renderer, player, or shader change has been validated on affected hosts or explicitly gated at the host boundary.
+- The accepted implementation does not depend on CPU readback, screenshot compositing, per-frame CPU texture upload, forced MSAA disablement, or an unprofiled full-frame copy path.
+- Mobile-class performance risk has been assessed for the accepted approach, either with measurement or with a concrete bandwidth/synchronization analysis tied to the actual implementation.
+
+If any item above is missing, failed, or only indirectly inferred from logs or pixel counts, the ordered-overlay milestone is not complete.
+
+## Full Depth Completion Criteria
+
+The full depth milestone is complete only when all of the following are true:
+
+- Godot and Unity both have automated CI or runtime validation that explicitly tests depth interleaving.
+- Host geometry correctly occludes IMM where the host geometry is closer.
+- IMM correctly remains visible where IMM content is closer than host geometry.
+- Captures for both engines are embedded in the final testing report and visually inspected.
+- Each status JSON reports `composition_mode=full_depth`.
+- Each status JSON reports `depth_composition=success`.
+- Each status JSON reports `depth_interleaving=success`.
+- Ordered-overlay evidence is not reused as proof of full depth compositing.
+- XR/multiview, Metal, Android Vulkan/OpenXR, and Android GLES impacts are either validated or explicitly documented as unsupported/deferred for the full-depth milestone.
+
+Full depth compositing is intentionally deferred while the ordered-overlay milestone is active.
+
+## Evidence Rules
+
+Evidence must be visual and contract-specific.
+
+- A log saying draw calls ran is not enough.
+- Nonblank pixel counts are not enough.
+- Color bucket counts are not enough.
+- A host-depth image is not ordered-overlay evidence.
+- A no-MSAA diagnostic image is not normal Unity Vulkan ordered-overlay evidence.
+- A local screenshot is useful during development, but CI evidence is required for completion.
+- Failed captures must remain visible in the final testing report when a lane fails, because they are the fastest way to diagnose whether the failure is rendering, composition, orientation, or fixture setup.
+
 ## Goal
 
 Bring the Godot IMM compositor behavior to parity with the Unity plugin scene integration while keeping shared renderer behavior correct across all hosts and platforms.
@@ -37,6 +103,45 @@ The platform scope for shared-code changes is:
 - Existing non-Vulkan backends, which must remain unchanged unless intentionally modified.
 
 The working assumption must be that a shared renderer or generated-shader change can affect more than Godot until a build, smoke, or explicit state gate proves otherwise.
+
+## Full Depth Platform Disposition
+
+For `FULL_DEPTH_COMPOSITOR_GOAL.md`, the current full-depth completion claim is intentionally limited to desktop non-XR Windows Vulkan unless a later validation row replaces this table. Other platform impacts are explicitly scoped as follows:
+
+| Platform / Host | Full-depth status for this milestone | Required evidence before promotion |
+| --- | --- | --- |
+| Unity Windows Vulkan non-XR, persistent camera target | In scope. Local smoke evidence exists and CI lane code exists. | CI run artifact with embedded PNG, `composition_mode=full_depth`, `depth_composition=success`, `depth_interleaving=success`, and managed/native host-depth log contracts. |
+| Unity Windows Vulkan display backbuffer | Partially validated locally. A rebuilt visible-window display capture now passes the scene-probe contract when the smoke harness freezes IMM playback and the native path is allowed to assume Unity's display depth attachment. Unity still reports null display render-buffer pointers, so this is not yet the final production handoff. | CI artifact or repeated local evidence with embedded PNG/status, `composition_mode=full_depth`, `depth_composition=success`, `depth_interleaving=success`, host-depth native markers, and a documented production answer for Unity's null display render-buffer pointers rather than relying on an unguarded assumption. |
+| Unity Android Vulkan/OpenXR | Deferred for this full-depth milestone. Unity owns OpenXR swapchains and the current branch has no device runtime proof for Vulkan OpenXR eye targets. | Device run or hardware-gated CI artifact proving OpenXR starts, Vulkan is active, IMM renders into eye targets, and full-depth probes pass or a separate supported/unsupported product decision. |
+| Android GLES | Deferred as a runtime validation target. GLES does not use the Vulkan host-depth shader changes directly, but shared player/native changes still require build/runtime guard evidence before broad parity claims. | Android GLES runtime smoke or explicit product decision that GLES is outside full-depth parity for this milestone. Build-only evidence remains insufficient. |
+| Godot Windows Vulkan non-XR | In scope. Local scene-probe evidence exists and the GPU CI lane runs the full-depth smoke as the default composition mode. | CI artifact with embedded PNG and status fields reporting full-depth success. |
+| Godot Metal | Deferred. The current Metal path has external render-pass entry points, but no local or CI runtime proof that Godot exposes a compatible color/depth resource contract for this compositor path. | macOS Metal runtime smoke with equivalent full-depth scene probes, or a documented platform limitation after inspecting Godot Metal resource access. |
+| Godot XR / multiview | Deferred. The current compositor records view count but the validated path is mono/non-XR and feeds `eye=0`. | XR/multiview runtime capture or hardware-gated validation proving each eye has correct color, depth, orientation, and layer/view selection. |
+
+Deferred here means "not claimed as implemented or validated by this milestone." It does not mean the code is known safe on that platform. Any shared renderer, player, or shader change still needs either a platform guard, a build/runtime check, or a documented product decision before release.
+
+## Full Depth Performance Assessment
+
+The accepted Windows desktop Vulkan full-depth paths must keep GPU work on the GPU and must not depend on CPU readback, screenshot compositing, per-frame CPU texture upload, forced MSAA disablement, or an unprofiled full-frame copy path.
+
+Current assessment:
+
+- Unity Windows Vulkan full-depth smoke uses Unity's active host render pass and normal 8x MSAA sample count. It does not use CPU readback to compose pixels, does not upload a screenshot back to the GPU, and does not force MSAA off. A visible-window display-backbuffer diagnostic passes locally after freezing IMM playback. Unity's display `RenderBuffer` native pointers are still null, so the current display path uses the explicit `IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH=1` contract: IMM records into Unity's current Vulkan render pass and treats the active render pass as depth-capable without separately owning or sampling a depth image. This is narrower than the old `IMM_UNITY_VK_ASSUME_HOST_DEPTH=1` diagnostic alias, but it still needs CI artifact proof and performance evidence before broad release.
+- Godot Windows Vulkan full-depth smoke renders IMM into a Godot-owned intermediate texture and composites it through the compositor path while using Godot scene depth for host-depth composition. This is GPU-local; the CI/local PPM/PNG capture happens after rendering for validation only and is not part of the compositor implementation. The path adds an intermediate color target and a fullscreen composite pass, so mobile/tile-GPU performance cannot be inferred from desktop correctness.
+- Shared Vulkan picture-backdrop and depth-test changes are gated by explicit host-depth/external-frame state rather than by `API == Vulkan`, limiting the performance and behavior change to frames that opt into host-depth composition.
+
+Implementation-specific synchronization and bandwidth analysis for the current Windows desktop evidence:
+
+- Unity host-render-pass path: `BeginHostRenderPassFrame(...)` replaces the IMM renderer command buffer with Unity's active Vulkan command buffer and marks `hostRenderPassFrameActive=true`. The paint and picture draw helpers check that flag and, in host-render-pass mode, emit `vkCmd*` draw commands and return before the standalone-path `vkQueueSubmit(...)` and `vkWaitForFences(...)` blocks. Therefore the accepted Unity Windows Vulkan evidence is not using plugin-side per-draw queue submits or per-draw CPU/GPU waits for composition. It also does not allocate an IMM color intermediate, perform a fullscreen Unity blit, or force MSAA off. The remaining Unity risk is validating this same command-buffer contract in CI and on any later mobile/XR promotion target.
+- Godot Vulkan render-graph path: the current full-depth path uses a Godot-owned intermediate color texture and an intermediate IMM depth texture, then runs one `RenderingDevice` fullscreen draw list that samples IMM color, IMM depth, and Godot scene depth before writing surviving IMM pixels to Godot scene color. There is no compositor CPU readback unless `IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE` is explicitly enabled for diagnostics. At 1280x720 with 32-bit color/depth formats, the composite pass touches roughly 3.5 MiB IMM color + 3.5 MiB IMM depth + 3.5 MiB scene depth plus up to 3.5 MiB color output, about 14 MiB/frame worst-case for the fullscreen composite, excluding normal IMM rendering and driver/tile overhead. That is acceptable as a desktop validation path, but not sufficient proof for mobile/tile GPUs.
+- Godot direct Vulkan color-target mode remains a separate possible optimization path, but the current accepted Godot full-depth evidence uses the render-graph intermediate path because it has the validated depth-aware final composite.
+- No accepted full-depth evidence depends on CPU screenshot compositing, per-frame CPU texture upload, forced no-MSAA, or an unprofiled Unity full-frame copy/blit path. Local/CI captures and PNG/PPM conversions are validation outputs after rendering, not part of runtime composition.
+
+Concrete follow-up performance evidence required before broad release:
+
+- Unity: CI artifact proof of the named host-render-pass depth contract, plus GPU timing around the IMM host render pass before promoting beyond Windows desktop non-XR.
+- Godot: GPU timing for the intermediate render plus fullscreen composite at 1280x720 and target mobile resolution, or RenderDoc/AGI evidence showing expected render-target load/store behavior and no CPU/GPU synchronization point.
+- Android/mobile: either device timing for the selected Android graphics path or a documented product decision that Android full-depth parity is deferred.
 
 ## Current State
 
@@ -548,7 +653,65 @@ Not yet validated in this environment:
 Known runtime implementation gap:
 
 - Unity desktop Vulkan ordered overlay/background composition now has local evidence for the overlay-camera route with normal MSAA rendering: `artifacts/testing-matrix/unity-vulkan-second-camera-overlay-visible-editor-upright/unity-vulkan-composition.png`. Same-camera arbitrary Unity geometry over IMM is not yet a general feature; the validated route is base camera IMM plus a later Unity overlay camera or explicit command-buffer overlay draw.
-- Unity desktop Vulkan full scene-depth composition remains a separate final goal. It still requires a render-target/command-buffer handoff that handles Unity depth, MSAA color, render pass compatibility, synchronization, and resolve behavior without adding avoidable full-frame copies.
+- Unity desktop Vulkan full scene-depth composition now has local Windows Vulkan evidence for the runtime smoke fixture, but still needs CI integration, broader Unity scene coverage, Android/mobile validation, and XR validation before full parity can be claimed.
+- 2026-06-17 Unity desktop Vulkan full-depth local pass:
+  - `artifacts/unity-vulkan-full-depth-offset-fixture-default-20260617/unity-windows-vulkan-full-depth.png` was opened and inspected. It shows the foreground Unity probe visible, the center rear-occlusion probe mostly hidden by IMM content, and the rear-visible Unity probe still visible.
+  - `artifacts/unity-vulkan-full-depth-offset-fixture-default-20260617/composition-status.json` reports `rendering=success`, `composition_mode=full_depth`, `depth_composition=success`, and `depth_interleaving=success`.
+  - The pass uses Unity's host render pass with a populated camera `RenderTexture` diagnostic target and normal 8x MSAA sample count. The persistent camera target remains a diagnostic capture route until the same render-buffer/depth handoff is proven on Unity's display backbuffer path.
+  - Fixes involved correcting the Unity scene-probe fixture to place the rear-occluded probe behind/within IMM content, making Vulkan picture backdrop depth convention-aware, honoring Vulkan `piSTATE_DEPTH_TEST`, and using the less/equal host-depth convention for Unity Vulkan host render-pass composition by default.
+- 2026-06-17 Unity desktop Vulkan visible display-backbuffer full-depth pass:
+  - `code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs` now freezes loaded IMM documents for composition probes at deterministic tick `37800` by default. The overrides are `IMM_UNITY_SMOKE_FREEZE_PLAYBACK=0` and `IMM_UNITY_SMOKE_FREEZE_TIME_TICKS=<ticks>`.
+  - A rebuilt Windows Vulkan smoke player was run visibly against the display path, not the diagnostic camera `RenderTexture`: `artifacts/unity-vulkan-full-depth-display-visible-freeze-playback-20260617/unity-windows-vulkan-full-depth-display-freeze-playback.png`.
+  - The PNG was opened and inspected. It shows the magenta foreground probe in front, the yellow rear-visible probe still visible, and the cyan rear-occlusion probe effectively hidden by IMM content.
+  - `artifacts/unity-vulkan-full-depth-display-visible-freeze-playback-20260617/composition-status.json` reports `rendering=success`, `composition_mode=full_depth`, `depth_composition=success`, and `depth_interleaving=success`.
+  - The managed log reports `source=display` and `composition playback freeze documents=1 ticks=37800`; the native log reports `hostDepth=1`, the historical diagnostic alias `assumeHostDepth=1`, `Vulkan renderer began host render pass frame with host depth`, and repeated `Unity Vulkan host render: ... rendered=1`.
+  - This closes the earlier "black hidden display capture" diagnostic as a harness/process issue, not a rendering proof. The production-facing CI contract has since been narrowed to `IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH=1`, which means IMM records into Unity's active Vulkan render pass and uses its depth attachment contract rather than a separately accessible display depth render-buffer pointer.
+- 2026-06-17 local full-depth evidence report:
+  - `artifacts/full-depth-local-evidence/FULL_DEPTH_LOCAL_EVIDENCE.md` embeds the current Unity Windows Vulkan and Godot Windows Vulkan full-depth captures.
+  - Both sections report `composition_mode=full_depth`, `depth_composition=success`, and `depth_interleaving=success`.
+  - The images were opened from `artifacts/full-depth-local-evidence/aggregate/captures/...` and visually inspected. Unity shows the foreground probe visible, the rear-occlusion probe mostly hidden by IMM, and the rear-visible probe still visible. Godot shows IMM paint/picture content, the cyan host-depth occlusion region, and visible foreground/rear probe behavior in the expected spatial layout.
+  - This is local evidence only; completion still requires committed validation coverage and any required CI/hardware-gated evidence.
+- 2026-06-17 Unity desktop Vulkan full-depth CI coverage added:
+  - `.github/workflows/ci-engine.yml` now has a `unity-windows-vulkan-full-depth` lane that reuses the Unity Vulkan smoke player, runs `-force-vulkan` with `IMM_UNITY_VK_USE_HOST_DEPTH=1` and `IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH=1`, captures `unity-windows-vulkan-full-depth.png` from the display path, classifies it with `--composition-mode full_depth`, stages the image/status as evidence, and verifies managed/native log markers for display-source host-depth rendering.
+  - The managed log contract requires `source=display`, `composition playback freeze documents=...`, and `scene composition probe passed`; the native log contract requires `hostRenderPassHasDepth=1`, `assumeHostDepth=0`, `Vulkan renderer began host render pass frame with host depth`, and non-skipped rendered draw calls.
+  - `tests/tools/verify_workflow_matrix.py`, `tests/tools/test_composition_probe_contracts.py`, and `tests/tools/write_visual_evidence_report.py` were updated so this lane is required by workflow verification and appears separately from ordered-overlay evidence in the final validation report.
+  - `.github/workflows/ci-validation.yml` now runs `tests/tools/verify_full_depth_evidence_report.py` after generating `VALIDATION_REPORT.md` when both engine and GPU validation ran. This final-report gate requires embedded Unity and Godot full-depth images plus `composition_mode=full_depth`, `depth_composition=success`, and `depth_interleaving=success` status JSONs. It rejects missing images, ordered-overlay-only evidence, and tiny placeholder PNGs below 320x180.
+  - `.github/workflows/ci-core.yml` runs `tests/tools/test_write_visual_evidence_report.py` and `tests/tools/test_verify_full_depth_evidence_report.py` as CI tool self-tests, and `tests/tools/verify_workflow_matrix.py` now fails if those commands are removed.
+  - Local verifier runs passed: `python tests/tools/verify_workflow_matrix.py`, `python tests/tools/test_composition_probe_contracts.py`, `python tests/tools/test_classify_composition_modes.py`, and `python tests/tools/test_write_visual_evidence_report.py`.
+  - This CI lane is intended to prevent regression of the currently validated Unity Windows Vulkan display-path full-depth smoke. It does not by itself close Android/OpenXR, Godot Metal/XR, the production answer for Unity's null display render-buffer pointers, or performance criteria.
+- 2026-06-17 Unity desktop Vulkan display full-depth pass with named host-render-pass depth contract:
+  - `code/appImmUnity/src/main.cpp` now distinguishes the old diagnostic alias `IMM_UNITY_VK_ASSUME_HOST_DEPTH` from the production-facing `IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH` contract and logs both `hostRenderPassHasDepth` and `assumeHostDepth`.
+  - `appImmUnity.vcxproj` was built directly with `BuildProjectReferences=false`, `TrackFileAccess=false`, and the real `SolutionDir`; the build completed and copied `ImmUnityPlugin.dll` into the Unity sample package. Direct `cl /c /O2` codegen for `code/appImmUnity/src/main.cpp` also completed. The only compiler warnings were the existing `UnityTextureID` pointer-size conversion warnings.
+  - A copied source-built Windows Vulkan smoke player was updated with the freshly built `ImmUnityPlugin.dll` and run with `IMM_UNITY_VK_USE_HOST_DEPTH=1`, `IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH=1`, and no `IMM_UNITY_VK_ASSUME_HOST_DEPTH`.
+  - Evidence: `artifacts/unity-vulkan-full-depth-display-host-render-pass-depth-20260617/unity-windows-vulkan-full-depth-display-host-render-pass-depth.png`, `composition-status.json`, `managed-log-contract.json`, `native-log-contract.json`, and `render-report.md`.
+  - The PNG was opened and inspected. It shows the magenta foreground probe visible, the yellow rear-visible probe visible, and the cyan rear-occlusion probe reduced to a small exposed strip while IMM content occupies its region.
+  - `composition-status.json` reports `rendering=success`, `composition_mode=full_depth`, `depth_composition=success`, and `depth_interleaving=success`. The native log contract reports `hostRenderPassHasDepth=1` and `assumeHostDepth=0`, plus repeated non-skipped host renders with paint and picture draw-call markers.
+- 2026-06-17 current local full-depth aggregate evidence:
+  - `artifacts/full-depth-current-local-evidence/view/VALIDATION_REPORT.md` was regenerated from the current Unity named-contract display evidence and the guarded Godot Windows Vulkan full-depth evidence using `tests/tools/write_visual_evidence_report.py`.
+  - `tests/tools/verify_full_depth_evidence_report.py --report artifacts/full-depth-current-local-evidence/view/VALIDATION_REPORT.md` passed, proving the aggregate report contains embedded Unity and Godot full-depth images plus success status JSONs. The verifier now also rejects placeholder PNGs below 320x180, so this check proves the report contains viewable evidence-sized images rather than just any image file.
+  - The aggregate Unity and Godot PNGs were opened and inspected. Unity shows the expected foreground/rear-visible/rear-occluded probe relationship for the display host-render-pass-depth path. Godot shows paint, host content, and the magenta/cyan/yellow probe regions in the expected depth-interleaving fixture layout.
+  - This remains local aggregate evidence. It is not a substitute for a committed CI validation run artifact.
+- 2026-06-17 Godot Vulkan full-depth regression pass after the shared Vulkan changes:
+  - `artifacts/godot-vulkan-full-depth-missing-probe-guard-20260617/godot-vulkan-full-depth.png` was converted from the smoke PPM, opened, and inspected.
+  - The Godot smoke reported `last_depth_aware_vulkan_composite=true`, `last_depth_aware_vulkan_composite_result=true`, and passed scene-probe validation.
+  - The Windows Godot Vulkan CI lane's full-depth capture is now treated as a composition fixture: it records candidate render metrics and writes a status/report, but does not compare that probe-heavy image against the older committed DirectX spatial baseline. The scene-probe composition status is the authoritative full-depth pass/fail signal for this lane.
+  - `code/projects/windows/run-godot-vulkan-visual-baseline-smoke.ps1` now treats missing scene-composition diagnostics as a composition failure. For `full_depth`, the log must contain `visual smoke scene composition diagnostics` or `visual smoke PPM scene composition diagnostics`; for `ordered_overlay`, it must contain `ordered overlay IMM diagnostics`. `tests/tools/verify_workflow_matrix.py` enforces these guard strings so they cannot be removed silently.
+  - The generated status remains local Windows Vulkan evidence only; Godot Metal, Godot XR/multiview, and Android runtime coverage are still outstanding.
+- 2026-06-17 Unity sample package-resolution cleanup:
+  - `com.unity.purchasing` was removed from `code/ImmUnitySampleProject/Packages/manifest.json` and `packages-lock.json`. Older Unity smoke logs repeatedly reported `The "path" argument must be of type string. Received undefined` through `UnityPurchasingEditor`, and the sample project has no `UnityEngine.Purchasing` or IAP code references.
+  - The IMM package layout checks still pass for both embedded Unity packages after the removal. This change keeps validation focused on the existing sample project and avoids an unused editor package interfering with smoke runs.
+- 2026-06-17 Unity desktop Vulkan full-depth diagnostics:
+  - The Unity Vulkan host-render-pass path no longer requires a source edit to test render-pass color-format compatibility. `IMM_UNITY_VK_HOST_COLOR_FORMAT=<VkFormat>` overrides the default host color format (`44`, `VK_FORMAT_B8G8R8A8_UNORM`) and the native `[IMM_UNITY_VK_HOST_RT_20260612]` diagnostic logs the selected `colorFormat`. This is a diagnostic for display-backbuffer compatibility, not completion evidence by itself.
+  - `artifacts/unity-vulkan-full-depth-after-forward-opaque-correct-env-assume-host-depth-visible-20260617/unity-windows-vulkan-full-depth.png` shows IMM picture/paint and Unity probes, but all probes render on top of IMM. The status JSON reports `depth_composition=expected_failed` because the rear occlusion probe remains visible (`share=0.777`). This is ordered-overlay behavior, not full-depth composition.
+  - `artifacts/unity-vulkan-full-depth-after-forward-opaque-linear01-assume-host-depth-visible-20260617/unity-windows-vulkan-full-depth.png` changes the output substantially, hiding the probes and rendering a blocky IMM slice. That proves the host-depth pipeline state is affecting rendering, but the depth convention/result is still wrong.
+  - Binding `CameraTarget` with `BuiltinRenderTextureType.Depth` before the Vulkan plugin event is not a valid normal-MSAA fix. `artifacts/unity-vulkan-full-depth-depth-target-bind-after-forward-visible-20260617/unity-windows-vulkan-full-depth.png` displays Unity's development-console error `BeginRenderPass: Attachment AA sample counts must match: 8 vs 1 in attachment 1`, and the status still reports `depth_composition=expected_failed`.
+  - Disabling runtime MSAA for diagnosis removes the 8x/1x attachment mismatch, but does not produce full-depth composition. `artifacts/unity-vulkan-full-depth-depth-target-bind-nomsaa-visible-20260617/unity-windows-vulkan-full-depth.png` still shows all Unity probes in front and reports `depth_composition=expected_failed` with rear occlusion leakage (`share=0.788`). Therefore the current Unity depth binding is either not the populated camera scene depth attachment or is not compatible with the plugin render event at that point.
+  - `artifacts/unity-vulkan-full-depth-display-backbuffer-diagnostic-20260617/unity-windows-vulkan-full-depth-display.png` is a failed display-backbuffer diagnostic from a copied smoke player run without `IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE`. The image is fully black, `composition-status.json` reports `rendering=failed`, `composition_mode=full_depth`, `depth_composition=expected_failed`, and `depth_interleaving=expected_failed`, and the native log contains plugin initialization/load but no `Unity Vulkan host render` marker. Because this run was started as a hidden background process, treat it as evidence that the current automated display-capture path is inadequate, not as final proof about visible-window display-backbuffer rendering.
+  - A persistent camera `RenderTexture` diagnostic makes Unity pass non-null render buffers into the plugin: `artifacts/unity-vulkan-full-depth-persistent-camera-rt-hostpass-visible-20260617/native.log` reports `colorRB=<non-null>`, `depthAttachment=1`, `hostDepth=1`, `assumeHostDepth=0`, and `colorSamples=8`. The capture still fails as ordered-overlay-like output (`rear occlusion share=0.777`), so the remaining problem is not merely missing render-buffer handles.
+  - The same persistent camera `RenderTexture` diagnostic with the alternate linear-depth compare, `artifacts/unity-vulkan-full-depth-persistent-camera-rt-hostpass-linear01-visible-20260617/unity-windows-vulkan-full-depth.png`, hides the probes behind a blocky 360/background slice. That confirms the valid-render-buffer path has the same depth convention/value problem as the display path.
+  - Paint-only persistent camera `RenderTexture` diagnostics narrow the failure further. With `IMM_RENDER_SKIP_PICTURE=1` and the linear compare, captures `artifacts/unity-vulkan-full-depth-persistent-camera-rt-hostpass-linear01-skip-picture-visible-20260617/unity-windows-vulkan-full-depth.png` and `artifacts/unity-vulkan-full-depth-persistent-camera-rt-hostpass-linear01-skip-picture-nomsaa-visible-20260617/unity-windows-vulkan-full-depth.png` partially interleave paint and Unity geometry, but still fail: the front probe is partly covered (`share=0.276`) and the rear occlusion probe remains too visible (`share=0.318` to `0.329`). This is independent of MSAA and points to IMM paint depth/projection not matching Unity scene depth closely enough.
+  - Later visible display-backbuffer diagnostics showed the remaining rear-occlusion leak was partly caused by validating against a moving IMM animation frame. Without freezing playback, the same display path produced real rendered frames but failed the rear-occlusion probe (`share=0.141` at 240 frames, `0.175` at 180 frames, and `0.232` at 600 frames). Freezing playback makes the spatial probe deterministic and produced the passing display capture listed above.
+  - Full-depth Unity Vulkan must not be implemented by merely assuming a depth attachment or by binding Unity's resolved/single-sample depth texture into an incompatible MSAA render pass. The handoff must prove matching sample counts, populated scene depth, correct depth convention, and valid render-pass/subpass compatibility.
 - Forced no-MSAA diagnostic captures and copy-based fullscreen composites must not be counted as the production overlay milestone unless separately profiled and accepted for mobile-class hardware.
 - 2026-06-12 Unity Vulkan host-depth update:
   - Passing Unity depth availability into the host render-pass path and using normal IMM ordering (`paint -> 360 picture`) produces the first correct local desktop Vulkan image at `samples=1`: `artifacts/unity-vulkan-overlay/host-depth-order-normal.png`.
@@ -634,4 +797,4 @@ Full parity is complete only when:
 - XR Godot rendering handles each eye correctly.
 - Regression guards prevent returning to fullscreen replacement behavior accidentally.
 
-Current status against these criteria: Phase 1 and Phase 2 have local Godot Vulkan evidence. The Unity desktop Vulkan ordered overlay/background milestone has local evidence for the two-camera overlay route on Windows Vulkan MSAA, with D3D11 rechecked as upright. Full parity is not complete because Unity runtime Vulkan/Android, Godot Metal, Godot XR/multiview, same-camera arbitrary host geometry interleaving, and full host-depth interleaving still need validation.
+Current status against these criteria: Phase 1 and Phase 2 have local Godot Vulkan evidence. The Unity desktop Vulkan ordered overlay/background milestone has local evidence for the two-camera overlay route on Windows Vulkan MSAA, with D3D11 rechecked as upright. Unity desktop Vulkan full-depth composition has a local Windows Vulkan smoke pass for the corrected runtime fixture, and the CI Engine Matrix now includes a Unity Windows Vulkan full-depth lane that captures a PNG, writes a composition status, emits a visual report, and checks managed/native host-depth log contracts. The top-level validation report now has a verifier that requires both Unity and Godot full-depth image/status evidence when engine and GPU validation run. Godot Vulkan still passes after the shared Vulkan changes. Full parity is not complete because final CI run artifacts, Unity display-backbuffer host-depth handoff, Unity Android Vulkan/OpenXR, Android GLES runtime, Godot Metal, Godot XR/multiview, broader same-camera arbitrary host geometry interleaving, and production performance timing/RenderDoc/AGI evidence still need coverage.

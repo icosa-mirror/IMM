@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from composition_status import COMPOSITION_CONTRACTS, build_composition_fields, classification_succeeded
@@ -16,6 +17,25 @@ RENDER_FAILURE_MARKERS = [
     "[IMM_UNITY_SMOKE] invalid screen size",
     "[IMM_UNITY_SMOKE] graphics api probe failed",
 ]
+
+CAPTURE_METRICS_RE = re.compile(r"\[IMM_UNITY_SMOKE\] capture=.*?\bnonZero=(?P<non_zero>\d+)\b.*?\bcolorBuckets=(?P<color_buckets>\d+)\b")
+
+
+def capture_metric_failures(text: str) -> list[str]:
+    failures: list[str] = []
+    matches = list(CAPTURE_METRICS_RE.finditer(text))
+    if not matches:
+        return failures
+
+    # The last capture line is the authoritative one for the run.
+    match = matches[-1]
+    non_zero = int(match.group("non_zero"))
+    color_buckets = int(match.group("color_buckets"))
+    if non_zero <= 0:
+        failures.append("capture has no non-zero pixels")
+    if color_buckets <= 1:
+        failures.append(f"capture has only {color_buckets} color bucket(s)")
+    return failures
 
 
 def main() -> int:
@@ -33,6 +53,7 @@ def main() -> int:
         if "[IMM_UNITY_SMOKE] scene composition" in line and "failed" in line
     ]
     render_failures = [marker for marker in RENDER_FAILURE_MARKERS if marker in text]
+    render_failures.extend(capture_metric_failures(text))
     rendering_succeeded = (
         ("[IMM_EDITOR_SMOKE] passed:" in text or "[IMM_UNITY_SMOKE] capture=" in text)
         and args.capture.exists()

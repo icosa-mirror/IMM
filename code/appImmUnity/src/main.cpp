@@ -373,6 +373,22 @@ static bool iEnvFlagEnabled(const char *name)
     return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
 }
 
+static uint32_t iEnvUIntOrDefault(const char *name, uint32_t fallback)
+{
+    const char *value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0')
+    {
+        return fallback;
+    }
+    char *end = nullptr;
+    const unsigned long parsed = std::strtoul(value, &end, 0);
+    if (end == value)
+    {
+        return fallback;
+    }
+    return static_cast<uint32_t>(parsed);
+}
+
 #if defined(WINDOWS)
 static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
 {
@@ -719,21 +735,26 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
 
     const int width = target.width;
     const int height = target.height;
-    const uint32_t colorFormat = 44u; // VK_FORMAT_B8G8R8A8_UNORM; Unity's render pass defines pipeline compatibility.
+    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 44u); // Default VK_FORMAT_B8G8R8A8_UNORM; Unity's render pass defines pipeline compatibility.
     const uint32_t colorSamples = static_cast<uint32_t>(target.samples > 0 ? target.samples : 1);
-    const bool hasDepthAttachment = target.depth != nullptr;
+    const bool assumeHostDepth = iEnvFlagEnabled("IMM_UNITY_VK_ASSUME_HOST_DEPTH");
+    // Display render-buffer pointers can be null while Unity's active Vulkan render pass still owns depth.
+    const bool hostRenderPassHasDepth = iEnvFlagEnabled("IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH") || assumeHostDepth;
+    const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth;
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
     if (sUnityVulkanRenderTargetDiagnosticCount < 24)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_HOST_RT_20260612] camera=%d colorRB=%p colorFormat=%u colorSamples=%u depthAttachment=%d hostDepth=%d colorExtent=%dx%d cmd=%p renderPass=0x%llx framebuffer=0x%llx subpass=%d accessRenderBuffer=0",
+            L"[IMM_UNITY_VK_HOST_RT_20260612] camera=%d colorRB=%p colorFormat=%u colorSamples=%u depthAttachment=%d hostDepth=%d hostRenderPassHasDepth=%d assumeHostDepth=%d colorExtent=%dx%d cmd=%p renderPass=0x%llx framebuffer=0x%llx subpass=%d accessRenderBuffer=0",
             cameraID,
             colorTarget,
             static_cast<unsigned int>(colorFormat),
             static_cast<unsigned int>(colorSamples),
             hasDepthAttachment ? 1 : 0,
             useHostDepth ? 1 : 0,
+            hostRenderPassHasDepth ? 1 : 0,
+            assumeHostDepth ? 1 : 0,
             width,
             height,
             recordingState.commandBuffer,

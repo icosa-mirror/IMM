@@ -104,10 +104,17 @@ def top_level_metric(metrics: dict, section: str, key: str) -> str:
 
 
 def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]], status: dict | None = None) -> None:
+    status_failed = False
+    if status:
+        status_failed = bool(status.get("failure_class")) or any(
+            status.get(key) in {"failed", "expected_failed"}
+            for key in ["compositing", "ordered_overlay", "depth_composition", "depth_interleaving"]
+        )
+    report_passed = bool(metrics.get("passed")) and not status_failed
     lines = [
         "# Render Validation Report",
         "",
-        f"- Result: {'passed' if metrics.get('passed') else 'failed'}",
+        f"- Result: {'passed' if report_passed else 'failed'}",
         "",
     ]
     if status:

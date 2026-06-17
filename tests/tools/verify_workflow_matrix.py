@@ -38,10 +38,11 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
-        "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Prepare Unity DirectX CI project", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
+        "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
-        "unity-windows-vulkan-player-build": ["Preflight Unity Vulkan runner", "Prepare Unity Vulkan CI project", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
-        "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-vulkan-player-build": ["Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
+        "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Write Unity Vulkan ordered overlay report", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Write engine aggregate status manifests", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
@@ -52,7 +53,7 @@ REQUIRED_JOBS = {
         "windows-standalone-opengl": ["Install Mesa llvmpipe OpenGL", "Configure Mesa llvmpipe OpenGL", "Preflight OpenGL runner", "Build Windows viewer", "Capture OpenGL sample1", "Compare OpenGL render metrics against committed DirectX baseline", "Write OpenGL render report", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-openxr-vr": ["Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-opengl-vr": ["Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Capture DirectX reference", "Run Godot Vulkan visual baseline smoke", "Compare Godot Vulkan render metrics against committed DirectX baseline", "Write Godot Vulkan render report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-standalone-metal": ["Preflight macOS Metal runner", "Configure macOS build", "Build macOS Metal standalone viewer", "Smoke macOS Metal standalone viewer", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
@@ -75,6 +76,7 @@ REQUIRED_RUNS_ON = {
         "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-vulkan-player-build": {"ubuntu-latest"},
         "unity-windows-vulkan-ordered-overlay": {"self-hosted", "windows"},
+        "unity-windows-vulkan-full-depth": {"self-hosted", "windows"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
@@ -112,6 +114,7 @@ REQUIRED_JOB_TIMEOUTS = {
         "unity-windows-directx-composition",
         "unity-windows-vulkan-player-build",
         "unity-windows-vulkan-ordered-overlay",
+        "unity-windows-vulkan-full-depth",
         "unity-windows-openxr-vr",
         "godot-package-import",
         "engine-evidence-report",
@@ -141,6 +144,7 @@ REQUIRED_STEP_TIMEOUTS = {
         "unity-package-import": {"Run Unity batchmode package import tests"},
         "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
         "unity-windows-vulkan-ordered-overlay": {"Run Unity Vulkan ordered overlay smoke"},
+        "unity-windows-vulkan-full-depth": {"Run Unity Vulkan full depth smoke"},
         "unity-windows-openxr-vr": {"Run Unity OpenXR VR smoke"},
     },
     ".github/workflows/ci-gpu.yml": {
@@ -313,6 +317,92 @@ def verify_render_contract_references(root: Path, errors: list[str]) -> None:
             )
 
 
+def verify_unity_vulkan_full_depth_display_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-engine.yml":
+        return
+
+    text = path.read_text(encoding="utf-8")
+    match = re.search(
+        r"^  unity-windows-vulkan-full-depth:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return
+
+    body = match.group("body")
+    required_tokens = [
+        '$env:IMM_UNITY_VK_USE_HOST_DEPTH = "1"',
+        '$env:IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH = "1"',
+        '--composition-mode full_depth',
+        '--require "source=display"',
+        '--require "composition playback freeze documents="',
+        '--require "hostRenderPassHasDepth=1"',
+        '--require "assumeHostDepth=0"',
+        '--require "Vulkan renderer began host render pass frame with host depth"',
+    ]
+    for token in required_tokens:
+        if token not in body:
+            errors.append(f"{workflow_rel} unity-windows-vulkan-full-depth missing display-depth contract token: {token}")
+
+    forbidden_tokens = [
+        "IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE",
+    ]
+    for token in forbidden_tokens:
+        if token in body:
+            errors.append(f"{workflow_rel} unity-windows-vulkan-full-depth must not use camera-target diagnostic token: {token}")
+
+
+def verify_full_depth_validation_report_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-validation.yml":
+        return
+
+    text = path.read_text(encoding="utf-8")
+    required_tokens = [
+        "Verify full depth validation evidence",
+        "needs.engine.result != 'skipped' && needs.gpu.result != 'skipped'",
+        "python tests/tools/verify_full_depth_evidence_report.py",
+        "--report artifacts/validation-evidence/view/VALIDATION_REPORT.md",
+    ]
+    for token in required_tokens:
+        if token not in text:
+            errors.append(f"{workflow_rel} missing full-depth validation report contract token: {token}")
+
+
+def verify_ci_core_self_test_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-core.yml":
+        return
+
+    text = path.read_text(encoding="utf-8")
+    required_tokens = [
+        "python tests/tools/test_write_visual_evidence_report.py",
+        "python tests/tools/test_verify_full_depth_evidence_report.py",
+    ]
+    for token in required_tokens:
+        if token not in text:
+            errors.append(f"{workflow_rel} missing CI tool self-test command: {token}")
+
+
+def verify_godot_vulkan_smoke_contract(root: Path, errors: list[str]) -> None:
+    script_rel = "code/projects/windows/run-godot-vulkan-visual-baseline-smoke.ps1"
+    script_path = root / script_rel
+    if not script_path.exists():
+        errors.append(f"Missing Godot Vulkan smoke script: {script_rel}")
+        return
+
+    text = script_path.read_text(encoding="utf-8")
+    required_tokens = [
+        "visual smoke scene composition diagnostics",
+        "visual smoke PPM scene composition diagnostics",
+        "ordered overlay IMM diagnostics",
+        "scene composition full depth probe missing failed",
+        "scene composition ordered overlay probe missing failed",
+    ]
+    for token in required_tokens:
+        if token not in text:
+            errors.append(f"{script_rel} missing composition smoke contract token: {token}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
@@ -321,6 +411,7 @@ def main() -> int:
     root = args.repo_root.resolve()
     errors: list[str] = []
 
+    verify_godot_vulkan_smoke_contract(root, errors)
     for workflow_rel, jobs in REQUIRED_JOBS.items():
         workflow_path = root / workflow_rel
         if not workflow_path.exists():
@@ -330,6 +421,9 @@ def main() -> int:
             verify_reusable_workflow(workflow_path, workflow_rel, errors)
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)
+        verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)
+        verify_full_depth_validation_report_contract(workflow_path, workflow_rel, errors)
+        verify_ci_core_self_test_contract(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
         for job_name, required_steps in jobs.items():

@@ -79,6 +79,25 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        unity_vulkan_full_depth = input_root / "EngineValidationEvidence" / "captures" / "unity-windows-vulkan-full-depth"
+        unity_vulkan_full_depth.mkdir(parents=True)
+        (unity_vulkan_full_depth / "unity-windows-vulkan-full-depth.png").write_bytes(PNG_1X1)
+        (unity_vulkan_full_depth / "composition-status.json").write_text(
+            json.dumps(
+                {
+                    "rendering": "success",
+                    "composition_mode": "full_depth",
+                    "composition_contract": "depth_composition",
+                    "compositing": "success",
+                    "ordered_overlay": "not_tested",
+                    "depth_composition": "success",
+                    "depth_interleaving": "success",
+                    "failure_class": "",
+                    "failures": [],
+                }
+            ),
+            encoding="utf-8",
+        )
 
         gpu = input_root / "GPUMatrixEvidence" / "WindowsGodotVulkan-GPU"
         gpu.mkdir(parents=True)
@@ -116,6 +135,31 @@ def main() -> int:
                     "ordered_overlay": "success",
                     "depth_composition": "not_claimed",
                     "depth_interleaving": "not_claimed",
+                    "failure_class": "",
+                    "failures": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        godot_full_depth = input_root / "GPUMatrixEvidence" / "godot-windows-vulkan-full-depth"
+        godot_full_depth_captures = godot_full_depth / "captures"
+        godot_full_depth_captures.mkdir(parents=True)
+        (godot_full_depth_captures / "godot-vulkan-full-depth.png").write_bytes(PNG_1X1)
+        (godot_full_depth / "render-report.md").write_text(
+            "# IMM Render Report\n\n### godot-vulkan-full-depth.png\n"
+            "![Godot](captures/godot-vulkan-full-depth.png)\n",
+            encoding="utf-8",
+        )
+        (godot_full_depth / "composition-status.json").write_text(
+            json.dumps(
+                {
+                    "rendering": "success",
+                    "composition_mode": "full_depth",
+                    "composition_contract": "depth_composition",
+                    "compositing": "success",
+                    "ordered_overlay": "not_tested",
+                    "depth_composition": "success",
+                    "depth_interleaving": "success",
                     "failure_class": "",
                     "failures": [],
                 }
@@ -251,8 +295,14 @@ def main() -> int:
         assert "Ordered overlay: success" in text
         assert "Depth composition: not_claimed" in text
         assert "![unity-windows-vulkan-ordered-overlay.png]" in text
+        assert "## Unity Windows Vulkan Full Depth" in text
+        assert "Depth composition: success" in text
+        assert "Depth interleaving: success" in text
+        assert "![unity-windows-vulkan-full-depth.png]" in text
         assert "## Windows Godot Vulkan Ordered Overlay" in text
         assert "![godot-vulkan-ordered-overlay.png]" in text
+        assert "## Godot Windows Vulkan Full Depth" in text
+        assert "![godot-vulkan-full-depth.png]" in text
         assert "### Missing Supported Evidence" in text
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text
         assert "## Enginevalidationevidence" not in text

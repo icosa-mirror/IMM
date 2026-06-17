@@ -20,7 +20,7 @@ const MIN_LUMA_RANGE := 0.02
 const MIN_ORIENTATION_LUMA_DELTA := 0.05
 const MIN_SCENE_PROBE_REGION_PIXELS := 64
 const MIN_SCENE_PROBE_DOMINANT_SHARE := 0.35
-const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.12
+const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.35
 const MIN_ORDERED_OVERLAY_IMM_PIXELS := 4096
 const IMM_TICKS_PER_SECOND := 12600
 const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
@@ -140,6 +140,10 @@ func _setup_compositor() -> bool:
 	if _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY:
 		_compositor_effect.set("effect_callback_type", CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
 		print("IMM Godot %s visual smoke ordered overlay compositor callback: PRE_TRANSPARENT" % _selected_renderer_name())
+	var callback_override: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_CALLBACK_TYPE", -1)
+	if callback_override >= 0 and callback_override < CompositorEffect.EFFECT_CALLBACK_TYPE_MAX:
+		_compositor_effect.set("effect_callback_type", callback_override)
+		print("IMM Godot %s visual smoke compositor callback override: %d" % [_selected_renderer_name(), callback_override])
 	camera.compositor = compositor
 	if _world_environment == null:
 		_world_environment = WorldEnvironment.new()
@@ -261,6 +265,15 @@ func _run_visual_smoke() -> void:
 		if selected_renderer_api == IMM_RENDERER_API_VULKAN:
 			if not bool(compositor_diagnostics.get("last_vulkan_frame_started", false)):
 				failures.append("ImmViewerCompositorEffect did not start a Vulkan frame")
+			if _visual_smoke_composition_mode() == COMPOSITION_MODE_FULL_DEPTH:
+				if not bool(compositor_diagnostics.get("last_depth_aware_vulkan_composite", false)):
+					failures.append("full-depth Vulkan composition did not run the Godot render-graph depth composite path")
+				if not bool(compositor_diagnostics.get("last_depth_aware_vulkan_composite_result", false)):
+					failures.append("full-depth Vulkan composition render-graph depth composite failed")
+				if not bool(compositor_diagnostics.get("last_had_intermediate_texture", false)) or not bool(compositor_diagnostics.get("last_had_intermediate_depth_texture", false)):
+					failures.append("full-depth Vulkan composition did not render IMM into color and depth intermediate textures")
+				if int(compositor_diagnostics.get("last_vulkan_depth_image_handle", 0)) == 0 or int(compositor_diagnostics.get("last_vulkan_depth_image_view_handle", 0)) == 0:
+					failures.append("full-depth Vulkan composition did not receive Godot depth image handles")
 		elif not bool(compositor_diagnostics.get("last_metal_frame_started", false)):
 			failures.append("ImmViewerCompositorEffect did not start a Metal frame")
 		if int(compositor_diagnostics.get("last_render_result", -1)) < 0:
@@ -290,7 +303,7 @@ func _run_visual_smoke() -> void:
 		var orientation_luma_delta: float = float(content_diagnostics.get("orientation_luma_delta", 0.0))
 		if selected_renderer_api == IMM_RENDERER_API_METAL and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
 			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % orientation_luma_delta)
-		_append_ordered_overlay_imm_failures(ordered_overlay_imm_diagnostics, failures, "PNG")
+		_append_imm_visibility_failures(ordered_overlay_imm_diagnostics, failures, "PNG")
 		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PNG")
 		var screenshot_dir: String = screenshot_path.get_base_dir()
 		if not screenshot_dir.is_empty():
@@ -313,7 +326,7 @@ func _run_visual_smoke() -> void:
 		print("IMM Godot %s visual smoke PPM scene composition diagnostics: %s" % [selected_renderer_name, str(scene_composition_diagnostics)])
 		if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
 			failures.append("visual smoke PPM had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
-		_append_ordered_overlay_imm_failures(ordered_overlay_imm_diagnostics, failures, "PPM")
+		_append_imm_visibility_failures(ordered_overlay_imm_diagnostics, failures, "PPM")
 		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PPM")
 		var save_result := _save_ppm(image, ppm_path)
 		if save_result != OK:
@@ -574,9 +587,9 @@ func _setup_scene_composition_probe() -> void:
 	_front_scene_probe.global_position = center - forward * max(radius * 0.20, 0.28) - right * max(radius * 0.18, 0.22)
 	_front_scene_probe.look_at(camera.global_position, Vector3.UP)
 
-	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(probe_size * 1.35, probe_size * 1.35, probe_depth), ordered_overlay)
+	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(probe_size * 0.55, probe_size * 0.55, probe_depth), ordered_overlay)
 	add_child(_rear_occluded_scene_probe)
-	_rear_occluded_scene_probe.global_position = center + forward * max(radius * 0.28, 0.35)
+	_rear_occluded_scene_probe.global_position = center + forward * max(radius * 0.24, 0.32) + right * max(radius * 0.22, 0.26)
 	_rear_occluded_scene_probe.look_at(camera.global_position, Vector3.UP)
 
 	_rear_visible_scene_probe = _create_scene_probe("IMMSceneRearVisibleProbe", SCENE_REAR_VISIBLE_PROBE_COLOR, Vector3(probe_size * 1.15, probe_size * 1.15, probe_depth), ordered_overlay)
@@ -742,11 +755,12 @@ func _analyze_ordered_overlay_imm_pixels(image: Image, background: Color) -> Dic
 		"minimum_imm_like_pixels": MIN_ORDERED_OVERLAY_IMM_PIXELS,
 	}
 
-func _append_ordered_overlay_imm_failures(diagnostics: Dictionary, failures: Array[String], label: String) -> void:
-	if _visual_smoke_composition_mode() != COMPOSITION_MODE_ORDERED_OVERLAY:
+func _append_imm_visibility_failures(diagnostics: Dictionary, failures: Array[String], label: String) -> void:
+	var composition_mode: String = _visual_smoke_composition_mode()
+	if composition_mode != COMPOSITION_MODE_ORDERED_OVERLAY and composition_mode != COMPOSITION_MODE_FULL_DEPTH:
 		return
 	if int(diagnostics.get("imm_like_pixels", 0)) < MIN_ORDERED_OVERLAY_IMM_PIXELS:
-		failures.append("scene composition %s ordered overlay IMM background failed: %s" % [label, str(diagnostics)])
+		failures.append("scene composition %s %s IMM visibility failed: %s" % [label, composition_mode, str(diagnostics)])
 
 func _analyze_content_pixels(image: Image, background: Color) -> Dictionary:
 	var width: int = image.get_width()

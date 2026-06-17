@@ -82,6 +82,12 @@ extern "C"
         uint32_t depthFormat;
         int width;
         int height;
+        uint32_t flags;
+    };
+
+    enum ImmGodotVulkanFrameFlags
+    {
+        ImmGodotVulkanFrameFlag_ClearExternalDepth = 1u << 0,
     };
 
     struct ImmGodotPlayerInfo

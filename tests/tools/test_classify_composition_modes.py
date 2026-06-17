@@ -93,6 +93,20 @@ def main() -> int:
         assert status["depth_interleaving"] == "expected_failed"
         assert "scene composition full depth probe missing failed" in status["failures"]
 
+        full_depth_black_capture_log = "\n".join(
+            [
+                "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_black.png width=1280 height=720 pixels=921600 nonZero=0 colorBuckets=1 hash=1",
+                "[IMM_UNITY_SMOKE] scene composition front occluder failed: share=0.00",
+            ]
+        )
+        returncode, status = run_unity_classifier(temp, "full_depth", full_depth_black_capture_log)
+        assert returncode == 1
+        assert status["rendering"] == "failed"
+        assert status["composition_mode"] == "full_depth"
+        assert status["compositing"] == "expected_failed"
+        assert "rendering failure marker: capture has no non-zero pixels" in status["failures"]
+        assert "rendering failure marker: capture has only 1 color bucket(s)" in status["failures"]
+
         full_depth_pass_log = "\n".join(
             [
                 "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_pass.png width=1280 height=720",

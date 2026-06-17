@@ -16,6 +16,7 @@ namespace godot
                                                uint64_t depth_image_view_handle,
                                                uint32_t depth_format,
                                                int width,
-                                               int height);
+                                               int height,
+                                               bool clear_external_depth);
     void ImmViewerGodotEndVulkanTextureFrame();
 }

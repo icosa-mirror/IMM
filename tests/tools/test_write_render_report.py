@@ -81,6 +81,7 @@ def main() -> int:
         assert (images / "candidate.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
         text = report.read_text(encoding="utf-8")
         assert "# Render Validation Report" in text
+        assert "- Result: failed" in text
         assert "![Reference]" in text
         assert "![Candidate]" in text
         assert "visible_luma_mean" in text

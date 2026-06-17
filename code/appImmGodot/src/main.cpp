@@ -258,7 +258,7 @@ extern "C" IMMGODOT_EXPORT void ImmGodot_EndMetalFrame()
 
 extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFrame *frame)
 {
-    if (frame == nullptr || frame->version != 1 || frame->width <= 0 || frame->height <= 0)
+    if (frame == nullptr || (frame->version != 1 && frame->version != 2) || frame->width <= 0 || frame->height <= 0)
         return -1;
     if (!gBridge.IsInitialized() || gBridge.GetRenderer() == nullptr || gBridge.GetRenderer()->GetAPI() != piRenderer::API::Vulkan)
         return -1;
@@ -283,27 +283,30 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFra
         return -1;
     }
     piRendererVulkan *renderer = static_cast<piRendererVulkan *>(gBridge.GetRenderer());
+    const bool clearExternalDepth = frame->version >= 2 && (frame->flags & ImmGodotVulkanFrameFlag_ClearExternalDepth) != 0;
+    bool began = false;
     if (frame->depthImage != nullptr && frame->depthImageView != nullptr && frame->depthFormat != 0)
     {
-        return renderer->BeginExternalImageFrame(frame->colorImage,
+        began = renderer->BeginExternalImageFrame(frame->colorImage,
+                                                  frame->colorImageView,
+                                                  frame->colorFormat,
+                                                  frame->depthImage,
+                                                  frame->depthImageView,
+                                                  frame->depthFormat,
+                                                  frame->width,
+                                                  frame->height,
+                                                  clearExternalDepth);
+    }
+    else
+    {
+        began = renderer->BeginExternalImageFrame(frame->colorImage,
                                                  frame->colorImageView,
                                                  frame->colorFormat,
-                                                 frame->depthImage,
-                                                 frame->depthImageView,
-                                                 frame->depthFormat,
                                                  frame->width,
-                                                 frame->height)
-                   ? 0
-                   : -1;
+                                                 frame->height);
     }
 
-    return renderer->BeginExternalImageFrame(frame->colorImage,
-                                            frame->colorImageView,
-                                            frame->colorFormat,
-                                            frame->width,
-                                            frame->height)
-              ? 0
-              : -1;
+    return began ? 0 : -1;
 #else
     return -1;
 #endif

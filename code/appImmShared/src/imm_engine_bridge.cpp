@@ -592,7 +592,12 @@ namespace ImmShared
         // depth remains visible when composited into their external targets.
         conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-        conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+        const bool vulkanProjectionAlreadyGpuAdjusted =
+            mConfig.rendererApi == piRenderer::API::Vulkan &&
+            std::getenv("IMM_UNITY_VK_PROJECTION_ALREADY_GPU") != nullptr;
+        conf.projectionMatrix = (usesZeroToOneDepth && !vulkanProjectionAlreadyGpuAdjusted)
+            ? ClipSpaceDepth::FromZeroToOne
+            : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
 #if defined(ANDROID) || defined(__ANDROID__)

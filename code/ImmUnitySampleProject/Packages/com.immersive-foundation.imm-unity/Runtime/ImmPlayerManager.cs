@@ -637,7 +637,14 @@ namespace ImmPlayer
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {
-                    info.CommandBuffer.SetRenderTarget(cameraTarget);
+                    if (IsEnvFlagEnabled("IMM_UNITY_VK_BIND_CAMERA_DEPTH_TARGET"))
+                    {
+                        info.CommandBuffer.SetRenderTarget(cameraTarget, new RenderTargetIdentifier(BuiltinRenderTextureType.Depth));
+                    }
+                    else
+                    {
+                        info.CommandBuffer.SetRenderTarget(cameraTarget);
+                    }
                 }
                 if (useCustomBlit && _renderEventAndDataFunc != IntPtr.Zero)
                 {

@@ -16,10 +16,11 @@ namespace godot
                                                uint64_t depth_image_view_handle,
                                                uint32_t depth_format,
                                                int width,
-                                               int height)
+                                               int height,
+                                               bool clear_external_depth)
     {
         ImmGodotVulkanFrame frame = {};
-        frame.version = 1;
+        frame.version = 2;
         frame.instance = reinterpret_cast<void *>(instance_handle);
         frame.physicalDevice = reinterpret_cast<void *>(physical_device_handle);
         frame.device = reinterpret_cast<void *>(device_handle);
@@ -33,6 +34,7 @@ namespace godot
         frame.depthFormat = depth_format;
         frame.width = width;
         frame.height = height;
+        frame.flags = clear_external_depth ? ImmGodotVulkanFrameFlag_ClearExternalDepth : 0;
         return ImmGodot_BeginVulkanFrame(&frame) == 0;
     }
 

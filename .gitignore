@@ -99,3 +99,7 @@ code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
 code/appImmGodotGDExtension/src/*.os
 code/appImmGodotGDExtension/*.pdb
+/code/ImmUnitySampleProject/Assets/StreamingAssets
+/LLM Docs
+/LLM Scripts
+/quillplayer_decompiled

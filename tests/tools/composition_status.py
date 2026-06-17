@@ -7,6 +7,7 @@ from __future__ import annotations
 COMPOSITION_CONTRACTS = {
     "full_depth": {
         "composition_contract": "depth_composition",
+        "depth_interleaving": "expected_failed",
         "failure_status": "expected_failed",
     },
     "ordered_overlay": {

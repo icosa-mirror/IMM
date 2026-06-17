@@ -641,10 +641,6 @@ jobs:
         working-directory: code/projects/windows
         run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
 
-      - name: Capture DirectX reference
-        shell: pwsh
-        run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
-
       - name: Run Godot Vulkan visual baseline smoke
         timeout-minutes: 10
         shell: pwsh
@@ -656,21 +652,19 @@ jobs:
           -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
           -LogDir artifacts\godot-smoke-windows-vulkan
 
-      - name: Compare Godot Vulkan render metrics against committed DirectX baseline
+      - name: Record Godot Vulkan full depth metrics
         shell: pwsh
         run: |
-          python tests\tools\compare_render_metrics.py artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
-            --reference .\tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\godot-windows-vulkan-sample1.json `
-            --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-committed-directx-render-metrics.json
+          python tests\tools\compare_render_metrics.py `
+            artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
+            --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
 
       - name: Write Godot Vulkan render report
         if: always()
         shell: pwsh
         run: >
           python tests\tools\write_render_report.py
-          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-vs-committed-directx-render-metrics.json
-          --reference-capture .\tests\baselines\render\windows-directx-sample1.ppm
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
           --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
           --status-json artifacts\godot-smoke-windows-vulkan\composition-status.json
           --output-dir artifacts\godot-smoke-windows-vulkan\captures

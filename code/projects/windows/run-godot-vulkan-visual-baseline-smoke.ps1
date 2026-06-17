@@ -121,6 +121,7 @@ $previousEnv = @{
     IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE
     IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES
     IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION = $env:IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION
+    IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION = $env:IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION
     IMM_VIEWER_VALIDATE_FIXED_DT = $env:IMM_VIEWER_VALIDATE_FIXED_DT
     IMM_VIEWER_VALIDATE_PLAYER_FRAME = $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME
 }
@@ -134,8 +135,13 @@ try {
     $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = "1"
     $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $CompositionMode
     $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = "0"
-    if ($CompositionMode -eq "ordered_overlay") {
+    if ($CompositionMode -eq "full_depth") {
         Remove-Item -Path "env:IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION" -ErrorAction SilentlyContinue
+        $env:IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION = "1"
+    }
+    else {
+        Remove-Item -Path "env:IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION" -ErrorAction SilentlyContinue
+        Remove-Item -Path "env:IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION" -ErrorAction SilentlyContinue
     }
     $env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
     $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
@@ -184,6 +190,14 @@ finally {
 $output | Tee-Object -FilePath $outputPath
 $outputText = $output -join "`n"
 $compositionFailures = @($output | Where-Object { $_ -match "scene composition .* failed" })
+$hasSceneCompositionDiagnostics = $outputText.Contains("visual smoke scene composition diagnostics") -or $outputText.Contains("visual smoke PPM scene composition diagnostics")
+$hasOrderedOverlayDiagnostics = $outputText.Contains("ordered overlay IMM diagnostics")
+if ($CompositionMode -eq "full_depth" -and $compositionFailures.Count -eq 0 -and -not $hasSceneCompositionDiagnostics) {
+    $compositionFailures += "scene composition full depth probe missing failed"
+}
+if ($CompositionMode -eq "ordered_overlay" -and $compositionFailures.Count -eq 0 -and -not $hasOrderedOverlayDiagnostics) {
+    $compositionFailures += "scene composition ordered overlay probe missing failed"
+}
 $compositionContract = if ($CompositionMode -eq "ordered_overlay") { "ordered_overlay" } else { "depth_composition" }
 $failureStatus = if ($CompositionMode -eq "ordered_overlay") { "failed" } else { "expected_failed" }
 $knownCompositionOnly = $CompositionMode -eq "full_depth" `
@@ -219,8 +233,8 @@ if (-not (Test-Path -LiteralPath $CapturePath -PathType Leaf)) {
     throw "Godot Vulkan visual baseline smoke did not write capture: $CapturePath"
 }
 
-if ($CompositionMode -eq "ordered_overlay") {
-    Write-Output "Skipping DirectX baseline PPM comparison for ordered_overlay composition mode; ordered-overlay validation uses scene probes and render metrics."
+if ($CompositionMode -eq "ordered_overlay" -or $CompositionMode -eq "full_depth") {
+    Write-Output "Skipping DirectX baseline PPM comparison for $CompositionMode composition mode; composition validation uses scene probes and render metrics."
 }
 else {
     try {

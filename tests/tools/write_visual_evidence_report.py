@@ -39,6 +39,8 @@ def normalize_label(value: str) -> str:
         "windows-standalone-vulkan": "Windows-Standalone-Vulkan",
         "unity-windows-directx-composition": "Unity-Windows-DirectX-Composition",
         "unity-windows-vulkan-ordered-overlay": "Unity-Windows-Vulkan-Ordered-Overlay",
+        "unity-windows-vulkan-full-depth": "Unity-Windows-Vulkan-Full-Depth",
+        "godot-windows-vulkan-full-depth": "Godot-Windows-Vulkan-Full-Depth",
     }
     for old, new in replacements.items():
         normalized = normalized.replace(old, new)
@@ -64,6 +66,8 @@ def slugify(value: str) -> str:
         "godotsmokemacosmetal": "macos-godot-metal",
         "unitywindowsdirectxcomposition": "unity-windows-directx-composition",
         "unitywindowsvulkanorderedoverlay": "unity-windows-vulkan-ordered-overlay",
+        "unitywindowsvulkanfulldepth": "unity-windows-vulkan-full-depth",
+        "godotwindowsvulkanfulldepth": "godot-windows-vulkan-full-depth",
         "windowsgodotvulkanorderedoverlay": "windows-godot-vulkan-ordered-overlay",
         "windowsgodotvulkan": "windows-godot-vulkan",
         "windowsstandalonedirectx": "windows-standalone-directx",

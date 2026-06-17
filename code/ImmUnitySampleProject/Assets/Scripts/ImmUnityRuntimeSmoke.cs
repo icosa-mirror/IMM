@@ -15,8 +15,12 @@ namespace ImmPlayer
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
         private const string OverlayProbeEnv = "IMM_UNITY_SMOKE_OVERLAY_PROBE";
         private const string OverlayFixtureEnv = "IMM_UNITY_SMOKE_OVERLAY_FIXTURE";
+        private const string FreezePlaybackEnv = "IMM_UNITY_SMOKE_FREEZE_PLAYBACK";
+        private const string FreezeTimeTicksEnv = "IMM_UNITY_SMOKE_FREEZE_TIME_TICKS";
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string ExpectedGraphicsApiEnv = "IMM_UNITY_EXPECT_GRAPHICS_API";
+        private const string DisableMsaaEnv = "IMM_UNITY_SMOKE_DISABLE_MSAA";
+        private const string CaptureCameraTextureEnv = "IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE";
         private const string CapturePathArg = "-immSmokeCapturePath";
         private const string FramesArg = "-immSmokeFrames";
         private const string QuitArg = "-immSmokeQuit";
@@ -34,6 +38,7 @@ namespace ImmPlayer
         private const float MinOrderedOverlayBottomLeftPaintToTopLeftRatio = 2.0f;
         private const int CaptureWidth = 1280;
         private const int CaptureHeight = 720;
+        private const long DefaultCompositionFreezeTimeTicks = 37800;
         private static readonly Color FrontProbeColor = new Color(1.0f, 0.0f, 1.0f, 1.0f);
         private static readonly Color RearOccludedProbeColor = new Color(0.0f, 1.0f, 1.0f, 1.0f);
         private static readonly Color RearVisibleProbeColor = new Color(1.0f, 1.0f, 0.0f, 1.0f);
@@ -62,6 +67,7 @@ namespace ImmPlayer
         private GameObject _frontProbe;
         private GameObject _rearOccludedProbe;
         private GameObject _rearVisibleProbe;
+        private RenderTexture _diagnosticCameraTargetTexture;
         private readonly List<string> _compositionFailures = new List<string>();
 
         private IEnumerator Start()
@@ -79,6 +85,19 @@ namespace ImmPlayer
             {
                 Debug.Log($"{Prefix}setting capture resolution {CaptureWidth}x{CaptureHeight} from {Screen.width}x{Screen.height}");
                 Screen.SetResolution(CaptureWidth, CaptureHeight, false);
+            }
+            if (IsTruthyValue(Environment.GetEnvironmentVariable(DisableMsaaEnv)))
+            {
+                QualitySettings.antiAliasing = 0;
+                foreach (Camera camera in FindObjectsOfType<Camera>())
+                {
+                    camera.allowMSAA = false;
+                }
+                Debug.Log($"{Prefix}runtime diagnostic MSAA disabled");
+            }
+            if (IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv)))
+            {
+                ConfigureDiagnosticCameraTargetTexture();
             }
 
             string framesText = GetCommandLineValue(FramesArg);
@@ -100,6 +119,7 @@ namespace ImmPlayer
 
             if (_compositionProbeEnabled)
             {
+                FreezeCompositionPlaybackIfRequested();
                 if (_overlayProbeEnabled)
                 {
                     ConfigureRuntimeOverlayFixtureIfRequested();
@@ -124,7 +144,12 @@ namespace ImmPlayer
                 yield break;
             }
 
-            Texture2D tex = _overlayProbeEnabled ? CaptureScreenTexture() : CaptureCameraTexture(captureCamera);
+            bool usePresentedFrameCapture = !IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv)) &&
+                (_overlayProbeEnabled ||
+                (_compositionProbeEnabled && SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan));
+            Texture2D tex = _diagnosticCameraTargetTexture != null
+                ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
+                : (usePresentedFrameCapture ? CaptureScreenTexture() : CaptureCameraTexture(captureCamera));
 
             int width = tex.width;
             int height = tex.height;
@@ -220,7 +245,62 @@ namespace ImmPlayer
             Destroy(tex);
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
+            ReleaseDiagnosticCameraTargetTexture();
             QuitIfRequested(0);
+        }
+
+        private void ConfigureDiagnosticCameraTargetTexture()
+        {
+            Camera camera = Camera.main;
+            if (camera == null)
+                camera = FindObjectOfType<Camera>();
+            if (camera == null)
+            {
+                Debug.LogWarning($"{Prefix}runtime diagnostic camera target skipped: no camera");
+                return;
+            }
+
+            _diagnosticCameraTargetTexture = new RenderTexture(CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32)
+            {
+                antiAliasing = Mathf.Max(1, QualitySettings.antiAliasing),
+                name = "IMM Runtime Smoke Diagnostic Target"
+            };
+            _diagnosticCameraTargetTexture.Create();
+            camera.targetTexture = _diagnosticCameraTargetTexture;
+            Debug.Log($"{Prefix}runtime diagnostic camera target enabled camera={camera.name} samples={_diagnosticCameraTargetTexture.antiAliasing}");
+        }
+
+        private void ReleaseDiagnosticCameraTargetTexture()
+        {
+            if (_diagnosticCameraTargetTexture == null)
+                return;
+
+            Camera[] cameras = FindObjectsOfType<Camera>();
+            foreach (Camera camera in cameras)
+            {
+                if (camera != null && camera.targetTexture == _diagnosticCameraTargetTexture)
+                    camera.targetTexture = null;
+            }
+            _diagnosticCameraTargetTexture.Release();
+            Destroy(_diagnosticCameraTargetTexture);
+            _diagnosticCameraTargetTexture = null;
+        }
+
+        private static Texture2D CaptureRenderTexture(RenderTexture renderTexture)
+        {
+            RenderTexture previousActive = RenderTexture.active;
+            try
+            {
+                RenderTexture.active = renderTexture;
+                var tex = new Texture2D(CaptureWidth, CaptureHeight, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, CaptureWidth, CaptureHeight), 0, 0, false);
+                tex.Apply(false, false);
+                return tex;
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+            }
         }
 
         private static Texture2D CaptureCameraTexture(Camera captureCamera)
@@ -302,6 +382,60 @@ namespace ImmPlayer
             }
 
             Debug.LogWarning($"{Prefix}smoke spawn area 0 was not available before capture");
+        }
+
+        private void FreezeCompositionPlaybackIfRequested()
+        {
+            string freezeFlag = Environment.GetEnvironmentVariable(FreezePlaybackEnv);
+            if (!string.IsNullOrEmpty(freezeFlag) && !IsTruthyValue(freezeFlag))
+            {
+                Debug.Log($"{Prefix}composition playback freeze disabled");
+                return;
+            }
+
+            long freezeTicks = DefaultCompositionFreezeTimeTicks;
+            string freezeTicksText = Environment.GetEnvironmentVariable(FreezeTimeTicksEnv);
+            if (!string.IsNullOrEmpty(freezeTicksText) && long.TryParse(freezeTicksText, out long parsedTicks))
+                freezeTicks = Math.Max(0L, parsedTicks);
+
+            int frozenDocuments = 0;
+            var seenDocuments = new HashSet<int>();
+            MonoBehaviour[] behaviours = FindObjectsOfType<MonoBehaviour>();
+            for (int i = 0; i < behaviours.Length; ++i)
+            {
+                MonoBehaviour behaviour = behaviours[i];
+                if (behaviour == null)
+                    continue;
+
+                Type type = behaviour.GetType();
+                while (type != null)
+                {
+                    FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    for (int fieldIndex = 0; fieldIndex < fields.Length; ++fieldIndex)
+                    {
+                        FieldInfo field = fields[fieldIndex];
+                        if (!typeof(ImmDocument).IsAssignableFrom(field.FieldType))
+                            continue;
+
+                        if (field.GetValue(behaviour) is ImmDocument document && document.IsLoaded)
+                        {
+                            if (!seenDocuments.Add(document.DocumentId))
+                                continue;
+
+                            document.Show();
+                            document.SetTime(freezeTicks, 1);
+                            document.Pause();
+                            ++frozenDocuments;
+                        }
+                    }
+                    type = type.BaseType;
+                }
+            }
+
+            if (frozenDocuments > 0)
+                ImmNativePlugin.GlobalWork(1);
+
+            Debug.Log($"{Prefix}composition playback freeze documents={frozenDocuments} ticks={freezeTicks}");
         }
 
         private static Texture2D CaptureOrderedCameraStackTexture(Camera finalCamera)
@@ -431,7 +565,7 @@ namespace ImmPlayer
             Vector3 right = cam.transform.right.normalized;
             Vector3 center = cam.transform.position + forward * 3.0f;
             _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.50f - forward * 0.35f, cam.transform.rotation, new Vector3(0.55f, 0.55f, 0.06f), probeLayer);
-            _rearOccludedProbe = CreateProbe("IMM Scene Rear Occlusion Probe", RearOccludedProbeColor, center - forward * 0.95f, cam.transform.rotation, new Vector3(0.75f, 0.75f, 0.06f), probeLayer);
+            _rearOccludedProbe = CreateProbe("IMM Scene Rear Occlusion Probe", RearOccludedProbeColor, center + forward * 0.95f + right * 0.25f, cam.transform.rotation, new Vector3(0.75f, 0.75f, 0.06f), probeLayer);
             _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 0.75f + forward * 0.45f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
             Debug.Log($"{Prefix}scene composition probes created center={center} camera={cam.name} overlay={_overlayProbeEnabled} layer={probeLayer}");
             return true;
@@ -696,6 +830,11 @@ namespace ImmPlayer
             {
                 value = Environment.GetEnvironmentVariable(envName);
             }
+            return IsTruthyValue(value);
+        }
+
+        private static bool IsTruthyValue(string value)
+        {
             return !string.IsNullOrEmpty(value) && value != "0" && !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
         }
 
