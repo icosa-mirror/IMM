@@ -16,12 +16,14 @@ namespace ImmPlayer
         private const string OverlayProbeEnv = "IMM_UNITY_SMOKE_OVERLAY_PROBE";
         private const string OverlayFixtureEnv = "IMM_UNITY_SMOKE_OVERLAY_FIXTURE";
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
+        private const string ExpectedGraphicsApiEnv = "IMM_UNITY_EXPECT_GRAPHICS_API";
         private const string CapturePathArg = "-immSmokeCapturePath";
         private const string FramesArg = "-immSmokeFrames";
         private const string QuitArg = "-immSmokeQuit";
         private const string CompositionProbeArg = "-immSmokeCompositionProbe";
         private const string OverlayProbeArg = "-immSmokeOverlayProbe";
         private const string XrProbeArg = "-immSmokeXrProbe";
+        private const string ExpectedGraphicsApiArg = "-immSmokeExpectedGraphicsApi";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
         private const float MinDominantShare = 0.35f;
@@ -64,6 +66,11 @@ namespace ImmPlayer
             _compositionProbeEnabled = IsEnabled(CompositionProbeArg, CompositionProbeEnv);
             _overlayProbeEnabled = IsEnabled(OverlayProbeArg, OverlayProbeEnv);
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
+            if (!ValidateExpectedGraphicsApi())
+            {
+                QuitIfRequested(6);
+                yield break;
+            }
             if (Screen.width != CaptureWidth || Screen.height != CaptureHeight)
             {
                 Debug.Log($"{Prefix}setting capture resolution {CaptureWidth}x{CaptureHeight} from {Screen.width}x{Screen.height}");
@@ -559,6 +566,28 @@ namespace ImmPlayer
 
             Debug.Log($"{Prefix}xr probe passed");
             return true;
+        }
+
+        private static bool ValidateExpectedGraphicsApi()
+        {
+            string expected = GetCommandLineValue(ExpectedGraphicsApiArg);
+            if (string.IsNullOrEmpty(expected))
+            {
+                expected = Environment.GetEnvironmentVariable(ExpectedGraphicsApiEnv);
+            }
+            if (string.IsNullOrEmpty(expected))
+            {
+                return true;
+            }
+
+            string actual = SystemInfo.graphicsDeviceType.ToString();
+            bool matched = string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+            Debug.Log($"{Prefix}graphics api expected={expected} actual={actual}");
+            if (!matched)
+            {
+                Debug.LogError($"{Prefix}graphics api probe failed: expected {expected}, actual {actual}");
+            }
+            return matched;
         }
 
         private static bool GetXrSettingsBool(string propertyName)

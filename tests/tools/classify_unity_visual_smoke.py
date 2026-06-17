@@ -14,6 +14,7 @@ RENDER_FAILURE_MARKERS = [
     "[IMM_EDITOR_SMOKE] timed out waiting for capture",
     "[IMM_EDITOR_SMOKE] failed:",
     "[IMM_UNITY_SMOKE] invalid screen size",
+    "[IMM_UNITY_SMOKE] graphics api probe failed",
 ]
 
 
