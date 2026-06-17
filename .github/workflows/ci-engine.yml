@@ -525,7 +525,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Mesa lavapipe
+      - name: Install Mesa Vulkan drivers
         id: msys2-unity-vulkan
         uses: msys2/setup-msys2@v2
         with:
@@ -534,7 +534,7 @@ jobs:
           install: >-
             mingw-w64-x86_64-mesa
 
-      - name: Configure Mesa lavapipe Vulkan ICD
+      - name: Configure Mesa Windows Vulkan ICD
         shell: pwsh
         env:
           MSYS2_LOCATION: ${{ steps.msys2-unity-vulkan.outputs.msys2-location }}
@@ -548,30 +548,43 @@ jobs:
           }
           "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
           "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
-          $icds = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue })
-          $dlls = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue })
+          $icds = @($searchRoots | ForEach-Object {
+            Get-ChildItem -Path $_ -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like "dzn_icd*.json" -or $_.Name -like "lvp_icd*.json" }
+          })
+          $dlls = @($searchRoots | ForEach-Object {
+            Get-ChildItem -Path $_ -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -eq "vulkan_dzn.dll" -or $_.Name -eq "vulkan_lvp.dll" }
+          })
           "ICD candidates:" | Out-File -FilePath $setupLog -Append
           $icds.FullName | Out-File -FilePath $setupLog -Append
           "DLL candidates:" | Out-File -FilePath $setupLog -Append
           $dlls.FullName | Out-File -FilePath $setupLog -Append
-          $sourceIcd = $icds | Where-Object { $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          $sourceIcd = $icds | Where-Object { $_.Name -like "dzn_icd*" -and $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Where-Object { $_.Name -like "dzn_icd*" } | Select-Object -First 1
+          }
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Where-Object { $_.Name -like "lvp_icd*" -and $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          }
           if (-not $sourceIcd) {
             $sourceIcd = $icds | Select-Object -First 1
           }
           if (-not $sourceIcd) {
-            throw "Mesa lavapipe ICD was not found under: $($searchRoots -join ', ')"
+            throw "Mesa Vulkan ICD was not found under: $($searchRoots -join ', ')"
           }
           $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
-          $sourceDll = Join-Path $driverRoot "bin\vulkan_lvp.dll"
+          $expectedDllName = if ($sourceIcd.Name -like "dzn_icd*") { "vulkan_dzn.dll" } else { "vulkan_lvp.dll" }
+          $sourceDll = Join-Path $driverRoot "bin\$expectedDllName"
           if (-not (Test-Path $sourceDll)) {
-            $sourceDll = ($dlls | Where-Object { $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
+            $sourceDll = ($dlls | Where-Object { $_.Name -eq $expectedDllName -and $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
           }
           if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
-            throw "Mesa lavapipe DLL was not found for $($sourceIcd.FullName)"
+            throw "Mesa Vulkan DLL $expectedDllName was not found for $($sourceIcd.FullName)"
           }
-          $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
+          $icdDir = Join-Path $env:GITHUB_WORKSPACE "mesa-vulkan"
           New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
-          $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
+          $workspaceIcd = Join-Path $icdDir $sourceIcd.Name
           $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
           $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
           $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
