@@ -517,7 +517,7 @@ jobs:
   unity-windows-vulkan-ordered-overlay:
     name: Unity Windows Vulkan Ordered Overlay
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
-    runs-on: windows-latest
+    runs-on: [self-hosted, windows, unity, gpu]
     timeout-minutes: 25
     needs: unity-windows-vulkan-player-build
     steps:
@@ -525,95 +525,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Mesa Vulkan drivers
-        id: msys2-unity-vulkan
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          update: true
-          install: >-
-            mingw-w64-x86_64-mesa
-
-      - name: Configure Mesa Windows Vulkan ICD
-        shell: pwsh
-        env:
-          MSYS2_LOCATION: ${{ steps.msys2-unity-vulkan.outputs.msys2-location }}
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts\unity-windows-vulkan-ordered-overlay | Out-Null
-          $setupLog = "artifacts\unity-windows-vulkan-ordered-overlay\vulkan-driver-setup.txt"
-          $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
-          $mingwBin = Join-Path ($searchRoots | Select-Object -First 1) "mingw64\bin"
-          if (Test-Path $mingwBin) {
-            $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Append
-          }
-          "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
-          "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
-          $icds = @($searchRoots | ForEach-Object {
-            Get-ChildItem -Path $_ -Recurse -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -like "dzn_icd*.json" -or $_.Name -like "lvp_icd*.json" }
-          })
-          $dlls = @($searchRoots | ForEach-Object {
-            Get-ChildItem -Path $_ -Recurse -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -eq "vulkan_dzn.dll" -or $_.Name -eq "vulkan_lvp.dll" }
-          })
-          "ICD candidates:" | Out-File -FilePath $setupLog -Append
-          $icds.FullName | Out-File -FilePath $setupLog -Append
-          "DLL candidates:" | Out-File -FilePath $setupLog -Append
-          $dlls.FullName | Out-File -FilePath $setupLog -Append
-          $sourceIcd = $icds | Where-Object { $_.Name -like "dzn_icd*" -and $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
-          if (-not $sourceIcd) {
-            $sourceIcd = $icds | Where-Object { $_.Name -like "dzn_icd*" } | Select-Object -First 1
-          }
-          if (-not $sourceIcd) {
-            $sourceIcd = $icds | Where-Object { $_.Name -like "lvp_icd*" -and $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
-          }
-          if (-not $sourceIcd) {
-            $sourceIcd = $icds | Select-Object -First 1
-          }
-          if (-not $sourceIcd) {
-            throw "Mesa Vulkan ICD was not found under: $($searchRoots -join ', ')"
-          }
-          $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
-          $expectedDllName = if ($sourceIcd.Name -like "dzn_icd*") { "vulkan_dzn.dll" } else { "vulkan_lvp.dll" }
-          $sourceDll = Join-Path $driverRoot "bin\$expectedDllName"
-          if (-not (Test-Path $sourceDll)) {
-            $sourceDll = ($dlls | Where-Object { $_.Name -eq $expectedDllName -and $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
-          }
-          if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
-            throw "Mesa Vulkan DLL $expectedDllName was not found for $($sourceIcd.FullName)"
-          }
-          $icdDir = Join-Path $env:GITHUB_WORKSPACE "mesa-vulkan"
-          New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
-          $workspaceIcd = Join-Path $icdDir $sourceIcd.Name
-          $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
-          $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
-          $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
-          "Selected ICD=$($sourceIcd.FullName)" | Out-File -FilePath $setupLog -Append
-          "Selected DLL=$sourceDll" | Out-File -FilePath $setupLog -Append
-          "Workspace ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
-          Get-Content -Raw $workspaceIcd | Out-File -FilePath $setupLog -Append
-          "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
-          $registryTargets = @(
-            "HKCU\Software\Khronos\Vulkan\Drivers",
-            "HKLM\SOFTWARE\Khronos\Vulkan\Drivers",
-            "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
-          )
-          $icdTargets = @($workspaceIcd, $sourceIcd.FullName) | Select-Object -Unique
-          foreach ($registryTarget in $registryTargets) {
-            reg add $registryTarget /f | Out-File -FilePath $setupLog -Append
-            foreach ($icdTarget in $icdTargets) {
-              reg add $registryTarget /v "$icdTarget" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
-              "Registered Vulkan ICD $icdTarget in $registryTarget" | Out-File -FilePath $setupLog -Append
-            }
-            reg query $registryTarget | Out-File -FilePath $setupLog -Append
-          }
-          (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
-
       - name: Preflight Unity Vulkan runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile unity-windows-vulkan --output artifacts\unity-windows-vulkan-ordered-overlay\preflight.json --require-env VK_ICD_FILENAMES
+        run: python tests\tools\preflight_runner.py --profile unity-windows-vulkan --output artifacts\unity-windows-vulkan-ordered-overlay\preflight.json
 
       - name: Capture Unity Vulkan diagnostics
         shell: pwsh
@@ -628,8 +542,12 @@ jobs:
           "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES" | Out-File -FilePath $out
           "VK_DRIVER_FILES=$env:VK_DRIVER_FILES" | Out-File -FilePath $out -Append
           "VK_ADD_DRIVER_FILES=$env:VK_ADD_DRIVER_FILES" | Out-File -FilePath $out -Append
-          "ICD exists=$(Test-Path $env:VK_ICD_FILENAMES)" | Out-File -FilePath $out -Append
-          Get-Content -Raw $env:VK_ICD_FILENAMES | Out-File -FilePath $out -Append
+          if ($env:VK_ICD_FILENAMES) {
+            "ICD exists=$(Test-Path $env:VK_ICD_FILENAMES)" | Out-File -FilePath $out -Append
+            if (Test-Path $env:VK_ICD_FILENAMES) {
+              Get-Content -Raw $env:VK_ICD_FILENAMES | Out-File -FilePath $out -Append
+            }
+          }
           $env:VK_LOADER_DEBUG = "error,warn"
           & $vulkanInfo.Source --summary *>> $out
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
