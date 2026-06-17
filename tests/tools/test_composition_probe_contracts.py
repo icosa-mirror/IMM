@@ -27,6 +27,7 @@ def main() -> int:
             "IMM_UNITY_FORCE_TEXTURE_PROJECTION",
             "Resources.Load<Shader>(\"ImmUnitySmokeUnlitColor\")",
             "scene composition overlay rear probe failed",
+            "scene composition ordered overlay orientation failed",
             "scene composition overlay probe passed",
             "scene composition rear occlusion probe failed",
             "scene composition probe passed",

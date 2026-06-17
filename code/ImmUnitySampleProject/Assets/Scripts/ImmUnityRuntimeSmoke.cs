@@ -30,6 +30,8 @@ namespace ImmPlayer
         private const float MaxOccludedShare = 0.12f;
         private const float MinOrderedOverlayImmShare = 0.02f;
         private const int MinOrderedOverlayImmUniqueColors = 5000;
+        private const float MinOrderedOverlayTopRightBrightToBottomRightRatio = 2.0f;
+        private const float MinOrderedOverlayBottomLeftPaintToTopLeftRatio = 2.0f;
         private const int CaptureWidth = 1280;
         private const int CaptureHeight = 720;
         private static readonly Color FrontProbeColor = new Color(1.0f, 0.0f, 1.0f, 1.0f);
@@ -182,6 +184,11 @@ namespace ImmPlayer
                     if (immResult.Share < MinOrderedOverlayImmShare || immResult.UniqueColors < MinOrderedOverlayImmUniqueColors)
                     {
                         RecordCompositionFailure($"scene composition ordered overlay IMM background failed: {immResult}");
+                    }
+                    if (immResult.TopRightBrightToBottomRightRatio < MinOrderedOverlayTopRightBrightToBottomRightRatio ||
+                        immResult.BottomLeftPaintToTopLeftRatio < MinOrderedOverlayBottomLeftPaintToTopLeftRatio)
+                    {
+                        RecordCompositionFailure($"scene composition ordered overlay orientation failed: {immResult}");
                     }
                     if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share < MinDominantShare)
                     {
@@ -565,6 +572,14 @@ namespace ImmPlayer
         private static OrderedOverlayImmResult AnalyzeOrderedOverlayImmContent(Color32[] pixels, int width, int height)
         {
             int candidate = 0;
+            int topBright = 0;
+            int bottomBright = 0;
+            int topPaint = 0;
+            int bottomPaint = 0;
+            int topRightBright = 0;
+            int bottomRightBright = 0;
+            int topLeftPaint = 0;
+            int bottomLeftPaint = 0;
             var colors = new HashSet<int>();
             int[] buckets = new int[64];
             int bucketCount = 0;
@@ -582,11 +597,55 @@ namespace ImmPlayer
                     buckets[bucket] = 1;
                     ++bucketCount;
                 }
+
+                int x = i % width;
+                int y = i / width;
+                int displayY = height - 1 - y;
+                bool isTopHalf = displayY < height / 2;
+                bool isTopRightOrientationRegion = x >= width * 3 / 5 && x < width * 49 / 50 && displayY < height * 7 / 20;
+                bool isBottomRightOrientationRegion = x >= width * 3 / 5 && x < width * 49 / 50 && displayY >= height * 13 / 20;
+                bool isTopLeftOrientationRegion = x < width * 2 / 5 && displayY < height * 7 / 20;
+                bool isBottomLeftOrientationRegion = x < width * 2 / 5 && displayY >= height * 13 / 20;
+                if (IsLikelyOrderedOverlayBrightSkyPixel(pixel))
+                {
+                    if (isTopHalf)
+                        ++topBright;
+                    else
+                        ++bottomBright;
+                    if (isTopRightOrientationRegion)
+                        ++topRightBright;
+                    if (isBottomRightOrientationRegion)
+                        ++bottomRightBright;
+                }
+                if (IsLikelyOrderedOverlayPaintPixel(pixel))
+                {
+                    if (isTopHalf)
+                        ++topPaint;
+                    else
+                        ++bottomPaint;
+                    if (isTopLeftOrientationRegion)
+                        ++topLeftPaint;
+                    if (isBottomLeftOrientationRegion)
+                        ++bottomLeftPaint;
+                }
             }
 
             int total = Math.Max(1, width * height);
             float share = (float)candidate / total;
-            return new OrderedOverlayImmResult(candidate, total, share, bucketCount, colors.Count);
+            return new OrderedOverlayImmResult(
+                candidate,
+                total,
+                share,
+                bucketCount,
+                colors.Count,
+                topBright,
+                bottomBright,
+                topPaint,
+                bottomPaint,
+                topRightBright,
+                bottomRightBright,
+                topLeftPaint,
+                bottomLeftPaint);
         }
 
         private static bool IsLikelyImmOrderedOverlayPixel(Color32 pixel)
@@ -604,6 +663,24 @@ namespace ImmPlayer
             }
 
             return true;
+        }
+
+        private static bool IsLikelyOrderedOverlayBrightSkyPixel(Color32 pixel)
+        {
+            int max = Mathf.Max(pixel.r, Mathf.Max(pixel.g, pixel.b));
+            int min = Mathf.Min(pixel.r, Mathf.Min(pixel.g, pixel.b));
+            float luma = 0.2126f * pixel.r + 0.7152f * pixel.g + 0.0722f * pixel.b;
+            return luma > 145.0f && max - min < 110;
+        }
+
+        private static bool IsLikelyOrderedOverlayPaintPixel(Color32 pixel)
+        {
+            return pixel.r >= 45 &&
+                pixel.r <= 190 &&
+                pixel.r > pixel.g * 1.25f &&
+                pixel.r > pixel.b * 1.25f &&
+                pixel.g < 120 &&
+                pixel.b < 120;
         }
 
         private void RecordCompositionFailure(string message)
@@ -747,13 +824,34 @@ namespace ImmPlayer
 
         private struct OrderedOverlayImmResult
         {
-            public OrderedOverlayImmResult(int candidatePixels, int totalPixels, float share, int colorBuckets, int uniqueColors)
+            public OrderedOverlayImmResult(
+                int candidatePixels,
+                int totalPixels,
+                float share,
+                int colorBuckets,
+                int uniqueColors,
+                int topBrightPixels,
+                int bottomBrightPixels,
+                int topPaintPixels,
+                int bottomPaintPixels,
+                int topRightBrightPixels,
+                int bottomRightBrightPixels,
+                int topLeftPaintPixels,
+                int bottomLeftPaintPixels)
             {
                 CandidatePixels = candidatePixels;
                 TotalPixels = totalPixels;
                 Share = share;
                 ColorBuckets = colorBuckets;
                 UniqueColors = uniqueColors;
+                TopBrightPixels = topBrightPixels;
+                BottomBrightPixels = bottomBrightPixels;
+                TopPaintPixels = topPaintPixels;
+                BottomPaintPixels = bottomPaintPixels;
+                TopRightBrightPixels = topRightBrightPixels;
+                BottomRightBrightPixels = bottomRightBrightPixels;
+                TopLeftPaintPixels = topLeftPaintPixels;
+                BottomLeftPaintPixels = bottomLeftPaintPixels;
             }
 
             public int CandidatePixels { get; }
@@ -761,10 +859,22 @@ namespace ImmPlayer
             public float Share { get; }
             public int ColorBuckets { get; }
             public int UniqueColors { get; }
+            public int TopBrightPixels { get; }
+            public int BottomBrightPixels { get; }
+            public int TopPaintPixels { get; }
+            public int BottomPaintPixels { get; }
+            public int TopRightBrightPixels { get; }
+            public int BottomRightBrightPixels { get; }
+            public int TopLeftPaintPixels { get; }
+            public int BottomLeftPaintPixels { get; }
+            public float BrightTopToBottomRatio => TopBrightPixels / (float)Math.Max(1, BottomBrightPixels);
+            public float PaintTopToBottomRatio => TopPaintPixels / (float)Math.Max(1, BottomPaintPixels);
+            public float TopRightBrightToBottomRightRatio => TopRightBrightPixels / (float)Math.Max(1, BottomRightBrightPixels);
+            public float BottomLeftPaintToTopLeftRatio => BottomLeftPaintPixels / (float)Math.Max(1, TopLeftPaintPixels);
 
             public override string ToString()
             {
-                return $"candidate={CandidatePixels} total={TotalPixels} share={Share:F4} colorBuckets={ColorBuckets} uniqueColors={UniqueColors}";
+                return $"candidate={CandidatePixels} total={TotalPixels} share={Share:F4} colorBuckets={ColorBuckets} uniqueColors={UniqueColors} brightTop={TopBrightPixels} brightBottom={BottomBrightPixels} brightTopBottom={BrightTopToBottomRatio:F3} paintTop={TopPaintPixels} paintBottom={BottomPaintPixels} paintTopBottom={PaintTopToBottomRatio:F3} topRightBright={TopRightBrightPixels} bottomRightBright={BottomRightBrightPixels} topRightBrightBottomRight={TopRightBrightToBottomRightRatio:F3} topLeftPaint={TopLeftPaintPixels} bottomLeftPaint={BottomLeftPaintPixels} bottomLeftPaintTopLeft={BottomLeftPaintToTopLeftRatio:F3}";
             }
         }
 

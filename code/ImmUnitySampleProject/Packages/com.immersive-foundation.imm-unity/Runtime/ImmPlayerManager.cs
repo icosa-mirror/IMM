@@ -491,6 +491,12 @@ namespace ImmPlayer
                 !cam.stereoEnabled)
                 return false;
 
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
+                cam != null &&
+                cam.cameraType == CameraType.Game &&
+                !cam.stereoEnabled)
+                return true;
+
             // Unity can mark Game cameras as stereo/XR-active even when we are
             // validating the editor Game view. Do not use stereoEnabled as a
             // proxy for render-into-texture projection. SceneView is the other

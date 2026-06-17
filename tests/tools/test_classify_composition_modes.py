@@ -90,6 +90,21 @@ def main() -> int:
         assert status["depth_composition"] == "not_claimed"
         assert status["depth_interleaving"] == "not_claimed"
 
+        upside_down_overlay_log = "\n".join(
+            [
+                "[IMM_UNITY_SMOKE] capture=C:/tmp/ordered_overlay_upside_down.png width=1280 height=720",
+                "[IMM_UNITY_SMOKE] scene composition ordered overlay orientation failed: candidate=578313 total=921600 share=0.6275 colorBuckets=34 uniqueColors=46040 brightTop=3181 brightBottom=74809 brightTopBottom=0.043 paintTop=128683 paintBottom=56199 paintTopBottom=2.290",
+            ]
+        )
+        returncode, status = run_unity_classifier(temp, "ordered_overlay", upside_down_overlay_log)
+        assert returncode == 1
+        assert status["composition_mode"] == "ordered_overlay"
+        assert status["composition_contract"] == "ordered_overlay"
+        assert status["compositing"] == "failed"
+        assert status["ordered_overlay"] == "failed"
+        assert status["depth_composition"] == "not_claimed"
+        assert status["depth_interleaving"] == "not_claimed"
+
         returncode, status = run_unity_classifier(
             temp,
             "render_only",
