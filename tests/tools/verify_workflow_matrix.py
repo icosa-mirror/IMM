@@ -74,7 +74,7 @@ REQUIRED_RUNS_ON = {
         "unity-windows-directx-player-build": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-vulkan-player-build": {"ubuntu-latest"},
-        "unity-windows-vulkan-ordered-overlay": {"self-hosted", "windows", "unity", "gpu"},
+        "unity-windows-vulkan-ordered-overlay": {"self-hosted", "windows", "gpu"},
         "unity-windows-openxr-vr": {"self-hosted", "windows", "unity", "vr"},
     },
     ".github/workflows/ci-gpu.yml": {
