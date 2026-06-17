@@ -517,7 +517,7 @@ jobs:
   unity-windows-vulkan-ordered-overlay:
     name: Unity Windows Vulkan Ordered Overlay
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
-    runs-on: [self-hosted, windows, gpu]
+    runs-on: [self-hosted, windows]
     timeout-minutes: 25
     needs: unity-windows-vulkan-player-build
     steps:
