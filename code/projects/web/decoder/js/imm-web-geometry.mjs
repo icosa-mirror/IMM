@@ -37,9 +37,21 @@ function buildStroke(drawing, stroke, brushType, positions, colors, indices) {
     for (let pointIndex = 0; pointIndex < stroke.pointCount; pointIndex++) {
         computeBasis(drawing.points, stroke.pointOffset, stroke.pointCount, pointIndex, tangent, basisU, basisV);
         const sourceOffset = (stroke.pointOffset + pointIndex) * POINT_FLOATS;
-        const px = read(drawing.points, sourceOffset);
-        const py = read(drawing.points, sourceOffset + 1);
-        const pz = read(drawing.points, sourceOffset + 2);
+        let px = read(drawing.points, sourceOffset);
+        let py = read(drawing.points, sourceOffset + 1);
+        let pz = read(drawing.points, sourceOffset + 2);
+        const adjacentIndex = pointIndex === 0 ? 1 : pointIndex === stroke.pointCount - 1 ? pointIndex - 1 : -1;
+        if (adjacentIndex >= 0) {
+            const adjacentOffset = (stroke.pointOffset + adjacentIndex) * POINT_FLOATS;
+            if (px === read(drawing.points, adjacentOffset) &&
+                py === read(drawing.points, adjacentOffset + 1) &&
+                pz === read(drawing.points, adjacentOffset + 2)) {
+                const direction = pointIndex === 0 ? -0.0001 : 0.0001;
+                px += direction * tangent[0];
+                py += direction * tangent[1];
+                pz += direction * tangent[2];
+            }
+        }
         const width = read(drawing.points, sourceOffset + 13);
         for (let sectionIndex = 0; sectionIndex < stroke.sectionCount; sectionIndex++) {
             const [sectionX, sectionY] = sectionPosition(brushType, sectionIndex, stroke.sectionCount);
@@ -75,7 +87,7 @@ function buildStroke(drawing, stroke, brushType, positions, colors, indices) {
 function sectionPosition(brushType, index, count) {
     if (brushType <= 1) return index === 0 ? [-1, 0] : [1, 0];
     if (brushType === 4) return [[-1, -1], [1, -1], [1, 1], [-1, 1]][index];
-    const angle = Math.PI * 2 * index / count;
+    const angle = 6.2831 * index / count;
     return [Math.cos(angle), Math.sin(angle) * (brushType === 3 ? 0.3 : 1)];
 }
 
@@ -107,7 +119,6 @@ function computeBasis(points, strokeOffset, pointCount, pointIndex, tangent, bas
         } else {
             basisU[0] = tangent[1]; basisU[1] = -tangent[0]; basisU[2] = 0;
         }
-        normalize(basisU);
     }
     basisV[0] = tangent[1] * basisU[2] - tangent[2] * basisU[1];
     basisV[1] = tangent[2] * basisU[0] - tangent[0] * basisU[2];
