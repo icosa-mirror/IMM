@@ -16,6 +16,11 @@ const STROKE_INFO_SIZE = 40;
 const STROKE_POINT_SIZE = 56;
 const STROKE_POINT_FLOATS = STROKE_POINT_SIZE / Float32Array.BYTES_PER_ELEMENT;
 const PICTURE_INFO_SIZE = 28;
+const PLAYBACK_INFO_SIZE = 32;
+const TIMELINE_LAYER_INFO_SIZE = 296;
+const TIMELINE_LAYER_NAME_OFFSET = 40;
+const ANIMATION_KEY_SIZE = 80;
+const CHAPTER_INFO_SIZE = 24;
 
 const decoder = await createDecoderModule();
 
@@ -141,6 +146,10 @@ function decodeScene(source) {
         const animationPointer = decoder._malloc(ANIMATION_INFO_SIZE);
         const strokeInfoPointer = decoder._malloc(STROKE_INFO_SIZE);
         const pictureInfoPointer = decoder._malloc(PICTURE_INFO_SIZE);
+        const playbackInfoPointer = decoder._malloc(PLAYBACK_INFO_SIZE);
+        const timelineLayerPointer = decoder._malloc(TIMELINE_LAYER_INFO_SIZE);
+        const animationKeyPointer = decoder._malloc(ANIMATION_KEY_SIZE);
+        const chapterPointer = decoder._malloc(CHAPTER_INFO_SIZE);
         try {
             decoder._imm_web_get_background_color(backgroundPointer, 3);
             memory = new DataView(decoder.HEAPU8.buffer);
@@ -149,7 +158,7 @@ function decodeScene(source) {
                 memory.getFloat32(backgroundPointer + 4, true),
                 memory.getFloat32(backgroundPointer + 8, true),
             ];
-            const layers = [];
+            const contentLayers = [];
             const transfers = [];
             const layerCount = decoder._imm_web_get_layer_count();
             for (let layerIndex = 0; layerIndex < layerCount; layerIndex++) {
@@ -284,7 +293,102 @@ function decodeScene(source) {
                         decoder._free(pixelsPointer);
                     }
                 }
-                layers.push(layer);
+                contentLayers.push(layer);
+            }
+
+            if (decoder._imm_web_get_playback_info(playbackInfoPointer) === 0) {
+                throw new Error("Could not read decoded playback metadata");
+            }
+            memory = new DataView(decoder.HEAPU8.buffer);
+            const ticksPerSecond = memory.getUint32(playbackInfoPointer, true);
+            const animateOnStart = memory.getUint32(playbackInfoPointer + 4, true) !== 0;
+            const timelineLayerCount = memory.getUint32(playbackInfoPointer + 8, true);
+            const chapterCount = memory.getUint32(playbackInfoPointer + 12, true);
+            const durationTicks = Number(memory.getBigInt64(playbackInfoPointer + 16, true));
+            const layers = [];
+            const claimedContentLayers = new Set();
+            for (let layerIndex = 0; layerIndex < timelineLayerCount; layerIndex++) {
+                if (decoder._imm_web_get_timeline_layer_info(layerIndex, timelineLayerPointer) === 0) {
+                    throw new Error(`Could not read timeline layer ${layerIndex}`);
+                }
+                if (decoder._imm_web_get_timeline_layer_transforms(
+                    layerIndex, localPointer, worldPointer, pivotPointer) === 0) {
+                    throw new Error(`Could not read timeline transforms ${layerIndex}`);
+                }
+                memory = new DataView(decoder.HEAPU8.buffer);
+                const flags = memory.getUint32(timelineLayerPointer + 12, true);
+                const contentLayerIndex = memory.getUint32(timelineLayerPointer + 36, true);
+                const keyCount = memory.getUint32(timelineLayerPointer + 32, true);
+                const content = contentLayerIndex < contentLayers.length
+                    ? contentLayers[contentLayerIndex]
+                    : undefined;
+                if (content !== undefined) claimedContentLayers.add(contentLayerIndex);
+                const keys = [];
+                for (let keyIndex = 0; keyIndex < keyCount; keyIndex++) {
+                    if (decoder._imm_web_get_animation_key(layerIndex, keyIndex, animationKeyPointer) === 0) {
+                        throw new Error(`Could not read animation key ${layerIndex}/${keyIndex}`);
+                    }
+                    memory = new DataView(decoder.HEAPU8.buffer);
+                    keys.push({
+                        property: memory.getUint32(animationKeyPointer, true),
+                        interpolation: memory.getUint32(animationKeyPointer + 4, true),
+                        timeTicks: Number(memory.getBigInt64(animationKeyPointer + 8, true)),
+                        boolValue: memory.getUint32(animationKeyPointer + 16, true) !== 0,
+                        uintValue: memory.getUint32(animationKeyPointer + 20, true),
+                        floatValue: memory.getFloat32(animationKeyPointer + 24, true),
+                        doubleValue: memory.getFloat64(animationKeyPointer + 32, true),
+                        transformValue: readTransform(memory, animationKeyPointer + 40),
+                    });
+                }
+                memory = new DataView(decoder.HEAPU8.buffer);
+                layers.push({
+                    ...(content ?? {
+                        defaultSpawn: false,
+                        frameRate: 0,
+                        frameCount: 0,
+                        frameBuffer: new Uint32Array(),
+                        drawings: [],
+                    }),
+                    id: memory.getUint32(timelineLayerPointer, true),
+                    parentId: memory.getInt32(timelineLayerPointer + 4, true),
+                    type: memory.getUint32(timelineLayerPointer + 8, true),
+                    name: readCString(
+                        timelineLayerPointer + TIMELINE_LAYER_NAME_OFFSET,
+                        LAYER_NAME_CAPACITY,
+                    ),
+                    visible: (flags & 1) !== 0,
+                    isTimeline: (flags & 2) !== 0,
+                    opacity: memory.getFloat32(timelineLayerPointer + 16, true),
+                    maxRepeatCount: memory.getUint32(timelineLayerPointer + 20, true),
+                    durationTicks: Number(memory.getBigInt64(timelineLayerPointer + 24, true)),
+                    localTransform: readTransform(memory, localPointer),
+                    worldTransform: readTransform(memory, worldPointer),
+                    pivotTransform: readTransform(memory, pivotPointer),
+                    keys,
+                });
+            }
+            for (let contentIndex = 0; contentIndex < contentLayers.length; contentIndex++) {
+                if (!claimedContentLayers.has(contentIndex)) {
+                    layers.push({
+                        ...contentLayers[contentIndex],
+                        parentId: -1,
+                        isTimeline: false,
+                        durationTicks: 0,
+                        keys: [],
+                    });
+                }
+            }
+            const chapters = [];
+            for (let chapterIndex = 0; chapterIndex < chapterCount; chapterIndex++) {
+                if (decoder._imm_web_get_chapter_info(chapterIndex, chapterPointer) === 0) {
+                    throw new Error(`Could not read chapter ${chapterIndex}`);
+                }
+                memory = new DataView(decoder.HEAPU8.buffer);
+                chapters.push({
+                    startTicks: Number(memory.getBigInt64(chapterPointer, true)),
+                    endTicks: Number(memory.getBigInt64(chapterPointer + 8, true)),
+                    markerAction: memory.getUint32(chapterPointer + 16, true),
+                });
             }
             const marshalledAt = performance.now();
             return {
@@ -292,6 +396,10 @@ function decodeScene(source) {
                 document: {
                     schemaVersion: decoder._imm_web_schema_version(),
                     backgroundColor,
+                    ticksPerSecond,
+                    animateOnStart,
+                    durationTicks,
+                    chapters,
                     layers,
                     metrics: {
                         decodeMs: decodedAt - startedAt,
@@ -302,6 +410,10 @@ function decodeScene(source) {
                 transfers,
             };
         } finally {
+            decoder._free(chapterPointer);
+            decoder._free(animationKeyPointer);
+            decoder._free(timelineLayerPointer);
+            decoder._free(playbackInfoPointer);
             decoder._free(pictureInfoPointer);
             decoder._free(strokeInfoPointer);
             decoder._free(animationPointer);
