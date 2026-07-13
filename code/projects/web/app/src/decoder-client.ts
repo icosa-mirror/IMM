@@ -30,8 +30,9 @@ interface DecoderResponse {
 }
 
 interface PendingRequest {
-    resolve: (value: ImmDocumentSummary | ImmDocument) => void;
+    resolve: (value: ImmDocumentSummary | ImmDocument | undefined) => void;
     reject: (error: Error) => void;
+    allowEmpty: boolean;
 }
 
 
@@ -52,14 +53,43 @@ export class ImmDecoderClient {
     }
 
     inspect(source: ArrayBuffer): Promise<ImmDocumentSummary> {
-        return this.#request<ImmDocumentSummary>("inspect", source);
+        return this.#request<ImmDocumentSummary>("inspect", { source }, [source]);
     }
 
     decode(source: ArrayBuffer): Promise<ImmDocument> {
-        return this.#request<ImmDocument>("decode", source);
+        return this.#requestDocument("decode", { source }, [source]);
     }
 
-    #request<T extends ImmDocumentSummary | ImmDocument>(type: "inspect" | "decode", source: ArrayBuffer): Promise<T> {
+    openMetadata(source: ArrayBuffer): Promise<ImmDocument> {
+        return this.#requestDocument("openMetadata", { source }, [source]);
+    }
+
+    decodeDrawing(layerId: number, drawingId: number): Promise<ImmDocument> {
+        return this.#requestDocument("decodeDrawing", { layerId, drawingId });
+    }
+
+    decodeLayerAsset(layerId: number): Promise<ImmDocument> {
+        return this.#requestDocument("decodeLayerAsset", { layerId });
+    }
+
+    release(): Promise<void> {
+        return this.#request<void>("release", {}, [], true);
+    }
+
+    #requestDocument(
+        type: "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset",
+        payload: Record<string, unknown>,
+        transfer: Transferable[] = [],
+    ): Promise<ImmDocument> {
+        return this.#request<ImmDocument>(type, payload, transfer);
+    }
+
+    #request<T>(
+        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "release",
+        payload: Record<string, unknown>,
+        transfer: Transferable[] = [],
+        allowEmpty = false,
+    ): Promise<T> {
         if (this.#disposed) {
             return Promise.reject(new Error("IMM decoder client is disposed"));
         }
@@ -69,9 +99,10 @@ export class ImmDecoderClient {
             this.#pending.set(requestId, {
                 resolve: (value) => resolve(value as T),
                 reject,
+                allowEmpty,
             });
         });
-        this.#worker.postMessage({ requestId, type, source }, [source]);
+        this.#worker.postMessage({ requestId, type, ...payload }, transfer);
         return result;
     }
 
@@ -92,7 +123,7 @@ export class ImmDecoderClient {
         this.#pending.delete(response.requestId);
 
         const value = response.summary ?? response.document;
-        if (response.ok && value !== undefined) {
+        if (response.ok && (value !== undefined || pending.allowEmpty)) {
             pending.resolve(value);
             return;
         }
