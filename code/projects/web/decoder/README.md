@@ -4,9 +4,11 @@ This target is the format-facing C ABI for the native web port. It intentionally
 has no dependency on the native renderer, sound engine, file system, windowing,
 VR, or threading backends.
 
-The first slice performs bounded inspection of the top-level IMM chunk stream
-and resource table. Paint and scene decoding will be moved behind the same ABI
-in subsequent slices.
+The decoder performs bounded top-level inspection and full scene decoding for
+the Phase 2 visual fixture. It exports layer transforms, pivots, visibility,
+opacity, default-spawn metadata, paint drawings/strokes/points, frame maps, and
+decoded picture pixels through a bulk C ABI. Its worker expands the five paint
+brush types into transferable indexed buffers before returning the document.
 
 ## Native contract test
 
@@ -46,5 +48,7 @@ ctest --test-dir build/web-decoder-wasm --output-on-failure
 ```
 
 The smoke transfers `sample1.imm` to the worker, calls the Wasm C ABI, and
-checks the returned document summary. The same worker module supports browser
-module workers and Node workers used by CI.
+checks the layer, spawn, paint, picture, stroke, point, geometry-batch, and
+triangle contracts. A separate deterministic test asserts exact positions,
+colors, indices, and topology sizes for all five brush types. The same worker
+module supports browser module workers and Node workers used by CI.
