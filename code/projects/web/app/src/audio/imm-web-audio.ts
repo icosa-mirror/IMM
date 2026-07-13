@@ -190,8 +190,11 @@ export class ImmWebAudio {
         this.#userEnabled = true;
         this.#muted = false;
         this.#setMasterGain(1);
+        const wasRunning = this.#context.state === "running";
         await this.#setContextRunning(this.#transportPlaying && pageIsVisible());
-        this.#reconcile(false);
+        // A blocked context leaves staged sources behind the visual timeline. Rebuild them at the
+        // latest evaluated offsets after the user gesture successfully starts the audio clock.
+        this.#reconcile(!wasRunning && this.#context.state === "running");
     }
 
     setMuted(muted: boolean): void {

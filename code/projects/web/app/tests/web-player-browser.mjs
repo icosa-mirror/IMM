@@ -20,6 +20,9 @@ await server.listen();
 const browser = await chromium.launch({
     channel: "chrome",
     headless: process.env.IMM_WEB_HEADLESS === "1",
+    args: process.env.IMM_WEB_REQUIRE_AUDIO_GESTURE === "1"
+        ? ["--autoplay-policy=user-gesture-required"]
+        : [],
 });
 
 try {
