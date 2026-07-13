@@ -1,0 +1,93 @@
+:root {
+    color: #e8edf2;
+    background: #10151d;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-synthesis: none;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+#viewport {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#panel {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    width: min(24rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 1rem;
+    overflow: auto;
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 0.75rem;
+    background: rgb(12 17 24 / 88%);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / 35%);
+    backdrop-filter: blur(12px);
+}
+
+h1 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.phase {
+    margin: 0.25rem 0 1rem;
+    color: #8fa4b8;
+    font-size: 0.85rem;
+}
+
+.file-picker {
+    display: block;
+    padding: 0.8rem;
+    border: 1px dashed #66829d;
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+
+.file-picker:hover {
+    border-color: #9fc4e5;
+    background: rgb(120 170 210 / 8%);
+}
+
+.file-picker input {
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+}
+
+#status {
+    color: #c4d0dc;
+    line-height: 1.4;
+}
+
+#summary {
+    padding: 0.75rem;
+    overflow: auto;
+    border-radius: 0.4rem;
+    background: #080b10;
+    color: #b9d9c1;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 600px) {
+    #panel {
+        top: 0.5rem;
+        left: 0.5rem;
+        width: calc(100vw - 1rem);
+        max-height: 45vh;
+    }
+}

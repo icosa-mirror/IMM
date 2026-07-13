@@ -88,3 +88,8 @@ code/ImmUnitySampleProject/imm_player_log.txt
 code/appImmViewer/exe/debug.txt
 /code/ImmGodotSampleProject/.godot
 metal_player_debug.txt
+
+# Generated native-web decoder assets served by the local Vite application.
+/code/projects/web/app/node_modules/
+/code/projects/web/app/public/decoder/
+/code/projects/web/app/dist/

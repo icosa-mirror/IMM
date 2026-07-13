@@ -26,6 +26,16 @@ emcmake cmake -S code/projects/web/decoder -B build/web-decoder-wasm \
 cmake --build build/web-decoder-wasm
 ```
 
+To serve the generated module directly from the standalone Vite application,
+configure with:
+
+```bash
+emcmake cmake -S code/projects/web/decoder -B build/web-decoder-wasm \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DIMM_WEB_OUTPUT_DIRECTORY="$PWD/code/projects/web/app/public/decoder"
+cmake --build build/web-decoder-wasm
+```
+
 The Emscripten build emits an ES module intended to run inside a Web Worker. It
 does not enable pthreads or a virtual filesystem.
 
