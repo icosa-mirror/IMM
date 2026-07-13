@@ -1,0 +1,152 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Web Player Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/web-pages.yml"
+      - "code/appImmStrokeReader/**"
+      - "code/libImmCore/**"
+      - "code/libImmImporter/**"
+      - "code/projects/web/**"
+      - "exampleImmFiles/sample1.imm"
+      - "tests/baselines/render/web-three-sample1.json"
+      - "tests/baselines/render/windows-directx-sample1.ppm"
+      - "tests/tools/compare_render_metrics.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/web-pages.yml"
+      - "code/appImmStrokeReader/**"
+      - "code/libImmCore/**"
+      - "code/libImmImporter/**"
+      - "code/projects/web/**"
+      - "exampleImmFiles/sample1.imm"
+      - "tests/baselines/render/web-three-sample1.json"
+      - "tests/baselines/render/windows-directx-sample1.ppm"
+      - "tests/tools/compare_render_metrics.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: web-player-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and verify web player
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read pinned Emscripten version
+        id: emscripten
+        shell: bash
+        run: echo "version=$(cat code/projects/web/EMSCRIPTEN_VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{ steps.emscripten.outputs.version }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Build Wasm decoder
+        shell: bash
+        run: |
+          emcmake cmake \
+            -S code/projects/web/decoder \
+            -B build/web-decoder-wasm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DIMM_WEB_OUTPUT_DIRECTORY="$GITHUB_WORKSPACE/code/projects/web/app/public/decoder"
+          cmake --build build/web-decoder-wasm --parallel 2
+          ctest --test-dir build/web-decoder-wasm --output-on-failure
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install web dependencies
+        working-directory: code/projects/web/app
+        run: bun install --frozen-lockfile
+
+      - name: Run playback tests
+        working-directory: code/projects/web/app
+        run: bun test
+
+      - name: Run browser verification
+        working-directory: code/projects/web/app
+        env:
+          IMM_WEB_HEADLESS: "1"
+        run: bun run test:browser
+
+      - name: Upload failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebPlayerBrowserFailure
+          path: artifacts/web-native
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build Pages bundle
+        working-directory: code/projects/web/app
+        env:
+          IMM_WEB_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          VITE_IMM_DEFAULT_SOURCE: ${{ steps.pages.outputs.base_path }}/fixtures/sample1.imm
+        run: bun run build
+
+      - name: Add sample and disable Jekyll processing
+        shell: bash
+        run: |
+          mkdir -p code/projects/web/app/dist/fixtures
+          cp exampleImmFiles/sample1.imm code/projects/web/app/dist/fixtures/sample1.imm
+          touch code/projects/web/app/dist/.nojekyll
+
+      - name: Verify Pages bundle layout
+        shell: bash
+        env:
+          IMM_WEB_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+        run: |
+          test -f code/projects/web/app/dist/decoder/imm-web-decoder.wasm
+          test -f code/projects/web/app/dist/decoder/imm-web-decoder-worker.mjs
+          test -f code/projects/web/app/dist/fixtures/sample1.imm
+          grep -qF "$IMM_WEB_BASE_PATH" code/projects/web/app/dist/index.html
+          grep -RqF "${IMM_WEB_BASE_PATH}decoder/imm-web-decoder-worker.mjs" code/projects/web/app/dist/assets
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: code/projects/web/app/dist
+
+  deploy:
+    name: Deploy web player
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

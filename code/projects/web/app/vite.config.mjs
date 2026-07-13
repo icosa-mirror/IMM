@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+    base: process.env.IMM_WEB_BASE_PATH ?? "/",
     plugins: [{
         name: "imm-sample-fixture",
         configureServer(server) {

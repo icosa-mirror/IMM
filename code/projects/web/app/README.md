@@ -73,3 +73,11 @@ Set `IMM_WEB_HEADLESS=1` only for unattended automation. Results are written to
 `artifacts/web-native/` and include decode, marshal, pack, upload-render,
 CPU-frame, GPU-frame (when timer queries are available), draw-call, triangle,
 pixel-ratio, texture/geometry, and JavaScript-heap measurements.
+
+## GitHub Pages
+
+`.github/workflows/web-pages.yml` builds and verifies the Wasm decoder and web
+application on pushes to `main`, then deploys the production bundle with the
+repository's GitHub Pages base path. The deployed bundle includes
+`sample1.imm` and loads it on startup; local builds continue to start with the
+file and URL pickers unless `VITE_IMM_DEFAULT_SOURCE` is set.

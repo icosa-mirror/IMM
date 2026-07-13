@@ -163,8 +163,8 @@ chapter.addEventListener("change", () => {
 
 const parameters = new URLSearchParams(location.search);
 if (parameters.get("visual-test") === "1") document.body.classList.add("visual-test");
-const initialSource = parameters.get("src");
-if (initialSource !== null) void loadUrl(initialSource);
+const initialSource = parameters.get("src") ?? import.meta.env.VITE_IMM_DEFAULT_SOURCE;
+if (initialSource !== undefined && initialSource !== "") void loadUrl(initialSource);
 
 window.addEventListener("resize", resize);
 window.addEventListener("beforeunload", () => {
