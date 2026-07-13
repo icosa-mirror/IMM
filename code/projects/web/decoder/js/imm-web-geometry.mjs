@@ -23,14 +23,15 @@ export function packPaintGeometry(drawing) {
 
         const positions = new Float32Array(vertexCount * 3);
         const colors = new Float32Array(vertexCount * 4);
+        const progress = new Float32Array(vertexCount);
         const indices = vertexCount > 65_535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
-        for (const stroke of strokes) buildStroke(drawing, stroke, brushType, positions, colors, indices);
-        results.push({ brushType, triangleCount: indexCount / 3, positions, colors, indices });
+        for (const stroke of strokes) buildStroke(drawing, stroke, brushType, positions, colors, progress, indices);
+        results.push({ brushType, triangleCount: indexCount / 3, positions, colors, progress, indices });
     }
     return results;
 }
 
-function buildStroke(drawing, stroke, brushType, positions, colors, indices) {
+function buildStroke(drawing, stroke, brushType, positions, colors, progress, indices) {
     const tangent = [0, 0, 0];
     const basisU = [0, 0, 0];
     const basisV = [0, 0, 0];
@@ -65,6 +66,7 @@ function buildStroke(drawing, stroke, brushType, positions, colors, indices) {
             colors[colorOffset + 1] = read(drawing.points, sourceOffset + 10);
             colors[colorOffset + 2] = read(drawing.points, sourceOffset + 11);
             colors[colorOffset + 3] = read(drawing.points, sourceOffset + 12);
+            progress[vertexIndex] = read(drawing.pointTimes, stroke.pointOffset + pointIndex);
         }
     }
 

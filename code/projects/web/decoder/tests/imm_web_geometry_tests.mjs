@@ -12,7 +12,7 @@ for (let brushType = 0; brushType < strokeCount; brushType++) {
     writePoint(brushType * 2 + 1, 0, 0, brushType * 3 + 2, brushType);
 }
 
-const geometries = packPaintGeometry({ descriptors, points });
+const geometries = packPaintGeometry({ descriptors, points, pointTimes: new Float32Array(10) });
 assert.equal(geometries.length, 5);
 for (let brushType = 0; brushType < geometries.length; brushType++) {
     const geometry = geometries[brushType];

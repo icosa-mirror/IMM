@@ -10,6 +10,7 @@ export interface ImmDrawing {
     descriptors: Uint32Array;
     bounds: Float32Array;
     points: Float32Array;
+    pointTimes: Float32Array;
     geometries: ImmPaintGeometry[];
 }
 
@@ -18,6 +19,7 @@ export interface ImmPaintGeometry {
     triangleCount: number;
     positions: Float32Array;
     colors: Float32Array;
+    progress: Float32Array;
     indices: Uint16Array | Uint32Array;
 }
 

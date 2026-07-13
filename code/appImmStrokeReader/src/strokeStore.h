@@ -160,6 +160,7 @@ public:
     int GetStrokeCount(int layerIdx, int drawingIdx) const;
     bool GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info) const;
     bool GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokePointC* points, int maxPoints) const;
+    bool GetStrokePointTimes(int layerIdx, int drawingIdx, int strokeIdx, float* times, int maxPoints) const;
     bool GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const;
     bool GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) const;
     

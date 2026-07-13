@@ -198,6 +198,12 @@ uint32_t imm_web_get_stroke_points(
     uint32_t stroke_index,
     ImmWebStrokePoint* out_points,
     uint32_t point_capacity);
+uint32_t imm_web_get_stroke_point_times(
+    uint32_t layer_index,
+    uint32_t drawing_index,
+    uint32_t stroke_index,
+    float* out_times,
+    uint32_t point_capacity);
 uint32_t imm_web_get_picture_info(uint32_t layer_index, ImmWebPictureInfo* out_info);
 uint32_t imm_web_get_picture_pixels(uint32_t layer_index, uint8_t* out_pixels, uint32_t byte_capacity);
 uint32_t imm_web_get_playback_info(ImmWebPlaybackInfo* out_info);
