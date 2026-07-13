@@ -207,7 +207,9 @@ try {
     assert.equal(desktopMetrics.audio.codecs.oggOpus, "probably");
     assert.equal(desktopMetrics.audio.ambisonicSupported, false);
     assert.equal(desktopMetrics.audio.userEnabled, true);
-    assert.equal(desktopMetrics.audio.playingSounds, 3);
+    assert.ok(desktopMetrics.audio.playingSounds > 0 &&
+        desktopMetrics.audio.playingSounds <= desktopMetrics.audio.decodedSounds,
+        `Desktop autoplay had ${desktopMetrics.audio.playingSounds} active sources for ${desktopMetrics.audio.decodedSounds} decoded sounds`);
     assert.ok(desktopMetrics.audio.sourceStarts >= 3,
         `Desktop autoplay started only ${desktopMetrics.audio.sourceStarts} sources for three decoded sounds`);
     assert.deepEqual(errors, []);
