@@ -60,6 +60,7 @@ export class ImmPlaybackController {
     playbackRate = 1;
 
     #fractionalTicks = 0;
+    readonly #timelineOffsets = new Map<number, number>();
 
     constructor(document: ImmDocument) {
         this.document = document;
@@ -76,7 +77,6 @@ export class ImmPlaybackController {
 
     play(): void {
         if (this.timeTicks >= this.durationTicks) this.restart();
-        this.waiting = false;
         this.playing = true;
     }
 
@@ -104,6 +104,7 @@ export class ImmPlaybackController {
         this.timeTicks = clampTicks(timeTicks, this.durationTicks);
         this.waiting = false;
         this.#fractionalTicks = 0;
+        this.#timelineOffsets.clear();
     }
 
     seekSeconds(timeSeconds: number): void {
@@ -114,11 +115,15 @@ export class ImmPlaybackController {
         const chapter = this.document.chapters[index];
         if (chapter === undefined) throw new RangeError(`Chapter ${index} does not exist`);
         this.seekTicks(chapter.startTicks);
+        this.playing = true;
     }
 
     skipForward(): void {
         const next = this.document.chapters[this.chapterIndex + 1];
-        if (next !== undefined) this.seekTicks(next.startTicks);
+        if (next !== undefined) {
+            this.seekTicks(next.startTicks);
+            this.playing = true;
+        }
     }
 
     skipBack(): void {
@@ -128,21 +133,29 @@ export class ImmPlaybackController {
             : Math.max(0, this.chapterIndex - 1);
         const target = this.document.chapters[targetIndex];
         this.seekTicks(target?.startTicks ?? 0);
+        this.playing = true;
     }
 
     advance(deltaSeconds: number): ImmPlaybackSnapshot {
-        if (this.playing && !this.waiting && deltaSeconds > 0) {
+        if (this.playing && deltaSeconds > 0) {
             const exactTicks = deltaSeconds * this.document.ticksPerSecond * this.playbackRate + this.#fractionalTicks;
             const wholeTicks = Math.floor(exactTicks);
             this.#fractionalTicks = exactTicks - wholeTicks;
+            if (this.waiting) {
+                this.#advanceWaitingTimelines(wholeTicks);
+                return this.evaluate();
+            }
             const target = Math.min(this.durationTicks, this.timeTicks + wholeTicks);
             const stop = nextStopBetween(this.document, this.timeTicks, target);
             const loop = nextLoopBetween(this.document, this.timeTicks, target);
             if (loop !== undefined && (stop === undefined || loop < stop)) {
                 this.timeTicks = loop > 0 ? (target - loop) % loop : 0;
+                this.#timelineOffsets.clear();
             } else if (stop !== undefined) {
+                const previousTicks = this.timeTicks;
                 this.timeTicks = Math.max(0, stop - 1);
                 this.waiting = true;
+                this.#advanceWaitingTimelines(Math.max(0, wholeTicks - (this.timeTicks - previousTicks)));
             } else {
                 this.timeTicks = target;
             }
@@ -152,11 +165,27 @@ export class ImmPlaybackController {
     }
 
     evaluate(): ImmPlaybackSnapshot {
-        return evaluateImmDocument(this.document, this.timeTicks);
+        return evaluateImmDocument(this.document, this.timeTicks, this.#timelineOffsets);
+    }
+
+    #advanceWaitingTimelines(ticks: number): void {
+        if (ticks <= 0) return;
+        const snapshot = this.evaluate();
+        for (const state of snapshot.layers.values()) {
+            if (state.layer.parentId < 0 || !state.layer.isTimeline || !state.visible) continue;
+            this.#timelineOffsets.set(
+                state.layer.id,
+                (this.#timelineOffsets.get(state.layer.id) ?? 0) + ticks,
+            );
+        }
     }
 }
 
-export function evaluateImmDocument(document: ImmDocument, requestedTicks: number): ImmPlaybackSnapshot {
+export function evaluateImmDocument(
+    document: ImmDocument,
+    requestedTicks: number,
+    timelineOffsets: ReadonlyMap<number, number> = new Map(),
+): ImmPlaybackSnapshot {
     const timeTicks = clampTicks(requestedTicks, document.durationTicks);
     const states = new Map<number, ImmEvaluatedLayer>();
     const contexts = new Map<number, EvaluationContext>();
@@ -169,7 +198,11 @@ export function evaluateImmDocument(document: ImmDocument, requestedTicks: numbe
         const visible = (parent?.visible ?? true) && local.visible;
         const opacity = (parent?.opacity ?? 1) * local.opacity;
         const timelineTicks = layer.isTimeline
-            ? wrapTimeline(local.localTimeTicks, layer.durationTicks, local.loop === true ? 0 : layer.maxRepeatCount)
+            ? wrapTimeline(
+                local.localTimeTicks + (timelineOffsets.get(layer.id) ?? 0),
+                layer.durationTicks,
+                local.loop === true ? 0 : layer.maxRepeatCount,
+            )
             : controllingTicks;
         const drawingIndex = selectDrawing(layer, local.localTimeTicks, document.ticksPerSecond, local.loop);
         states.set(layer.id, {

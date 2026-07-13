@@ -165,11 +165,39 @@ describe("IMM deterministic playback evaluation", () => {
         controller.advance(5);
         expect(controller.timeTicks).toBe(399);
         expect(controller.waiting).toBe(true);
+        controller.play();
+        controller.advance(0.5);
+        expect(controller.timeTicks).toBe(399);
+        expect(controller.waiting).toBe(true);
         controller.continue();
         expect(controller.timeTicks).toBe(400);
         expect(controller.waiting).toBe(false);
         controller.advance(0.01);
         expect(controller.timeTicks).toBe(401);
+    });
+
+    test("keeps active child timelines running during an authored root wait", () => {
+        const controller = new ImmPlaybackController(fixture());
+        controller.advance(4);
+        expect(controller.timeTicks).toBe(399);
+        expect(controller.waiting).toBe(true);
+        const childAtStop = controller.evaluate().layers.get(2)?.timelineTicks;
+
+        controller.advance(0.5);
+        expect(controller.timeTicks).toBe(399);
+        expect(controller.evaluate().layers.get(2)?.timelineTicks).not.toBe(childAtStop);
+
+        controller.pause();
+        const childAtPause = controller.evaluate().layers.get(2)?.timelineTicks;
+        controller.advance(0.5);
+        expect(controller.evaluate().layers.get(2)?.timelineTicks).toBe(childAtPause);
+
+        controller.play();
+        controller.advance(0.25);
+        expect(controller.waiting).toBe(true);
+        expect(controller.evaluate().layers.get(2)?.timelineTicks).not.toBe(childAtPause);
+        controller.continue();
+        expect(controller.waiting).toBe(false);
     });
 
     test("selects and skips chapters in both directions", () => {
@@ -232,6 +260,7 @@ describe("IMM deterministic playback evaluation", () => {
         freshChapter.selectChapter(1);
         controller.advance(1.5);
         controller.selectChapter(1);
+        expect(controller.playing).toBe(true);
         expect(controller.evaluate()).toEqual(freshChapter.evaluate());
     });
 
