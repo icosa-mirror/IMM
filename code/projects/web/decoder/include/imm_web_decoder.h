@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define IMM_WEB_OUTPUT_SCHEMA_VERSION 1u
+#define IMM_WEB_OUTPUT_SCHEMA_VERSION 2u
 #define IMM_WEB_ERROR_MESSAGE_CAPACITY 160u
 
 typedef enum ImmWebStatus
@@ -116,6 +116,51 @@ typedef struct ImmWebPictureInfo
     uint32_t data_size;
 } ImmWebPictureInfo;
 
+typedef struct ImmWebPlaybackInfo
+{
+    uint32_t ticks_per_second;
+    uint32_t animate_on_start;
+    uint32_t timeline_layer_count;
+    uint32_t chapter_count;
+    int64_t duration_ticks;
+    uint32_t reserved[2];
+} ImmWebPlaybackInfo;
+
+typedef struct ImmWebTimelineLayerInfo
+{
+    uint32_t id;
+    int32_t parent_id;
+    uint32_t type;
+    uint32_t flags;
+    float opacity;
+    uint32_t max_repeat_count;
+    int64_t duration_ticks;
+    uint32_t key_count;
+    uint32_t content_layer_index;
+    char name[256];
+} ImmWebTimelineLayerInfo;
+
+typedef struct ImmWebAnimationKey
+{
+    uint32_t property;
+    uint32_t interpolation;
+    int64_t time_ticks;
+    uint32_t bool_value;
+    uint32_t uint_value;
+    float float_value;
+    uint32_t reserved;
+    double double_value;
+    ImmWebTransform transform_value;
+} ImmWebAnimationKey;
+
+typedef struct ImmWebChapterInfo
+{
+    int64_t start_ticks;
+    int64_t end_ticks;
+    uint32_t marker_action;
+    uint32_t reserved;
+} ImmWebChapterInfo;
+
 uint32_t imm_web_schema_version(void);
 
 ImmWebStatus imm_web_inspect(
@@ -155,6 +200,18 @@ uint32_t imm_web_get_stroke_points(
     uint32_t point_capacity);
 uint32_t imm_web_get_picture_info(uint32_t layer_index, ImmWebPictureInfo* out_info);
 uint32_t imm_web_get_picture_pixels(uint32_t layer_index, uint8_t* out_pixels, uint32_t byte_capacity);
+uint32_t imm_web_get_playback_info(ImmWebPlaybackInfo* out_info);
+uint32_t imm_web_get_timeline_layer_info(uint32_t layer_index, ImmWebTimelineLayerInfo* out_info);
+uint32_t imm_web_get_timeline_layer_transforms(
+    uint32_t layer_index,
+    ImmWebTransform* out_local,
+    ImmWebTransform* out_world,
+    ImmWebTransform* out_pivot);
+uint32_t imm_web_get_animation_key(
+    uint32_t layer_index,
+    uint32_t key_index,
+    ImmWebAnimationKey* out_key);
+uint32_t imm_web_get_chapter_info(uint32_t chapter_index, ImmWebChapterInfo* out_info);
 
 #if defined(__cplusplus)
 }

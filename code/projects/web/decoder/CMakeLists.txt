@@ -109,7 +109,7 @@ if(EMSCRIPTEN)
         "SHELL:-sFILESYSTEM=0"
         "SHELL:-sALLOW_MEMORY_GROWTH=1"
         "SHELL:-sSTACK_SIZE=4194304"
-        "SHELL:-sEXPORTED_FUNCTIONS=['_imm_web_schema_version','_imm_web_inspect','_imm_web_decode_scene','_imm_web_release_scene','_imm_web_get_layer_count','_imm_web_get_background_color','_imm_web_get_layer_info','_imm_web_get_layer_transforms','_imm_web_get_animation_info','_imm_web_get_frame_buffer','_imm_web_get_drawing_count','_imm_web_get_drawing_biggest_stroke','_imm_web_get_stroke_count','_imm_web_get_stroke_info','_imm_web_get_stroke_points','_imm_web_get_picture_info','_imm_web_get_picture_pixels','_malloc','_free']"
+        "SHELL:-sEXPORTED_FUNCTIONS=['_imm_web_schema_version','_imm_web_inspect','_imm_web_decode_scene','_imm_web_release_scene','_imm_web_get_layer_count','_imm_web_get_background_color','_imm_web_get_layer_info','_imm_web_get_layer_transforms','_imm_web_get_animation_info','_imm_web_get_frame_buffer','_imm_web_get_drawing_count','_imm_web_get_drawing_biggest_stroke','_imm_web_get_stroke_count','_imm_web_get_stroke_info','_imm_web_get_stroke_points','_imm_web_get_picture_info','_imm_web_get_picture_pixels','_imm_web_get_playback_info','_imm_web_get_timeline_layer_info','_imm_web_get_timeline_layer_transforms','_imm_web_get_animation_key','_imm_web_get_chapter_info','_malloc','_free']"
         "SHELL:-sEXPORTED_RUNTIME_METHODS=['HEAPU8']"
         "SHELL:-sNO_EXIT_RUNTIME=1"
         "SHELL:-sUSE_ZLIB=1"
