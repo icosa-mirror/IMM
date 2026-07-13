@@ -21,6 +21,15 @@ the main thread creates and uploads Three.js resources. Picture support covers
 2D, viewer-locked, mono/stereo equirectangular, cross-cubemap, and
 vertical-strip-cubemap layers.
 
+The standalone player decodes embedded WAV, Ogg Vorbis, and Ogg Opus payloads
+through Web Audio. Audio remains suspended until the user selects **Enable
+audio**. Flat and positional layers follow authored visibility, opacity, gain,
+looping, transforms, distance attenuation, directional cone/frustum modifiers,
+transport pause, seek, and chapter changes. Browser diagnostics report codec
+probes, decode failures, active source types, and restart offsets. Ambisonic
+layers are currently decoded for capability reporting but explicitly not played
+or claimed as spatially correct.
+
 On browsers with WebXR support, the standalone player also presents Three.js's
 VR entry button. The current authored viewpoint becomes the XR reference pose;
 the embeddable adapter continues to leave renderer, camera, controls, and the XR
@@ -79,6 +88,11 @@ CPU-throttled mobile profile:
 ```bash
 bun run test:browser
 ```
+
+The same Chrome run verifies that `sample1.imm` exports and decodes all three
+Opus layers, starts no sources before the user gesture, resumes and suspends the
+audio context with transport controls, uses one positional and two flat source
+paths, and restarts each source at deterministic seek/chapter offsets.
 
 Set `IMM_WEB_HEADLESS=1` only for unattended automation. Results are written to
 `artifacts/web-native/` and include decode, marshal, pack, upload-render,

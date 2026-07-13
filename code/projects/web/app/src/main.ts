@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
+import { cameraAudioTransform, ImmWebAudio } from "./audio/imm-web-audio";
 import { ImmCameraControls, type CameraMode } from "./camera-controls";
 import { ImmDecoderClient } from "./decoder-client";
 import { releaseAssetUrl } from "./release-assets";
@@ -22,6 +23,7 @@ const continueButton = requiredElement<HTMLButtonElement>("continue");
 const restartButton = requiredElement<HTMLButtonElement>("restart");
 const skipBack = requiredElement<HTMLButtonElement>("skip-back");
 const skipForward = requiredElement<HTMLButtonElement>("skip-forward");
+const audioToggle = requiredElement<HTMLButtonElement>("audio-toggle");
 const timeline = requiredElement<HTMLInputElement>("timeline");
 const playbackTime = requiredElement<HTMLOutputElement>("playback-time");
 const chapter = requiredElement<HTMLSelectElement>("chapter");
@@ -55,6 +57,7 @@ scene.add(grid);
 const decoder = new ImmDecoderClient();
 let immView: ImmThreeView | null = null;
 let playback: ImmPlaybackController | null = null;
+let immAudio: ImmWebAudio | null = null;
 let lastMetrics: Record<string, unknown> | null = null;
 let frameStart = performance.now();
 let frameCount = 0;
@@ -158,17 +161,26 @@ window.__immDiagnostics = () => ({
     viewpoint: viewpoint.value,
     xrPresenting: renderer.xr.isPresenting,
     gridVisible: grid.visible,
+    audio: immAudio?.diagnostics ?? null,
 });
 window.__immPlayback = {
-    play: () => playback?.play(),
-    pause: () => playback?.pause(),
+    play: () => {
+        playback?.play();
+        syncAudio(false);
+    },
+    pause: () => {
+        playback?.pause();
+        syncAudio(false);
+    },
     seekTicks: (value) => {
         playback?.seekTicks(value);
         applyAuthoredSpawn(true);
+        syncAudio(true);
     },
     selectChapter: (index) => {
         playback?.selectChapter(index);
         applyAuthoredSpawn(true);
+        syncAudio(true);
     },
     snapshot: () => ({
         timeTicks: playback?.timeTicks ?? 0,
@@ -183,35 +195,42 @@ window.__immPlayback = {
 playPause.addEventListener("click", () => {
     if (playback === null) return;
     if (playback.playing) playback.pause(); else playback.play();
+    syncAudio(false);
     updatePlaybackControls();
 });
 continueButton.addEventListener("click", () => {
     playback?.continue();
+    syncAudio(false);
     updatePlaybackControls();
 });
 restartButton.addEventListener("click", () => {
     playback?.restart();
     applyAuthoredSpawn(true);
+    syncAudio(true);
     updatePlaybackControls();
 });
 skipBack.addEventListener("click", () => {
     playback?.skipBack();
     applyAuthoredSpawn(true);
+    syncAudio(true);
     updatePlaybackControls();
 });
 skipForward.addEventListener("click", () => {
     playback?.skipForward();
     applyAuthoredSpawn(true);
+    syncAudio(true);
     updatePlaybackControls();
 });
 timeline.addEventListener("input", () => {
     playback?.seekTicks(Number(timeline.value));
     applyAuthoredSpawn(true);
+    syncAudio(true);
     updatePlaybackControls();
 });
 chapter.addEventListener("change", () => {
     playback?.selectChapter(Number(chapter.value));
     applyAuthoredSpawn(true);
+    syncAudio(true);
     updatePlaybackControls();
 });
 viewpoint.addEventListener("change", () => {
@@ -221,6 +240,17 @@ viewpoint.addEventListener("change", () => {
 });
 cameraMode.addEventListener("change", () => {
     controls.setMode(cameraMode.value as CameraMode);
+});
+
+audioToggle.addEventListener("click", async () => {
+    if (immAudio === null) return;
+    if (!immAudio.diagnostics.userEnabled) await immAudio.enable();
+    else immAudio.setMuted(!immAudio.diagnostics.muted);
+    updateAudioControl();
+});
+
+document.addEventListener("visibilitychange", () => {
+    void immAudio?.setPageVisible(document.visibilityState !== "hidden");
 });
 
 renderer.xr.addEventListener("sessionstart", () => {
@@ -246,6 +276,7 @@ if (initialSource !== "") void loadUrl(initialSource).catch(() => undefined);
 window.addEventListener("resize", resize);
 window.addEventListener("beforeunload", () => {
     immView?.dispose();
+    void immAudio?.dispose();
     controls.dispose();
     decoder.dispose();
     renderer.dispose();
@@ -263,9 +294,11 @@ renderer.setAnimationLoop((animationTime) => {
     resize();
     if (!renderer.xr.isPresenting) controls.update(deltaSeconds);
     if (playback !== null && immView !== null) {
+        const previousTicks = playback.timeTicks;
         playback.advance(deltaSeconds);
         applyAuthoredSpawn(false);
         immView.setTimeTicks(playback.timeTicks, camera);
+        syncAudio(playback.timeTicks < previousTicks);
         updatePlaybackControls();
     }
     pollGpuTimer();
@@ -321,10 +354,12 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     const document = await decoder.decode(source);
     if (requestId !== loadRequestId) return;
     const nextView = new ImmThreeView(document, { renderer, parent: scene });
+    const nextAudio = new ImmWebAudio(document);
     try {
         const nextPlayback = new ImmPlaybackController(document);
         immView = nextView;
         playback = nextPlayback;
+        immAudio = nextAudio;
         configurePlaybackControls(document);
         measureNextRender = true;
         configureViewpoints(document);
@@ -332,9 +367,15 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         grid.visible = false;
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
         showSummary(name, document, nextView);
+        syncAudio(true);
+        void nextAudio.prepare().then(() => {
+            if (immAudio === nextAudio) updateAudioControl();
+        });
     } catch (error) {
         if (immView === nextView) immView = null;
         playback = null;
+        if (immAudio === nextAudio) immAudio = null;
+        void nextAudio.dispose();
         nextView.dispose();
         resetDocumentState();
         throw error;
@@ -366,6 +407,9 @@ function resetDocumentState(): void {
     viewpoint.replaceChildren();
     playbackTime.value = "0:00 / 0:00";
     playPause.textContent = "Play";
+    audioToggle.hidden = true;
+    audioToggle.disabled = true;
+    audioToggle.textContent = "Enable audio";
     continueButton.disabled = true;
     camera.position.copy(idleCameraPosition);
     camera.quaternion.identity();
@@ -385,6 +429,8 @@ function configureViewpoints(document: ImmDocument): void {
 function disposeView(): void {
     immView?.dispose();
     immView = null;
+    void immAudio?.dispose();
+    immAudio = null;
     playback = null;
     playbackControls.hidden = true;
 }
@@ -397,6 +443,25 @@ function configurePlaybackControls(document: ImmDocument): void {
         return option;
     }));
     updatePlaybackControls();
+    updateAudioControl();
+}
+
+function updateAudioControl(): void {
+    const diagnostics = immAudio?.diagnostics;
+    const hasAudio = (diagnostics?.soundLayers ?? 0) > 0;
+    audioToggle.hidden = !hasAudio;
+    audioToggle.disabled = !hasAudio || diagnostics?.available !== true || diagnostics.decodedSounds === 0;
+    if (diagnostics?.available !== true) audioToggle.textContent = "Audio unavailable";
+    else if (!diagnostics.userEnabled) audioToggle.textContent = diagnostics.decodedSounds > 0 ? "Enable audio" : "Preparing audio…";
+    else audioToggle.textContent = diagnostics.muted ? "Unmute" : "Mute";
+}
+
+function syncAudio(restart: boolean): void {
+    if (immAudio === null || playback === null) return;
+    const xrCamera = renderer.xr.isPresenting ? renderer.xr.getCamera() : null;
+    const listener = xrCamera?.cameras[0] ?? xrCamera ?? camera;
+    immAudio.update(playback.evaluate(), cameraAudioTransform(listener), restart);
+    void immAudio.setTransportPlaying(playback.playing);
 }
 
 function updatePlaybackControls(): void {

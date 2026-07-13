@@ -88,6 +88,41 @@ try {
     await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
     assert.equal((await controlsPage.evaluate(() => window.__immDiagnostics())).strokes, 1_171,
         "Valid IMM did not recover after a failed load");
+    await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.decodedSounds === 3);
+    const audioBeforeGesture = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
+    assert.equal(audioBeforeGesture.userEnabled, false);
+    assert.equal(audioBeforeGesture.playingSounds, 0,
+        "Sound sources started before the user enabled audio");
+    assert.equal(audioBeforeGesture.contextState, "suspended",
+        "AudioContext was not suspended before the user gesture");
+    assert.equal(await controlsPage.locator("#audio-toggle").isVisible(), true);
+    assert.equal(await controlsPage.locator("#audio-toggle").isEnabled(), true);
+    await controlsPage.locator("#audio-toggle").click();
+    await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.userEnabled === true);
+    await controlsPage.locator("#play-pause").click();
+    await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.contextState === "running" &&
+        window.__immDiagnostics().audio.playingSounds === 3);
+    await controlsPage.locator("#play-pause").click();
+    await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.contextState === "suspended");
+    const audioPlayback = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
+    assert.equal(audioPlayback.sourceStarts, 3);
+    assert.equal(audioPlayback.loopingSounds, 3);
+    assert.equal(audioPlayback.positionalSounds, 1);
+    const controlsDuration = (await controlsPage.evaluate(() => window.__immPlayback.snapshot())).durationTicks;
+    await controlsPage.evaluate((ticks) => window.__immPlayback.seekTicks(ticks), Math.round(controlsDuration / 2));
+    await controlsPage.waitForFunction((starts) => window.__immDiagnostics().audio.sourceStarts >= starts + 3,
+        audioPlayback.sourceStarts);
+    const audioAfterSeek = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
+    assert.equal(audioAfterSeek.lastStartOffsets.length, 3);
+    assert.ok(audioAfterSeek.lastStartOffsets.every((entry) => entry.offsetSeconds > 0),
+        `Seek did not restart sounds at timeline offsets: ${JSON.stringify(audioAfterSeek.lastStartOffsets)}`);
+    await controlsPage.evaluate(() => window.__immPlayback.selectChapter(0));
+    await controlsPage.waitForFunction((starts) => window.__immDiagnostics().audio.sourceStarts >= starts + 3,
+        audioAfterSeek.sourceStarts);
+    const audioAfterChapter = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
+    assert.ok(audioAfterChapter.lastStartOffsets.every((entry) => entry.offsetSeconds === 0),
+        `Chapter selection did not restart sounds at chapter time: ${JSON.stringify(audioAfterChapter.lastStartOffsets)}`);
+    const audioSync = { beforeGesture: audioBeforeGesture, playback: audioPlayback, afterSeek: audioAfterSeek, afterChapter: audioAfterChapter };
     await controlsPage.close();
 
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -114,6 +149,16 @@ try {
         `Chrome supplied no default-framebuffer MSAA samples: ${desktopMetrics.sampleCount}`);
     assert.ok(desktopMetrics.maxSamples >= desktopMetrics.sampleCount,
         `Chrome reported MAX_SAMPLES ${desktopMetrics.maxSamples} below active ${desktopMetrics.sampleCount}`);
+    assert.equal(desktopMetrics.audio.soundLayers, 3);
+    assert.equal(desktopMetrics.audio.decodedSounds, 3);
+    assert.deepEqual(desktopMetrics.audio.decodeFailures, []);
+    assert.equal(desktopMetrics.audio.codecs.oggOpus, "probably");
+    assert.equal(desktopMetrics.audio.ambisonicSupported, false);
+    assert.equal(desktopMetrics.audio.userEnabled, false);
+    assert.equal(desktopMetrics.audio.playingSounds, 0,
+        "Sound sources started before the user enabled audio");
+    assert.equal(desktopMetrics.audio.contextState, "suspended",
+        "AudioContext was not suspended before the user gesture");
     assert.deepEqual(errors, []);
     await desktop.screenshot({ path: resolve(artifactDirectory, "sample1-web-1280x720.png") });
     execFileSync("python", [
@@ -311,6 +356,8 @@ try {
         decodeResponsiveness,
         playbackInfo,
         playedState,
+        audioPlayback,
+        audioSync,
         sampleTimestamps,
         phase3States,
         lockedPositions,

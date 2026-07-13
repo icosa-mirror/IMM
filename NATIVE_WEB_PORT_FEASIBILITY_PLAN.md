@@ -836,12 +836,47 @@ Exit gate:
 ### Phase 4 — transparency/depth parity and browser audio (about 3–6 weeks)
 
 Transparency and depth parity are release-critical, not optional visual polish.
-The current web renderer combines Three.js transparent blending with hardware
-alpha-to-coverage and depth writes. Native rendering instead disables blending,
-writes opaque color, and uses a blue-noise-dithered, primitive-seeded MSAA
-coverage mask. Opaque paint must separately match native geometry, culling,
-projection, depth comparison, and depth-write behavior; transparency cannot be
-used to explain or mask opaque-stroke artifacts.
+The original web renderer combined Three.js transparent blending with hardware
+alpha-to-coverage and depth writes. The Phase 4 paint and picture paths now
+disable blending, write opaque color, and use the native 64×64×64 blue-noise
+table to produce primitive-seeded programmable MSAA sample masks when Chrome
+exposes `OES_sample_variables`. Opaque paint must separately match native
+geometry, culling, projection, depth comparison, and depth-write behavior;
+transparency cannot be used to explain or mask opaque-stroke artifacts.
+
+Status: in progress on `main` (2026-07-13).
+
+Implemented and verified so far:
+
+- Paint and picture coverage use opaque output, depth writes where applicable,
+  native blue-noise sample masks, and an alpha-hash fallback. Diagnostics report
+  the selected path plus depth, stencil, active samples, and maximum samples.
+- Chrome provides D24S8, four active default-framebuffer samples, a maximum of
+  eight samples, and programmable sample masks on the current test machine.
+- The overlap fixture is byte-identical after reversing two near-coplanar
+  translucent stroke submissions. `sample1.imm` renders 1,171 strokes from
+  58,405 points in desktop and CPU-throttled mobile Chrome runs.
+- Schema v4 exports encoded WAV, Ogg Vorbis, and Ogg Opus sound payloads and
+  authored flat/positional/ambisonic, gain, looping, attenuation, modifier, and
+  transform metadata without uploading private corpus files.
+- The standalone player probes codecs, sequentially decodes Web Audio buffers,
+  keeps the context and sources silent before an explicit user gesture, and
+  implements flat and HRTF positional playback. Transport pause suspends the
+  context; seeks and chapter changes rebuild sources at measured local offsets.
+- Distance attenuation and directional cone/frustum equations have focused
+  tests against the native Audio360 backend math. `sample1.imm` verifies three
+  looping Opus sources (two flat, one positional) with no decode failures.
+- Ambisonic is explicitly reported unsupported and is never silently downmixed
+  or labeled parity.
+
+Still required before the Phase 4 exit gate:
+
+- Export and render model layers through the same coverage contract.
+- Add retained opaque/intersection/flipped-transform fixtures and diagnose the
+  reported opaque depth artifact when a legally usable reproduction exists.
+- Measure long-running A/V drift and exercise supported codecs across the
+  agreed browser/device matrix; validate or retain the explicit ambisonic
+  unsupported status.
 
 Open question: some external IMM content has shown apparent z-fighting on fully
 opaque strokes, but `exampleImmFiles/sample1.imm` does not reproduce it. Do not
