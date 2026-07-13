@@ -1,0 +1,2341 @@
+{
+  "decoder_build_id": "IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53",
+  "document": {
+    "chapter_count": 1,
+    "layer_count": 31,
+    "layers": [
+      {
+        "animation": null,
+        "drawings": [],
+        "id": 5,
+        "index": 0,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.7191990613937378,
+            0.0,
+            0.6948040723800659
+          ],
+          "scale": 91.39423370361328,
+          "translation": [
+            4.425622940063477,
+            -18.603660583496094,
+            -126.86013793945312
+          ]
+        },
+        "name": "mossy_forest.jpg",
+        "opacity": 1.0,
+        "picture": {
+          "content_type": 1,
+          "decoded_byte_size": 8000000,
+          "decoded_sha256": "92e9317e2e04087ad71ea98a5bd352238a1bb51fe9a5a9d184b01462e36d03fa",
+          "has_alpha": true,
+          "height": 1000,
+          "is_viewer_locked": false,
+          "layer_id": 5,
+          "width": 2000
+        },
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 4,
+        "visible": true,
+        "world_transform": {
+          "flip": 3,
+          "rotation": [
+            0.0,
+            -0.7191990613937378,
+            0.0,
+            0.6948040723800659
+          ],
+          "scale": 35.69112014770508,
+          "translation": [
+            9.824773788452148,
+            -1.4443520307540894,
+            4.8839640617370605
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 9,
+        "index": 1,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            38.48521423339844,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 10,
+        "index": 2,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            38.48521423339844,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 12,
+        "index": 3,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            26.22840690612793,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 13,
+        "index": 4,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            26.22840690612793,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 15,
+        "index": 5,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            13.971599578857422,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 16,
+        "index": 6,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            13.971599578857422,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 18,
+        "index": 7,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            1.7147912979125977,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 19,
+        "index": 8,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            1.7147912979125977,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 21,
+        "index": 9,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -10.542016983032227,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 22,
+        "index": 10,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            -10.542016983032227,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 24,
+        "index": 11,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -22.798824310302734,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 25,
+        "index": 12,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            -22.798824310302734,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 37
+            },
+            "canonical_sha256": "6420dd44eea376b2cc64cb350d3f20c6f21da79ad35b9004a3bf4c3079671b7e",
+            "index": 0,
+            "point_count": 4925,
+            "stroke_count": 37,
+            "visibility_mode_counts": {
+              "1": 37
+            }
+          }
+        ],
+        "id": 27,
+        "index": 13,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.24135375022888184,
+            -0.011572688817977905,
+            -0.00812232494354248
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -35.055633544921875,
+            -0.3286301791667938,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 24
+            },
+            "canonical_sha256": "a91a0a611b5952c43f50bfb0988ddb727ce5c80421643557185524a375e55ddc",
+            "index": 0,
+            "point_count": 712,
+            "stroke_count": 24,
+            "visibility_mode_counts": {
+              "1": 24
+            }
+          }
+        ],
+        "id": 28,
+        "index": 14,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.003199325641617179,
+            -7.395634651184082
+          ]
+        },
+        "name": "Branch1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.253464937210083,
+            2.5682075023651123,
+            9.669071197509766
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.015000857412815094,
+            0.0,
+            0.0,
+            0.9998874664306641
+          ],
+          "scale": 1.0,
+          "translation": [
+            -35.055633544921875,
+            -0.32543084025382996,
+            -7.395634651184082
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 1
+            },
+            "canonical_sha256": "e757de21298b3766b06b1e41a88aba76179fbfbd1bfc3abfd6432ed3aae34895",
+            "index": 0,
+            "point_count": 30,
+            "stroke_count": 1,
+            "visibility_mode_counts": {
+              "1": 1
+            }
+          }
+        ],
+        "id": 30,
+        "index": 15,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 0.5030490159988403,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            1.991408109664917,
+            -0.23041486740112305,
+            3.335456609725952
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -0.0012852060608565807,
+            -0.07190167158842087,
+            0.004376081749796867
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "1": 3,
+              "2": 38,
+              "4": 10
+            },
+            "canonical_sha256": "9a3cbc5a2591a3258d3dc2b0af740e38bf910afa7f787923746607b74b872a03",
+            "index": 0,
+            "point_count": 4718,
+            "stroke_count": 51,
+            "visibility_mode_counts": {
+              "1": 51
+            }
+          }
+        ],
+        "id": 33,
+        "index": 16,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            2.0511133670806885,
+            2.8176703453063965,
+            0.14308786392211914
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0016494496958330274,
+            -0.00038388630491681397,
+            -0.009352809749543667,
+            0.9999548196792603
+          ],
+          "scale": 1.0,
+          "translation": [
+            -0.02840021625161171,
+            -0.17585071921348572,
+            -0.049911122769117355
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 13,
+              "4": 3
+            },
+            "canonical_sha256": "fd23e2b14d8257e9e0f55aa048347703e95ad680c1ce38182ebba8698083373d",
+            "index": 0,
+            "point_count": 1770,
+            "stroke_count": 16,
+            "visibility_mode_counts": {
+              "1": 16
+            }
+          }
+        ],
+        "id": 34,
+        "index": 17,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -2.545125961303711,
+            -3.0910544395446777,
+            9.639925956726074
+          ]
+        },
+        "name": "Torso",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            5.248570442199707,
+            0.12718701362609863,
+            -9.6007080078125
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -2.5464110374450684,
+            -3.1629559993743896,
+            9.644301414489746
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 1,
+              "4": 1
+            },
+            "canonical_sha256": "7b71d9d26bb21c51eb977c929572494f1c34c21832c4f647438a9fdb5f2c7265",
+            "index": 0,
+            "point_count": 296,
+            "stroke_count": 2,
+            "visibility_mode_counts": {
+              "1": 2
+            }
+          }
+        ],
+        "id": 37,
+        "index": 18,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 3,
+          "rotation": [
+            0.0227737408131361,
+            -0.04157742112874985,
+            0.05608920380473137,
+            0.9972996711730957
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.06944103538990021,
+            -0.36557355523109436,
+            0.11093948036432266
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 4,
+              "4": 3
+            },
+            "canonical_sha256": "24a4245da6aaa384270d0531466a726b8e7c1c490050e7e5f60d9517c960e1bf",
+            "index": 0,
+            "point_count": 692,
+            "stroke_count": 7,
+            "visibility_mode_counts": {
+              "1": 7
+            }
+          }
+        ],
+        "id": 38,
+        "index": 19,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 3,
+          "rotation": [
+            -0.08612418174743652,
+            -0.028677821159362793,
+            -0.024571849033236504,
+            0.9955683946609497
+          ],
+          "scale": 1.0,
+          "translation": [
+            -0.11323507130146027,
+            0.17231500148773193,
+            0.39392802119255066
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 1,
+              "4": 1
+            },
+            "canonical_sha256": "125bec63549f732ba0318ab5839073a10f97dd809c015f2078324fe71a08350b",
+            "index": 0,
+            "point_count": 296,
+            "stroke_count": 2,
+            "visibility_mode_counts": {
+              "1": 2
+            }
+          }
+        ],
+        "id": 41,
+        "index": 20,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            -0.0227737408131361,
+            0.04157742112874985,
+            0.05608920380473137,
+            0.9972996711730957
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.06944103538990021,
+            -0.36557355523109436,
+            0.1799948364496231
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 4,
+              "4": 3
+            },
+            "canonical_sha256": "24a4245da6aaa384270d0531466a726b8e7c1c490050e7e5f60d9517c960e1bf",
+            "index": 0,
+            "point_count": 692,
+            "stroke_count": 7,
+            "visibility_mode_counts": {
+              "1": 7
+            }
+          }
+        ],
+        "id": 42,
+        "index": 21,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.08612418174743652,
+            0.028677821159362793,
+            -0.024571849033236504,
+            0.9955683946609497
+          ],
+          "scale": 1.0,
+          "translation": [
+            -0.11323507130146027,
+            0.17231500148773193,
+            -0.10299369692802429
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 3
+            },
+            "canonical_sha256": "da879ca650c342c1ad4d61c36f8936e849cffaa9b579e6b4eaaefc9744fea8fe",
+            "index": 0,
+            "point_count": 108,
+            "stroke_count": 3,
+            "visibility_mode_counts": {
+              "1": 3
+            }
+          }
+        ],
+        "id": 44,
+        "index": 22,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            -0.021260708570480347,
+            -0.009852662682533264,
+            -0.007563365623354912,
+            0.9996967911720276
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0075997244566679,
+            0.15433184802532196,
+            -0.0661342591047287
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            2.1015784740448,
+            0.9462940692901611,
+            0.1023523211479187
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 3,
+          "rotation": [
+            0.0037703579291701317,
+            -0.03318009898066521,
+            -0.021895920857787132,
+            0.9992023706436157
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.017913132905960083,
+            -0.5137090086936951,
+            -0.42223432660102844
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 4,
+              "4": 3
+            },
+            "canonical_sha256": "b2f6f4be4e9a3518ab80ea96a0a6dcb21a601c7484102beb7054393f6fcb83c4",
+            "index": 0,
+            "point_count": 690,
+            "stroke_count": 7,
+            "visibility_mode_counts": {
+              "1": 7
+            }
+          }
+        ],
+        "id": 46,
+        "index": 23,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 3,
+          "rotation": [
+            -0.11797883361577988,
+            -0.09322361648082733,
+            -0.3052195906639099,
+            0.940335750579834
+          ],
+          "scale": 0.8195181488990784,
+          "translation": [
+            0.2602441906929016,
+            0.6759665012359619,
+            -0.5425114631652832
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 4,
+              "4": 3
+            },
+            "canonical_sha256": "1adc34a8eb145528faf43a723d0f3e8d75c1b646e45f2e004cbf8d631fd41cff",
+            "index": 0,
+            "point_count": 692,
+            "stroke_count": 7,
+            "visibility_mode_counts": {
+              "1": 7
+            }
+          }
+        ],
+        "id": 48,
+        "index": 24,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            5.421010862427522e-19,
+            6.938893903907228e-18,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 3,
+          "rotation": [
+            -0.05480225011706352,
+            -0.06493605673313141,
+            0.12929382920265198,
+            0.987959086894989
+          ],
+          "scale": 0.8195181488990784,
+          "translation": [
+            0.8618146777153015,
+            -0.817114531993866,
+            -0.36831340193748474
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 3
+            },
+            "canonical_sha256": "3b3da41eb452efd2ad4835e33041341d7c51f17eb270e64e2e2ebb982a7a2e07",
+            "index": 0,
+            "point_count": 108,
+            "stroke_count": 3,
+            "visibility_mode_counts": {
+              "1": 3
+            }
+          }
+        ],
+        "id": 50,
+        "index": 25,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            -0.021260708570480347,
+            -0.009852662682533264,
+            -0.007563365623354912,
+            0.9996967911720276
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0075997244566679,
+            0.15433184802532196,
+            -0.0661342591047287
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            2.1015784740448,
+            0.9462940692901611,
+            0.1023523211479187
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            -0.07131584733724594,
+            0.05939022824168205,
+            0.15887358784675598,
+            0.9829272627830505
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.49465322494506836,
+            -1.0905156135559082,
+            0.9893710613250732
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 4,
+              "4": 3
+            },
+            "canonical_sha256": "2593c305b251e3cfd57a2c7cd25550a3e0ec339c035db9859eeb03985c206f4b",
+            "index": 0,
+            "point_count": 690,
+            "stroke_count": 7,
+            "visibility_mode_counts": {
+              "1": 7
+            }
+          }
+        ],
+        "id": 52,
+        "index": 26,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            -0.009738162159919739,
+            0.011245188303291798,
+            0.18224672973155975,
+            0.9831402897834778
+          ],
+          "scale": 0.8195181488990784,
+          "translation": [
+            0.8423493504524231,
+            -0.9157359600067139,
+            0.6220517754554749
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 4,
+              "4": 3
+            },
+            "canonical_sha256": "1adc34a8eb145528faf43a723d0f3e8d75c1b646e45f2e004cbf8d631fd41cff",
+            "index": 0,
+            "point_count": 692,
+            "stroke_count": 7,
+            "visibility_mode_counts": {
+              "1": 7
+            }
+          }
+        ],
+        "id": 54,
+        "index": 27,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            5.421010862427522e-19,
+            6.938893903907228e-18,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.09702502936124802,
+            -0.0056729549542069435,
+            -0.1636628806591034,
+            0.9817171096801758
+          ],
+          "scale": 0.8195181488990784,
+          "translation": [
+            0.11744406819343567,
+            0.1794191300868988,
+            0.3988707661628723
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "2": 616
+            },
+            "canonical_sha256": "8a539fb52ee8db3002f1e6f7eb1026a9dbb16a1375569cbbbbdaaf942c976912",
+            "index": 0,
+            "point_count": 7392,
+            "stroke_count": 616,
+            "visibility_mode_counts": {
+              "1": 616
+            }
+          }
+        ],
+        "id": 58,
+        "index": 28,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            -299.96881103515625,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 0.24619999527931213,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            12.168582916259766,
+            -19.958223342895508,
+            19.5432186126709
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 0.1708546280860901,
+          "translation": [
+            -51.251060485839844,
+            3.8921070098876953,
+            0.0
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "3": 4
+            },
+            "canonical_sha256": "2ccb43924bfcb88688313e2bcdf3a6afdacf836947c8175b948b55202eeae0a8",
+            "index": 0,
+            "point_count": 40,
+            "stroke_count": 4,
+            "visibility_mode_counts": {
+              "1": 4
+            }
+          }
+        ],
+        "id": 72,
+        "index": 29,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer0",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            3.427037239074707,
+            2.4107375144958496,
+            3.463066577911377
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            -0.2776888906955719,
+            0.09649613499641418,
+            -0.055923350155353546,
+            0.9541749954223633
+          ],
+          "scale": 1.9997202157974243,
+          "translation": [
+            -5.6459245681762695,
+            -2.9011917114257812,
+            2.235985279083252
+          ]
+        }
+      },
+      {
+        "animation": {
+          "frame_map_sha256": "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+          "frame_rate": 24,
+          "frames_read": 1,
+          "max_repeat_count": 1,
+          "num_frames": 1
+        },
+        "drawings": [
+          {
+            "brush_type_counts": {
+              "3": 4
+            },
+            "canonical_sha256": "e9d7b6a0c98dd5e355b7c94570e8186a5d0ecbb99fe84ef9e6f5288496297b9b",
+            "index": 0,
+            "point_count": 40,
+            "stroke_count": 4,
+            "visibility_mode_counts": {
+              "1": 4
+            }
+          }
+        ],
+        "id": 74,
+        "index": 30,
+        "local_transform": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "name": "NewLayer1",
+        "opacity": 1.0,
+        "picture": null,
+        "pivot": {
+          "flip": 0,
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "type": 1,
+        "visible": true,
+        "world_transform": {
+          "flip": 0,
+          "rotation": [
+            0.5067552328109741,
+            -0.2462647557258606,
+            0.005488640628755093,
+            0.8261493444442749
+          ],
+          "scale": 1.9997202157974243,
+          "translation": [
+            0.0858410894870758,
+            6.48195219039917,
+            -9.130643844604492
+          ]
+        }
+      }
+    ]
+  },
+  "fixture": {
+    "byte_size": 5831101,
+    "path": "exampleImmFiles/sample1.imm",
+    "sha256": "baa05c125ed0ca130760f1b76a8cde39a475f66a60e5b4e96644a1839b0b2095"
+  },
+  "schema": "imm-native-decoder-manifest-v1"
+}
