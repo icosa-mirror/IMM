@@ -17,13 +17,21 @@ try {
         worker.postMessage({ requestId: 1, type: "decode", source }, [source]);
     });
     if (!decoded.ok) throw new Error(decoded.error.message);
+    const layerTypes = Object.fromEntries([...decoded.document.layers.reduce((counts, layer) => {
+        counts.set(layer.type, (counts.get(layer.type) ?? 0) + 1);
+        return counts;
+    }, new Map()).entries()].sort(([left], [right]) => left - right));
     const sounds = decoded.document.layers.filter((layer) => layer.sound !== undefined).map((layer) => ({
         id: layer.id,
         name: layer.name,
         ...layer.sound,
         bytes: layer.sound.bytes.byteLength,
     }));
-    console.log(JSON.stringify({ schemaVersion: decoded.document.schemaVersion, sounds }, null, 2));
+    const models = decoded.document.layers.filter((layer) => layer.type === 3).map((layer) => ({
+        id: layer.id,
+        name: layer.name,
+    }));
+    console.log(JSON.stringify({ schemaVersion: decoded.document.schemaVersion, layerTypes, models, sounds }, null, 2));
     if (sounds.length === 0) process.exitCode = 2;
 } finally {
     await worker.terminate();

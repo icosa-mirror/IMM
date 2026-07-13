@@ -33,6 +33,15 @@ export interface ImmPicture {
     pixels: Uint8Array;
 }
 
+export interface ImmModel {
+    shadingModel: number;
+    wireframe: boolean;
+    positions: Float32Array;
+    colors: Float32Array;
+    normals: Float32Array;
+    indices: Uint16Array | Uint32Array;
+}
+
 export interface ImmSound {
     type: number;
     assetFormat: number;
@@ -91,6 +100,7 @@ export interface ImmLayer {
     keepAlive?: ImmKeepAlive;
     frameBuffer: Uint32Array;
     drawings: ImmDrawing[];
+    model?: ImmModel;
     picture?: ImmPicture;
     sound?: ImmSound;
 }
@@ -113,6 +123,7 @@ export interface ImmDocument {
 }
 
 export const IMM_LAYER_PAINT = 1;
+export const IMM_LAYER_MODEL = 3;
 export const IMM_LAYER_PICTURE = 4;
 export const IMM_LAYER_SOUND = 5;
 

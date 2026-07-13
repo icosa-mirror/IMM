@@ -61,6 +61,7 @@ input.addEventListener("change", async () => {
             hostCubeAtPaintVertex: intersectionTarget !== null,
             intersectionTarget,
             immMeshes: view.diagnostics.meshCount,
+            immModelLayers: view.diagnostics.modelLayerCount,
             triangles: view.diagnostics.triangleCount,
         }, null, 2);
         summary.hidden = false;

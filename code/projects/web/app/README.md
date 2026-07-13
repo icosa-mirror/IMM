@@ -21,6 +21,14 @@ the main thread creates and uploads Three.js resources. Picture support covers
 2D, viewer-locked, mono/stereo equirectangular, cross-cubemap, and
 vertical-strip-cubemap layers.
 
+`ImmThreeView` also applies the native double-sided, unlit, vertex-RGB coverage
+contract to canonical model geometry supplied by a host. The browser fixture
+checks opacity coverage, depth state, flipped transforms, and submission-order
+independence. This is not a claim that model assets load from IMM files: the
+repository's native model import/export functions are serialization stubs, so
+the Wasm decoder explicitly returns no model geometry until a real format and
+fixture exist.
+
 The standalone player decodes embedded WAV, Ogg Vorbis, and Ogg Opus payloads
 through Web Audio. Audio remains suspended until the user selects **Enable
 audio**. Flat and positional layers follow authored visibility, opacity, gain,

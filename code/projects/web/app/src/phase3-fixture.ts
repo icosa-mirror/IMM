@@ -11,6 +11,7 @@ import {
     type ImmDocument,
     type ImmDrawing,
     type ImmLayer,
+    type ImmModel,
     type ImmTransform,
 } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
@@ -40,6 +41,7 @@ declare global {
             samplePicture(contentType: number, direction: [number, number, number], eye?: number): number[];
             samplePaintEffect(drawIn: number, timeSeconds: number, keepAliveType: number): number[];
             sampleOverlap(reverse: boolean): number[];
+            sampleModelOverlap(reverse: boolean): number[];
             coverageState(): Record<string, unknown>;
         };
     }
@@ -55,9 +57,11 @@ window.__phase3Fixture = {
         const paintMesh = findPaintMesh(view.object3d);
         const material = paintMesh?.material as THREE.ShaderMaterial | undefined;
         const pictureTypes: number[] = [];
+        let modelCount = 0;
         const keepAliveTypes: number[] = [];
         view.object3d.traverse((object) => {
             if (object.userData.immLayerType === "picture") pictureTypes.push(Number(object.userData.immPictureType));
+            if (object.userData.immLayerType === "model") modelCount++;
             if (object.userData.immLayerType === "paint") {
                 const paintMaterial = (object as THREE.Mesh).material as THREE.ShaderMaterial;
                 const keepAliveType = Number(paintMaterial.uniforms.immKeepAliveType?.value ?? 0);
@@ -75,6 +79,7 @@ window.__phase3Fixture = {
             opacity: material?.uniforms.immOpacity?.value ?? null,
             drawIn: material?.uniforms.immDrawIn?.value ?? null,
             pictureTypes: pictureTypes.sort(),
+            modelCount,
             keepAliveTypes: keepAliveTypes.sort(),
             lockedPictureX: lockedWorldPosition?.x ?? null,
             gpuGeometries: renderer.info.memory.geometries,
@@ -94,6 +99,7 @@ window.__phase3Fixture = {
         view.setTimeTicks(0, camera);
         view.object3d.traverse((object) => {
             if (object.userData.immLayerType === "paint") object.visible = false;
+            if (object.userData.immLayerType === "model") object.visible = false;
             if (object.userData.immLayerType === "picture") object.visible = object.userData.immPictureType === contentType;
         });
         renderer.render(scene, camera);
@@ -108,6 +114,7 @@ window.__phase3Fixture = {
         let target: THREE.Mesh | undefined;
         view.object3d.traverse((object) => {
             if (object.userData.immLayerType === "picture") object.visible = false;
+            if (object.userData.immLayerType === "model") object.visible = false;
             if (object.userData.immLayerType === "paint") {
                 object.visible = object.parent?.userData.immLayerId === 8;
                 if (object.visible) target = object as THREE.Mesh;
@@ -132,6 +139,7 @@ window.__phase3Fixture = {
         view.setCoverageFrame(7);
         view.object3d.traverse((object) => {
             if (object.userData.immLayerType === "picture") object.visible = false;
+            if (object.userData.immLayerType === "model") object.visible = false;
             if (object.userData.immLayerType === "paint") {
                 const layerId = object.parent?.userData.immLayerId;
                 object.visible = layerId === 9 || layerId === 10;
@@ -144,8 +152,30 @@ window.__phase3Fixture = {
             renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixels);
         return Array.from(pixels);
     },
+    sampleModelOverlap(reverse) {
+        camera.position.set(0, 0, 3);
+        camera.quaternion.identity();
+        view.setTimeTicks(0, camera);
+        view.setCoverageFrame(13);
+        view.object3d.traverse((object) => {
+            if (object.userData.immLayerType === "paint" || object.userData.immLayerType === "picture") {
+                object.visible = false;
+            }
+            if (object.userData.immLayerType === "model") {
+                const layerId = object.parent?.userData.immLayerId;
+                object.visible = layerId === 11 || layerId === 12;
+                object.renderOrder = layerId === 11 ? (reverse ? 1 : -1) : (reverse ? -1 : 1);
+            }
+        });
+        renderer.render(scene, camera);
+        const pixels = new Uint8Array(64 * 64 * 4);
+        renderer.getContext().readPixels(288, 148, 64, 64,
+            renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixels);
+        return Array.from(pixels);
+    },
     coverageState() {
         const paint: Record<string, unknown>[] = [];
+        const models: Record<string, unknown>[] = [];
         const pictures: Record<string, unknown>[] = [];
         view.object3d.traverse((object) => {
             if (!(object instanceof THREE.Mesh)) return;
@@ -159,11 +189,16 @@ window.__phase3Fixture = {
                 alphaToCoverage: material.alphaToCoverage,
             };
             if (object.userData.immLayerType === "paint") paint.push(state);
+            if (object.userData.immLayerType === "model") models.push({
+                ...state,
+                doubleSided: material.side === THREE.DoubleSide,
+                wireframe: material.wireframe,
+            });
             if (object.userData.immLayerType === "picture") pictures.push({
                 ...state, contentType: object.userData.immPictureType,
             });
         });
-        return { paint, pictures };
+        return { paint, models, pictures };
     },
 };
 window.__phase3Fixture.setTimeTicks(0);
@@ -221,6 +256,15 @@ function createFixture(): ImmDocument {
         id: 10, parentId: 0, type: 1, opacity: 0.5,
         drawings: [drawing(0, 0x42a5f5, 1, 0, 37)],
     });
+    const modelFar = makeLayer({
+        id: 11, parentId: 0, type: 3, opacity: 0.5,
+        model: model(0xef5350, -0.02),
+    });
+    const modelNear = makeLayer({
+        id: 12, parentId: 0, type: 3, opacity: 0.5,
+        localTransform: { ...identity(), flip: 1 },
+        model: model(0x42a5f5, 0),
+    });
     return {
         schemaVersion: 2,
         backgroundColor: [0.08, 0.12, 0.18],
@@ -231,7 +275,7 @@ function createFixture(): ImmDocument {
             { startTicks: 0, endTicks: 200, markerAction: IMM_ACTION_PLAY },
             { startTicks: 200, endTicks: 400, markerAction: IMM_ACTION_PLAY },
         ],
-        layers: [root, timeline, paint, blink, overlapFar, overlapNear, ...pictureLayers],
+        layers: [root, timeline, paint, blink, overlapFar, overlapNear, modelFar, modelNear, ...pictureLayers],
         metrics: { decodeMs: 0, marshalMs: 0, packMs: 0 },
     };
 }
@@ -294,6 +338,22 @@ function drawing(x: number, color: number, alpha = 1, z = 0, mask = 0): ImmDrawi
             progress: new Float32Array([0, 0.25, 0.5]),
             indices: new Uint16Array([0, 1, 2]),
         }],
+    };
+}
+
+function model(color: number, z: number): ImmModel {
+    const value = new THREE.Color(color);
+    return {
+        shadingModel: 0,
+        wireframe: false,
+        positions: new Float32Array([-0.7, -0.5, z, 0.7, -0.5, z, 0, 0.7, z]),
+        colors: new Float32Array([
+            value.r, value.g, value.b,
+            value.r, value.g, value.b,
+            value.r, value.g, value.b,
+        ]),
+        normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        indices: new Uint16Array([0, 1, 2]),
     };
 }
 

@@ -61,5 +61,5 @@ For machine-local corpus inspection without copying an IMM into the repository
 or onto a web host, pass the generated worker and source file to:
 
 ```powershell
-node tests/inspect_sound_file.mjs <worker.mjs> <local-file.imm>
+node tests/inspect_scene_file.mjs <worker.mjs> <local-file.imm>
 ```

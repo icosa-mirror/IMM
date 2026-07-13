@@ -243,6 +243,7 @@ try {
         assert.ok(Math.abs(actual.drawIn - expected.drawIn) < 1e-5, `Draw-in mismatch at ${expected.ticks}`);
         assert.equal(actual.drawingIndex, expected.drawing);
         assert.deepEqual(actual.pictureTypes, [0, 1, 2, 3, 4]);
+        assert.equal(actual.modelCount, 2);
         assert.deepEqual(actual.keepAliveTypes, [1, 2]);
         await phase3.screenshot({ path: resolve(artifactDirectory, `phase3-time-${expected.ticks}.png`) });
     }
@@ -306,6 +307,10 @@ try {
     assert.ok(coverageState.pictures.filter((state) => state.contentType === 0)
         .every((state) => state.depthTest && state.depthWrite),
     `2D pictures did not retain native depth state: ${JSON.stringify(coverageState.pictures)}`);
+    assert.equal(coverageState.models.length, 2);
+    assert.ok(coverageState.models.every((state) => state.noBlending && !state.transparent
+        && state.depthTest && state.depthWrite && state.doubleSided && !state.wireframe),
+    `Models did not retain native coverage/raster state: ${JSON.stringify(coverageState.models)}`);
     const overlapSamples = await phase3.evaluate(() => ({
         forward: window.__phase3Fixture.sampleOverlap(false),
         reverse: window.__phase3Fixture.sampleOverlap(true),
@@ -314,6 +319,15 @@ try {
     assert.equal(overlapDifference.changedChannels, 0,
         `Near-coplanar coverage changed with submission order: ${JSON.stringify(overlapDifference)}`);
     assert.ok(new Set(overlapSamples.forward).size > 4, "Overlap fixture did not render both translucent strokes");
+    const modelOverlapSamples = await phase3.evaluate(() => ({
+        forward: window.__phase3Fixture.sampleModelOverlap(false),
+        reverse: window.__phase3Fixture.sampleModelOverlap(true),
+    }));
+    const modelOverlapDifference = pixelArrayDifference(modelOverlapSamples.forward, modelOverlapSamples.reverse);
+    assert.equal(modelOverlapDifference.changedChannels, 0,
+        `Near-coplanar model coverage changed with submission order: ${JSON.stringify(modelOverlapDifference)}`);
+    assert.ok(new Set(modelOverlapSamples.forward).size > 4,
+        "Model overlap fixture did not render both translucent meshes");
     await phase3.close();
 
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -365,6 +379,7 @@ try {
         paintEffectSamples,
         coverageState,
         overlapDifference,
+        modelOverlapDifference,
     };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));

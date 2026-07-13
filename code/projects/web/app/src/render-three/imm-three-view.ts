@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
     IMM_ANIM_DRAW_IN_TIME,
     IMM_LAYER_PAINT,
+    IMM_LAYER_MODEL,
     IMM_LAYER_PICTURE,
     IMM_KEEP_ALIVE_BLINK,
     IMM_KEEP_ALIVE_WIGGLE,
@@ -12,6 +13,7 @@ import {
     IMM_PICTURE_EQUIRECT_STEREO,
     type ImmDocument,
     type ImmLayer,
+    type ImmModel,
     type ImmPaintGeometry,
     type ImmTransform,
 } from "../format/imm-document";
@@ -22,6 +24,7 @@ type ImmCoverageMode = "sample-mask" | "alpha-to-coverage" | "alpha-hash";
 
 export interface ImmThreeDiagnostics {
     paintLayerCount: number;
+    modelLayerCount: number;
     pictureLayerCount: number;
     meshCount: number;
     triangleCount: number;
@@ -58,6 +61,13 @@ interface PictureRecord {
     viewerLocked: boolean;
 }
 
+interface ModelRecord {
+    layer: ImmLayer;
+    node: THREE.Group;
+    mesh: THREE.Mesh;
+    material: THREE.ShaderMaterial;
+}
+
 export class ImmThreeView {
     readonly object3d = new THREE.Group();
     readonly diagnostics: ImmThreeDiagnostics;
@@ -65,6 +75,7 @@ export class ImmThreeView {
     readonly #document: ImmDocument;
     readonly #nodes = new Map<number, THREE.Group>();
     readonly #paint = new Map<number, PaintRecord>();
+    readonly #models = new Map<number, ModelRecord>();
     readonly #pictures = new Map<number, PictureRecord>();
     readonly #resources: Array<{ dispose(): void }> = [];
     readonly #coverageMode: ImmCoverageMode;
@@ -98,6 +109,7 @@ export class ImmThreeView {
         }
 
         let paintLayerCount = 0;
+        let modelLayerCount = 0;
         let pictureLayerCount = 0;
         let meshCount = 0;
         let triangleCount = 0;
@@ -117,6 +129,12 @@ export class ImmThreeView {
                 paintLayerCount++;
                 meshCount += built.meshes;
                 triangleCount += built.triangles;
+            } else if (layer.type === IMM_LAYER_MODEL && layer.model !== undefined) {
+                const record = this.#createModel(layer, node);
+                this.#models.set(layer.id, record);
+                modelLayerCount++;
+                meshCount++;
+                triangleCount += triangleCountFor(record.mesh.geometry);
             } else if (layer.type === IMM_LAYER_PICTURE && layer.picture !== undefined) {
                 const record = this.#createPicture(layer, node);
                 if (record !== null) {
@@ -130,6 +148,7 @@ export class ImmThreeView {
 
         this.diagnostics = {
             paintLayerCount,
+            modelLayerCount,
             pictureLayerCount,
             meshCount,
             triangleCount,
@@ -174,6 +193,7 @@ export class ImmThreeView {
             for (const material of record.materials) material.uniforms.immFrame!.value = this.#coverageFrame;
         }
         for (const record of this.#pictures.values()) record.material.uniforms.immFrame!.value = this.#coverageFrame;
+        for (const record of this.#models.values()) record.material.uniforms.immFrame!.value = this.#coverageFrame;
     }
 
     /** The host owns the renderer and clock; time is an explicit document-relative value. */
@@ -187,6 +207,7 @@ export class ImmThreeView {
         for (const resource of this.#resources) resource.dispose();
         this.#resources.length = 0;
         this.#paint.clear();
+        this.#models.clear();
         this.#pictures.clear();
         this.#nodes.clear();
         this.object3d.clear();
@@ -214,6 +235,12 @@ export class ImmThreeView {
         if (picture !== undefined) {
             picture.material.uniforms.immOpacity!.value = state.opacity;
             picture.material.uniforms.immFrame!.value = this.#coverageFrame;
+        }
+
+        const model = this.#models.get(state.layer.id);
+        if (model !== undefined) {
+            model.material.uniforms.immOpacity!.value = state.opacity;
+            model.material.uniforms.immFrame!.value = this.#coverageFrame;
         }
     }
 
@@ -251,6 +278,25 @@ export class ImmThreeView {
         for (const resource of record.resources) resource.dispose();
         record.resources.length = 0;
         record.materials.length = 0;
+    }
+
+    #createModel(layer: ImmLayer, node: THREE.Group): ModelRecord {
+        const model = layer.model;
+        if (model === undefined) throw new Error(`Model layer ${layer.id} has no geometry`);
+        const geometry = createModelGeometry(model);
+        const material = createModelMaterial(
+            model,
+            layer.opacity,
+            this.#coverageMode,
+            this.#blueNoise,
+            this.#sampleCount,
+        );
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = layer.name;
+        mesh.userData.immLayerType = "model";
+        node.add(mesh);
+        this.#resources.push(geometry, material);
+        return { layer, node, mesh, material };
     }
 
     #createPicture(layer: ImmLayer, node: THREE.Group): PictureRecord | null {
@@ -351,6 +397,95 @@ function createPaintGeometry(packed: ImmPaintGeometry): THREE.BufferGeometry {
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     return geometry;
+}
+
+function createModelGeometry(model: ImmModel): THREE.BufferGeometry {
+    const vertexCount = model.positions.length / 3;
+    if (!Number.isInteger(vertexCount) || vertexCount === 0 || model.colors.length !== vertexCount * 3 ||
+        (model.normals.length !== 0 && model.normals.length !== vertexCount * 3) ||
+        model.indices.length === 0 || model.indices.length % 3 !== 0) {
+        throw new RangeError("IMM model buffers do not describe indexed RGB triangles");
+    }
+    for (const index of model.indices) {
+        if (index >= vertexCount) throw new RangeError(`IMM model index ${index} exceeds ${vertexCount} vertices`);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(model.positions, 3));
+    geometry.setAttribute("color", new THREE.BufferAttribute(model.colors, 3));
+    if (model.normals.length > 0) geometry.setAttribute("normal", new THREE.BufferAttribute(model.normals, 3));
+    geometry.setIndex(new THREE.BufferAttribute(model.indices, 1));
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+}
+
+function createModelMaterial(
+    model: ImmModel,
+    opacity: number,
+    coverageMode: ImmCoverageMode,
+    blueNoise: THREE.DataArrayTexture,
+    sampleCount: number | null,
+): THREE.RawShaderMaterial {
+    const activeSamples = Math.max(1, Math.min(8, sampleCount ?? 1));
+    return new THREE.RawShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        defines: {
+            IMM_SAMPLE_MASK: coverageMode === "sample-mask" ? 1 : 0,
+            IMM_ALPHA_HASH: coverageMode === "alpha-hash" ? 1 : 0,
+            IMM_SAMPLE_COUNT: activeSamples,
+        },
+        uniforms: {
+            immOpacity: { value: opacity }, immBlueNoise: { value: blueNoise }, immFrame: { value: 0 },
+        },
+        vertexShader: `
+            precision highp float; precision highp int;
+            uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;
+            in vec3 position; in vec3 color; out vec3 immColor;
+            void main(){ immColor=color; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
+        `,
+        fragmentShader: `
+            #if IMM_SAMPLE_MASK == 1
+            #extension GL_OES_sample_variables : require
+            #endif
+            precision highp float; precision highp int;
+            uniform float immOpacity; uniform int immFrame; uniform highp sampler2DArray immBlueNoise;
+            in vec3 immColor; out vec4 outColor;
+            float coverageNoise(){
+                ivec2 pixel=ivec2(gl_FragCoord.xy)&ivec2(63);
+                return texelFetch(immBlueNoise,ivec3(pixel,immFrame&63),0).r;
+            }
+            int coverageMask(float alpha,float noise){
+                const int sampleCount=IMM_SAMPLE_COUNT;
+                uint bits=(1u<<uint(sampleCount))-1u;
+                float dithered=clamp(alpha+0.99*(noise-0.5)/float(sampleCount),0.0,1.0);
+                uint covered=uint(dithered*float(sampleCount)+0.5);
+                uint mask=((bits<<uint(sampleCount))>>covered)&bits;
+                uint shift=uint(noise*float(sampleCount-1))%uint(sampleCount);
+                return int((((mask<<uint(sampleCount))|mask)>>shift)&bits);
+            }
+            void main(){
+                float coverage=clamp(immOpacity,0.0,1.0); float noise=coverageNoise();
+                vec3 srgb=mix(pow(immColor,vec3(0.41666))*1.055-vec3(0.055),immColor*12.92,
+                    vec3(lessThanEqual(immColor,vec3(0.0031308))));
+                #if IMM_SAMPLE_MASK == 1
+                    outColor=vec4(srgb,1.0); gl_SampleMask[0]=coverageMask(coverage,noise);
+                #elif IMM_ALPHA_HASH == 1
+                    if(coverage<noise) discard; outColor=vec4(srgb,1.0);
+                #else
+                    outColor=vec4(srgb,coverage);
+                #endif
+            }
+        `,
+        transparent: false,
+        blending: THREE.NoBlending,
+        depthTest: true,
+        depthWrite: true,
+        depthFunc: THREE.LessEqualDepth,
+        side: THREE.DoubleSide,
+        alphaToCoverage: coverageMode === "alpha-to-coverage",
+        wireframe: model.wireframe,
+        toneMapped: false,
+    });
 }
 
 function createBlueNoiseTexture(): THREE.DataArrayTexture {

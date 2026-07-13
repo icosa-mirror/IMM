@@ -856,6 +856,12 @@ Implemented and verified so far:
 - The overlap fixture is byte-identical after reversing two near-coplanar
   translucent stroke submissions. `sample1.imm` renders 1,171 strokes from
   58,405 points in desktop and CPU-throttled mobile Chrome runs.
+- Host-supplied canonical model geometry now uses the native unlit vertex-RGB,
+  double-sided, depth-write, blue-noise coverage contract. A synthetic fixture
+  proves flipped-transform rendering and byte-identical output after reversing
+  near-coplanar model submission order. Real IMM model assets remain explicitly
+  unsupported because the native importer/exporter consumes and writes no mesh
+  data; 40 locally decoded corpus files contained no model-layer records.
 - Schema v4 exports encoded WAV, Ogg Vorbis, and Ogg Opus sound payloads and
   authored flat/positional/ambisonic, gain, looping, attenuation, modifier, and
   transform metadata without uploading private corpus files.
@@ -871,7 +877,8 @@ Implemented and verified so far:
 
 Still required before the Phase 4 exit gate:
 
-- Export and render model layers through the same coverage contract.
+- Define and implement an actual serialized model asset format plus a legal
+  native reference fixture before claiming that model layers load from IMM.
 - Add retained opaque/intersection/flipped-transform fixtures and diagnose the
   reported opaque depth artifact when a legally usable reproduction exists.
 - Measure long-running A/V drift and exercise supported codecs across the
@@ -890,7 +897,8 @@ device-specific default-framebuffer behavior.
 
 Deliverables:
 
-- Native-equivalent order-independent coverage for paint, pictures, and models:
+- Native-equivalent order-independent coverage for paint, pictures, and any
+  host-supplied canonical model geometry:
   no conventional alpha blending on the MSAA coverage path, opaque color output,
   depth writes, and opacity represented by sample coverage.
 - A capability-selected custom sample-mask path where WebGL exposes the required

@@ -514,6 +514,7 @@ function showSummary(
     const metrics = {
         layers: document.layers.length,
         paintLayers: view.diagnostics.paintLayerCount,
+        modelLayers: view.diagnostics.modelLayerCount,
         pictureLayers: view.diagnostics.pictureLayerCount,
         strokes: strokeCount,
         points: pointCount,
