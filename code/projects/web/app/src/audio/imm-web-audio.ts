@@ -203,14 +203,16 @@ export class ImmWebAudio {
 
     async enable(): Promise<void> {
         if (this.#disposed || this.#context === null) return;
+        const context = this.#context;
         this.#userEnabled = true;
         this.#muted = false;
         this.#setMasterGain(1);
-        const wasRunning = this.#context.state === "running";
+        const wasRunning = audioContextIsRunning(context);
         await this.#setContextRunning(this.#transportPlaying && pageIsVisible());
+        if (this.#disposed || this.#context !== context) return;
         // A blocked context leaves staged sources behind the visual timeline. Rebuild them at the
         // latest evaluated offsets after the user gesture successfully starts the audio clock.
-        this.#reconcile(!wasRunning && this.#context.state === "running");
+        this.#reconcile(!wasRunning && audioContextIsRunning(context));
     }
 
     setMuted(muted: boolean): void {
@@ -426,14 +428,16 @@ export class ImmWebAudio {
     }
 
     async #setContextRunning(running: boolean): Promise<void> {
-        if (this.#context === null) return;
+        const context = this.#context;
+        if (context === null) return;
         try {
-            if (running) await this.#context.resume();
-            else await this.#context.suspend();
+            if (running) await context.resume();
+            else await context.suspend();
         } catch {
             // Browsers reject resume() until a user gesture. The visible control retries from its click handler.
         }
-        this.#lastTimelineContextTime = this.#context.currentTime;
+        if (this.#disposed || this.#context !== context) return;
+        this.#lastTimelineContextTime = context.currentTime;
     }
 }
 
@@ -607,6 +611,10 @@ function clamp01(value: number): number {
 
 function pageIsVisible(): boolean {
     return typeof document === "undefined" || document.visibilityState !== "hidden";
+}
+
+function audioContextIsRunning(context: AudioContext): boolean {
+    return context.state === "running";
 }
 
 export function cameraAudioTransform(camera: THREE.Camera): ImmTransform {

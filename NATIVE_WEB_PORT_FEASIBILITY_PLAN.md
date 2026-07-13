@@ -883,14 +883,25 @@ Implemented and verified so far:
 - When enabled audio is running, visual playback advances from the Web Audio
   monotonic clock rather than free-running from `requestAnimationFrame`.
   Per-source diagnostics report current/maximum drift and browser output
-  latency; the Chrome smoke gate currently enforces a 50 ms bound.
+  latency; the browser gates enforce a 50 ms bound. A continuous 60.029-second
+  Chromium soak crossed authored waits, retained all three playing sources,
+  collected 10,270 drift samples, and measured a 10.714 ms maximum absolute
+  drift before the existing pause, seek, and chapter checks passed.
 - Distance attenuation and directional cone/frustum equations have focused
   tests against the native Audio360 backend math. `sample1.imm` verifies three
   looping Opus sources (two flat, one positional) with no decode failures.
-- Chrome local-file verification also decodes a private Ogg Vorbis fixture
-  (1/1 sound layer) and a private WAV-containing fixture (9/9 sound layers).
-  The reusable optional harness retains only codec labels and counts; no private
-  corpus path or bytes are copied, served, uploaded, or committed.
+- Current desktop Chromium and Playwright Firefox 141 each decode the public
+  Ogg Opus sample (3/3 sound layers), a private Ogg Vorbis fixture (1/1), and a
+  private WAV-containing fixture (9/9). Firefox also decodes a generated PCM
+  WAV and correctly resamples it to the active audio-context rate. The reusable
+  optional harness retains only codec labels and counts; no private corpus path
+  or bytes are copied, served, uploaded, or committed.
+- Firefox installs its module-worker handler before awaiting Wasm startup, so a
+  decode posted during module initialization is not lost. Its Web Audio path
+  supports both modern listener/panner `AudioParam` properties and Firefox's
+  legacy spatial methods. Reload disposal guards prevent pending resume/suspend
+  operations from touching a closed context. A dedicated CI job exercises the
+  complete sample render, audio, generated-WAV, and drift contract in Firefox.
 - Ambisonic is explicitly reported unsupported and is never silently downmixed
   or labeled parity.
 - The embedded adapter reports structured warnings for sub-24-bit,
@@ -898,15 +909,23 @@ Implemented and verified so far:
   perspective `0.01` to `20,000` projection contract. It does not mutate host
   renderer or camera state.
 
-Still required before the Phase 4 exit gate:
+Remaining qualification before closing the Phase 4 exit gate:
 
-- Define and implement an actual serialized model asset format plus a legal
-  native reference fixture before claiming that model layers load from IMM.
-- Add retained opaque/intersection/flipped-transform fixtures and diagnose the
-  reported opaque depth artifact when a legally usable reproduction exists.
-- Measure long-running A/V drift and exercise supported codecs across the
-  agreed browser/device matrix; validate or retain the explicit ambisonic
-  unsupported status.
+- Confirm the new Firefox job on the Ubuntu GitHub Actions runner. Local Firefox
+  and Chromium evidence already passes the same render/audio contract.
+- Keep the reported opaque-depth issue open until a legally usable reproduction
+  exists. The retained opaque intersection, near-coplanar submission-order, and
+  flipped-transform fixtures pass, and `sample1.imm` does not exhibit the report;
+  this is not evidence that the unretained external case is fixed.
+
+Serialized IMM model meshes are not a Phase 4 parity blocker in the current
+format implementation. The native `fiLayerModel::ReadAsset` returns success
+without reading asset bytes, while the only mesh-loading code in
+`LayerModel::Init` is commented out. The web player therefore does not claim to
+load serialized model geometry; its tested model path is an explicit host API
+for canonical geometry. Defining a new serialized mesh format would be an
+upstream format feature requiring a legal native reference, not a port of
+behavior present in the native player.
 
 Open question: some external IMM content has shown apparent z-fighting on fully
 opaque strokes, but `exampleImmFiles/sample1.imm` does not reproduce it. Do not
