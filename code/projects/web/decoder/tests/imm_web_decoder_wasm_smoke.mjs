@@ -73,6 +73,36 @@ try {
     if (pictureLayers[0].picture?.pixels.length === 0) {
         throw new Error("Scene decode returned no picture pixels");
     }
+    if (pictureLayers[0].picture.contentType !== 1 ||
+        pictureLayers[0].picture.width !== 2_000 || pictureLayers[0].picture.height !== 1_000) {
+        throw new Error("Scene decode returned incorrect mono equirectangular picture metadata");
+    }
+    if (decoded.document.backgroundColor.length !== 3 ||
+        !decoded.document.backgroundColor.every(Number.isFinite)) {
+        throw new Error("Scene decode returned an invalid background color");
+    }
+    for (const layer of decoded.document.layers) {
+        for (const transform of [layer.localTransform, layer.worldTransform, layer.pivotTransform]) {
+            if (!transform.rotation.every(Number.isFinite) || !transform.translation.every(Number.isFinite) ||
+                !Number.isFinite(transform.scale) || transform.flip < 0 || transform.flip > 3) {
+                throw new Error(`Layer ${layer.id} returned an invalid transform`);
+            }
+        }
+        if (typeof layer.visible !== "boolean" || !Number.isFinite(layer.opacity)) {
+            throw new Error(`Layer ${layer.id} returned invalid visibility or opacity`);
+        }
+        for (const drawing of layer.drawings) {
+            if (drawing.bounds.length !== drawing.descriptors.length / 4 * 6 ||
+                !Array.from(drawing.bounds).every(Number.isFinite)) {
+                throw new Error(`Layer ${layer.id} returned invalid paint bounds`);
+            }
+        }
+    }
+    if (!decoded.document.layers.some((layer) => layer.worldTransform.flip !== 0) ||
+        !decoded.document.layers.some((layer) => layer.opacity > 0 && layer.opacity < 1) ||
+        !decoded.document.layers.some((layer) => layer.pivotTransform.translation.some((value) => value !== 0))) {
+        throw new Error("Sample did not exercise flip, opacity, and pivot contracts");
+    }
     const defaultSpawns = decoded.document.layers.filter((layer) => layer.type === 8 && layer.defaultSpawn);
     if (defaultSpawns.length !== 1) {
         throw new Error(`Expected one default spawn area, found ${defaultSpawns.length}`);

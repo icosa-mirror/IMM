@@ -43,11 +43,22 @@ try {
     ], { stdio: "inherit" });
 
     const loadedGeometryCounts = [];
+    let decodeResponsiveness = null;
     for (let cycle = 0; cycle < 3; cycle++) {
-        await desktop.evaluate(() => window.__immLoadUrl("/fixtures/sample1.imm"));
+        const responsiveness = await desktop.evaluate(async () => {
+            let eventLoopTicks = 0;
+            const interval = window.setInterval(() => eventLoopTicks++, 0);
+            const startedAt = performance.now();
+            await window.__immLoadUrl("/fixtures/sample1.imm");
+            window.clearInterval(interval);
+            return { eventLoopTicks, loadMs: performance.now() - startedAt };
+        });
+        if (cycle === 0) decodeResponsiveness = responsiveness;
         await desktop.waitForTimeout(100);
         loadedGeometryCounts.push((await desktop.evaluate(() => window.__immDiagnostics())).gpuGeometries);
     }
+    assert.ok(decodeResponsiveness.eventLoopTicks > 0,
+        `Main thread did not service events during ${decodeResponsiveness.loadMs} ms reload`);
     assert.ok(loadedGeometryCounts.every((count) => count === loadedGeometryCounts[0]),
         `WebGL geometry count grew across reloads: ${loadedGeometryCounts}`);
 
@@ -82,7 +93,13 @@ try {
     await mobile.screenshot({ path: resolve(artifactDirectory, "sample1-web-mobile.png") });
     await mobileContext.close();
 
-    const report = { desktop: desktopMetrics, embedded: embedMetrics, mobile4xCpu: mobileMetrics, loadedGeometryCounts };
+    const report = {
+        desktop: desktopMetrics,
+        embedded: embedMetrics,
+        mobile4xCpu: mobileMetrics,
+        loadedGeometryCounts,
+        decodeResponsiveness,
+    };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
 } finally {
