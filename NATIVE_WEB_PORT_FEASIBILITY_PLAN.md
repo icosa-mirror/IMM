@@ -592,6 +592,39 @@ Expanded tube geometry may be several times larger than canonical point data. Th
 
 Performance work must follow actual corpus measurements. Do not add pthreads, shared memory, a texture-buffer point format, or WebGPU storage buffers until profiles identify decode, transfer, geometry expansion, upload, draw calls, or fill rate as the limiting stage.
 
+### Large-file desktop checkpoint (2026-07-13)
+
+Local-only Chrome tests used several uncommitted IMM files between roughly 159
+MB and 440 MB. None of these large local test files is part of the repository or
+deployment. The initial eager decoder consistently failed above roughly 150 MB
+while growing the default Emscripten heap toward its 2 GB limit.
+
+Two measured changes moved the tested desktop boundary:
+
+- The Wasm build can grow to the Wasm32 4 GB ceiling rather than Emscripten's
+  default 2 GB maximum.
+- `IMM_WEB_DECODER` imports no longer retain both the importer's tessellated
+  `Drawing` representation and the collector's canonical stroke copy. After
+  worker-side geometry packing, temporary descriptors, bounds, points, and
+  point-time arrays are also discarded instead of being transferred and kept
+  by the player.
+
+On the current reference desktop, a 263 MB scene with about 18.8 million points
+loaded in approximately 21 seconds. Removing the retained JavaScript paint
+buffers reduced its reported browser heap from about 5.9 GB to 4.75 GB. A 440
+MB scene with about 32.9 million points, which previously aborted during native
+decode even with a 4 GB Wasm maximum, then loaded in approximately 30 seconds
+with about 3.6 GB reported browser heap. These figures are single-machine
+diagnostics, not product budgets; browser heap reporting includes memory outside
+the live Wasm allocation and should be treated as comparative evidence.
+
+This establishes an eager full-download desktop fallback for the largest case
+tested. It does not make that architecture suitable for mobile. Multi-gigabyte
+peak memory and 20–30 second preparation times reinforce the existing Phase 5
+requirement: metadata-first parsing, drawing/asset-at-a-time decode, bounded
+residency, and incremental geometry upload are required for large-film mobile
+and WebXR support.
+
 ## Expected performance and performance gates
 
 No reliable frame-rate or load-time number can be derived from source inspection alone. It depends on film size, decoded point count, geometry expansion, alpha overdraw, image sizes, animation residency, device thermal state, and whether rendering is mono or stereo. The port is nevertheless structurally capable of good performance because decoding is batch-oriented and the public sample has a modest draw-call count.
