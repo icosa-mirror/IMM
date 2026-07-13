@@ -51,6 +51,7 @@ input.addEventListener("change", async () => {
         view = new ImmThreeView(document, { renderer, parent: scene });
         documentTimeSeconds = 0;
         applySpawn(document);
+        view.setTimeSeconds(documentTimeSeconds, camera);
         const intersectionTarget = placeCubeOnVisiblePaint(view);
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
         summary.textContent = JSON.stringify({
@@ -63,6 +64,7 @@ input.addEventListener("change", async () => {
             immMeshes: view.diagnostics.meshCount,
             immModelLayers: view.diagnostics.modelLayerCount,
             triangles: view.diagnostics.triangleCount,
+            hostCompatibilityWarnings: view.diagnostics.hostCompatibilityWarnings,
         }, null, 2);
         summary.hidden = false;
         status.textContent = `${file.name}: IMM and host cube share one depth buffer.`;

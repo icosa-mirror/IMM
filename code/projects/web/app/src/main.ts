@@ -530,6 +530,7 @@ function showSummary(
         sampleCount: view.diagnostics.sampleCount,
         maxSamples: view.diagnostics.maxSamples,
         programmableSampleMask: view.diagnostics.programmableSampleMask,
+        hostCompatibilityWarnings: view.diagnostics.hostCompatibilityWarnings,
         maxTextureSize: view.diagnostics.maxTextureSize,
         colorMode: view.diagnostics.colorMode,
     };

@@ -340,6 +340,7 @@ try {
     assert.equal(embedMetrics.sharedCanvas, true);
     assert.equal(embedMetrics.hostDepthTest, true);
     assert.equal(embedMetrics.hostCubeAtPaintVertex, true);
+    assert.deepEqual(embedMetrics.hostCompatibilityWarnings, []);
     await embedded.screenshot({ path: resolve(artifactDirectory, "sample1-web-embedded.png") });
     await embedded.close();
 

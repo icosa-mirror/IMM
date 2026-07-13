@@ -874,6 +874,10 @@ Implemented and verified so far:
   looping Opus sources (two flat, one positional) with no decode failures.
 - Ambisonic is explicitly reported unsupported and is never silently downmixed
   or labeled parity.
+- The embedded adapter reports structured warnings for sub-24-bit,
+  logarithmic, or reversed depth and for cameras that differ from the native
+  perspective `0.01` to `20,000` projection contract. It does not mutate host
+  renderer or camera state.
 
 Still required before the Phase 4 exit gate:
 

@@ -22,6 +22,25 @@ import { IMM_BLUE_NOISE_64_BASE64 } from "./blue-noise-data";
 
 type ImmCoverageMode = "sample-mask" | "alpha-to-coverage" | "alpha-hash";
 
+export type ImmHostCompatibilityWarningCode =
+    | "depth-buffer"
+    | "logarithmic-depth"
+    | "reversed-depth"
+    | "camera-projection"
+    | "camera-near"
+    | "camera-far";
+
+export interface ImmHostCompatibilityWarning {
+    code: ImmHostCompatibilityWarningCode;
+    message: string;
+}
+
+export interface ImmHostDepthContract {
+    depthBits: number | null;
+    logarithmicDepthBuffer: boolean;
+    reversedDepthBuffer: boolean;
+}
+
 export interface ImmThreeDiagnostics {
     paintLayerCount: number;
     modelLayerCount: number;
@@ -38,6 +57,7 @@ export interface ImmThreeDiagnostics {
     maxTextureSize: number | null;
     colorMode: "srgb-output-no-tone-mapping";
     activeDrawingCount: number;
+    hostCompatibilityWarnings: ReadonlyArray<ImmHostCompatibilityWarning>;
 }
 
 export interface ImmThreeViewOptions {
@@ -80,6 +100,7 @@ export class ImmThreeView {
     readonly #resources: Array<{ dispose(): void }> = [];
     readonly #coverageMode: ImmCoverageMode;
     readonly #sampleCount: number | null;
+    readonly #hostDepthContract: ImmHostDepthContract;
     readonly #blueNoise: THREE.DataArrayTexture;
     #timeTicks = 0;
     #coverageFrame = 0;
@@ -92,6 +113,11 @@ export class ImmThreeView {
         this.#sampleCount = sampleCount;
         const programmableSampleMask = context !== undefined
             && context.getExtension("OES_sample_variables") !== null;
+        this.#hostDepthContract = {
+            depthBits: context === undefined ? null : Number(context.getParameter(context.DEPTH_BITS)),
+            logarithmicDepthBuffer: options.renderer?.capabilities.logarithmicDepthBuffer ?? false,
+            reversedDepthBuffer: options.renderer?.capabilities.reversedDepthBuffer ?? false,
+        };
         this.#coverageMode = programmableSampleMask && sampleCount !== null && sampleCount > 0
             ? "sample-mask"
             : sampleCount !== null && sampleCount > 0 ? "alpha-to-coverage" : "alpha-hash";
@@ -154,7 +180,7 @@ export class ImmThreeView {
             triangleCount,
             geometryBuildMs: performance.now() - startedAt,
             alphaMode: this.#coverageMode,
-            depthBits: context === undefined ? null : Number(context.getParameter(context.DEPTH_BITS)),
+            depthBits: this.#hostDepthContract.depthBits,
             stencilBits: context === undefined ? null : Number(context.getParameter(context.STENCIL_BITS)),
             sampleCount,
             maxSamples: context === undefined ? null : Number(context.getParameter(
@@ -164,6 +190,7 @@ export class ImmThreeView {
             maxTextureSize: options.renderer?.capabilities.maxTextureSize ?? null,
             colorMode: "srgb-output-no-tone-mapping",
             activeDrawingCount: this.#paint.size,
+            hostCompatibilityWarnings: validateImmHostCompatibility(undefined, this.#hostDepthContract),
         };
         this.setTimeTicks(0);
         options.parent?.add(this.object3d);
@@ -182,7 +209,10 @@ export class ImmThreeView {
         this.#timeTicks = snapshot.timeTicks;
         this.#coverageFrame = Math.floor(snapshot.timeTicks * 60 / this.#document.ticksPerSecond) & 63;
         for (const state of snapshot.layers.values()) this.#applyLayerState(state);
-        if (camera !== undefined) this.#updateViewerLocked(camera);
+        if (camera !== undefined) {
+            this.#updateViewerLocked(camera);
+            this.diagnostics.hostCompatibilityWarnings = validateImmHostCompatibility(camera, this.#hostDepthContract);
+        }
         this.object3d.updateMatrixWorld();
     }
 
@@ -383,6 +413,56 @@ export class ImmThreeView {
             }
         }
     }
+}
+
+export function validateImmHostCompatibility(
+    camera: THREE.Camera | undefined,
+    depth: ImmHostDepthContract,
+): ImmHostCompatibilityWarning[] {
+    const warnings: ImmHostCompatibilityWarning[] = [];
+    if (depth.depthBits !== null && depth.depthBits < 24) {
+        warnings.push({
+            code: "depth-buffer",
+            message: `Host framebuffer has ${depth.depthBits} depth bits; native desktop parity uses D24S8.`,
+        });
+    }
+    if (depth.logarithmicDepthBuffer) {
+        warnings.push({
+            code: "logarithmic-depth",
+            message: "Host renderer uses logarithmic depth; native desktop parity uses linear depth.",
+        });
+    }
+    if (depth.reversedDepthBuffer) {
+        warnings.push({
+            code: "reversed-depth",
+            message: "Host renderer uses reversed depth; native desktop parity uses conventional LESS_EQUAL depth.",
+        });
+    }
+    if (camera === undefined) return warnings;
+    if (!(camera instanceof THREE.PerspectiveCamera)) {
+        warnings.push({
+            code: "camera-projection",
+            message: "Host camera is not perspective; native desktop parity uses a perspective projection.",
+        });
+        return warnings;
+    }
+    if (!approximatelyEqual(camera.near, 0.01)) {
+        warnings.push({
+            code: "camera-near",
+            message: `Host camera near plane is ${camera.near}; native desktop parity uses 0.01.`,
+        });
+    }
+    if (!approximatelyEqual(camera.far, 20_000)) {
+        warnings.push({
+            code: "camera-far",
+            message: `Host camera far plane is ${camera.far}; native desktop parity uses 20000.`,
+        });
+    }
+    return warnings;
+}
+
+function approximatelyEqual(actual: number, expected: number): boolean {
+    return Math.abs(actual - expected) <= Math.max(1e-6, Math.abs(expected) * 1e-6);
 }
 
 function createPaintGeometry(packed: ImmPaintGeometry): THREE.BufferGeometry {
