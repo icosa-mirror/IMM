@@ -622,6 +622,228 @@ namespace ImmImporter
         return true;
     }
 
+    static bool iReadDocumentMetadata(
+        piIStream* fp,
+        Sequence* sq,
+        piLog* log,
+        Drawing::PaintRenderingTechnique renderingTechnique)
+    {
+        Sequence::Type sqType = Sequence::Type::Still;
+        uint16_t sqCaps = 0;
+        int numChunks = 0;
+
+        for (;;)
+        {
+            const uint64_t chunkSignature = fp->ReadUInt64();
+            const uint64_t chunkSize = fp->ReadUInt64();
+            const uint64_t currentOffset = fp->Tell();
+            numChunks++;
+
+            if (numChunks == 1 && chunkSignature != kSig_Immersiv)
+                return false;
+
+            if (chunkSignature == kSig_Immersiv)
+            {
+                if (fp->ReadUInt32() != 0x00010001)
+                    return false;
+            }
+            else if (chunkSignature == kSig_CoordSys)
+            {
+                fp->ReadUInt8();
+                fp->ReadUInt8();
+            }
+            else if (chunkSignature == kSig_Category)
+            {
+                const uint8_t type = fp->ReadUInt8();
+                const uint8_t caps = fp->ReadUInt8();
+                fp->ReadUInt16();
+                if (type >= static_cast<int>(Sequence::Type::COUNT))
+                    return false;
+                sqType = static_cast<Sequence::Type>(type);
+                sqCaps = static_cast<uint16_t>(caps);
+                fp->ReadUInt8();
+            }
+            else if (chunkSignature == kSig_Sequence)
+            {
+                if (!iReadSceneGraph(fp, sq, log, sqType, sqCaps, renderingTechnique))
+                    return false;
+            }
+            else if (chunkSignature == kSig_ResTable)
+            {
+                return iReadAssetTable(fp, sq, log);
+            }
+
+            if (!fp->Seek(currentOffset + chunkSize, piIStreamArray::SeekMode::SET))
+                return false;
+        }
+    }
+
+    static Layer* iFindLayerById(Sequence* sq, uint32_t layerId)
+    {
+        Layer* result = nullptr;
+        sq->Recurse(
+            [&result, layerId](Layer* layer, int, int, bool) {
+                if (layer->GetID() == layerId)
+                    result = layer;
+                return result == nullptr;
+            },
+            false, false, false, false);
+        return result;
+    }
+
+    static void iBeginCollectedLayer(Layer* layer, IStrokeCollector* collector)
+    {
+        collector->OnBeginLayer(
+            layer->GetID(),
+            static_cast<uint32_t>(layer->GetType()),
+            layer->GetName().GetS(),
+            layer->GetWorldVisible(),
+            layer->GetWorldOpacity());
+        collector->OnLayerTransform(
+            layer->GetID(),
+            layer->GetTransform(),
+            layer->GetTransformToWorld(),
+            layer->GetPivot());
+    }
+
+    bool ImportMetadataFromMemory(
+        piTArray<uint8_t>* data,
+        Sequence* sq,
+        piLog* log,
+        const Drawing::ColorSpace colorSpace,
+        Drawing::PaintRenderingTechnique renderingTechnique,
+        IStrokeCollector* collector)
+    {
+        if (data == nullptr || sq == nullptr || log == nullptr || collector == nullptr)
+            return false;
+
+        doLoad = true;
+        doneLoading = false;
+        data->SetLength(0);
+        piIStreamArray stream(data);
+        if (!iReadDocumentMetadata(&stream, sq, log, renderingTechnique))
+        {
+            doneLoading = true;
+            return false;
+        }
+
+        bool success = true;
+        sq->Recurse(
+            [sq, &stream, log, colorSpace, renderingTechnique, collector, &success](Layer* layer, int, int, bool) {
+                if (layer->GetType() == Layer::Type::Paint)
+                {
+                    iBeginCollectedLayer(layer, collector);
+                    if (!fiLayer::LoadAsset(layer, &stream, sq, log, colorSpace, renderingTechnique))
+                    {
+                        log->Printf(LT_ERROR, L"Could not load paint metadata for layer %s", layer->GetName().GetS());
+                        success = false;
+                        collector->OnEndLayer();
+                        return true;
+                    }
+                    layer->SetLoaded(true);
+
+                    LayerPaint* paint = static_cast<LayerPaint*>(layer->GetImplementation());
+                    collector->OnPaintLayerInfo(paint->GetFrameRate(), paint->GetNumFrames(), paint->GetMaxRepeatCount());
+                    uint32_t* frameBuffer = paint->GetFrameBuffer();
+                    if (frameBuffer != nullptr && paint->GetNumFrames() > 0)
+                        collector->OnFrameBuffer(frameBuffer, paint->GetNumFrames());
+                    for (uint32_t drawingId = 0; drawingId < paint->GetNumDrawings(); drawingId++)
+                    {
+                        collector->OnBeginDrawing(drawingId);
+                        collector->OnEndDrawing();
+                    }
+                    collector->OnEndLayer();
+                }
+                else if (layer->GetType() == Layer::Type::Picture || layer->GetType() == Layer::Type::SpawnArea)
+                {
+                    iBeginCollectedLayer(layer, collector);
+                    if (layer->GetType() == Layer::Type::SpawnArea)
+                        collector->OnSpawnArea(layer->GetID(), layer == sq->GetInitialSpawnArea());
+                    collector->OnEndLayer();
+                }
+                return true;
+            },
+            false, false, false, false);
+
+        doneLoading = true;
+        return success;
+    }
+
+    bool DecodeDrawingFromMemory(
+        piTArray<uint8_t>* data,
+        Sequence* sq,
+        piLog* log,
+        uint32_t layerId,
+        uint32_t drawingId,
+        const Drawing::ColorSpace colorSpace,
+        Drawing::PaintRenderingTechnique renderingTechnique,
+        IStrokeCollector* collector)
+    {
+        if (data == nullptr || sq == nullptr || log == nullptr || collector == nullptr)
+            return false;
+        Layer* layer = iFindLayerById(sq, layerId);
+        if (layer == nullptr || layer->GetType() != Layer::Type::Paint)
+            return false;
+        LayerPaint* paint = static_cast<LayerPaint*>(layer->GetImplementation());
+        if (paint == nullptr || drawingId >= paint->GetNumDrawings())
+            return false;
+
+        data->SetLength(0);
+        piIStreamArray stream(data);
+        iBeginCollectedLayer(layer, collector);
+        collector->OnBeginDrawing(drawingId);
+        const bool flipped = layer->GetTransformToWorld().mFlip != flip3::N;
+        const bool success = fiLayerPaint::ReadDrawing(
+            paint, drawingId, &stream, log, colorSpace, renderingTechnique, flipped, collector);
+        collector->OnEndDrawing();
+        collector->OnEndLayer();
+        return success;
+    }
+
+    bool DecodeLayerAssetFromMemory(
+        piTArray<uint8_t>* data,
+        Sequence* sq,
+        piLog* log,
+        uint32_t layerId,
+        const Drawing::ColorSpace colorSpace,
+        Drawing::PaintRenderingTechnique renderingTechnique,
+        IStrokeCollector* collector)
+    {
+        if (data == nullptr || sq == nullptr || log == nullptr || collector == nullptr)
+            return false;
+        Layer* layer = iFindLayerById(sq, layerId);
+        if (layer == nullptr || layer->GetType() == Layer::Type::Paint)
+            return false;
+
+        data->SetLength(0);
+        piIStreamArray stream(data);
+        if (!fiLayer::LoadAsset(layer, &stream, sq, log, colorSpace, renderingTechnique))
+            return false;
+        layer->SetLoaded(true);
+
+        if (layer->GetType() == Layer::Type::Picture)
+        {
+            iBeginCollectedLayer(layer, collector);
+            LayerPicture* picture = static_cast<LayerPicture*>(layer->GetImplementation());
+            piImage* image = picture == nullptr ? nullptr : picture->GetImage();
+            if (image != nullptr)
+            {
+                const piImage::Format format = image->GetFormat(0);
+                collector->OnPictureLayer(
+                    layer->GetID(),
+                    static_cast<uint32_t>(picture->GetType()),
+                    picture->GetIsViewerLocked(),
+                    image->GetXRes(),
+                    image->GetYRes(),
+                    format == piImage::FORMAT_I_RGBA || format == piImage::FORMAT_F_RGBA,
+                    static_cast<const uint8_t*>(image->GetData(0)),
+                    static_cast<int>(image->GetDataSize(0)));
+            }
+            collector->OnEndLayer();
+        }
+        return true;
+    }
+
     bool ImportFromDisk(Sequence* sq, piLog* log, const wchar_t* filename, const Drawing::ColorSpace colorSpace, Drawing::PaintRenderingTechnique renderingTechnique, IStrokeCollector* collector)
     {
         if (filename == nullptr)

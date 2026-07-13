@@ -65,6 +65,20 @@ StrokeStore::~StrokeStore()
 
 void StrokeStore::OnBeginLayer(uint32_t layerId, uint32_t layerType, const wchar_t* name, bool visible, float opacity)
 {
+    for (auto& existing : mDocument.layers)
+    {
+        if (existing.layerId == layerId)
+        {
+            existing.layerType = layerType;
+            existing.name = name ? name : L"";
+            existing.visible = visible;
+            existing.opacity = opacity;
+            mCurrentLayer = &existing;
+            mCurrentDrawing = nullptr;
+            return;
+        }
+    }
+
     StoredLayer layer;
     layer.layerId = layerId;
     layer.layerType = layerType;
@@ -181,6 +195,17 @@ void StrokeStore::OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames)
 void StrokeStore::OnBeginDrawing(uint32_t drawingId)
 {
     if (!mCurrentLayer) return;
+
+    for (auto& existing : mCurrentLayer->drawings)
+    {
+        if (existing.drawingId == drawingId)
+        {
+            existing.biggestStroke = 0.0f;
+            existing.strokes.clear();
+            mCurrentDrawing = &existing;
+            return;
+        }
+    }
 
     StoredDrawing drawing;
     drawing.drawingId = drawingId;
