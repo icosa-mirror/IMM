@@ -46,6 +46,29 @@ try {
     await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
     assert.equal((await controlsPage.locator("#status").textContent())?.includes("sample1.imm"), true,
         "Base URL did not load the bundled sample IMM by default");
+    assert.equal(await controlsPage.locator("#camera-mode").inputValue(), "fly",
+        "Fly/free-look was not the default camera mode");
+    assert.ok(await controlsPage.locator("#viewpoint option").count() > 0,
+        "Decoded spawn areas were not exposed as viewpoints");
+    const initialNavigation = await controlsPage.evaluate(() => window.__immDiagnostics());
+    await controlsPage.mouse.move(700, 350);
+    await controlsPage.mouse.down();
+    await controlsPage.mouse.move(760, 390, { steps: 4 });
+    await controlsPage.mouse.up();
+    const lookedNavigation = await controlsPage.evaluate(() => window.__immDiagnostics());
+    assert.notDeepEqual(lookedNavigation.cameraQuaternion, initialNavigation.cameraQuaternion,
+        "Pointer drag did not rotate the fly camera");
+    await controlsPage.keyboard.down("KeyW");
+    await controlsPage.waitForTimeout(100);
+    await controlsPage.keyboard.up("KeyW");
+    const movedNavigation = await controlsPage.evaluate(() => window.__immDiagnostics());
+    assert.notDeepEqual(movedNavigation.cameraPosition, lookedNavigation.cameraPosition,
+        "WASD input did not move the fly camera");
+    await controlsPage.locator("#camera-mode").selectOption("orbit");
+    assert.equal((await controlsPage.evaluate(() => window.__immDiagnostics())).cameraMode, "orbit",
+        "Orbit mode could not be selected");
+    await controlsPage.locator("#camera-mode").selectOption("fly");
+    await controlsPage.locator("#viewpoint").selectOption(initialNavigation.viewpoint);
     await controlsPage.evaluate(() => window.__immLoadUrl("/fixtures/not-an-imm.imm").catch(() => undefined));
     const failedLoadState = await controlsPage.evaluate(() => ({
         diagnostics: window.__immDiagnostics(),

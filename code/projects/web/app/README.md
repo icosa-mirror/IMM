@@ -7,6 +7,10 @@ adapter:
   controls, and render loop and accepts local files or same-origin/CORS URLs.
   It loads the bundled `sample1.imm` by default, keeps both source controls
   available while loading, and can paste an HTTP(S) IMM URL from the clipboard.
+  Authored spawn areas appear as named viewpoints. The authored initial spawn is
+  used on load, and timeline `MakeDefault` actions move to the viewpoint selected
+  by a chapter or seek. Fly/free-look navigation is the default, with orbit as an
+  optional mode.
 - `embed.html` is the integration fixture. The host owns one renderer, canvas,
   scene, camera, and render loop; the IMM adapter contributes an `Object3D`
   subtree to that scene so host and IMM geometry share the depth buffer.
@@ -16,6 +20,11 @@ model. Paint decoding and indexed-geometry packing run in the decoder worker;
 the main thread creates and uploads Three.js resources. Picture support covers
 2D, viewer-locked, mono/stereo equirectangular, cross-cubemap, and
 vertical-strip-cubemap layers.
+
+On browsers with WebXR support, the standalone player also presents Three.js's
+VR entry button. The current authored viewpoint becomes the XR reference pose;
+the embeddable adapter continues to leave renderer, camera, controls, and the XR
+session entirely under host ownership.
 
 ## Build decoder assets
 

@@ -151,6 +151,7 @@ window.__immDiagnostics = () => ({
     gpuFrameMs: gpuFrameMs === null ? null : round(gpuFrameMs),
     gpuTimerAvailable: timerExtension !== null,
     cameraPosition: camera.position.toArray(),
+    cameraQuaternion: camera.quaternion.toArray(),
     controlsTarget: controls.orbit.target.toArray(),
     cameraMode: controls.mode,
     viewpoint: viewpoint.value,
@@ -160,8 +161,14 @@ window.__immDiagnostics = () => ({
 window.__immPlayback = {
     play: () => playback?.play(),
     pause: () => playback?.pause(),
-    seekTicks: (value) => playback?.seekTicks(value),
-    selectChapter: (index) => playback?.selectChapter(index),
+    seekTicks: (value) => {
+        playback?.seekTicks(value);
+        applyAuthoredSpawn(true);
+    },
+    selectChapter: (index) => {
+        playback?.selectChapter(index);
+        applyAuthoredSpawn(true);
+    },
     snapshot: () => ({
         timeTicks: playback?.timeTicks ?? 0,
         chapterIndex: playback?.chapterIndex ?? 0,
@@ -183,18 +190,22 @@ continueButton.addEventListener("click", () => {
 });
 restartButton.addEventListener("click", () => {
     playback?.restart();
+    applyAuthoredSpawn(true);
     updatePlaybackControls();
 });
 skipBack.addEventListener("click", () => {
     playback?.skipBack();
+    applyAuthoredSpawn(true);
     updatePlaybackControls();
 });
 skipForward.addEventListener("click", () => {
     playback?.skipForward();
+    applyAuthoredSpawn(true);
     updatePlaybackControls();
 });
 timeline.addEventListener("input", () => {
     playback?.seekTicks(Number(timeline.value));
+    applyAuthoredSpawn(true);
     updatePlaybackControls();
 });
 chapter.addEventListener("change", () => {
@@ -478,7 +489,7 @@ function applyAuthoredSpawn(force: boolean): void {
 }
 
 function spawnActivationKey(active: ImmActiveSpawnArea): string {
-    return `${active.state.layer.id}:${active.actionTimeTicks ?? "initial"}`;
+    return `${active.state.layer.id}:${active.actionTimeTicks ?? "initial"}:${playback?.chapterIndex ?? 0}`;
 }
 
 function applySpawnPose(transform: ImmActiveSpawnArea["state"]["worldTransform"]): void {

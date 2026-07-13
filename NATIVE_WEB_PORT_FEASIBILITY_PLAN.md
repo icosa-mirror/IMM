@@ -1,6 +1,6 @@
 # Native Web Port Feasibility and Implementation Plan
 
-**Status:** Phase 2 static visual MVP completed and verified
+**Status:** Phase 3 completed; authored viewpoints and initial WebXR presentation implemented
 **Date:** 2026-07-13  
 **Target:** a browser-native IMM viewer, using JavaScript/TypeScript, WebAssembly, or a mixture of the two; Three.js is an acceptable rendering framework.
 
@@ -833,6 +833,30 @@ Exit gate:
 - Peak JS, Wasm, and GPU memory remain within per-device budgets during long playback and repeated chapter seeks.
 
 ### Phase 6 — WebXR and device validation (about 2–4 weeks)
+
+Status: partially implemented on `main` (2026-07-13).
+
+Implemented so far:
+
+- Named spawn areas are exposed as standalone-player viewpoints, with the exact
+  scene-header initial spawn distinguished from later `MakeDefault` actions.
+- The active authored spawn is resolved from playback time, so chapter changes
+  and seeks apply their authored camera transform. Manual viewpoint selection
+  remains independent until a later authored spawn action takes over.
+- Fly/free-look is the standalone default on mouse, keyboard, wheel, and touch;
+  OrbitControls remains selectable. The embedded adapter still leaves all
+  camera and navigation ownership to its host.
+- The standalone renderer enables WebXR, presents Three.js's VR session entry,
+  and uses the active authored spawn as the XR rig pose.
+
+Remaining before the Phase 6 exit gate:
+
+- Export and enforce spawn-area tracking level, movement volume, and per-axis
+  locomotion constraints.
+- Add controller transport input, explicit reference-space policy, and headset
+  lifecycle recovery tests.
+- Validate stereo rendering, orientation, scale, performance, and interaction
+  on desktop WebXR and a standalone Quest-class browser.
 
 Deliverables:
 
