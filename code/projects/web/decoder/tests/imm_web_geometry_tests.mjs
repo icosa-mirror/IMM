@@ -12,7 +12,9 @@ for (let brushType = 0; brushType < strokeCount; brushType++) {
     writePoint(brushType * 2 + 1, 0, 0, brushType * 3 + 2, brushType);
 }
 
-const geometries = packPaintGeometry({ descriptors, points, pointTimes: new Float32Array(10) });
+const pointTimes = new Float32Array(10);
+for (let index = 0; index < pointTimes.length; index++) pointTimes[index] = index / 10;
+const geometries = packPaintGeometry({ descriptors, points, pointTimes });
 assert.equal(geometries.length, 5);
 for (let brushType = 0; brushType < geometries.length; brushType++) {
     const geometry = geometries[brushType];
@@ -20,12 +22,15 @@ for (let brushType = 0; brushType < geometries.length; brushType++) {
     assert.equal(geometry.brushType, brushType);
     assert.equal(geometry.positions.length, 2 * sectionCount * 3);
     assert.equal(geometry.colors.length, 2 * sectionCount * 4);
+    assert.equal(geometry.progress.length, 2 * sectionCount);
     assert.equal(geometry.indices.length, sectionCount * 6);
     assert.equal(geometry.triangleCount, sectionCount * 2);
     assert.ok(geometry.indices instanceof Uint16Array);
     assert.ok(Array.from(geometry.positions).every(Number.isFinite));
     assert.deepEqual(Array.from(geometry.indices.slice(0, 6)), [0, sectionCount, 1, 1, sectionCount, sectionCount + 1]);
     assert.deepEqual(Array.from(geometry.colors.slice(0, 4)), [brushType / 4, 0.25, 0.5, 0.75]);
+    assert.ok(Array.from(geometry.progress.slice(0, sectionCount)).every(
+        (value) => Math.abs(value - brushType / 5) < 1e-6));
 }
 
 console.log("IMM web geometry: all five brush topologies passed exact buffer assertions");

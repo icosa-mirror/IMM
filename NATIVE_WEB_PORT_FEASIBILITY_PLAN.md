@@ -746,6 +746,47 @@ Exit gate:
 
 ### Phase 3 — playback and full picture support (about 3–5 weeks)
 
+Status: implemented and verified on the `feature/web-native` branch (2026-07-13).
+
+Implementation evidence:
+
+- The schema-v3 Wasm contract retains the complete layer hierarchy, root clock,
+  chapters, animation keys, pivots, paint frame maps, point timing, picture
+  layout metadata, and keep-alive parameters after native import.
+- `ImmPlaybackController` provides deterministic tick-based play, pause, seek,
+  restart, manual/author-authored wait and continue, chapter selection, skip
+  back/forward, repeat limits, and root loop actions. Stateless evaluation
+  covers nested timeline clocks, offsets, eased keys, pivoted transforms,
+  visibility, opacity, draw-in, and drawing-frame selection.
+- `ImmThreeView` applies evaluated local state through the authored hierarchy,
+  keeps only the active drawing resident in WebGL, and implements draw-in,
+  wiggle, blink, 2D pictures, viewer locking, mono/stereo equirectangular
+  pictures, cross cubemaps, and vertical-strip cubemaps. Its explicit
+  `setTimeTicks`/`setTimeSeconds` API is usable in host-owned Three.js loops.
+- The standalone page owns a document-relative clock and exposes transport,
+  seek, continue, restart, and chapter controls. The embedded fixture retains
+  its host-owned renderer, scene, camera, canvas, depth buffer, and clock.
+
+Verification evidence:
+
+- `bun test` covers fresh-versus-history seeks, chapter equivalence, every
+  transport state, stop/continue boundaries, nested loops, offsets, easing,
+  paint frames, root loops, and pivot compensation.
+- The Wasm CTest suite decodes the real sample and asserts 75 hierarchical
+  layers, 1,015 animation keys, root duration, chapter bounds, paint geometry,
+  point timing, and schema identity.
+- `bun run test:browser` uses Chrome to capture the real sample at start,
+  midpoint, and end plus a synthetic scene at start, interpolation midpoints,
+  a nested-loop boundary, chapter boundary, pre-end, and end. At every fixture
+  timestamp it asserts the exact active drawing, transform, opacity, draw-in,
+  and picture/effect types.
+- The same browser run proves history-independent rendered pixels after a
+  re-seek, stable WebGL geometry counts through drawing swaps and three real
+  sample reloads, all six cross/vertical cubemap face mappings, both stereo
+  eyes, viewer locking, embedded shared depth, and the throttled mobile profile.
+  Timestamp captures and the JSON report are written under
+  `artifacts/web-native/`.
+
 Deliverables:
 
 - Playback clock and state machine: play, pause, seek, restart, wait/continue, skip, and chapter selection.

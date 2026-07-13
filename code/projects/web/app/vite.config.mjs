@@ -17,6 +17,7 @@ export default defineConfig({
             input: {
                 player: resolve(import.meta.dirname, "index.html"),
                 embed: resolve(import.meta.dirname, "embed.html"),
+                phase3Fixture: resolve(import.meta.dirname, "phase3-fixture.html"),
             },
         },
     },

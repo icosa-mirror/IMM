@@ -181,6 +181,31 @@ describe("IMM deterministic playback evaluation", () => {
         expect(controller.timeTicks).toBe(600);
     });
 
+    test("play, pause, manual wait, restart, and chapter selection preserve exact state", () => {
+        const document = fixture();
+        const controller = new ImmPlaybackController(document);
+        controller.pause();
+        controller.advance(1);
+        expect(controller.timeTicks).toBe(0);
+        controller.play();
+        controller.advance(0.25);
+        expect(controller.timeTicks).toBe(25);
+        controller.wait();
+        controller.advance(1);
+        expect(controller.timeTicks).toBe(25);
+        controller.continue();
+        expect(controller.timeTicks).toBe(26);
+        controller.restart();
+        expect(controller.timeTicks).toBe(0);
+        expect(controller.playing).toBe(true);
+
+        const freshChapter = new ImmPlaybackController(document);
+        freshChapter.selectChapter(1);
+        controller.advance(1.5);
+        controller.selectChapter(1);
+        expect(controller.evaluate()).toEqual(freshChapter.evaluate());
+    });
+
     test("restarts deterministically at root loop actions", () => {
         const document = fixture();
         const root = document.layers[0];
