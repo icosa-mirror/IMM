@@ -117,8 +117,9 @@ CPU-frame, GPU-frame (when timer queries are available), draw-call, triangle,
 pixel-ratio, texture/geometry, and JavaScript-heap measurements.
 
 The focused Firefox run verifies worker startup, the complete `sample1.imm`
-render, its three embedded Opus sources, positional playback, the 50 ms A/V
-drift bound, and generated PCM WAV decode:
+render, alpha-to-coverage and alpha-hash submission-order invariance, opaque
+intersection depth, flipped culling, its three embedded Opus sources,
+positional playback, the 50 ms A/V drift bound, and generated PCM WAV decode:
 
 ```bash
 node node_modules/playwright-core/cli.js install firefox

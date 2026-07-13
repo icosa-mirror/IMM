@@ -890,7 +890,7 @@ Implemented and verified so far:
 - Distance attenuation and directional cone/frustum equations have focused
   tests against the native Audio360 backend math. `sample1.imm` verifies three
   looping Opus sources (two flat, one positional) with no decode failures.
-- Current desktop Chromium and Playwright Firefox 141 each decode the public
+- Current desktop Chrome 150 and Playwright Firefox 151 each decode the public
   Ogg Opus sample (3/3 sound layers), a private Ogg Vorbis fixture (1/1), and a
   private WAV-containing fixture (9/9). Firefox also decodes a generated PCM
   WAV and correctly resamples it to the active audio-context rate. The reusable
@@ -901,7 +901,9 @@ Implemented and verified so far:
   supports both modern listener/panner `AudioParam` properties and Firefox's
   legacy spatial methods. Reload disposal guards prevent pending resume/suspend
   operations from touching a closed context. A dedicated CI job exercises the
-  complete sample render, audio, generated-WAV, and drift contract in Firefox.
+  complete sample render, alpha-to-coverage and alpha-hash submission-order
+  fixtures, opaque intersection depth, flipped culling, audio, generated-WAV,
+  and drift contract in Firefox.
 - Ambisonic is explicitly reported unsupported and is never silently downmixed
   or labeled parity.
 - The embedded adapter reports structured warnings for sub-24-bit,

@@ -207,6 +207,7 @@ jobs:
         working-directory: code/projects/web/app
         env:
           IMM_WEB_HEADLESS: "0"
+          IMM_WEB_REQUIRE_AUDIO_GESTURE: "1"
         run: xvfb-run --auto-servernum bun run test:browser:firefox
 
       - name: Upload failed Firefox evidence

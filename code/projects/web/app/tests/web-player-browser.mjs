@@ -467,6 +467,7 @@ try {
     await mobileContext.close();
 
     const report = {
+        browser: await browser.version(),
         desktop: desktopMetrics,
         embedded: embedMetrics,
         mobile4xCpu: mobileMetrics,
