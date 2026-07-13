@@ -859,15 +859,22 @@ Implemented and verified so far:
 - The overlap fixture is byte-identical after reversing two near-coplanar
   translucent stroke submissions. `sample1.imm` renders 1,171 strokes from
   58,405 points in desktop and CPU-throttled mobile Chrome runs.
+- Retained opaque fixtures cross two depth-varying, front-culled paint surfaces
+  and verify opposite depth winners away from their exact intersection. A
+  paired negative-determinant transform verifies that flipped front-culled
+  paint remains visible with the same resolved color.
 - Host-supplied canonical model geometry now uses the native unlit vertex-RGB,
   double-sided, depth-write, blue-noise coverage contract. A synthetic fixture
   proves flipped-transform rendering and byte-identical output after reversing
   near-coplanar model submission order. Real IMM model assets remain explicitly
   unsupported because the native importer/exporter consumes and writes no mesh
   data; 40 locally decoded corpus files contained no model-layer records.
-- Schema v4 exports encoded WAV, Ogg Vorbis, and Ogg Opus sound payloads and
+- Schema v5 exports encoded WAV, Ogg Vorbis, and Ogg Opus sound payloads and
   authored flat/positional/ambisonic, gain, looping, attenuation, modifier, and
   transform metadata without uploading private corpus files.
+- Schema v5 also retains eye-level versus floor-level spawn tracking. Desktop
+  applies the native 1.6 m mono eye height only to floor-level viewpoints;
+  WebXR leaves height to the headset pose. Eye-level transforms remain exact.
 - The standalone player probes codecs, sequentially decodes Web Audio buffers,
   keeps the context and sources silent before an explicit user gesture, and
   implements flat and HRTF positional playback. Transport pause suspends the

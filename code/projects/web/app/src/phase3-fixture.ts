@@ -43,6 +43,8 @@ declare global {
             samplePaintEffect(drawIn: number, timeSeconds: number, keepAliveType: number): number[];
             sampleOverlap(reverse: boolean): number[];
             sampleModelOverlap(reverse: boolean): number[];
+            sampleOpaqueIntersection(reverse: boolean): { left: number[]; right: number[] };
+            sampleFlippedPaint(): { normal: number[]; flipped: number[] };
             coverageState(): Record<string, unknown>;
         };
     }
@@ -177,6 +179,33 @@ window.__phase3Fixture = {
             renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixels);
         return Array.from(pixels);
     },
+    sampleOpaqueIntersection(reverse) {
+        preparePaintSample(view, camera);
+        view.object3d.traverse((object) => {
+            if (object.userData.immLayerType !== "paint") return;
+            const layerId = object.parent?.userData.immLayerId;
+            object.visible = layerId === 13 || layerId === 14;
+            object.renderOrder = layerId === 13 ? (reverse ? 1 : -1) : (reverse ? -1 : 1);
+        });
+        renderer.render(scene, camera);
+        return {
+            left: readPixel(renderer, 288, 180),
+            right: readPixel(renderer, 352, 180),
+        };
+    },
+    sampleFlippedPaint() {
+        preparePaintSample(view, camera);
+        view.object3d.traverse((object) => {
+            if (object.userData.immLayerType !== "paint") return;
+            const layerId = object.parent?.userData.immLayerId;
+            object.visible = layerId === 15 || layerId === 16;
+        });
+        renderer.render(scene, camera);
+        return {
+            normal: readPixel(renderer, 266, 180),
+            flipped: readPixel(renderer, 374, 180),
+        };
+    },
     coverageState() {
         const paint: Record<string, unknown>[] = [];
         const models: Record<string, unknown>[] = [];
@@ -269,6 +298,24 @@ function createFixture(): ImmDocument {
         localTransform: { ...identity(), flip: 1 },
         model: model(0x42a5f5, 0),
     });
+    const opaqueIntersectionA = makeLayer({
+        id: 13, parentId: 0, type: 1,
+        drawings: [culledDrawing(0xef5350, [-0.08, 0.08, 0])],
+    });
+    const opaqueIntersectionB = makeLayer({
+        id: 14, parentId: 0, type: 1,
+        drawings: [culledDrawing(0x42a5f5, [0.08, -0.08, 0])],
+    });
+    const normalPaint = makeLayer({
+        id: 15, parentId: 0, type: 1,
+        localTransform: { ...identity(), translation: [-0.5, 0, 0] },
+        drawings: [culledDrawing(0x66bb6a, [0, 0, 0], 0.38)],
+    });
+    const flippedPaint = makeLayer({
+        id: 16, parentId: 0, type: 1,
+        localTransform: { ...identity(), flip: 1, translation: [0.5, 0, 0] },
+        drawings: [culledDrawing(0x66bb6a, [0, 0, 0], 0.38)],
+    });
     return {
         schemaVersion: 2,
         backgroundColor: [0.08, 0.12, 0.18],
@@ -279,7 +326,10 @@ function createFixture(): ImmDocument {
             { startTicks: 0, endTicks: 200, markerAction: IMM_ACTION_PLAY },
             { startTicks: 200, endTicks: 400, markerAction: IMM_ACTION_PLAY },
         ],
-        layers: [root, timeline, paint, blink, overlapFar, overlapNear, modelFar, modelNear, ...pictureLayers],
+        layers: [
+            root, timeline, paint, blink, overlapFar, overlapNear, modelFar, modelNear,
+            opaqueIntersectionA, opaqueIntersectionB, normalPaint, flippedPaint, ...pictureLayers,
+        ],
         metrics: { decodeMs: 0, marshalMs: 0, packMs: 0 },
     };
 }
@@ -339,6 +389,26 @@ function drawing(x: number, color: number, alpha = 1, z = 0, mask = 0): ImmDrawi
             directions: new Float32Array([0, 0, -1, 0, 0, -1, 0, 0, -1]),
             visibility: new Uint8Array([1, 1, 1]),
             masks: new Uint8Array([mask, mask, mask]),
+            progress: new Float32Array([0, 0.25, 0.5]),
+            indices: new Uint16Array([0, 1, 2]),
+        }],
+    };
+}
+
+function culledDrawing(color: number, z: [number, number, number], radius = 0.7): ImmDrawing {
+    const c = new THREE.Color(color);
+    return {
+        biggestStroke: 1,
+        strokeCount: 1,
+        pointCount: 3,
+        geometries: [{
+            brushType: 2,
+            triangleCount: 1,
+            positions: new Float32Array([-radius, -0.5, z[0], radius, -0.5, z[1], 0, 0.7, z[2]]),
+            colors: new Float32Array([c.r, c.g, c.b, 1, c.r, c.g, c.b, 1, c.r, c.g, c.b, 1]),
+            directions: new Float32Array([0, 0, -1, 0, 0, -1, 0, 0, -1]),
+            visibility: new Uint8Array([1, 1, 1]),
+            masks: new Uint8Array([0, 0, 0]),
             progress: new Float32Array([0, 0.25, 0.5]),
             indices: new Uint16Array([0, 1, 2]),
         }],
@@ -421,4 +491,21 @@ function findPaintMesh(root: THREE.Object3D): THREE.Mesh | undefined {
         if (object instanceof THREE.Mesh && object.userData.immLayerType === "paint" && object.parent?.userData.immLayerId === 2) result = object;
     });
     return result;
+}
+
+function preparePaintSample(view: ImmThreeView, camera: THREE.PerspectiveCamera): void {
+    camera.position.set(0, 0, 3);
+    camera.quaternion.identity();
+    view.setTimeTicks(0, camera);
+    view.setCoverageFrame(19);
+    view.object3d.traverse((object) => {
+        if (object.userData.immLayerType === "picture" || object.userData.immLayerType === "model") object.visible = false;
+    });
+}
+
+function readPixel(renderer: THREE.WebGLRenderer, x: number, y: number): number[] {
+    const pixel = new Uint8Array(4);
+    const context = renderer.getContext();
+    context.readPixels(x, y, 1, 1, context.RGBA, context.UNSIGNED_BYTE, pixel);
+    return Array.from(pixel);
 }

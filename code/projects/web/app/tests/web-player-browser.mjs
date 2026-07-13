@@ -12,6 +12,7 @@ const localCodecFixtures = [
     ["ogg-vorbis", process.env.IMM_WEB_LOCAL_OGG_FIXTURE],
     ["wav", process.env.IMM_WEB_LOCAL_WAV_FIXTURE],
 ].filter((entry) => entry[1] !== undefined);
+const localFloorSpawnFixture = process.env.IMM_WEB_LOCAL_FLOOR_SPAWN_FIXTURE;
 await mkdir(artifactDirectory, { recursive: true });
 
 const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 4177 } });
@@ -153,6 +154,18 @@ try {
         assert.equal(diagnostics.decodedSounds, diagnostics.soundLayers,
             `${codec} local fixture did not decode every sound layer`);
         localCodecResults.push({ codec, soundLayers: diagnostics.soundLayers, decodedSounds: diagnostics.decodedSounds });
+    }
+    let localFloorSpawnResult = null;
+    if (localFloorSpawnFixture !== undefined) {
+        await controlsPage.setInputFiles("#file-input", localFloorSpawnFixture);
+        await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true &&
+            window.__immDiagnostics().viewpointTracking === "floor", undefined, { timeout: 120_000 });
+        const diagnostics = await controlsPage.evaluate(() => window.__immDiagnostics());
+        const authoredY = diagnostics.viewpointAuthoredTranslation[1];
+        const appliedOffset = diagnostics.cameraPosition[1] - authoredY;
+        assert.ok(Math.abs(appliedOffset - 1.6) <= 1e-6,
+            `Floor-level viewpoint applied ${appliedOffset} m instead of the native 1.6 m mono eye height`);
+        localFloorSpawnResult = { tracking: diagnostics.viewpointTracking, appliedOffset };
     }
     await controlsPage.close();
 
@@ -359,6 +372,19 @@ try {
         `Near-coplanar model coverage changed with submission order: ${JSON.stringify(modelOverlapDifference)}`);
     assert.ok(new Set(modelOverlapSamples.forward).size > 4,
         "Model overlap fixture did not render both translucent meshes");
+    const opaqueIntersection = await phase3.evaluate(() => ({
+        forward: window.__phase3Fixture.sampleOpaqueIntersection(false),
+        reverse: window.__phase3Fixture.sampleOpaqueIntersection(true),
+    }));
+    assert.deepEqual(opaqueIntersection.forward, opaqueIntersection.reverse,
+        `Opaque intersection changed away from the crossing with submission order: ${JSON.stringify(opaqueIntersection)}`);
+    assert.ok(pixelDistance(opaqueIntersection.forward.left, opaqueIntersection.forward.right) > 40,
+        `Opaque intersection did not resolve opposite depth winners: ${JSON.stringify(opaqueIntersection.forward)}`);
+    const flippedPaint = await phase3.evaluate(() => window.__phase3Fixture.sampleFlippedPaint());
+    assert.ok(pixelDistance(flippedPaint.normal, [102, 187, 106, 255]) <= 12,
+        `Normal front-culled paint did not render: ${JSON.stringify(flippedPaint.normal)}`);
+    assert.ok(pixelDistance(flippedPaint.flipped, flippedPaint.normal) <= 12,
+        `Flipped front-culled paint disappeared or changed: ${JSON.stringify(flippedPaint)}`);
     await phase3.close();
 
     const alphaHash = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
@@ -425,6 +451,7 @@ try {
         audioPlayback,
         audioSync,
         localCodecResults,
+        localFloorSpawnResult,
         sampleTimestamps,
         phase3States,
         lockedPositions,
@@ -433,6 +460,8 @@ try {
         coverageState,
         overlapDifference,
         modelOverlapDifference,
+        opaqueIntersection,
+        flippedPaint,
         alphaHashFallback: {
             state: alphaHashState,
             overlapDifference: alphaHashOverlapDifference,

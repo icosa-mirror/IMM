@@ -121,6 +121,11 @@ absolute paths before `bun run test:browser`. Playwright transfers each file
 directly through the browser file input; reports retain only the codec label and
 decoded layer counts, not the source path or bytes.
 
+`IMM_WEB_LOCAL_FLOOR_SPAWN_FIXTURE` optionally verifies a private floor-level
+viewpoint through the browser file input. The assertion compares the decoded
+authored height with the applied desktop camera height and retains only the
+tracking label and measured offset.
+
 ## GitHub Pages
 
 `.github/workflows/web-pages.yml` builds and verifies the Wasm decoder and web
