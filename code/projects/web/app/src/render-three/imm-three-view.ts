@@ -223,7 +223,8 @@ export class ImmThreeView {
         let geometry: THREE.BufferGeometry;
         let material: THREE.ShaderMaterial;
         if (picture.contentType === IMM_PICTURE_2D) {
-            geometry = new THREE.PlaneGeometry(picture.height > 0 ? picture.width / picture.height : 1, 1);
+            const aspect = picture.height > 0 ? picture.width / picture.height : 1;
+            geometry = new THREE.PlaneGeometry(2 * aspect, 2);
             material = createPicture2DMaterial(texture, layer.opacity);
         } else if (picture.contentType === IMM_PICTURE_EQUIRECT_MONO ||
             picture.contentType === IMM_PICTURE_EQUIRECT_STEREO) {
@@ -242,7 +243,7 @@ export class ImmThreeView {
         mesh.userData.immLayerType = "picture";
         mesh.userData.immPictureType = picture.contentType;
         mesh.renderOrder = picture.contentType === IMM_PICTURE_2D ? 0 : -10_000;
-        material.transparent = picture.hasAlpha || layer.opacity < 1;
+        material.transparent = true;
         if (picture.contentType !== IMM_PICTURE_2D) {
             material.depthTest = false;
             material.depthWrite = false;
@@ -266,7 +267,10 @@ export class ImmThreeView {
         for (const record of this.#pictures.values()) {
             if (!record.viewerLocked) continue;
             const parent = record.node.parent;
-            const lockedWorldPosition = record.node.position.clone().applyQuaternion(worldRotation).add(worldPosition);
+            const is2D = record.layer.picture?.contentType === IMM_PICTURE_2D;
+            const lockedWorldPosition = is2D
+                ? record.node.position.clone().applyQuaternion(worldRotation).add(worldPosition)
+                : worldPosition.clone();
             const lockedWorldRotation = worldRotation.clone().multiply(record.node.quaternion);
             if (parent === null) {
                 record.node.position.copy(lockedWorldPosition);
@@ -328,7 +332,7 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
                 return 0.5+0.5*sin(6.2831853*phase);
             }
             void main(){
-                float reveal=smoothstep(immVertexProgress-0.008,immVertexProgress+0.008,immDrawIn);
+                float reveal=smoothstep(0.3,1.0,2.0*immDrawIn-immVertexProgress);
                 float blink=1.0;
                 if(immKeepAliveType==${IMM_KEEP_ALIVE_BLINK}){
                     float mapped=clamp((keepAliveWave()-immBlink.w)/max(immBlinkMaxIn-immBlink.w,0.00001),0.0,1.0);
@@ -356,7 +360,7 @@ function createPicture2DMaterial(texture: THREE.DataTexture, opacity: number): T
         fragmentShader: `
             uniform sampler2D immPicture; uniform float immOpacity; varying vec2 immUv;
             void main(){
-                vec4 c=texture2D(immPicture,immUv);
+                vec4 c=texture2D(immPicture,vec2(immUv.x,1.0-immUv.y));
                 gl_FragColor=vec4(c.rgb,c.a*immOpacity);
                 #include <tonemapping_fragment>
                 #include <colorspace_fragment>

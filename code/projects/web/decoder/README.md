@@ -4,11 +4,12 @@ This target is the format-facing C ABI for the native web port. It intentionally
 has no dependency on the native renderer, sound engine, file system, windowing,
 VR, or threading backends.
 
-The decoder performs bounded top-level inspection and full scene decoding for
-the Phase 2 visual fixture. It exports layer transforms, pivots, visibility,
-opacity, default-spawn metadata, paint drawings/strokes/points, frame maps, and
-decoded picture pixels through a bulk C ABI. Its worker expands the five paint
-brush types into transferable indexed buffers before returning the document.
+The decoder performs bounded top-level inspection and full scene decoding. Its
+schema-v3 bulk C ABI exports the complete hierarchy, playback clock, chapters,
+animation keys, transforms and pivots, visibility and opacity, default spawn,
+paint drawings/strokes/points/timing/frame maps, keep-alive parameters, and
+decoded picture metadata/pixels. Its worker expands the five paint brush types
+into transferable indexed buffers before returning the canonical document.
 
 ## Native contract test
 
@@ -48,7 +49,8 @@ ctest --test-dir build/web-decoder-wasm --output-on-failure
 ```
 
 The smoke transfers `sample1.imm` to the worker, calls the Wasm C ABI, and
-checks the layer, spawn, paint, picture, stroke, point, geometry-batch, and
-triangle contracts. A separate deterministic test asserts exact positions,
-colors, indices, and topology sizes for all five brush types. The same worker
-module supports browser module workers and Node workers used by CI.
+checks hierarchy, root timing, chapters, all animation keys, spawn, paint,
+picture, stroke, point, geometry-batch, and triangle contracts. A separate
+deterministic test asserts exact positions, colors, indices, and topology sizes
+for all five brush types. The same worker module supports browser module
+workers and Node workers used by CI.

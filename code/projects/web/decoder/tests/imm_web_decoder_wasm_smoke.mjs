@@ -114,6 +114,14 @@ try {
                 !Array.from(drawing.bounds).every(Number.isFinite)) {
                 throw new Error(`Layer ${layer.id} returned invalid paint bounds`);
             }
+            if (drawing.pointTimes.length !== drawing.points.length / 14 ||
+                !Array.from(drawing.pointTimes).every(Number.isFinite)) {
+                throw new Error(`Layer ${layer.id} returned invalid paint timing`);
+            }
+        }
+        if (layer.keepAlive === undefined || layer.keepAlive.parameters.length !== 6 ||
+            !layer.keepAlive.parameters.every(Number.isFinite)) {
+            throw new Error(`Layer ${layer.id} returned invalid keep-alive metadata`);
         }
     }
     if (!decoded.document.layers.some((layer) => layer.worldTransform.flip !== 0) ||
@@ -126,7 +134,9 @@ try {
         throw new Error(`Expected one default spawn area, found ${defaultSpawns.length}`);
     }
     const geometries = paintLayers.flatMap((layer) => layer.drawings.flatMap((drawing) => drawing.geometries));
-    if (geometries.length !== 41 || geometries.some((geometry) => geometry.positions.length === 0 || geometry.indices.length === 0)) {
+    if (geometries.length !== 41 || geometries.some((geometry) =>
+        geometry.positions.length === 0 || geometry.indices.length === 0 ||
+        geometry.progress.length !== geometry.positions.length / 3)) {
         throw new Error(`Unexpected packed geometry result: ${geometries.length} batches`);
     }
     const triangleCount = geometries.reduce((sum, geometry) => sum + geometry.triangleCount, 0);

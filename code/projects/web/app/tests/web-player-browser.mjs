@@ -42,8 +42,13 @@ try {
         "--json-output", resolve(artifactDirectory, "sample1-web-render-metrics.json"),
     ], { stdio: "inherit" });
 
+    await desktop.evaluate(() => window.__immPlayback.play());
+    await desktop.waitForTimeout(100);
+    const playedState = await desktop.evaluate(() => window.__immPlayback.snapshot());
+    assert.ok(playedState.timeTicks > 0, "Standalone document clock did not advance while playing");
     const playbackInfo = await desktop.evaluate(() => {
         window.__immPlayback.pause();
+        window.__immPlayback.seekTicks(0);
         return window.__immPlayback.snapshot();
     });
     assert.ok(playbackInfo.durationTicks > 0);
@@ -191,6 +196,7 @@ try {
         loadedGeometryCounts,
         decodeResponsiveness,
         playbackInfo,
+        playedState,
         sampleTimestamps,
         phase3States,
         lockedPositions,

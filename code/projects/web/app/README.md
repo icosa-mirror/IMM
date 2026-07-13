@@ -9,9 +9,11 @@ adapter:
   scene, camera, and render loop; the IMM adapter contributes an `Object3D`
   subtree to that scene so host and IMM geometry share the depth buffer.
 
-Both render all five IMM paint brush types and the mono equirectangular
-background in `sample1.imm`. Paint decoding and indexed-geometry packing run in
-the decoder worker; the main thread creates and uploads Three.js resources.
+Both render all five IMM paint brush types and the complete Phase 3 playback
+model. Paint decoding and indexed-geometry packing run in the decoder worker;
+the main thread creates and uploads Three.js resources. Picture support covers
+2D, viewer-locked, mono/stereo equirectangular, cross-cubemap, and
+vertical-strip-cubemap layers.
 
 ## Build decoder assets
 
@@ -42,9 +44,10 @@ fixture. Generated decoder assets under `public/decoder` are ignored by Git.
 
 `ImmThreeView` accepts an optional host `WebGLRenderer` and scene parent. It
 does not create a renderer, canvas, camera, animation loop, or WebXR session.
-The host calls `update(timeSeconds, camera)` and renders its own scene, then
-calls `dispose()` when unloading the document. The adapter disposes every
-geometry, material, and texture it creates.
+The host calls `update(timeSeconds, camera)`, `setTimeSeconds`, or
+`setTimeTicks` and renders its own scene, then calls `dispose()` when unloading
+the document. The adapter disposes every geometry, material, and texture it
+creates and keeps only each paint layer's active drawing resident in WebGL.
 
 ## Verification
 
@@ -57,9 +60,10 @@ ctest --test-dir build/web-decoder-wasm --output-on-failure
 
 The browser harness launches installed Chrome visibly by default, captures the
 fixed 1280×720 standalone and embedded views, compares the standalone capture
-to the committed native spatial/color contract, checks three reload cycles for
-WebGL resource growth, and records a 390×844, 3× DPR, four-times CPU-throttled
-mobile profile:
+to the committed native spatial/color contract, checks deterministic Phase 3
+timestamps and every picture mapping, checks drawing swaps and three reload
+cycles for WebGL resource growth, and records a 390×844, 3× DPR, four-times
+CPU-throttled mobile profile:
 
 ```bash
 bun run test:browser
