@@ -16,6 +16,7 @@ const STROKE_INFO_SIZE = 40;
 const STROKE_POINT_SIZE = 56;
 const STROKE_POINT_FLOATS = STROKE_POINT_SIZE / Float32Array.BYTES_PER_ELEMENT;
 const PICTURE_INFO_SIZE = 28;
+const SOUND_INFO_SIZE = 64;
 const PLAYBACK_INFO_SIZE = 32;
 const TIMELINE_LAYER_INFO_SIZE = 296;
 const TIMELINE_LAYER_NAME_OFFSET = 40;
@@ -147,6 +148,7 @@ function decodeScene(source) {
         const animationPointer = decoder._malloc(ANIMATION_INFO_SIZE);
         const strokeInfoPointer = decoder._malloc(STROKE_INFO_SIZE);
         const pictureInfoPointer = decoder._malloc(PICTURE_INFO_SIZE);
+        const soundInfoPointer = decoder._malloc(SOUND_INFO_SIZE);
         const playbackInfoPointer = decoder._malloc(PLAYBACK_INFO_SIZE);
         const timelineLayerPointer = decoder._malloc(TIMELINE_LAYER_INFO_SIZE);
         const animationKeyPointer = decoder._malloc(ANIMATION_KEY_SIZE);
@@ -342,6 +344,7 @@ function decodeScene(source) {
                 }
                 memory = new DataView(decoder.HEAPU8.buffer);
                 const flags = memory.getUint32(timelineLayerPointer + 12, true);
+                const layerType = memory.getUint32(timelineLayerPointer + 8, true);
                 const contentLayerIndex = memory.getUint32(timelineLayerPointer + 36, true);
                 const keyCount = memory.getUint32(timelineLayerPointer + 32, true);
                 const content = contentLayerIndex < contentLayers.length
@@ -376,6 +379,40 @@ function decodeScene(source) {
                     parameters: Array.from({ length: 6 }, (_, index) =>
                         memory.getFloat32(keepAlivePointer + 8 + index * 4, true)),
                 };
+                let sound;
+                if (layerType === 5 && decoder._imm_web_get_sound_info(layerIndex, soundInfoPointer) !== 0) {
+                    memory = new DataView(decoder.HEAPU8.buffer);
+                    const dataSize = memory.getUint32(soundInfoPointer + 60, true);
+                    const bytesPointer = dataSize > 0 ? decoder._malloc(dataSize) : 0;
+                    try {
+                        memory = new DataView(decoder.HEAPU8.buffer);
+                        if (dataSize > 0 && decoder._imm_web_get_sound_bytes(
+                            layerIndex, bytesPointer, dataSize) !== dataSize) {
+                            throw new Error(`Could not read sound bytes ${layerIndex}`);
+                        }
+                        const bytes = new Uint8Array(dataSize);
+                        if (dataSize > 0) bytes.set(decoder.HEAPU8.subarray(bytesPointer, bytesPointer + dataSize));
+                        sound = {
+                            type: memory.getUint32(soundInfoPointer + 4, true),
+                            assetFormat: memory.getUint32(soundInfoPointer + 8, true),
+                            channelCount: memory.getUint32(soundInfoPointer + 12, true),
+                            looping: memory.getUint32(soundInfoPointer + 16, true) !== 0,
+                            playOnLoad: memory.getUint32(soundInfoPointer + 20, true) !== 0,
+                            gain: memory.getFloat32(soundInfoPointer + 24, true),
+                            attenuationType: memory.getUint32(soundInfoPointer + 28, true),
+                            attenuationMin: memory.getFloat32(soundInfoPointer + 32, true),
+                            attenuationMax: memory.getFloat32(soundInfoPointer + 36, true),
+                            modifierType: memory.getUint32(soundInfoPointer + 40, true),
+                            modifierParameters: Array.from({ length: 4 }, (_, index) =>
+                                memory.getFloat32(soundInfoPointer + 44 + index * 4, true)),
+                            bytes,
+                        };
+                        transfers.push(bytes.buffer);
+                    } finally {
+                        if (bytesPointer !== 0) decoder._free(bytesPointer);
+                    }
+                    memory = new DataView(decoder.HEAPU8.buffer);
+                }
                 layers.push({
                     ...(content ?? {
                         defaultSpawn: false,
@@ -386,7 +423,7 @@ function decodeScene(source) {
                     }),
                     id: memory.getUint32(timelineLayerPointer, true),
                     parentId: memory.getInt32(timelineLayerPointer + 4, true),
-                    type: memory.getUint32(timelineLayerPointer + 8, true),
+                    type: layerType,
                     name: readCString(
                         timelineLayerPointer + TIMELINE_LAYER_NAME_OFFSET,
                         LAYER_NAME_CAPACITY,
@@ -401,6 +438,7 @@ function decodeScene(source) {
                     pivotTransform: readTransform(memory, pivotPointer),
                     keys,
                     keepAlive,
+                    sound,
                 });
             }
             for (let contentIndex = 0; contentIndex < contentLayers.length; contentIndex++) {
@@ -451,6 +489,7 @@ function decodeScene(source) {
             decoder._free(animationKeyPointer);
             decoder._free(timelineLayerPointer);
             decoder._free(playbackInfoPointer);
+            decoder._free(soundInfoPointer);
             decoder._free(pictureInfoPointer);
             decoder._free(strokeInfoPointer);
             decoder._free(animationPointer);

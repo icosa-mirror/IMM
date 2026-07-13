@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "libImmCore/src/libBasics/piString.h"
 #include "libImmCore/src/libBasics/piVecTypes.h"
 #include "libImmCore/src/libBasics/piLog.h"
@@ -97,6 +99,10 @@ namespace ImmImporter
 
         inline void SetCompressed(bool c) { mCompressed = c; }
         inline ImmCore::piWav * GetSound(void) { return &mSound; }
+        bool SetEncodedSound(uint32_t format, uint32_t channels, const uint8_t* data, uint64_t size);
+        uint32_t GetEncodedFormat(void) const { return mEncodedFormat; }
+        uint32_t GetEncodedChannels(void) const { return mEncodedChannels; }
+        const std::vector<uint8_t>& GetEncodedSound(void) const { return mEncodedSound; }
 
 		int GetGpuId(void) const;
 		void SetGpuId(int id);
@@ -104,6 +110,9 @@ namespace ImmImporter
 	private:
         Type     mType;
         ImmCore::piWav    mSound;
+        uint32_t mEncodedFormat;
+        uint32_t mEncodedChannels;
+        std::vector<uint8_t> mEncodedSound;
         
 
         AttenuationParameters mAttenuation;

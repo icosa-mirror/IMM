@@ -5,6 +5,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/sequence.h"
+#include "libImmImporter/src/document/layerSound.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 
 #include <algorithm>
@@ -56,8 +57,15 @@ namespace
         uint32_t markerAction;
     };
 
+    struct StoredSound
+    {
+        ImmWebSoundInfo info{};
+        std::vector<uint8_t> bytes;
+    };
+
     std::vector<StoredTimelineLayer> gTimelineLayers;
     std::vector<StoredChapter> gChapters;
+    std::vector<StoredSound> gSounds;
     bool gAnimateOnStart = false;
     int64_t gDurationTicks = 0;
 
@@ -116,6 +124,7 @@ namespace
     {
         gTimelineLayers.clear();
         gChapters.clear();
+        gSounds.clear();
         gAnimateOnStart = sequence.GetAnimateOnStart();
 
         ImmImporter::Layer* root = sequence.GetRoot();
@@ -137,6 +146,45 @@ namespace
                 stored.local = layer->GetTransform();
                 stored.world = layer->GetTransformToWorld();
                 stored.pivot = layer->GetPivot();
+                if (layer->GetType() == ImmImporter::Layer::Type::Sound)
+                {
+                    const auto* sound = static_cast<const ImmImporter::LayerSound*>(layer->GetImplementation());
+                    if (sound != nullptr && sound->GetEncodedSound().size() <= std::numeric_limits<uint32_t>::max())
+                    {
+                        StoredSound storedSound{};
+                        storedSound.info.layer_id = layer->GetID();
+                        storedSound.info.type = static_cast<uint32_t>(sound->GetType());
+                        storedSound.info.asset_format = sound->GetEncodedFormat();
+                        storedSound.info.channel_count = sound->GetEncodedChannels();
+                        storedSound.info.looping = sound->GetLooping() ? 1u : 0u;
+                        storedSound.info.play_on_load = sound->GetPlaying() ? 1u : 0u;
+                        storedSound.info.gain = sound->GetGain();
+                        ImmImporter::LayerSound::AttenuationParameters attenuation{};
+                        sound->GetAttenuation(&attenuation);
+                        storedSound.info.attenuation_type = static_cast<uint32_t>(attenuation.mType);
+                        storedSound.info.attenuation_min = attenuation.mMin;
+                        storedSound.info.attenuation_max = attenuation.mMax;
+                        ImmImporter::LayerSound::ModifierParameters modifier{};
+                        sound->GetModifier(&modifier);
+                        storedSound.info.modifier_type = static_cast<uint32_t>(modifier.mType);
+                        if (modifier.mType == ImmImporter::LayerSound::ModifierType::DirectionalCone)
+                        {
+                            storedSound.info.modifier_parameters[0] = modifier.mParams.mDirectionalCone.mAngleIn;
+                            storedSound.info.modifier_parameters[1] = modifier.mParams.mDirectionalCone.mAngleBand;
+                            storedSound.info.modifier_parameters[2] = modifier.mParams.mDirectionalCone.mAttenOut;
+                        }
+                        else if (modifier.mType == ImmImporter::LayerSound::ModifierType::DirectionalFrus)
+                        {
+                            storedSound.info.modifier_parameters[0] = modifier.mParams.mDirectionalFrus.mAngleInX;
+                            storedSound.info.modifier_parameters[1] = modifier.mParams.mDirectionalFrus.mAngleInY;
+                            storedSound.info.modifier_parameters[2] = modifier.mParams.mDirectionalFrus.mAngleBand;
+                            storedSound.info.modifier_parameters[3] = modifier.mParams.mDirectionalFrus.mAttenOut;
+                        }
+                        storedSound.bytes = sound->GetEncodedSound();
+                        storedSound.info.data_size = static_cast<uint32_t>(storedSound.bytes.size());
+                        gSounds.push_back(std::move(storedSound));
+                    }
+                }
                 const ImmImporter::KeepAlive* keepAlive = layer->GetKeepAlive();
                 stored.keepAlive.type = static_cast<uint32_t>(keepAlive->GetType());
                 if (keepAlive->GetType() == ImmImporter::KeepAlive::KeepAliveType::Wiggle)
@@ -253,6 +301,7 @@ static_assert(sizeof(ImmWebTimelineLayerInfo) == 296u, "ImmWebTimelineLayerInfo 
 static_assert(sizeof(ImmWebAnimationKey) == 80u, "ImmWebAnimationKey ABI changed");
 static_assert(sizeof(ImmWebChapterInfo) == 24u, "ImmWebChapterInfo ABI changed");
 static_assert(sizeof(ImmWebKeepAliveInfo) == 32u, "ImmWebKeepAliveInfo ABI changed");
+static_assert(sizeof(ImmWebSoundInfo) == 64u, "ImmWebSoundInfo ABI changed");
 
 extern "C" ImmWebStatus imm_web_decode_scene(
     const uint8_t* source,
@@ -309,6 +358,7 @@ extern "C" void imm_web_release_scene(void)
     gBackgroundColor[2] = 0.0f;
     gTimelineLayers.clear();
     gChapters.clear();
+    gSounds.clear();
     gAnimateOnStart = false;
     gDurationTicks = 0;
 }
@@ -570,6 +620,33 @@ extern "C" uint32_t imm_web_get_picture_pixels(uint32_t layerIndex, uint8_t* out
         return 0u;
     }
     return std::min(byteCapacity, static_cast<uint32_t>(info.dataSize));
+}
+
+extern "C" uint32_t imm_web_get_sound_info(uint32_t timelineLayerIndex, ImmWebSoundInfo* outInfo)
+{
+    if (outInfo == nullptr || timelineLayerIndex >= gTimelineLayers.size()) return 0u;
+    const uint32_t layerId = gTimelineLayers[timelineLayerIndex].id;
+    const auto sound = std::find_if(gSounds.begin(), gSounds.end(), [layerId](const StoredSound& candidate) {
+        return candidate.info.layer_id == layerId;
+    });
+    if (sound == gSounds.end()) return 0u;
+    *outInfo = sound->info;
+    return 1u;
+}
+
+extern "C" uint32_t imm_web_get_sound_bytes(
+    uint32_t timelineLayerIndex,
+    uint8_t* outBytes,
+    uint32_t byteCapacity)
+{
+    if (outBytes == nullptr || timelineLayerIndex >= gTimelineLayers.size()) return 0u;
+    const uint32_t layerId = gTimelineLayers[timelineLayerIndex].id;
+    const auto sound = std::find_if(gSounds.begin(), gSounds.end(), [layerId](const StoredSound& candidate) {
+        return candidate.info.layer_id == layerId;
+    });
+    if (sound == gSounds.end() || byteCapacity < sound->bytes.size()) return 0u;
+    std::copy(sound->bytes.begin(), sound->bytes.end(), outBytes);
+    return static_cast<uint32_t>(sound->bytes.size());
 }
 
 extern "C" uint32_t imm_web_get_playback_info(ImmWebPlaybackInfo* outInfo)

@@ -33,7 +33,7 @@ try {
     if (!result.ok) {
         throw new Error(`Wasm inspection failed at ${result.error.byteOffset}: ${result.error.message}`);
     }
-    if (result.requestId !== 1 || result.summary.schemaVersion !== 3) {
+    if (result.requestId !== 1 || result.summary.schemaVersion !== 4) {
         throw new Error("Worker response identity or schema version mismatch");
     }
     if (result.summary.sourceSize !== 5_831_101n) {
@@ -60,8 +60,20 @@ try {
     }
     const paintLayers = decoded.document.layers.filter((layer) => layer.type === 1);
     const pictureLayers = decoded.document.layers.filter((layer) => layer.type === 4);
+    const soundLayers = decoded.document.layers.filter((layer) => layer.type === 5);
     if (paintLayers.length !== 30 || pictureLayers.length !== 1) {
         throw new Error(`Unexpected visible content layers: ${paintLayers.length} paint, ${pictureLayers.length} picture`);
+    }
+    if (soundLayers.length !== 3 || soundLayers.some((layer) => layer.sound === undefined)) {
+        throw new Error(`Unexpected sound layer export: ${soundLayers.length} sound layers`);
+    }
+    const sounds = soundLayers.map((layer) => layer.sound);
+    if (sounds.some((sound) => sound.assetFormat !== 5 || sound.channelCount !== 2 ||
+        !sound.looping || sound.bytes.length === 0 || !Number.isFinite(sound.gain)) ||
+        sounds.filter((sound) => sound.type === 0).length !== 2 ||
+        sounds.filter((sound) => sound.type === 2).length !== 1 ||
+        sounds.reduce((sum, sound) => sum + sound.bytes.length, 0) !== 4_801_785) {
+        throw new Error("Scene decode returned incorrect encoded sound data or metadata");
     }
     if (decoded.document.ticksPerSecond !== 12_600 || decoded.document.durationTicks !== 45_360_000) {
         throw new Error("Playback clock metadata mismatch");
@@ -147,7 +159,7 @@ try {
         throw new Error("Worker did not report geometry packing time");
     }
 
-    console.log(`IMM_WEB_WASM_WORKER_SMOKE: passed (${strokeCount} strokes, ${pointCount} points, ${triangleCount} paint triangles)`);
+    console.log(`IMM_WEB_WASM_WORKER_SMOKE: passed (${strokeCount} strokes, ${pointCount} points, ${triangleCount} paint triangles, ${sounds.length} encoded sounds)`);
 } finally {
     await worker.terminate();
 }

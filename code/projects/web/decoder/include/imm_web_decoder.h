@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define IMM_WEB_OUTPUT_SCHEMA_VERSION 3u
+#define IMM_WEB_OUTPUT_SCHEMA_VERSION 4u
 #define IMM_WEB_ERROR_MESSAGE_CAPACITY 160u
 
 typedef enum ImmWebStatus
@@ -116,6 +116,23 @@ typedef struct ImmWebPictureInfo
     uint32_t data_size;
 } ImmWebPictureInfo;
 
+typedef struct ImmWebSoundInfo
+{
+    uint32_t layer_id;
+    uint32_t type;
+    uint32_t asset_format;
+    uint32_t channel_count;
+    uint32_t looping;
+    uint32_t play_on_load;
+    float gain;
+    uint32_t attenuation_type;
+    float attenuation_min;
+    float attenuation_max;
+    uint32_t modifier_type;
+    float modifier_parameters[4];
+    uint32_t data_size;
+} ImmWebSoundInfo;
+
 typedef struct ImmWebPlaybackInfo
 {
     uint32_t ticks_per_second;
@@ -213,6 +230,8 @@ uint32_t imm_web_get_stroke_point_times(
     uint32_t point_capacity);
 uint32_t imm_web_get_picture_info(uint32_t layer_index, ImmWebPictureInfo* out_info);
 uint32_t imm_web_get_picture_pixels(uint32_t layer_index, uint8_t* out_pixels, uint32_t byte_capacity);
+uint32_t imm_web_get_sound_info(uint32_t timeline_layer_index, ImmWebSoundInfo* out_info);
+uint32_t imm_web_get_sound_bytes(uint32_t timeline_layer_index, uint8_t* out_bytes, uint32_t byte_capacity);
 uint32_t imm_web_get_playback_info(ImmWebPlaybackInfo* out_info);
 uint32_t imm_web_get_timeline_layer_info(uint32_t layer_index, ImmWebTimelineLayerInfo* out_info);
 uint32_t imm_web_get_timeline_layer_transforms(

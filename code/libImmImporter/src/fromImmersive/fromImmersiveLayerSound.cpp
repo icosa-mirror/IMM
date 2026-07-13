@@ -84,10 +84,18 @@ namespace ImmImporter
         bool ReadAsset(LayerImplementation vme, piIStream *fp, piLog* log)
         {
 #if defined(IMM_WEB_DECODER)
-            (void)vme;
-            (void)fp;
             (void)log;
-            return true;
+            LayerSound *me = (LayerSound*)vme;
+            const AssetFormat format = static_cast<AssetFormat>(fp->ReadUInt32());
+            uint32_t channels = 0;
+            if (format == AssetFormat::OPUS) channels = fp->ReadUInt32();
+            if (format != AssetFormat::WAV && format != AssetFormat::OGG && format != AssetFormat::OPUS)
+                return false;
+            const uint64_t size = fp->ReadUInt64();
+            if (size == 0 || size > static_cast<uint64_t>(SIZE_MAX)) return false;
+            std::vector<uint8_t> data(static_cast<size_t>(size));
+            fp->ReadUInt8array(data.data(), size);
+            return me->SetEncodedSound(static_cast<uint32_t>(format), channels, data.data(), size);
 #else
             LayerSound *me = (LayerSound*)vme;
 

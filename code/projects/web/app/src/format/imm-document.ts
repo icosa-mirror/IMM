@@ -33,6 +33,21 @@ export interface ImmPicture {
     pixels: Uint8Array;
 }
 
+export interface ImmSound {
+    type: number;
+    assetFormat: number;
+    channelCount: number;
+    looping: boolean;
+    playOnLoad: boolean;
+    gain: number;
+    attenuationType: number;
+    attenuationMin: number;
+    attenuationMax: number;
+    modifierType: number;
+    modifierParameters: number[];
+    bytes: Uint8Array;
+}
+
 export interface ImmAnimationKey {
     property: number;
     interpolation: number;
@@ -77,6 +92,7 @@ export interface ImmLayer {
     frameBuffer: Uint32Array;
     drawings: ImmDrawing[];
     picture?: ImmPicture;
+    sound?: ImmSound;
 }
 
 export interface ImmDecodeMetrics {
@@ -98,6 +114,15 @@ export interface ImmDocument {
 
 export const IMM_LAYER_PAINT = 1;
 export const IMM_LAYER_PICTURE = 4;
+export const IMM_LAYER_SOUND = 5;
+
+export const IMM_SOUND_FLAT = 0;
+export const IMM_SOUND_AMBISONIC = 1;
+export const IMM_SOUND_POSITIONAL = 2;
+
+export const IMM_ASSET_WAV = 3;
+export const IMM_ASSET_OGG = 4;
+export const IMM_ASSET_OPUS = 5;
 
 export const IMM_ANIM_VISIBILITY = 0;
 export const IMM_ANIM_OPACITY = 1;

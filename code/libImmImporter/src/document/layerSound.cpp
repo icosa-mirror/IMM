@@ -9,6 +9,8 @@ namespace ImmImporter
 
 	LayerSound::LayerSound()
 	{
+		mEncodedFormat = 0;
+		mEncodedChannels = 0;
 	}
 
 	LayerSound::~LayerSound()
@@ -45,6 +47,16 @@ namespace ImmImporter
 #if !defined(IMM_WEB_DECODER)
         mSound.Deinit();
 #endif
+        mEncodedSound.clear();
+    }
+
+    bool LayerSound::SetEncodedSound(uint32_t format, uint32_t channels, const uint8_t* data, uint64_t size)
+    {
+        if (data == nullptr || size == 0 || size > static_cast<uint64_t>(SIZE_MAX)) return false;
+        mEncodedFormat = format;
+        mEncodedChannels = channels;
+        mEncodedSound.assign(data, data + static_cast<size_t>(size));
+        return true;
     }
 
     void LayerSound::SetPlaying(bool value, uint64_t startOffsetMicroseconds)

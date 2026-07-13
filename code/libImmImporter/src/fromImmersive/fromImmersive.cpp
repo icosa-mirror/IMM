@@ -572,6 +572,19 @@ namespace ImmImporter
 
                 collector->OnEndLayer();
             }
+            else if (layer->GetType() == Layer::Type::Sound)
+            {
+#if defined(IMM_WEB_DECODER)
+                if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))
+                {
+                    log->Printf(LT_ERROR, L"Could not load sound asset for layer %s", layer->GetName().GetS());
+                }
+                else
+                {
+                    layer->SetLoaded(true);
+                }
+#endif
+            }
             else if (layer->GetType() == Layer::Type::SpawnArea)
             {
                 collector->OnBeginLayer(
