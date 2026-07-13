@@ -446,12 +446,12 @@ async function continueStagedLoad(name: string, work: StagedLoadWork[], requestI
 
         const loadedLayer = document.layers.find((layer) => layer.id === work[index]!.layerId);
         if (work[index]!.type === "drawing" || loadedLayer?.type === 3 || loadedLayer?.type === 4) {
-            const nextView = new ImmThreeView(document, { renderer, parent: scene });
-            nextView.setTimeTicks(playback?.timeTicks ?? 0, camera);
-            const previousView = immView;
-            immView = nextView;
-            previousView?.dispose();
-            showSummary(name, document, nextView);
+            immView?.refreshLayer(
+                delta.layerId,
+                delta.type === "drawing" ? delta.drawingId : undefined,
+                camera,
+            );
+            if (immView !== null) showSummary(name, document, immView);
         }
 
         if (loadedLayer?.type === 5) {

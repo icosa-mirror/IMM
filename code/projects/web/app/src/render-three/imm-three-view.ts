@@ -231,6 +231,41 @@ export class ImmThreeView {
         this.setTimeSeconds(timeSeconds, camera);
     }
 
+    /** Uploads newly decoded content without rebuilding already resident layers. */
+    refreshLayer(layerId: number, drawingId?: number, camera?: THREE.Camera): void {
+        const layer = this.#document.layers.find((candidate) => candidate.id === layerId);
+        const node = this.#nodes.get(layerId);
+        if (layer === undefined || node === undefined) return;
+        const startedAt = performance.now();
+
+        const paint = this.#paint.get(layerId);
+        if (paint !== undefined && (drawingId === undefined || paint.activeDrawing === drawingId)) {
+            const previousMeshes = paint.node.children.length;
+            const previousTriangles = objectTriangleCount(paint.node);
+            paint.activeDrawing = -1;
+            const state = evaluateImmDocument(this.#document, this.#timeTicks).layers.get(layerId);
+            if (state !== undefined) this.#applyLayerState(state);
+            this.diagnostics.meshCount += paint.node.children.length - previousMeshes;
+            this.diagnostics.triangleCount += objectTriangleCount(paint.node) - previousTriangles;
+        } else if (layer.type === IMM_LAYER_PICTURE && layer.picture !== undefined && !this.#pictures.has(layerId)) {
+            const record = this.#createPicture(layer, node);
+            if (record !== null) {
+                this.#pictures.set(layerId, record);
+                this.diagnostics.pictureLayerCount++;
+                this.diagnostics.meshCount++;
+                this.diagnostics.triangleCount += triangleCountFor(record.mesh.geometry);
+            }
+        } else if (layer.type === IMM_LAYER_MODEL && layer.model !== undefined && !this.#models.has(layerId)) {
+            const record = this.#createModel(layer, node);
+            this.#models.set(layerId, record);
+            this.diagnostics.modelLayerCount++;
+            this.diagnostics.meshCount++;
+            this.diagnostics.triangleCount += triangleCountFor(record.mesh.geometry);
+        }
+        this.diagnostics.geometryBuildMs += performance.now() - startedAt;
+        this.setTimeTicks(this.#timeTicks, camera);
+    }
+
     dispose(): void {
         this.object3d.removeFromParent();
         for (const record of this.#paint.values()) this.#disposePaintResources(record);
@@ -413,6 +448,14 @@ export class ImmThreeView {
             }
         }
     }
+}
+
+function objectTriangleCount(object: THREE.Object3D): number {
+    let triangles = 0;
+    object.traverse((child) => {
+        if (child instanceof THREE.Mesh) triangles += triangleCountFor(child.geometry);
+    });
+    return triangles;
 }
 
 export function validateImmHostCompatibility(
