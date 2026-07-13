@@ -235,12 +235,21 @@ try {
         .find((layer) => layer.id === soundLayers[0].id)?.sound?.bytes.length === 0) {
         throw new Error("Wasm staged sound asset decode failed");
     }
-    const released = await request({ requestId: 7, type: "release" });
+    const stagedSpawnLayer = stagedSound.document.layers.find((layer) => layer.type === 8);
+    const stagedSpawn = await request({
+        requestId: 7,
+        type: "decodeLayerAsset",
+        layerId: stagedSpawnLayer.id,
+    });
+    if (!stagedSpawn.ok) {
+        throw new Error(`Wasm staged spawn asset decode failed: ${stagedSpawn.error.message}`);
+    }
+    const released = await request({ requestId: 8, type: "release" });
     if (!released.ok) {
         throw new Error("Wasm staged release failed");
     }
     const afterRelease = await request({
-        requestId: 8,
+        requestId: 9,
         type: "decodeDrawing",
         layerId: eagerPaintLayer.id,
         drawingId,

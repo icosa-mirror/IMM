@@ -208,6 +208,7 @@ ImmWebStatus imm_web_decode_drawing(
 ImmWebStatus imm_web_decode_layer_asset(
     uint32_t layer_id,
     ImmWebError* out_error);
+ImmWebStatus imm_web_decode_open_scene_eager(ImmWebError* out_error);
 void imm_web_release_scene(void);
 uint32_t imm_web_get_layer_count(void);
 uint32_t imm_web_get_background_color(float* out_rgb, uint32_t float_capacity);

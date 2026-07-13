@@ -3,6 +3,7 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { cameraAudioTransform, ImmWebAudio } from "./audio/imm-web-audio";
 import { desktopSpawnTransform, ImmCameraControls, type CameraMode } from "./camera-controls";
 import { ImmDecoderClient } from "./decoder-client";
+import { createNativeLoadOrder, type StagedLoadWork } from "./staged-loading";
 import { releaseAssetUrl } from "./release-assets";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
@@ -355,8 +356,25 @@ async function loadUrl(url: string): Promise<void> {
 async function loadDocument(name: string, source: ArrayBuffer, requestId: number): Promise<void> {
     if (requestId !== loadRequestId) return;
     summary.hidden = true;
-    status.textContent = `Decoding ${formatBytes(source.byteLength)} in the decoder worker…`;
-    const document = await decoder.decode(source);
+    status.textContent = `Reading ${formatBytes(source.byteLength)} of IMM metadata…`;
+    let document: ImmDocument;
+    let remainingWork: StagedLoadWork[] = [];
+    try {
+        document = await decoder.openMetadata(source);
+        const work = createNativeLoadOrder(document);
+        const initialWork = work.filter((item) => item.initial);
+        remainingWork = work.filter((item) => !item.initial);
+        for (let index = 0; index < initialWork.length; index++) {
+            if (requestId !== loadRequestId) return;
+            status.textContent = `Buffering native five-second window ${index + 1}/${initialWork.length}…`;
+            document = await decodeStagedWork(initialWork[index]!);
+        }
+    } catch (stagedError) {
+        if (requestId !== loadRequestId) return;
+        status.textContent = "Staged loading failed; using the eager decoder…";
+        document = await decoder.fallbackEager().catch(() => { throw stagedError; });
+        remainingWork = [];
+    }
     if (requestId !== loadRequestId) return;
     const nextView = new ImmThreeView(document, { renderer, parent: scene });
     const nextAudio = new ImmWebAudio(document);
@@ -377,6 +395,15 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         void nextAudio.prepare().then(() => {
             if (immAudio === nextAudio) updateAudioControl();
         });
+        if (remainingWork.length > 0) {
+            void continueStagedLoad(name, remainingWork, requestId).catch((error) => {
+                if (requestId === loadRequestId) {
+                    status.textContent = `Background IMM loading stopped: ${error instanceof Error ? error.message : String(error)}`;
+                }
+            });
+        } else {
+            void decoder.release().catch(() => undefined);
+        }
     } catch (error) {
         if (immView === nextView) immView = null;
         playback = null;
@@ -386,6 +413,45 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         resetDocumentState();
         throw error;
     }
+}
+
+function decodeStagedWork(work: StagedLoadWork): Promise<ImmDocument> {
+    return work.type === "drawing"
+        ? decoder.decodeDrawing(work.layerId, work.drawingId)
+        : decoder.decodeLayerAsset(work.layerId);
+}
+
+async function continueStagedLoad(name: string, work: StagedLoadWork[], requestId: number): Promise<void> {
+    for (let index = 0; index < work.length; index++) {
+        if (requestId !== loadRequestId) return;
+        const document = await decodeStagedWork(work[index]!);
+        if (requestId !== loadRequestId) return;
+
+        const loadedLayer = document.layers.find((layer) => layer.id === work[index]!.layerId);
+        if (work[index]!.type === "drawing" || loadedLayer?.type === 3 || loadedLayer?.type === 4) {
+            const nextView = new ImmThreeView(document, { renderer, parent: scene });
+            nextView.setTimeTicks(playback?.timeTicks ?? 0, camera);
+            const previousView = immView;
+            immView = nextView;
+            previousView?.dispose();
+            showSummary(name, document, nextView);
+        }
+
+        if (loadedLayer?.type === 5) {
+            const nextAudio = new ImmWebAudio(document);
+            const previousAudio = immAudio;
+            immAudio = nextAudio;
+            void previousAudio?.dispose();
+            void nextAudio.prepare().then(() => {
+                if (immAudio === nextAudio) {
+                    syncAudio(true);
+                    updateAudioControl();
+                }
+            });
+        }
+        status.textContent = `${name}: loaded ${index + 1}/${work.length} remaining native-order assets.`;
+    }
+    if (requestId === loadRequestId) await decoder.release();
 }
 
 function beginLoad(message: string): number {

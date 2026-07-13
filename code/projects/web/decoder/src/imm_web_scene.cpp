@@ -386,7 +386,6 @@ extern "C" ImmWebStatus imm_web_open_scene_metadata(
     ImmCore::piTArray<uint8_t> data;
     if (!makeSourceArray(&data))
     {
-        imm_web_release_scene();
         setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Could not initialize scene input");
         return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
     }
@@ -403,7 +402,6 @@ extern "C" ImmWebStatus imm_web_open_scene_metadata(
             store.get()))
     {
         sequence->Deinit(log.get());
-        imm_web_release_scene();
         setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Native IMM metadata importer failed");
         return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
     }
@@ -473,6 +471,17 @@ extern "C" ImmWebStatus imm_web_decode_layer_asset(
     capturePlaybackDocument(*gSequence, *gStore);
     setError(outError, IMM_WEB_STATUS_OK, "");
     return IMM_WEB_STATUS_OK;
+}
+
+extern "C" ImmWebStatus imm_web_decode_open_scene_eager(ImmWebError* outError)
+{
+    if (gSource.empty())
+    {
+        setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "No staged scene source is open");
+        return IMM_WEB_STATUS_INVALID_ARGUMENT;
+    }
+    const std::vector<uint8_t> source = gSource;
+    return imm_web_decode_scene(source.data(), source.size(), outError);
 }
 
 extern "C" void imm_web_release_scene(void)

@@ -72,12 +72,16 @@ export class ImmDecoderClient {
         return this.#requestDocument("decodeLayerAsset", { layerId });
     }
 
+    fallbackEager(): Promise<ImmDocument> {
+        return this.#requestDocument("fallbackEager", {});
+    }
+
     release(): Promise<void> {
         return this.#request<void>("release", {}, [], true);
     }
 
     #requestDocument(
-        type: "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset",
+        type: "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "fallbackEager",
         payload: Record<string, unknown>,
         transfer: Transferable[] = [],
     ): Promise<ImmDocument> {
@@ -85,7 +89,7 @@ export class ImmDecoderClient {
     }
 
     #request<T>(
-        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "release",
+        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "fallbackEager" | "release",
         payload: Record<string, unknown>,
         transfer: Transferable[] = [],
         allowEmpty = false,

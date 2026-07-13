@@ -148,6 +148,8 @@ function decodeScene(source, operation = { type: "decode" }) {
             status = decoder._imm_web_decode_drawing(operation.layerId, operation.drawingId, errorPointer);
         } else if (operation.type === "decodeLayerAsset") {
             status = decoder._imm_web_decode_layer_asset(operation.layerId, errorPointer);
+        } else if (operation.type === "fallbackEager") {
+            status = decoder._imm_web_decode_open_scene_eager(errorPointer);
         } else {
             status = decoder._imm_web_decode_scene(sourcePointer, sourceLength, errorPointer);
         }
@@ -516,7 +518,7 @@ function decodeScene(source, operation = { type: "decode" }) {
             decoder._free(localPointer);
             decoder._free(layerPointer);
             decoder._free(backgroundPointer);
-            if (operation.type === "decode") {
+            if (operation.type === "decode" || operation.type === "fallbackEager") {
                 decoder._imm_web_release_scene();
             }
         }
@@ -535,6 +537,7 @@ async function handleMessage(message, send) {
         "openMetadata",
         "decodeDrawing",
         "decodeLayerAsset",
+        "fallbackEager",
         "release",
     ]);
     if (!requestTypes.has(type)) {
