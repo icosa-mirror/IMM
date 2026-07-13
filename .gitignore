@@ -103,3 +103,7 @@ code/appImmGodotGDExtension/*.pdb
 /LLM Docs
 /LLM Scripts
 /quillplayer_decompiled
+# Generated native-web decoder assets served by the local Vite application.
+/code/projects/web/app/node_modules/
+/code/projects/web/app/public/decoder/
+/code/projects/web/app/dist/

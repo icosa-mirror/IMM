@@ -4,6 +4,13 @@ project(ImmWebDecoder LANGUAGES CXX)
 
 enable_testing()
 
+set(
+    IMM_WEB_OUTPUT_DIRECTORY
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    CACHE PATH
+    "Directory for generated Emscripten module and worker assets"
+)
+
 add_library(imm_web_decoder STATIC
     src/imm_web_decoder.cpp
 )
@@ -30,6 +37,7 @@ if(EMSCRIPTEN)
     set_target_properties(imm_web_decoder_wasm PROPERTIES
         OUTPUT_NAME "imm-web-decoder"
         SUFFIX ".mjs"
+        RUNTIME_OUTPUT_DIRECTORY "${IMM_WEB_OUTPUT_DIRECTORY}"
     )
     target_link_options(imm_web_decoder_wasm PRIVATE
         "SHELL:-sWASM=1"
@@ -45,7 +53,7 @@ if(EMSCRIPTEN)
 
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/js/imm-web-decoder-worker.mjs
-        ${CMAKE_CURRENT_BINARY_DIR}/imm-web-decoder-worker.mjs
+        ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-decoder-worker.mjs
         COPYONLY
     )
 
@@ -55,7 +63,7 @@ if(EMSCRIPTEN)
         COMMAND
             ${IMM_WEB_NODE_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/imm_web_decoder_wasm_smoke.mjs
-            ${CMAKE_CURRENT_BINARY_DIR}/imm-web-decoder-worker.mjs
+            ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-decoder-worker.mjs
             ${CMAKE_CURRENT_SOURCE_DIR}/../../../../exampleImmFiles/sample1.imm
     )
 else()
