@@ -46,6 +46,14 @@ export interface ImmAudioDiagnostics {
     maximumAbsoluteDriftSeconds: number;
     currentDrift: ReadonlyArray<{ layerId: number; driftSeconds: number }>;
     lastStartOffsets: ReadonlyArray<{ layerId: number; offsetSeconds: number }>;
+    activeTimings: ReadonlyArray<{
+        layerId: number;
+        contextStartSeconds: number;
+        contextTimeSeconds: number;
+        actualSeconds: number;
+        expectedSeconds: number | null;
+        durationSeconds: number;
+    }>;
     decodeFailures: ReadonlyArray<{ layerId: number; name: string; reason: string }>;
     codecs: ImmAudioCodecCapabilities;
     ambisonicSupported: false;
@@ -148,6 +156,14 @@ export class ImmWebAudio {
             lastStartOffsets: [...this.#lastStartOffsets].map(([layerId, offsetSeconds]) => ({
                 layerId,
                 offsetSeconds,
+            })),
+            activeTimings: [...this.#active].map(([layerId, active]) => ({
+                layerId,
+                contextStartSeconds: active.contextStartSeconds,
+                contextTimeSeconds: this.#context?.currentTime ?? 0,
+                actualSeconds: active.offsetSeconds + (this.#context?.currentTime ?? 0) - active.contextStartSeconds,
+                expectedSeconds: this.#lastExpectedOffsets.get(layerId) ?? null,
+                durationSeconds: active.durationSeconds,
             })),
             decodeFailures: [...this.#failures],
             codecs: this.codecs,
