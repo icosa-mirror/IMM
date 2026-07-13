@@ -122,6 +122,11 @@ absolute paths before `bun run test:browser`. Playwright transfers each file
 directly through the browser file input; reports retain only the codec label and
 decoded layer counts, not the source path or bytes.
 
+Set `IMM_WEB_AUDIO_SOAK_SECONDS` to run a real-time audio-clock soak. The harness
+continues across authored stop markers, verifies that document time advances for
+the requested duration, and retains the 50 ms maximum drift gate before running
+the existing pause, seek, and chapter synchronization checks.
+
 `IMM_WEB_LOCAL_FLOOR_SPAWN_FIXTURE` optionally verifies a private floor-level
 viewpoint through the browser file input. The assertion compares the decoded
 authored height with the applied desktop camera height and retains only the

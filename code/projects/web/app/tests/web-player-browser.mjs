@@ -13,6 +13,7 @@ const localCodecFixtures = [
     ["wav", process.env.IMM_WEB_LOCAL_WAV_FIXTURE],
 ].filter((entry) => entry[1] !== undefined);
 const localFloorSpawnFixture = process.env.IMM_WEB_LOCAL_FLOOR_SPAWN_FIXTURE;
+const audioSoakSeconds = Number(process.env.IMM_WEB_AUDIO_SOAK_SECONDS ?? "0");
 await mkdir(artifactDirectory, { recursive: true });
 
 const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 4177 } });
@@ -119,6 +120,28 @@ try {
     assert.equal(audioRunning.timelineClock, "audio-context");
     assert.ok(audioRunning.maximumAbsoluteDriftSeconds <= 0.05,
         `Audio/visual drift exceeded 50 ms: ${JSON.stringify({ audio: audioRunning, playback: await controlsPage.evaluate(() => window.__immPlayback.snapshot()) })}`);
+    let audioSoak = null;
+    if (audioSoakSeconds > 0) {
+        const soakStarted = await controlsPage.evaluate(() => window.__immPlayback.snapshot());
+        const deadline = Date.now() + audioSoakSeconds * 1_000;
+        while (Date.now() < deadline) {
+            await controlsPage.waitForTimeout(Math.min(250, Math.max(1, deadline - Date.now())));
+            const waiting = await controlsPage.evaluate(() => window.__immPlayback.snapshot().waiting);
+            if (waiting) await controlsPage.locator("#continue").click();
+        }
+        const soakFinished = await controlsPage.evaluate(() => ({
+            audio: window.__immDiagnostics().audio,
+            playback: window.__immPlayback.snapshot(),
+        }));
+        const advancedSeconds = (soakFinished.playback.timeTicks - soakStarted.timeTicks) /
+            soakFinished.playback.ticksPerSecond;
+        assert.ok(advancedSeconds >= audioSoakSeconds - 2,
+            `Long-running playback advanced only ${advancedSeconds} seconds during a ${audioSoakSeconds}-second soak`);
+        assert.equal(soakFinished.audio.timelineClock, "audio-context");
+        assert.ok(soakFinished.audio.maximumAbsoluteDriftSeconds <= 0.05,
+            `Long-running A/V drift exceeded 50 ms: ${JSON.stringify(soakFinished)}`);
+        audioSoak = { requestedSeconds: audioSoakSeconds, advancedSeconds, ...soakFinished };
+    }
     await controlsPage.locator("#play-pause").click();
     await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.contextState === "suspended");
     const audioPlayback = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
@@ -453,6 +476,7 @@ try {
         playedState,
         audioPlayback,
         audioSync,
+        audioSoak,
         localCodecResults,
         localFloorSpawnResult,
         sampleTimestamps,
