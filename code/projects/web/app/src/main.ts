@@ -462,6 +462,8 @@ function showSummary(
         depthBits: view.diagnostics.depthBits,
         stencilBits: view.diagnostics.stencilBits,
         sampleCount: view.diagnostics.sampleCount,
+        maxSamples: view.diagnostics.maxSamples,
+        programmableSampleMask: view.diagnostics.programmableSampleMask,
         maxTextureSize: view.diagnostics.maxTextureSize,
         colorMode: view.diagnostics.colorMode,
     };

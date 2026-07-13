@@ -104,13 +104,16 @@ try {
     assert.equal(desktopMetrics.triangles, 802_890);
     assert.equal(desktopMetrics.canvasWidth, 1280);
     assert.equal(desktopMetrics.canvasHeight, 720);
-    assert.equal(desktopMetrics.alphaMode, "alpha-to-coverage");
+    assert.equal(desktopMetrics.alphaMode, "sample-mask");
+    assert.equal(desktopMetrics.programmableSampleMask, true);
     assert.ok(desktopMetrics.depthBits >= 24,
         `Chrome supplied only ${desktopMetrics.depthBits} depth bits`);
     assert.ok(desktopMetrics.stencilBits >= 8,
         `Chrome supplied only ${desktopMetrics.stencilBits} stencil bits`);
     assert.ok(desktopMetrics.sampleCount > 0,
         `Chrome supplied no default-framebuffer MSAA samples: ${desktopMetrics.sampleCount}`);
+    assert.ok(desktopMetrics.maxSamples >= desktopMetrics.sampleCount,
+        `Chrome reported MAX_SAMPLES ${desktopMetrics.maxSamples} below active ${desktopMetrics.sampleCount}`);
     assert.deepEqual(errors, []);
     await desktop.screenshot({ path: resolve(artifactDirectory, "sample1-web-1280x720.png") });
     execFileSync("python", [

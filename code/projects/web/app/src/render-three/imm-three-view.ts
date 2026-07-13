@@ -16,6 +16,9 @@ import {
     type ImmTransform,
 } from "../format/imm-document";
 import { evaluateImmDocument, type ImmEvaluatedLayer } from "../runtime/imm-playback";
+import { IMM_BLUE_NOISE_64_BASE64 } from "./blue-noise-data";
+
+type ImmCoverageMode = "sample-mask" | "alpha-to-coverage" | "alpha-hash";
 
 export interface ImmThreeDiagnostics {
     paintLayerCount: number;
@@ -23,10 +26,12 @@ export interface ImmThreeDiagnostics {
     meshCount: number;
     triangleCount: number;
     geometryBuildMs: number;
-    alphaMode: "alpha-to-coverage" | "alpha-hash";
+    alphaMode: ImmCoverageMode;
     depthBits: number | null;
     stencilBits: number | null;
     sampleCount: number | null;
+    maxSamples: number | null;
+    programmableSampleMask: boolean;
     maxTextureSize: number | null;
     colorMode: "srgb-output-no-tone-mapping";
     activeDrawingCount: number;
@@ -62,15 +67,25 @@ export class ImmThreeView {
     readonly #paint = new Map<number, PaintRecord>();
     readonly #pictures = new Map<number, PictureRecord>();
     readonly #resources: Array<{ dispose(): void }> = [];
-    readonly #alphaToCoverage: boolean;
+    readonly #coverageMode: ImmCoverageMode;
+    readonly #sampleCount: number | null;
+    readonly #blueNoise: THREE.DataArrayTexture;
     #timeTicks = 0;
+    #coverageFrame = 0;
 
     constructor(document: ImmDocument, options: ImmThreeViewOptions = {}) {
         this.#document = document;
         this.object3d.name = "IMM document";
         const context = options.renderer?.getContext();
         const sampleCount = context === undefined ? null : Number(context.getParameter(context.SAMPLES));
-        this.#alphaToCoverage = sampleCount !== null && sampleCount > 0;
+        this.#sampleCount = sampleCount;
+        const programmableSampleMask = context !== undefined
+            && context.getExtension("OES_sample_variables") !== null;
+        this.#coverageMode = programmableSampleMask && sampleCount !== null && sampleCount > 0
+            ? "sample-mask"
+            : sampleCount !== null && sampleCount > 0 ? "alpha-to-coverage" : "alpha-hash";
+        this.#blueNoise = createBlueNoiseTexture();
+        this.#resources.push(this.#blueNoise);
         const startedAt = performance.now();
 
         for (const layer of document.layers) {
@@ -119,10 +134,14 @@ export class ImmThreeView {
             meshCount,
             triangleCount,
             geometryBuildMs: performance.now() - startedAt,
-            alphaMode: this.#alphaToCoverage ? "alpha-to-coverage" : "alpha-hash",
+            alphaMode: this.#coverageMode,
             depthBits: context === undefined ? null : Number(context.getParameter(context.DEPTH_BITS)),
             stencilBits: context === undefined ? null : Number(context.getParameter(context.STENCIL_BITS)),
             sampleCount,
+            maxSamples: context === undefined ? null : Number(context.getParameter(
+                (context as WebGL2RenderingContext).MAX_SAMPLES,
+            )),
+            programmableSampleMask,
             maxTextureSize: options.renderer?.capabilities.maxTextureSize ?? null,
             colorMode: "srgb-output-no-tone-mapping",
             activeDrawingCount: this.#paint.size,
@@ -142,6 +161,7 @@ export class ImmThreeView {
     setTimeTicks(timeTicks: number, camera?: THREE.Camera): void {
         const snapshot = evaluateImmDocument(this.#document, timeTicks);
         this.#timeTicks = snapshot.timeTicks;
+        this.#coverageFrame = (this.#coverageFrame + 1) & 63;
         for (const state of snapshot.layers.values()) this.#applyLayerState(state);
         if (camera !== undefined) this.#updateViewerLocked(camera);
         this.object3d.updateMatrixWorld();
@@ -177,6 +197,7 @@ export class ImmThreeView {
                 material.uniforms.immOpacity!.value = state.opacity;
                 material.uniforms.immDrawIn!.value = drawInEnabled ? state.drawInTime : 1;
                 material.uniforms.immTime!.value = this.#timeTicks / this.#document.ticksPerSecond;
+                material.uniforms.immFrame!.value = this.#coverageFrame;
             }
         }
 
@@ -194,7 +215,13 @@ export class ImmThreeView {
         let triangles = 0;
         for (const packed of drawing.geometries) {
             const geometry = createPaintGeometry(packed);
-            const material = createPaintMaterial(packed.brushType, this.#alphaToCoverage, record.layer);
+            const material = createPaintMaterial(
+                packed.brushType,
+                this.#coverageMode,
+                record.layer,
+                this.#blueNoise,
+                this.#sampleCount,
+            );
             const mesh = new THREE.Mesh(geometry, material);
             mesh.name = `${record.layer.name} drawing ${drawingIndex} brush ${packed.brushType}`;
             mesh.userData.immLayerType = "paint";
@@ -307,13 +334,44 @@ function createPaintGeometry(packed: ImmPaintGeometry): THREE.BufferGeometry {
     return geometry;
 }
 
-function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer: ImmLayer): THREE.ShaderMaterial {
+function createBlueNoiseTexture(): THREE.DataArrayTexture {
+    const encoded = atob(IMM_BLUE_NOISE_64_BASE64);
+    const bytes = new Uint8Array(encoded.length);
+    for (let index = 0; index < encoded.length; index++) bytes[index] = encoded.charCodeAt(index);
+    const texture = new THREE.DataArrayTexture(bytes, 64, 64, 64);
+    texture.name = "IMM native 64x64x64 blue noise";
+    texture.format = THREE.RedFormat;
+    texture.type = THREE.UnsignedByteType;
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.generateMipmaps = false;
+    texture.unpackAlignment = 1;
+    texture.needsUpdate = true;
+    return texture;
+}
+
+function createPaintMaterial(
+    brushType: number,
+    coverageMode: ImmCoverageMode,
+    layer: ImmLayer,
+    blueNoise: THREE.DataArrayTexture,
+    sampleCount: number | null,
+): THREE.RawShaderMaterial {
     const keepAlive = layer.keepAlive;
     const parameters = keepAlive?.parameters ?? [];
-    return new THREE.ShaderMaterial({
-        defines: { IMM_ALPHA_HASH: alphaToCoverage ? 0 : 1 },
+    const activeSamples = Math.max(1, Math.min(8, sampleCount ?? 1));
+    return new THREE.RawShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        defines: {
+            IMM_SAMPLE_MASK: coverageMode === "sample-mask" ? 1 : 0,
+            IMM_ALPHA_HASH: coverageMode === "alpha-hash" ? 1 : 0,
+            IMM_SAMPLE_COUNT: activeSamples,
+        },
         uniforms: {
-            immOpacity: { value: 1 }, immDrawIn: { value: 1 }, immTime: { value: 0 },
+            immOpacity: { value: 1 }, immDrawIn: { value: 1 }, immTime: { value: 0 }, immFrame: { value: 0 },
+            immBlueNoise: { value: blueNoise },
             immKeepAliveType: { value: keepAlive?.type ?? 0 },
             immWaveform: { value: keepAlive?.waveform ?? 0 },
             immWiggle: { value: new THREE.Vector3(parameters[0] ?? 0, parameters[1] ?? 0, parameters[2] ?? 0) },
@@ -321,9 +379,11 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
             immBlinkMaxIn: { value: parameters[4] ?? 1 },
         },
         vertexShader: `
-            attribute float immProgress; attribute vec3 immDirection;
-            attribute float immVisibility; attribute float immMask;
-            varying vec4 immColor; varying float immVertexProgress; varying float immDirectional; varying float immMaskSeed;
+            precision highp float; precision highp int;
+            uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;
+            in vec3 position; in vec4 color; in float immProgress; in vec3 immDirection;
+            in float immVisibility; in float immMask;
+            out vec4 immColor; out float immVertexProgress; out float immDirectional; flat out float immMaskSeed;
             uniform int immKeepAliveType; uniform float immTime; uniform vec3 immWiggle;
             void main(){
                 immColor=color; immVertexProgress=immProgress; immMaskSeed=immMask;
@@ -339,13 +399,28 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
             }
         `,
         fragmentShader: `
+            #if IMM_SAMPLE_MASK == 1
+            #extension GL_OES_sample_variables : require
+            #endif
+            precision highp float; precision highp int;
             uniform float immOpacity; uniform float immDrawIn;
-            uniform int immKeepAliveType; uniform int immWaveform; uniform float immTime;
+            uniform int immKeepAliveType; uniform int immWaveform; uniform float immTime; uniform int immFrame;
             uniform vec4 immBlink; uniform float immBlinkMaxIn;
-            varying vec4 immColor; varying float immVertexProgress; varying float immDirectional; varying float immMaskSeed;
+            uniform highp sampler2DArray immBlueNoise;
+            in vec4 immColor; in float immVertexProgress; in float immDirectional; flat in float immMaskSeed;
+            out vec4 outColor;
             float coverageNoise(){
-                vec2 pixel=floor(gl_FragCoord.xy)+vec2(immMaskSeed*17.0,immTime*61.0);
-                return fract(52.9829189*fract(dot(pixel,vec2(0.06711056,0.00583715))));
+                ivec2 pixel=ivec2(gl_FragCoord.xy)&ivec2(63);
+                return texelFetch(immBlueNoise,ivec3(pixel,immFrame&63),0).r;
+            }
+            int nativeCoverageMask(float alpha,float noise){
+                const int sampleCount=IMM_SAMPLE_COUNT;
+                uint bits=(1u<<uint(sampleCount))-1u;
+                float dithered=clamp(alpha+0.99*(noise-0.5)/float(sampleCount),0.0,1.0);
+                uint covered=uint(dithered*float(sampleCount)+0.5);
+                uint mask=((bits<<uint(sampleCount))>>covered)&bits;
+                uint shift=(uint(noise*float(sampleCount-1))+uint(max(immMaskSeed,0.0)))%uint(sampleCount);
+                return int((((mask<<uint(sampleCount))|mask)>>shift)&bits);
             }
             float keepAliveWave(){
                 float phase=fract(immTime*immBlink.x);
@@ -362,24 +437,28 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
                     blink=mix(immBlink.y,immBlink.z,mapped);
                 }
                 float coverage=clamp(immColor.a*immOpacity*immDirectional*reveal*blink,0.0,1.0);
-                #if IMM_ALPHA_HASH == 1
-                    if(coverage<coverageNoise()) discard;
-                    gl_FragColor=vec4(immColor.rgb,1.0);
+                float noise=coverageNoise();
+                vec4 linearColor=vec4(immColor.rgb,1.0);
+                vec4 srgbColor=vec4(mix(pow(linearColor.rgb,vec3(0.41666))*1.055-vec3(0.055),
+                    linearColor.rgb*12.92,vec3(lessThanEqual(linearColor.rgb,vec3(0.0031308)))),1.0);
+                #if IMM_SAMPLE_MASK == 1
+                    outColor=srgbColor;
+                    gl_SampleMask[0]=nativeCoverageMask(coverage,noise);
+                #elif IMM_ALPHA_HASH == 1
+                    if(coverage<noise) discard;
+                    outColor=srgbColor;
                 #else
-                    gl_FragColor=vec4(immColor.rgb,coverage);
+                    outColor=vec4(srgbColor.rgb,coverage);
                 #endif
-                #include <tonemapping_fragment>
-                #include <colorspace_fragment>
             }
         `,
-        vertexColors: true,
         transparent: false,
         blending: THREE.NoBlending,
         depthTest: true,
         depthWrite: true,
         depthFunc: THREE.LessEqualDepth,
         side: brushType <= 1 ? THREE.DoubleSide : THREE.FrontSide,
-        alphaToCoverage,
+        alphaToCoverage: coverageMode === "alpha-to-coverage",
         toneMapped: false,
     });
 }

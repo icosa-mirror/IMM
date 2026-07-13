@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "generate:blue-noise": "node scripts/generate-blue-noise.mjs",
+    "prebuild": "node scripts/generate-blue-noise.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node tests/verify-cache-versioning.mjs",
     "test": "bun test",
