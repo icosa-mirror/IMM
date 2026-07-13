@@ -89,6 +89,8 @@ export interface ImmLayer {
     isTimeline: boolean;
     opacity: number;
     defaultSpawn: boolean;
+    /** Native spawn tracking origin. Null for non-spawn layers. */
+    spawnTracking?: "eye" | "floor" | null;
     localTransform: ImmTransform;
     worldTransform: ImmTransform;
     pivotTransform: ImmTransform;

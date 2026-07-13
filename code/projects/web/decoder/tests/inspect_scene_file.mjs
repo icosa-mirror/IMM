@@ -31,7 +31,14 @@ try {
         id: layer.id,
         name: layer.name,
     }));
-    console.log(JSON.stringify({ schemaVersion: decoded.document.schemaVersion, layerTypes, models, sounds }, null, 2));
+    const spawnAreas = decoded.document.layers.filter((layer) => layer.type === 8).map((layer) => ({
+        id: layer.id,
+        name: layer.name,
+        defaultSpawn: layer.defaultSpawn,
+        tracking: layer.spawnTracking,
+        translation: layer.worldTransform.translation,
+    }));
+    console.log(JSON.stringify({ schemaVersion: decoded.document.schemaVersion, layerTypes, models, spawnAreas, sounds }, null, 2));
     if (sounds.length === 0) process.exitCode = 2;
 } finally {
     await worker.terminate();

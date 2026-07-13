@@ -5,6 +5,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/sequence.h"
+#include "libImmImporter/src/document/layerSpawnArea.h"
 #include "libImmImporter/src/document/layerSound.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 
@@ -38,6 +39,7 @@ namespace
         uint32_t type;
         bool visible;
         bool timeline;
+        bool spawnFloorLevel;
         float opacity;
         uint32_t maxRepeatCount;
         int64_t durationTicks;
@@ -139,6 +141,13 @@ namespace
                 stored.type = static_cast<uint32_t>(layer->GetType());
                 stored.visible = layer->GetVisible();
                 stored.timeline = layer->GetIsTimeline();
+                stored.spawnFloorLevel = false;
+                if (layer->GetType() == ImmImporter::Layer::Type::SpawnArea)
+                {
+                    const auto* spawn = static_cast<const ImmImporter::LayerSpawnArea*>(layer->GetImplementation());
+                    stored.spawnFloorLevel = spawn != nullptr &&
+                        spawn->GetTracking() == ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+                }
                 stored.opacity = layer->GetOpacity();
                 stored.maxRepeatCount = layer->GetMaxRepeatCount();
                 stored.durationTicks = ImmCore::piTick::CastInt(layer->GetDuration());
@@ -677,7 +686,8 @@ extern "C" uint32_t imm_web_get_timeline_layer_info(uint32_t layerIndex, ImmWebT
     outInfo->id = source.id;
     outInfo->parent_id = source.parentId;
     outInfo->type = source.type;
-    outInfo->flags = (source.visible ? 1u : 0u) | (source.timeline ? 2u : 0u);
+    outInfo->flags = (source.visible ? 1u : 0u) | (source.timeline ? 2u : 0u) |
+        (source.spawnFloorLevel ? 4u : 0u);
     outInfo->opacity = source.opacity;
     outInfo->max_repeat_count = source.maxRepeatCount;
     outInfo->duration_ticks = source.durationTicks;

@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define IMM_WEB_OUTPUT_SCHEMA_VERSION 4u
+#define IMM_WEB_OUTPUT_SCHEMA_VERSION 5u
 #define IMM_WEB_ERROR_MESSAGE_CAPACITY 160u
 
 typedef enum ImmWebStatus

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { desktopSpawnTransform } from "./camera-controls";
 import { ImmDecoderClient } from "./decoder-client";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
@@ -94,8 +95,9 @@ window.addEventListener("beforeunload", () => {
 function applySpawn(document: ImmDocument): void {
     const spawn = document.layers.find((layer) => layer.type === 8 && layer.defaultSpawn);
     if (spawn === undefined) return;
-    camera.position.fromArray(spawn.worldTransform.translation);
-    camera.quaternion.fromArray(spawn.worldTransform.rotation);
+    const transform = desktopSpawnTransform(spawn.worldTransform, spawn.spawnTracking);
+    camera.position.fromArray(transform.translation);
+    camera.quaternion.fromArray(transform.rotation);
     controls.target.copy(camera.position).add(new THREE.Vector3(0, 0, -10).applyQuaternion(camera.quaternion));
     controls.update();
 }

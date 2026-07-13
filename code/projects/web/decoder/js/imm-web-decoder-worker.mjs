@@ -430,6 +430,7 @@ function decodeScene(source) {
                     ),
                     visible: (flags & 1) !== 0,
                     isTimeline: (flags & 2) !== 0,
+                    spawnTracking: layerType === 8 ? ((flags & 4) !== 0 ? "floor" : "eye") : null,
                     opacity: memory.getFloat32(timelineLayerPointer + 16, true),
                     maxRepeatCount: memory.getUint32(timelineLayerPointer + 20, true),
                     durationTicks: Number(memory.getBigInt64(timelineLayerPointer + 24, true)),

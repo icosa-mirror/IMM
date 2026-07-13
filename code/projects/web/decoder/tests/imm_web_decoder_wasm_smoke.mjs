@@ -33,7 +33,7 @@ try {
     if (!result.ok) {
         throw new Error(`Wasm inspection failed at ${result.error.byteOffset}: ${result.error.message}`);
     }
-    if (result.requestId !== 1 || result.summary.schemaVersion !== 4) {
+    if (result.requestId !== 1 || result.summary.schemaVersion !== 5) {
         throw new Error("Worker response identity or schema version mismatch");
     }
     if (result.summary.sourceSize !== 5_831_101n) {
@@ -144,6 +144,13 @@ try {
     const defaultSpawns = decoded.document.layers.filter((layer) => layer.type === 8 && layer.defaultSpawn);
     if (defaultSpawns.length !== 1) {
         throw new Error(`Expected one default spawn area, found ${defaultSpawns.length}`);
+    }
+    const spawnAreas = decoded.document.layers.filter((layer) => layer.type === 8);
+    if (spawnAreas.some((layer) => layer.spawnTracking !== "eye")) {
+        throw new Error(`Expected sample1 spawn areas to be eye-level: ${JSON.stringify(spawnAreas)}`);
+    }
+    if (decoded.document.layers.some((layer) => layer.type !== 8 && layer.spawnTracking !== null)) {
+        throw new Error("Non-spawn layer retained spawn tracking metadata");
     }
     const geometries = paintLayers.flatMap((layer) => layer.drawings.flatMap((drawing) => drawing.geometries));
     if (geometries.length !== 41 || geometries.some((geometry) =>

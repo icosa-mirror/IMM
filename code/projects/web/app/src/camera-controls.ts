@@ -4,6 +4,24 @@ import type { ImmTransform } from "./format/imm-document";
 
 export type CameraMode = "fly" | "orbit";
 
+export const IMM_MONO_EYE_HEIGHT_METERS = 1.6;
+
+export function desktopSpawnTransform(
+    transform: ImmTransform,
+    tracking: "eye" | "floor" | null | undefined,
+): ImmTransform {
+    if (tracking !== "floor") return transform;
+    return {
+        ...transform,
+        rotation: [...transform.rotation],
+        translation: [
+            transform.translation[0],
+            transform.translation[1] + IMM_MONO_EYE_HEIGHT_METERS,
+            transform.translation[2],
+        ],
+    };
+}
+
 export class ImmCameraControls {
     readonly orbit: OrbitControls;
     mode: CameraMode = "fly";

@@ -5,7 +5,7 @@ has no dependency on the native renderer, sound engine, file system, windowing,
 VR, or threading backends.
 
 The decoder performs bounded top-level inspection and full scene decoding. Its
-schema-v4 bulk C ABI exports the complete hierarchy, playback clock, chapters,
+schema-v5 bulk C ABI exports the complete hierarchy, playback clock, chapters,
 animation keys, transforms and pivots, visibility and opacity, default spawn,
 paint drawings/strokes/points/timing/frame maps, keep-alive parameters, and
 decoded picture metadata/pixels. It also preserves WAV, Ogg Vorbis, and Ogg

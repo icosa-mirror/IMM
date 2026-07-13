@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { cameraAudioTransform, ImmWebAudio } from "./audio/imm-web-audio";
-import { ImmCameraControls, type CameraMode } from "./camera-controls";
+import { desktopSpawnTransform, ImmCameraControls, type CameraMode } from "./camera-controls";
 import { ImmDecoderClient } from "./decoder-client";
 import { releaseAssetUrl } from "./release-assets";
 import type { ImmDocument } from "./format/imm-document";
@@ -136,7 +136,9 @@ pasteUrl.addEventListener("click", async () => {
 
 window.__immLoadUrl = loadUrl;
 window.__immDisposeView = resetDocumentState;
-window.__immDiagnostics = () => ({
+window.__immDiagnostics = () => {
+    const activeViewpoint = playback?.evaluate().layers.get(Number(viewpoint.value));
+    return {
     ready: immView !== null,
     ...lastMetrics,
     frameMs: round(meanFrameMs),
@@ -159,10 +161,13 @@ window.__immDiagnostics = () => ({
     controlsTarget: controls.orbit.target.toArray(),
     cameraMode: controls.mode,
     viewpoint: viewpoint.value,
+    viewpointTracking: activeViewpoint?.layer.spawnTracking ?? null,
+    viewpointAuthoredTranslation: activeViewpoint?.worldTransform.translation ?? null,
     xrPresenting: renderer.xr.isPresenting,
     gridVisible: grid.visible,
     audio: immAudio?.diagnostics ?? null,
-});
+    };
+};
 window.__immPlayback = {
     play: () => {
         playback?.play();
@@ -236,7 +241,7 @@ chapter.addEventListener("change", () => {
 viewpoint.addEventListener("change", () => {
     if (playback === null) return;
     const state = playback.evaluate().layers.get(Number(viewpoint.value));
-    if (state !== undefined) applySpawnPose(state.worldTransform);
+    if (state !== undefined) applySpawnPose(state.worldTransform, state.layer.spawnTracking);
 });
 cameraMode.addEventListener("change", () => {
     controls.setMode(cameraMode.value as CameraMode);
@@ -558,18 +563,21 @@ function applyAuthoredSpawn(force: boolean): void {
     if (!force && key === appliedAuthoredSpawn) return;
     appliedAuthoredSpawn = key;
     viewpoint.value = String(active.state.layer.id);
-    applySpawnPose(active.state.worldTransform);
+    applySpawnPose(active.state.worldTransform, active.state.layer.spawnTracking);
 }
 
 function spawnActivationKey(active: ImmActiveSpawnArea): string {
     return `${active.state.layer.id}:${active.actionTimeTicks ?? "initial"}:${playback?.chapterIndex ?? 0}`;
 }
 
-function applySpawnPose(transform: ImmActiveSpawnArea["state"]["worldTransform"]): void {
+function applySpawnPose(
+    transform: ImmActiveSpawnArea["state"]["worldTransform"],
+    tracking: "eye" | "floor" | null | undefined,
+): void {
     if (renderer.xr.isPresenting) {
         xrRig.position.fromArray(transform.translation);
         xrRig.quaternion.fromArray(transform.rotation).normalize();
     } else {
-        controls.setPose(transform);
+        controls.setPose(desktopSpawnTransform(transform, tracking));
     }
 }
