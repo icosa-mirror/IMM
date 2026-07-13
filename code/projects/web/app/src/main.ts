@@ -11,6 +11,7 @@ const canvas = requiredElement<HTMLCanvasElement>("viewport");
 const fileInput = requiredElement<HTMLInputElement>("file-input");
 const urlForm = requiredElement<HTMLFormElement>("url-form");
 const urlInput = requiredElement<HTMLInputElement>("url-input");
+const pasteUrl = requiredElement<HTMLButtonElement>("paste-url");
 const status = requiredElement<HTMLParagraphElement>("status");
 const summary = requiredElement<HTMLPreElement>("summary");
 const playbackControls = requiredElement<HTMLElement>("playback-controls");
@@ -57,6 +58,7 @@ let timerQuery: WebGLQuery | null = null;
 let timerQueryActive = false;
 let gpuFrameMs: number | null = null;
 let previousAnimationTime = performance.now();
+let loadRequestId = 0;
 
 declare global {
     interface Window {
@@ -79,20 +81,41 @@ fileInput.addEventListener("change", async () => {
         return;
     }
 
+    const requestId = ++loadRequestId;
     try {
         const source = await file.arrayBuffer();
-        await loadDocument(file.name, source);
+        await loadDocument(file.name, source, requestId);
     } catch (error) {
-        status.textContent = error instanceof Error ? error.message : String(error);
-    } finally {
-        fileInput.disabled = false;
+        if (requestId === loadRequestId) {
+            status.textContent = error instanceof Error ? error.message : String(error);
+        }
     }
 });
 
 urlForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (urlInput.value === "") return;
-    await loadUrl(urlInput.value);
+    await loadUrl(urlInput.value).catch(() => undefined);
+});
+
+pasteUrl.addEventListener("click", async () => {
+    try {
+        if (navigator.clipboard?.readText === undefined) {
+            throw new Error("Clipboard access is not available in this browser.");
+        }
+        const clipboardText = (await navigator.clipboard.readText()).trim();
+        const clipboardUrl = new URL(clipboardText);
+        if (clipboardUrl.protocol !== "http:" && clipboardUrl.protocol !== "https:") {
+            throw new Error("Clipboard text is not an HTTP or HTTPS URL.");
+        }
+        urlInput.value = clipboardText;
+        urlInput.setCustomValidity("");
+        urlInput.focus();
+        status.textContent = "IMM URL pasted. Select Load to open it.";
+    } catch (error) {
+        status.textContent = error instanceof Error ? error.message : String(error);
+        urlInput.focus();
+    }
 });
 
 window.__immLoadUrl = loadUrl;
@@ -163,8 +186,9 @@ chapter.addEventListener("change", () => {
 
 const parameters = new URLSearchParams(location.search);
 if (parameters.get("visual-test") === "1") document.body.classList.add("visual-test");
-const initialSource = parameters.get("src") ?? import.meta.env.VITE_IMM_DEFAULT_SOURCE;
-if (initialSource !== undefined && initialSource !== "") void loadUrl(initialSource);
+const initialSource = parameters.get("src") ?? import.meta.env.VITE_IMM_DEFAULT_SOURCE ??
+    `${import.meta.env.BASE_URL}fixtures/sample1.imm`;
+if (initialSource !== "") void loadUrl(initialSource).catch(() => undefined);
 
 window.addEventListener("resize", resize);
 window.addEventListener("beforeunload", () => {
@@ -221,28 +245,28 @@ function pollGpuTimer(): void {
 }
 
 async function loadUrl(url: string): Promise<void> {
-    fileInput.disabled = true;
-    urlInput.disabled = true;
+    const requestId = ++loadRequestId;
     summary.hidden = true;
     status.textContent = `Fetching ${url}…`;
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`IMM fetch failed: HTTP ${response.status}`);
-        await loadDocument(url.split("/").pop() || url, await response.arrayBuffer());
+        if (requestId !== loadRequestId) return;
+        await loadDocument(url.split("/").pop() || url, await response.arrayBuffer(), requestId);
     } catch (error) {
-        status.textContent = error instanceof Error ? error.message : String(error);
+        if (requestId === loadRequestId) {
+            status.textContent = error instanceof Error ? error.message : String(error);
+        }
         throw error;
-    } finally {
-        fileInput.disabled = false;
-        urlInput.disabled = false;
     }
 }
 
-async function loadDocument(name: string, source: ArrayBuffer): Promise<void> {
-    fileInput.disabled = true;
+async function loadDocument(name: string, source: ArrayBuffer, requestId: number): Promise<void> {
+    if (requestId !== loadRequestId) return;
     summary.hidden = true;
     status.textContent = `Decoding ${formatBytes(source.byteLength)} in the decoder worker…`;
     const document = await decoder.decode(source);
+    if (requestId !== loadRequestId) return;
     disposeView();
     immView = new ImmThreeView(document, { renderer, parent: scene });
     playback = new ImmPlaybackController(document);
@@ -253,7 +277,6 @@ async function loadDocument(name: string, source: ArrayBuffer): Promise<void> {
     grid.visible = false;
     renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
     showSummary(name, document, immView);
-    fileInput.disabled = false;
 }
 
 function disposeView(): void {

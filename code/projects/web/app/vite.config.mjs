@@ -1,6 +1,9 @@
 import { resolve } from "node:path";
 import { createReadStream } from "node:fs";
+import { copyFile, mkdir } from "node:fs/promises";
 import { defineConfig } from "vite";
+
+const samplePath = resolve(import.meta.dirname, "../../../../exampleImmFiles/sample1.imm");
 
 export default defineConfig({
     base: process.env.IMM_WEB_BASE_PATH ?? "/",
@@ -11,6 +14,12 @@ export default defineConfig({
         },
         configurePreviewServer(server) {
             server.middlewares.use("/fixtures/sample1.imm", serveSample);
+        },
+        async writeBundle(outputOptions) {
+            const outputDirectory = outputOptions.dir ?? resolve(import.meta.dirname, "dist");
+            const fixtureDirectory = resolve(outputDirectory, "fixtures");
+            await mkdir(fixtureDirectory, { recursive: true });
+            await copyFile(samplePath, resolve(fixtureDirectory, "sample1.imm"));
         },
     }],
     build: {
@@ -26,5 +35,5 @@ export default defineConfig({
 
 function serveSample(_request, response) {
     response.setHeader("Content-Type", "application/octet-stream");
-    createReadStream(resolve(import.meta.dirname, "../../../../exampleImmFiles/sample1.imm")).pipe(response);
+    createReadStream(samplePath).pipe(response);
 }

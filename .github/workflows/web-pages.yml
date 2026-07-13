@@ -111,11 +111,9 @@ jobs:
           VITE_IMM_DEFAULT_SOURCE: ${{ steps.pages.outputs.base_path }}/fixtures/sample1.imm
         run: bun run build
 
-      - name: Add sample and disable Jekyll processing
+      - name: Disable Jekyll processing
         shell: bash
         run: |
-          mkdir -p code/projects/web/app/dist/fixtures
-          cp exampleImmFiles/sample1.imm code/projects/web/app/dist/fixtures/sample1.imm
           touch code/projects/web/app/dist/.nojekyll
 
       - name: Verify Pages bundle layout

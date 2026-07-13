@@ -18,6 +18,31 @@ const browser = await chromium.launch({
 });
 
 try {
+    const controlsPage = await browser.newPage({ viewport: { width: 900, height: 700 }, deviceScaleFactor: 1 });
+    const clipboardImmUrl = "https://example.com/scenes/clipboard-test.imm";
+    await controlsPage.addInitScript((clipboardText) => {
+        Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { readText: async () => clipboardText },
+        });
+    }, clipboardImmUrl);
+    await controlsPage.route("**/fixtures/sample1.imm", async (route) => {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+        await route.continue();
+    });
+    await controlsPage.goto("http://127.0.0.1:4177/");
+    await controlsPage.waitForFunction(() => document.querySelector("#status")?.textContent?.startsWith("Fetching"));
+    assert.equal(await controlsPage.locator("#url-input").isDisabled(), false,
+        "URL input was disabled while the default IMM loaded");
+    assert.equal(await controlsPage.locator("#file-input").isDisabled(), false,
+        "File input was disabled while the default IMM loaded");
+    await controlsPage.locator("#paste-url").click();
+    assert.equal(await controlsPage.locator("#url-input").inputValue(), clipboardImmUrl);
+    await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
+    assert.equal((await controlsPage.locator("#status").textContent())?.includes("sample1.imm"), true,
+        "Base URL did not load the bundled sample IMM by default");
+    await controlsPage.close();
+
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     const errors = [];
     desktop.on("console", (message) => {

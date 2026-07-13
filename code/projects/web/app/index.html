@@ -18,7 +18,11 @@
         </label>
         <form id="url-form" class="url-picker">
           <label for="url-input">IMM URL</label>
-          <div><input id="url-input" type="url" placeholder="https://…/scene.imm" /><button type="submit">Load</button></div>
+          <div>
+            <input id="url-input" type="url" placeholder="https://…/scene.imm" />
+            <button type="button" id="paste-url">Paste</button>
+            <button type="submit">Load</button>
+          </div>
         </form>
         <section id="playback-controls" class="playback-controls" aria-label="Playback controls" hidden>
           <div class="transport">

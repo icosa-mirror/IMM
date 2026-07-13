@@ -5,6 +5,8 @@ adapter:
 
 - `index.html` is the standalone player. It owns its renderer, canvas, camera,
   controls, and render loop and accepts local files or same-origin/CORS URLs.
+  It loads the bundled `sample1.imm` by default, keeps both source controls
+  available while loading, and can paste an HTTP(S) IMM URL from the clipboard.
 - `embed.html` is the integration fixture. The host owns one renderer, canvas,
   scene, camera, and render loop; the IMM adapter contributes an `Object3D`
   subtree to that scene so host and IMM geometry share the depth buffer.
