@@ -984,6 +984,53 @@ Exit gate:
 
 ### Phase 4.5 — native loading parity (about 2–3 weeks)
 
+Status: implemented on `main` (2026-07-13).
+
+Implemented:
+
+- The Wasm decoder now owns a persistent parsed `Sequence`, stroke store, log,
+  and transferred source allocation. Separate worker commands open metadata,
+  decode one drawing, decode one non-paint asset, fall back to eager decoding,
+  and release the complete session.
+- Paint metadata loads frame maps and records native drawing offsets without
+  decoding strokes. Pictures and sounds retain empty placeholders until their
+  asset command runs. Staged commands return only drawing/picture/sound deltas,
+  avoiding quadratic whole-document retransmission.
+- The web scheduler matches the native first-needed ordering: root-timeline
+  visibility time, plus each paint drawing's first referenced frame time. Spawn
+  assets and all work needed within five seconds block startup; remaining work
+  continues in that stable order after autoplay begins.
+- Three.js uploads newly resident active drawings and picture/model layers into
+  the existing scene instead of rebuilding already resident content. Sound
+  assets refresh the audio graph when they arrive.
+- New loads abort pending file/network reads, invalidate background work,
+  dispose CPU/GPU/audio state, and release the persistent Wasm session. Local
+  selection uses the `File.slice()` random-access source; ordinary URLs retain
+  the deliberate Phase 4.5 full-download `ArrayBuffer` path.
+- The eager decoder remains available as an in-Wasm fallback without retaining
+  a second JavaScript copy of the IMM source.
+
+Verification completed:
+
+- The Wasm smoke fully stages `sample1.imm` and matches eager totals for strokes,
+  points, picture bytes, and sound bytes, while also checking metadata
+  placeholders, spawn loading, and post-release invalidation.
+- Unit coverage verifies exact native ordering, the five-second boundary,
+  spawn priority, `File.slice()`/`ArrayBuffer` range semantics, and cancellation.
+- Private machine-local probes (never copied or uploaded) passed at 158.6 MB,
+  171.2 MB, and 440.7 MB. The 440.7 MB file contains 5,402 layers including
+  2,853 paint layers; metadata completed in 1.69 seconds and a representative
+  three-payload staged probe in 2.48 seconds after the file bytes were read.
+- The production TypeScript/Vite build, 28 application tests, Wasm geometry
+  tests, and eager/staged worker smoke pass. Visible in-app browser inspection
+  was unavailable in the implementing session, so interactive/GPU-memory
+  capture remains a follow-up regression check rather than a claimed result.
+
+Current scope note: `File.slice()` is the local source abstraction, but the
+current synchronous Wasm importer retains one complete transferred source
+allocation for random seeks. Fetching only selected file/network ranges and
+bounded source residency remain Phase 5 work.
+
 This phase reproduces the native player's loading policy without adding the
 production streaming system planned for Phase 5. Native parses the document and
 asset table, records individual drawing offsets, sorts content by first required
