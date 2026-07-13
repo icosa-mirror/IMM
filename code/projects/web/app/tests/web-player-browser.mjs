@@ -24,6 +24,11 @@ const browser = await chromium.launch({
 
 try {
     const controlsPage = await browser.newPage({ viewport: { width: 900, height: 700 }, deviceScaleFactor: 1 });
+    const controlsCpuRate = Number(process.env.IMM_WEB_CONTROLS_CPU_RATE ?? "1");
+    if (controlsCpuRate > 1) {
+        const controlsCdp = await controlsPage.context().newCDPSession(controlsPage);
+        await controlsCdp.send("Emulation.setCPUThrottlingRate", { rate: controlsCpuRate });
+    }
     const clipboardImmUrl = "https://example.com/scenes/clipboard-test.imm";
     await controlsPage.addInitScript((clipboardText) => {
         Object.defineProperty(navigator, "clipboard", {
@@ -110,7 +115,7 @@ try {
     const audioRunning = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
     assert.equal(audioRunning.timelineClock, "audio-context");
     assert.ok(audioRunning.maximumAbsoluteDriftSeconds <= 0.05,
-        `Audio/visual drift exceeded 50 ms: ${audioRunning.maximumAbsoluteDriftSeconds}`);
+        `Audio/visual drift exceeded 50 ms: ${JSON.stringify({ audio: audioRunning, playback: await controlsPage.evaluate(() => window.__immPlayback.snapshot()) })}`);
     await controlsPage.locator("#play-pause").click();
     await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.contextState === "suspended");
     const audioPlayback = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
