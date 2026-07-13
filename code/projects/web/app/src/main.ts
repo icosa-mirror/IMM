@@ -68,7 +68,7 @@ declare global {
             pause(): void;
             seekTicks(value: number): void;
             selectChapter(index: number): void;
-            snapshot(): Record<string, unknown>;
+        snapshot(): Record<string, unknown>;
         };
     }
 }
@@ -126,6 +126,8 @@ window.__immPlayback = {
         chapterIndex: playback?.chapterIndex ?? 0,
         playing: playback?.playing ?? false,
         waiting: playback?.waiting ?? false,
+        durationTicks: playback?.durationTicks ?? 0,
+        ticksPerSecond: playback?.document.ticksPerSecond ?? 0,
     }),
 };
 

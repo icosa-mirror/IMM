@@ -263,8 +263,17 @@ export class ImmThreeView {
         for (const record of this.#pictures.values()) {
             if (!record.viewerLocked) continue;
             const parent = record.node.parent;
-            record.node.position.copy(parent === null ? worldPosition : parent.worldToLocal(worldPosition.clone()));
-            if (record.layer.picture?.contentType === IMM_PICTURE_2D) record.node.quaternion.copy(worldRotation);
+            const lockedWorldPosition = record.node.position.clone().applyQuaternion(worldRotation).add(worldPosition);
+            const lockedWorldRotation = worldRotation.clone().multiply(record.node.quaternion);
+            if (parent === null) {
+                record.node.position.copy(lockedWorldPosition);
+                record.node.quaternion.copy(lockedWorldRotation);
+            } else {
+                parent.updateMatrixWorld();
+                record.node.position.copy(parent.worldToLocal(lockedWorldPosition));
+                const parentRotation = new THREE.Quaternion().setFromRotationMatrix(parent.matrixWorld).invert();
+                record.node.quaternion.copy(parentRotation.multiply(lockedWorldRotation));
+            }
         }
     }
 }
@@ -314,7 +323,12 @@ function createPicture2DMaterial(texture: THREE.DataTexture, opacity: number): T
         vertexShader: `varying vec2 immUv; void main(){ immUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
         fragmentShader: `
             uniform sampler2D immPicture; uniform float immOpacity; varying vec2 immUv;
-            void main(){ vec4 c=texture2D(immPicture,immUv); gl_FragColor=vec4(c.rgb,c.a*immOpacity); #include <tonemapping_fragment> #include <colorspace_fragment> }
+            void main(){
+                vec4 c=texture2D(immPicture,immUv);
+                gl_FragColor=vec4(c.rgb,c.a*immOpacity);
+                #include <tonemapping_fragment>
+                #include <colorspace_fragment>
+            }
         `,
         side: THREE.DoubleSide,
         depthTest: true,
