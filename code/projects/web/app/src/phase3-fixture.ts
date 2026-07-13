@@ -50,8 +50,13 @@ window.__phase3Fixture = {
         const paintMesh = findPaintMesh(view.object3d);
         const material = paintMesh?.material as THREE.ShaderMaterial | undefined;
         const pictureTypes: number[] = [];
+        const keepAliveTypes: number[] = [];
         view.object3d.traverse((object) => {
             if (object.userData.immLayerType === "picture") pictureTypes.push(Number(object.userData.immPictureType));
+            if (object.userData.immLayerType === "paint") {
+                const paintMaterial = (object as THREE.Mesh).material as THREE.ShaderMaterial;
+                keepAliveTypes.push(Number(paintMaterial.uniforms.immKeepAliveType?.value ?? 0));
+            }
         });
         return {
             ready: true,
@@ -62,6 +67,7 @@ window.__phase3Fixture = {
             opacity: material?.uniforms.immOpacity?.value ?? null,
             drawIn: material?.uniforms.immDrawIn?.value ?? null,
             pictureTypes: pictureTypes.sort(),
+            keepAliveTypes: keepAliveTypes.sort(),
             gpuGeometries: renderer.info.memory.geometries,
             gpuTextures: renderer.info.memory.textures,
         };
@@ -84,6 +90,7 @@ function createFixture(): ImmDocument {
         frameBuffer: new Uint32Array([0, 1]),
         drawings: [drawing(-0.4, 0xff7043), drawing(0.4, 0x42a5f5)],
     });
+    paint.keepAlive = { type: 1, waveform: 0, parameters: [3, 2, 0.03, 0, 0, 0] };
     paint.keys = [
         animationKey(IMM_ANIM_VISIBILITY, 0, { boolValue: true }),
         animationKey(IMM_ANIM_OPACITY, 0, { interpolation: IMM_INTERPOLATION_LINEAR, floatValue: 0.25 }),
@@ -104,6 +111,15 @@ function createFixture(): ImmDocument {
         localTransform: { ...identity(), translation: contentType === 0 ? [0, -1, -2] : [0, 0, 0] },
         picture: picture(contentType, contentType === 0),
     }));
+    const blink = makeLayer({
+        id: 8,
+        parentId: 1,
+        type: 1,
+        drawings: [drawing(0, 0xab47bc)],
+        localTransform: { ...identity(), translation: [0, 0.9, 0] },
+        keepAlive: { type: 2, waveform: 3, parameters: [1, 0.2, 1, 0, 1, 0] },
+    });
+    blink.keys = [animationKey(IMM_ANIM_VISIBILITY, 0, { boolValue: true })];
     return {
         schemaVersion: 2,
         backgroundColor: [0.08, 0.12, 0.18],
@@ -114,7 +130,7 @@ function createFixture(): ImmDocument {
             { startTicks: 0, endTicks: 200, markerAction: IMM_ACTION_PLAY },
             { startTicks: 200, endTicks: 400, markerAction: IMM_ACTION_PLAY },
         ],
-        layers: [root, timeline, paint, ...pictureLayers],
+        layers: [root, timeline, paint, blink, ...pictureLayers],
         metrics: { decodeMs: 0, marshalMs: 0, packMs: 0 },
     };
 }
@@ -202,6 +218,8 @@ function findLayer(root: THREE.Object3D, id: number): THREE.Object3D | undefined
 
 function findPaintMesh(root: THREE.Object3D): THREE.Mesh | undefined {
     let result: THREE.Mesh | undefined;
-    root.traverse((object) => { if (object instanceof THREE.Mesh && object.userData.immLayerType === "paint") result = object; });
+    root.traverse((object) => {
+        if (object instanceof THREE.Mesh && object.userData.immLayerType === "paint" && object.parent?.userData.immLayerId === 2) result = object;
+    });
     return result;
 }

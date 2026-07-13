@@ -33,7 +33,7 @@ try {
     if (!result.ok) {
         throw new Error(`Wasm inspection failed at ${result.error.byteOffset}: ${result.error.message}`);
     }
-    if (result.requestId !== 1 || result.summary.schemaVersion !== 2) {
+    if (result.requestId !== 1 || result.summary.schemaVersion !== 3) {
         throw new Error("Worker response identity or schema version mismatch");
     }
     if (result.summary.sourceSize !== 5_831_101n) {

@@ -45,6 +45,7 @@ namespace
         ImmCore::trans3d local;
         ImmCore::trans3d world;
         ImmCore::trans3d pivot;
+        ImmWebKeepAliveInfo keepAlive;
         std::vector<StoredTimelineKey> keys;
     };
 
@@ -136,6 +137,25 @@ namespace
                 stored.local = layer->GetTransform();
                 stored.world = layer->GetTransformToWorld();
                 stored.pivot = layer->GetPivot();
+                const ImmImporter::KeepAlive* keepAlive = layer->GetKeepAlive();
+                stored.keepAlive.type = static_cast<uint32_t>(keepAlive->GetType());
+                if (keepAlive->GetType() == ImmImporter::KeepAlive::KeepAliveType::Wiggle)
+                {
+                    const ImmImporter::KeepAlive::Wiggle* wiggle = keepAlive->GetDataWiggle();
+                    stored.keepAlive.parameters[0] = wiggle->mFrequency;
+                    stored.keepAlive.parameters[1] = wiggle->mSpeed;
+                    stored.keepAlive.parameters[2] = wiggle->mAmplitude;
+                }
+                else if (keepAlive->GetType() == ImmImporter::KeepAlive::KeepAliveType::Blink)
+                {
+                    const ImmImporter::KeepAlive::Blink* blink = keepAlive->GetDataBlink();
+                    stored.keepAlive.waveform = static_cast<uint32_t>(blink->mWaveForm);
+                    stored.keepAlive.parameters[0] = blink->mSpeed;
+                    stored.keepAlive.parameters[1] = blink->mMinOut;
+                    stored.keepAlive.parameters[2] = blink->mMaxOut;
+                    stored.keepAlive.parameters[3] = blink->mMinIn;
+                    stored.keepAlive.parameters[4] = blink->mMaxIn;
+                }
 
                 char* name = ImmCore::piws2str(layer->GetName().GetS());
                 if (name != nullptr)
@@ -232,6 +252,7 @@ static_assert(sizeof(ImmWebPlaybackInfo) == 32u, "ImmWebPlaybackInfo ABI changed
 static_assert(sizeof(ImmWebTimelineLayerInfo) == 296u, "ImmWebTimelineLayerInfo ABI changed");
 static_assert(sizeof(ImmWebAnimationKey) == 80u, "ImmWebAnimationKey ABI changed");
 static_assert(sizeof(ImmWebChapterInfo) == 24u, "ImmWebChapterInfo ABI changed");
+static_assert(sizeof(ImmWebKeepAliveInfo) == 32u, "ImmWebKeepAliveInfo ABI changed");
 
 extern "C" ImmWebStatus imm_web_decode_scene(
     const uint8_t* source,
@@ -637,5 +658,15 @@ extern "C" uint32_t imm_web_get_chapter_info(uint32_t chapterIndex, ImmWebChapte
     }
     const StoredChapter& source = gChapters[chapterIndex];
     *outInfo = {source.startTicks, source.endTicks, source.markerAction, 0u};
+    return 1u;
+}
+
+extern "C" uint32_t imm_web_get_keep_alive_info(uint32_t layerIndex, ImmWebKeepAliveInfo* outInfo)
+{
+    if (outInfo == nullptr || layerIndex >= gTimelineLayers.size())
+    {
+        return 0u;
+    }
+    *outInfo = gTimelineLayers[layerIndex].keepAlive;
     return 1u;
 }

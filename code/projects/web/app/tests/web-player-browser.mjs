@@ -110,6 +110,7 @@ try {
         assert.ok(Math.abs(actual.drawIn - expected.drawIn) < 1e-5, `Draw-in mismatch at ${expected.ticks}`);
         assert.equal(actual.drawingIndex, expected.drawing);
         assert.deepEqual(actual.pictureTypes, [0, 1, 2, 3, 4]);
+        assert.deepEqual(actual.keepAliveTypes, [1, 2]);
         await phase3.screenshot({ path: resolve(artifactDirectory, `phase3-time-${expected.ticks}.png`) });
     }
     await phase3.evaluate(() => window.__phase3Fixture.setTimeTicks(50));

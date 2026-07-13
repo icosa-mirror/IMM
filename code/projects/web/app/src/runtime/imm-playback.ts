@@ -381,9 +381,9 @@ function composeTransform(a: ImmTransform, b: ImmTransform): ImmTransform {
     }
     if (b.flip === 0) {
         return {
-            rotation: multiplyQuaternion(
+            rotation: flipQuaternion(
                 multiplyQuaternion(flipQuaternion(a.rotation, a.flip), b.rotation),
-                flipQuaternion([0, 0, 0, 1], a.flip),
+                a.flip,
             ),
             scale: a.scale * b.scale,
             flip: a.flip,

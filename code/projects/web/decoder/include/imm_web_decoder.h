@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-#define IMM_WEB_OUTPUT_SCHEMA_VERSION 2u
+#define IMM_WEB_OUTPUT_SCHEMA_VERSION 3u
 #define IMM_WEB_ERROR_MESSAGE_CAPACITY 160u
 
 typedef enum ImmWebStatus
@@ -161,6 +161,13 @@ typedef struct ImmWebChapterInfo
     uint32_t reserved;
 } ImmWebChapterInfo;
 
+typedef struct ImmWebKeepAliveInfo
+{
+    uint32_t type;
+    uint32_t waveform;
+    float parameters[6];
+} ImmWebKeepAliveInfo;
+
 uint32_t imm_web_schema_version(void);
 
 ImmWebStatus imm_web_inspect(
@@ -218,6 +225,7 @@ uint32_t imm_web_get_animation_key(
     uint32_t key_index,
     ImmWebAnimationKey* out_key);
 uint32_t imm_web_get_chapter_info(uint32_t chapter_index, ImmWebChapterInfo* out_info);
+uint32_t imm_web_get_keep_alive_info(uint32_t layer_index, ImmWebKeepAliveInfo* out_info);
 
 #if defined(__cplusplus)
 }

@@ -49,6 +49,12 @@ export interface ImmChapter {
     markerAction: number;
 }
 
+export interface ImmKeepAlive {
+    type: number;
+    waveform: number;
+    parameters: number[];
+}
+
 export interface ImmLayer {
     id: number;
     parentId: number;
@@ -66,6 +72,7 @@ export interface ImmLayer {
     maxRepeatCount: number;
     durationTicks: number;
     keys: ImmAnimationKey[];
+    keepAlive?: ImmKeepAlive;
     frameBuffer: Uint32Array;
     drawings: ImmDrawing[];
     picture?: ImmPicture;
@@ -109,6 +116,10 @@ export const IMM_ACTION_STOP = 0;
 export const IMM_ACTION_PLAY = 1;
 export const IMM_ACTION_LOOP = 2;
 export const IMM_ACTION_MAKE_DEFAULT = 3;
+
+export const IMM_KEEP_ALIVE_NONE = 0;
+export const IMM_KEEP_ALIVE_WIGGLE = 1;
+export const IMM_KEEP_ALIVE_BLINK = 2;
 
 export const IMM_PICTURE_2D = 0;
 export const IMM_PICTURE_EQUIRECT_MONO = 1;
