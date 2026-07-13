@@ -10,6 +10,15 @@ export interface ImmDrawing {
     descriptors: Uint32Array;
     bounds: Float32Array;
     points: Float32Array;
+    geometries: ImmPaintGeometry[];
+}
+
+export interface ImmPaintGeometry {
+    brushType: number;
+    triangleCount: number;
+    positions: Float32Array;
+    colors: Float32Array;
+    indices: Uint16Array | Uint32Array;
 }
 
 export interface ImmPicture {
@@ -42,6 +51,7 @@ export interface ImmLayer {
 export interface ImmDecodeMetrics {
     decodeMs: number;
     marshalMs: number;
+    packMs: number;
 }
 
 export interface ImmDocument {
