@@ -59,6 +59,7 @@ try {
     assert.equal(embedMetrics.immAttachedToHostScene, true);
     assert.equal(embedMetrics.sharedCanvas, true);
     assert.equal(embedMetrics.hostDepthTest, true);
+    assert.equal(embedMetrics.hostCubeAtPaintVertex, true);
     await embedded.screenshot({ path: resolve(artifactDirectory, "sample1-web-embedded.png") });
 
     const mobileContext = await browser.newContext({

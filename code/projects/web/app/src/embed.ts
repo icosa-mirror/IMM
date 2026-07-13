@@ -37,14 +37,15 @@ input.addEventListener("change", async () => {
         view?.dispose();
         view = new ImmThreeView(document, { renderer, parent: scene });
         applySpawn(document);
-        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-        hostCube.position.copy(camera.position).add(forward.multiplyScalar(3));
+        const intersectionTarget = placeCubeOnVisiblePaint(view);
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
         summary.textContent = JSON.stringify({
             immAttachedToHostScene: view.object3d.parent === scene,
             sharedRenderer: true,
             sharedCanvas: renderer.domElement === canvas,
             hostDepthTest: hostCube.material.depthTest,
+            hostCubeAtPaintVertex: intersectionTarget !== null,
+            intersectionTarget,
             immMeshes: view.diagnostics.meshCount,
             triangles: view.diagnostics.triangleCount,
         }, null, 2);
@@ -78,6 +79,40 @@ function applySpawn(document: ImmDocument): void {
     camera.quaternion.fromArray(spawn.worldTransform.rotation);
     controls.target.copy(camera.position).add(new THREE.Vector3(0, 0, -10).applyQuaternion(camera.quaternion));
     controls.update();
+}
+
+function placeCubeOnVisiblePaint(view: ImmThreeView): string | null {
+    camera.updateMatrixWorld(true);
+    view.object3d.updateMatrixWorld(true);
+    const worldPoint = new THREE.Vector3();
+    const projected = new THREE.Vector3();
+    const selectedPoint = new THREE.Vector3();
+    let selectedName = "";
+    let selectedDistance = Number.POSITIVE_INFINITY;
+    view.object3d.traverse((object) => {
+        if (!(object instanceof THREE.Mesh) || object.userData.immLayerType !== "paint") return;
+        const positions = object.geometry.getAttribute("position");
+        const stride = Math.max(1, Math.floor(positions.count / 200));
+        for (let index = 0; index < positions.count; index += stride) {
+            worldPoint.fromBufferAttribute(positions, index).applyMatrix4(object.matrixWorld);
+            projected.copy(worldPoint).project(camera);
+            if (Math.abs(projected.x) > 0.75 || Math.abs(projected.y) > 0.75 || projected.z < -1 || projected.z > 1) continue;
+            const distance = worldPoint.distanceTo(camera.position);
+            if (distance < selectedDistance) {
+                selectedPoint.copy(worldPoint);
+                selectedName = object.name;
+                selectedDistance = distance;
+            }
+        }
+    });
+    if (!Number.isFinite(selectedDistance)) {
+        hostCube.visible = false;
+        return null;
+    }
+    hostCube.visible = true;
+    hostCube.position.copy(selectedPoint);
+    hostCube.scale.setScalar(Math.max(0.08, selectedDistance * 0.012));
+    return selectedName;
 }
 
 function resize(): void {
