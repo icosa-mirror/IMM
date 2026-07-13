@@ -195,9 +195,11 @@ describe("IMM deterministic playback evaluation", () => {
         controller.play();
         controller.advance(0.25);
         expect(controller.waiting).toBe(true);
+        expect(controller.evaluate().waiting).toBe(true);
         expect(controller.evaluate().layers.get(2)?.timelineTicks).not.toBe(childAtPause);
         controller.continue();
         expect(controller.waiting).toBe(false);
+        expect(controller.evaluate().waiting).toBe(false);
     });
 
     test("selects and skips chapters in both directions", () => {

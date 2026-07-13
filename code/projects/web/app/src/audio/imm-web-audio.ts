@@ -262,7 +262,13 @@ export class ImmWebAudio {
                 active = this.#start(layerId, decoded, state.localTimeTicks / this.document.ticksPerSecond);
                 if (active === undefined) continue;
             }
-            this.#measureDrift(layerId, active, state.localTimeTicks / this.document.ticksPerSecond);
+            if (this.#lastSnapshot.waiting) {
+                // Native Waiting keeps sounds running while root story time is clamped at its stop marker.
+                this.#lastExpectedOffsets.delete(layerId);
+                this.#currentDrift.delete(layerId);
+            } else {
+                this.#measureDrift(layerId, active, state.localTimeTicks / this.document.ticksPerSecond);
+            }
             const spatialGain = decoded.sound.type === IMM_SOUND_POSITIONAL
                 ? computeSpatialGain(decoded.sound, state.worldTransform, this.#listenerTransform?.translation ?? [0, 0, 0])
                 : 1;

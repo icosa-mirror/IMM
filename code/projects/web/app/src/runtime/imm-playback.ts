@@ -34,6 +34,7 @@ export interface ImmEvaluatedLayer {
 export interface ImmPlaybackSnapshot {
     timeTicks: number;
     chapterIndex: number;
+    waiting: boolean;
     layers: ReadonlyMap<number, ImmEvaluatedLayer>;
 }
 
@@ -165,7 +166,7 @@ export class ImmPlaybackController {
     }
 
     evaluate(): ImmPlaybackSnapshot {
-        return evaluateImmDocument(this.document, this.timeTicks, this.#timelineOffsets);
+        return evaluateImmDocument(this.document, this.timeTicks, this.#timelineOffsets, this.waiting);
     }
 
     #advanceWaitingTimelines(ticks: number): void {
@@ -185,6 +186,7 @@ export function evaluateImmDocument(
     document: ImmDocument,
     requestedTicks: number,
     timelineOffsets: ReadonlyMap<number, number> = new Map(),
+    waiting = false,
 ): ImmPlaybackSnapshot {
     const timeTicks = clampTicks(requestedTicks, document.durationTicks);
     const states = new Map<number, ImmEvaluatedLayer>();
@@ -221,7 +223,7 @@ export function evaluateImmDocument(
         contexts.set(layer.id, { visible, opacity, timelineTicks });
     }
 
-    return { timeTicks, chapterIndex: chapterAt(document, timeTicks), layers: states };
+    return { timeTicks, chapterIndex: chapterAt(document, timeTicks), waiting, layers: states };
 }
 
 /** Resolves the authored spawn area at a playback time, including timed MakeDefault actions. */
