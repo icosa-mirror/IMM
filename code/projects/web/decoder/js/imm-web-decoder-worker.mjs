@@ -25,6 +25,7 @@ const CHAPTER_INFO_SIZE = 24;
 const KEEP_ALIVE_INFO_SIZE = 32;
 
 let decoder;
+let stagedSourcePointer = 0;
 const decoderReady = createDecoderModule().then((module) => {
     decoder = module;
     return module;
@@ -135,6 +136,11 @@ function decodeScene(source, operation = { type: "decode" }) {
 
     const startedAt = performance.now();
     const sourceLength = requiresSource ? source.byteLength : 0;
+    if (requiresSource && stagedSourcePointer !== 0) {
+        decoder._imm_web_release_scene();
+        decoder._free(stagedSourcePointer);
+        stagedSourcePointer = 0;
+    }
     const sourcePointer = sourceLength > 0 ? decoder._malloc(sourceLength) : 0;
     const errorPointer = decoder._malloc(ERROR_SIZE);
     try {
@@ -155,8 +161,10 @@ function decodeScene(source, operation = { type: "decode" }) {
         }
         let memory = new DataView(decoder.HEAPU8.buffer);
         if (status !== 0) {
+            if (operation.type === "openMetadata") stagedSourcePointer = sourcePointer;
             return { ok: false, error: readError(memory, errorPointer) };
         }
+        if (operation.type === "openMetadata") stagedSourcePointer = sourcePointer;
         const decodedAt = performance.now();
         let packMs = 0;
         const backgroundPointer = decoder._malloc(3 * Float32Array.BYTES_PER_ELEMENT);
@@ -520,11 +528,15 @@ function decodeScene(source, operation = { type: "decode" }) {
             decoder._free(backgroundPointer);
             if (operation.type === "decode" || operation.type === "fallbackEager") {
                 decoder._imm_web_release_scene();
+                if (operation.type === "fallbackEager" && stagedSourcePointer !== 0) {
+                    decoder._free(stagedSourcePointer);
+                    stagedSourcePointer = 0;
+                }
             }
         }
     } finally {
         decoder._free(errorPointer);
-        if (sourcePointer !== 0) decoder._free(sourcePointer);
+        if (sourcePointer !== 0 && sourcePointer !== stagedSourcePointer) decoder._free(sourcePointer);
     }
 }
 
@@ -555,6 +567,10 @@ async function handleMessage(message, send) {
             send({ requestId, ...inspect(source) });
         } else if (type === "release") {
             decoder._imm_web_release_scene();
+            if (stagedSourcePointer !== 0) {
+                decoder._free(stagedSourcePointer);
+                stagedSourcePointer = 0;
+            }
             send({ requestId, ok: true });
         } else {
             const result = decodeScene(source, {

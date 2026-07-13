@@ -22,7 +22,8 @@ namespace
     std::unique_ptr<ImmStrokeReader::StrokeStore> gStore;
     std::unique_ptr<ImmImporter::Sequence> gSequence;
     std::unique_ptr<ImmCore::piLog> gLog;
-    std::vector<uint8_t> gSource;
+    const uint8_t* gSource = nullptr;
+    size_t gSourceSize = 0;
     float gBackgroundColor[3] = {0.0f, 0.0f, 0.0f};
     constexpr uint32_t kTicksPerSecond = 12600u;
     constexpr uint32_t kNoContentLayer = std::numeric_limits<uint32_t>::max();
@@ -88,9 +89,9 @@ namespace
 
     bool makeSourceArray(ImmCore::piTArray<uint8_t>* data)
     {
-        if (data == nullptr || gSource.empty() || !data->Init(0u, false))
+        if (data == nullptr || gSource == nullptr || gSourceSize == 0 || !data->Init(0u, false))
             return false;
-        data->Set(gSource.data(), static_cast<uint64_t>(gSource.size()));
+        data->Set(const_cast<uint8_t*>(gSource), static_cast<uint64_t>(gSourceSize));
         return true;
     }
 
@@ -382,7 +383,8 @@ extern "C" ImmWebStatus imm_web_open_scene_metadata(
         return IMM_WEB_STATUS_INVALID_ARGUMENT;
     }
 
-    gSource.assign(source, source + sourceSize);
+    gSource = source;
+    gSourceSize = sourceSize;
     ImmCore::piTArray<uint8_t> data;
     if (!makeSourceArray(&data))
     {
@@ -475,13 +477,12 @@ extern "C" ImmWebStatus imm_web_decode_layer_asset(
 
 extern "C" ImmWebStatus imm_web_decode_open_scene_eager(ImmWebError* outError)
 {
-    if (gSource.empty())
+    if (gSource == nullptr || gSourceSize == 0)
     {
         setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "No staged scene source is open");
         return IMM_WEB_STATUS_INVALID_ARGUMENT;
     }
-    const std::vector<uint8_t> source = gSource;
-    return imm_web_decode_scene(source.data(), source.size(), outError);
+    return imm_web_decode_scene(gSource, gSourceSize, outError);
 }
 
 extern "C" void imm_web_release_scene(void)
@@ -491,7 +492,8 @@ extern "C" void imm_web_release_scene(void)
     gStore.reset();
     gSequence.reset();
     gLog.reset();
-    gSource.clear();
+    gSource = nullptr;
+    gSourceSize = 0;
     gBackgroundColor[0] = 0.0f;
     gBackgroundColor[1] = 0.0f;
     gBackgroundColor[2] = 0.0f;
