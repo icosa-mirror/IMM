@@ -19,7 +19,8 @@ import "./style.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#viewport");
 if (canvas === null) throw new Error("Phase 3 fixture canvas is missing");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, stencil: true });
+const antialias = new URLSearchParams(location.search).get("antialias") !== "0";
+const renderer = new THREE.WebGLRenderer({ canvas, antialias, preserveDrawingBuffer: true, stencil: true });
 renderer.setPixelRatio(1);
 renderer.setSize(640, 360, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -84,6 +85,9 @@ window.__phase3Fixture = {
             lockedPictureX: lockedWorldPosition?.x ?? null,
             gpuGeometries: renderer.info.memory.geometries,
             gpuTextures: renderer.info.memory.textures,
+            alphaMode: view.diagnostics.alphaMode,
+            sampleCount: view.diagnostics.sampleCount,
+            programmableSampleMask: view.diagnostics.programmableSampleMask,
         };
     },
     moveCameraX(value) {

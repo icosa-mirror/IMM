@@ -361,6 +361,26 @@ try {
         "Model overlap fixture did not render both translucent meshes");
     await phase3.close();
 
+    const alphaHash = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
+    await alphaHash.goto("http://127.0.0.1:4177/phase3-fixture.html?antialias=0");
+    await alphaHash.waitForFunction(() => window.__phase3Fixture?.state().ready === true);
+    const alphaHashState = await alphaHash.evaluate(() => window.__phase3Fixture.state());
+    assert.equal(alphaHashState.sampleCount, 0);
+    assert.equal(alphaHashState.alphaMode, "alpha-hash");
+    const alphaHashOverlapSamples = await alphaHash.evaluate(() => ({
+        forward: window.__phase3Fixture.sampleOverlap(false),
+        reverse: window.__phase3Fixture.sampleOverlap(true),
+    }));
+    const alphaHashOverlapDifference = pixelArrayDifference(
+        alphaHashOverlapSamples.forward,
+        alphaHashOverlapSamples.reverse,
+    );
+    assert.equal(alphaHashOverlapDifference.changedChannels, 0,
+        `Alpha-hash fallback changed with submission order: ${JSON.stringify(alphaHashOverlapDifference)}`);
+    assert.ok(new Set(alphaHashOverlapSamples.forward).size > 4,
+        "Alpha-hash overlap fixture did not render both translucent strokes");
+    await alphaHash.close();
+
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     await embedded.goto("http://127.0.0.1:4177/embed.html");
     await embedded.setInputFiles("#file-input", resolve(repositoryRoot, "exampleImmFiles/sample1.imm"));
@@ -413,6 +433,10 @@ try {
         coverageState,
         overlapDifference,
         modelOverlapDifference,
+        alphaHashFallback: {
+            state: alphaHashState,
+            overlapDifference: alphaHashOverlapDifference,
+        },
     };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));

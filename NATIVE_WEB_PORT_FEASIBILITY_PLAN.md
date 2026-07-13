@@ -851,6 +851,9 @@ Implemented and verified so far:
 - Paint and picture coverage use opaque output, depth writes where applicable,
   native blue-noise sample masks, and an alpha-hash fallback. Diagnostics report
   the selected path plus depth, stencil, active samples, and maximum samples.
+- A non-antialiased Chrome fixture forces zero framebuffer samples, selects the
+  alpha-hash fallback, and applies the same reversed-submission overlap test as
+  the programmable sample-mask path.
 - Chrome provides D24S8, four active default-framebuffer samples, a maximum of
   eight samples, and programmable sample masks on the current test machine.
 - The overlap fixture is byte-identical after reversing two near-coplanar
