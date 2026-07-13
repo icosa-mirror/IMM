@@ -154,6 +154,7 @@ try {
         `Main thread did not service events during ${decodeResponsiveness.loadMs} ms reload`);
     assert.ok(loadedGeometryCounts.every((count) => count === loadedGeometryCounts[0]),
         `WebGL geometry count grew across reloads: ${loadedGeometryCounts}`);
+    await desktop.close();
 
     const phase3 = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
     const phase3Errors = [];
@@ -253,6 +254,7 @@ try {
     assert.equal(embedMetrics.hostDepthTest, true);
     assert.equal(embedMetrics.hostCubeAtPaintVertex, true);
     await embedded.screenshot({ path: resolve(artifactDirectory, "sample1-web-embedded.png") });
+    await embedded.close();
 
     const mobileContext = await browser.newContext({
         viewport: { width: 390, height: 844 },
