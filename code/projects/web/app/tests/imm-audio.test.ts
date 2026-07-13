@@ -6,6 +6,7 @@ import {
     IMM_MODIFIER_FRUSTUM,
     computeDirectionalGain,
     computeDistanceGain,
+    computeAudioDriftSeconds,
     immAudioMimeType,
 } from "../src/audio/imm-web-audio";
 import {
@@ -43,6 +44,12 @@ function sound(overrides: Partial<ImmSound> = {}): ImmSound {
 }
 
 describe("IMM native audio contracts", () => {
+    test("measures looping drift across buffer wrap boundaries", () => {
+        expect(computeAudioDriftSeconds(60.012, 0.002, 60, true)).toBeCloseTo(0.01, 9);
+        expect(computeAudioDriftSeconds(0.002, 59.992, 60, true)).toBeCloseTo(0.01, 9);
+        expect(computeAudioDriftSeconds(60.012, 0.002, 60, false)).toBeCloseTo(60.01, 9);
+    });
+
     test("maps encoded asset formats to their browser container and codec types", () => {
         expect(immAudioMimeType(IMM_ASSET_WAV)).toBe("audio/wav");
         expect(immAudioMimeType(IMM_ASSET_OGG)).toBe('audio/ogg; codecs="vorbis"');

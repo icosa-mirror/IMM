@@ -102,6 +102,11 @@ try {
     await controlsPage.locator("#play-pause").click();
     await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.contextState === "running" &&
         window.__immDiagnostics().audio.playingSounds === 3);
+    await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.driftSampleCount >= 3);
+    const audioRunning = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
+    assert.equal(audioRunning.timelineClock, "audio-context");
+    assert.ok(audioRunning.maximumAbsoluteDriftSeconds <= 0.05,
+        `Audio/visual drift exceeded 50 ms: ${audioRunning.maximumAbsoluteDriftSeconds}`);
     await controlsPage.locator("#play-pause").click();
     await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.contextState === "suspended");
     const audioPlayback = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
@@ -122,7 +127,13 @@ try {
     const audioAfterChapter = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
     assert.ok(audioAfterChapter.lastStartOffsets.every((entry) => entry.offsetSeconds === 0),
         `Chapter selection did not restart sounds at chapter time: ${JSON.stringify(audioAfterChapter.lastStartOffsets)}`);
-    const audioSync = { beforeGesture: audioBeforeGesture, playback: audioPlayback, afterSeek: audioAfterSeek, afterChapter: audioAfterChapter };
+    const audioSync = {
+        beforeGesture: audioBeforeGesture,
+        running: audioRunning,
+        playback: audioPlayback,
+        afterSeek: audioAfterSeek,
+        afterChapter: audioAfterChapter,
+    };
     await controlsPage.close();
 
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });

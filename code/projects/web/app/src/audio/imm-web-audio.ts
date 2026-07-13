@@ -39,6 +39,12 @@ export interface ImmAudioDiagnostics {
     loopingSounds: number;
     positionalSounds: number;
     sourceStarts: number;
+    timelineClock: "animation-frame" | "audio-context";
+    baseLatencySeconds: number | null;
+    outputLatencySeconds: number | null;
+    driftSampleCount: number;
+    maximumAbsoluteDriftSeconds: number;
+    currentDrift: ReadonlyArray<{ layerId: number; driftSeconds: number }>;
     lastStartOffsets: ReadonlyArray<{ layerId: number; offsetSeconds: number }>;
     decodeFailures: ReadonlyArray<{ layerId: number; name: string; reason: string }>;
     codecs: ImmAudioCodecCapabilities;
@@ -55,6 +61,10 @@ interface ActiveSound {
     source: AudioBufferSourceNode;
     gain: GainNode;
     panner?: PannerNode;
+    contextStartSeconds: number;
+    offsetSeconds: number;
+    durationSeconds: number;
+    looping: boolean;
 }
 
 interface ImmAudioOptions {
@@ -95,6 +105,11 @@ export class ImmWebAudio {
     #failures: Array<{ layerId: number; name: string; reason: string }> = [];
     #sourceStarts = 0;
     #lastStartOffsets = new Map<number, number>();
+    #lastExpectedOffsets = new Map<number, number>();
+    #currentDrift = new Map<number, number>();
+    #driftSampleCount = 0;
+    #maximumAbsoluteDriftSeconds = 0;
+    #lastTimelineContextTime: number | null = null;
     #disposed = false;
     #prepared = false;
     #userEnabled = false;
@@ -125,6 +140,12 @@ export class ImmWebAudio {
             loopingSounds: [...this.#active.values()].filter((active) => active.source.loop).length,
             positionalSounds: [...this.#active.values()].filter((active) => active.panner !== undefined).length,
             sourceStarts: this.#sourceStarts,
+            timelineClock: this.#usesAudioTimelineClock() ? "audio-context" : "animation-frame",
+            baseLatencySeconds: this.#context?.baseLatency ?? null,
+            outputLatencySeconds: this.#context?.outputLatency ?? null,
+            driftSampleCount: this.#driftSampleCount,
+            maximumAbsoluteDriftSeconds: this.#maximumAbsoluteDriftSeconds,
+            currentDrift: [...this.#currentDrift].map(([layerId, driftSeconds]) => ({ layerId, driftSeconds })),
             lastStartOffsets: [...this.#lastStartOffsets].map(([layerId, offsetSeconds]) => ({
                 layerId,
                 offsetSeconds,
@@ -192,6 +213,20 @@ export class ImmWebAudio {
         if (this.#disposed || this.#context === null || !this.#userEnabled) return;
         if (playing && pageIsVisible()) await this.#context.resume();
         else await this.#context.suspend();
+        this.#lastTimelineContextTime = this.#context.currentTime;
+    }
+
+    /** Uses Web Audio's monotonic clock while audible sources run so visuals cannot free-run against it. */
+    timelineDeltaSeconds(animationFrameDeltaSeconds: number): number {
+        if (!this.#usesAudioTimelineClock() || this.#context === null) {
+            this.#lastTimelineContextTime = null;
+            return animationFrameDeltaSeconds;
+        }
+        const now = this.#context.currentTime;
+        const previous = this.#lastTimelineContextTime;
+        this.#lastTimelineContextTime = now;
+        if (previous === null) return animationFrameDeltaSeconds;
+        return Math.max(0, Math.min(0.1, now - previous));
     }
 
     update(snapshot: ImmPlaybackSnapshot, listener: ImmTransform, restart = false): void {
@@ -232,6 +267,7 @@ export class ImmWebAudio {
                 active = this.#start(layerId, decoded, state.localTimeTicks / this.document.ticksPerSecond);
                 if (active === undefined) continue;
             }
+            this.#measureDrift(layerId, active, state.localTimeTicks / this.document.ticksPerSecond);
             const spatialGain = decoded.sound.type === IMM_SOUND_POSITIONAL
                 ? computeSpatialGain(decoded.sound, state.worldTransform, this.#listenerTransform?.translation ?? [0, 0, 0])
                 : 1;
@@ -267,7 +303,15 @@ export class ImmWebAudio {
             source.connect(gain);
         }
         gain.connect(this.#master);
-        const active = { source, gain, panner };
+        const active = {
+            source,
+            gain,
+            panner,
+            contextStartSeconds: this.#context.currentTime,
+            offsetSeconds: offset,
+            durationSeconds: duration,
+            looping: decoded.sound.looping,
+        };
         this.#active.set(layerId, active);
         this.#sourceStarts++;
         this.#lastStartOffsets.set(layerId, offset);
@@ -284,6 +328,8 @@ export class ImmWebAudio {
 
     #stop(layerId: number, active: ActiveSound): void {
         this.#active.delete(layerId);
+        this.#lastExpectedOffsets.delete(layerId);
+        this.#currentDrift.delete(layerId);
         active.source.stop();
         active.source.disconnect();
         active.panner?.disconnect();
@@ -316,6 +362,43 @@ export class ImmWebAudio {
         setAudioParam(audioListener.upY, listenerUp.y, this.#context.currentTime);
         setAudioParam(audioListener.upZ, listenerUp.z, this.#context.currentTime);
     }
+
+    #usesAudioTimelineClock(): boolean {
+        return this.#context?.state === "running" && this.#userEnabled && this.#transportPlaying &&
+            this.#decoded.size > 0;
+    }
+
+    #measureDrift(layerId: number, active: ActiveSound, expectedSeconds: number): void {
+        if (this.#context === null || !this.#usesAudioTimelineClock()) return;
+        const previousExpected = this.#lastExpectedOffsets.get(layerId);
+        this.#lastExpectedOffsets.set(layerId, expectedSeconds);
+        if (previousExpected === undefined || approximatelySameTime(previousExpected, expectedSeconds)) return;
+        const actualSeconds = active.offsetSeconds + this.#context.currentTime - active.contextStartSeconds;
+        const driftSeconds = computeAudioDriftSeconds(
+            actualSeconds,
+            expectedSeconds,
+            active.durationSeconds,
+            active.looping,
+        );
+        this.#currentDrift.set(layerId, driftSeconds);
+        this.#driftSampleCount++;
+        this.#maximumAbsoluteDriftSeconds = Math.max(this.#maximumAbsoluteDriftSeconds, Math.abs(driftSeconds));
+    }
+}
+
+export function computeAudioDriftSeconds(
+    actualSeconds: number,
+    expectedSeconds: number,
+    durationSeconds: number,
+    looping: boolean,
+): number {
+    const difference = actualSeconds - expectedSeconds;
+    if (!looping || durationSeconds <= 0) return difference;
+    return ((difference + durationSeconds / 2) % durationSeconds + durationSeconds) % durationSeconds - durationSeconds / 2;
+}
+
+function approximatelySameTime(left: number, right: number): boolean {
+    return Math.abs(left - right) <= 1e-7;
 }
 
 function shouldPlaySound(

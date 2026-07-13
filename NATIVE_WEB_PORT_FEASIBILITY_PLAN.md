@@ -869,6 +869,10 @@ Implemented and verified so far:
   keeps the context and sources silent before an explicit user gesture, and
   implements flat and HRTF positional playback. Transport pause suspends the
   context; seeks and chapter changes rebuild sources at measured local offsets.
+- When enabled audio is running, visual playback advances from the Web Audio
+  monotonic clock rather than free-running from `requestAnimationFrame`.
+  Per-source diagnostics report current/maximum drift and browser output
+  latency; the Chrome smoke gate currently enforces a 50 ms bound.
 - Distance attenuation and directional cone/frustum equations have focused
   tests against the native Audio360 backend math. `sample1.imm` verifies three
   looping Opus sources (two flat, one positional) with no decode failures.

@@ -38,6 +38,13 @@ probes, decode failures, active source types, and restart offsets. Ambisonic
 layers are currently decoded for capability reporting but explicitly not played
 or claimed as spatially correct.
 
+While enabled audio is running, playback advances from
+`AudioContext.currentTime`, giving visuals and sources one monotonic clock.
+Diagnostics expose current/maximum source drift and browser base/output
+latency. Authored waits retain native behavior: active child timelines and
+sounds may continue, and a stationary authored sound timeline is not counted
+as clock drift.
+
 On browsers with WebXR support, the standalone player also presents Three.js's
 VR entry button. The current authored viewpoint becomes the XR reference pose;
 the embeddable adapter continues to leave renderer, camera, controls, and the XR
@@ -100,7 +107,8 @@ bun run test:browser
 The same Chrome run verifies that `sample1.imm` exports and decodes all three
 Opus layers, starts no sources before the user gesture, resumes and suspends the
 audio context with transport controls, uses one positional and two flat source
-paths, and restarts each source at deterministic seek/chapter offsets.
+paths, advances visuals from the audio clock within a 50 ms smoke bound, and
+restarts each source at deterministic seek/chapter offsets.
 
 Set `IMM_WEB_HEADLESS=1` only for unattended automation. Results are written to
 `artifacts/web-native/` and include decode, marshal, pack, upload-render,

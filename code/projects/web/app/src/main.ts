@@ -295,7 +295,7 @@ renderer.setAnimationLoop((animationTime) => {
     if (!renderer.xr.isPresenting) controls.update(deltaSeconds);
     if (playback !== null && immView !== null) {
         const previousTicks = playback.timeTicks;
-        playback.advance(deltaSeconds);
+        playback.advance(immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds);
         applyAuthoredSpawn(false);
         immView.setTimeTicks(playback.timeTicks, camera);
         syncAudio(playback.timeTicks < previousTicks);
