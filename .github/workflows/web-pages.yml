@@ -36,11 +36,11 @@ permissions:
 
 concurrency:
   group: web-player-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
-    name: Build and verify web player
+    name: Build and smoke-test web player
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -72,11 +72,6 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
       - name: Install web dependencies
         working-directory: code/projects/web/app
         run: bun install --frozen-lockfile
@@ -85,20 +80,19 @@ jobs:
         working-directory: code/projects/web/app
         run: bun test
 
-      - name: Run browser verification
+      - name: Run browser smoke test
         working-directory: code/projects/web/app
         env:
           IMM_WEB_HEADLESS: "1"
-        run: bun run test:browser
+        run: bun run test:browser:smoke
 
-      - name: Upload failed browser evidence
-        if: failure()
+      - name: Upload decoder artifact for extended verification
         uses: actions/upload-artifact@v4
         with:
-          name: WebPlayerBrowserFailure
-          path: artifacts/web-native
-          if-no-files-found: ignore
-          retention-days: 7
+          name: web-player-decoder-${{ github.sha }}
+          path: code/projects/web/app/public/decoder
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Configure GitHub Pages
         id: pages
@@ -131,6 +125,48 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: code/projects/web/app/dist
+
+  verify:
+    name: Extended browser verification
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install web dependencies
+        working-directory: code/projects/web/app
+        run: bun install --frozen-lockfile
+
+      - name: Download decoder artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-player-decoder-${{ github.sha }}
+          path: code/projects/web/app/public/decoder
+
+      - name: Run extended browser verification
+        working-directory: code/projects/web/app
+        env:
+          IMM_WEB_HEADLESS: "1"
+        run: bun run test:browser
+
+      - name: Upload failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebPlayerBrowserFailure
+          path: artifacts/web-native
+          if-no-files-found: ignore
+          retention-days: 7
 
   deploy:
     name: Deploy web player
