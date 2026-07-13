@@ -10,6 +10,9 @@ import {
     IMM_ANIM_VISIBILITY,
     IMM_INTERPOLATION_LINEAR,
     IMM_INTERPOLATION_NONE,
+    IMM_INTERPOLATION_SMOOTHSTEP,
+    IMM_INTERPOLATION_EASE_IN,
+    IMM_INTERPOLATION_EASE_OUT,
     type ImmAnimationKey,
     type ImmDocument,
     type ImmLayer,
@@ -235,5 +238,26 @@ describe("IMM deterministic playback evaluation", () => {
         const state = evaluateImmDocument(document, 50).layers.get(2);
         expect(state?.transform.translation[0]).toBeCloseTo(0, 5);
         expect(state?.transform.translation[1]).toBeCloseTo(-1, 5);
+    });
+
+    test("matches native easing and stepped interpolation curves", () => {
+        const cases = [
+            [IMM_INTERPOLATION_LINEAR, 0.25],
+            [IMM_INTERPOLATION_SMOOTHSTEP, 0.15625],
+            [IMM_INTERPOLATION_EASE_IN, 0.015625],
+            [IMM_INTERPOLATION_EASE_OUT, 0.578125],
+            [IMM_INTERPOLATION_NONE, 0],
+        ] as const;
+        for (const [interpolation, expected] of cases) {
+            const document = fixture();
+            const paint = document.layers[2];
+            if (paint === undefined) throw new Error("Paint fixture is missing");
+            paint.keys = [
+                key(IMM_ANIM_VISIBILITY, 0, { boolValue: true }),
+                key(IMM_ANIM_OPACITY, 0, { interpolation, floatValue: 0 }),
+                key(IMM_ANIM_OPACITY, 100, { floatValue: 1 }),
+            ];
+            expect(evaluateImmDocument(document, 25).layers.get(2)?.opacity).toBeCloseTo(expected * 0.5, 7);
+        }
     });
 });
