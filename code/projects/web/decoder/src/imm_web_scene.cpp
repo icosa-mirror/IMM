@@ -2,18 +2,63 @@
 
 #include "appImmStrokeReader/src/strokeStore.h"
 #include "libImmCore/src/libBasics/piLog.h"
+#include "libImmCore/src/libBasics/piStr.h"
 #include "libImmCore/src/libBasics/piTArray.h"
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace
 {
     std::unique_ptr<ImmStrokeReader::StrokeStore> gStore;
     float gBackgroundColor[3] = {0.0f, 0.0f, 0.0f};
+    constexpr uint32_t kTicksPerSecond = 12600u;
+    constexpr uint32_t kNoContentLayer = std::numeric_limits<uint32_t>::max();
+
+    struct StoredTimelineKey
+    {
+        uint32_t property;
+        uint32_t interpolation;
+        int64_t timeTicks;
+        ImmImporter::Layer::AnimValue value;
+    };
+
+    struct StoredTimelineLayer
+    {
+        uint32_t id;
+        int32_t parentId;
+        uint32_t type;
+        bool visible;
+        bool timeline;
+        float opacity;
+        uint32_t maxRepeatCount;
+        int64_t durationTicks;
+        uint32_t contentLayerIndex;
+        std::string name;
+        ImmCore::trans3d local;
+        ImmCore::trans3d world;
+        ImmCore::trans3d pivot;
+        std::vector<StoredTimelineKey> keys;
+    };
+
+    struct StoredChapter
+    {
+        int64_t startTicks;
+        int64_t endTicks;
+        uint32_t markerAction;
+    };
+
+    std::vector<StoredTimelineLayer> gTimelineLayers;
+    std::vector<StoredChapter> gChapters;
+    bool gAnimateOnStart = false;
+    int64_t gDurationTicks = 0;
 
     void setError(ImmWebError* error, ImmWebStatus status, const char* message)
     {
@@ -36,7 +81,157 @@ namespace
         std::copy(source.translation, source.translation + 3, result.translation);
         return result;
     }
+
+    ImmWebTransform convertTransform(const ImmCore::trans3d& source)
+    {
+        ImmWebTransform result{};
+        result.rotation[0] = static_cast<float>(source.mRotation.x);
+        result.rotation[1] = static_cast<float>(source.mRotation.y);
+        result.rotation[2] = static_cast<float>(source.mRotation.z);
+        result.rotation[3] = static_cast<float>(source.mRotation.w);
+        result.scale = static_cast<float>(source.mScale);
+        result.flip = static_cast<uint32_t>(source.mFlip);
+        result.translation[0] = static_cast<float>(source.mTranslation.x);
+        result.translation[1] = static_cast<float>(source.mTranslation.y);
+        result.translation[2] = static_cast<float>(source.mTranslation.z);
+        return result;
+    }
+
+    uint32_t findContentLayerIndex(const ImmStrokeReader::StrokeStore& store, uint32_t layerId)
+    {
+        const int layerCount = store.GetLayerCount();
+        for (int layerIndex = 0; layerIndex < layerCount; ++layerIndex)
+        {
+            ImmStrokeReader::StrokeLayerInfoC info{};
+            if (store.GetLayerInfo(layerIndex, &info) && static_cast<uint32_t>(info.id) == layerId)
+            {
+                return static_cast<uint32_t>(layerIndex);
+            }
+        }
+        return kNoContentLayer;
+    }
+
+    void capturePlaybackDocument(ImmImporter::Sequence& sequence, const ImmStrokeReader::StrokeStore& store)
+    {
+        gTimelineLayers.clear();
+        gChapters.clear();
+        gAnimateOnStart = sequence.GetAnimateOnStart();
+
+        ImmImporter::Layer* root = sequence.GetRoot();
+        gDurationTicks = root == nullptr ? 0 : ImmCore::piTick::CastInt(root->GetDuration());
+        sequence.Recurse(
+            [&store](ImmImporter::Layer* layer, int, int, bool) {
+                StoredTimelineLayer stored{};
+                stored.id = layer->GetID();
+                stored.parentId = layer->GetParent() == nullptr
+                    ? -1
+                    : static_cast<int32_t>(layer->GetParent()->GetID());
+                stored.type = static_cast<uint32_t>(layer->GetType());
+                stored.visible = layer->GetVisible();
+                stored.timeline = layer->GetIsTimeline();
+                stored.opacity = layer->GetOpacity();
+                stored.maxRepeatCount = layer->GetMaxRepeatCount();
+                stored.durationTicks = ImmCore::piTick::CastInt(layer->GetDuration());
+                stored.contentLayerIndex = findContentLayerIndex(store, stored.id);
+                stored.local = layer->GetTransform();
+                stored.world = layer->GetTransformToWorld();
+                stored.pivot = layer->GetPivot();
+
+                char* name = ImmCore::piws2str(layer->GetName().GetS());
+                if (name != nullptr)
+                {
+                    stored.name = name;
+                    std::free(name);
+                }
+
+                for (uint32_t property = 0;
+                     property < static_cast<uint32_t>(ImmImporter::Layer::AnimProperty::MAX);
+                     ++property)
+                {
+                    const auto animationProperty = static_cast<ImmImporter::Layer::AnimProperty>(property);
+                    const uint32_t keyCount = layer->GetNumAnimKeys(animationProperty);
+                    for (uint32_t keyIndex = 0; keyIndex < keyCount; ++keyIndex)
+                    {
+                        const ImmImporter::Layer::AnimKey* key = layer->GetAnimKey(animationProperty, keyIndex);
+                        if (key != nullptr)
+                        {
+                            stored.keys.push_back({
+                                property,
+                                static_cast<uint32_t>(key->mInterpolation),
+                                ImmCore::piTick::CastInt(key->mTime),
+                                key->mValue,
+                            });
+                        }
+                    }
+                }
+                gTimelineLayers.push_back(std::move(stored));
+                return true;
+            },
+            false,
+            false,
+            false,
+            false);
+
+        if (root == nullptr)
+        {
+            return;
+        }
+
+        std::vector<std::pair<int64_t, uint32_t>> markers;
+        const uint32_t actionCount = root->GetNumAnimKeys(ImmImporter::Layer::AnimProperty::Action);
+        bool hasPlayMarker = false;
+        for (uint32_t index = 0; index < actionCount; ++index)
+        {
+            const ImmImporter::Layer::AnimKey* key = root->GetAnimKey(ImmImporter::Layer::AnimProperty::Action, index);
+            if (key != nullptr &&
+                static_cast<ImmImporter::Layer::AnimAction>(key->mValue.mInt) == ImmImporter::Layer::AnimAction::Play)
+            {
+                hasPlayMarker = true;
+                break;
+            }
+        }
+
+        markers.emplace_back(0, static_cast<uint32_t>(ImmImporter::Layer::AnimAction::Play));
+        for (uint32_t index = 0; index < actionCount; ++index)
+        {
+            const ImmImporter::Layer::AnimKey* key = root->GetAnimKey(ImmImporter::Layer::AnimProperty::Action, index);
+            if (key == nullptr)
+            {
+                continue;
+            }
+            const auto action = static_cast<ImmImporter::Layer::AnimAction>(key->mValue.mInt);
+            if ((hasPlayMarker && action == ImmImporter::Layer::AnimAction::Play) ||
+                (!hasPlayMarker && action == ImmImporter::Layer::AnimAction::Stop))
+            {
+                const int64_t markerTime = ImmCore::piTick::CastInt(key->mTime) + (hasPlayMarker ? 0 : 1);
+                if (markerTime > 0)
+                {
+                    markers.emplace_back(markerTime, static_cast<uint32_t>(action));
+                }
+            }
+        }
+
+        std::sort(markers.begin(), markers.end());
+        markers.erase(std::unique(markers.begin(), markers.end()), markers.end());
+        if (!markers.empty())
+        {
+            gDurationTicks = std::max(gDurationTicks, markers.back().first);
+        }
+        for (size_t index = 0; index < markers.size(); ++index)
+        {
+            const int64_t start = markers[index].first;
+            const int64_t end = index + 1 < markers.size()
+                ? markers[index + 1].first
+                : std::max(start, gDurationTicks);
+            gChapters.push_back({start, end, markers[index].second});
+        }
+    }
 }
+
+static_assert(sizeof(ImmWebPlaybackInfo) == 32u, "ImmWebPlaybackInfo ABI changed");
+static_assert(sizeof(ImmWebTimelineLayerInfo) == 296u, "ImmWebTimelineLayerInfo ABI changed");
+static_assert(sizeof(ImmWebAnimationKey) == 80u, "ImmWebAnimationKey ABI changed");
+static_assert(sizeof(ImmWebChapterInfo) == 24u, "ImmWebChapterInfo ABI changed");
 
 extern "C" ImmWebStatus imm_web_decode_scene(
     const uint8_t* source,
@@ -78,6 +273,7 @@ extern "C" ImmWebStatus imm_web_decode_scene(
     gBackgroundColor[0] = background.x;
     gBackgroundColor[1] = background.y;
     gBackgroundColor[2] = background.z;
+    capturePlaybackDocument(sequence, *store);
     sequence.Deinit(&log);
     gStore = std::move(store);
     setError(outError, IMM_WEB_STATUS_OK, "");
@@ -90,6 +286,10 @@ extern "C" void imm_web_release_scene(void)
     gBackgroundColor[0] = 0.0f;
     gBackgroundColor[1] = 0.0f;
     gBackgroundColor[2] = 0.0f;
+    gTimelineLayers.clear();
+    gChapters.clear();
+    gAnimateOnStart = false;
+    gDurationTicks = 0;
 }
 
 extern "C" uint32_t imm_web_get_layer_count(void)
@@ -325,4 +525,93 @@ extern "C" uint32_t imm_web_get_picture_pixels(uint32_t layerIndex, uint8_t* out
         return 0u;
     }
     return std::min(byteCapacity, static_cast<uint32_t>(info.dataSize));
+}
+
+extern "C" uint32_t imm_web_get_playback_info(ImmWebPlaybackInfo* outInfo)
+{
+    if (gStore == nullptr || outInfo == nullptr)
+    {
+        return 0u;
+    }
+    *outInfo = {
+        kTicksPerSecond,
+        gAnimateOnStart ? 1u : 0u,
+        static_cast<uint32_t>(gTimelineLayers.size()),
+        static_cast<uint32_t>(gChapters.size()),
+        gDurationTicks,
+        {0u, 0u},
+    };
+    return 1u;
+}
+
+extern "C" uint32_t imm_web_get_timeline_layer_info(uint32_t layerIndex, ImmWebTimelineLayerInfo* outInfo)
+{
+    if (outInfo == nullptr || layerIndex >= gTimelineLayers.size())
+    {
+        return 0u;
+    }
+    const StoredTimelineLayer& source = gTimelineLayers[layerIndex];
+    *outInfo = {};
+    outInfo->id = source.id;
+    outInfo->parent_id = source.parentId;
+    outInfo->type = source.type;
+    outInfo->flags = (source.visible ? 1u : 0u) | (source.timeline ? 2u : 0u);
+    outInfo->opacity = source.opacity;
+    outInfo->max_repeat_count = source.maxRepeatCount;
+    outInfo->duration_ticks = source.durationTicks;
+    outInfo->key_count = static_cast<uint32_t>(source.keys.size());
+    outInfo->content_layer_index = source.contentLayerIndex;
+    const size_t copyLength = std::min(source.name.size(), sizeof(outInfo->name) - 1u);
+    std::memcpy(outInfo->name, source.name.data(), copyLength);
+    return 1u;
+}
+
+extern "C" uint32_t imm_web_get_timeline_layer_transforms(
+    uint32_t layerIndex,
+    ImmWebTransform* outLocal,
+    ImmWebTransform* outWorld,
+    ImmWebTransform* outPivot)
+{
+    if (outLocal == nullptr || outWorld == nullptr || outPivot == nullptr || layerIndex >= gTimelineLayers.size())
+    {
+        return 0u;
+    }
+    const StoredTimelineLayer& source = gTimelineLayers[layerIndex];
+    *outLocal = convertTransform(source.local);
+    *outWorld = convertTransform(source.world);
+    *outPivot = convertTransform(source.pivot);
+    return 1u;
+}
+
+extern "C" uint32_t imm_web_get_animation_key(
+    uint32_t layerIndex,
+    uint32_t keyIndex,
+    ImmWebAnimationKey* outKey)
+{
+    if (outKey == nullptr || layerIndex >= gTimelineLayers.size() || keyIndex >= gTimelineLayers[layerIndex].keys.size())
+    {
+        return 0u;
+    }
+    const StoredTimelineKey& source = gTimelineLayers[layerIndex].keys[keyIndex];
+    *outKey = {};
+    outKey->property = source.property;
+    outKey->interpolation = source.interpolation;
+    outKey->time_ticks = source.timeTicks;
+    outKey->bool_value = source.value.mBool ? 1u : 0u;
+    outKey->uint_value = source.value.mInt;
+    outKey->float_value = source.value.mFloat;
+    outKey->double_value = source.value.mDouble;
+    outKey->transform_value = convertTransform(source.value.mTransform);
+    return 1u;
+}
+
+extern "C" uint32_t imm_web_get_chapter_info(uint32_t chapterIndex, ImmWebChapterInfo* outInfo)
+{
+    if (outInfo == nullptr || chapterIndex >= gChapters.size())
+    {
+        return 0u;
+    }
+    const StoredChapter& source = gChapters[chapterIndex];
+    *outInfo = {source.startTicks, source.endTicks, source.markerAction, 0u};
+    return 1u;
 }
