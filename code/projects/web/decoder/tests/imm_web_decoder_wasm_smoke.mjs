@@ -63,6 +63,24 @@ try {
     if (paintLayers.length !== 30 || pictureLayers.length !== 1) {
         throw new Error(`Unexpected visible content layers: ${paintLayers.length} paint, ${pictureLayers.length} picture`);
     }
+    if (decoded.document.ticksPerSecond !== 12_600 || decoded.document.durationTicks !== 45_360_000) {
+        throw new Error("Playback clock metadata mismatch");
+    }
+    if (decoded.document.layers.length !== 75 || decoded.document.layers.filter((layer) => layer.type === 0).length !== 37) {
+        throw new Error("Timeline hierarchy was not preserved");
+    }
+    const root = decoded.document.layers.find((layer) => layer.parentId === -1);
+    if (root?.name !== "Root" || root.durationTicks !== decoded.document.durationTicks) {
+        throw new Error("Root timeline metadata mismatch");
+    }
+    if (decoded.document.layers.reduce((sum, layer) => sum + layer.keys.length, 0) !== 1_015) {
+        throw new Error("Animation keys were not fully exported");
+    }
+    if (decoded.document.chapters.length !== 1 ||
+        decoded.document.chapters[0].startTicks !== 0 ||
+        decoded.document.chapters[0].endTicks !== decoded.document.durationTicks) {
+        throw new Error("Chapter metadata mismatch");
+    }
     const strokeCount = paintLayers.reduce((sum, layer) => sum + layer.drawings.reduce(
         (drawingSum, drawing) => drawingSum + drawing.descriptors.length / 4, 0), 0);
     const pointCount = paintLayers.reduce((sum, layer) => sum + layer.drawings.reduce(
