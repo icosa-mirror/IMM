@@ -876,8 +876,9 @@ Implemented and verified so far:
   applies the native 1.6 m mono eye height only to floor-level viewpoints;
   WebXR leaves height to the headset pose. Eye-level transforms remain exact.
 - The standalone player probes codecs, sequentially decodes Web Audio buffers,
-  keeps the context and sources silent before an explicit user gesture, and
-  implements flat and HRTF positional playback. Transport pause suspends the
+  enables document/audio playback by default, and implements flat and HRTF
+  positional playback. When autoplay policy blocks the context, the visible
+  enable control retries from an explicit gesture. Transport pause suspends the
   context; seeks and chapter changes rebuild sources at measured local offsets.
 - When enabled audio is running, visual playback advances from the Web Audio
   monotonic clock rather than free-running from `requestAnimationFrame`.

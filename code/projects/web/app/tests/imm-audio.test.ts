@@ -7,6 +7,7 @@ import {
     computeDirectionalGain,
     computeDistanceGain,
     computeAudioDriftSeconds,
+    audioContextTimelineDelta,
     immAudioMimeType,
 } from "../src/audio/imm-web-audio";
 import {
@@ -48,6 +49,12 @@ describe("IMM native audio contracts", () => {
         expect(computeAudioDriftSeconds(60.012, 0.002, 60, true)).toBeCloseTo(0.01, 9);
         expect(computeAudioDriftSeconds(0.002, 59.992, 60, true)).toBeCloseTo(0.01, 9);
         expect(computeAudioDriftSeconds(60.012, 0.002, 60, false)).toBeCloseTo(60.01, 9);
+    });
+
+    test("does not cap audio-clock advancement after a delayed render frame", () => {
+        expect(audioContextTimelineDelta(12.75, 10.25, 0.1)).toBe(2.5);
+        expect(audioContextTimelineDelta(10, null, 0.016)).toBe(0.016);
+        expect(audioContextTimelineDelta(9, 10, 0.016)).toBe(0);
     });
 
     test("maps encoded asset formats to their browser container and codec types", () => {

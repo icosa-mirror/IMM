@@ -249,7 +249,7 @@ cameraMode.addEventListener("change", () => {
 
 audioToggle.addEventListener("click", async () => {
     if (immAudio === null) return;
-    if (!immAudio.diagnostics.userEnabled) await immAudio.enable();
+    if (immAudio.diagnostics.contextState !== "running" && playback?.playing) await immAudio.enable();
     else immAudio.setMuted(!immAudio.diagnostics.muted);
     updateAudioControl();
 });
@@ -362,6 +362,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     const nextAudio = new ImmWebAudio(document);
     try {
         const nextPlayback = new ImmPlaybackController(document);
+        nextPlayback.play();
         immView = nextView;
         playback = nextPlayback;
         immAudio = nextAudio;
@@ -457,7 +458,8 @@ function updateAudioControl(): void {
     audioToggle.hidden = !hasAudio;
     audioToggle.disabled = !hasAudio || diagnostics?.available !== true || diagnostics.decodedSounds === 0;
     if (diagnostics?.available !== true) audioToggle.textContent = "Audio unavailable";
-    else if (!diagnostics.userEnabled) audioToggle.textContent = diagnostics.decodedSounds > 0 ? "Enable audio" : "Preparing audio…";
+    else if (diagnostics.decodedSounds === 0) audioToggle.textContent = "Preparing audio…";
+    else if (diagnostics.contextState !== "running" && playback?.playing) audioToggle.textContent = "Enable audio";
     else audioToggle.textContent = diagnostics.muted ? "Unmute" : "Mute";
 }
 

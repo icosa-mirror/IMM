@@ -112,7 +112,7 @@ export class ImmWebAudio {
     #lastTimelineContextTime: number | null = null;
     #disposed = false;
     #prepared = false;
-    #userEnabled = false;
+    #userEnabled = true;
     #muted = false;
     #transportPlaying = false;
     #lastSnapshot: ImmPlaybackSnapshot | null = null;
@@ -125,7 +125,6 @@ export class ImmWebAudio {
         this.#context = options.context ?? (AudioContextConstructor === undefined ? null : new AudioContextConstructor());
         this.#master = this.#context?.createGain() ?? null;
         this.#master?.connect(this.#context!.destination);
-        if (this.#context?.state === "running") void this.#context.suspend();
     }
 
     get diagnostics(): ImmAudioDiagnostics {
@@ -191,9 +190,8 @@ export class ImmWebAudio {
         this.#userEnabled = true;
         this.#muted = false;
         this.#setMasterGain(1);
-        if (this.#transportPlaying && pageIsVisible()) await this.#context.resume();
-        else await this.#context.suspend();
-        this.#reconcile(true);
+        await this.#setContextRunning(this.#transportPlaying && pageIsVisible());
+        this.#reconcile(false);
     }
 
     setMuted(muted: boolean): void {
@@ -203,17 +201,14 @@ export class ImmWebAudio {
 
     async setPageVisible(visible: boolean): Promise<void> {
         if (this.#disposed || this.#context === null || !this.#userEnabled) return;
-        if (visible && this.#transportPlaying) await this.#context.resume();
-        else await this.#context.suspend();
+        await this.#setContextRunning(visible && this.#transportPlaying);
     }
 
     async setTransportPlaying(playing: boolean): Promise<void> {
         if (this.#transportPlaying === playing) return;
         this.#transportPlaying = playing;
         if (this.#disposed || this.#context === null || !this.#userEnabled) return;
-        if (playing && pageIsVisible()) await this.#context.resume();
-        else await this.#context.suspend();
-        this.#lastTimelineContextTime = this.#context.currentTime;
+        await this.#setContextRunning(playing && pageIsVisible());
     }
 
     /** Uses Web Audio's monotonic clock while audible sources run so visuals cannot free-run against it. */
@@ -226,7 +221,7 @@ export class ImmWebAudio {
         const previous = this.#lastTimelineContextTime;
         this.#lastTimelineContextTime = now;
         if (previous === null) return animationFrameDeltaSeconds;
-        return Math.max(0, Math.min(0.1, now - previous));
+        return audioContextTimelineDelta(now, previous, animationFrameDeltaSeconds);
     }
 
     update(snapshot: ImmPlaybackSnapshot, listener: ImmTransform, restart = false): void {
@@ -384,6 +379,26 @@ export class ImmWebAudio {
         this.#driftSampleCount++;
         this.#maximumAbsoluteDriftSeconds = Math.max(this.#maximumAbsoluteDriftSeconds, Math.abs(driftSeconds));
     }
+
+    async #setContextRunning(running: boolean): Promise<void> {
+        if (this.#context === null) return;
+        try {
+            if (running) await this.#context.resume();
+            else await this.#context.suspend();
+        } catch {
+            // Browsers reject resume() until a user gesture. The visible control retries from its click handler.
+        }
+        this.#lastTimelineContextTime = this.#context.currentTime;
+    }
+}
+
+export function audioContextTimelineDelta(
+    currentContextTime: number,
+    previousContextTime: number | null,
+    animationFrameDeltaSeconds: number,
+): number {
+    if (previousContextTime === null) return animationFrameDeltaSeconds;
+    return Math.max(0, currentContextTime - previousContextTime);
 }
 
 export function computeAudioDriftSeconds(

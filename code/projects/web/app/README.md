@@ -30,8 +30,9 @@ the Wasm decoder explicitly returns no model geometry until a real format and
 fixture exist.
 
 The standalone player decodes embedded WAV, Ogg Vorbis, and Ogg Opus payloads
-through Web Audio. Audio remains suspended until the user selects **Enable
-audio**. Flat and positional layers follow authored visibility, opacity, gain,
+through Web Audio. Audio and document playback start automatically on load.
+If browser autoplay policy suspends Web Audio, **Enable audio** retries from an
+explicit click. Flat and positional layers follow authored visibility, opacity, gain,
 looping, transforms, distance attenuation, directional cone/frustum modifiers,
 transport pause, seek, and chapter changes. Browser diagnostics report codec
 probes, decode failures, active source types, and restart offsets. Ambisonic
@@ -105,8 +106,8 @@ bun run test:browser
 ```
 
 The same Chrome run verifies that `sample1.imm` exports and decodes all three
-Opus layers, starts no sources before the user gesture, resumes and suspends the
-audio context with transport controls, uses one positional and two flat source
+Opus layers, enables sources and playback by default, handles autoplay-policy
+fallback, resumes and suspends the audio context with transport controls, uses one positional and two flat source
 paths, advances visuals from the audio clock within a 50 ms smoke bound, and
 restarts each source at deterministic seek/chapter offsets.
 
