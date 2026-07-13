@@ -109,6 +109,7 @@ export class ImmThreeView {
             });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.name = `${layer.name} brush ${result.brushType}`;
+            mesh.userData.immLayerType = "paint";
             mesh.frustumCulled = true;
             group.add(mesh);
             this.#resources.push(geometry, material);
@@ -143,6 +144,7 @@ export class ImmThreeView {
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = layer.name;
+        mesh.userData.immLayerType = "picture";
         mesh.renderOrder = -10_000;
         applyTransform(mesh, layer.worldTransform);
         this.object3d.add(mesh);
