@@ -38,6 +38,7 @@ declare global {
             state(): Record<string, unknown>;
             moveCameraX(value: number): void;
             samplePicture(contentType: number, direction: [number, number, number], eye?: number): number[];
+            samplePaintEffect(drawIn: number, timeSeconds: number, keepAliveType: number): number[];
         };
     }
 }
@@ -92,6 +93,30 @@ window.__phase3Fixture = {
             if (object.userData.immLayerType === "paint") object.visible = false;
             if (object.userData.immLayerType === "picture") object.visible = object.userData.immPictureType === contentType;
         });
+        renderer.render(scene, camera);
+        const pixel = new Uint8Array(4);
+        renderer.getContext().readPixels(320, 180, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
+        return Array.from(pixel);
+    },
+    samplePaintEffect(drawIn, timeSeconds, keepAliveType) {
+        camera.position.set(0, 0, 3);
+        camera.quaternion.identity();
+        view.setTimeTicks(0, camera);
+        let target: THREE.Mesh | undefined;
+        view.object3d.traverse((object) => {
+            if (object.userData.immLayerType === "picture") object.visible = false;
+            if (object.userData.immLayerType === "paint") {
+                object.visible = object.parent?.userData.immLayerId === 8;
+                if (object.visible) target = object as THREE.Mesh;
+            }
+        });
+        if (target === undefined) throw new Error("Effect paint mesh is missing");
+        target.parent?.position.set(0, 0, 0);
+        const material = target.material as THREE.ShaderMaterial;
+        material.uniforms.immOpacity!.value = 1;
+        material.uniforms.immDrawIn!.value = drawIn;
+        material.uniforms.immTime!.value = timeSeconds;
+        material.uniforms.immKeepAliveType!.value = keepAliveType;
         renderer.render(scene, camera);
         const pixel = new Uint8Array(4);
         renderer.getContext().readPixels(320, 180, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
