@@ -102,7 +102,7 @@ jobs:
         working-directory: code/projects/web/app
         env:
           IMM_WEB_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
-          VITE_IMM_DEFAULT_SOURCE: ${{ steps.pages.outputs.base_path }}/fixtures/sample1.imm
+          VITE_IMM_RELEASE_ID: ${{ github.sha }}
         run: bun run build
 
       - name: Disable Jekyll processing
@@ -114,12 +114,15 @@ jobs:
         shell: bash
         env:
           IMM_WEB_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+          IMM_WEB_RELEASE_ID: ${{ github.sha }}
         run: |
-          test -f code/projects/web/app/dist/decoder/imm-web-decoder.wasm
-          test -f code/projects/web/app/dist/decoder/imm-web-decoder-worker.mjs
-          test -f code/projects/web/app/dist/fixtures/sample1.imm
+          test -f "code/projects/web/app/dist/decoder/$IMM_WEB_RELEASE_ID/imm-web-decoder.wasm"
+          test -f "code/projects/web/app/dist/decoder/$IMM_WEB_RELEASE_ID/imm-web-decoder-worker.mjs"
+          test -f "code/projects/web/app/dist/fixtures/$IMM_WEB_RELEASE_ID/sample1.imm"
+          grep -qF "\"release\": \"$IMM_WEB_RELEASE_ID\"" code/projects/web/app/dist/version.json
           grep -qF "$IMM_WEB_BASE_PATH" code/projects/web/app/dist/index.html
-          grep -RqF "${IMM_WEB_BASE_PATH}decoder/imm-web-decoder-worker.mjs" code/projects/web/app/dist/assets
+          grep -RqF "$IMM_WEB_RELEASE_ID" code/projects/web/app/dist/assets
+          grep -RqF "imm-web-decoder-worker.mjs" code/projects/web/app/dist/assets
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

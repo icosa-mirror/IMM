@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { ImmCameraControls, type CameraMode } from "./camera-controls";
 import { ImmDecoderClient } from "./decoder-client";
+import { releaseAssetUrl } from "./release-assets";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
 import { ImmPlaybackController, resolveActiveSpawnArea, type ImmActiveSpawnArea } from "./runtime/imm-playback";
@@ -239,7 +240,7 @@ renderer.xr.addEventListener("sessionend", () => {
 const parameters = new URLSearchParams(location.search);
 if (parameters.get("visual-test") === "1") document.body.classList.add("visual-test");
 const initialSource = parameters.get("src") ?? import.meta.env.VITE_IMM_DEFAULT_SOURCE ??
-    `${import.meta.env.BASE_URL}fixtures/sample1.imm`;
+    releaseAssetUrl("fixtures", "sample1.imm");
 if (initialSource !== "") void loadUrl(initialSource).catch(() => undefined);
 
 window.addEventListener("resize", resize);

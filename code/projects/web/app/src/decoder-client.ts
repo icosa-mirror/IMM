@@ -1,3 +1,5 @@
+import { releaseAssetUrl } from "./release-assets";
+
 export interface ImmDocumentSummary {
     schemaVersion: number;
     formatVersion: number;
@@ -39,7 +41,7 @@ export class ImmDecoderClient {
     #nextRequestId = 1;
     #disposed = false;
 
-    constructor(workerUrl = `${import.meta.env.BASE_URL}decoder/imm-web-decoder-worker.mjs`) {
+    constructor(workerUrl = releaseAssetUrl("decoder", "imm-web-decoder-worker.mjs")) {
         this.#worker = new Worker(workerUrl, { type: "module", name: "imm-decoder" });
         this.#worker.addEventListener("message", (event: MessageEvent<DecoderResponse>) => {
             this.#handleResponse(event.data);
