@@ -82,9 +82,9 @@ try {
         throw new Error("Chapter metadata mismatch");
     }
     const strokeCount = paintLayers.reduce((sum, layer) => sum + layer.drawings.reduce(
-        (drawingSum, drawing) => drawingSum + drawing.descriptors.length / 4, 0), 0);
+        (drawingSum, drawing) => drawingSum + drawing.strokeCount, 0), 0);
     const pointCount = paintLayers.reduce((sum, layer) => sum + layer.drawings.reduce(
-        (drawingSum, drawing) => drawingSum + drawing.points.length / 14, 0), 0);
+        (drawingSum, drawing) => drawingSum + drawing.pointCount, 0), 0);
     if (strokeCount === 0 || pointCount === 0) {
         throw new Error(`Scene decode returned no paint data: ${strokeCount} strokes, ${pointCount} points`);
     }
@@ -110,13 +110,13 @@ try {
             throw new Error(`Layer ${layer.id} returned invalid visibility or opacity`);
         }
         for (const drawing of layer.drawings) {
-            if (drawing.bounds.length !== drawing.descriptors.length / 4 * 6 ||
-                !Array.from(drawing.bounds).every(Number.isFinite)) {
-                throw new Error(`Layer ${layer.id} returned invalid paint bounds`);
+            if (!Number.isSafeInteger(drawing.strokeCount) || drawing.strokeCount < 0 ||
+                !Number.isSafeInteger(drawing.pointCount) || drawing.pointCount < 0) {
+                throw new Error(`Layer ${layer.id} returned invalid paint counts`);
             }
-            if (drawing.pointTimes.length !== drawing.points.length / 14 ||
-                !Array.from(drawing.pointTimes).every(Number.isFinite)) {
-                throw new Error(`Layer ${layer.id} returned invalid paint timing`);
+            if (drawing.descriptors !== undefined || drawing.bounds !== undefined ||
+                drawing.points !== undefined || drawing.pointTimes !== undefined) {
+                throw new Error(`Layer ${layer.id} retained temporary paint buffers`);
             }
         }
         if (layer.keepAlive === undefined || layer.keepAlive.parameters.length !== 6 ||

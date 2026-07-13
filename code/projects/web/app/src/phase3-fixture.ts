@@ -228,10 +228,8 @@ function drawing(x: number, color: number): ImmDrawing {
     const c = new THREE.Color(color);
     return {
         biggestStroke: 1,
-        descriptors: new Uint32Array([0, 3, 0, 0]),
-        bounds: new Float32Array([-1, -1, 0, 1, 1, 0]),
-        points: new Float32Array(),
-        pointTimes: new Float32Array([0, 0.25, 0.5]),
+        strokeCount: 1,
+        pointCount: 3,
         geometries: [{
             brushType: 0,
             triangleCount: 1,

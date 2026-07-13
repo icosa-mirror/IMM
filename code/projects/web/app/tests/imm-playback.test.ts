@@ -109,10 +109,8 @@ function fixture(): ImmDocument {
         frameBuffer: new Uint32Array([2, 1, 0]),
         drawings: Array.from({ length: 3 }, () => ({
             biggestStroke: 1,
-            descriptors: new Uint32Array(),
-            bounds: new Float32Array(),
-            points: new Float32Array(),
-            pointTimes: new Float32Array(),
+            strokeCount: 0,
+            pointCount: 0,
             geometries: [],
         })),
         keys: [

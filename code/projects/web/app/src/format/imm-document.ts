@@ -7,10 +7,8 @@ export interface ImmTransform {
 
 export interface ImmDrawing {
     biggestStroke: number;
-    descriptors: Uint32Array;
-    bounds: Float32Array;
-    points: Float32Array;
-    pointTimes: Float32Array;
+    strokeCount: number;
+    pointCount: number;
     geometries: ImmPaintGeometry[];
 }
 

@@ -442,9 +442,9 @@ function showSummary(
 ): void {
     const paintLayers = document.layers.filter((layer) => layer.type === 1);
     const strokeCount = paintLayers.reduce((total, layer) => total + layer.drawings.reduce(
-        (drawingTotal, drawing) => drawingTotal + drawing.descriptors.length / 4, 0), 0);
+        (drawingTotal, drawing) => drawingTotal + drawing.strokeCount, 0), 0);
     const pointCount = paintLayers.reduce((total, layer) => total + layer.drawings.reduce(
-        (drawingTotal, drawing) => drawingTotal + drawing.points.length / 14, 0), 0);
+        (drawingTotal, drawing) => drawingTotal + drawing.pointCount, 0), 0);
     const metrics = {
         layers: document.layers.length,
         paintLayers: view.diagnostics.paintLayerCount,

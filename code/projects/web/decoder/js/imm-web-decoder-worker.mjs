@@ -266,7 +266,7 @@ function decodeScene(source) {
                         } finally {
                             if (pointsPointer !== 0) decoder._free(pointsPointer);
                         }
-                        const drawing = {
+                        const drawingSource = {
                             biggestStroke: decoder._imm_web_get_drawing_biggest_stroke(layerIndex, drawingIndex),
                             descriptors,
                             bounds,
@@ -274,11 +274,15 @@ function decodeScene(source) {
                             pointTimes,
                         };
                         const packStartedAt = performance.now();
-                        drawing.geometries = packPaintGeometry(drawing);
+                        const geometries = packPaintGeometry(drawingSource);
                         packMs += performance.now() - packStartedAt;
-                        layer.drawings.push(drawing);
-                        transfers.push(descriptors.buffer, bounds.buffer, points.buffer, pointTimes.buffer);
-                        for (const geometry of drawing.geometries) {
+                        layer.drawings.push({
+                            biggestStroke: drawingSource.biggestStroke,
+                            strokeCount,
+                            pointCount: totalPointCount,
+                            geometries,
+                        });
+                        for (const geometry of geometries) {
                             transfers.push(
                                 geometry.positions.buffer,
                                 geometry.colors.buffer,

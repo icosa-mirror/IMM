@@ -376,7 +376,15 @@ namespace ImmImporter
                 const uint16_t *dataAlp = mData.mAlp.GetAddress(0);
                 const uint16_t *dataWid = mData.mWid.GetAddress(0);
 
-                if (!dr->StartAdding(biggestStroke))
+                // The web decoder exports paint through IStrokeCollector and never
+                // reads the importer's tessellated Drawing afterwards. Retaining
+                // both representations roughly doubles peak Wasm memory.
+#if defined(IMM_WEB_DECODER)
+                const bool retainImportedDrawing = collector == nullptr;
+#else
+                const bool retainImportedDrawing = true;
+#endif
+                if (retainImportedDrawing && !dr->StartAdding(biggestStroke))
                     return false;
 
                 Element ele;
@@ -524,11 +532,13 @@ namespace ImmImporter
                         );
                     }
 
-                    if (!dr->Add(&ele, static_cast<Drawing::ColorSpace>(colorSpace), flipped))
+                    if (retainImportedDrawing &&
+                        !dr->Add(&ele, static_cast<Drawing::ColorSpace>(colorSpace), flipped))
                         return false;
                 }
 
-                dr->StopAdding();
+                if (retainImportedDrawing)
+                    dr->StopAdding();
                 log->Printf(LT_MESSAGE, L"IMM_IMPORT: Finished drawing %u", drawingId);
             }
 
