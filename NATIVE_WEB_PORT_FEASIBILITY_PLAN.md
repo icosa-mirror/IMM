@@ -843,6 +843,16 @@ coverage mask. Opaque paint must separately match native geometry, culling,
 projection, depth comparison, and depth-write behavior; transparency cannot be
 used to explain or mask opaque-stroke artifacts.
 
+Open question: some external IMM content has shown apparent z-fighting on fully
+opaque strokes, but `exampleImmFiles/sample1.imm` does not reproduce it. Do not
+assign this to transparency, topology, or depth precision without a retained,
+legally usable reproduction. When one is available, capture the affected stroke
+and measure the actual web `DEPTH_BITS` and `SAMPLES` alongside the native
+desktop contract (D24S8, 8x MSAA, linear depth, `LESS_EQUAL`, depth writes, and
+the `0.01` to `20,000` projection range). Also test for duplicate/coplanar
+triangles, drawing residency overlap, flipped-transform culling, and browser or
+device-specific default-framebuffer behavior.
+
 Deliverables:
 
 - Native-equivalent order-independent coverage for paint, pictures, and models:
