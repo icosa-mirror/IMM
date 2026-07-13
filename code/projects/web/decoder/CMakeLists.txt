@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(ImmWebDecoder LANGUAGES CXX)
 
+enable_testing()
+
 add_library(imm_web_decoder STATIC
     src/imm_web_decoder.cpp
 )
@@ -33,15 +35,30 @@ if(EMSCRIPTEN)
         "SHELL:-sWASM=1"
         "SHELL:-sMODULARIZE=1"
         "SHELL:-sEXPORT_ES6=1"
-        "SHELL:-sENVIRONMENT=worker"
+        "SHELL:-sENVIRONMENT=web,worker,node"
         "SHELL:-sFILESYSTEM=0"
         "SHELL:-sALLOW_MEMORY_GROWTH=1"
         "SHELL:-sEXPORTED_FUNCTIONS=['_imm_web_schema_version','_imm_web_inspect','_malloc','_free']"
         "SHELL:-sEXPORTED_RUNTIME_METHODS=['HEAPU8']"
         "SHELL:-sNO_EXIT_RUNTIME=1"
     )
+
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/js/imm-web-decoder-worker.mjs
+        ${CMAKE_CURRENT_BINARY_DIR}/imm-web-decoder-worker.mjs
+        COPYONLY
+    )
+
+    find_program(IMM_WEB_NODE_EXECUTABLE node REQUIRED)
+    add_test(
+        NAME imm_web_decoder_wasm_smoke
+        COMMAND
+            ${IMM_WEB_NODE_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/imm_web_decoder_wasm_smoke.mjs
+            ${CMAKE_CURRENT_BINARY_DIR}/imm-web-decoder-worker.mjs
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../../../exampleImmFiles/sample1.imm
+    )
 else()
-    enable_testing()
     add_executable(imm_web_decoder_tests
         tests/imm_web_decoder_tests.cpp
     )
