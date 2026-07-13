@@ -833,10 +833,33 @@ Exit gate:
 - Automated timestamp screenshots match expected active drawings, transforms, visibility, and opacity at start, midpoints, chapter boundaries, loops, and end.
 - Seek and chapter changes are deterministic from a fresh load and after prior playback.
 
-### Phase 4 — browser audio (about 2–4 weeks)
+### Phase 4 — transparency/depth parity and browser audio (about 3–6 weeks)
+
+Transparency and depth parity are release-critical, not optional visual polish.
+The current web renderer combines Three.js transparent blending with hardware
+alpha-to-coverage and depth writes. Native rendering instead disables blending,
+writes opaque color, and uses a blue-noise-dithered, primitive-seeded MSAA
+coverage mask. The web camera's current `0.01` to `20,000` clipping range also
+needs replacement with scene-appropriate depth precision.
 
 Deliverables:
 
+- Native-equivalent order-independent coverage for paint, pictures, and models:
+  no conventional alpha blending on the MSAA coverage path, opaque color output,
+  depth writes, and opacity represented by sample coverage.
+- A capability-selected custom sample-mask path where WebGL exposes the required
+  sample-variable support, including native-equivalent blue-noise dithering and
+  primitive/layer mask rotation.
+- A measured alpha-hash/coverage fallback for browsers and embedded renderers
+  that cannot expose programmable sample masks; diagnostics must identify the
+  active path and actual MSAA sample count.
+- Correct composition of point alpha, inherited layer opacity, directional
+  visibility, draw-in, keep-alive effects, and picture/model alpha before
+  coverage conversion.
+- Scene-bounds-appropriate near/far planes, or an explicitly validated reverse-Z
+  or logarithmic-depth alternative, in standalone and embedded camera guidance.
+- Fixtures with coincident and near-coplanar translucent strokes, intersecting
+  opaque geometry, animated fades, and deliberately permuted submission order.
 - Compressed sound blob export and codec capability probe.
 - Flat and positional playback with gain, loop, pause, seek, and chapter synchronization.
 - Attenuation and directional cone/frustum behavior.
@@ -845,6 +868,13 @@ Deliverables:
 
 Exit gate:
 
+- Animated opacity and overlapping-stroke captures match the native reference at
+  agreed sample counts, without darkening from blended alpha or visible depth
+  fighting under a stationary camera.
+- Permuting layer, stroke, and batch submission order does not materially change
+  resolved pixels on the order-independent coverage path.
+- Depth precision remains stable across the supported scene-size corpus and the
+  embedded adapter reports incompatible host camera/depth settings.
 - A/V drift stays within an agreed bound over long-running fixtures and after pause/seek/chapter operations.
 - Each claimed codec works on the supported browser matrix.
 - Ambisonic is either validated spatially or marked unsupported; stereo downmix is not labeled parity.
