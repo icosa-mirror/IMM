@@ -489,6 +489,30 @@ extern "C" uint32_t imm_web_get_stroke_points(
     return count;
 }
 
+extern "C" uint32_t imm_web_get_stroke_point_times(
+    uint32_t layerIndex,
+    uint32_t drawingIndex,
+    uint32_t strokeIndex,
+    float* outTimes,
+    uint32_t pointCapacity)
+{
+    if (gStore == nullptr || outTimes == nullptr || pointCapacity == 0u)
+    {
+        return 0u;
+    }
+    ImmWebStrokeInfo info{};
+    const uint32_t count = imm_web_get_stroke_info(layerIndex, drawingIndex, strokeIndex, &info) == 0u
+        ? 0u
+        : std::min(pointCapacity, info.point_count);
+    if (count == 0u || !gStore->GetStrokePointTimes(
+        static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex),
+        outTimes, static_cast<int>(count)))
+    {
+        return 0u;
+    }
+    return count;
+}
+
 extern "C" uint32_t imm_web_get_picture_info(uint32_t layerIndex, ImmWebPictureInfo* outInfo)
 {
     if (gStore == nullptr || outInfo == nullptr)

@@ -233,6 +233,7 @@ function decodeScene(source) {
                         }
 
                         const points = new Float32Array(totalPointCount * STROKE_POINT_FLOATS);
+                        const pointTimes = new Float32Array(totalPointCount);
                         const maximumPointCount = pointCounts.reduce((maximum, value) => Math.max(maximum, value), 0);
                         const pointsPointer = maximumPointCount > 0
                             ? decoder._malloc(maximumPointCount * STROKE_POINT_SIZE)
@@ -250,6 +251,15 @@ function decodeScene(source) {
                                     new Float32Array(decoder.HEAPU8.buffer, pointsPointer, copied * STROKE_POINT_FLOATS),
                                     descriptors[strokeIndex * 4] * STROKE_POINT_FLOATS,
                                 );
+                                const copiedTimes = decoder._imm_web_get_stroke_point_times(
+                                    layerIndex, drawingIndex, strokeIndex, pointsPointer, pointCount);
+                                if (copiedTimes !== pointCount) {
+                                    throw new Error(`Could not read point times for stroke ${layerIndex}/${drawingIndex}/${strokeIndex}`);
+                                }
+                                pointTimes.set(
+                                    new Float32Array(decoder.HEAPU8.buffer, pointsPointer, copiedTimes),
+                                    descriptors[strokeIndex * 4],
+                                );
                             }
                         } finally {
                             if (pointsPointer !== 0) decoder._free(pointsPointer);
@@ -259,14 +269,20 @@ function decodeScene(source) {
                             descriptors,
                             bounds,
                             points,
+                            pointTimes,
                         };
                         const packStartedAt = performance.now();
                         drawing.geometries = packPaintGeometry(drawing);
                         packMs += performance.now() - packStartedAt;
                         layer.drawings.push(drawing);
-                        transfers.push(descriptors.buffer, bounds.buffer, points.buffer);
+                        transfers.push(descriptors.buffer, bounds.buffer, points.buffer, pointTimes.buffer);
                         for (const geometry of drawing.geometries) {
-                            transfers.push(geometry.positions.buffer, geometry.colors.buffer, geometry.indices.buffer);
+                            transfers.push(
+                                geometry.positions.buffer,
+                                geometry.colors.buffer,
+                                geometry.progress.buffer,
+                                geometry.indices.buffer,
+                            );
                         }
                     }
                 } else if (layer.type === 4 && decoder._imm_web_get_picture_info(layerIndex, pictureInfoPointer) !== 0) {

@@ -102,7 +102,14 @@ function fixture(): ImmDocument {
         frameCount: 3,
         maxRepeatCount: 1,
         frameBuffer: new Uint32Array([2, 1, 0]),
-        drawings: [{ biggestStroke: 1, descriptors: new Uint32Array(), bounds: new Float32Array(), points: new Float32Array(), geometries: [] }, {}, {}] as ImmLayer["drawings"],
+        drawings: Array.from({ length: 3 }, () => ({
+            biggestStroke: 1,
+            descriptors: new Uint32Array(),
+            bounds: new Float32Array(),
+            points: new Float32Array(),
+            pointTimes: new Float32Array(),
+            geometries: [],
+        })),
         keys: [
             key(IMM_ANIM_VISIBILITY, 0, { boolValue: true }),
             key(IMM_ANIM_OPACITY, 0, { interpolation: IMM_INTERPOLATION_LINEAR, floatValue: 0.5 }),

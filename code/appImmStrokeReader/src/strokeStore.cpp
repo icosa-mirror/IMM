@@ -405,6 +405,23 @@ bool StrokeStore::GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, S
     return true;
 }
 
+bool StrokeStore::GetStrokePointTimes(int layerIdx, int drawingIdx, int strokeIdx, float* times, int maxPoints) const
+{
+    if (!times || maxPoints <= 0 || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+        return false;
+    const auto& drawings = mDocument.layers[layerIdx].drawings;
+    if (drawingIdx < 0 || drawingIdx >= static_cast<int>(drawings.size()))
+        return false;
+    const auto& strokes = drawings[drawingIdx].strokes;
+    if (strokeIdx < 0 || strokeIdx >= static_cast<int>(strokes.size()))
+        return false;
+    const StoredStroke& stroke = strokes[strokeIdx];
+    const int copyCount = std::min(static_cast<int>(stroke.points.size()), maxPoints);
+    for (int index = 0; index < copyCount; ++index)
+        times[index] = stroke.points[index].mTim;
+    return true;
+}
+
 bool StrokeStore::GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const
 {
     if (!info)
