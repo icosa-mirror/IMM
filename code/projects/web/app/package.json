@@ -11,7 +11,8 @@
     "test": "bun test",
     "preview": "vite preview",
     "test:browser:smoke": "node tests/web-player-smoke.mjs",
-    "test:browser": "node tests/web-player-browser.mjs"
+    "test:browser": "node tests/web-player-browser.mjs",
+    "test:browser:firefox": "node tests/web-player-firefox.mjs"
   },
   "dependencies": {
     "three": "0.180.0"

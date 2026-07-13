@@ -171,6 +171,53 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  verify-firefox:
+    name: Firefox browser verification
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install web dependencies
+        working-directory: code/projects/web/app
+        run: bun install --frozen-lockfile
+
+      - name: Cache Playwright Firefox
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-firefox-${{ runner.os }}-${{ hashFiles('code/projects/web/app/bun.lock') }}
+
+      - name: Install Playwright Firefox and system dependencies
+        working-directory: code/projects/web/app
+        run: node node_modules/playwright-core/cli.js install --with-deps firefox
+
+      - name: Download decoder artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-player-decoder-${{ github.sha }}
+          path: code/projects/web/app/public/decoder
+
+      - name: Run Firefox browser verification
+        working-directory: code/projects/web/app
+        env:
+          IMM_WEB_HEADLESS: "1"
+        run: bun run test:browser:firefox
+
+      - name: Upload failed Firefox evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebPlayerFirefoxFailure
+          path: artifacts/web-native
+          if-no-files-found: ignore
+          retention-days: 7
+
   deploy:
     name: Deploy web player
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

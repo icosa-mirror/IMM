@@ -24,7 +24,11 @@ const ANIMATION_KEY_SIZE = 80;
 const CHAPTER_INFO_SIZE = 24;
 const KEEP_ALIVE_INFO_SIZE = 32;
 
-const decoder = await createDecoderModule();
+let decoder;
+const decoderReady = createDecoderModule().then((module) => {
+    decoder = module;
+    return module;
+});
 
 
 function readSummary(memory, pointer) {
@@ -520,6 +524,7 @@ async function handleMessage(message, send) {
     }
 
     try {
+        await decoderReady;
         if (type === "inspect") {
             send({ requestId, ...inspect(source) });
         } else {

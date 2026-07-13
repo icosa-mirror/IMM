@@ -116,6 +116,15 @@ Set `IMM_WEB_HEADLESS=1` only for unattended automation. Results are written to
 CPU-frame, GPU-frame (when timer queries are available), draw-call, triangle,
 pixel-ratio, texture/geometry, and JavaScript-heap measurements.
 
+The focused Firefox run verifies worker startup, the complete `sample1.imm`
+render, its three embedded Opus sources, positional playback, the 50 ms A/V
+drift bound, and generated PCM WAV decode:
+
+```bash
+node node_modules/playwright-core/cli.js install firefox
+bun run test:browser:firefox
+```
+
 Private local codec fixtures can be included without copying or serving them by
 setting `IMM_WEB_LOCAL_OGG_FIXTURE` and/or `IMM_WEB_LOCAL_WAV_FIXTURE` to their
 absolute paths before `bun run test:browser`. Playwright transfers each file

@@ -377,15 +377,30 @@ export class ImmWebAudio {
         listenerDirection.copy(forward).applyQuaternion(new THREE.Quaternion().fromArray(transform.rotation)).normalize();
         listenerUp.copy(up).applyQuaternion(new THREE.Quaternion().fromArray(transform.rotation)).normalize();
         const audioListener = this.#context.listener;
-        setAudioParam(audioListener.positionX, listenerPosition.x, this.#context.currentTime);
-        setAudioParam(audioListener.positionY, listenerPosition.y, this.#context.currentTime);
-        setAudioParam(audioListener.positionZ, listenerPosition.z, this.#context.currentTime);
-        setAudioParam(audioListener.forwardX, listenerDirection.x, this.#context.currentTime);
-        setAudioParam(audioListener.forwardY, listenerDirection.y, this.#context.currentTime);
-        setAudioParam(audioListener.forwardZ, listenerDirection.z, this.#context.currentTime);
-        setAudioParam(audioListener.upX, listenerUp.x, this.#context.currentTime);
-        setAudioParam(audioListener.upY, listenerUp.y, this.#context.currentTime);
-        setAudioParam(audioListener.upZ, listenerUp.z, this.#context.currentTime);
+        const time = this.#context.currentTime;
+        if (hasAudioParams(audioListener.positionX, audioListener.positionY, audioListener.positionZ)) {
+            setAudioParam(audioListener.positionX, listenerPosition.x, time);
+            setAudioParam(audioListener.positionY, listenerPosition.y, time);
+            setAudioParam(audioListener.positionZ, listenerPosition.z, time);
+        } else {
+            legacyAudioListener(audioListener).setPosition?.(
+                listenerPosition.x, listenerPosition.y, listenerPosition.z,
+            );
+        }
+        if (hasAudioParams(audioListener.forwardX, audioListener.forwardY, audioListener.forwardZ) &&
+            hasAudioParams(audioListener.upX, audioListener.upY, audioListener.upZ)) {
+            setAudioParam(audioListener.forwardX, listenerDirection.x, time);
+            setAudioParam(audioListener.forwardY, listenerDirection.y, time);
+            setAudioParam(audioListener.forwardZ, listenerDirection.z, time);
+            setAudioParam(audioListener.upX, listenerUp.x, time);
+            setAudioParam(audioListener.upY, listenerUp.y, time);
+            setAudioParam(audioListener.upZ, listenerUp.z, time);
+        } else {
+            legacyAudioListener(audioListener).setOrientation?.(
+                listenerDirection.x, listenerDirection.y, listenerDirection.z,
+                listenerUp.x, listenerUp.y, listenerUp.z,
+            );
+        }
     }
 
     #usesAudioTimelineClock(): boolean {
@@ -531,12 +546,20 @@ function updatePanner(panner: PannerNode, transform: ImmTransform, time: number)
     if (transform.flip === 2) sourceUp.y *= -1;
     sourceDirection.applyQuaternion(rotation).normalize();
     sourceUp.applyQuaternion(rotation).normalize();
-    setAudioParam(panner.positionX, sourcePosition.x, time);
-    setAudioParam(panner.positionY, sourcePosition.y, time);
-    setAudioParam(panner.positionZ, sourcePosition.z, time);
-    setAudioParam(panner.orientationX, sourceDirection.x, time);
-    setAudioParam(panner.orientationY, sourceDirection.y, time);
-    setAudioParam(panner.orientationZ, sourceDirection.z, time);
+    if (hasAudioParams(panner.positionX, panner.positionY, panner.positionZ)) {
+        setAudioParam(panner.positionX, sourcePosition.x, time);
+        setAudioParam(panner.positionY, sourcePosition.y, time);
+        setAudioParam(panner.positionZ, sourcePosition.z, time);
+    } else {
+        legacyPanner(panner).setPosition?.(sourcePosition.x, sourcePosition.y, sourcePosition.z);
+    }
+    if (hasAudioParams(panner.orientationX, panner.orientationY, panner.orientationZ)) {
+        setAudioParam(panner.orientationX, sourceDirection.x, time);
+        setAudioParam(panner.orientationY, sourceDirection.y, time);
+        setAudioParam(panner.orientationZ, sourceDirection.z, time);
+    } else {
+        legacyPanner(panner).setOrientation?.(sourceDirection.x, sourceDirection.y, sourceDirection.z);
+    }
 }
 
 export function immAudioMimeType(assetFormat: number): string | undefined {
@@ -549,6 +572,27 @@ export function immAudioMimeType(assetFormat: number): string | undefined {
 function setAudioParam(parameter: AudioParam, value: number, time: number): void {
     parameter.cancelScheduledValues(time);
     parameter.setValueAtTime(Number.isFinite(value) ? value : 0, time);
+}
+
+function hasAudioParams(...parameters: ReadonlyArray<AudioParam | undefined>): boolean {
+    return parameters.every((parameter) => parameter !== undefined &&
+        typeof parameter.cancelScheduledValues === "function" &&
+        typeof parameter.setValueAtTime === "function");
+}
+
+function legacyAudioListener(listener: AudioListener): AudioListener & {
+    setPosition?: (x: number, y: number, z: number) => void;
+    setOrientation?: (forwardX: number, forwardY: number, forwardZ: number,
+        upX: number, upY: number, upZ: number) => void;
+} {
+    return listener;
+}
+
+function legacyPanner(panner: PannerNode): PannerNode & {
+    setPosition?: (x: number, y: number, z: number) => void;
+    setOrientation?: (x: number, y: number, z: number) => void;
+} {
+    return panner;
 }
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
