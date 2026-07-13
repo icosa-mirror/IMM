@@ -22,6 +22,9 @@ for (let brushType = 0; brushType < geometries.length; brushType++) {
     assert.equal(geometry.brushType, brushType);
     assert.equal(geometry.positions.length, 2 * sectionCount * 3);
     assert.equal(geometry.colors.length, 2 * sectionCount * 4);
+    assert.equal(geometry.directions.length, 2 * sectionCount * 3);
+    assert.equal(geometry.visibility.length, 2 * sectionCount);
+    assert.equal(geometry.masks.length, 2 * sectionCount);
     assert.equal(geometry.progress.length, 2 * sectionCount);
     assert.equal(geometry.indices.length, sectionCount * 6);
     assert.equal(geometry.triangleCount, sectionCount * 2);
@@ -29,6 +32,9 @@ for (let brushType = 0; brushType < geometries.length; brushType++) {
     assert.ok(Array.from(geometry.positions).every(Number.isFinite));
     assert.deepEqual(Array.from(geometry.indices.slice(0, 6)), [0, 1, sectionCount, 1, sectionCount + 1, sectionCount]);
     assert.deepEqual(Array.from(geometry.colors.slice(0, 4)), [brushType / 4, 0.25, 0.5, 0.75]);
+    assert.deepEqual(Array.from(geometry.directions.slice(0, 3)), [0, 0, -1]);
+    assert.ok(Array.from(geometry.visibility).every((value) => value === 0));
+    assert.ok(Array.from(geometry.masks).every((value) => value === brushType));
     assert.ok(Array.from(geometry.progress.slice(0, sectionCount)).every(
         (value) => Math.abs(value - brushType / 5) < 1e-6));
     if (brushType >= 2) assertOutwardFacing(geometry);

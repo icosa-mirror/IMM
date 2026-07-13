@@ -28,7 +28,7 @@ const chapter = requiredElement<HTMLSelectElement>("chapter");
 const viewpoint = requiredElement<HTMLSelectElement>("viewpoint");
 const cameraMode = requiredElement<HTMLSelectElement>("camera-mode");
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const idleClearColor = new THREE.Color(0x10151d);
 renderer.setClearColor(idleClearColor, 1);
@@ -459,6 +459,9 @@ function showSummary(
         workerPackMs: round(document.metrics.packMs),
         geometryUploadMs: round(view.diagnostics.geometryBuildMs),
         alphaMode: view.diagnostics.alphaMode,
+        depthBits: view.diagnostics.depthBits,
+        stencilBits: view.diagnostics.stencilBits,
+        sampleCount: view.diagnostics.sampleCount,
         maxTextureSize: view.diagnostics.maxTextureSize,
         colorMode: view.diagnostics.colorMode,
     };

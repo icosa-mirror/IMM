@@ -17,6 +17,9 @@ export interface ImmPaintGeometry {
     triangleCount: number;
     positions: Float32Array;
     colors: Float32Array;
+    directions: Float32Array;
+    visibility: Uint8Array;
+    masks: Uint8Array;
     progress: Float32Array;
     indices: Uint16Array | Uint32Array;
 }

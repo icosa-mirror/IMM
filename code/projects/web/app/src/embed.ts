@@ -9,7 +9,7 @@ const canvas = required<HTMLCanvasElement>("viewport");
 const input = required<HTMLInputElement>("file-input");
 const status = required<HTMLParagraphElement>("status");
 const summary = required<HTMLPreElement>("summary");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;

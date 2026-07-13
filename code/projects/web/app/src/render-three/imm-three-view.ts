@@ -23,7 +23,10 @@ export interface ImmThreeDiagnostics {
     meshCount: number;
     triangleCount: number;
     geometryBuildMs: number;
-    alphaMode: "alpha-to-coverage" | "alpha-blend";
+    alphaMode: "alpha-to-coverage" | "alpha-hash";
+    depthBits: number | null;
+    stencilBits: number | null;
+    sampleCount: number | null;
     maxTextureSize: number | null;
     colorMode: "srgb-output-no-tone-mapping";
     activeDrawingCount: number;
@@ -65,7 +68,9 @@ export class ImmThreeView {
     constructor(document: ImmDocument, options: ImmThreeViewOptions = {}) {
         this.#document = document;
         this.object3d.name = "IMM document";
-        this.#alphaToCoverage = options.renderer?.getContext().getContextAttributes()?.antialias === true;
+        const context = options.renderer?.getContext();
+        const sampleCount = context === undefined ? null : Number(context.getParameter(context.SAMPLES));
+        this.#alphaToCoverage = sampleCount !== null && sampleCount > 0;
         const startedAt = performance.now();
 
         for (const layer of document.layers) {
@@ -114,7 +119,10 @@ export class ImmThreeView {
             meshCount,
             triangleCount,
             geometryBuildMs: performance.now() - startedAt,
-            alphaMode: this.#alphaToCoverage ? "alpha-to-coverage" : "alpha-blend",
+            alphaMode: this.#alphaToCoverage ? "alpha-to-coverage" : "alpha-hash",
+            depthBits: context === undefined ? null : Number(context.getParameter(context.DEPTH_BITS)),
+            stencilBits: context === undefined ? null : Number(context.getParameter(context.STENCIL_BITS)),
+            sampleCount,
             maxTextureSize: options.renderer?.capabilities.maxTextureSize ?? null,
             colorMode: "srgb-output-no-tone-mapping",
             activeDrawingCount: this.#paint.size,
@@ -289,6 +297,9 @@ function createPaintGeometry(packed: ImmPaintGeometry): THREE.BufferGeometry {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(packed.positions, 3));
     geometry.setAttribute("color", new THREE.BufferAttribute(packed.colors, 4));
+    geometry.setAttribute("immDirection", new THREE.BufferAttribute(packed.directions, 3));
+    geometry.setAttribute("immVisibility", new THREE.BufferAttribute(packed.visibility, 1));
+    geometry.setAttribute("immMask", new THREE.BufferAttribute(packed.masks, 1));
     geometry.setAttribute("immProgress", new THREE.BufferAttribute(packed.progress, 1));
     geometry.setIndex(new THREE.BufferAttribute(packed.indices, 1));
     geometry.computeBoundingBox();
@@ -300,6 +311,7 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
     const keepAlive = layer.keepAlive;
     const parameters = keepAlive?.parameters ?? [];
     return new THREE.ShaderMaterial({
+        defines: { IMM_ALPHA_HASH: alphaToCoverage ? 0 : 1 },
         uniforms: {
             immOpacity: { value: 1 }, immDrawIn: { value: 1 }, immTime: { value: 0 },
             immKeepAliveType: { value: keepAlive?.type ?? 0 },
@@ -309,21 +321,32 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
             immBlinkMaxIn: { value: parameters[4] ?? 1 },
         },
         vertexShader: `
-            attribute float immProgress;
-            varying vec4 immColor; varying float immVertexProgress;
+            attribute float immProgress; attribute vec3 immDirection;
+            attribute float immVisibility; attribute float immMask;
+            varying vec4 immColor; varying float immVertexProgress; varying float immDirectional; varying float immMaskSeed;
             uniform int immKeepAliveType; uniform float immTime; uniform vec3 immWiggle;
             void main(){
-                immColor=color; immVertexProgress=immProgress;
+                immColor=color; immVertexProgress=immProgress; immMaskSeed=immMask;
                 vec3 animatedPosition=position;
                 if(immKeepAliveType==${IMM_KEEP_ALIVE_WIGGLE}) animatedPosition+=immWiggle.z*sin(immWiggle.x*position.yzx+immWiggle.y*immTime);
-                gl_Position=projectionMatrix*modelViewMatrix*vec4(animatedPosition,1.0);
+                vec3 cpos=(modelViewMatrix*vec4(animatedPosition,1.0)).xyz;
+                immDirectional=1.0;
+                if(immVisibility<0.5){
+                    vec3 viewDirection=normalize(mat3(modelViewMatrix)*immDirection);
+                    immDirectional=pow(clamp(dot(viewDirection,normalize(cpos)),0.0,1.0),2.0);
+                }
+                gl_Position=projectionMatrix*vec4(cpos,1.0);
             }
         `,
         fragmentShader: `
             uniform float immOpacity; uniform float immDrawIn;
             uniform int immKeepAliveType; uniform int immWaveform; uniform float immTime;
             uniform vec4 immBlink; uniform float immBlinkMaxIn;
-            varying vec4 immColor; varying float immVertexProgress;
+            varying vec4 immColor; varying float immVertexProgress; varying float immDirectional; varying float immMaskSeed;
+            float coverageNoise(){
+                vec2 pixel=floor(gl_FragCoord.xy)+vec2(immMaskSeed*17.0,immTime*61.0);
+                return fract(52.9829189*fract(dot(pixel,vec2(0.06711056,0.00583715))));
+            }
             float keepAliveWave(){
                 float phase=fract(immTime*immBlink.x);
                 if(immWaveform==1) return phase<0.5?0.0:1.0;
@@ -338,15 +361,23 @@ function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer:
                     float mapped=clamp((keepAliveWave()-immBlink.w)/max(immBlinkMaxIn-immBlink.w,0.00001),0.0,1.0);
                     blink=mix(immBlink.y,immBlink.z,mapped);
                 }
-                gl_FragColor=vec4(immColor.rgb,immColor.a*immOpacity*reveal*blink);
+                float coverage=clamp(immColor.a*immOpacity*immDirectional*reveal*blink,0.0,1.0);
+                #if IMM_ALPHA_HASH == 1
+                    if(coverage<coverageNoise()) discard;
+                    gl_FragColor=vec4(immColor.rgb,1.0);
+                #else
+                    gl_FragColor=vec4(immColor.rgb,coverage);
+                #endif
                 #include <tonemapping_fragment>
                 #include <colorspace_fragment>
             }
         `,
         vertexColors: true,
-        transparent: true,
+        transparent: false,
+        blending: THREE.NoBlending,
         depthTest: true,
         depthWrite: true,
+        depthFunc: THREE.LessEqualDepth,
         side: brushType <= 1 ? THREE.DoubleSide : THREE.FrontSide,
         alphaToCoverage,
         toneMapped: false,

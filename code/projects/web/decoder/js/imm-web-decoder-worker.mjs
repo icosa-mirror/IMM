@@ -286,6 +286,9 @@ function decodeScene(source) {
                             transfers.push(
                                 geometry.positions.buffer,
                                 geometry.colors.buffer,
+                                geometry.directions.buffer,
+                                geometry.visibility.buffer,
+                                geometry.masks.buffer,
                                 geometry.progress.buffer,
                                 geometry.indices.buffer,
                             );

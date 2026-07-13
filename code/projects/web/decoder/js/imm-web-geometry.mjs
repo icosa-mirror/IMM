@@ -15,7 +15,15 @@ export function packPaintGeometry(drawing) {
             const pointCount = drawing.descriptors[descriptorOffset + 1] ?? 0;
             if (pointCount < 2) continue;
             const sectionCount = SECTION_COUNTS[brushType];
-            strokes.push({ pointOffset, pointCount, sectionCount, vertexOffset: vertexCount, indexOffset: indexCount });
+            strokes.push({
+                pointOffset,
+                pointCount,
+                sectionCount,
+                vertexOffset: vertexCount,
+                indexOffset: indexCount,
+                visibility: drawing.descriptors[descriptorOffset + 3] ?? 0,
+                mask: strokeIndex & 127,
+            });
             vertexCount += pointCount * sectionCount;
             indexCount += (pointCount - 1) * sectionCount * 6;
         }
@@ -23,15 +31,20 @@ export function packPaintGeometry(drawing) {
 
         const positions = new Float32Array(vertexCount * 3);
         const colors = new Float32Array(vertexCount * 4);
+        const directions = new Float32Array(vertexCount * 3);
+        const visibility = new Uint8Array(vertexCount);
+        const masks = new Uint8Array(vertexCount);
         const progress = new Float32Array(vertexCount);
         const indices = vertexCount > 65_535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
-        for (const stroke of strokes) buildStroke(drawing, stroke, brushType, positions, colors, progress, indices);
-        results.push({ brushType, triangleCount: indexCount / 3, positions, colors, progress, indices });
+        for (const stroke of strokes) {
+            buildStroke(drawing, stroke, brushType, positions, colors, directions, visibility, masks, progress, indices);
+        }
+        results.push({ brushType, triangleCount: indexCount / 3, positions, colors, directions, visibility, masks, progress, indices });
     }
     return results;
 }
 
-function buildStroke(drawing, stroke, brushType, positions, colors, progress, indices) {
+function buildStroke(drawing, stroke, brushType, positions, colors, directions, visibility, masks, progress, indices) {
     const tangent = [0, 0, 0];
     const basisU = [0, 0, 0];
     const basisV = [0, 0, 0];
@@ -66,6 +79,11 @@ function buildStroke(drawing, stroke, brushType, positions, colors, progress, in
             colors[colorOffset + 1] = read(drawing.points, sourceOffset + 10);
             colors[colorOffset + 2] = read(drawing.points, sourceOffset + 11);
             colors[colorOffset + 3] = read(drawing.points, sourceOffset + 12);
+            directions[positionOffset] = read(drawing.points, sourceOffset + 6);
+            directions[positionOffset + 1] = read(drawing.points, sourceOffset + 7);
+            directions[positionOffset + 2] = read(drawing.points, sourceOffset + 8);
+            visibility[vertexIndex] = stroke.visibility;
+            masks[vertexIndex] = stroke.mask;
             progress[vertexIndex] = read(drawing.pointTimes, stroke.pointOffset + pointIndex);
         }
     }

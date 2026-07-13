@@ -18,7 +18,7 @@ import "./style.css";
 
 const canvas = document.querySelector<HTMLCanvasElement>("#viewport");
 if (canvas === null) throw new Error("Phase 3 fixture canvas is missing");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, stencil: true });
 renderer.setPixelRatio(1);
 renderer.setSize(640, 360, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -235,6 +235,9 @@ function drawing(x: number, color: number): ImmDrawing {
             triangleCount: 1,
             positions: new Float32Array([x - 0.7, -0.5, 0, x + 0.7, -0.5, 0, x, 0.7, 0]),
             colors: new Float32Array([c.r, c.g, c.b, 1, c.r, c.g, c.b, 1, c.r, c.g, c.b, 1]),
+            directions: new Float32Array([0, 0, -1, 0, 0, -1, 0, 0, -1]),
+            visibility: new Uint8Array([1, 1, 1]),
+            masks: new Uint8Array([0, 0, 0]),
             progress: new Float32Array([0, 0.25, 0.5]),
             indices: new Uint16Array([0, 1, 2]),
         }],
