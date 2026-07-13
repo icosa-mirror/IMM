@@ -42,6 +42,22 @@ try {
         "--json-output", resolve(artifactDirectory, "sample1-web-render-metrics.json"),
     ], { stdio: "inherit" });
 
+    const playbackInfo = await desktop.evaluate(() => {
+        window.__immPlayback.pause();
+        return window.__immPlayback.snapshot();
+    });
+    assert.ok(playbackInfo.durationTicks > 0);
+    const sampleTimestamps = [...new Set([
+        0,
+        Math.round(playbackInfo.durationTicks / 2),
+        playbackInfo.durationTicks,
+    ])];
+    for (const ticks of sampleTimestamps) {
+        await desktop.evaluate((value) => window.__immPlayback.seekTicks(value), ticks);
+        await desktop.waitForTimeout(50);
+        await desktop.screenshot({ path: resolve(artifactDirectory, `sample1-time-${ticks}.png`) });
+    }
+
     const loadedGeometryCounts = [];
     let decodeResponsiveness = null;
     for (let cycle = 0; cycle < 3; cycle++) {
@@ -61,6 +77,55 @@ try {
         `Main thread did not service events during ${decodeResponsiveness.loadMs} ms reload`);
     assert.ok(loadedGeometryCounts.every((count) => count === loadedGeometryCounts[0]),
         `WebGL geometry count grew across reloads: ${loadedGeometryCounts}`);
+
+    const phase3 = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
+    const phase3Errors = [];
+    phase3.on("console", (message) => {
+        if (message.type() === "error") phase3Errors.push(message.text());
+    });
+    await phase3.goto("http://127.0.0.1:4177/phase3-fixture.html");
+    await phase3.waitForFunction(() => window.__phase3Fixture?.state().ready === true);
+    const expectedStates = [
+        { ticks: 0, x: -1, opacity: 0.25, drawIn: 0, drawing: 0 },
+        { ticks: 25, x: -0.5, opacity: 0.4375, drawIn: 0.125, drawing: 0 },
+        { ticks: 50, x: 0, opacity: 0.625, drawIn: 0.25, drawing: 1 },
+        { ticks: 75, x: 0.5, opacity: 0.8125, drawIn: 0.375, drawing: 1 },
+        { ticks: 100, x: -1, opacity: 0.25, drawIn: 0, drawing: 0 },
+        { ticks: 150, x: 0, opacity: 0.625, drawIn: 0.25, drawing: 1 },
+        { ticks: 200, x: -1, opacity: 0.25, drawIn: 0, drawing: 0 },
+        { ticks: 399, x: 0.98, opacity: 0.9925, drawIn: 0.495, drawing: 1 },
+        { ticks: 400, x: -1, opacity: 0.25, drawIn: 0, drawing: 0 },
+    ];
+    const phase3States = [];
+    for (const expected of expectedStates) {
+        const actual = await phase3.evaluate((ticks) => {
+            window.__phase3Fixture.setTimeTicks(ticks);
+            return window.__phase3Fixture.state();
+        }, expected.ticks);
+        phase3States.push(actual);
+        assert.equal(actual.timeTicks, expected.ticks);
+        assert.equal(actual.paintVisible, true);
+        assert.ok(Math.abs(actual.paintX - expected.x) < 1e-5, `Transform mismatch at ${expected.ticks}`);
+        assert.ok(Math.abs(actual.opacity - expected.opacity) < 1e-5, `Opacity mismatch at ${expected.ticks}`);
+        assert.ok(Math.abs(actual.drawIn - expected.drawIn) < 1e-5, `Draw-in mismatch at ${expected.ticks}`);
+        assert.equal(actual.drawingIndex, expected.drawing);
+        assert.deepEqual(actual.pictureTypes, [0, 1, 2, 3, 4]);
+        await phase3.screenshot({ path: resolve(artifactDirectory, `phase3-time-${expected.ticks}.png`) });
+    }
+    await phase3.evaluate(() => window.__phase3Fixture.setTimeTicks(50));
+    const targetBefore = await phase3.screenshot();
+    await phase3.evaluate(() => window.__phase3Fixture.setTimeTicks(17));
+    await phase3.evaluate(() => window.__phase3Fixture.setTimeTicks(311));
+    await phase3.evaluate(() => window.__phase3Fixture.setTimeTicks(400));
+    await phase3.evaluate(() => window.__phase3Fixture.setTimeTicks(50));
+    const targetAfterPriorPlayback = await phase3.screenshot();
+    assert.deepEqual(targetAfterPriorPlayback, targetBefore,
+        "Explicit seek rendered differently after prior playback");
+    assert.deepEqual(phase3Errors, []);
+    const phase3GeometryCounts = phase3States.map((state) => state.gpuGeometries);
+    assert.ok(phase3GeometryCounts.every((count) => count === phase3GeometryCounts[0]),
+        `Drawing swaps leaked GPU geometries: ${phase3GeometryCounts}`);
+    await phase3.close();
 
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     await embedded.goto("http://127.0.0.1:4177/embed.html");
@@ -99,6 +164,9 @@ try {
         mobile4xCpu: mobileMetrics,
         loadedGeometryCounts,
         decodeResponsiveness,
+        playbackInfo,
+        sampleTimestamps,
+        phase3States,
     };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
