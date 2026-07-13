@@ -7,7 +7,6 @@ import {
     type ImmLayer,
     type ImmTransform,
 } from "../format/imm-document";
-import { buildPaintGeometries } from "./paint-geometry";
 
 export interface ImmThreeDiagnostics {
     paintLayerCount: number;
@@ -15,6 +14,13 @@ export interface ImmThreeDiagnostics {
     meshCount: number;
     triangleCount: number;
     geometryBuildMs: number;
+    alphaMode: "alpha-to-coverage" | "alpha-blend";
+    maxTextureSize: number | null;
+}
+
+export interface ImmThreeViewOptions {
+    renderer?: THREE.WebGLRenderer;
+    parent?: THREE.Object3D;
 }
 
 export class ImmThreeView {
@@ -22,8 +28,11 @@ export class ImmThreeView {
     readonly diagnostics: ImmThreeDiagnostics;
     readonly #resources: Array<{ dispose(): void }> = [];
 
-    constructor(document: ImmDocument) {
+    readonly #alphaToCoverage: boolean;
+
+    constructor(document: ImmDocument, options: ImmThreeViewOptions = {}) {
         this.object3d.name = "IMM document";
+        this.#alphaToCoverage = options.renderer?.getContext().getContextAttributes()?.antialias === true;
         const startedAt = performance.now();
         let paintLayerCount = 0;
         let pictureLayerCount = 0;
@@ -53,7 +62,10 @@ export class ImmThreeView {
             meshCount,
             triangleCount,
             geometryBuildMs: performance.now() - startedAt,
+            alphaMode: this.#alphaToCoverage ? "alpha-to-coverage" : "alpha-blend",
+            maxTextureSize: options.renderer?.capabilities.maxTextureSize ?? null,
         };
+        options.parent?.add(this.object3d);
     }
 
     update(_timeSeconds: number, _camera: THREE.Camera): void {
@@ -76,7 +88,13 @@ export class ImmThreeView {
         applyTransform(group, layer.worldTransform);
         let meshes = 0;
         let triangles = 0;
-        for (const result of buildPaintGeometries(drawing)) {
+        for (const result of drawing.geometries) {
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute("position", new THREE.BufferAttribute(result.positions, 3));
+            geometry.setAttribute("color", new THREE.BufferAttribute(result.colors, 4));
+            geometry.setIndex(new THREE.BufferAttribute(result.indices, 1));
+            geometry.computeBoundingBox();
+            geometry.computeBoundingSphere();
             const material = new THREE.MeshBasicMaterial({
                 vertexColors: true,
                 transparent: true,
@@ -84,14 +102,14 @@ export class ImmThreeView {
                 depthTest: true,
                 depthWrite: true,
                 side: result.brushType <= 1 ? THREE.DoubleSide : THREE.FrontSide,
-                alphaToCoverage: true,
+                alphaToCoverage: this.#alphaToCoverage,
                 toneMapped: false,
             });
-            const mesh = new THREE.Mesh(result.geometry, material);
+            const mesh = new THREE.Mesh(geometry, material);
             mesh.name = `${layer.name} brush ${result.brushType}`;
             mesh.frustumCulled = true;
             group.add(mesh);
-            this.#resources.push(result.geometry, material);
+            this.#resources.push(geometry, material);
             meshes++;
             triangles += result.triangleCount;
         }

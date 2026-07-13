@@ -122,6 +122,11 @@ if(EMSCRIPTEN)
         ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-decoder-worker.mjs
         COPYONLY
     )
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/js/imm-web-geometry.mjs
+        ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-geometry.mjs
+        COPYONLY
+    )
 
     find_program(IMM_WEB_NODE_EXECUTABLE node REQUIRED)
     add_test(
@@ -131,6 +136,12 @@ if(EMSCRIPTEN)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/imm_web_decoder_wasm_smoke.mjs
             ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-decoder-worker.mjs
             ${CMAKE_CURRENT_SOURCE_DIR}/../../../../exampleImmFiles/sample1.imm
+    )
+    add_test(
+        NAME imm_web_geometry_tests
+        COMMAND
+            ${IMM_WEB_NODE_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/imm_web_geometry_tests.mjs
     )
 else()
     add_executable(imm_web_decoder_tests

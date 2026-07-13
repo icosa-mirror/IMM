@@ -1,4 +1,5 @@
 import createDecoderModule from "./imm-web-decoder.mjs";
+import { packPaintGeometry } from "./imm-web-geometry.mjs";
 
 
 const SUMMARY_SIZE = 72;
@@ -131,6 +132,7 @@ function decodeScene(source) {
             return { ok: false, error: readError(memory, errorPointer) };
         }
         const decodedAt = performance.now();
+        let packMs = 0;
         const backgroundPointer = decoder._malloc(3 * Float32Array.BYTES_PER_ELEMENT);
         const layerPointer = decoder._malloc(LAYER_INFO_SIZE);
         const localPointer = decoder._malloc(TRANSFORM_SIZE);
@@ -243,13 +245,20 @@ function decodeScene(source) {
                         } finally {
                             if (pointsPointer !== 0) decoder._free(pointsPointer);
                         }
-                        layer.drawings.push({
+                        const drawing = {
                             biggestStroke: decoder._imm_web_get_drawing_biggest_stroke(layerIndex, drawingIndex),
                             descriptors,
                             bounds,
                             points,
-                        });
+                        };
+                        const packStartedAt = performance.now();
+                        drawing.geometries = packPaintGeometry(drawing);
+                        packMs += performance.now() - packStartedAt;
+                        layer.drawings.push(drawing);
                         transfers.push(descriptors.buffer, bounds.buffer, points.buffer);
+                        for (const geometry of drawing.geometries) {
+                            transfers.push(geometry.positions.buffer, geometry.colors.buffer, geometry.indices.buffer);
+                        }
                     }
                 } else if (layer.type === 4 && decoder._imm_web_get_picture_info(layerIndex, pictureInfoPointer) !== 0) {
                     memory = new DataView(decoder.HEAPU8.buffer);
@@ -287,6 +296,7 @@ function decodeScene(source) {
                     metrics: {
                         decodeMs: decodedAt - startedAt,
                         marshalMs: marshalledAt - decodedAt,
+                        packMs,
                     },
                 },
                 transfers,

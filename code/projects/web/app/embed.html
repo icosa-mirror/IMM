@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IMM Three.js Embed Fixture</title>
+  </head>
+  <body>
+    <canvas id="viewport"></canvas>
+    <main class="panel">
+      <p class="eyebrow">Shared-scene integration fixture</p>
+      <h1>IMM + host Three.js</h1>
+      <p>One renderer, canvas, camera, scene, and depth buffer.</p>
+      <label class="file-picker">
+        <span>Open IMM file</span>
+        <input id="file-input" type="file" accept=".imm,application/octet-stream" />
+      </label>
+      <p id="status" role="status">Choose the same IMM file used by the standalone player.</p>
+      <pre id="summary" hidden></pre>
+    </main>
+    <script type="module" src="/src/embed.ts"></script>
+  </body>
+</html>

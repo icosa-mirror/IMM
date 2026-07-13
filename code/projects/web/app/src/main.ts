@@ -45,8 +45,7 @@ fileInput.addEventListener("change", async () => {
         const document = await decoder.decode(source);
         status.textContent = "Building paint geometry…";
         immView?.dispose();
-        immView = new ImmThreeView(document);
-        scene.add(immView.object3d);
+        immView = new ImmThreeView(document, { renderer, parent: scene });
         applyDefaultSpawn(document);
         grid.visible = false;
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
@@ -114,7 +113,10 @@ function showSummary(
         triangles: view.diagnostics.triangleCount,
         decodeMs: round(document.metrics.decodeMs),
         workerMarshalMs: round(document.metrics.marshalMs),
-        geometryBuildMs: round(view.diagnostics.geometryBuildMs),
+        workerPackMs: round(document.metrics.packMs),
+        geometryUploadMs: round(view.diagnostics.geometryBuildMs),
+        alphaMode: view.diagnostics.alphaMode,
+        maxTextureSize: view.diagnostics.maxTextureSize,
     };
     status.textContent = `${fileName}: rendered ${metrics.strokes.toLocaleString()} strokes in ${metrics.meshes} meshes.`;
     summary.textContent = JSON.stringify(metrics, null, 2);

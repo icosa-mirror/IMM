@@ -77,8 +77,19 @@ try {
     if (defaultSpawns.length !== 1) {
         throw new Error(`Expected one default spawn area, found ${defaultSpawns.length}`);
     }
+    const geometries = paintLayers.flatMap((layer) => layer.drawings.flatMap((drawing) => drawing.geometries));
+    if (geometries.length !== 41 || geometries.some((geometry) => geometry.positions.length === 0 || geometry.indices.length === 0)) {
+        throw new Error(`Unexpected packed geometry result: ${geometries.length} batches`);
+    }
+    const triangleCount = geometries.reduce((sum, geometry) => sum + geometry.triangleCount, 0);
+    if (triangleCount !== 798_922) {
+        throw new Error(`Packed paint triangle count mismatch: ${triangleCount}`);
+    }
+    if (!(decoded.document.metrics.packMs >= 0)) {
+        throw new Error("Worker did not report geometry packing time");
+    }
 
-    console.log(`IMM_WEB_WASM_WORKER_SMOKE: passed (${strokeCount} strokes, ${pointCount} points)`);
+    console.log(`IMM_WEB_WASM_WORKER_SMOKE: passed (${strokeCount} strokes, ${pointCount} points, ${triangleCount} paint triangles)`);
 } finally {
     await worker.terminate();
 }
