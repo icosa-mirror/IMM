@@ -28,3 +28,13 @@ cmake --build build/web-decoder-wasm
 
 The Emscripten build emits an ES module intended to run inside a Web Worker. It
 does not enable pthreads or a virtual filesystem.
+
+Run its worker-level smoke test with:
+
+```bash
+ctest --test-dir build/web-decoder-wasm --output-on-failure
+```
+
+The smoke transfers `sample1.imm` to the worker, calls the Wasm C ABI, and
+checks the returned document summary. The same worker module supports browser
+module workers and Node workers used by CI.
