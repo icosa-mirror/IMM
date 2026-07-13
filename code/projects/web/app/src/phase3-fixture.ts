@@ -39,6 +39,8 @@ declare global {
             moveCameraX(value: number): void;
             samplePicture(contentType: number, direction: [number, number, number], eye?: number): number[];
             samplePaintEffect(drawIn: number, timeSeconds: number, keepAliveType: number): number[];
+            sampleOverlap(reverse: boolean): number[];
+            coverageState(): Record<string, unknown>;
         };
     }
 }
@@ -58,7 +60,8 @@ window.__phase3Fixture = {
             if (object.userData.immLayerType === "picture") pictureTypes.push(Number(object.userData.immPictureType));
             if (object.userData.immLayerType === "paint") {
                 const paintMaterial = (object as THREE.Mesh).material as THREE.ShaderMaterial;
-                keepAliveTypes.push(Number(paintMaterial.uniforms.immKeepAliveType?.value ?? 0));
+                const keepAliveType = Number(paintMaterial.uniforms.immKeepAliveType?.value ?? 0);
+                if (keepAliveType !== 0) keepAliveTypes.push(keepAliveType);
             }
         });
         const lockedPicture = findLayer(view.object3d, 3);
@@ -122,6 +125,46 @@ window.__phase3Fixture = {
         renderer.getContext().readPixels(320, 180, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
         return Array.from(pixel);
     },
+    sampleOverlap(reverse) {
+        camera.position.set(0, 0, 3);
+        camera.quaternion.identity();
+        view.setTimeTicks(0, camera);
+        view.setCoverageFrame(7);
+        view.object3d.traverse((object) => {
+            if (object.userData.immLayerType === "picture") object.visible = false;
+            if (object.userData.immLayerType === "paint") {
+                const layerId = object.parent?.userData.immLayerId;
+                object.visible = layerId === 9 || layerId === 10;
+                object.renderOrder = layerId === 9 ? (reverse ? 1 : -1) : (reverse ? -1 : 1);
+            }
+        });
+        renderer.render(scene, camera);
+        const pixels = new Uint8Array(64 * 64 * 4);
+        renderer.getContext().readPixels(288, 148, 64, 64,
+            renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixels);
+        return Array.from(pixels);
+    },
+    coverageState() {
+        const paint: Record<string, unknown>[] = [];
+        const pictures: Record<string, unknown>[] = [];
+        view.object3d.traverse((object) => {
+            if (!(object instanceof THREE.Mesh)) return;
+            const material = object.material as THREE.ShaderMaterial;
+            const state = {
+                noBlending: material.blending === THREE.NoBlending,
+                transparent: material.transparent,
+                depthTest: material.depthTest,
+                depthWrite: material.depthWrite,
+                depthFunc: material.depthFunc,
+                alphaToCoverage: material.alphaToCoverage,
+            };
+            if (object.userData.immLayerType === "paint") paint.push(state);
+            if (object.userData.immLayerType === "picture") pictures.push({
+                ...state, contentType: object.userData.immPictureType,
+            });
+        });
+        return { paint, pictures };
+    },
 };
 window.__phase3Fixture.setTimeTicks(0);
 
@@ -170,6 +213,14 @@ function createFixture(): ImmDocument {
         keepAlive: { type: 2, waveform: 3, parameters: [1, 0.2, 1, 0, 1, 0] },
     });
     blink.keys = [animationKey(IMM_ANIM_VISIBILITY, 0, { boolValue: true })];
+    const overlapFar = makeLayer({
+        id: 9, parentId: 0, type: 1, opacity: 0.5,
+        drawings: [drawing(0, 0xef5350, 1, -0.02, 11)],
+    });
+    const overlapNear = makeLayer({
+        id: 10, parentId: 0, type: 1, opacity: 0.5,
+        drawings: [drawing(0, 0x42a5f5, 1, 0, 37)],
+    });
     return {
         schemaVersion: 2,
         backgroundColor: [0.08, 0.12, 0.18],
@@ -180,7 +231,7 @@ function createFixture(): ImmDocument {
             { startTicks: 0, endTicks: 200, markerAction: IMM_ACTION_PLAY },
             { startTicks: 200, endTicks: 400, markerAction: IMM_ACTION_PLAY },
         ],
-        layers: [root, timeline, paint, blink, ...pictureLayers],
+        layers: [root, timeline, paint, blink, overlapFar, overlapNear, ...pictureLayers],
         metrics: { decodeMs: 0, marshalMs: 0, packMs: 0 },
     };
 }
@@ -224,7 +275,7 @@ function animationKey(property: number, timeTicks: number, values: Partial<ImmAn
     };
 }
 
-function drawing(x: number, color: number): ImmDrawing {
+function drawing(x: number, color: number, alpha = 1, z = 0, mask = 0): ImmDrawing {
     const c = new THREE.Color(color);
     return {
         biggestStroke: 1,
@@ -233,11 +284,13 @@ function drawing(x: number, color: number): ImmDrawing {
         geometries: [{
             brushType: 0,
             triangleCount: 1,
-            positions: new Float32Array([x - 0.7, -0.5, 0, x + 0.7, -0.5, 0, x, 0.7, 0]),
-            colors: new Float32Array([c.r, c.g, c.b, 1, c.r, c.g, c.b, 1, c.r, c.g, c.b, 1]),
+            positions: new Float32Array([x - 0.7, -0.5, z, x + 0.7, -0.5, z, x, 0.7, z]),
+            colors: new Float32Array([
+                c.r, c.g, c.b, alpha, c.r, c.g, c.b, alpha, c.r, c.g, c.b, alpha,
+            ]),
             directions: new Float32Array([0, 0, -1, 0, 0, -1, 0, 0, -1]),
             visibility: new Uint8Array([1, 1, 1]),
-            masks: new Uint8Array([0, 0, 0]),
+            masks: new Uint8Array([mask, mask, mask]),
             progress: new Float32Array([0, 0.25, 0.5]),
             indices: new Uint16Array([0, 1, 2]),
         }],

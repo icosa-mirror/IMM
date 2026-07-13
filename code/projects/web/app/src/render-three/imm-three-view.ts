@@ -161,10 +161,19 @@ export class ImmThreeView {
     setTimeTicks(timeTicks: number, camera?: THREE.Camera): void {
         const snapshot = evaluateImmDocument(this.#document, timeTicks);
         this.#timeTicks = snapshot.timeTicks;
-        this.#coverageFrame = (this.#coverageFrame + 1) & 63;
+        this.#coverageFrame = Math.floor(snapshot.timeTicks * 60 / this.#document.ticksPerSecond) & 63;
         for (const state of snapshot.layers.values()) this.#applyLayerState(state);
         if (camera !== undefined) this.#updateViewerLocked(camera);
         this.object3d.updateMatrixWorld();
+    }
+
+    /** Pins stochastic coverage for deterministic captures and host-controlled render sequencing. */
+    setCoverageFrame(frame: number): void {
+        this.#coverageFrame = Math.max(0, Math.trunc(frame)) & 63;
+        for (const record of this.#paint.values()) {
+            for (const material of record.materials) material.uniforms.immFrame!.value = this.#coverageFrame;
+        }
+        for (const record of this.#pictures.values()) record.material.uniforms.immFrame!.value = this.#coverageFrame;
     }
 
     /** The host owns the renderer and clock; time is an explicit document-relative value. */
@@ -202,7 +211,10 @@ export class ImmThreeView {
         }
 
         const picture = this.#pictures.get(state.layer.id);
-        if (picture !== undefined) picture.material.uniforms.immOpacity!.value = state.opacity;
+        if (picture !== undefined) {
+            picture.material.uniforms.immOpacity!.value = state.opacity;
+            picture.material.uniforms.immFrame!.value = this.#coverageFrame;
+        }
     }
 
     #activateDrawing(record: PaintRecord, drawingIndex: number): { meshes: number; triangles: number } {
@@ -260,15 +272,23 @@ export class ImmThreeView {
         if (picture.contentType === IMM_PICTURE_2D) {
             const aspect = picture.height > 0 ? picture.width / picture.height : 1;
             geometry = new THREE.PlaneGeometry(2 * aspect, 2);
-            material = createPicture2DMaterial(texture, layer.opacity);
+            material = createPicture2DMaterial(
+                texture, layer.opacity, this.#coverageMode, this.#blueNoise, this.#sampleCount,
+            );
         } else if (picture.contentType === IMM_PICTURE_EQUIRECT_MONO ||
             picture.contentType === IMM_PICTURE_EQUIRECT_STEREO) {
             geometry = new THREE.SphereGeometry(100, 64, 32);
-            material = createEquirectMaterial(texture, layer.opacity, picture.contentType === IMM_PICTURE_EQUIRECT_STEREO);
+            material = createEquirectMaterial(
+                texture, layer.opacity, picture.contentType === IMM_PICTURE_EQUIRECT_STEREO,
+                this.#coverageMode, this.#blueNoise, this.#sampleCount,
+            );
         } else if (picture.contentType === IMM_PICTURE_CUBEMAP_CROSS ||
             picture.contentType === IMM_PICTURE_CUBEMAP_VERTICAL) {
             geometry = new THREE.SphereGeometry(100, 64, 32);
-            material = createCubemapAtlasMaterial(texture, layer.opacity, picture.contentType === IMM_PICTURE_CUBEMAP_VERTICAL);
+            material = createCubemapAtlasMaterial(
+                texture, layer.opacity, picture.contentType === IMM_PICTURE_CUBEMAP_VERTICAL,
+                this.#coverageMode, this.#blueNoise, this.#sampleCount,
+            );
         } else {
             texture.dispose();
             return null;
@@ -278,7 +298,6 @@ export class ImmThreeView {
         mesh.userData.immLayerType = "picture";
         mesh.userData.immPictureType = picture.contentType;
         mesh.renderOrder = picture.contentType === IMM_PICTURE_2D ? 0 : -10_000;
-        material.transparent = true;
         if (picture.contentType !== IMM_PICTURE_2D) {
             material.depthTest = false;
             material.depthWrite = false;
@@ -463,57 +482,68 @@ function createPaintMaterial(
     });
 }
 
-function createPicture2DMaterial(texture: THREE.DataTexture, opacity: number): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: { immPicture: { value: texture }, immOpacity: { value: opacity } },
-        vertexShader: `varying vec2 immUv; void main(){ immUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-        fragmentShader: `
-            uniform sampler2D immPicture; uniform float immOpacity; varying vec2 immUv;
-            void main(){
-                vec4 c=texture2D(immPicture,vec2(immUv.x,1.0-immUv.y));
-                gl_FragColor=vec4(c.rgb,c.a*immOpacity);
-                #include <tonemapping_fragment>
-                #include <colorspace_fragment>
-            }
-        `,
+function createPicture2DMaterial(
+    texture: THREE.DataTexture,
+    opacity: number,
+    coverageMode: ImmCoverageMode,
+    blueNoise: THREE.DataArrayTexture,
+    sampleCount: number | null,
+): THREE.RawShaderMaterial {
+    return createCoveragePictureMaterial({
+        texture, opacity, coverageMode, blueNoise, sampleCount,
+        vertexShader: `${PICTURE_VERTEX_HEADER} in vec2 uv; out vec2 immUv;
+            void main(){ immUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+        fragmentBody: `in vec2 immUv;
+            void main(){ immWriteCoverage(texture(immPicture,vec2(immUv.x,1.0-immUv.y))); }`,
         side: THREE.DoubleSide,
-        depthTest: true,
-        depthWrite: true,
-        toneMapped: false,
     });
 }
 
-const directionVertexShader = `
-    varying vec3 immDirection;
+const PICTURE_VERTEX_HEADER = `
+    precision highp float; precision highp int;
+    uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; in vec3 position;
+`;
+
+const directionVertexShader = `${PICTURE_VERTEX_HEADER}
+    out vec3 immDirection;
     void main(){ immDirection=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
 `;
 
-function createEquirectMaterial(texture: THREE.DataTexture, opacity: number, stereo: boolean): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: { immPicture: { value: texture }, immOpacity: { value: opacity }, immEye: { value: 0 } },
-        vertexShader: directionVertexShader,
-        fragmentShader: `
-            uniform sampler2D immPicture; uniform float immOpacity; uniform float immEye;
-            varying vec3 immDirection; const float IMM_PI=3.1415927;
+function createEquirectMaterial(
+    texture: THREE.DataTexture,
+    opacity: number,
+    stereo: boolean,
+    coverageMode: ImmCoverageMode,
+    blueNoise: THREE.DataArrayTexture,
+    sampleCount: number | null,
+): THREE.RawShaderMaterial {
+    return createCoveragePictureMaterial({
+        texture, opacity, coverageMode, blueNoise, sampleCount, vertexShader: directionVertexShader,
+        extraUniforms: { immEye: { value: 0 } },
+        fragmentBody: `
+            uniform float immEye; in vec3 immDirection; const float IMM_PI=3.1415927;
             void main(){
                 vec3 d=normalize(immDirection);
                 vec2 uv=vec2(0.5+0.5*atan(d.x,-d.z)/IMM_PI,acos(clamp(d.y,-1.0,1.0))/IMM_PI);
                 ${stereo ? "uv.y=uv.y*0.5+0.5*immEye;" : ""}
-                vec4 c=texture2D(immPicture,uv); gl_FragColor=vec4(c.rgb,c.a*immOpacity);
-                #include <tonemapping_fragment>
-                #include <colorspace_fragment>
+                immWriteCoverage(texture(immPicture,uv));
             }
         `,
-        toneMapped: false,
     });
 }
 
-function createCubemapAtlasMaterial(texture: THREE.DataTexture, opacity: number, vertical: boolean): THREE.ShaderMaterial {
-    return new THREE.ShaderMaterial({
-        uniforms: { immPicture: { value: texture }, immOpacity: { value: opacity } },
-        vertexShader: directionVertexShader,
-        fragmentShader: `
-            uniform sampler2D immPicture; uniform float immOpacity; varying vec3 immDirection;
+function createCubemapAtlasMaterial(
+    texture: THREE.DataTexture,
+    opacity: number,
+    vertical: boolean,
+    coverageMode: ImmCoverageMode,
+    blueNoise: THREE.DataArrayTexture,
+    sampleCount: number | null,
+): THREE.RawShaderMaterial {
+    return createCoveragePictureMaterial({
+        texture, opacity, coverageMode, blueNoise, sampleCount, vertexShader: directionVertexShader,
+        fragmentBody: `
+            in vec3 immDirection;
             vec3 faceUv(vec3 d){
                 vec3 a=abs(d); float face; vec2 uv;
                 if(a.x>=a.y&&a.x>=a.z){ face=d.x>0.0?0.0:1.0; uv=vec2(d.x>0.0?-d.z:d.z,d.y)/a.x; }
@@ -531,14 +561,87 @@ function createCubemapAtlasMaterial(texture: THREE.DataTexture, opacity: number,
                     vec2 localUv=(f.z<1.5||f.z>=3.5)?vec2(1.0-f.x,1.0-f.y):f.xy;
                     uv=(cell+localUv)/vec2(4.0,3.0);
                 `}
-                vec4 c=texture2D(immPicture,uv); gl_FragColor=vec4(c.rgb,c.a*immOpacity);
-                #include <tonemapping_fragment>
-                #include <colorspace_fragment>
+                immWriteCoverage(texture(immPicture,uv));
             }
         `,
+    });
+}
+
+interface CoveragePictureOptions {
+    texture: THREE.DataTexture;
+    opacity: number;
+    coverageMode: ImmCoverageMode;
+    blueNoise: THREE.DataArrayTexture;
+    sampleCount: number | null;
+    vertexShader: string;
+    fragmentBody: string;
+    extraUniforms?: Record<string, THREE.IUniform>;
+    side?: THREE.Side;
+}
+
+function createCoveragePictureMaterial(options: CoveragePictureOptions): THREE.RawShaderMaterial {
+    const activeSamples = Math.max(1, Math.min(8, options.sampleCount ?? 1));
+    return new THREE.RawShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        defines: {
+            IMM_SAMPLE_MASK: options.coverageMode === "sample-mask" ? 1 : 0,
+            IMM_ALPHA_HASH: options.coverageMode === "alpha-hash" ? 1 : 0,
+            IMM_SAMPLE_COUNT: activeSamples,
+        },
+        uniforms: {
+            immPicture: { value: options.texture }, immOpacity: { value: options.opacity },
+            immBlueNoise: { value: options.blueNoise }, immFrame: { value: 0 },
+            ...options.extraUniforms,
+        },
+        vertexShader: options.vertexShader,
+        fragmentShader: `${PICTURE_COVERAGE_HEADER}\n${options.fragmentBody}`,
+        transparent: false,
+        blending: THREE.NoBlending,
+        depthTest: true,
+        depthWrite: true,
+        depthFunc: THREE.LessEqualDepth,
+        side: options.side ?? THREE.FrontSide,
+        alphaToCoverage: options.coverageMode === "alpha-to-coverage",
         toneMapped: false,
     });
 }
+
+const PICTURE_COVERAGE_HEADER = `
+    #if IMM_SAMPLE_MASK == 1
+    #extension GL_OES_sample_variables : require
+    #endif
+    precision highp float; precision highp int;
+    uniform sampler2D immPicture; uniform highp sampler2DArray immBlueNoise;
+    uniform float immOpacity; uniform int immFrame; out vec4 outColor;
+    float immCoverageNoise(){
+        ivec2 pixel=ivec2(gl_FragCoord.xy)&ivec2(63);
+        return texelFetch(immBlueNoise,ivec3(pixel,immFrame&63),0).r;
+    }
+    int immCoverageMask(float alpha,float noise){
+        const int sampleCount=IMM_SAMPLE_COUNT;
+        uint bits=(1u<<uint(sampleCount))-1u;
+        float dithered=clamp(alpha+0.99*(noise-0.5)/float(sampleCount),0.0,1.0);
+        uint covered=uint(dithered*float(sampleCount)+0.5);
+        uint mask=((bits<<uint(sampleCount))>>covered)&bits;
+        uint shift=uint(noise*float(sampleCount-1))%uint(sampleCount);
+        return int((((mask<<uint(sampleCount))|mask)>>shift)&bits);
+    }
+    vec4 immSrgb(vec4 value){
+        return vec4(mix(pow(value.rgb,vec3(0.41666))*1.055-vec3(0.055),value.rgb*12.92,
+            vec3(lessThanEqual(value.rgb,vec3(0.0031308)))),1.0);
+    }
+    void immWriteCoverage(vec4 texel){
+        float coverage=clamp(texel.a*immOpacity,0.0,1.0); float noise=immCoverageNoise();
+        vec4 color=immSrgb(vec4(texel.rgb,1.0));
+        #if IMM_SAMPLE_MASK == 1
+            outColor=color; gl_SampleMask[0]=immCoverageMask(coverage,noise);
+        #elif IMM_ALPHA_HASH == 1
+            if(coverage<noise) discard; outColor=color;
+        #else
+            outColor=vec4(color.rgb,coverage);
+        #endif
+    }
+`;
 
 function triangleCountFor(geometry: THREE.BufferGeometry): number {
     return geometry.index?.count !== undefined

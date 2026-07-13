@@ -251,6 +251,24 @@ try {
         `Blink did not modulate rendered pixels: ${JSON.stringify(paintEffectSamples)}`);
     assert.ok(pixelDistance(paintEffectSamples.drawVisible, paintEffectSamples.blinkHigh) <= 8,
         "Blink maximum did not restore authored paint output");
+    const coverageState = await phase3.evaluate(() => window.__phase3Fixture.coverageState());
+    assert.ok(coverageState.paint.length > 0);
+    assert.ok(coverageState.paint.every((state) => state.noBlending && !state.transparent
+        && state.depthTest && state.depthWrite),
+    `Paint did not retain the native opaque/depth-write state: ${JSON.stringify(coverageState.paint)}`);
+    assert.ok(coverageState.pictures.every((state) => state.noBlending && !state.transparent),
+        `Pictures retained conventional blending: ${JSON.stringify(coverageState.pictures)}`);
+    assert.ok(coverageState.pictures.filter((state) => state.contentType === 0)
+        .every((state) => state.depthTest && state.depthWrite),
+    `2D pictures did not retain native depth state: ${JSON.stringify(coverageState.pictures)}`);
+    const overlapSamples = await phase3.evaluate(() => ({
+        forward: window.__phase3Fixture.sampleOverlap(false),
+        reverse: window.__phase3Fixture.sampleOverlap(true),
+    }));
+    const overlapDifference = pixelArrayDifference(overlapSamples.forward, overlapSamples.reverse);
+    assert.equal(overlapDifference.changedChannels, 0,
+        `Near-coplanar coverage changed with submission order: ${JSON.stringify(overlapDifference)}`);
+    assert.ok(new Set(overlapSamples.forward).size > 4, "Overlap fixture did not render both translucent strokes");
     await phase3.close();
 
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -298,6 +316,8 @@ try {
         lockedPositions,
         pictureSamples,
         paintEffectSamples,
+        coverageState,
+        overlapDifference,
     };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
@@ -314,6 +334,20 @@ function assertPixelNear(actual, expected, label) {
 
 function pixelDistance(a, b) {
     return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+}
+
+function pixelArrayDifference(a, b) {
+    assert.equal(a.length, b.length);
+    let changedChannels = 0;
+    let maximumDifference = 0;
+    let absoluteDifference = 0;
+    for (let index = 0; index < a.length; index++) {
+        const difference = Math.abs(a[index] - b[index]);
+        if (difference > 0) changedChannels++;
+        maximumDifference = Math.max(maximumDifference, difference);
+        absoluteDifference += difference;
+    }
+    return { changedChannels, maximumDifference, absoluteDifference };
 }
 
 function assertVectorNear(actual, expected, message) {
