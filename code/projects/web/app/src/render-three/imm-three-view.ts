@@ -16,6 +16,7 @@ export interface ImmThreeDiagnostics {
     geometryBuildMs: number;
     alphaMode: "alpha-to-coverage" | "alpha-blend";
     maxTextureSize: number | null;
+    colorMode: "srgb-output-no-tone-mapping";
 }
 
 export interface ImmThreeViewOptions {
@@ -64,6 +65,7 @@ export class ImmThreeView {
             geometryBuildMs: performance.now() - startedAt,
             alphaMode: this.#alphaToCoverage ? "alpha-to-coverage" : "alpha-blend",
             maxTextureSize: options.renderer?.capabilities.maxTextureSize ?? null,
+            colorMode: "srgb-output-no-tone-mapping",
         };
         options.parent?.add(this.object3d);
     }

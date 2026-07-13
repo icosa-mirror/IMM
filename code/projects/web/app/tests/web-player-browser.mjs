@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
 
@@ -33,6 +34,13 @@ try {
     assert.equal(desktopMetrics.canvasHeight, 720);
     assert.deepEqual(errors, []);
     await desktop.screenshot({ path: resolve(artifactDirectory, "sample1-web-1280x720.png") });
+    execFileSync("python", [
+        resolve(repositoryRoot, "tests/tools/compare_render_metrics.py"),
+        resolve(artifactDirectory, "sample1-web-1280x720.png"),
+        "--reference", resolve(repositoryRoot, "tests/baselines/render/windows-directx-sample1.ppm"),
+        "--contract", resolve(repositoryRoot, "tests/baselines/render/web-three-sample1.json"),
+        "--json-output", resolve(artifactDirectory, "sample1-web-render-metrics.json"),
+    ], { stdio: "inherit" });
 
     const loadedGeometryCounts = [];
     for (let cycle = 0; cycle < 3; cycle++) {

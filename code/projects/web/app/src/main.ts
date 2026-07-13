@@ -38,6 +38,13 @@ let frameCount = 0;
 let meanFrameMs = 0;
 let firstUploadRenderMs: number | null = null;
 let measureNextRender = false;
+const timerContext = renderer.getContext() as WebGL2RenderingContext;
+const timerExtension = timerContext.getExtension("EXT_disjoint_timer_query_webgl2") as
+    | { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
+    | null;
+let timerQuery: WebGLQuery | null = null;
+let timerQueryActive = false;
+let gpuFrameMs: number | null = null;
 
 declare global {
     interface Window {
@@ -87,6 +94,8 @@ window.__immDiagnostics = () => ({
         ? (performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize
         : null,
     firstUploadRenderMs: firstUploadRenderMs === null ? null : round(firstUploadRenderMs),
+    gpuFrameMs: gpuFrameMs === null ? null : round(gpuFrameMs),
+    gpuTimerAvailable: timerExtension !== null,
 });
 
 const parameters = new URLSearchParams(location.search);
@@ -111,13 +120,36 @@ renderer.setAnimationLoop(() => {
     resize();
     controls.update();
     immView?.update(performance.now() / 1_000, camera);
+    pollGpuTimer();
     const renderStartedAt = measureNextRender ? performance.now() : 0;
+    if (timerExtension !== null && timerQuery === null) {
+        timerQuery = timerContext.createQuery();
+        if (timerQuery !== null) {
+            timerContext.beginQuery(timerExtension.TIME_ELAPSED_EXT, timerQuery);
+            timerQueryActive = true;
+        }
+    }
     renderer.render(scene, camera);
+    if (timerExtension !== null && timerQueryActive) {
+        timerContext.endQuery(timerExtension.TIME_ELAPSED_EXT);
+        timerQueryActive = false;
+    }
     if (measureNextRender) {
         firstUploadRenderMs = performance.now() - renderStartedAt;
         measureNextRender = false;
     }
 });
+
+function pollGpuTimer(): void {
+    if (timerExtension === null || timerQuery === null) return;
+    if (!timerContext.getQueryParameter(timerQuery, timerContext.QUERY_RESULT_AVAILABLE)) return;
+    const disjoint = timerContext.getParameter(timerExtension.GPU_DISJOINT_EXT) as boolean;
+    if (!disjoint) {
+        gpuFrameMs = Number(timerContext.getQueryParameter(timerQuery, timerContext.QUERY_RESULT)) / 1_000_000;
+    }
+    timerContext.deleteQuery(timerQuery);
+    timerQuery = null;
+}
 
 async function loadUrl(url: string): Promise<void> {
     fileInput.disabled = true;
@@ -205,6 +237,7 @@ function showSummary(
         geometryUploadMs: round(view.diagnostics.geometryBuildMs),
         alphaMode: view.diagnostics.alphaMode,
         maxTextureSize: view.diagnostics.maxTextureSize,
+        colorMode: view.diagnostics.colorMode,
     };
     lastMetrics = metrics;
     status.textContent = `${fileName}: rendered ${metrics.strokes.toLocaleString()} strokes in ${metrics.meshes} meshes.`;
