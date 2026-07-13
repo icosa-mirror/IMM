@@ -115,6 +115,12 @@ Set `IMM_WEB_HEADLESS=1` only for unattended automation. Results are written to
 CPU-frame, GPU-frame (when timer queries are available), draw-call, triangle,
 pixel-ratio, texture/geometry, and JavaScript-heap measurements.
 
+Private local codec fixtures can be included without copying or serving them by
+setting `IMM_WEB_LOCAL_OGG_FIXTURE` and/or `IMM_WEB_LOCAL_WAV_FIXTURE` to their
+absolute paths before `bun run test:browser`. Playwright transfers each file
+directly through the browser file input; reports retain only the codec label and
+decoded layer counts, not the source path or bytes.
+
 ## GitHub Pages
 
 `.github/workflows/web-pages.yml` builds and verifies the Wasm decoder and web

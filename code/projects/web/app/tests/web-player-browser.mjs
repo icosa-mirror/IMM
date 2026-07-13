@@ -8,6 +8,10 @@ import { createServer } from "vite";
 const appRoot = resolve(import.meta.dirname, "..");
 const repositoryRoot = resolve(appRoot, "../../../..");
 const artifactDirectory = resolve(repositoryRoot, "artifacts/web-native");
+const localCodecFixtures = [
+    ["ogg-vorbis", process.env.IMM_WEB_LOCAL_OGG_FIXTURE],
+    ["wav", process.env.IMM_WEB_LOCAL_WAV_FIXTURE],
+].filter((entry) => entry[1] !== undefined);
 await mkdir(artifactDirectory, { recursive: true });
 
 const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 4177 } });
@@ -134,6 +138,22 @@ try {
         afterSeek: audioAfterSeek,
         afterChapter: audioAfterChapter,
     };
+    const localCodecResults = [];
+    for (const [codec, fixturePath] of localCodecFixtures) {
+        await controlsPage.setInputFiles("#file-input", fixturePath);
+        await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true,
+            undefined, { timeout: 120_000 });
+        await controlsPage.waitForFunction(() => {
+            const audio = window.__immDiagnostics().audio;
+            return audio.soundLayers > 0 && audio.decodedSounds + audio.decodeFailures.length >= audio.soundLayers;
+        }, undefined, { timeout: 120_000 });
+        const diagnostics = await controlsPage.evaluate(() => window.__immDiagnostics().audio);
+        assert.equal(diagnostics.decodeFailures.length, 0,
+            `${codec} local fixture failed Web Audio decode: ${JSON.stringify(diagnostics.decodeFailures)}`);
+        assert.equal(diagnostics.decodedSounds, diagnostics.soundLayers,
+            `${codec} local fixture did not decode every sound layer`);
+        localCodecResults.push({ codec, soundLayers: diagnostics.soundLayers, decodedSounds: diagnostics.decodedSounds });
+    }
     await controlsPage.close();
 
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -384,6 +404,7 @@ try {
         playedState,
         audioPlayback,
         audioSync,
+        localCodecResults,
         sampleTimestamps,
         phase3States,
         lockedPositions,

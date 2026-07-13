@@ -876,6 +876,10 @@ Implemented and verified so far:
 - Distance attenuation and directional cone/frustum equations have focused
   tests against the native Audio360 backend math. `sample1.imm` verifies three
   looping Opus sources (two flat, one positional) with no decode failures.
+- Chrome local-file verification also decodes a private Ogg Vorbis fixture
+  (1/1 sound layer) and a private WAV-containing fixture (9/9 sound layers).
+  The reusable optional harness retains only codec labels and counts; no private
+  corpus path or bytes are copied, served, uploaded, or committed.
 - Ambisonic is explicitly reported unsupported and is never silently downmixed
   or labeled parity.
 - The embedded adapter reports structured warnings for sub-24-bit,
