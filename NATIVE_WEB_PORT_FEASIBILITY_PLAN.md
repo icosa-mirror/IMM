@@ -844,7 +844,9 @@ exposes `OES_sample_variables`. Opaque paint must separately match native
 geometry, culling, projection, depth comparison, and depth-write behavior;
 transparency cannot be used to explain or mask opaque-stroke artifacts.
 
-Status: in progress on `main` (2026-07-13).
+Completed: 2026-07-13 on `main`. The retained Phase 4 fixtures, current desktop
+browser matrix, bounded CI gates, and documented unsupported cases satisfy the
+exit gate for the implemented web-player scope.
 
 Implemented and verified so far:
 
@@ -913,10 +915,8 @@ Implemented and verified so far:
   perspective `0.01` to `20,000` projection contract. It does not mutate host
   renderer or camera state.
 
-Remaining qualification before closing the Phase 4 exit gate:
+Retained limitations and follow-up:
 
-- Confirm the new Firefox job on the Ubuntu GitHub Actions runner. Local Firefox
-  and Chromium evidence already passes the same render/audio contract.
 - Keep the reported opaque-depth issue open until a legally usable reproduction
   exists. The retained opaque intersection, near-coplanar submission-order, and
   flipped-transform fixtures pass, and `sample1.imm` does not exhibit the report;
