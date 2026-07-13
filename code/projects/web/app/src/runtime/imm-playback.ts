@@ -1,5 +1,6 @@
 import {
     IMM_ACTION_LOOP,
+    IMM_ACTION_MAKE_DEFAULT,
     IMM_ACTION_STOP,
     IMM_ANIM_ACTION,
     IMM_ANIM_DRAW_IN_TIME,
@@ -25,6 +26,7 @@ export interface ImmEvaluatedLayer {
     visible: boolean;
     opacity: number;
     transform: ImmTransform;
+    worldTransform: ImmTransform;
     drawInTime: number;
     drawingIndex: number;
 }
@@ -177,6 +179,9 @@ export function evaluateImmDocument(document: ImmDocument, requestedTicks: numbe
             visible,
             opacity,
             transform: local.transform,
+            worldTransform: parent === undefined
+                ? cloneTransform(local.transform)
+                : composeTransform(states.get(layer.parentId)?.worldTransform ?? layer.worldTransform, local.transform),
             drawInTime: local.drawInTime,
             drawingIndex,
         });
@@ -184,6 +189,35 @@ export function evaluateImmDocument(document: ImmDocument, requestedTicks: numbe
     }
 
     return { timeTicks, chapterIndex: chapterAt(document, timeTicks), layers: states };
+}
+
+/** Resolves the authored spawn area at a playback time, including timed MakeDefault actions. */
+export interface ImmActiveSpawnArea {
+    state: ImmEvaluatedLayer;
+    actionTimeTicks: number | null;
+}
+
+export function resolveActiveSpawnArea(
+    document: ImmDocument,
+    requestedTicks: number,
+    snapshot = evaluateImmDocument(document, requestedTicks),
+): ImmActiveSpawnArea | undefined {
+    let active = [...snapshot.layers.values()].find((state) => state.layer.type === 8 && state.layer.defaultSpawn);
+    let activeActionTime = Number.NEGATIVE_INFINITY;
+    for (const state of snapshot.layers.values()) {
+        if (state.layer.type !== 8) continue;
+        for (const key of state.layer.keys) {
+            if (key.property !== IMM_ANIM_ACTION || key.uintValue !== IMM_ACTION_MAKE_DEFAULT) continue;
+            if (key.timeTicks <= state.timelineTicks && key.timeTicks >= activeActionTime) {
+                active = state;
+                activeActionTime = key.timeTicks;
+            }
+        }
+    }
+    return active === undefined ? undefined : {
+        state: active,
+        actionTimeTicks: Number.isFinite(activeActionTime) ? activeActionTime : null,
+    };
 }
 
 function evaluateLocalLayer(layer: ImmLayer, timelineTicks: number, ticksPerSecond: number): LocalEvaluation {

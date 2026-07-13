@@ -585,17 +585,7 @@ namespace ImmImporter
                     layer->GetTransform(),
                     layer->GetTransformToWorld(),
                     layer->GetPivot());
-                bool isDefaultSpawn = false;
-                const uint32_t actionCount = layer->GetNumAnimKeys(Layer::AnimProperty::Action);
-                for (uint32_t actionIndex = 0u; actionIndex < actionCount; ++actionIndex)
-                {
-                    const Layer::AnimKey* key = layer->GetAnimKey(Layer::AnimProperty::Action, actionIndex);
-                    if (key != nullptr && static_cast<Layer::AnimAction>(key->mValue.mInt) == Layer::AnimAction::MakeDefault)
-                    {
-                        isDefaultSpawn = true;
-                        break;
-                    }
-                }
+                const bool isDefaultSpawn = layer == sq->GetInitialSpawnArea();
                 collector->OnSpawnArea(layer->GetID(), isDefaultSpawn);
 #if !defined(IMM_WEB_DECODER)
                 // Load spawn areas for completeness

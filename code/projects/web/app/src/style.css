@@ -22,6 +22,7 @@ body,
     display: block;
     width: 100%;
     height: 100%;
+    touch-action: none;
 }
 
 #panel {
@@ -118,6 +119,38 @@ h1 {
 
 .timeline-labels select {
     max-width: 11rem;
+}
+
+.camera-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+}
+
+.camera-options label {
+    display: grid;
+    gap: 0.2rem;
+    color: #c4d0dc;
+    font-size: 0.75rem;
+}
+
+.camera-options select {
+    min-width: 0;
+    width: 100%;
+}
+
+.camera-help {
+    margin: 0.45rem 0 0;
+    color: #8fa4b8;
+    font-size: 0.7rem;
+    line-height: 1.35;
+}
+
+#VRButton {
+    right: 1rem !important;
+    bottom: 1rem !important;
+    left: auto !important;
 }
 
 body.visual-test #panel {

@@ -1,9 +1,10 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { VRButton } from "three/addons/webxr/VRButton.js";
+import { ImmCameraControls, type CameraMode } from "./camera-controls";
 import { ImmDecoderClient } from "./decoder-client";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
-import { ImmPlaybackController } from "./runtime/imm-playback";
+import { ImmPlaybackController, resolveActiveSpawnArea, type ImmActiveSpawnArea } from "./runtime/imm-playback";
 import "./style.css";
 
 
@@ -23,6 +24,8 @@ const skipForward = requiredElement<HTMLButtonElement>("skip-forward");
 const timeline = requiredElement<HTMLInputElement>("timeline");
 const playbackTime = requiredElement<HTMLOutputElement>("playback-time");
 const chapter = requiredElement<HTMLSelectElement>("chapter");
+const viewpoint = requiredElement<HTMLSelectElement>("viewpoint");
+const cameraMode = requiredElement<HTMLSelectElement>("camera-mode");
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -30,16 +33,20 @@ const idleClearColor = new THREE.Color(0x10151d);
 renderer.setClearColor(idleClearColor, 1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
+renderer.xr.enabled = true;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 20_000);
 const idleCameraPosition = new THREE.Vector3(3, 2, 5);
 const idleControlsTarget = new THREE.Vector3(0, 0.75, 0);
 camera.position.copy(idleCameraPosition);
+scene.add(camera);
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.target.copy(idleControlsTarget);
+const controls = new ImmCameraControls(camera, renderer.domElement);
+controls.reset(idleCameraPosition, idleControlsTarget);
+const xrRig = new THREE.Group();
+scene.add(xrRig);
+if ("xr" in navigator) document.body.append(VRButton.createButton(renderer));
 
 const grid = new THREE.GridHelper(10, 20, 0x506070, 0x28333f);
 scene.add(grid);
@@ -62,6 +69,7 @@ let timerQueryActive = false;
 let gpuFrameMs: number | null = null;
 let previousAnimationTime = performance.now();
 let loadRequestId = 0;
+let appliedAuthoredSpawn = "";
 
 declare global {
     interface Window {
@@ -143,7 +151,10 @@ window.__immDiagnostics = () => ({
     gpuFrameMs: gpuFrameMs === null ? null : round(gpuFrameMs),
     gpuTimerAvailable: timerExtension !== null,
     cameraPosition: camera.position.toArray(),
-    controlsTarget: controls.target.toArray(),
+    controlsTarget: controls.orbit.target.toArray(),
+    cameraMode: controls.mode,
+    viewpoint: viewpoint.value,
+    xrPresenting: renderer.xr.isPresenting,
     gridVisible: grid.visible,
 });
 window.__immPlayback = {
@@ -188,7 +199,30 @@ timeline.addEventListener("input", () => {
 });
 chapter.addEventListener("change", () => {
     playback?.selectChapter(Number(chapter.value));
+    applyAuthoredSpawn(true);
     updatePlaybackControls();
+});
+viewpoint.addEventListener("change", () => {
+    if (playback === null) return;
+    const state = playback.evaluate().layers.get(Number(viewpoint.value));
+    if (state !== undefined) applySpawnPose(state.worldTransform);
+});
+cameraMode.addEventListener("change", () => {
+    controls.setMode(cameraMode.value as CameraMode);
+});
+
+renderer.xr.addEventListener("sessionstart", () => {
+    xrRig.position.copy(camera.position);
+    xrRig.quaternion.copy(camera.quaternion);
+    camera.position.set(0, 0, 0);
+    camera.quaternion.identity();
+    xrRig.add(camera);
+});
+renderer.xr.addEventListener("sessionend", () => {
+    camera.position.copy(xrRig.position);
+    camera.quaternion.copy(xrRig.quaternion);
+    scene.add(camera);
+    controls.setMode(cameraMode.value as CameraMode);
 });
 
 const parameters = new URLSearchParams(location.search);
@@ -200,6 +234,7 @@ if (initialSource !== "") void loadUrl(initialSource).catch(() => undefined);
 window.addEventListener("resize", resize);
 window.addEventListener("beforeunload", () => {
     immView?.dispose();
+    controls.dispose();
     decoder.dispose();
     renderer.dispose();
 });
@@ -214,9 +249,10 @@ renderer.setAnimationLoop((animationTime) => {
         frameCount = 0;
     }
     resize();
-    controls.update();
+    if (!renderer.xr.isPresenting) controls.update(deltaSeconds);
     if (playback !== null && immView !== null) {
         playback.advance(deltaSeconds);
+        applyAuthoredSpawn(false);
         immView.setTimeTicks(playback.timeTicks, camera);
         updatePlaybackControls();
     }
@@ -279,7 +315,8 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         playback = nextPlayback;
         configurePlaybackControls(document);
         measureNextRender = true;
-        applyDefaultSpawn(document);
+        configureViewpoints(document);
+        applyAuthoredSpawn(true);
         grid.visible = false;
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
         showSummary(name, document, nextView);
@@ -314,6 +351,7 @@ function resetDocumentState(): void {
     timeline.value = "0";
     timeline.max = "1";
     chapter.replaceChildren();
+    viewpoint.replaceChildren();
     playbackTime.value = "0:00 / 0:00";
     playPause.textContent = "Play";
     continueButton.disabled = true;
@@ -321,8 +359,15 @@ function resetDocumentState(): void {
     camera.quaternion.identity();
     camera.scale.set(1, 1, 1);
     camera.up.set(0, 1, 0);
-    controls.target.copy(idleControlsTarget);
-    controls.update();
+    controls.reset(idleCameraPosition, idleControlsTarget);
+    appliedAuthoredSpawn = "";
+}
+
+function configureViewpoints(document: ImmDocument): void {
+    const spawnAreas = document.layers.filter((layer) => layer.type === 8);
+    viewpoint.replaceChildren(...spawnAreas.map((layer, index) =>
+        new Option(layer.name || `Viewpoint ${index + 1}`, String(layer.id))));
+    viewpoint.disabled = spawnAreas.length === 0;
 }
 
 function disposeView(): void {
@@ -421,12 +466,26 @@ function round(value: number): number {
     return Math.round(value * 10) / 10;
 }
 
-function applyDefaultSpawn(document: Awaited<ReturnType<ImmDecoderClient["decode"]>>): void {
-    const spawn = document.layers.find((layer) => layer.type === 8 && layer.defaultSpawn);
-    if (spawn === undefined) return;
-    camera.position.fromArray(spawn.worldTransform.translation);
-    camera.quaternion.fromArray(spawn.worldTransform.rotation);
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-    controls.target.copy(camera.position).add(forward.multiplyScalar(10));
-    controls.update();
+function applyAuthoredSpawn(force: boolean): void {
+    if (playback === null) return;
+    const active = resolveActiveSpawnArea(playback.document, playback.timeTicks, playback.evaluate());
+    if (active === undefined) return;
+    const key = spawnActivationKey(active);
+    if (!force && key === appliedAuthoredSpawn) return;
+    appliedAuthoredSpawn = key;
+    viewpoint.value = String(active.state.layer.id);
+    applySpawnPose(active.state.worldTransform);
+}
+
+function spawnActivationKey(active: ImmActiveSpawnArea): string {
+    return `${active.state.layer.id}:${active.actionTimeTicks ?? "initial"}`;
+}
+
+function applySpawnPose(transform: ImmActiveSpawnArea["state"]["worldTransform"]): void {
+    if (renderer.xr.isPresenting) {
+        xrRig.position.fromArray(transform.translation);
+        xrRig.quaternion.fromArray(transform.rotation).normalize();
+    } else {
+        controls.setPose(transform);
+    }
 }

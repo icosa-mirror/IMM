@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
     IMM_ACTION_PLAY,
     IMM_ACTION_LOOP,
+    IMM_ACTION_MAKE_DEFAULT,
     IMM_ACTION_STOP,
     IMM_ANIM_ACTION,
     IMM_ANIM_OFFSET,
@@ -18,7 +19,7 @@ import {
     type ImmLayer,
     type ImmTransform,
 } from "../src/format/imm-document";
-import { evaluateImmDocument, ImmPlaybackController } from "../src/runtime/imm-playback";
+import { evaluateImmDocument, ImmPlaybackController, resolveActiveSpawnArea } from "../src/runtime/imm-playback";
 
 const identity: ImmTransform = {
     rotation: [0, 0, 0, 1],
@@ -182,6 +183,33 @@ describe("IMM deterministic playback evaluation", () => {
         expect(controller.timeTicks).toBe(0);
         controller.selectChapter(1);
         expect(controller.timeTicks).toBe(600);
+    });
+
+    test("resolves initial and chapter-authored spawn areas with evaluated world transforms", () => {
+        const document = fixture();
+        const initial = layer({
+            id: 3,
+            parentId: 0,
+            type: 8,
+            name: "Opening view",
+            defaultSpawn: true,
+            localTransform: { ...identity, translation: [1, 2, 3] },
+        });
+        const chapterView = layer({
+            id: 4,
+            parentId: 0,
+            type: 8,
+            name: "Chapter two view",
+            localTransform: { ...identity, translation: [9, 2, 3] },
+            keys: [key(IMM_ANIM_ACTION, 600, { uintValue: IMM_ACTION_MAKE_DEFAULT })],
+        });
+        document.layers.push(initial, chapterView);
+
+        expect(resolveActiveSpawnArea(document, 0)?.state.layer.id).toBe(3);
+        const selected = resolveActiveSpawnArea(document, 600);
+        expect(selected?.state.layer.id).toBe(4);
+        expect(selected?.actionTimeTicks).toBe(600);
+        expect(selected?.state.worldTransform.translation).toEqual([9, 2, 3]);
     });
 
     test("play, pause, manual wait, restart, and chapter selection preserve exact state", () => {

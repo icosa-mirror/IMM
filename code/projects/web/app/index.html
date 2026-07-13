@@ -34,6 +34,11 @@
           </div>
           <input id="timeline" type="range" min="0" max="1" value="0" step="1" aria-label="Timeline" />
           <div class="timeline-labels"><output id="playback-time">0:00 / 0:00</output><select id="chapter" aria-label="Chapter"></select></div>
+          <div class="camera-options">
+            <label>Viewpoint <select id="viewpoint" aria-label="Viewpoint"></select></label>
+            <label>Camera <select id="camera-mode" aria-label="Camera navigation mode"><option value="fly">Fly / free look</option><option value="orbit">Orbit</option></select></label>
+          </div>
+          <p class="camera-help">Drag to look · WASD move · Q/E down/up · wheel moves forward · two-finger drag moves</p>
         </section>
         <p id="status" role="status">Choose an IMM file to decode and render.</p>
         <pre id="summary" hidden></pre>
