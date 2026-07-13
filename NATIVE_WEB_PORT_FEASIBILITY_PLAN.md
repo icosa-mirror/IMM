@@ -620,10 +620,10 @@ the live Wasm allocation and should be treated as comparative evidence.
 
 This establishes an eager full-download desktop fallback for the largest case
 tested. It does not make that architecture suitable for mobile. Multi-gigabyte
-peak memory and 20–30 second preparation times reinforce the existing Phase 5
-requirement: metadata-first parsing, drawing/asset-at-a-time decode, bounded
-residency, and incremental geometry upload are required for large-film mobile
-and WebXR support.
+peak memory and 20–30 second preparation times reinforce the Phase 4.5 native-
+parity requirement for metadata-first, drawing/asset-at-a-time decode and
+incremental upload. Phase 5 then adds bounded residency required for large-film
+mobile and WebXR support.
 
 ## Expected performance and performance gates
 
@@ -982,13 +982,60 @@ Exit gate:
 - Each claimed codec works on the supported browser matrix.
 - Ambisonic is either validated spatially or marked unsupported; stereo downmix is not labeled parity.
 
+### Phase 4.5 — native loading parity (about 2–3 weeks)
+
+This phase reproduces the native player's loading policy without adding the
+production streaming system planned for Phase 5. Native parses the document and
+asset table, records individual drawing offsets, sorts content by first required
+root-timeline time, blocks on the first five seconds, begins playback, and then
+loads every remaining drawing and asset in that order on a background thread.
+It does not maintain an LRU or continuously reprioritize work after seeking.
+
+Deliverables:
+
+- A persistent parsed-document handle in the decoder worker, with separate
+  metadata, drawing, asset, and whole-document release commands.
+- Random access backed by `File.slice()` for local files and by an already
+  downloaded `ArrayBuffer` for ordinary HTTP responses. HTTP Range requests are
+  deliberately deferred to Phase 5.
+- Metadata and asset-table parsing that records drawing/asset offsets without
+  decoding their payloads or expanding their geometry.
+- The native first-needed ordering, including each paint drawing's first frame
+  time and each non-paint layer's first visible root-timeline time.
+- Blocking decode/upload of spawn-area assets and all content required during
+  the first five seconds, followed by playback as soon as that buffer is ready.
+- Background decode and incremental upload of every remaining drawing and asset
+  in native timeline order until the document is fully resident.
+- Loading/buffering progress and clean whole-document cancellation/unload. As in
+  native, chapter seeks do not introduce adaptive reprioritization or eviction.
+- The existing eager full-document decoder retained as a compatibility fallback
+  until the incremental path has equivalent format and render coverage.
+
+Exit gate:
+
+- A representative large local file and a full-download HTTP file begin
+  playback after the initial five-second window is decoded and uploaded, without
+  waiting for later drawings and assets.
+- Initial playback and eventual fully loaded output match the eager decoder at
+  retained timestamps, including drawings, pictures, sound, and chapter state.
+- Instrumentation proves later assets are decoded in first-needed order and the
+  source, worker document, CPU buffers, and GPU resources are released when the
+  document is unloaded.
+
+Explicitly deferred to Phase 5:
+
+- HTTP Range requests and validator-aware range caching.
+- Adaptive prefetch horizons, seek reprioritization, per-request cancellation,
+  retry policy, and bounded LRU eviction.
+- Production per-device memory budgets.
+
 ### Phase 5 — streaming and production memory (about 3–5 weeks)
 
 Deliverables:
 
-- `File.slice()` and HTTP Range random-access sources.
-- Metadata-first parsing and asset/drawing decode commands.
-- Timeline-prioritized prefetch, cancellation, retry, and bounded LRU residency.
+- HTTP Range random-access sources with validator-aware caching.
+- Adaptive timeline-prioritized prefetch, seek reprioritization, per-request
+  cancellation, retry, and bounded LRU residency built on Phase 4.5 commands.
 - Complete-download fallback for non-range servers.
 - Size/complexity limits and malformed-file hardening.
 
