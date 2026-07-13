@@ -295,7 +295,7 @@ function decodeScene(source) {
                     layers,
                     metrics: {
                         decodeMs: decodedAt - startedAt,
-                        marshalMs: marshalledAt - decodedAt,
+                        marshalMs: marshalledAt - decodedAt - packMs,
                         packMs,
                     },
                 },

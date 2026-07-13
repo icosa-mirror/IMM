@@ -36,6 +36,8 @@ let lastMetrics: Record<string, unknown> | null = null;
 let frameStart = performance.now();
 let frameCount = 0;
 let meanFrameMs = 0;
+let firstUploadRenderMs: number | null = null;
+let measureNextRender = false;
 
 declare global {
     interface Window {
@@ -84,6 +86,7 @@ window.__immDiagnostics = () => ({
     jsHeapBytes: "memory" in performance
         ? (performance as Performance & { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize
         : null,
+    firstUploadRenderMs: firstUploadRenderMs === null ? null : round(firstUploadRenderMs),
 });
 
 const parameters = new URLSearchParams(location.search);
@@ -108,7 +111,12 @@ renderer.setAnimationLoop(() => {
     resize();
     controls.update();
     immView?.update(performance.now() / 1_000, camera);
+    const renderStartedAt = measureNextRender ? performance.now() : 0;
     renderer.render(scene, camera);
+    if (measureNextRender) {
+        firstUploadRenderMs = performance.now() - renderStartedAt;
+        measureNextRender = false;
+    }
 });
 
 async function loadUrl(url: string): Promise<void> {
@@ -136,6 +144,8 @@ async function loadDocument(name: string, source: ArrayBuffer): Promise<void> {
     const document = await decoder.decode(source);
     disposeView();
     immView = new ImmThreeView(document, { renderer, parent: scene });
+    firstUploadRenderMs = null;
+    measureNextRender = true;
     applyDefaultSpawn(document);
     grid.visible = false;
     renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
