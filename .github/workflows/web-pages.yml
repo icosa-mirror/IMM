@@ -206,8 +206,8 @@ jobs:
       - name: Run Firefox browser verification
         working-directory: code/projects/web/app
         env:
-          IMM_WEB_HEADLESS: "1"
-        run: bun run test:browser:firefox
+          IMM_WEB_HEADLESS: "0"
+        run: xvfb-run --auto-servernum bun run test:browser:firefox
 
       - name: Upload failed Firefox evidence
         if: failure()
