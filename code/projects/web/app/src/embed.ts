@@ -27,6 +27,19 @@ scene.add(hostCube);
 
 const decoder = new ImmDecoderClient();
 let view: ImmThreeView | null = null;
+let documentTimeSeconds = 0;
+let previousAnimationTime = performance.now();
+
+declare global {
+    interface Window {
+        __immEmbedSetTime: (timeSeconds: number) => void;
+    }
+}
+
+window.__immEmbedSetTime = (timeSeconds) => {
+    documentTimeSeconds = Math.max(0, timeSeconds);
+    view?.setTimeSeconds(documentTimeSeconds, camera);
+};
 input.addEventListener("change", async () => {
     const file = input.files?.[0];
     if (file === undefined) return;
@@ -36,6 +49,7 @@ input.addEventListener("change", async () => {
         const document = await decoder.decode(await file.arrayBuffer());
         view?.dispose();
         view = new ImmThreeView(document, { renderer, parent: scene });
+        documentTimeSeconds = 0;
         applySpawn(document);
         const intersectionTarget = placeCubeOnVisiblePaint(view);
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
@@ -58,10 +72,12 @@ input.addEventListener("change", async () => {
     }
 });
 
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((animationTime) => {
+    documentTimeSeconds += Math.max(0, Math.min(0.1, (animationTime - previousAnimationTime) / 1_000));
+    previousAnimationTime = animationTime;
     resize();
     controls.update();
-    view?.update(performance.now() / 1_000, camera);
+    view?.setTimeSeconds(documentTimeSeconds, camera);
     renderer.render(scene, camera);
 });
 window.addEventListener("beforeunload", () => {

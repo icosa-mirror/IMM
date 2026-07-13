@@ -84,6 +84,37 @@ h1 {
     flex: 1;
 }
 
+.playback-controls {
+    margin-top: 0.75rem;
+}
+
+.transport,
+.timeline-labels {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.transport button {
+    min-height: 2rem;
+}
+
+.playback-controls input[type="range"] {
+    width: 100%;
+    margin: 0.65rem 0 0.35rem;
+    touch-action: none;
+}
+
+.timeline-labels {
+    justify-content: space-between;
+    color: #c4d0dc;
+    font-size: 0.78rem;
+}
+
+.timeline-labels select {
+    max-width: 11rem;
+}
+
 body.visual-test #panel {
     display: none;
 }
