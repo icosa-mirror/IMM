@@ -574,6 +574,7 @@ namespace ImmImporter
             }
             else if (layer->GetType() == Layer::Type::SpawnArea)
             {
+#if !defined(IMM_WEB_DECODER)
                 // Load spawn areas for completeness
                 if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))
                 {
@@ -583,6 +584,7 @@ namespace ImmImporter
                 {
                     layer->SetLoaded(true);
                 }
+#endif
             }
             return true;
         };

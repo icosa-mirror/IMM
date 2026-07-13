@@ -83,6 +83,12 @@ namespace ImmImporter
 
         bool ReadAsset(LayerImplementation vme, piIStream *fp, piLog* log)
         {
+#if defined(IMM_WEB_DECODER)
+            (void)vme;
+            (void)fp;
+            (void)log;
+            return true;
+#else
             LayerSound *me = (LayerSound*)vme;
 
             const AssetFormat format = static_cast<AssetFormat>(fp->ReadUInt32());                
@@ -130,6 +136,7 @@ namespace ImmImporter
             }
 
             return true;
+#endif
         }
 
 

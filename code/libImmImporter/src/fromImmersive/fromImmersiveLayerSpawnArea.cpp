@@ -80,6 +80,12 @@ namespace ImmImporter
 
         bool ReadAsset(LayerImplementation vme, piIStream *fp, piLog* log)
         {
+#if defined(IMM_WEB_DECODER)
+            (void)vme;
+            (void)fp;
+            (void)log;
+            return true;
+#else
             LayerSpawnArea* me = (LayerSpawnArea*)vme;
             const int version = me->GetVersion();
 
@@ -112,6 +118,7 @@ namespace ImmImporter
 
             // version > 2
             return false;
+#endif
         }
 
 
