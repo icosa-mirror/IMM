@@ -332,6 +332,11 @@ export class ImmWebAudio {
             durationSeconds: duration,
             looping: decoded.sound.looping,
         };
+        if (this.#active.size === 0 && this.#usesAudioTimelineClock()) {
+            // The source offset was evaluated at this instant. Give the visual timeline the same
+            // Web Audio origin instead of one capped requestAnimationFrame delta on its first tick.
+            this.#lastTimelineContextTime = this.#context.currentTime;
+        }
         this.#active.set(layerId, active);
         this.#sourceStarts++;
         this.#lastStartOffsets.set(layerId, offset);
