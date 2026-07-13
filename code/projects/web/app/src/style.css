@@ -69,6 +69,25 @@ h1 {
     margin-top: 0.5rem;
 }
 
+.url-picker {
+    margin-top: 0.75rem;
+}
+
+.url-picker div {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+}
+
+.url-picker input {
+    min-width: 0;
+    flex: 1;
+}
+
+body.visual-test #panel {
+    display: none;
+}
+
 #status {
     color: #c4d0dc;
     line-height: 1.4;
