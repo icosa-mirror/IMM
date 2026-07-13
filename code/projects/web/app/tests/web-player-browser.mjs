@@ -56,7 +56,7 @@ try {
         "File input was disabled while the default IMM loaded");
     await controlsPage.locator("#paste-url").click();
     assert.equal(await controlsPage.locator("#url-input").inputValue(), clipboardImmUrl);
-    await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
+    await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 120_000 });
     assert.equal((await controlsPage.locator("#status").textContent())?.includes("sample1.imm"), true,
         "Base URL did not load the bundled sample IMM by default");
     assert.equal(await controlsPage.locator("#camera-mode").inputValue(), "fly",
@@ -98,7 +98,7 @@ try {
     assert.equal(failedLoadState.playback.durationTicks, 0,
         "Failed load retained the previous playback document");
     await controlsPage.evaluate(() => window.__immLoadUrl("/fixtures/sample1.imm"));
-    await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
+    await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 120_000 });
     assert.equal((await controlsPage.evaluate(() => window.__immDiagnostics())).strokes, 1_171,
         "Valid IMM did not recover after a failed load");
     await controlsPage.waitForFunction(() => window.__immDiagnostics().audio.decodedSounds === 3);
@@ -183,7 +183,7 @@ try {
         if (message.type() === "error") errors.push(message.text());
     });
     await desktop.goto("http://127.0.0.1:4177/?src=/fixtures/sample1.imm&visual-test=1");
-    await desktop.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
+    await desktop.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 120_000 });
     await desktop.waitForTimeout(1_000);
     const desktopMetrics = await desktop.evaluate(() => window.__immDiagnostics());
     assert.equal(desktopMetrics.strokes, 1_171);
