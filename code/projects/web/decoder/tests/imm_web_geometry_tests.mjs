@@ -27,10 +27,11 @@ for (let brushType = 0; brushType < geometries.length; brushType++) {
     assert.equal(geometry.triangleCount, sectionCount * 2);
     assert.ok(geometry.indices instanceof Uint16Array);
     assert.ok(Array.from(geometry.positions).every(Number.isFinite));
-    assert.deepEqual(Array.from(geometry.indices.slice(0, 6)), [0, sectionCount, 1, 1, sectionCount, sectionCount + 1]);
+    assert.deepEqual(Array.from(geometry.indices.slice(0, 6)), [0, 1, sectionCount, 1, sectionCount + 1, sectionCount]);
     assert.deepEqual(Array.from(geometry.colors.slice(0, 4)), [brushType / 4, 0.25, 0.5, 0.75]);
     assert.ok(Array.from(geometry.progress.slice(0, sectionCount)).every(
         (value) => Math.abs(value - brushType / 5) < 1e-6));
+    if (brushType >= 2) assertOutwardFacing(geometry);
 }
 
 console.log("IMM web geometry: all five brush topologies passed exact buffer assertions");
@@ -44,4 +45,29 @@ function writePoint(pointIndex, x, y, z, brushType) {
         brushType / 4, 0.25, 0.5, 0.75,
         1,
     ], offset);
+}
+
+function assertOutwardFacing(geometry) {
+    const [ia, ib, ic] = geometry.indices;
+    const a = position(geometry.positions, ia);
+    const b = position(geometry.positions, ib);
+    const c = position(geometry.positions, ic);
+    const ab = b.map((value, index) => value - a[index]);
+    const ac = c.map((value, index) => value - a[index]);
+    const normal = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    const radial = [
+        (a[0] + b[0] + c[0]) / 3,
+        (a[1] + b[1] + c[1]) / 3,
+        0,
+    ];
+    assert.ok(normal[0] * radial[0] + normal[1] * radial[1] > 0,
+        `Brush ${geometry.brushType} generated inward-facing tube triangles`);
+}
+
+function position(positions, index) {
+    return Array.from(positions.slice(index * 3, index * 3 + 3));
 }

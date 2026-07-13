@@ -77,11 +77,11 @@ function buildStroke(drawing, stroke, brushType, positions, colors, progress, in
             const current = stroke.vertexOffset + pointIndex * stroke.sectionCount;
             const next = current + stroke.sectionCount;
             indices[target++] = current + sectionIndex;
-            indices[target++] = next + sectionIndex;
-            indices[target++] = current + nextSection;
             indices[target++] = current + nextSection;
             indices[target++] = next + sectionIndex;
+            indices[target++] = current + nextSection;
             indices[target++] = next + nextSection;
+            indices[target++] = next + sectionIndex;
         }
     }
 }
