@@ -8,3 +8,4 @@
 
 - Always pull before pushing because CI may have committed replacement binaries upstream.
 - CI replacement-binary commits are always safe to merge.
+- Avoid stashing when a pull can safely merge without it. If a stash or autostash is necessary, inventory the dirty files first and verify that the same contents are restored immediately afterward; never leave the user's changes stranded in a stash.
