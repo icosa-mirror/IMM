@@ -903,7 +903,9 @@ Implemented and verified so far:
   operations from touching a closed context. A dedicated CI job exercises the
   complete sample render, alpha-to-coverage and alpha-hash submission-order
   fixtures, opaque intersection depth, flipped culling, audio, generated-WAV,
-  and drift contract in Firefox.
+  and codec contracts in Firefox. The Xvfb runner may lack an audio sink, so
+  live Firefox clock/drift remains a required local gate rather than being
+  falsely inferred from a permanently suspended CI `AudioContext`.
 - Ambisonic is explicitly reported unsupported and is never silently downmixed
   or labeled parity.
 - The embedded adapter reports structured warnings for sub-24-bit,

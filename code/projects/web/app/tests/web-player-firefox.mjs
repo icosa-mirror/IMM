@@ -60,22 +60,30 @@ try {
     assert.equal(diagnostics.audio.ambisonicSupported, false);
 
     if (diagnostics.audio.contextState !== "running") await page.locator("#audio-toggle").click();
-    await page.waitForFunction(() => window.__immDiagnostics().audio.contextState === "running",
-        undefined, { timeout: 30_000 });
-    const driftDeadline = Date.now() + 5_000;
-    while (Date.now() < driftDeadline) {
-        const playback = await page.evaluate(() => window.__immPlayback.snapshot());
-        if (playback.waiting) await page.locator("#continue").click();
-        const driftSamples = await page.evaluate(() => window.__immDiagnostics().audio.driftSampleCount);
-        if (driftSamples >= 3) break;
-        await page.waitForTimeout(100);
+    let audioClockVerified = false;
+    try {
+        await page.waitForFunction(() => window.__immDiagnostics().audio.contextState === "running",
+            undefined, { timeout: 5_000 });
+        audioClockVerified = true;
+    } catch (error) {
+        if (process.env.IMM_WEB_ALLOW_SUSPENDED_AUDIO !== "1") throw error;
     }
-    diagnostics = await page.evaluate(() => window.__immDiagnostics());
-    assert.equal(diagnostics.audio.timelineClock, "audio-context");
-    assert.ok(diagnostics.audio.driftSampleCount >= 3,
-        `Firefox produced only ${diagnostics.audio.driftSampleCount} audio drift samples`);
-    assert.ok(diagnostics.audio.maximumAbsoluteDriftSeconds <= 0.05,
-        `Firefox A/V drift exceeded 50 ms: ${JSON.stringify(diagnostics.audio)}`);
+    if (audioClockVerified) {
+        const driftDeadline = Date.now() + 5_000;
+        while (Date.now() < driftDeadline) {
+            const playback = await page.evaluate(() => window.__immPlayback.snapshot());
+            if (playback.waiting) await page.locator("#continue").click();
+            const driftSamples = await page.evaluate(() => window.__immDiagnostics().audio.driftSampleCount);
+            if (driftSamples >= 3) break;
+            await page.waitForTimeout(100);
+        }
+        diagnostics = await page.evaluate(() => window.__immDiagnostics());
+        assert.equal(diagnostics.audio.timelineClock, "audio-context");
+        assert.ok(diagnostics.audio.driftSampleCount >= 3,
+            `Firefox produced only ${diagnostics.audio.driftSampleCount} audio drift samples`);
+        assert.ok(diagnostics.audio.maximumAbsoluteDriftSeconds <= 0.05,
+            `Firefox A/V drift exceeded 50 ms: ${JSON.stringify(diagnostics.audio)}`);
+    }
 
     const generatedWav = await page.evaluate(async () => {
         const sampleRate = 8_000;
@@ -189,6 +197,7 @@ try {
         triangles: diagnostics.triangles,
         audio: diagnostics.audio,
         generatedWav,
+        audioClockVerified,
         localCodecResults,
         coverage: {
             state: coverageState,

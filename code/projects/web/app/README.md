@@ -126,6 +126,10 @@ node node_modules/playwright-core/cli.js install firefox
 bun run test:browser:firefox
 ```
 
+The CI runner permits a suspended Firefox audio clock because its Xvfb session
+has no audio sink; codec decoding and all render checks still run there. Local
+Firefox runs continue to require a running audio clock and the drift bound.
+
 Private local codec fixtures can be included without copying or serving them by
 setting `IMM_WEB_LOCAL_OGG_FIXTURE` and/or `IMM_WEB_LOCAL_WAV_FIXTURE` to their
 absolute paths before `bun run test:browser`. Playwright transfers each file

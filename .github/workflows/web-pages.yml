@@ -208,6 +208,7 @@ jobs:
         env:
           IMM_WEB_HEADLESS: "0"
           IMM_WEB_REQUIRE_AUDIO_GESTURE: "1"
+          IMM_WEB_ALLOW_SUSPENDED_AUDIO: "1"
         run: xvfb-run --auto-servernum bun run test:browser:firefox
 
       - name: Upload failed Firefox evidence
