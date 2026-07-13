@@ -13,5 +13,5 @@
 # Critical blockers and goal continuation
 
 - If continued progress depends on an important user approval, decision, or other blocker, never mention it only once in a live update and then continue as though it was communicated.
-- Either stop work and make the blocker plus the exact response needed the terminal response, or continue useful work while repeating the blocker and exact response needed in every user-visible update until the user answers.
+- Either stop work and make the blocker plus the exact response needed the terminal response, or continue useful work while repeating the blocker and exact response needed on every line of every user-visible update until the user answers, so it cannot scroll past unnoticed.
 - Treat the blocked part of the goal as paused until the user explicitly answers. Do not claim that the user failed to answer a request that appeared only in an earlier, potentially scrolled-off update.
