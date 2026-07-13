@@ -96,7 +96,7 @@ if ($RequireExtension) {
 }
 
 if (-not $SmokeScene) {
-    $SmokeScene = if ($RequireExtension) { "res://scenes/NativeSmokeScene.tscn" } else { "res://scenes/SampleScene.tscn" }
+    $SmokeScene = if ($RequireExtension) { "res://scenes/NativeSmokeScene.tscn" } else { "res://scenes/ScriptSmokeScene.tscn" }
 }
 
 $godot = Resolve-GodotExe $GodotExe

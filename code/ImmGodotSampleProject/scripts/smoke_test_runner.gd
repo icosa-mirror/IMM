@@ -2,7 +2,7 @@ extends SceneTree
 
 const EXPECTED_RENDERER := "forward_plus"
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
-const SAMPLE_SCENE := "res://scenes/SampleScene.tscn"
+const SCRIPT_SCENE := "res://scenes/ScriptSmokeScene.tscn"
 const NATIVE_SCENE := "res://scenes/NativeSmokeScene.tscn"
 const CAMERA_ID := 0
 const MAX_READY_SECONDS := 12.0
@@ -33,7 +33,7 @@ func _run() -> void:
 
     var scene_path := OS.get_environment("IMM_GODOT_SMOKE_SCENE")
     if scene_path.is_empty():
-        scene_path = NATIVE_SCENE if expected_native else SAMPLE_SCENE
+        scene_path = NATIVE_SCENE if expected_native else SCRIPT_SCENE
 
     var packed_scene := load(scene_path)
     if packed_scene == null:

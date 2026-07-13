@@ -31,6 +31,7 @@ GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runne
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
 GODOT_METAL_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/metal_visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
+GODOT_SCRIPT_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/ScriptSmokeScene.tscn"
 GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
 GODOT_METAL_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/MetalVisualSmokeScene.tscn"
 GODOT_EXTENSION_SOURCES = [
@@ -90,8 +91,8 @@ def verify_project_renderer() -> None:
     rendering_method = unquote(rendering_match.group(1)) if rendering_match else "forward_plus"
     if rendering_method != "forward_plus":
         raise RuntimeError(f"Unexpected sample renderer path: {rendering_method!r}")
-    if 'run/main_scene="res://scenes/MetalVisualSmokeScene.tscn"' not in project:
-        raise RuntimeError("Godot sample project Run button must launch MetalVisualSmokeScene.tscn")
+    if 'run/main_scene="uid://dxrq2se1fvtxw"' not in project:
+        raise RuntimeError("Godot sample project Run button must launch SampleScene.tscn")
 
     print("Godot sample renderer path ok", flush=True)
 
@@ -284,17 +285,23 @@ def node_by_name(nodes: list[dict[str, str]], name: str) -> dict[str, str]:
 
 def verify_godot_scenes() -> None:
     sample_resources, sample_nodes = parse_tscn(GODOT_SAMPLE_SCENE)
+    script_resources, script_nodes = parse_tscn(GODOT_SCRIPT_SMOKE_SCENE)
     native_resources, native_nodes = parse_tscn(GODOT_NATIVE_SMOKE_SCENE)
     visual_resources, visual_nodes = parse_tscn(GODOT_METAL_VISUAL_SCENE)
 
     sample_resource_paths = {resource["path"] for resource in sample_resources}
+    script_resource_paths = {resource["path"] for resource in script_resources}
     native_resource_paths = {resource["path"] for resource in native_resources}
     visual_resource_paths = {resource["path"] for resource in visual_resources}
 
     if "res://scripts/sample_scene_controller.gd" not in sample_resource_paths:
         raise RuntimeError("SampleScene.tscn does not reference sample_scene_controller.gd")
-    if "res://addons/imm_viewer/imm_viewer_node.gd" not in sample_resource_paths:
-        raise RuntimeError("SampleScene.tscn does not reference the script stub")
+    if "res://addons/imm_viewer/imm_viewer_node.gd" in sample_resource_paths:
+        raise RuntimeError("SampleScene.tscn must use the native ImmViewerNode")
+    if "res://scripts/sample_scene_controller.gd" not in script_resource_paths:
+        raise RuntimeError("ScriptSmokeScene.tscn does not reference sample_scene_controller.gd")
+    if "res://addons/imm_viewer/imm_viewer_node.gd" not in script_resource_paths:
+        raise RuntimeError("ScriptSmokeScene.tscn does not reference the script stub")
     if "res://addons/imm_viewer/imm_viewer_node.gd" in native_resource_paths:
         raise RuntimeError("NativeSmokeScene.tscn must not reference the script stub")
     if "res://scripts/sample_scene_controller.gd" not in native_resource_paths:
@@ -304,8 +311,10 @@ def verify_godot_scenes() -> None:
     if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
         raise RuntimeError("MetalVisualSmokeScene.tscn must not reference the script stub")
 
-    if node_by_name(sample_nodes, "ImmViewer").get("type") != "Node":
-        raise RuntimeError("SampleScene.tscn ImmViewer must be a script-backed Node")
+    if node_by_name(sample_nodes, "ImmViewer").get("type") != "ImmViewerNode":
+        raise RuntimeError("SampleScene.tscn ImmViewer must be native ImmViewerNode")
+    if node_by_name(script_nodes, "ImmViewer").get("type") != "Node":
+        raise RuntimeError("ScriptSmokeScene.tscn ImmViewer must be a script-backed Node")
     if node_by_name(native_nodes, "ImmViewer").get("type") != "ImmViewerNode":
         raise RuntimeError("NativeSmokeScene.tscn ImmViewer must be native ImmViewerNode")
     if any(node.get("type") == "ImmViewerNode" for node in visual_nodes):
@@ -313,6 +322,7 @@ def verify_godot_scenes() -> None:
 
     for scene_name, nodes in [
         ("SampleScene.tscn", sample_nodes),
+        ("ScriptSmokeScene.tscn", script_nodes),
         ("NativeSmokeScene.tscn", native_nodes),
     ]:
         viewer = node_by_name(nodes, "ImmViewer")
@@ -323,10 +333,11 @@ def verify_godot_scenes() -> None:
 
     for required in ["CameraRig", "Camera3D", "StatusLabel"]:
         node_by_name(sample_nodes, required)
+        node_by_name(script_nodes, required)
         node_by_name(native_nodes, required)
         node_by_name(visual_nodes, required)
 
-    print("Godot sample/native/Metal visual scenes ok", flush=True)
+    print("Godot sample/script/native/Metal visual scenes ok", flush=True)
 
 
 def verify_windows_build_wiring() -> None:
@@ -353,7 +364,7 @@ def verify_windows_build_wiring() -> None:
     if re.search(r"^\s*class_name\s+ImmViewerNode\b", script_stub, re.MULTILINE):
         raise RuntimeError("Script stub must not claim the native ImmViewerNode class_name")
 
-    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
+    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "ScriptSmokeScene.tscn", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
@@ -559,7 +570,7 @@ def verify_godot_script_smoke() -> None:
     print("+ " + " ".join(command), flush=True)
     env = os.environ.copy()
     env["IMM_GODOT_EXPECT_NATIVE"] = "0"
-    env["IMM_GODOT_SMOKE_SCENE"] = "res://scenes/SampleScene.tscn"
+    env["IMM_GODOT_SMOKE_SCENE"] = "res://scenes/ScriptSmokeScene.tscn"
     result = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     print(result.stdout, end="", flush=True)
     if result.returncode != 0 or "IMM Godot smoke test passed" not in result.stdout:
