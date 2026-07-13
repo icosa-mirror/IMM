@@ -241,12 +241,56 @@ try {
     if (!stagedSpawn.ok) {
         throw new Error(`Wasm staged spawn asset decode failed: ${stagedSpawn.error.message}`);
     }
-    const released = await request({ requestId: 8, type: "release" });
+    let nextStagedRequestId = 8;
+    let stagedStrokeCount = decodedDrawing.strokeCount;
+    let stagedPointCount = decodedDrawing.pointCount;
+    for (const layer of stagedPaintLayers) {
+        for (let index = 0; index < layer.drawings.length; index++) {
+            if (layer.id === eagerPaintLayer.id && index === drawingId) continue;
+            const response = await request({
+                requestId: nextStagedRequestId++,
+                type: "decodeDrawing",
+                layerId: layer.id,
+                drawingId: index,
+            });
+            if (!response.ok || response.delta?.type !== "drawing") {
+                throw new Error(`Wasm full staged drawing decode failed for ${layer.id}/${index}`);
+            }
+            stagedStrokeCount += response.delta.drawing.strokeCount;
+            stagedPointCount += response.delta.drawing.pointCount;
+        }
+    }
+    let stagedPictureBytes = stagedPicture.delta.picture.pixels.length;
+    for (const layer of pictureLayers.slice(1)) {
+        const response = await request({
+            requestId: nextStagedRequestId++,
+            type: "decodeLayerAsset",
+            layerId: layer.id,
+        });
+        stagedPictureBytes += response.delta?.picture?.pixels.length ?? 0;
+    }
+    let stagedSoundBytes = stagedSound.delta.sound.bytes.length;
+    for (const layer of soundLayers.slice(1)) {
+        const response = await request({
+            requestId: nextStagedRequestId++,
+            type: "decodeLayerAsset",
+            layerId: layer.id,
+        });
+        stagedSoundBytes += response.delta?.sound?.bytes.length ?? 0;
+    }
+    const eagerPictureBytes = pictureLayers.reduce((sum, layer) => sum + (layer.picture?.pixels.length ?? 0), 0);
+    const eagerSoundBytes = soundLayers.reduce((sum, layer) => sum + (layer.sound?.bytes.length ?? 0), 0);
+    if (stagedStrokeCount !== strokeCount || stagedPointCount !== pointCount ||
+        stagedPictureBytes !== eagerPictureBytes || stagedSoundBytes !== eagerSoundBytes) {
+        throw new Error("Fully staged paint/picture/sound totals do not match eager decode");
+    }
+
+    const released = await request({ requestId: nextStagedRequestId++, type: "release" });
     if (!released.ok) {
         throw new Error("Wasm staged release failed");
     }
     const afterRelease = await request({
-        requestId: 9,
+        requestId: nextStagedRequestId++,
         type: "decodeDrawing",
         layerId: eagerPaintLayer.id,
         drawingId,

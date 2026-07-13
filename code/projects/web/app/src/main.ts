@@ -5,6 +5,7 @@ import { desktopSpawnTransform, ImmCameraControls, type CameraMode } from "./cam
 import { ImmDecoderClient, type ImmStagedDelta } from "./decoder-client";
 import { createNativeLoadOrder, type StagedLoadWork } from "./staged-loading";
 import { releaseAssetUrl } from "./release-assets";
+import { FileRandomAccessSource } from "./random-access-source";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
 import { ImmPlaybackController, resolveActiveSpawnArea, type ImmActiveSpawnArea } from "./runtime/imm-playback";
@@ -74,6 +75,7 @@ let timerQueryActive = false;
 let gpuFrameMs: number | null = null;
 let previousAnimationTime = performance.now();
 let loadRequestId = 0;
+let loadAbortController = new AbortController();
 let appliedAuthoredSpawn = "";
 
 declare global {
@@ -100,7 +102,8 @@ fileInput.addEventListener("change", async () => {
     const requestId = beginLoad(`Reading ${file.name}…`);
     fileInput.value = "";
     try {
-        const source = await file.arrayBuffer();
+        const fileSource = new FileRandomAccessSource(file);
+        const source = await fileSource.read(0n, file.size, loadAbortController.signal);
         await loadDocument(file.name, source, requestId);
     } catch (error) {
         if (requestId === loadRequestId) {
@@ -341,7 +344,7 @@ function pollGpuTimer(): void {
 async function loadUrl(url: string): Promise<void> {
     const requestId = beginLoad(`Fetching ${url}…`);
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: loadAbortController.signal });
         if (!response.ok) throw new Error(`IMM fetch failed: HTTP ${response.status}`);
         if (requestId !== loadRequestId) return;
         await loadDocument(url.split("/").pop() || url, await response.arrayBuffer(), requestId);
@@ -472,8 +475,11 @@ async function continueStagedLoad(name: string, work: StagedLoadWork[], requestI
 }
 
 function beginLoad(message: string): number {
+    loadAbortController.abort();
+    loadAbortController = new AbortController();
     const requestId = ++loadRequestId;
     resetDocumentState();
+    void decoder.release().catch(() => undefined);
     urlInput.setCustomValidity("");
     status.textContent = message;
     return requestId;
