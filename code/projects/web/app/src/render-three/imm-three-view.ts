@@ -134,13 +134,40 @@ export class ImmThreeView {
         texture.wrapS = THREE.RepeatWrapping;
         texture.needsUpdate = true;
         const geometry = new THREE.SphereGeometry(100, 64, 32);
-        geometry.scale(-1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({
-            map: texture,
-            side: THREE.FrontSide,
+        const material = new THREE.ShaderMaterial({
+            uniforms: {
+                immPicture: { value: texture },
+                immOpacity: { value: layer.opacity },
+            },
+            vertexShader: `
+                varying vec3 immDirection;
+                void main() {
+                    immDirection = normalize(position);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D immPicture;
+                uniform float immOpacity;
+                varying vec3 immDirection;
+                const float IMM_PI = 3.1415927;
+                void main() {
+                    vec3 direction = normalize(immDirection);
+                    vec2 uv = vec2(
+                        0.5 + 0.5 * atan(direction.x, -direction.z) / IMM_PI,
+                        acos(clamp(direction.y, -1.0, 1.0)) / IMM_PI
+                    );
+                    vec4 color = texture2D(immPicture, uv);
+                    gl_FragColor = vec4(color.rgb, color.a * immOpacity);
+                    #include <tonemapping_fragment>
+                    #include <colorspace_fragment>
+                }
+            `,
+            side: THREE.DoubleSide,
             depthTest: false,
             depthWrite: false,
             toneMapped: false,
+            transparent: layer.opacity < 1,
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = layer.name;

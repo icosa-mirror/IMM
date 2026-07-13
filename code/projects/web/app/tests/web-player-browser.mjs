@@ -55,6 +55,7 @@ try {
     await embedded.goto("http://127.0.0.1:4177/embed.html");
     await embedded.setInputFiles("#file-input", resolve(repositoryRoot, "exampleImmFiles/sample1.imm"));
     await embedded.waitForFunction(() => document.querySelector("#summary")?.textContent?.includes('"sharedRenderer": true'));
+    await embedded.waitForTimeout(1_000);
     const embedMetrics = JSON.parse(await embedded.locator("#summary").textContent());
     assert.equal(embedMetrics.immAttachedToHostScene, true);
     assert.equal(embedMetrics.sharedCanvas, true);
