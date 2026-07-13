@@ -197,6 +197,17 @@ ImmWebStatus imm_web_decode_scene(
     const uint8_t* source,
     size_t source_size,
     ImmWebError* out_error);
+ImmWebStatus imm_web_open_scene_metadata(
+    const uint8_t* source,
+    size_t source_size,
+    ImmWebError* out_error);
+ImmWebStatus imm_web_decode_drawing(
+    uint32_t layer_id,
+    uint32_t drawing_id,
+    ImmWebError* out_error);
+ImmWebStatus imm_web_decode_layer_asset(
+    uint32_t layer_id,
+    ImmWebError* out_error);
 void imm_web_release_scene(void);
 uint32_t imm_web_get_layer_count(void);
 uint32_t imm_web_get_background_color(float* out_rgb, uint32_t float_capacity);

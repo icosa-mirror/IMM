@@ -166,6 +166,89 @@ try {
         throw new Error("Worker did not report geometry packing time");
     }
 
+    const stagedBytes = await readFile(process.argv[3]);
+    const stagedSource = stagedBytes.buffer.slice(
+        stagedBytes.byteOffset,
+        stagedBytes.byteOffset + stagedBytes.byteLength,
+    );
+    const staged = await request(
+        { requestId: 3, type: "openMetadata", source: stagedSource },
+        [stagedSource],
+    );
+    if (!staged.ok) {
+        throw new Error(`Wasm staged metadata decode failed: ${staged.error.message}`);
+    }
+    const stagedPaintLayers = staged.document.layers.filter((layer) => layer.type === 1);
+    if (stagedPaintLayers.length !== paintLayers.length || stagedPaintLayers.some((layer) =>
+        layer.drawings.some((drawing) => drawing.strokeCount !== 0 || drawing.pointCount !== 0))) {
+        throw new Error("Staged metadata did not preserve empty paint drawing placeholders");
+    }
+    if (staged.document.layers.some((layer) => layer.picture?.pixels.length > 0 || layer.sound?.bytes.length > 0)) {
+        throw new Error("Staged metadata eagerly decoded a picture or sound payload");
+    }
+
+    let eagerDrawing;
+    let eagerPaintLayer;
+    for (const layer of paintLayers) {
+        const drawing = layer.drawings.find((candidate) => candidate.strokeCount > 0);
+        if (drawing !== undefined) {
+            eagerPaintLayer = layer;
+            eagerDrawing = drawing;
+            break;
+        }
+    }
+    if (eagerPaintLayer === undefined || eagerDrawing === undefined) {
+        throw new Error("Eager fixture did not contain a staged drawing candidate");
+    }
+    const drawingId = eagerPaintLayer.drawings.indexOf(eagerDrawing);
+    const stagedDrawing = await request({
+        requestId: 4,
+        type: "decodeDrawing",
+        layerId: eagerPaintLayer.id,
+        drawingId,
+    });
+    if (!stagedDrawing.ok) {
+        throw new Error(`Wasm staged drawing decode failed: ${stagedDrawing.error.message}`);
+    }
+    const decodedDrawing = stagedDrawing.document.layers
+        .find((layer) => layer.id === eagerPaintLayer.id)?.drawings[drawingId];
+    if (decodedDrawing?.strokeCount !== eagerDrawing.strokeCount ||
+        decodedDrawing?.pointCount !== eagerDrawing.pointCount) {
+        throw new Error("Staged drawing does not match eager drawing counts");
+    }
+
+    const stagedPicture = await request({
+        requestId: 5,
+        type: "decodeLayerAsset",
+        layerId: pictureLayers[0].id,
+    });
+    if (!stagedPicture.ok || stagedPicture.document.layers
+        .find((layer) => layer.id === pictureLayers[0].id)?.picture?.pixels.length === 0) {
+        throw new Error("Wasm staged picture asset decode failed");
+    }
+    const stagedSound = await request({
+        requestId: 6,
+        type: "decodeLayerAsset",
+        layerId: soundLayers[0].id,
+    });
+    if (!stagedSound.ok || stagedSound.document.layers
+        .find((layer) => layer.id === soundLayers[0].id)?.sound?.bytes.length === 0) {
+        throw new Error("Wasm staged sound asset decode failed");
+    }
+    const released = await request({ requestId: 7, type: "release" });
+    if (!released.ok) {
+        throw new Error("Wasm staged release failed");
+    }
+    const afterRelease = await request({
+        requestId: 8,
+        type: "decodeDrawing",
+        layerId: eagerPaintLayer.id,
+        drawingId,
+    });
+    if (afterRelease.ok) {
+        throw new Error("Wasm staged session remained usable after release");
+    }
+
     console.log(`IMM_WEB_WASM_WORKER_SMOKE: passed (${strokeCount} strokes, ${pointCount} points, ${triangleCount} paint triangles, ${sounds.length} encoded sounds)`);
 } finally {
     await worker.terminate();

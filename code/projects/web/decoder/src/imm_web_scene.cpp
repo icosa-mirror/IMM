@@ -20,6 +20,9 @@
 namespace
 {
     std::unique_ptr<ImmStrokeReader::StrokeStore> gStore;
+    std::unique_ptr<ImmImporter::Sequence> gSequence;
+    std::unique_ptr<ImmCore::piLog> gLog;
+    std::vector<uint8_t> gSource;
     float gBackgroundColor[3] = {0.0f, 0.0f, 0.0f};
     constexpr uint32_t kTicksPerSecond = 12600u;
     constexpr uint32_t kNoContentLayer = std::numeric_limits<uint32_t>::max();
@@ -81,6 +84,14 @@ namespace
         error->status = static_cast<uint32_t>(status);
         const size_t copyLength = std::min(std::strlen(message), static_cast<size_t>(IMM_WEB_ERROR_MESSAGE_CAPACITY - 1u));
         std::memcpy(error->message, message, copyLength);
+    }
+
+    bool makeSourceArray(ImmCore::piTArray<uint8_t>* data)
+    {
+        if (data == nullptr || gSource.empty() || !data->Init(0u, false))
+            return false;
+        data->Set(gSource.data(), static_cast<uint64_t>(gSource.size()));
+        return true;
     }
 
     ImmWebTransform convertTransform(const ImmStrokeReader::StrokeLayerTransformC& source)
@@ -359,9 +370,119 @@ extern "C" ImmWebStatus imm_web_decode_scene(
     return IMM_WEB_STATUS_OK;
 }
 
+extern "C" ImmWebStatus imm_web_open_scene_metadata(
+    const uint8_t* source,
+    size_t sourceSize,
+    ImmWebError* outError)
+{
+    imm_web_release_scene();
+    if (source == nullptr || sourceSize == 0u)
+    {
+        setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "Scene source is required");
+        return IMM_WEB_STATUS_INVALID_ARGUMENT;
+    }
+
+    gSource.assign(source, source + sourceSize);
+    ImmCore::piTArray<uint8_t> data;
+    if (!makeSourceArray(&data))
+    {
+        imm_web_release_scene();
+        setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Could not initialize scene input");
+        return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
+    }
+
+    auto sequence = std::make_unique<ImmImporter::Sequence>();
+    auto log = std::make_unique<ImmCore::piLog>();
+    auto store = std::make_unique<ImmStrokeReader::StrokeStore>();
+    if (!ImmImporter::ImportMetadataFromMemory(
+            &data,
+            sequence.get(),
+            log.get(),
+            ImmImporter::Drawing::ColorSpace::Gamma,
+            ImmImporter::Drawing::PaintRenderingTechnique::Static,
+            store.get()))
+    {
+        sequence->Deinit(log.get());
+        imm_web_release_scene();
+        setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Native IMM metadata importer failed");
+        return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
+    }
+
+    const ImmCore::vec3 background = sequence->GetBackgroundColor();
+    gBackgroundColor[0] = background.x;
+    gBackgroundColor[1] = background.y;
+    gBackgroundColor[2] = background.z;
+    capturePlaybackDocument(*sequence, *store);
+    gSequence = std::move(sequence);
+    gLog = std::move(log);
+    gStore = std::move(store);
+    setError(outError, IMM_WEB_STATUS_OK, "");
+    return IMM_WEB_STATUS_OK;
+}
+
+extern "C" ImmWebStatus imm_web_decode_drawing(
+    uint32_t layerId,
+    uint32_t drawingId,
+    ImmWebError* outError)
+{
+    if (gSequence == nullptr || gLog == nullptr || gStore == nullptr)
+    {
+        setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "No staged scene is open");
+        return IMM_WEB_STATUS_INVALID_ARGUMENT;
+    }
+    ImmCore::piTArray<uint8_t> data;
+    if (!makeSourceArray(&data) || !ImmImporter::DecodeDrawingFromMemory(
+            &data,
+            gSequence.get(),
+            gLog.get(),
+            layerId,
+            drawingId,
+            ImmImporter::Drawing::ColorSpace::Gamma,
+            ImmImporter::Drawing::PaintRenderingTechnique::Static,
+            gStore.get()))
+    {
+        setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Native IMM drawing decode failed");
+        return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
+    }
+    setError(outError, IMM_WEB_STATUS_OK, "");
+    return IMM_WEB_STATUS_OK;
+}
+
+extern "C" ImmWebStatus imm_web_decode_layer_asset(
+    uint32_t layerId,
+    ImmWebError* outError)
+{
+    if (gSequence == nullptr || gLog == nullptr || gStore == nullptr)
+    {
+        setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "No staged scene is open");
+        return IMM_WEB_STATUS_INVALID_ARGUMENT;
+    }
+    ImmCore::piTArray<uint8_t> data;
+    if (!makeSourceArray(&data) || !ImmImporter::DecodeLayerAssetFromMemory(
+            &data,
+            gSequence.get(),
+            gLog.get(),
+            layerId,
+            ImmImporter::Drawing::ColorSpace::Gamma,
+            ImmImporter::Drawing::PaintRenderingTechnique::Static,
+            gStore.get()))
+    {
+        setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Native IMM layer asset decode failed");
+        return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
+    }
+    capturePlaybackDocument(*gSequence, *gStore);
+    setError(outError, IMM_WEB_STATUS_OK, "");
+    return IMM_WEB_STATUS_OK;
+}
+
 extern "C" void imm_web_release_scene(void)
 {
+    if (gSequence != nullptr && gLog != nullptr)
+        gSequence->Deinit(gLog.get());
     gStore.reset();
+    gSequence.reset();
+    gLog.reset();
+    gSource.clear();
     gBackgroundColor[0] = 0.0f;
     gBackgroundColor[1] = 0.0f;
     gBackgroundColor[2] = 0.0f;

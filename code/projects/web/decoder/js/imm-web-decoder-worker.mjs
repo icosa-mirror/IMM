@@ -124,20 +124,33 @@ function readCString(pointer, capacity) {
 }
 
 
-function decodeScene(source) {
-    if (!(source instanceof ArrayBuffer)) {
-        throw new TypeError("decode requires an ArrayBuffer");
+function decodeScene(source, operation = { type: "decode" }) {
+    const requiresSource = operation.type === "decode" || operation.type === "openMetadata";
+    if (requiresSource && !(source instanceof ArrayBuffer)) {
+        throw new TypeError(`${operation.type} requires an ArrayBuffer`);
     }
-    if (source.byteLength > MAX_WASM32_SOURCE_SIZE) {
+    if (requiresSource && source.byteLength > MAX_WASM32_SOURCE_SIZE) {
         throw new RangeError("IMM source exceeds the Wasm32 address space");
     }
 
     const startedAt = performance.now();
-    const sourcePointer = decoder._malloc(source.byteLength);
+    const sourceLength = requiresSource ? source.byteLength : 0;
+    const sourcePointer = sourceLength > 0 ? decoder._malloc(sourceLength) : 0;
     const errorPointer = decoder._malloc(ERROR_SIZE);
     try {
-        decoder.HEAPU8.set(new Uint8Array(source), sourcePointer);
-        const status = decoder._imm_web_decode_scene(sourcePointer, source.byteLength, errorPointer);
+        if (sourceLength > 0) {
+            decoder.HEAPU8.set(new Uint8Array(source), sourcePointer);
+        }
+        let status;
+        if (operation.type === "openMetadata") {
+            status = decoder._imm_web_open_scene_metadata(sourcePointer, sourceLength, errorPointer);
+        } else if (operation.type === "decodeDrawing") {
+            status = decoder._imm_web_decode_drawing(operation.layerId, operation.drawingId, errorPointer);
+        } else if (operation.type === "decodeLayerAsset") {
+            status = decoder._imm_web_decode_layer_asset(operation.layerId, errorPointer);
+        } else {
+            status = decoder._imm_web_decode_scene(sourcePointer, sourceLength, errorPointer);
+        }
         let memory = new DataView(decoder.HEAPU8.buffer);
         if (status !== 0) {
             return { ok: false, error: readError(memory, errorPointer) };
@@ -503,18 +516,28 @@ function decodeScene(source) {
             decoder._free(localPointer);
             decoder._free(layerPointer);
             decoder._free(backgroundPointer);
-            decoder._imm_web_release_scene();
+            if (operation.type === "decode") {
+                decoder._imm_web_release_scene();
+            }
         }
     } finally {
         decoder._free(errorPointer);
-        decoder._free(sourcePointer);
+        if (sourcePointer !== 0) decoder._free(sourcePointer);
     }
 }
 
 
 async function handleMessage(message, send) {
     const { requestId, type, source } = message;
-    if (type !== "inspect" && type !== "decode") {
+    const requestTypes = new Set([
+        "inspect",
+        "decode",
+        "openMetadata",
+        "decodeDrawing",
+        "decodeLayerAsset",
+        "release",
+    ]);
+    if (!requestTypes.has(type)) {
         send({
             requestId,
             ok: false,
@@ -527,8 +550,15 @@ async function handleMessage(message, send) {
         await decoderReady;
         if (type === "inspect") {
             send({ requestId, ...inspect(source) });
+        } else if (type === "release") {
+            decoder._imm_web_release_scene();
+            send({ requestId, ok: true });
         } else {
-            const result = decodeScene(source);
+            const result = decodeScene(source, {
+                type,
+                layerId: message.layerId,
+                drawingId: message.drawingId,
+            });
             const transfers = result.transfers ?? [];
             delete result.transfers;
             send({ requestId, ...result }, transfers);
