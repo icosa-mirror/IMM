@@ -32,7 +32,9 @@ namespace ImmImporter
 		mLoop = loop;
         mPaused = false;
         mForceRestart = false;
+#if !defined(IMM_WEB_DECODER)
         mSound.Init();
+#endif
         mOffset = 0;
         mCompressed = false;
 		return true;
@@ -40,7 +42,9 @@ namespace ImmImporter
 
     void LayerSound::Deinit(void)
     {
+#if !defined(IMM_WEB_DECODER)
         mSound.Deinit();
+#endif
     }
 
     void LayerSound::SetPlaying(bool value, uint64_t startOffsetMicroseconds)

@@ -23,7 +23,9 @@ namespace ImmImporter
 
 	void LayerSpawnArea::Deinit(void)
 	{
+#if !defined(IMM_WEB_DECODER)
         mScreenshot.Free();
+#endif
 	}
 
 	void LayerSpawnArea::SetGpuId(int id)
@@ -76,9 +78,16 @@ namespace ImmImporter
 
     bool LayerSpawnArea::LoadAssetMemory(const piTArray<uint8_t>& data, piLog* log, const wchar_t* ext)
     {
+#if defined(IMM_WEB_DECODER)
+        (void)data;
+        (void)log;
+        (void)ext;
+        return true;
+#else
         if( !mScreenshot.ReadFromMemory(&data, ext) )
             return false;
         return true;
+#endif
     }
 
     const AssetFormat LayerSpawnArea::GetAssetFormat() const
