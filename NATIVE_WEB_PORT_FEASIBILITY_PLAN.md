@@ -1,6 +1,6 @@
 # Native Web Port Feasibility and Implementation Plan
 
-**Status:** investigation and proposed plan  
+**Status:** Phase 2 static visual MVP completed and verified
 **Date:** 2026-07-13  
 **Target:** a browser-native IMM viewer, using JavaScript/TypeScript, WebAssembly, or a mixture of the two; Three.js is an acceptable rendering framework.
 
@@ -705,6 +705,24 @@ Stop/reassess condition:
 - If removing accidental core dependencies requires broad changes, create a format-only decoder library from the existing source rather than compiling the production importer unchanged.
 
 ### Phase 2 — static visual MVP (about 3–5 weeks)
+
+**Completed:** 2026-07-13 on `feature/web-native`.
+
+Verification evidence:
+
+- The production TypeScript/Vite build, focused native decoder test, Wasm
+  worker smoke, and exact five-brush geometry tests pass.
+- The Chrome harness renders all 30 paint layers (1,171 strokes / 58,405
+  points) and the mono equirectangular picture from `sample1.imm`.
+- The deterministic 1280×720 capture passes the committed web/native
+  spatial/color contract in `tests/baselines/render/web-three-sample1.json`.
+- The embedded fixture uses one host renderer, canvas, scene, camera, and depth
+  buffer and places a normal host cube on an IMM paint vertex.
+- Three consecutive reloads retain a constant WebGL geometry count, and the
+  event loop remains responsive while the worker decodes and packs geometry.
+- Desktop and four-times CPU-throttled mobile measurements are committed in
+  `tests/baselines/web/sample1-phase2-browser.json` and are reproducible with
+  `bun run test:browser` from `code/projects/web/app`.
 
 Deliverables:
 

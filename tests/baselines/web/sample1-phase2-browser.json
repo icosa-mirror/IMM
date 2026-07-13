@@ -1,0 +1,61 @@
+{
+  "schema": "imm-web-phase2-browser-report-v1",
+  "date": "2026-07-13",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "browser": "installed Google Chrome via playwright-core 1.55.1",
+  "desktop": {
+    "viewport": "1280x720@1x",
+    "layers": 35,
+    "paint_layers": 30,
+    "picture_layers": 1,
+    "strokes": 1171,
+    "points": 58405,
+    "mesh_batches": 42,
+    "total_triangles": 802890,
+    "visible_draw_calls": 39,
+    "visible_triangles": 646890,
+    "decode_ms": 43.6,
+    "worker_marshal_ms": 4.8,
+    "worker_pack_ms": 49.9,
+    "geometry_creation_ms": 12.2,
+    "first_upload_render_ms": 39.9,
+    "steady_fps": 60,
+    "gpu_frame_ms": 2.2,
+    "used_js_heap_bytes": 36178303,
+    "render_metric_passed": true,
+    "spatial_luma_grid_correlation": 0.6562792443426563,
+    "spatial_luma_grid_mean_abs_delta": 0.10727567146650327
+  },
+  "embedded": {
+    "shared_renderer": true,
+    "shared_canvas": true,
+    "imm_attached_to_host_scene": true,
+    "host_depth_test": true,
+    "host_cube_at_paint_vertex": true,
+    "intersection_target": "NewLayer0 brush 2"
+  },
+  "mobile_profile": {
+    "emulation": "390x844 viewport, 3x device scale, capped to 2x render scale, touch/mobile mode, 4x CPU throttling",
+    "render_buffer": "780x1688",
+    "decode_ms": 44.6,
+    "worker_marshal_ms": 4.4,
+    "worker_pack_ms": 49.8,
+    "geometry_creation_ms": 54.8,
+    "first_upload_render_ms": 57.6,
+    "steady_fps": 60,
+    "gpu_frame_ms": 0.1,
+    "visible_draw_calls": 36,
+    "visible_triangles": 568322,
+    "used_js_heap_bytes": 35920551
+  },
+  "lifecycle": {
+    "reload_cycles": 3,
+    "webgl_geometry_counts": [39, 39, 39],
+    "resource_growth_detected": false
+  },
+  "responsiveness": {
+    "reload_ms": 111.2,
+    "event_loop_ticks_during_reload": 29,
+    "main_thread_responsive": true
+  }
+}
