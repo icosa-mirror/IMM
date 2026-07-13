@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { cameraAudioTransform, ImmWebAudio } from "./audio/imm-web-audio";
 import { desktopSpawnTransform, ImmCameraControls, type CameraMode } from "./camera-controls";
-import { ImmDecoderClient } from "./decoder-client";
+import { ImmDecoderClient, type ImmStagedDelta } from "./decoder-client";
 import { createNativeLoadOrder, type StagedLoadWork } from "./staged-loading";
 import { releaseAssetUrl } from "./release-assets";
 import type { ImmDocument } from "./format/imm-document";
@@ -367,7 +367,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         for (let index = 0; index < initialWork.length; index++) {
             if (requestId !== loadRequestId) return;
             status.textContent = `Buffering native five-second window ${index + 1}/${initialWork.length}…`;
-            document = await decodeStagedWork(initialWork[index]!);
+            applyStagedDelta(document, await decodeStagedWork(initialWork[index]!));
         }
     } catch (stagedError) {
         if (requestId !== loadRequestId) return;
@@ -415,17 +415,34 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     }
 }
 
-function decodeStagedWork(work: StagedLoadWork): Promise<ImmDocument> {
+function decodeStagedWork(work: StagedLoadWork): Promise<ImmStagedDelta> {
     return work.type === "drawing"
         ? decoder.decodeDrawing(work.layerId, work.drawingId)
         : decoder.decodeLayerAsset(work.layerId);
 }
 
+function applyStagedDelta(document: ImmDocument, delta: ImmStagedDelta): void {
+    const layer = document.layers.find((candidate) => candidate.id === delta.layerId);
+    if (layer === undefined) throw new Error(`Staged decoder returned unknown layer ${delta.layerId}`);
+    if (delta.type === "drawing") {
+        if (delta.drawingId < 0 || delta.drawingId >= layer.drawings.length) {
+            throw new Error(`Staged decoder returned unknown drawing ${delta.layerId}/${delta.drawingId}`);
+        }
+        layer.drawings[delta.drawingId] = delta.drawing;
+    } else {
+        if (delta.picture !== undefined) layer.picture = delta.picture;
+        if (delta.sound !== undefined) layer.sound = delta.sound;
+    }
+}
+
 async function continueStagedLoad(name: string, work: StagedLoadWork[], requestId: number): Promise<void> {
     for (let index = 0; index < work.length; index++) {
         if (requestId !== loadRequestId) return;
-        const document = await decodeStagedWork(work[index]!);
+        const delta = await decodeStagedWork(work[index]!);
         if (requestId !== loadRequestId) return;
+        const document = playback?.document;
+        if (document === undefined) return;
+        applyStagedDelta(document, delta);
 
         const loadedLayer = document.layers.find((layer) => layer.id === work[index]!.layerId);
         if (work[index]!.type === "drawing" || loadedLayer?.type === 3 || loadedLayer?.type === 4) {

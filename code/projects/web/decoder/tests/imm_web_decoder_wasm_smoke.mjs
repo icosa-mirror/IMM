@@ -210,8 +210,7 @@ try {
     if (!stagedDrawing.ok) {
         throw new Error(`Wasm staged drawing decode failed: ${stagedDrawing.error.message}`);
     }
-    const decodedDrawing = stagedDrawing.document.layers
-        .find((layer) => layer.id === eagerPaintLayer.id)?.drawings[drawingId];
+    const decodedDrawing = stagedDrawing.delta?.drawing;
     if (decodedDrawing?.strokeCount !== eagerDrawing.strokeCount ||
         decodedDrawing?.pointCount !== eagerDrawing.pointCount) {
         throw new Error("Staged drawing does not match eager drawing counts");
@@ -222,8 +221,7 @@ try {
         type: "decodeLayerAsset",
         layerId: pictureLayers[0].id,
     });
-    if (!stagedPicture.ok || stagedPicture.document.layers
-        .find((layer) => layer.id === pictureLayers[0].id)?.picture?.pixels.length === 0) {
+    if (!stagedPicture.ok || stagedPicture.delta?.picture?.pixels.length === 0) {
         throw new Error("Wasm staged picture asset decode failed");
     }
     const stagedSound = await request({
@@ -231,11 +229,10 @@ try {
         type: "decodeLayerAsset",
         layerId: soundLayers[0].id,
     });
-    if (!stagedSound.ok || stagedSound.document.layers
-        .find((layer) => layer.id === soundLayers[0].id)?.sound?.bytes.length === 0) {
+    if (!stagedSound.ok || stagedSound.delta?.sound?.bytes.length === 0) {
         throw new Error("Wasm staged sound asset decode failed");
     }
-    const stagedSpawnLayer = stagedSound.document.layers.find((layer) => layer.type === 8);
+    const stagedSpawnLayer = staged.document.layers.find((layer) => layer.type === 8);
     const stagedSpawn = await request({
         requestId: 7,
         type: "decodeLayerAsset",

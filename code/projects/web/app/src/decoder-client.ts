@@ -26,11 +26,12 @@ interface DecoderResponse {
     ok: boolean;
     summary?: ImmDocumentSummary;
     document?: ImmDocument;
+    delta?: ImmStagedDelta;
     error?: DecoderError;
 }
 
 interface PendingRequest {
-    resolve: (value: ImmDocumentSummary | ImmDocument | undefined) => void;
+    resolve: (value: ImmDocumentSummary | ImmDocument | ImmStagedDelta | undefined) => void;
     reject: (error: Error) => void;
     allowEmpty: boolean;
 }
@@ -64,12 +65,12 @@ export class ImmDecoderClient {
         return this.#requestDocument("openMetadata", { source }, [source]);
     }
 
-    decodeDrawing(layerId: number, drawingId: number): Promise<ImmDocument> {
-        return this.#requestDocument("decodeDrawing", { layerId, drawingId });
+    decodeDrawing(layerId: number, drawingId: number): Promise<ImmStagedDelta> {
+        return this.#request<ImmStagedDelta>("decodeDrawing", { layerId, drawingId });
     }
 
-    decodeLayerAsset(layerId: number): Promise<ImmDocument> {
-        return this.#requestDocument("decodeLayerAsset", { layerId });
+    decodeLayerAsset(layerId: number): Promise<ImmStagedDelta> {
+        return this.#request<ImmStagedDelta>("decodeLayerAsset", { layerId });
     }
 
     fallbackEager(): Promise<ImmDocument> {
@@ -81,7 +82,7 @@ export class ImmDecoderClient {
     }
 
     #requestDocument(
-        type: "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "fallbackEager",
+        type: "decode" | "openMetadata" | "fallbackEager",
         payload: Record<string, unknown>,
         transfer: Transferable[] = [],
     ): Promise<ImmDocument> {
@@ -126,7 +127,7 @@ export class ImmDecoderClient {
         }
         this.#pending.delete(response.requestId);
 
-        const value = response.summary ?? response.document;
+        const value = response.summary ?? response.document ?? response.delta;
         if (response.ok && (value !== undefined || pending.allowEmpty)) {
             pending.resolve(value);
             return;
@@ -146,4 +147,8 @@ export class ImmDecoderClient {
         this.#pending.clear();
     }
 }
-import type { ImmDocument } from "./format/imm-document";
+import type { ImmDocument, ImmDrawing, ImmPicture, ImmSound } from "./format/imm-document";
+
+export type ImmStagedDelta =
+    | { type: "drawing"; layerId: number; drawingId: number; drawing: ImmDrawing }
+    | { type: "asset"; layerId: number; picture?: ImmPicture; sound?: ImmSound };

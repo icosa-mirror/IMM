@@ -124,6 +124,211 @@ function readCString(pointer, capacity) {
     return new TextDecoder().decode(terminator < 0 ? bytes : bytes.subarray(0, terminator));
 }
 
+function findContentLayerIndex(layerId) {
+    const layerPointer = decoder._malloc(LAYER_INFO_SIZE);
+    try {
+        const layerCount = decoder._imm_web_get_layer_count();
+        for (let layerIndex = 0; layerIndex < layerCount; layerIndex++) {
+            if (decoder._imm_web_get_layer_info(layerIndex, layerPointer) === 0) continue;
+            const memory = new DataView(decoder.HEAPU8.buffer);
+            if (memory.getUint32(layerPointer, true) === layerId) return layerIndex;
+        }
+        return -1;
+    } finally {
+        decoder._free(layerPointer);
+    }
+}
+
+function marshalDrawing(layerId, drawingId) {
+    const layerIndex = findContentLayerIndex(layerId);
+    if (layerIndex < 0) throw new Error(`Could not find paint layer ${layerId}`);
+    const strokeCount = decoder._imm_web_get_stroke_count(layerIndex, drawingId);
+    const descriptors = new Uint32Array(strokeCount * 4);
+    const bounds = new Float32Array(strokeCount * 6);
+    const pointCounts = new Uint32Array(strokeCount);
+    const strokeInfoPointer = decoder._malloc(STROKE_INFO_SIZE);
+    let totalPointCount = 0;
+    try {
+        for (let strokeIndex = 0; strokeIndex < strokeCount; strokeIndex++) {
+            if (decoder._imm_web_get_stroke_info(layerIndex, drawingId, strokeIndex, strokeInfoPointer) === 0) {
+                throw new Error(`Could not read stroke ${layerId}/${drawingId}/${strokeIndex}`);
+            }
+            const memory = new DataView(decoder.HEAPU8.buffer);
+            const pointCount = memory.getUint32(strokeInfoPointer + 8, true);
+            pointCounts[strokeIndex] = pointCount;
+            descriptors[strokeIndex * 4] = totalPointCount;
+            descriptors[strokeIndex * 4 + 1] = pointCount;
+            descriptors[strokeIndex * 4 + 2] = memory.getUint32(strokeInfoPointer, true);
+            descriptors[strokeIndex * 4 + 3] = memory.getUint32(strokeInfoPointer + 4, true);
+            for (let component = 0; component < 6; component++) {
+                bounds[strokeIndex * 6 + component] = memory.getFloat32(
+                    strokeInfoPointer + 16 + component * 4, true);
+            }
+            totalPointCount += pointCount;
+        }
+    } finally {
+        decoder._free(strokeInfoPointer);
+    }
+
+    const points = new Float32Array(totalPointCount * STROKE_POINT_FLOATS);
+    const pointTimes = new Float32Array(totalPointCount);
+    const maximumPointCount = pointCounts.reduce((maximum, value) => Math.max(maximum, value), 0);
+    const pointsPointer = maximumPointCount > 0 ? decoder._malloc(maximumPointCount * STROKE_POINT_SIZE) : 0;
+    try {
+        for (let strokeIndex = 0; strokeIndex < strokeCount; strokeIndex++) {
+            const pointCount = pointCounts[strokeIndex];
+            if (pointCount === 0) continue;
+            if (decoder._imm_web_get_stroke_points(
+                layerIndex, drawingId, strokeIndex, pointsPointer, pointCount) !== pointCount) {
+                throw new Error(`Could not read points for stroke ${layerId}/${drawingId}/${strokeIndex}`);
+            }
+            points.set(
+                new Float32Array(decoder.HEAPU8.buffer, pointsPointer, pointCount * STROKE_POINT_FLOATS),
+                descriptors[strokeIndex * 4] * STROKE_POINT_FLOATS,
+            );
+            if (decoder._imm_web_get_stroke_point_times(
+                layerIndex, drawingId, strokeIndex, pointsPointer, pointCount) !== pointCount) {
+                throw new Error(`Could not read point times for stroke ${layerId}/${drawingId}/${strokeIndex}`);
+            }
+            pointTimes.set(
+                new Float32Array(decoder.HEAPU8.buffer, pointsPointer, pointCount),
+                descriptors[strokeIndex * 4],
+            );
+        }
+    } finally {
+        if (pointsPointer !== 0) decoder._free(pointsPointer);
+    }
+
+    const biggestStroke = decoder._imm_web_get_drawing_biggest_stroke(layerIndex, drawingId);
+    const geometries = packPaintGeometry({ biggestStroke, descriptors, bounds, points, pointTimes });
+    const transfers = geometries.flatMap((geometry) => [
+        geometry.positions.buffer,
+        geometry.colors.buffer,
+        geometry.directions.buffer,
+        geometry.visibility.buffer,
+        geometry.masks.buffer,
+        geometry.progress.buffer,
+        geometry.indices.buffer,
+    ]);
+    return {
+        delta: {
+            type: "drawing",
+            layerId,
+            drawingId,
+            drawing: { biggestStroke, strokeCount, pointCount: totalPointCount, geometries },
+        },
+        transfers,
+    };
+}
+
+function marshalLayerAsset(layerId) {
+    const transfers = [];
+    let picture;
+    const contentLayerIndex = findContentLayerIndex(layerId);
+    if (contentLayerIndex >= 0) {
+        const infoPointer = decoder._malloc(PICTURE_INFO_SIZE);
+        try {
+            if (decoder._imm_web_get_picture_info(contentLayerIndex, infoPointer) !== 0) {
+                let memory = new DataView(decoder.HEAPU8.buffer);
+                const dataSize = memory.getUint32(infoPointer + 24, true);
+                const pixelsPointer = dataSize > 0 ? decoder._malloc(dataSize) : 0;
+                try {
+                    if (dataSize > 0 && decoder._imm_web_get_picture_pixels(
+                        contentLayerIndex, pixelsPointer, dataSize) !== dataSize) {
+                        throw new Error(`Could not read picture pixels for layer ${layerId}`);
+                    }
+                    memory = new DataView(decoder.HEAPU8.buffer);
+                    const pixels = new Uint8Array(dataSize);
+                    if (dataSize > 0) pixels.set(decoder.HEAPU8.subarray(pixelsPointer, pixelsPointer + dataSize));
+                    picture = {
+                        contentType: memory.getUint32(infoPointer + 4, true),
+                        viewerLocked: memory.getUint32(infoPointer + 8, true) !== 0,
+                        width: memory.getUint32(infoPointer + 12, true),
+                        height: memory.getUint32(infoPointer + 16, true),
+                        hasAlpha: memory.getUint32(infoPointer + 20, true) !== 0,
+                        pixels,
+                    };
+                    transfers.push(pixels.buffer);
+                } finally {
+                    if (pixelsPointer !== 0) decoder._free(pixelsPointer);
+                }
+            }
+        } finally {
+            decoder._free(infoPointer);
+        }
+    }
+
+    let sound;
+    const playbackPointer = decoder._malloc(PLAYBACK_INFO_SIZE);
+    const timelinePointer = decoder._malloc(TIMELINE_LAYER_INFO_SIZE);
+    const soundPointer = decoder._malloc(SOUND_INFO_SIZE);
+    try {
+        if (decoder._imm_web_get_playback_info(playbackPointer) !== 0) {
+            let memory = new DataView(decoder.HEAPU8.buffer);
+            const timelineCount = memory.getUint32(playbackPointer + 8, true);
+            for (let index = 0; index < timelineCount; index++) {
+                if (decoder._imm_web_get_timeline_layer_info(index, timelinePointer) === 0) continue;
+                memory = new DataView(decoder.HEAPU8.buffer);
+                if (memory.getUint32(timelinePointer, true) !== layerId ||
+                    decoder._imm_web_get_sound_info(index, soundPointer) === 0) continue;
+                memory = new DataView(decoder.HEAPU8.buffer);
+                const dataSize = memory.getUint32(soundPointer + 60, true);
+                const bytesPointer = dataSize > 0 ? decoder._malloc(dataSize) : 0;
+                try {
+                    if (dataSize > 0 && decoder._imm_web_get_sound_bytes(index, bytesPointer, dataSize) !== dataSize) {
+                        throw new Error(`Could not read sound bytes for layer ${layerId}`);
+                    }
+                    memory = new DataView(decoder.HEAPU8.buffer);
+                    const bytes = new Uint8Array(dataSize);
+                    if (dataSize > 0) bytes.set(decoder.HEAPU8.subarray(bytesPointer, bytesPointer + dataSize));
+                    sound = {
+                        type: memory.getUint32(soundPointer + 4, true),
+                        assetFormat: memory.getUint32(soundPointer + 8, true),
+                        channelCount: memory.getUint32(soundPointer + 12, true),
+                        looping: memory.getUint32(soundPointer + 16, true) !== 0,
+                        playOnLoad: memory.getUint32(soundPointer + 20, true) !== 0,
+                        gain: memory.getFloat32(soundPointer + 24, true),
+                        attenuationType: memory.getUint32(soundPointer + 28, true),
+                        attenuationMin: memory.getFloat32(soundPointer + 32, true),
+                        attenuationMax: memory.getFloat32(soundPointer + 36, true),
+                        modifierType: memory.getUint32(soundPointer + 40, true),
+                        modifierParameters: Array.from({ length: 4 }, (_, component) =>
+                            memory.getFloat32(soundPointer + 44 + component * 4, true)),
+                        bytes,
+                    };
+                    transfers.push(bytes.buffer);
+                } finally {
+                    if (bytesPointer !== 0) decoder._free(bytesPointer);
+                }
+                break;
+            }
+        }
+    } finally {
+        decoder._free(soundPointer);
+        decoder._free(timelinePointer);
+        decoder._free(playbackPointer);
+    }
+    return { delta: { type: "asset", layerId, picture, sound }, transfers };
+}
+
+function decodeStagedDelta(message) {
+    const errorPointer = decoder._malloc(ERROR_SIZE);
+    try {
+        const status = message.type === "decodeDrawing"
+            ? decoder._imm_web_decode_drawing(message.layerId, message.drawingId, errorPointer)
+            : decoder._imm_web_decode_layer_asset(message.layerId, errorPointer);
+        if (status !== 0) {
+            return { ok: false, error: readError(new DataView(decoder.HEAPU8.buffer), errorPointer) };
+        }
+        const result = message.type === "decodeDrawing"
+            ? marshalDrawing(message.layerId, message.drawingId)
+            : marshalLayerAsset(message.layerId);
+        return { ok: true, ...result };
+    } finally {
+        decoder._free(errorPointer);
+    }
+}
+
 
 function decodeScene(source, operation = { type: "decode" }) {
     const requiresSource = operation.type === "decode" || operation.type === "openMetadata";
@@ -572,6 +777,11 @@ async function handleMessage(message, send) {
                 stagedSourcePointer = 0;
             }
             send({ requestId, ok: true });
+        } else if (type === "decodeDrawing" || type === "decodeLayerAsset") {
+            const result = decodeStagedDelta(message);
+            const transfers = result.transfers ?? [];
+            delete result.transfers;
+            send({ requestId, ...result }, transfers);
         } else {
             const result = decodeScene(source, {
                 type,

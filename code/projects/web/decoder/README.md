@@ -63,3 +63,10 @@ or onto a web host, pass the generated worker and source file to:
 ```powershell
 node tests/inspect_scene_file.mjs <worker.mjs> <local-file.imm>
 ```
+
+Probe staged metadata and representative paint/spawn/media payloads without
+copying the source into the repository:
+
+```powershell
+node tests/inspect_staged_scene_file.mjs <worker.mjs> <local-file.imm>
+```
