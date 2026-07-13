@@ -156,6 +156,18 @@ try {
     assertPixelNear(pictureSamples.stereo[1], [0, 0, 255], "stereo right eye");
     pictureSamples.cross.forEach((pixel, index) => assertPixelNear(pixel, faceColors[index], `cross face ${index}`));
     pictureSamples.vertical.forEach((pixel, index) => assertPixelNear(pixel, faceColors[index], `vertical face ${index}`));
+    const paintEffectSamples = await phase3.evaluate(() => ({
+        drawHidden: window.__phase3Fixture.samplePaintEffect(0, 0, 0),
+        drawVisible: window.__phase3Fixture.samplePaintEffect(1, 0, 0),
+        blinkLow: window.__phase3Fixture.samplePaintEffect(1, 0, 2),
+        blinkHigh: window.__phase3Fixture.samplePaintEffect(1, 0.5, 2),
+    }));
+    assert.ok(pixelDistance(paintEffectSamples.drawHidden, paintEffectSamples.drawVisible) > 100,
+        `Draw-in did not change rendered pixels: ${JSON.stringify(paintEffectSamples)}`);
+    assert.ok(pixelDistance(paintEffectSamples.blinkLow, paintEffectSamples.blinkHigh) > 50,
+        `Blink did not modulate rendered pixels: ${JSON.stringify(paintEffectSamples)}`);
+    assert.ok(pixelDistance(paintEffectSamples.drawVisible, paintEffectSamples.blinkHigh) <= 8,
+        "Blink maximum did not restore authored paint output");
     await phase3.close();
 
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -201,6 +213,7 @@ try {
         phase3States,
         lockedPositions,
         pictureSamples,
+        paintEffectSamples,
     };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
@@ -213,4 +226,8 @@ function assertPixelNear(actual, expected, label) {
     assert.ok(actual !== undefined && expected !== undefined && actual.length >= 3);
     const difference = Math.max(...expected.map((value, index) => Math.abs(value - actual[index])));
     assert.ok(difference <= 8, `${label} sampled ${actual}, expected ${expected}`);
+}
+
+function pixelDistance(a, b) {
+    return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
 }
