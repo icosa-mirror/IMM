@@ -30,6 +30,11 @@ try {
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
         await route.continue();
     });
+    await controlsPage.route("**/fixtures/not-an-imm.imm", (route) => route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: "not an IMM document",
+    }));
     await controlsPage.goto("http://127.0.0.1:4177/");
     await controlsPage.waitForFunction(() => document.querySelector("#status")?.textContent?.startsWith("Fetching"));
     assert.equal(await controlsPage.locator("#url-input").isDisabled(), false,
@@ -41,6 +46,25 @@ try {
     await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
     assert.equal((await controlsPage.locator("#status").textContent())?.includes("sample1.imm"), true,
         "Base URL did not load the bundled sample IMM by default");
+    await controlsPage.evaluate(() => window.__immLoadUrl("/fixtures/not-an-imm.imm").catch(() => undefined));
+    const failedLoadState = await controlsPage.evaluate(() => ({
+        diagnostics: window.__immDiagnostics(),
+        playback: window.__immPlayback.snapshot(),
+    }));
+    assert.equal(failedLoadState.diagnostics.ready, false,
+        "Failed load retained the previous IMM view");
+    assert.equal(failedLoadState.diagnostics.gridVisible, true,
+        "Failed load did not restore the idle grid");
+    assertVectorNear(failedLoadState.diagnostics.cameraPosition, [3, 2, 5],
+        "Failed load retained the previous IMM camera position");
+    assertVectorNear(failedLoadState.diagnostics.controlsTarget, [0, 0.75, 0],
+        "Failed load retained the previous OrbitControls target");
+    assert.equal(failedLoadState.playback.durationTicks, 0,
+        "Failed load retained the previous playback document");
+    await controlsPage.evaluate(() => window.__immLoadUrl("/fixtures/sample1.imm"));
+    await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 30_000 });
+    assert.equal((await controlsPage.evaluate(() => window.__immDiagnostics())).strokes, 1_171,
+        "Valid IMM did not recover after a failed load");
     await controlsPage.close();
 
     const desktop = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -255,4 +279,10 @@ function assertPixelNear(actual, expected, label) {
 
 function pixelDistance(a, b) {
     return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+}
+
+function assertVectorNear(actual, expected, message) {
+    assert.equal(actual.length, expected.length, message);
+    const difference = Math.max(...expected.map((value, index) => Math.abs(value - actual[index])));
+    assert.ok(difference <= 1e-9, `${message}: ${actual}, expected ${expected}`);
 }

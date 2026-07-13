@@ -26,17 +26,20 @@ const chapter = requiredElement<HTMLSelectElement>("chapter");
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setClearColor(0x10151d, 1);
+const idleClearColor = new THREE.Color(0x10151d);
+renderer.setClearColor(idleClearColor, 1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 20_000);
-camera.position.set(3, 2, 5);
+const idleCameraPosition = new THREE.Vector3(3, 2, 5);
+const idleControlsTarget = new THREE.Vector3(0, 0.75, 0);
+camera.position.copy(idleCameraPosition);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.target.set(0, 0.75, 0);
+controls.target.copy(idleControlsTarget);
 
 const grid = new THREE.GridHelper(10, 20, 0x506070, 0x28333f);
 scene.add(grid);
@@ -81,7 +84,8 @@ fileInput.addEventListener("change", async () => {
         return;
     }
 
-    const requestId = ++loadRequestId;
+    const requestId = beginLoad(`Reading ${file.name}…`);
+    fileInput.value = "";
     try {
         const source = await file.arrayBuffer();
         await loadDocument(file.name, source, requestId);
@@ -119,7 +123,7 @@ pasteUrl.addEventListener("click", async () => {
 });
 
 window.__immLoadUrl = loadUrl;
-window.__immDisposeView = disposeView;
+window.__immDisposeView = resetDocumentState;
 window.__immDiagnostics = () => ({
     ready: immView !== null,
     ...lastMetrics,
@@ -138,6 +142,9 @@ window.__immDiagnostics = () => ({
     firstUploadRenderMs: firstUploadRenderMs === null ? null : round(firstUploadRenderMs),
     gpuFrameMs: gpuFrameMs === null ? null : round(gpuFrameMs),
     gpuTimerAvailable: timerExtension !== null,
+    cameraPosition: camera.position.toArray(),
+    controlsTarget: controls.target.toArray(),
+    gridVisible: grid.visible,
 });
 window.__immPlayback = {
     play: () => playback?.play(),
@@ -245,9 +252,7 @@ function pollGpuTimer(): void {
 }
 
 async function loadUrl(url: string): Promise<void> {
-    const requestId = ++loadRequestId;
-    summary.hidden = true;
-    status.textContent = `Fetching ${url}…`;
+    const requestId = beginLoad(`Fetching ${url}…`);
     try {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`IMM fetch failed: HTTP ${response.status}`);
@@ -267,16 +272,57 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     status.textContent = `Decoding ${formatBytes(source.byteLength)} in the decoder worker…`;
     const document = await decoder.decode(source);
     if (requestId !== loadRequestId) return;
+    const nextView = new ImmThreeView(document, { renderer, parent: scene });
+    try {
+        const nextPlayback = new ImmPlaybackController(document);
+        immView = nextView;
+        playback = nextPlayback;
+        configurePlaybackControls(document);
+        measureNextRender = true;
+        applyDefaultSpawn(document);
+        grid.visible = false;
+        renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
+        showSummary(name, document, nextView);
+    } catch (error) {
+        if (immView === nextView) immView = null;
+        playback = null;
+        nextView.dispose();
+        resetDocumentState();
+        throw error;
+    }
+}
+
+function beginLoad(message: string): number {
+    const requestId = ++loadRequestId;
+    resetDocumentState();
+    urlInput.setCustomValidity("");
+    status.textContent = message;
+    return requestId;
+}
+
+function resetDocumentState(): void {
     disposeView();
-    immView = new ImmThreeView(document, { renderer, parent: scene });
-    playback = new ImmPlaybackController(document);
-    configurePlaybackControls(document);
+    renderer.renderLists.dispose();
+    renderer.setClearColor(idleClearColor, 1);
+    grid.visible = true;
+    lastMetrics = null;
     firstUploadRenderMs = null;
-    measureNextRender = true;
-    applyDefaultSpawn(document);
-    grid.visible = false;
-    renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
-    showSummary(name, document, immView);
+    measureNextRender = false;
+    gpuFrameMs = null;
+    summary.textContent = "";
+    summary.hidden = true;
+    timeline.value = "0";
+    timeline.max = "1";
+    chapter.replaceChildren();
+    playbackTime.value = "0:00 / 0:00";
+    playPause.textContent = "Play";
+    continueButton.disabled = true;
+    camera.position.copy(idleCameraPosition);
+    camera.quaternion.identity();
+    camera.scale.set(1, 1, 1);
+    camera.up.set(0, 1, 0);
+    controls.target.copy(idleControlsTarget);
+    controls.update();
 }
 
 function disposeView(): void {
