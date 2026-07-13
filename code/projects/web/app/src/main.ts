@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { ImmDecoderClient } from "./decoder-client";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
+import { ImmPlaybackController } from "./runtime/imm-playback";
 import "./style.css";
 
 
@@ -12,6 +13,15 @@ const urlForm = requiredElement<HTMLFormElement>("url-form");
 const urlInput = requiredElement<HTMLInputElement>("url-input");
 const status = requiredElement<HTMLParagraphElement>("status");
 const summary = requiredElement<HTMLPreElement>("summary");
+const playbackControls = requiredElement<HTMLElement>("playback-controls");
+const playPause = requiredElement<HTMLButtonElement>("play-pause");
+const continueButton = requiredElement<HTMLButtonElement>("continue");
+const restartButton = requiredElement<HTMLButtonElement>("restart");
+const skipBack = requiredElement<HTMLButtonElement>("skip-back");
+const skipForward = requiredElement<HTMLButtonElement>("skip-forward");
+const timeline = requiredElement<HTMLInputElement>("timeline");
+const playbackTime = requiredElement<HTMLOutputElement>("playback-time");
+const chapter = requiredElement<HTMLSelectElement>("chapter");
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -32,6 +42,7 @@ scene.add(grid);
 
 const decoder = new ImmDecoderClient();
 let immView: ImmThreeView | null = null;
+let playback: ImmPlaybackController | null = null;
 let lastMetrics: Record<string, unknown> | null = null;
 let frameStart = performance.now();
 let frameCount = 0;
@@ -45,12 +56,20 @@ const timerExtension = timerContext.getExtension("EXT_disjoint_timer_query_webgl
 let timerQuery: WebGLQuery | null = null;
 let timerQueryActive = false;
 let gpuFrameMs: number | null = null;
+let previousAnimationTime = performance.now();
 
 declare global {
     interface Window {
         __immLoadUrl: (url: string) => Promise<void>;
         __immDisposeView: () => void;
         __immDiagnostics: () => Record<string, unknown>;
+        __immPlayback: {
+            play(): void;
+            pause(): void;
+            seekTicks(value: number): void;
+            selectChapter(index: number): void;
+            snapshot(): Record<string, unknown>;
+        };
     }
 }
 
@@ -97,6 +116,48 @@ window.__immDiagnostics = () => ({
     gpuFrameMs: gpuFrameMs === null ? null : round(gpuFrameMs),
     gpuTimerAvailable: timerExtension !== null,
 });
+window.__immPlayback = {
+    play: () => playback?.play(),
+    pause: () => playback?.pause(),
+    seekTicks: (value) => playback?.seekTicks(value),
+    selectChapter: (index) => playback?.selectChapter(index),
+    snapshot: () => ({
+        timeTicks: playback?.timeTicks ?? 0,
+        chapterIndex: playback?.chapterIndex ?? 0,
+        playing: playback?.playing ?? false,
+        waiting: playback?.waiting ?? false,
+    }),
+};
+
+playPause.addEventListener("click", () => {
+    if (playback === null) return;
+    if (playback.playing) playback.pause(); else playback.play();
+    updatePlaybackControls();
+});
+continueButton.addEventListener("click", () => {
+    playback?.continue();
+    updatePlaybackControls();
+});
+restartButton.addEventListener("click", () => {
+    playback?.restart();
+    updatePlaybackControls();
+});
+skipBack.addEventListener("click", () => {
+    playback?.skipBack();
+    updatePlaybackControls();
+});
+skipForward.addEventListener("click", () => {
+    playback?.skipForward();
+    updatePlaybackControls();
+});
+timeline.addEventListener("input", () => {
+    playback?.seekTicks(Number(timeline.value));
+    updatePlaybackControls();
+});
+chapter.addEventListener("change", () => {
+    playback?.selectChapter(Number(chapter.value));
+    updatePlaybackControls();
+});
 
 const parameters = new URLSearchParams(location.search);
 if (parameters.get("visual-test") === "1") document.body.classList.add("visual-test");
@@ -109,8 +170,10 @@ window.addEventListener("beforeunload", () => {
     decoder.dispose();
     renderer.dispose();
 });
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((animationTime) => {
     const now = performance.now();
+    const deltaSeconds = Math.max(0, Math.min(0.1, (animationTime - previousAnimationTime) / 1_000));
+    previousAnimationTime = animationTime;
     frameCount++;
     if (now - frameStart >= 500) {
         meanFrameMs = (now - frameStart) / frameCount;
@@ -119,7 +182,11 @@ renderer.setAnimationLoop(() => {
     }
     resize();
     controls.update();
-    immView?.update(performance.now() / 1_000, camera);
+    if (playback !== null && immView !== null) {
+        playback.advance(deltaSeconds);
+        immView.setTimeTicks(playback.timeTicks, camera);
+        updatePlaybackControls();
+    }
     pollGpuTimer();
     const renderStartedAt = measureNextRender ? performance.now() : 0;
     if (timerExtension !== null && timerQuery === null) {
@@ -176,6 +243,8 @@ async function loadDocument(name: string, source: ArrayBuffer): Promise<void> {
     const document = await decoder.decode(source);
     disposeView();
     immView = new ImmThreeView(document, { renderer, parent: scene });
+    playback = new ImmPlaybackController(document);
+    configurePlaybackControls(document);
     firstUploadRenderMs = null;
     measureNextRender = true;
     applyDefaultSpawn(document);
@@ -188,6 +257,32 @@ async function loadDocument(name: string, source: ArrayBuffer): Promise<void> {
 function disposeView(): void {
     immView?.dispose();
     immView = null;
+    playback = null;
+    playbackControls.hidden = true;
+}
+
+function configurePlaybackControls(document: ImmDocument): void {
+    playbackControls.hidden = false;
+    timeline.max = String(document.durationTicks);
+    chapter.replaceChildren(...document.chapters.map((_, index) => {
+        const option = new Option(`Chapter ${index + 1}`, String(index));
+        return option;
+    }));
+    updatePlaybackControls();
+}
+
+function updatePlaybackControls(): void {
+    if (playback === null) return;
+    timeline.value = String(playback.timeTicks);
+    chapter.value = String(playback.chapterIndex);
+    playPause.textContent = playback.playing ? "Pause" : "Play";
+    continueButton.disabled = !playback.waiting;
+    playbackTime.value = `${formatTime(playback.timeTicks)} / ${formatTime(playback.durationTicks)}`;
+}
+
+function formatTime(ticks: number): string {
+    const seconds = playback === null ? 0 : Math.floor(ticks / playback.document.ticksPerSecond);
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 

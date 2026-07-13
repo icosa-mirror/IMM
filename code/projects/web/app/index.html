@@ -20,6 +20,17 @@
           <label for="url-input">IMM URL</label>
           <div><input id="url-input" type="url" placeholder="https://…/scene.imm" /><button type="submit">Load</button></div>
         </form>
+        <section id="playback-controls" class="playback-controls" aria-label="Playback controls" hidden>
+          <div class="transport">
+            <button id="skip-back" type="button" title="Previous chapter">⏮</button>
+            <button id="play-pause" type="button">Play</button>
+            <button id="continue" type="button">Continue</button>
+            <button id="restart" type="button">Restart</button>
+            <button id="skip-forward" type="button" title="Next chapter">⏭</button>
+          </div>
+          <input id="timeline" type="range" min="0" max="1" value="0" step="1" aria-label="Timeline" />
+          <div class="timeline-labels"><output id="playback-time">0:00 / 0:00</output><select id="chapter" aria-label="Chapter"></select></div>
+        </section>
         <p id="status" role="status">Choose an IMM file to decode and render.</p>
         <pre id="summary" hidden></pre>
       </section>
