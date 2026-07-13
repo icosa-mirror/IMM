@@ -126,6 +126,31 @@ try {
     const phase3GeometryCounts = phase3States.map((state) => state.gpuGeometries);
     assert.ok(phase3GeometryCounts.every((count) => count === phase3GeometryCounts[0]),
         `Drawing swaps leaked GPU geometries: ${phase3GeometryCounts}`);
+    const lockedPositions = await phase3.evaluate(() => {
+        window.__phase3Fixture.moveCameraX(0);
+        const initial = window.__phase3Fixture.state().lockedPictureX;
+        window.__phase3Fixture.moveCameraX(5);
+        const moved = window.__phase3Fixture.state().lockedPictureX;
+        return { initial, moved };
+    });
+    assert.ok(Math.abs(lockedPositions.moved - lockedPositions.initial - 5) < 1e-5,
+        `Viewer-locked picture did not follow the camera: ${JSON.stringify(lockedPositions)}`);
+    const pictureSamples = await phase3.evaluate(() => {
+        const directions = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+        return {
+            stereo: [
+                window.__phase3Fixture.samplePicture(2, [0, 0, -1], 0),
+                window.__phase3Fixture.samplePicture(2, [0, 0, -1], 1),
+            ],
+            cross: directions.map((direction) => window.__phase3Fixture.samplePicture(3, direction)),
+            vertical: directions.map((direction) => window.__phase3Fixture.samplePicture(4, direction)),
+        };
+    });
+    const faceColors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255], [0, 255, 255]];
+    assertPixelNear(pictureSamples.stereo[0], [255, 0, 0], "stereo left eye");
+    assertPixelNear(pictureSamples.stereo[1], [0, 0, 255], "stereo right eye");
+    pictureSamples.cross.forEach((pixel, index) => assertPixelNear(pixel, faceColors[index], `cross face ${index}`));
+    pictureSamples.vertical.forEach((pixel, index) => assertPixelNear(pixel, faceColors[index], `vertical face ${index}`));
     await phase3.close();
 
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
@@ -168,10 +193,18 @@ try {
         playbackInfo,
         sampleTimestamps,
         phase3States,
+        lockedPositions,
+        pictureSamples,
     };
     await writeFile(resolve(artifactDirectory, "browser-report.json"), `${JSON.stringify(report, null, 2)}\n`);
     console.log(JSON.stringify(report, null, 2));
 } finally {
     await browser.close();
     await server.close();
+}
+
+function assertPixelNear(actual, expected, label) {
+    assert.ok(actual !== undefined && expected !== undefined && actual.length >= 3);
+    const difference = Math.max(...expected.map((value, index) => Math.abs(value - actual[index])));
+    assert.ok(difference <= 8, `${label} sampled ${actual}, expected ${expected}`);
 }

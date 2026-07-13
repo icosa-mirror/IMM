@@ -414,7 +414,8 @@ function createCubemapAtlasMaterial(texture: THREE.DataTexture, opacity: number,
                     if(f.z<0.5) cell=vec2(2.0,1.0); else if(f.z<1.5) cell=vec2(0.0,1.0);
                     else if(f.z<2.5) cell=vec2(1.0,0.0); else if(f.z<3.5) cell=vec2(1.0,2.0);
                     else if(f.z<4.5) cell=vec2(1.0,1.0); else cell=vec2(3.0,1.0);
-                    uv=(cell+vec2(f.x,1.0-f.y))/vec2(4.0,3.0);
+                    vec2 localUv=(f.z<1.5||f.z>=3.5)?vec2(1.0-f.x,1.0-f.y):f.xy;
+                    uv=(cell+localUv)/vec2(4.0,3.0);
                 `}
                 vec4 c=texture2D(immPicture,uv); gl_FragColor=vec4(c.rgb,c.a*immOpacity);
                 #include <tonemapping_fragment>

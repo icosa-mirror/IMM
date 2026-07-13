@@ -36,6 +36,8 @@ declare global {
         __phase3Fixture: {
             setTimeTicks(value: number): void;
             state(): Record<string, unknown>;
+            moveCameraX(value: number): void;
+            samplePicture(contentType: number, direction: [number, number, number], eye?: number): number[];
         };
     }
 }
@@ -58,6 +60,8 @@ window.__phase3Fixture = {
                 keepAliveTypes.push(Number(paintMaterial.uniforms.immKeepAliveType?.value ?? 0));
             }
         });
+        const lockedPicture = findLayer(view.object3d, 3);
+        const lockedWorldPosition = lockedPicture?.getWorldPosition(new THREE.Vector3());
         return {
             ready: true,
             timeTicks: view.timeTicks,
@@ -68,9 +72,30 @@ window.__phase3Fixture = {
             drawIn: material?.uniforms.immDrawIn?.value ?? null,
             pictureTypes: pictureTypes.sort(),
             keepAliveTypes: keepAliveTypes.sort(),
+            lockedPictureX: lockedWorldPosition?.x ?? null,
             gpuGeometries: renderer.info.memory.geometries,
             gpuTextures: renderer.info.memory.textures,
         };
+    },
+    moveCameraX(value) {
+        camera.position.set(value, 0, 3);
+        camera.quaternion.identity();
+        view.setTimeTicks(view.timeTicks, camera);
+        renderer.render(scene, camera);
+    },
+    samplePicture(contentType, direction, eye = 0) {
+        camera.position.set(0, 0, 0);
+        camera.lookAt(...direction);
+        (camera as THREE.PerspectiveCamera & { viewport?: THREE.Vector4 }).viewport = new THREE.Vector4(eye, 0, 1, 1);
+        view.setTimeTicks(0, camera);
+        view.object3d.traverse((object) => {
+            if (object.userData.immLayerType === "paint") object.visible = false;
+            if (object.userData.immLayerType === "picture") object.visible = object.userData.immPictureType === contentType;
+        });
+        renderer.render(scene, camera);
+        const pixel = new Uint8Array(4);
+        renderer.getContext().readPixels(320, 180, 1, 1, renderer.getContext().RGBA, renderer.getContext().UNSIGNED_BYTE, pixel);
+        return Array.from(pixel);
     },
 };
 window.__phase3Fixture.setTimeTicks(0);
@@ -197,13 +222,44 @@ function picture(contentType: number, viewerLocked: boolean): NonNullable<ImmLay
     const dimensions = contentType === 3 ? [8, 6] : contentType === 4 ? [2, 12] : contentType === 2 ? [8, 8] : [8, 4];
     const [width = 1, height = 1] = dimensions;
     const pixels = new Uint8Array(width * height * 4);
-    for (let index = 0; index < pixels.length; index += 4) {
-        pixels[index] = (contentType * 47 + index) % 255;
-        pixels[index + 1] = (120 + index / 4) % 255;
-        pixels[index + 2] = 200 - contentType * 20;
-        pixels[index + 3] = 255;
+    fill(pixels, width, 0, 0, width, height, [80, 100, 130, 255]);
+    if (contentType === 2) {
+        fill(pixels, width, 0, 0, width, height / 2, [255, 0, 0, 255]);
+        fill(pixels, width, 0, height / 2, width, height / 2, [0, 0, 255, 255]);
+    }
+    if (contentType === 3) {
+        const cells = [[2, 1], [0, 1], [1, 0], [1, 2], [1, 1], [3, 1]];
+        cells.forEach(([x = 0, y = 0], face) => fill(pixels, width, x * 2, y * 2, 2, 2, faceColor(face)));
+    }
+    if (contentType === 4) {
+        for (let face = 0; face < 6; face++) fill(pixels, width, 0, face * 2, 2, 2, faceColor(face));
     }
     return { contentType, viewerLocked, width, height, hasAlpha: false, pixels };
+}
+
+function faceColor(face: number): [number, number, number, number] {
+    return [
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 255, 0, 255],
+        [255, 0, 255, 255],
+        [0, 255, 255, 255],
+    ][face] as [number, number, number, number];
+}
+
+function fill(
+    pixels: Uint8Array,
+    imageWidth: number,
+    x0: number,
+    y0: number,
+    width: number,
+    height: number,
+    color: [number, number, number, number],
+): void {
+    for (let y = y0; y < y0 + height; y++) {
+        for (let x = x0; x < x0 + width; x++) pixels.set(color, (y * imageWidth + x) * 4);
+    }
 }
 
 function identity(): ImmTransform {
