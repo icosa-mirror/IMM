@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
     IMM_ACTION_PLAY,
+    IMM_ACTION_LOOP,
     IMM_ACTION_STOP,
     IMM_ANIM_ACTION,
     IMM_ANIM_OFFSET,
@@ -178,5 +179,36 @@ describe("IMM deterministic playback evaluation", () => {
         expect(controller.timeTicks).toBe(0);
         controller.selectChapter(1);
         expect(controller.timeTicks).toBe(600);
+    });
+
+    test("restarts deterministically at root loop actions", () => {
+        const document = fixture();
+        const root = document.layers[0];
+        root?.keys.push(key(IMM_ANIM_ACTION, 800, { uintValue: IMM_ACTION_LOOP }));
+        const controller = new ImmPlaybackController(document);
+        controller.seekTicks(750);
+        controller.advance(1);
+        expect(controller.timeTicks).toBe(50);
+        expect(controller.playing).toBe(true);
+    });
+
+    test("applies pivot compensation while interpolating transforms", () => {
+        const document = fixture();
+        const paint = document.layers[2];
+        if (paint === undefined) throw new Error("Paint fixture is missing");
+        paint.pivotTransform = { ...identity, translation: [1, 0, 0] };
+        paint.keys = [
+            key(IMM_ANIM_VISIBILITY, 0, { boolValue: true }),
+            key(IMM_ANIM_TRANSFORM, 0, {
+                interpolation: IMM_INTERPOLATION_LINEAR,
+                transformValue: identity,
+            }),
+            key(IMM_ANIM_TRANSFORM, 100, {
+                transformValue: { ...identity, rotation: [0, 0, 1, 0] },
+            }),
+        ];
+        const state = evaluateImmDocument(document, 50).layers.get(2);
+        expect(state?.transform.translation[0]).toBeCloseTo(0, 5);
+        expect(state?.transform.translation[1]).toBeCloseTo(-1, 5);
     });
 });

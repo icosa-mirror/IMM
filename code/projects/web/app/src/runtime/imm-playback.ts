@@ -1,4 +1,5 @@
 import {
+    IMM_ACTION_LOOP,
     IMM_ACTION_STOP,
     IMM_ANIM_ACTION,
     IMM_ANIM_DRAW_IN_TIME,
@@ -134,7 +135,10 @@ export class ImmPlaybackController {
             this.#fractionalTicks = exactTicks - wholeTicks;
             const target = Math.min(this.durationTicks, this.timeTicks + wholeTicks);
             const stop = nextStopBetween(this.document, this.timeTicks, target);
-            if (stop !== undefined) {
+            const loop = nextLoopBetween(this.document, this.timeTicks, target);
+            if (loop !== undefined && (stop === undefined || loop < stop)) {
+                this.timeTicks = loop > 0 ? (target - loop) % loop : 0;
+            } else if (stop !== undefined) {
                 this.timeTicks = Math.max(0, stop - 1);
                 this.waiting = true;
             } else {
@@ -195,7 +199,12 @@ function evaluateLocalLayer(layer: ImmLayer, timelineTicks: number, ticksPerSeco
     return {
         visible,
         opacity: interpolateNumber(keysFor(layer, IMM_ANIM_OPACITY), timelineTicks, "floatValue", layer.opacity),
-        transform: interpolateTransform(keysFor(layer, IMM_ANIM_TRANSFORM), timelineTicks, layer.localTransform),
+        transform: interpolateTransform(
+            keysFor(layer, IMM_ANIM_TRANSFORM),
+            timelineTicks,
+            layer.localTransform,
+            layer.pivotTransform,
+        ),
         drawInTime: interpolateNumber(keysFor(layer, IMM_ANIM_DRAW_IN_TIME), timelineTicks, "doubleValue", 0),
         localTimeTicks,
         loop: previousKey(keysFor(layer, IMM_ANIM_LOOP), timelineTicks)?.boolValue,
@@ -258,27 +267,19 @@ function interpolateNumber(
     return next === undefined ? previous[field] : previous[field] + (next[field] - previous[field]) * t;
 }
 
-function interpolateTransform(keys: ImmAnimationKey[], ticks: number, fallback: ImmTransform): ImmTransform {
+function interpolateTransform(
+    keys: ImmAnimationKey[],
+    ticks: number,
+    fallback: ImmTransform,
+    pivot: ImmTransform,
+): ImmTransform {
     const pair = interpolationPair(keys, ticks);
     if (pair === undefined) return cloneTransform(fallback);
     const [previous, next, t] = pair;
     if (next === undefined) return cloneTransform(previous.transformValue);
-    const a = previous.transformValue;
-    const b = next.transformValue;
-    const quaternionB = dot4(a.rotation, b.rotation) < 0
-        ? b.rotation.map((value) => -value) as ImmTransform["rotation"]
-        : b.rotation;
-    const rotation = normalize4(a.rotation.map(
-        (value, index) => value + ((quaternionB[index] ?? value) - value) * t,
-    ) as ImmTransform["rotation"]);
-    return {
-        rotation,
-        scale: a.scale + (b.scale - a.scale) * t,
-        flip: t < 1 ? a.flip : b.flip,
-        translation: a.translation.map(
-            (value, index) => value + ((b.translation[index] ?? value) - value) * t,
-        ) as ImmTransform["translation"],
-    };
+    const pivotedA = composeTransform(previous.transformValue, pivot);
+    const pivotedB = composeTransform(next.transformValue, pivot);
+    return composeTransform(mixTransform(pivotedA, pivotedB, t), invertTransform(pivot));
 }
 
 function valueAt(
@@ -322,6 +323,15 @@ function nextStopBetween(document: ImmDocument, start: number, end: number): num
         key.timeTicks <= end)?.timeTicks;
 }
 
+function nextLoopBetween(document: ImmDocument, start: number, end: number): number | undefined {
+    const root = document.layers.find((layer) => layer.parentId < 0);
+    return root?.keys.find((key) =>
+        key.property === IMM_ANIM_ACTION &&
+        key.uintValue === IMM_ACTION_LOOP &&
+        key.timeTicks > start &&
+        key.timeTicks <= end)?.timeTicks;
+}
+
 function clampTicks(ticks: number, duration: number): number {
     if (!Number.isFinite(ticks)) throw new RangeError("Playback time must be finite");
     return Math.max(0, Math.min(duration, Math.round(ticks)));
@@ -343,4 +353,109 @@ function dot4(a: ImmTransform["rotation"], b: ImmTransform["rotation"]): number 
 function normalize4(value: ImmTransform["rotation"]): ImmTransform["rotation"] {
     const length = Math.hypot(...value);
     return length === 0 ? [0, 0, 0, 1] : value.map((component) => component / length) as ImmTransform["rotation"];
+}
+
+function mixTransform(a: ImmTransform, b: ImmTransform, t: number): ImmTransform {
+    return {
+        rotation: slerp(a.rotation, b.rotation, t),
+        scale: a.scale * (1 - t) + b.scale * t,
+        flip: a.flip,
+        translation: a.translation.map(
+            (value, index) => value * (1 - t) + (b.translation[index] ?? value) * t,
+        ) as ImmTransform["translation"],
+    };
+}
+
+function composeTransform(a: ImmTransform, b: ImmTransform): ImmTransform {
+    const scaled = flipVector(b.translation, a.flip).map((value) => value * a.scale) as ImmTransform["translation"];
+    const translated = rotateVector(scaled, a.rotation).map(
+        (value, index) => value + (a.translation[index] ?? 0),
+    ) as ImmTransform["translation"];
+    if (a.flip === 0) {
+        return {
+            rotation: multiplyQuaternion(a.rotation, b.rotation),
+            scale: a.scale * b.scale,
+            flip: b.flip,
+            translation: translated,
+        };
+    }
+    if (b.flip === 0) {
+        return {
+            rotation: multiplyQuaternion(
+                multiplyQuaternion(flipQuaternion(a.rotation, a.flip), b.rotation),
+                flipQuaternion([0, 0, 0, 1], a.flip),
+            ),
+            scale: a.scale * b.scale,
+            flip: a.flip,
+            translation: translated,
+        };
+    }
+    return { rotation: multiplyQuaternion(a.rotation, b.rotation), scale: a.scale * b.scale, flip: 0, translation: translated };
+}
+
+function invertTransform(value: ImmTransform): ImmTransform {
+    const rotation = invertQuaternion(value.rotation);
+    const scale = 1 / value.scale;
+    const inverseTranslation = flipVector(
+        rotateVector(value.translation.map((component) => -component) as ImmTransform["translation"], rotation)
+            .map((component) => component * scale) as ImmTransform["translation"],
+        value.flip,
+    );
+    return { rotation: flipQuaternion(rotation, value.flip), scale, flip: value.flip, translation: inverseTranslation };
+}
+
+function multiplyQuaternion(a: ImmTransform["rotation"], b: ImmTransform["rotation"]): ImmTransform["rotation"] {
+    return normalize4([
+        a[0] * b[3] + a[3] * b[0] + a[1] * b[2] - a[2] * b[1],
+        a[1] * b[3] + a[3] * b[1] + a[2] * b[0] - a[0] * b[2],
+        a[2] * b[3] + a[3] * b[2] + a[0] * b[1] - a[1] * b[0],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    ]);
+}
+
+function invertQuaternion(value: ImmTransform["rotation"]): ImmTransform["rotation"] {
+    const magnitude = dot4(value, value);
+    return [-value[0] / magnitude, -value[1] / magnitude, -value[2] / magnitude, value[3] / magnitude];
+}
+
+function flipQuaternion(value: ImmTransform["rotation"], flip: number): ImmTransform["rotation"] {
+    if (flip === 1) return [value[0], -value[1], -value[2], value[3]];
+    if (flip === 2) return [-value[0], value[1], -value[2], value[3]];
+    if (flip === 3) return [-value[0], -value[1], value[2], value[3]];
+    return [...value];
+}
+
+function flipVector(value: ImmTransform["translation"], flip: number): ImmTransform["translation"] {
+    return [flip === 1 ? -value[0] : value[0], flip === 2 ? -value[1] : value[1], flip === 3 ? -value[2] : value[2]];
+}
+
+function rotateVector(value: ImmTransform["translation"], rotation: ImmTransform["rotation"]): ImmTransform["translation"] {
+    const [x, y, z] = value;
+    const [qx, qy, qz, qw] = rotation;
+    const ix = qw * x + qy * z - qz * y;
+    const iy = qw * y + qz * x - qx * z;
+    const iz = qw * z + qx * y - qy * x;
+    const iw = -qx * x - qy * y - qz * z;
+    return [
+        ix * qw + iw * -qx + iy * -qz - iz * -qy,
+        iy * qw + iw * -qy + iz * -qx - ix * -qz,
+        iz * qw + iw * -qz + ix * -qy - iy * -qx,
+    ];
+}
+
+function slerp(a: ImmTransform["rotation"], b: ImmTransform["rotation"], t: number): ImmTransform["rotation"] {
+    let cosine = dot4(a, b);
+    let target = b;
+    if (cosine < 0) {
+        cosine = -cosine;
+        target = b.map((value) => -value) as ImmTransform["rotation"];
+    }
+    if (1 - cosine <= 1e-6) {
+        return normalize4(a.map((value, index) => value * (1 - t) + (target[index] ?? value) * t) as ImmTransform["rotation"]);
+    }
+    const omega = Math.acos(Math.max(-1, Math.min(1, cosine)));
+    const sine = Math.sin(omega);
+    const scaleA = Math.sin((1 - t) * omega) / sine;
+    const scaleB = Math.sin(t * omega) / sine;
+    return normalize4(a.map((value, index) => value * scaleA + (target[index] ?? value) * scaleB) as ImmTransform["rotation"]);
 }
