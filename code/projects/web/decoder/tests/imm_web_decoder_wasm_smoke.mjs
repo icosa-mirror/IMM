@@ -73,6 +73,10 @@ try {
     if (pictureLayers[0].picture?.pixels.length === 0) {
         throw new Error("Scene decode returned no picture pixels");
     }
+    const defaultSpawns = decoded.document.layers.filter((layer) => layer.type === 8 && layer.defaultSpawn);
+    if (defaultSpawns.length !== 1) {
+        throw new Error(`Expected one default spawn area, found ${defaultSpawns.length}`);
+    }
 
     console.log(`IMM_WEB_WASM_WORKER_SMOKE: passed (${strokeCount} strokes, ${pointCount} points)`);
 } finally {

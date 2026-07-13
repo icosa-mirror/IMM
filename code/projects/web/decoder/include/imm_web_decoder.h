@@ -65,6 +65,7 @@ typedef struct ImmWebLayerInfo
     uint32_t drawing_count;
     uint32_t visible;
     float opacity;
+    uint32_t default_spawn;
     char name[256];
 } ImmWebLayerInfo;
 

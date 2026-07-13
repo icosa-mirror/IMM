@@ -20,6 +20,7 @@ struct StrokeLayerInfoC
     char name[256];
     int visible;
     float opacity;
+    int isDefaultSpawn;
     float pivotRotation[4];
     float pivotScale;
     int pivotFlip;
@@ -97,6 +98,7 @@ struct StoredLayer
     int pictureWidth = 0;
     int pictureHeight = 0;
     bool pictureHasAlpha = false;
+    bool isDefaultSpawn = false;
     std::vector<uint8_t> picturePixels;
     std::vector<StoredDrawing> drawings;
     
@@ -133,6 +135,7 @@ public:
         bool hasAlpha,
         const uint8_t* pixels,
         int pixelDataSize) override;
+    void OnSpawnArea(uint32_t layerId, bool isDefault) override;
     void OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint32_t maxRepeatCount) override;
     void OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames) override;
     void OnBeginDrawing(uint32_t drawingId) override;

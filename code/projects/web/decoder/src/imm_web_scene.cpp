@@ -124,6 +124,7 @@ extern "C" uint32_t imm_web_get_layer_info(uint32_t layerIndex, ImmWebLayerInfo*
     outInfo->drawing_count = static_cast<uint32_t>(source.numDrawings);
     outInfo->visible = static_cast<uint32_t>(source.visible);
     outInfo->opacity = source.opacity;
+    outInfo->default_spawn = static_cast<uint32_t>(source.isDefaultSpawn);
     std::memcpy(outInfo->name, source.name, sizeof(outInfo->name));
     return 1u;
 }
