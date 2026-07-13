@@ -49,6 +49,12 @@ public:
         (void)pixelDataSize;
     }
 
+    virtual void OnSpawnArea(uint32_t layerId, bool isDefault)
+    {
+        (void)layerId;
+        (void)isDefault;
+    }
+
     // Called when a paint layer's frame buffer info is available
     // @param frameRate - frames per second
     // @param numFrames - total number of frames in the animation

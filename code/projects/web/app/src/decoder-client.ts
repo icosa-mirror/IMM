@@ -23,11 +23,12 @@ interface DecoderResponse {
     requestId: number;
     ok: boolean;
     summary?: ImmDocumentSummary;
+    document?: ImmDocument;
     error?: DecoderError;
 }
 
 interface PendingRequest {
-    resolve: (summary: ImmDocumentSummary) => void;
+    resolve: (value: ImmDocumentSummary | ImmDocument) => void;
     reject: (error: Error) => void;
 }
 
@@ -49,15 +50,26 @@ export class ImmDecoderClient {
     }
 
     inspect(source: ArrayBuffer): Promise<ImmDocumentSummary> {
+        return this.#request<ImmDocumentSummary>("inspect", source);
+    }
+
+    decode(source: ArrayBuffer): Promise<ImmDocument> {
+        return this.#request<ImmDocument>("decode", source);
+    }
+
+    #request<T extends ImmDocumentSummary | ImmDocument>(type: "inspect" | "decode", source: ArrayBuffer): Promise<T> {
         if (this.#disposed) {
             return Promise.reject(new Error("IMM decoder client is disposed"));
         }
 
         const requestId = this.#nextRequestId++;
-        const result = new Promise<ImmDocumentSummary>((resolve, reject) => {
-            this.#pending.set(requestId, { resolve, reject });
+        const result = new Promise<T>((resolve, reject) => {
+            this.#pending.set(requestId, {
+                resolve: (value) => resolve(value as T),
+                reject,
+            });
         });
-        this.#worker.postMessage({ requestId, type: "inspect", source }, [source]);
+        this.#worker.postMessage({ requestId, type, source }, [source]);
         return result;
     }
 
@@ -77,8 +89,9 @@ export class ImmDecoderClient {
         }
         this.#pending.delete(response.requestId);
 
-        if (response.ok && response.summary !== undefined) {
-            pending.resolve(response.summary);
+        const value = response.summary ?? response.document;
+        if (response.ok && value !== undefined) {
+            pending.resolve(value);
             return;
         }
 
@@ -96,3 +109,4 @@ export class ImmDecoderClient {
         this.#pending.clear();
     }
 }
+import type { ImmDocument } from "./format/imm-document";

@@ -133,6 +133,30 @@ void StrokeStore::OnPictureLayer(
     }
 }
 
+void StrokeStore::OnSpawnArea(uint32_t layerId, bool isDefault)
+{
+    bool hasDefault = false;
+    for (const auto& layer : mDocument.layers)
+    {
+        hasDefault = hasDefault || layer.isDefaultSpawn;
+    }
+    if (isDefault)
+    {
+        for (auto& layer : mDocument.layers)
+        {
+            layer.isDefaultSpawn = false;
+        }
+    }
+    for (auto& layer : mDocument.layers)
+    {
+        if (layer.layerId == layerId)
+        {
+            layer.isDefaultSpawn = isDefault || !hasDefault;
+            return;
+        }
+    }
+}
+
 void StrokeStore::OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint32_t maxRepeatCount)
 {
     if (!mCurrentLayer) return;
@@ -241,7 +265,7 @@ bool StrokeStore::GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const
     info->numDrawings = static_cast<int>(layer.drawings.size());
     info->visible = layer.visible ? 1 : 0;
     info->opacity = static_cast<float>(layer.opacity);
-    info->visible = layer.visible ? 1 : 0;
+    info->isDefaultSpawn = layer.isDefaultSpawn ? 1 : 0;
 
     StrokeLayerTransformC pivot = ToTransformC(layer.pivotTransform);
     info->pivotRotation[0] = pivot.rotation[0];

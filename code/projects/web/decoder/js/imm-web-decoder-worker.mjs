@@ -6,8 +6,8 @@ const ERROR_SIZE = 176;
 const ERROR_MESSAGE_OFFSET = 16;
 const ERROR_MESSAGE_CAPACITY = 160;
 const MAX_WASM32_SOURCE_SIZE = 0xffff_ffff;
-const LAYER_INFO_SIZE = 276;
-const LAYER_NAME_OFFSET = 20;
+const LAYER_INFO_SIZE = 280;
+const LAYER_NAME_OFFSET = 24;
 const LAYER_NAME_CAPACITY = 256;
 const TRANSFORM_SIZE = 36;
 const ANIMATION_INFO_SIZE = 16;
@@ -40,10 +40,10 @@ function readSummary(memory, pointer) {
 function readError(memory, pointer) {
     const status = memory.getUint32(pointer, true);
     const byteOffset = memory.getBigUint64(pointer + 8, true);
-    const bytes = decoder.HEAPU8.subarray(
+    const bytes = Uint8Array.from(decoder.HEAPU8.subarray(
         pointer + ERROR_MESSAGE_OFFSET,
         pointer + ERROR_MESSAGE_OFFSET + ERROR_MESSAGE_CAPACITY,
-    );
+    ));
     const terminator = bytes.indexOf(0);
     const messageBytes = terminator >= 0 ? bytes.subarray(0, terminator) : bytes;
     return {
@@ -106,7 +106,7 @@ function readTransform(memory, pointer) {
 
 
 function readCString(pointer, capacity) {
-    const bytes = decoder.HEAPU8.subarray(pointer, pointer + capacity);
+    const bytes = Uint8Array.from(decoder.HEAPU8.subarray(pointer, pointer + capacity));
     const terminator = bytes.indexOf(0);
     return new TextDecoder().decode(terminator < 0 ? bytes : bytes.subarray(0, terminator));
 }
@@ -165,6 +165,7 @@ function decodeScene(source) {
                     name: readCString(layerPointer + LAYER_NAME_OFFSET, LAYER_NAME_CAPACITY),
                     visible: memory.getUint32(layerPointer + 12, true) !== 0,
                     opacity: memory.getFloat32(layerPointer + 16, true),
+                    defaultSpawn: memory.getUint32(layerPointer + 20, true) !== 0,
                     localTransform: readTransform(memory, localPointer),
                     worldTransform: readTransform(memory, worldPointer),
                     pivotTransform: readTransform(memory, pivotPointer),

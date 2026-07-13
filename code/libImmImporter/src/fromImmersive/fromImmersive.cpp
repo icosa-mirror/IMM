@@ -574,6 +574,29 @@ namespace ImmImporter
             }
             else if (layer->GetType() == Layer::Type::SpawnArea)
             {
+                collector->OnBeginLayer(
+                    layer->GetID(),
+                    static_cast<uint32_t>(layer->GetType()),
+                    layer->GetName().GetS(),
+                    layer->GetWorldVisible(),
+                    layer->GetWorldOpacity());
+                collector->OnLayerTransform(
+                    layer->GetID(),
+                    layer->GetTransform(),
+                    layer->GetTransformToWorld(),
+                    layer->GetPivot());
+                bool isDefaultSpawn = false;
+                const uint32_t actionCount = layer->GetNumAnimKeys(Layer::AnimProperty::Action);
+                for (uint32_t actionIndex = 0u; actionIndex < actionCount; ++actionIndex)
+                {
+                    const Layer::AnimKey* key = layer->GetAnimKey(Layer::AnimProperty::Action, actionIndex);
+                    if (key != nullptr && static_cast<Layer::AnimAction>(key->mValue.mInt) == Layer::AnimAction::MakeDefault)
+                    {
+                        isDefaultSpawn = true;
+                        break;
+                    }
+                }
+                collector->OnSpawnArea(layer->GetID(), isDefaultSpawn);
 #if !defined(IMM_WEB_DECODER)
                 // Load spawn areas for completeness
                 if (!fiLayer::LoadAsset(layer, fp, sq, log, colorSpace, renderingTechnique))
@@ -585,6 +608,7 @@ namespace ImmImporter
                     layer->SetLoaded(true);
                 }
 #endif
+                collector->OnEndLayer();
             }
             return true;
         };
