@@ -13,7 +13,7 @@ await mkdir(artifactDirectory, { recursive: true });
 const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 4177 } });
 await server.listen();
 const browser = await chromium.launch({
-    executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    channel: "chrome",
     headless: process.env.IMM_WEB_HEADLESS === "1",
 });
 
