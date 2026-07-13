@@ -3,6 +3,8 @@ import {
     IMM_ANIM_DRAW_IN_TIME,
     IMM_LAYER_PAINT,
     IMM_LAYER_PICTURE,
+    IMM_KEEP_ALIVE_BLINK,
+    IMM_KEEP_ALIVE_WIGGLE,
     IMM_PICTURE_2D,
     IMM_PICTURE_CUBEMAP_CROSS,
     IMM_PICTURE_CUBEMAP_VERTICAL,
@@ -166,6 +168,7 @@ export class ImmThreeView {
             for (const material of paint.materials) {
                 material.uniforms.immOpacity!.value = state.opacity;
                 material.uniforms.immDrawIn!.value = drawInEnabled ? state.drawInTime : 1;
+                material.uniforms.immTime!.value = this.#timeTicks / this.#document.ticksPerSecond;
             }
         }
 
@@ -183,7 +186,7 @@ export class ImmThreeView {
         let triangles = 0;
         for (const packed of drawing.geometries) {
             const geometry = createPaintGeometry(packed);
-            const material = createPaintMaterial(packed.brushType, this.#alphaToCoverage);
+            const material = createPaintMaterial(packed.brushType, this.#alphaToCoverage, record.layer);
             const mesh = new THREE.Mesh(geometry, material);
             mesh.name = `${record.layer.name} drawing ${drawingIndex} brush ${packed.brushType}`;
             mesh.userData.immLayerType = "paint";
@@ -289,20 +292,49 @@ function createPaintGeometry(packed: ImmPaintGeometry): THREE.BufferGeometry {
     return geometry;
 }
 
-function createPaintMaterial(brushType: number, alphaToCoverage: boolean): THREE.ShaderMaterial {
+function createPaintMaterial(brushType: number, alphaToCoverage: boolean, layer: ImmLayer): THREE.ShaderMaterial {
+    const keepAlive = layer.keepAlive;
+    const parameters = keepAlive?.parameters ?? [];
     return new THREE.ShaderMaterial({
-        uniforms: { immOpacity: { value: 1 }, immDrawIn: { value: 1 } },
+        uniforms: {
+            immOpacity: { value: 1 }, immDrawIn: { value: 1 }, immTime: { value: 0 },
+            immKeepAliveType: { value: keepAlive?.type ?? 0 },
+            immWaveform: { value: keepAlive?.waveform ?? 0 },
+            immWiggle: { value: new THREE.Vector3(parameters[0] ?? 0, parameters[1] ?? 0, parameters[2] ?? 0) },
+            immBlink: { value: new THREE.Vector4(parameters[0] ?? 0, parameters[1] ?? 1, parameters[2] ?? 1, parameters[3] ?? 0) },
+            immBlinkMaxIn: { value: parameters[4] ?? 1 },
+        },
         vertexShader: `
             attribute float immProgress;
             varying vec4 immColor; varying float immVertexProgress;
-            void main(){ immColor=color; immVertexProgress=immProgress; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
+            uniform int immKeepAliveType; uniform float immTime; uniform vec3 immWiggle;
+            void main(){
+                immColor=color; immVertexProgress=immProgress;
+                vec3 animatedPosition=position;
+                if(immKeepAliveType==${IMM_KEEP_ALIVE_WIGGLE}) animatedPosition+=immWiggle.z*sin(immWiggle.x*position.yzx+immWiggle.y*immTime);
+                gl_Position=projectionMatrix*modelViewMatrix*vec4(animatedPosition,1.0);
+            }
         `,
         fragmentShader: `
             uniform float immOpacity; uniform float immDrawIn;
+            uniform int immKeepAliveType; uniform int immWaveform; uniform float immTime;
+            uniform vec4 immBlink; uniform float immBlinkMaxIn;
             varying vec4 immColor; varying float immVertexProgress;
+            float keepAliveWave(){
+                float phase=fract(immTime*immBlink.x);
+                if(immWaveform==1) return phase<0.5?0.0:1.0;
+                if(immWaveform==2) return phase;
+                if(immWaveform==3) return 1.0-abs(2.0*phase-1.0);
+                return 0.5+0.5*sin(6.2831853*phase);
+            }
             void main(){
                 float reveal=smoothstep(immVertexProgress-0.008,immVertexProgress+0.008,immDrawIn);
-                gl_FragColor=vec4(immColor.rgb,immColor.a*immOpacity*reveal);
+                float blink=1.0;
+                if(immKeepAliveType==${IMM_KEEP_ALIVE_BLINK}){
+                    float mapped=clamp((keepAliveWave()-immBlink.w)/max(immBlinkMaxIn-immBlink.w,0.00001),0.0,1.0);
+                    blink=mix(immBlink.y,immBlink.z,mapped);
+                }
+                gl_FragColor=vec4(immColor.rgb,immColor.a*immOpacity*reveal*blink);
                 #include <tonemapping_fragment>
                 #include <colorspace_fragment>
             }

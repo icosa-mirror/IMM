@@ -21,6 +21,7 @@ const TIMELINE_LAYER_INFO_SIZE = 296;
 const TIMELINE_LAYER_NAME_OFFSET = 40;
 const ANIMATION_KEY_SIZE = 80;
 const CHAPTER_INFO_SIZE = 24;
+const KEEP_ALIVE_INFO_SIZE = 32;
 
 const decoder = await createDecoderModule();
 
@@ -150,6 +151,7 @@ function decodeScene(source) {
         const timelineLayerPointer = decoder._malloc(TIMELINE_LAYER_INFO_SIZE);
         const animationKeyPointer = decoder._malloc(ANIMATION_KEY_SIZE);
         const chapterPointer = decoder._malloc(CHAPTER_INFO_SIZE);
+        const keepAlivePointer = decoder._malloc(KEEP_ALIVE_INFO_SIZE);
         try {
             decoder._imm_web_get_background_color(backgroundPointer, 3);
             memory = new DataView(decoder.HEAPU8.buffer);
@@ -357,6 +359,16 @@ function decodeScene(source) {
                     });
                 }
                 memory = new DataView(decoder.HEAPU8.buffer);
+                if (decoder._imm_web_get_keep_alive_info(layerIndex, keepAlivePointer) === 0) {
+                    throw new Error(`Could not read keep-alive metadata ${layerIndex}`);
+                }
+                memory = new DataView(decoder.HEAPU8.buffer);
+                const keepAlive = {
+                    type: memory.getUint32(keepAlivePointer, true),
+                    waveform: memory.getUint32(keepAlivePointer + 4, true),
+                    parameters: Array.from({ length: 6 }, (_, index) =>
+                        memory.getFloat32(keepAlivePointer + 8 + index * 4, true)),
+                };
                 layers.push({
                     ...(content ?? {
                         defaultSpawn: false,
@@ -381,6 +393,7 @@ function decodeScene(source) {
                     worldTransform: readTransform(memory, worldPointer),
                     pivotTransform: readTransform(memory, pivotPointer),
                     keys,
+                    keepAlive,
                 });
             }
             for (let contentIndex = 0; contentIndex < contentLayers.length; contentIndex++) {
@@ -426,6 +439,7 @@ function decodeScene(source) {
                 transfers,
             };
         } finally {
+            decoder._free(keepAlivePointer);
             decoder._free(chapterPointer);
             decoder._free(animationKeyPointer);
             decoder._free(timelineLayerPointer);
