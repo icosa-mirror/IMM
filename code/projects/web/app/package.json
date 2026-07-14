@@ -8,6 +8,7 @@
     "prebuild": "node scripts/generate-blue-noise.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node tests/verify-cache-versioning.mjs",
+    "build:library": "vite build --config vite.library.config.mjs && tsc -p tsconfig.library.json",
     "test": "bun test",
     "preview": "vite preview",
     "test:browser:smoke": "node tests/web-player-smoke.mjs",
