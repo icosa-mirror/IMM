@@ -162,6 +162,7 @@ window.__immDiagnostics = () => {
     gpuTimerAvailable: timerExtension !== null,
     cameraPosition: camera.position.toArray(),
     cameraQuaternion: camera.quaternion.toArray(),
+    cameraScale: camera.scale.toArray(),
     controlsTarget: controls.orbit.target.toArray(),
     cameraMode: controls.mode,
     viewpoint: viewpoint.value,
@@ -265,13 +266,17 @@ document.addEventListener("visibilitychange", () => {
 renderer.xr.addEventListener("sessionstart", () => {
     xrRig.position.copy(camera.position);
     xrRig.quaternion.copy(camera.quaternion);
+    xrRig.scale.copy(camera.scale);
     camera.position.set(0, 0, 0);
     camera.quaternion.identity();
+    camera.scale.set(1, 1, 1);
     xrRig.add(camera);
 });
 renderer.xr.addEventListener("sessionend", () => {
     camera.position.copy(xrRig.position);
     camera.quaternion.copy(xrRig.quaternion);
+    camera.scale.copy(xrRig.scale);
+    xrRig.scale.set(1, 1, 1);
     scene.add(camera);
     controls.setMode(cameraMode.value as CameraMode);
 });
@@ -668,6 +673,10 @@ function applySpawnPose(
     if (renderer.xr.isPresenting) {
         xrRig.position.fromArray(transform.translation);
         xrRig.quaternion.fromArray(transform.rotation).normalize();
+        xrRig.scale.setScalar(transform.scale);
+        if (transform.flip === 1) xrRig.scale.x *= -1;
+        if (transform.flip === 2) xrRig.scale.y *= -1;
+        if (transform.flip === 3) xrRig.scale.z *= -1;
     } else {
         controls.setPose(desktopSpawnTransform(transform, tracking));
     }
