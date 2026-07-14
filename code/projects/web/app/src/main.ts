@@ -8,7 +8,12 @@ import { releaseAssetUrl } from "./release-assets";
 import { FileRandomAccessSource } from "./random-access-source";
 import type { ImmDocument } from "./format/imm-document";
 import { ImmThreeView } from "./render-three/imm-three-view";
-import { ImmPlaybackController, resolveActiveSpawnArea, type ImmActiveSpawnArea } from "./runtime/imm-playback";
+import {
+    ImmPlaybackController,
+    resolveActiveSpawnArea,
+    type ImmActiveSpawnArea,
+    type ImmPlaybackSnapshot,
+} from "./runtime/imm-playback";
 import "./style.css";
 
 
@@ -31,6 +36,7 @@ const playbackTime = requiredElement<HTMLOutputElement>("playback-time");
 const chapter = requiredElement<HTMLSelectElement>("chapter");
 const viewpoint = requiredElement<HTMLSelectElement>("viewpoint");
 const cameraMode = requiredElement<HTMLSelectElement>("camera-mode");
+const benchmarkEagerDecode = new URLSearchParams(location.search).get("benchmark-eager") === "1";
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -309,10 +315,10 @@ renderer.setAnimationLoop((animationTime) => {
     if (!renderer.xr.isPresenting) controls.update(deltaSeconds);
     if (playback !== null && immView !== null) {
         const previousTicks = playback.timeTicks;
-        playback.advance(immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds);
-        applyAuthoredSpawn(false);
-        immView.setTimeTicks(playback.timeTicks, camera);
-        syncAudio(playback.timeTicks < previousTicks);
+        const snapshot = playback.advance(immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds);
+        applyAuthoredSpawn(false, snapshot);
+        immView.applySnapshot(snapshot, camera);
+        syncAudio(playback.timeTicks < previousTicks, snapshot);
         updatePlaybackControls();
     }
     pollGpuTimer();
@@ -367,21 +373,26 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     status.textContent = `Reading ${formatBytes(source.byteLength)} of IMM metadata…`;
     let document: ImmDocument;
     let remainingWork: StagedLoadWork[] = [];
-    try {
-        document = await decoder.openMetadata(source);
-        const work = createNativeLoadOrder(document);
-        const initialWork = work.filter((item) => item.initial);
-        remainingWork = work.filter((item) => !item.initial);
-        for (let index = 0; index < initialWork.length; index++) {
+    if (benchmarkEagerDecode) {
+        status.textContent = "Benchmark mode: decoding the complete IMM before playback…";
+        document = await decoder.decode(source);
+    } else {
+        try {
+            document = await decoder.openMetadata(source);
+            const work = createNativeLoadOrder(document);
+            const initialWork = work.filter((item) => item.initial);
+            remainingWork = work.filter((item) => !item.initial);
+            for (let index = 0; index < initialWork.length; index++) {
+                if (requestId !== loadRequestId) return;
+                status.textContent = `Buffering native five-second window ${index + 1}/${initialWork.length}…`;
+                applyStagedDelta(document, await decodeStagedWork(initialWork[index]!));
+            }
+        } catch (stagedError) {
             if (requestId !== loadRequestId) return;
-            status.textContent = `Buffering native five-second window ${index + 1}/${initialWork.length}…`;
-            applyStagedDelta(document, await decodeStagedWork(initialWork[index]!));
+            status.textContent = "Staged loading failed; using the eager decoder…";
+            document = await decoder.fallbackEager().catch(() => { throw stagedError; });
+            remainingWork = [];
         }
-    } catch (stagedError) {
-        if (requestId !== loadRequestId) return;
-        status.textContent = "Staged loading failed; using the eager decoder…";
-        document = await decoder.fallbackEager().catch(() => { throw stagedError; });
-        remainingWork = [];
     }
     if (requestId !== loadRequestId) return;
     const nextView = new ImmThreeView(document, { renderer, parent: scene });
@@ -557,11 +568,11 @@ function updateAudioControl(): void {
     else audioToggle.textContent = diagnostics.muted ? "Unmute" : "Mute";
 }
 
-function syncAudio(restart: boolean): void {
+function syncAudio(restart: boolean, snapshot?: ImmPlaybackSnapshot): void {
     if (immAudio === null || playback === null) return;
     const xrCamera = renderer.xr.isPresenting ? renderer.xr.getCamera() : null;
     const listener = xrCamera?.cameras[0] ?? xrCamera ?? camera;
-    immAudio.update(playback.evaluate(), cameraAudioTransform(listener), restart);
+    immAudio.update(snapshot ?? playback.evaluate(), cameraAudioTransform(listener), restart);
     void immAudio.setTransportPlaying(playback.playing);
 }
 
@@ -651,9 +662,13 @@ function round(value: number): number {
     return Math.round(value * 10) / 10;
 }
 
-function applyAuthoredSpawn(force: boolean): void {
+function applyAuthoredSpawn(force: boolean, snapshot?: ImmPlaybackSnapshot): void {
     if (playback === null) return;
-    const active = resolveActiveSpawnArea(playback.document, playback.timeTicks, playback.evaluate());
+    const active = resolveActiveSpawnArea(
+        playback.document,
+        playback.timeTicks,
+        snapshot ?? playback.evaluate(),
+    );
     if (active === undefined) return;
     const key = spawnActivationKey(active);
     if (!force && key === appliedAuthoredSpawn) return;

@@ -17,7 +17,11 @@ import {
     type ImmPaintGeometry,
     type ImmTransform,
 } from "../format/imm-document";
-import { evaluateImmDocument, type ImmEvaluatedLayer } from "../runtime/imm-playback";
+import {
+    evaluateImmDocument,
+    type ImmEvaluatedLayer,
+    type ImmPlaybackSnapshot,
+} from "../runtime/imm-playback";
 import { IMM_BLUE_NOISE_64_BASE64 } from "./blue-noise-data";
 
 type ImmCoverageMode = "sample-mask" | "alpha-to-coverage" | "alpha-hash";
@@ -205,7 +209,11 @@ export class ImmThreeView {
     }
 
     setTimeTicks(timeTicks: number, camera?: THREE.Camera): void {
-        const snapshot = evaluateImmDocument(this.#document, timeTicks);
+        this.applySnapshot(evaluateImmDocument(this.#document, timeTicks), camera);
+    }
+
+    /** Applies a caller-owned evaluation so multiple consumers can share one frame snapshot. */
+    applySnapshot(snapshot: ImmPlaybackSnapshot, camera?: THREE.Camera): void {
         this.#timeTicks = snapshot.timeTicks;
         this.#coverageFrame = Math.floor(snapshot.timeTicks * 60 / this.#document.ticksPerSecond) & 63;
         for (const state of snapshot.layers.values()) this.#applyLayerState(state);
