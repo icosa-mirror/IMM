@@ -207,10 +207,21 @@ type IMMCameraPolicy =
   pose and let the host apply it.
 - Standalone player policy: `apply-authored-viewpoints`, preserving current
   behavior.
+- Gallery Viewer policy: `apply-authored-viewpoints`. Its IMM adapter must apply
+  the initial authored camera, explicit viewpoint selections, and any camera
+  transform selected as part of a chapter change. Authored IMM cameras are a
+  required Gallery feature, not an optional host-side example.
 - The desktop floor-to-eye height correction remains available as a helper and
   is applied only for non-XR camera poses.
 - In XR, the host owns the reference space and rig. The asset may provide a
   suggested spawn transform but must not enter/exit XR or replace the host rig.
+
+For Gallery Viewer specifically, desktop poses update its flat camera and the
+associated controls target atomically so the controls do not snap back on the
+next frame. In XR, the authored pose moves/orients the Gallery-owned camera rig
+while head tracking remains relative to that rig. Chapter selection must resolve
+the chapter's camera/viewpoint before applying the pose; it must not independently
+choose a preferred viewpoint afterward and overwrite the authored chapter view.
 
 ### 4.4 Audio ownership
 
@@ -815,3 +826,56 @@ Begin with Phase 0 and the smallest part of Phase 1:
 This sequence exercises the highest-risk lifecycle boundary while leaving Vite,
 release asset paths, HTML inputs, cache busting, and deployment artifact assembly
 untouched.
+
+## 17. Gallery Viewer integration findings
+
+The initial target consumer is Gallery Viewer. Its current architecture adds
+constraints that the package API and consumer fixture must cover:
+
+- Gallery owns one `WebGLRenderer`, render loop, canvas, desktop camera, XR
+  session, and XR camera rig. `IMMAsset` must plug into those objects and never
+  create competing global rendering state.
+- Gallery replaces content by clearing scene children. Renderer services that
+  must survive content replacement belong under a persistent services root;
+  loaded models and assets belong under a separate content root.
+- Gallery uses a shared `THREE.LoadingManager`. The IMM adapter must balance its
+  item lifecycle and forward staged progress without independently manipulating
+  the loading-screen DOM.
+- Gallery currently supports an optional Spark dependency. Spark 2.1 requires
+  Three.js 0.180 or newer and an explicit persistent `SparkRenderer` added to the
+  scene. This is a useful precedent for IMM: a static-looking scene object can
+  still require a host-owned, persistent renderer service and explicit disposal.
+- Spark's `SplatMesh` accepts URL, bytes, and stream sources, exposes progress
+  during download/initialization, and owns an `initialized` promise and
+  `dispose()` method. The IMM API should preserve the same useful flexibility,
+  while returning an `IMMAsset` because playback, chapters, viewpoints, audio,
+  and staged decode exceed a mesh's lifecycle.
+- Spark recommends creating its renderer with antialiasing disabled for splat
+  performance. IMM relies on multisampling/alpha-to-coverage for native brush
+  parity. Gallery must keep a stable shared renderer configuration while mixed
+  content is present; it must not recreate or silently reconfigure the renderer
+  when switching between Spark and IMM content. Any quality compromise must be
+  an explicit Gallery setting and benchmark.
+- Gallery's existing camera far plane is shorter than the standalone IMM
+  player's native-parity range. The IMM adapter must apply or validate the IMM
+  camera projection requirements when authored cameras become active without
+  permanently corrupting settings for later non-IMM content.
+- Gallery must expose authored IMM cameras in its viewer UI. Initial load,
+  explicit viewpoint selection, and chapter-associated viewpoint changes must
+  all use the same pose-resolution path and update desktop controls or the XR rig
+  as described in section 4.3.
+
+The companion Gallery implementation should therefore proceed in two layers:
+
+1. Upgrade and stabilize Gallery's persistent service/content lifecycle without
+   changing its deployed `dist/` artifact.
+2. Add an IMM adapter after `IMMAsset` exists. The adapter adds `asset.scene` to
+   the content root, calls `asset.update` once per Gallery render frame, maps
+   loading/progress events, applies authored camera results, and calls
+   `asset.dispose()` during replacement or viewer teardown.
+
+Gallery's package currently externalizes Three.js, Spark, three-icosa, and
+three-tiltloader. The consumer test must use exactly one Three.js 0.180 instance
+across Gallery, Spark 2.1, and the IMM package. The existing Gallery `dist/`
+output is intentionally not regenerated during this migration; deployment can
+be updated in a separately reviewed release commit after source verification.
