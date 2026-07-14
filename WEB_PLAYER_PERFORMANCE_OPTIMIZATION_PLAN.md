@@ -233,8 +233,10 @@ quality controls; high if silently changing native rendering.
 The standalone player now exposes the native-style Normal/High choice. Normal
 is the default and uses a 1x render scale, matching the native default pixel
 density. High uses device pixel ratio capped at 2x, preserving the web player's
-previous behavior. The CSS display size is unchanged and the preference is
-stored locally. WebXR continues to use the session/runtime framebuffer scale.
+previous behavior. In WebXR, Normal uses the runtime-recommended framebuffer
+size and High requests 1.5x per dimension, following the native player's eye-
+buffer scaling approach while retaining antialiasing. The CSS display size is
+unchanged and the preference is stored locally.
 
 - If two choices prove insufficient in real use, consider adding an Auto mode
   based on measured sustained frame time, with conservative hysteresis and a

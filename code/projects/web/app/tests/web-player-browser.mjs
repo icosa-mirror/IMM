@@ -460,7 +460,9 @@ try {
     await mobile.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 60_000 });
     await mobile.waitForTimeout(2_000);
     const mobileMetrics = await mobile.evaluate(() => window.__immDiagnostics());
-    assert.equal(mobileMetrics.pixelRatio, 2);
+    assert.equal(mobileMetrics.renderQuality, "normal");
+    assert.equal(mobileMetrics.pixelRatio, 1);
+    assert.equal(mobileMetrics.xrFramebufferScale, 1);
     assert.ok(mobileMetrics.drawCalls > 0 && mobileMetrics.drawCalls <= 42);
     assert.ok(mobileMetrics.renderedTriangles > 0 && mobileMetrics.renderedTriangles <= 802_890);
     await mobile.screenshot({ path: resolve(artifactDirectory, "sample1-web-mobile.png") });

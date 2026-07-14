@@ -33,6 +33,8 @@ try {
     assert.ok(diagnostics.renderedTriangles > 0);
     assert.equal(diagnostics.renderQuality, "normal");
     assert.equal(diagnostics.pixelRatio, 1);
+    assert.equal(diagnostics.xrFramebufferScale, 1);
+    assert.equal(diagnostics.xrFramebufferScalePending, false);
     assert.equal(diagnostics.canvasWidth, 960);
     assert.equal(diagnostics.canvasHeight, 540);
     assert.deepEqual(errors, []);
@@ -45,6 +47,8 @@ try {
     await standalone.waitForFunction(() => window.__immDiagnostics().pixelRatio === 2);
     let qualityDiagnostics = await standalone.evaluate(() => window.__immDiagnostics());
     assert.equal(qualityDiagnostics.renderQuality, "high");
+    assert.equal(qualityDiagnostics.xrFramebufferScale, 1.5);
+    assert.equal(qualityDiagnostics.xrFramebufferScalePending, false);
     assert.equal(qualityDiagnostics.canvasWidth, 1_920);
     assert.equal(qualityDiagnostics.canvasHeight, 1_080);
 
@@ -57,6 +61,7 @@ try {
     qualityDiagnostics = await standalone.evaluate(() => window.__immDiagnostics());
     assert.equal(qualityDiagnostics.renderQuality, "high");
     assert.equal(qualityDiagnostics.pixelRatio, 2);
+    assert.equal(qualityDiagnostics.xrFramebufferScale, 1.5);
     assert.equal(await standalone.locator("#render-quality").inputValue(), "high");
     await standalone.evaluate(() => window.__immPlayback.play());
     await standalone.waitForTimeout(100);

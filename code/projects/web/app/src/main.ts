@@ -50,6 +50,9 @@ renderer.setClearColor(idleClearColor, 1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
 renderer.xr.enabled = true;
+let appliedXrFramebufferScale = renderXrFramebufferScale(selectedRenderQuality);
+renderer.xr.setFramebufferScaleFactor(appliedXrFramebufferScale);
+renderer.xr.addEventListener("sessionend", applyXrFramebufferScale);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 20_000);
@@ -181,6 +184,8 @@ window.__immDiagnostics = () => {
     viewpointTracking: activeViewpoint?.layer.spawnTracking ?? null,
     viewpointAuthoredTranslation: activeViewpoint?.worldTransform.translation ?? null,
     xrPresenting: renderer.xr.isPresenting,
+    xrFramebufferScale: appliedXrFramebufferScale,
+    xrFramebufferScalePending: appliedXrFramebufferScale !== renderXrFramebufferScale(selectedRenderQuality),
     gridVisible: grid.visible,
     audio: immAudio?.diagnostics ?? null,
     };
@@ -267,6 +272,7 @@ renderQuality.addEventListener("change", () => {
     selectedRenderQuality = renderQuality.value as RenderQuality;
     saveRenderQuality(selectedRenderQuality);
     renderer.setPixelRatio(renderPixelRatio(selectedRenderQuality));
+    applyXrFramebufferScale();
     resize();
 });
 
@@ -692,6 +698,16 @@ function saveRenderQuality(quality: RenderQuality): void {
 
 function renderPixelRatio(quality: RenderQuality): number {
     return quality === "high" ? Math.min(window.devicePixelRatio, 2) : 1;
+}
+
+function renderXrFramebufferScale(quality: RenderQuality): number {
+    return quality === "high" ? 1.5 : 1;
+}
+
+function applyXrFramebufferScale(): void {
+    if (renderer.xr.isPresenting) return;
+    appliedXrFramebufferScale = renderXrFramebufferScale(selectedRenderQuality);
+    renderer.xr.setFramebufferScaleFactor(appliedXrFramebufferScale);
 }
 
 function applyAuthoredSpawn(force: boolean, snapshot?: ImmPlaybackSnapshot): void {
