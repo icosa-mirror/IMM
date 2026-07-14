@@ -10,7 +10,10 @@ adapter:
   Authored spawn areas appear as named viewpoints. The authored initial spawn is
   used on load, and timeline `MakeDefault` actions move to the viewpoint selected
   by a chapter or seek. Fly/free-look navigation is the default, with orbit as an
-  optional mode.
+  optional mode. The Quality selector defaults to Normal (1x render scale, matching
+  native's default pixel density); High uses the display pixel ratio capped at 2x.
+  The choice is stored locally and does not change WebXR's session-controlled
+  framebuffer scale.
 - `embed.html` is the integration fixture. The host owns one renderer, canvas,
   scene, camera, and render loop; the IMM adapter contributes an `Object3D`
   subtree to that scene so host and IMM geometry share the depth buffer.

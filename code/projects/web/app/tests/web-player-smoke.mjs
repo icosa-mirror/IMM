@@ -13,7 +13,10 @@ const browser = await chromium.launch({
 });
 
 try {
-    const standalone = await browser.newPage({ viewport: { width: 960, height: 540 } });
+    const standalone = await browser.newPage({
+        viewport: { width: 960, height: 540 },
+        deviceScaleFactor: 2,
+    });
     const errors = [];
     standalone.on("console", (message) => {
         if (message.type() === "error") errors.push(message.text());
@@ -28,7 +31,33 @@ try {
     assert.equal(diagnostics.strokes, 1_171);
     assert.equal(diagnostics.meshes, 42);
     assert.ok(diagnostics.renderedTriangles > 0);
+    assert.equal(diagnostics.renderQuality, "normal");
+    assert.equal(diagnostics.pixelRatio, 1);
+    assert.equal(diagnostics.canvasWidth, 960);
+    assert.equal(diagnostics.canvasHeight, 540);
     assert.deepEqual(errors, []);
+
+    await standalone.evaluate(() => {
+        const quality = document.querySelector("#render-quality");
+        quality.value = "high";
+        quality.dispatchEvent(new Event("change"));
+    });
+    await standalone.waitForFunction(() => window.__immDiagnostics().pixelRatio === 2);
+    let qualityDiagnostics = await standalone.evaluate(() => window.__immDiagnostics());
+    assert.equal(qualityDiagnostics.renderQuality, "high");
+    assert.equal(qualityDiagnostics.canvasWidth, 1_920);
+    assert.equal(qualityDiagnostics.canvasHeight, 1_080);
+
+    await standalone.reload();
+    await standalone.waitForFunction(
+        () => window.__immDiagnostics?.().ready === true,
+        undefined,
+        { timeout: 30_000 },
+    );
+    qualityDiagnostics = await standalone.evaluate(() => window.__immDiagnostics());
+    assert.equal(qualityDiagnostics.renderQuality, "high");
+    assert.equal(qualityDiagnostics.pixelRatio, 2);
+    assert.equal(await standalone.locator("#render-quality").inputValue(), "high");
     await standalone.evaluate(() => window.__immPlayback.play());
     await standalone.waitForTimeout(100);
     assert.ok((await standalone.evaluate(() => window.__immPlayback.snapshot())).timeTicks > 0);

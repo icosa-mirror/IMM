@@ -228,17 +228,17 @@ chapter/viewpoint semantics remain identical to native.
 Priority: conditional on GPU-bound evidence. Risk: low when exposed as explicit
 quality controls; high if silently changing native rendering.
 
-### P3.1 Add an explicit render-scale control
+### P3.1 Add an explicit render-scale control — implemented
 
-Current behavior caps device pixel ratio at 2. A ratio of 2 renders four times
-as many pixels as ratio 1 and can dominate fill-heavy paint scenes, especially
-on mobile and integrated GPUs.
+The standalone player now exposes the native-style Normal/High choice. Normal
+is the default and uses a 1x render scale, matching the native default pixel
+density. High uses device pixel ratio capped at 2x, preserving the web player's
+previous behavior. The CSS display size is unchanged and the preference is
+stored locally. WebXR continues to use the session/runtime framebuffer scale.
 
-- Offer Auto, 1.0, 1.5, and 2.0 render scales.
-- Consider an Auto policy based on device class and measured sustained frame
-  time, with conservative hysteresis and a visible selected value.
-- Keep CSS display size unchanged.
-- Store the preference locally and document its effect.
+- If two choices prove insufficient in real use, consider adding an Auto mode
+  based on measured sustained frame time, with conservative hysteresis and a
+  visible selected value.
 
 Exit condition: users can trade resolution for frame rate without altering IMM
 content, timing, or camera transforms.

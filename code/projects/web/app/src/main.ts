@@ -36,10 +36,15 @@ const playbackTime = requiredElement<HTMLOutputElement>("playback-time");
 const chapter = requiredElement<HTMLSelectElement>("chapter");
 const viewpoint = requiredElement<HTMLSelectElement>("viewpoint");
 const cameraMode = requiredElement<HTMLSelectElement>("camera-mode");
+const renderQuality = requiredElement<HTMLSelectElement>("render-quality");
 const benchmarkEagerDecode = new URLSearchParams(location.search).get("benchmark-eager") === "1";
+const renderQualityStorageKey = "imm-render-quality";
+type RenderQuality = "normal" | "high";
+let selectedRenderQuality = loadRenderQuality();
+renderQuality.value = selectedRenderQuality;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(renderPixelRatio(selectedRenderQuality));
 const idleClearColor = new THREE.Color(0x10151d);
 renderer.setClearColor(idleClearColor, 1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -154,6 +159,7 @@ window.__immDiagnostics = () => {
     frameMs: round(meanFrameMs),
     fps: meanFrameMs > 0 ? round(1_000 / meanFrameMs) : 0,
     pixelRatio: renderer.getPixelRatio(),
+    renderQuality: selectedRenderQuality,
     canvasWidth: canvas.width,
     canvasHeight: canvas.height,
     drawCalls: renderer.info.render.calls,
@@ -256,6 +262,12 @@ viewpoint.addEventListener("change", () => {
 });
 cameraMode.addEventListener("change", () => {
     controls.setMode(cameraMode.value as CameraMode);
+});
+renderQuality.addEventListener("change", () => {
+    selectedRenderQuality = renderQuality.value as RenderQuality;
+    saveRenderQuality(selectedRenderQuality);
+    renderer.setPixelRatio(renderPixelRatio(selectedRenderQuality));
+    resize();
 });
 
 audioToggle.addEventListener("click", async () => {
@@ -660,6 +672,26 @@ function formatBytes(byteCount: number): string {
 
 function round(value: number): number {
     return Math.round(value * 10) / 10;
+}
+
+function loadRenderQuality(): RenderQuality {
+    try {
+        return localStorage.getItem(renderQualityStorageKey) === "high" ? "high" : "normal";
+    } catch {
+        return "normal";
+    }
+}
+
+function saveRenderQuality(quality: RenderQuality): void {
+    try {
+        localStorage.setItem(renderQualityStorageKey, quality);
+    } catch {
+        // Storage can be disabled without affecting the active quality selection.
+    }
+}
+
+function renderPixelRatio(quality: RenderQuality): number {
+    return quality === "high" ? Math.min(window.devicePixelRatio, 2) : 1;
 }
 
 function applyAuthoredSpawn(force: boolean, snapshot?: ImmPlaybackSnapshot): void {
