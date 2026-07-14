@@ -9,14 +9,14 @@ const authored: ImmTransform = {
     translation: [2, 3, 4],
 };
 
-describe("IMM native spawn tracking", () => {
+describe("IMM desktop spawn tracking", () => {
     test("keeps authored eye-level viewpoints unchanged", () => {
         expect(desktopSpawnTransform(authored, "eye")).toBe(authored);
     });
 
-    test("matches native inverse viewer offset for floor-level viewpoints", () => {
+    test("raises floor-level viewpoints to standing eye height", () => {
         const result = desktopSpawnTransform(authored, "floor");
-        expect(result.translation).toEqual([2, 3 - IMM_MONO_EYE_HEIGHT_METERS, 4]);
+        expect(result.translation).toEqual([2, 3 + IMM_MONO_EYE_HEIGHT_METERS, 4]);
         expect(authored.translation).toEqual([2, 3, 4]);
     });
 
@@ -28,7 +28,7 @@ describe("IMM native spawn tracking", () => {
             flip: 2,
             translation: [10, 20, 30],
         }, "floor");
-        expect(result.translation[0]).toBeCloseTo(10 - 2 * IMM_MONO_EYE_HEIGHT_METERS);
+        expect(result.translation[0]).toBeCloseTo(10 + 2 * IMM_MONO_EYE_HEIGHT_METERS);
         expect(result.translation[1]).toBeCloseTo(20);
         expect(result.translation[2]).toBeCloseTo(30);
         expect(result.scale).toBe(2);

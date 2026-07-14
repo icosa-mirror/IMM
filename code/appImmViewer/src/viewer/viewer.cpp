@@ -230,11 +230,12 @@ void Viewer::SetSpawnArea(int docID, int spawnAreaID, bool recenter)
     if (mCurrentSpawnArea.mIsFloorLevel)
     {
         // In VR, zero out the head offset — the HMD provides actual head height via vr_to_head.
-        // In non-VR (mono), vr_to_head is identity, so bake eye height directly into the camera.
+        // In non-VR (mono), vr_to_head is identity, so bake eye height into the camera.
+        // This viewer transform is inverted below, hence the negative translation.
         if (mStereoMode != ImmPlayer::StereoMode::None)
             viewerTransform.mTranslation.y = 0.0;
         else
-            viewerTransform.mTranslation.y = 1.6;
+            viewerTransform.mTranslation.y = -1.6;
     }
 
     mCamera.SetWorldToCamera(toMatrix( viewerTransform * invert(mCurrentSpawnArea.mSpawnAreaToWorld) ));

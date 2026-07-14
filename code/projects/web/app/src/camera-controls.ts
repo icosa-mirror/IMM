@@ -11,7 +11,7 @@ export function desktopSpawnTransform(
     tracking: "eye" | "floor" | null | undefined,
 ): ImmTransform {
     if (tracking !== "floor") return transform;
-    const localEyeOffset = flipVector([0, -IMM_MONO_EYE_HEIGHT_METERS, 0], transform.flip)
+    const localEyeOffset = flipVector([0, IMM_MONO_EYE_HEIGHT_METERS, 0], transform.flip)
         .map((component) => component * transform.scale) as ImmTransform["translation"];
     const worldEyeOffset = rotateVector(localEyeOffset, transform.rotation);
     return {
