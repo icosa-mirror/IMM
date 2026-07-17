@@ -1501,9 +1501,12 @@ namespace ImmPlayer
         mRenderer->AttachShaderConstants(mGlobalResourcesConstans, 7);
 
 
-        const int eid = (mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES) ? eyeID : 0;
-
-        mDisplayRenderState.mEye[eid].mViewerToEye_Prj = iConvertProjectionMatrix(projection) * d2f(head_to_eye);
+        // Multipass renders one eye per call, so both slots carry the CURRENT
+        // eye's matrix: the paint shader indexes mEye[pass.mID] (never written
+        // for eye 1 when only slot 0 was updated - right eye lost all strokes
+        // on Vulkan), while the Vulkan picture shaders read a pinned mEye[0].
+        mDisplayRenderState.mEye[0].mViewerToEye_Prj = iConvertProjectionMatrix(projection) * d2f(head_to_eye);
+        mDisplayRenderState.mEye[1].mViewerToEye_Prj = mDisplayRenderState.mEye[0].mViewerToEye_Prj;
         mDisplayRenderState.mResolution = vec2(float(pixelResolutionIncludingSupersampling.x), float(pixelResolutionIncludingSupersampling.y));
 
         mRenderer->UpdateBuffer(mDisplayStateShaderConstans, &mDisplayRenderState, 0, sizeof(mDisplayRenderState));
