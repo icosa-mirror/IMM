@@ -12,8 +12,8 @@
   },
   "samples": [
     {
-      "displayName": "Runtime Authoring Benchmarks",
-      "description": "API-focused benchmark harness for IMM runtime generation, export, and playback loading.",
+      "displayName": "Runtime Authoring Demos",
+      "description": "Visual procedural animation demo plus benchmark harnesses for IMM runtime generation, export, and playback.",
       "path": "Samples~/RuntimeAuthoring"
     }
   ]
