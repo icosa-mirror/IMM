@@ -12,9 +12,9 @@
   },
   "samples": [
     {
-      "displayName": "IMM Samples",
-      "description": "Example scripts for IMM runtime.",
-      "path": "Samples~/Examples"
+      "displayName": "Runtime Authoring Benchmarks",
+      "description": "API-focused benchmark harness for IMM runtime generation, export, and playback loading.",
+      "path": "Samples~/RuntimeAuthoring"
     }
   ]
 }

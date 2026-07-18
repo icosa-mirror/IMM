@@ -339,6 +339,8 @@ namespace ImmPlayer.Exporter
             _drawingIndex = drawingIndex;
         }
 
+        public uint DrawingIndex => _drawingIndex;
+
         public bool Init(uint numElements, bool flipped = false)
         {
             return Native.ImmExporter_DrawingInit(_drawingHandle, numElements, flipped ? 1 : 0);
