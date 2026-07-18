@@ -150,13 +150,20 @@ namespace ImmPlayer.Authoring
         private readonly PaintPoint[] _points;
 
         public long Id { get; }
+        public long DrawingId { get; }
         public BrushSectionType BrushSection { get; }
         public VisibilityType Visibility { get; }
         public IReadOnlyList<PaintPoint> Points => Array.AsReadOnly(_points);
 
-        internal ImmAuthoringStrokeSnapshot(long id, BrushSectionType brushSection, VisibilityType visibility, PaintPoint[] points)
+        internal ImmAuthoringStrokeSnapshot(
+            long id,
+            long drawingId,
+            BrushSectionType brushSection,
+            VisibilityType visibility,
+            PaintPoint[] points)
         {
             Id = id;
+            DrawingId = drawingId;
             BrushSection = brushSection;
             Visibility = visibility;
             _points = points ?? Array.Empty<PaintPoint>();
@@ -170,11 +177,13 @@ namespace ImmPlayer.Authoring
         private readonly ImmAuthoringStrokeSnapshot[] _strokes;
 
         public long Id { get; }
+        public long PaintLayerId { get; }
         public IReadOnlyList<ImmAuthoringStrokeSnapshot> Strokes => Array.AsReadOnly(_strokes);
 
-        internal ImmAuthoringDrawingSnapshot(long id, ImmAuthoringStrokeSnapshot[] strokes)
+        internal ImmAuthoringDrawingSnapshot(long id, long paintLayerId, ImmAuthoringStrokeSnapshot[] strokes)
         {
             Id = id;
+            PaintLayerId = paintLayerId;
             _strokes = strokes ?? Array.Empty<ImmAuthoringStrokeSnapshot>();
         }
     }
@@ -220,6 +229,8 @@ namespace ImmPlayer.Authoring
         private readonly ImmAuthoringLayerSnapshot[] _layers;
         private readonly long[] _rootLayerIds;
         private readonly Dictionary<long, ImmAuthoringLayerSnapshot> _layersById;
+        private readonly Dictionary<long, ImmAuthoringDrawingSnapshot> _drawingsById;
+        private readonly Dictionary<long, ImmAuthoringStrokeSnapshot> _strokesById;
 
         public long DocumentId { get; }
         public long Revision { get; }
@@ -249,10 +260,27 @@ namespace ImmPlayer.Authoring
             _rootLayerIds = rootLayerIds ?? Array.Empty<long>();
             _layers = layers ?? Array.Empty<ImmAuthoringLayerSnapshot>();
             _layersById = new Dictionary<long, ImmAuthoringLayerSnapshot>(_layers.Length);
+            _drawingsById = new Dictionary<long, ImmAuthoringDrawingSnapshot>();
+            _strokesById = new Dictionary<long, ImmAuthoringStrokeSnapshot>();
             foreach (ImmAuthoringLayerSnapshot layer in _layers)
+            {
                 _layersById.Add(layer.Id, layer);
+                foreach (ImmAuthoringDrawingSnapshot drawing in layer.Drawings)
+                {
+                    _drawingsById.Add(drawing.Id, drawing);
+                    foreach (ImmAuthoringStrokeSnapshot stroke in drawing.Strokes)
+                        _strokesById.Add(stroke.Id, stroke);
+                }
+            }
         }
 
-        public bool TryGetLayer(long layerId, out ImmAuthoringLayerSnapshot layer) => _layersById.TryGetValue(layerId, out layer);
+        public bool TryGetLayer(long layerId, out ImmAuthoringLayerSnapshot layer) =>
+            _layersById.TryGetValue(layerId, out layer);
+
+        public bool TryGetDrawing(long drawingId, out ImmAuthoringDrawingSnapshot drawing) =>
+            _drawingsById.TryGetValue(drawingId, out drawing);
+
+        public bool TryGetStroke(long strokeId, out ImmAuthoringStrokeSnapshot stroke) =>
+            _strokesById.TryGetValue(strokeId, out stroke);
     }
 }

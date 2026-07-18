@@ -185,6 +185,86 @@ namespace ImmPlayer.Tests
         }
 
         [Test]
+        public void SnapshotLooksUpDrawingsAndStrokesByStableIdWithOwnership()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                long drawing = Require(document.CreateDrawing(layer));
+                long stroke = Require(document.CreateStroke(
+                    drawing,
+                    BrushSectionType.Circle,
+                    VisibilityType.Always,
+                    new[] { Point(0f), Point(1f), Point(2f) }));
+
+                ImmAuthoringSnapshot beforeReorder = Require(document.CreateSnapshot());
+                Assert.That(beforeReorder.TryGetDrawing(drawing, out ImmAuthoringDrawingSnapshot drawingSnapshot), Is.True);
+                Assert.That(drawingSnapshot.PaintLayerId, Is.EqualTo(layer));
+                Assert.That(beforeReorder.TryGetStroke(stroke, out ImmAuthoringStrokeSnapshot strokeSnapshot), Is.True);
+                Assert.That(strokeSnapshot.DrawingId, Is.EqualTo(drawing));
+
+                long unrelated = Require(document.CreateGroupLayer(
+                    0,
+                    ImmAuthoringLayerProperties.Default("Unrelated"),
+                    0));
+                Require(document.ReparentLayer(layer, unrelated));
+                ImmAuthoringSnapshot afterReorder = Require(document.CreateSnapshot());
+                Assert.That(afterReorder.TryGetDrawing(drawing, out drawingSnapshot), Is.True);
+                Assert.That(afterReorder.TryGetStroke(stroke, out strokeSnapshot), Is.True);
+                Assert.That(drawingSnapshot.Id, Is.EqualTo(drawing));
+                Assert.That(strokeSnapshot.Id, Is.EqualTo(stroke));
+            }
+        }
+
+        [Test]
+        public void FrameSequenceResizeGrowsAndShrinksWithoutDanglingReferences()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                long first = Require(document.CreateDrawing(layer));
+                long fill = Require(document.CreateDrawing(layer));
+                Require(document.AppendFrame(layer, first));
+
+                Require(document.ResizeFrameSequence(layer, 4, fill));
+                ImmAuthoringLayerSnapshot grown = Require(document.CreateSnapshot()).Layers[0];
+                Assert.That(grown.FrameDrawingIds, Is.EqualTo(new[] { first, fill, fill, fill }));
+
+                long revisionBeforeNoOp = document.Revision;
+                Require(document.ResizeFrameSequence(layer, 4, 0));
+                Assert.That(document.Revision, Is.EqualTo(revisionBeforeNoOp));
+
+                Require(document.ResizeFrameSequence(layer, 2));
+                ImmAuthoringLayerSnapshot shrunk = Require(document.CreateSnapshot()).Layers[0];
+                Assert.That(shrunk.FrameDrawingIds, Is.EqualTo(new[] { first, fill }));
+                Assert.That(document.Validate().Succeeded, Is.True);
+
+                long otherLayer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Other")));
+                long wrongOwner = Require(document.CreateDrawing(otherLayer));
+                long revisionBeforeFailure = document.Revision;
+                ImmAuthoringResult failure = document.ResizeFrameSequence(layer, 3, wrongOwner);
+                Assert.That(failure.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.InvalidOwner));
+                Assert.That(document.Revision, Is.EqualTo(revisionBeforeFailure));
+            }
+        }
+
+        [Test]
+        public void RepeatedManagedLifecycleRejectsUseAfterDispose()
+        {
+            for (int iteration = 0; iteration < 100; iteration++)
+            {
+                ImmAuthoringDocument document = CreateDocument();
+                Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default($"Paint {iteration}")));
+                document.Dispose();
+
+                Assert.That(document.CreateSnapshot().ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Disposed));
+                Assert.That(
+                    document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Disposed")).ErrorCode,
+                    Is.EqualTo(ImmAuthoringErrorCode.Disposed));
+                document.Dispose();
+            }
+        }
+        [Test]
         public void CancelledExportReturnsStructuredResultWithoutNativeWork()
         {
             using (ImmAuthoringDocument document = CreateDocument())

@@ -201,6 +201,7 @@ namespace ImmPlayer.Authoring
                 List<long> removedIds = new List<long>();
                 RemoveLayerRecursive(layerId, removedIds);
                 GetChildList(layer.ParentId).Remove(layerId);
+                removedIds.Add(layer.ParentId);
                 change = AdvanceRevision(removedIds.ToArray());
             }
             Publish(change);
@@ -427,8 +428,9 @@ namespace ImmPlayer.Authoring
                 LayerNode layer = _state.Layers[paintLayerId];
                 if (frameIndex < 0 || frameIndex >= layer.FrameDrawingIds.Count)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Frame index is outside the paint layer.", paintLayerId);
+                long previousDrawingId = layer.FrameDrawingIds[frameIndex];
                 layer.FrameDrawingIds[frameIndex] = drawingId;
-                change = AdvanceRevision(new[] { paintLayerId, drawingId });
+                change = AdvanceRevision(new[] { paintLayerId, previousDrawingId, drawingId });
             }
             Publish(change);
             return ImmAuthoringResult.Success();
@@ -477,6 +479,52 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        public ImmAuthoringResult ResizeFrameSequence(long paintLayerId, int frameCount, long fillDrawingId = 0)
+        {
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return Disposed();
+                if (frameCount < 0)
+                    return ImmAuthoringResult.Failure(
+                        ImmAuthoringErrorCode.InvalidArgument,
+                        "Frame count cannot be negative.",
+                        paintLayerId);
+                if (!_state.Layers.TryGetValue(paintLayerId, out LayerNode layer))
+                    return NotFound("Paint layer", paintLayerId);
+                if (layer.Type != ImmAuthoringLayerType.Paint)
+                    return ImmAuthoringResult.Failure(
+                        ImmAuthoringErrorCode.InvalidOwner,
+                        "Frames belong to paint layers.",
+                        paintLayerId);
+                if (frameCount == layer.FrameDrawingIds.Count)
+                    return ImmAuthoringResult.Success();
+
+                List<long> affectedIds = new List<long> { paintLayerId };
+                if (frameCount < layer.FrameDrawingIds.Count)
+                {
+                    for (int index = frameCount; index < layer.FrameDrawingIds.Count; index++)
+                        affectedIds.Add(layer.FrameDrawingIds[index]);
+                    layer.FrameDrawingIds.RemoveRange(
+                        frameCount,
+                        layer.FrameDrawingIds.Count - frameCount);
+                }
+                else
+                {
+                    ImmAuthoringResult ownership = ValidateFrameOwnership(paintLayerId, fillDrawingId);
+                    if (!ownership.Succeeded)
+                        return ownership;
+                    affectedIds.Add(fillDrawingId);
+                    while (layer.FrameDrawingIds.Count < frameCount)
+                        layer.FrameDrawingIds.Add(fillDrawingId);
+                }
+
+                change = AdvanceRevision(affectedIds.ToArray());
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
         public ImmAuthoringResult<ImmAuthoringSnapshot> CreateSnapshot()
         {
             lock (_gate)
@@ -721,6 +769,40 @@ namespace ImmPlayer.Authoring
             }
             if (visited.Count != state.Layers.Count)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "One or more layers are unreachable from the document root.");
+
+            HashSet<long> reachableDrawings = new HashSet<long>();
+            HashSet<long> reachableStrokes = new HashSet<long>();
+            foreach (LayerNode layer in state.Layers.Values)
+            {
+                foreach (long drawingId in layer.DrawingIds)
+                {
+                    if (!reachableDrawings.Add(drawingId))
+                        return ImmAuthoringResult.Failure(
+                            ImmAuthoringErrorCode.ValidationFailed,
+                            "Drawing appears more than once in the document.",
+                            drawingId);
+                }
+            }
+            if (reachableDrawings.Count != state.Drawings.Count)
+                return ImmAuthoringResult.Failure(
+                    ImmAuthoringErrorCode.ValidationFailed,
+                    "One or more drawings are unreachable from their paint layer.");
+
+            foreach (DrawingNode drawing in state.Drawings.Values)
+            {
+                foreach (long strokeId in drawing.StrokeIds)
+                {
+                    if (!reachableStrokes.Add(strokeId))
+                        return ImmAuthoringResult.Failure(
+                            ImmAuthoringErrorCode.ValidationFailed,
+                            "Stroke appears more than once in the document.",
+                            strokeId);
+                }
+            }
+            if (reachableStrokes.Count != state.Strokes.Count)
+                return ImmAuthoringResult.Failure(
+                    ImmAuthoringErrorCode.ValidationFailed,
+                    "One or more strokes are unreachable from their drawing.");
             return ImmAuthoringResult.Success();
         }
 

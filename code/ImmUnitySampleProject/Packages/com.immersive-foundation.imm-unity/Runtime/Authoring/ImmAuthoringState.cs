@@ -76,11 +76,12 @@ namespace ImmPlayer.Authoring
                     StrokeNode stroke = Strokes[drawing.StrokeIds[strokeIndex]];
                     strokes[strokeIndex] = new ImmAuthoringStrokeSnapshot(
                         stroke.Id,
+                        stroke.DrawingId,
                         stroke.BrushSection,
                         stroke.Visibility,
                         (PaintPoint[])stroke.Points.Clone());
                 }
-                drawings[drawingIndex] = new ImmAuthoringDrawingSnapshot(drawing.Id, strokes);
+                drawings[drawingIndex] = new ImmAuthoringDrawingSnapshot(drawing.Id, drawing.PaintLayerId, strokes);
             }
 
             output.Add(new ImmAuthoringLayerSnapshot(
