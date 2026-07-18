@@ -58,23 +58,34 @@ def require(value: object, operation: str):
 
 
 def runtime_dependencies(repo_root: Path) -> tuple[Path, ...]:
-    package_directory = (
+    imm_unity_directory = (
         repo_root
         / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64"
     )
-    return tuple(
-        package_directory / name
-        for name in (
-            "Audio360.dll",
-            "opusenc.dll",
-            "opus.dll",
-            "zlib1.dll",
-            "jpeg62.dll",
-            "libpng16.dll",
-            "ogg.dll",
-            "vorbis.dll",
-            "vorbisenc.dll",
-        )
+    stroke_reader_directory = (
+        repo_root
+        / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64"
+    )
+    return (
+        *(
+            imm_unity_directory / name
+            for name in (
+                "Audio360.dll",
+                "opusenc.dll",
+                "opus.dll",
+                "vorbisenc.dll",
+            )
+        ),
+        *(
+            stroke_reader_directory / name
+            for name in (
+                "zlib1.dll",
+                "jpeg62.dll",
+                "libpng16.dll",
+                "ogg.dll",
+                "vorbis.dll",
+            )
+        ),
     )
 
 def export_smoke_file(library: ctypes.CDLL, output_path: Path) -> None:
