@@ -1,6 +1,7 @@
+using System;
 using System.Collections;
 using System.Diagnostics;
-using System.IO;
+using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -8,8 +9,8 @@ using Debug = UnityEngine.Debug;
 namespace ImmPlayer.Samples
 {
     /// <summary>
-    /// Phase 1 vertical slice: construct, serialize, load, seek, play, and unload
-    /// a runtime-generated multi-frame IMM paint animation.
+    /// Phase 1 vertical slice: construct, compile to memory, load, seek, play,
+    /// render, and unload a runtime-generated multi-frame IMM paint animation.
     /// </summary>
     public sealed class ImmRuntimeAnimationSpike : MonoBehaviour
     {
@@ -40,55 +41,68 @@ namespace ImmPlayer.Samples
                 yield break;
             }
 
-            string outputPath = Path.Combine(Application.temporaryCachePath, "imm-runtime-animation-spike.imm");
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            if (!manager.Initialize())
+            {
+                Debug.LogError($"{LogPrefix} failed=player-initialize");
+                yield break;
+            }
+
+            int baselineDocuments = manager.LoadedDocumentCount;
+            int baselineBuffers = manager.OwnedInputBufferCount;
+            long initialManagedBytes = GC.GetTotalMemory(true);
             long initialWorkingSet = Process.GetCurrentProcess().WorkingSet64;
             Stopwatch totalTimer = Stopwatch.StartNew();
             int completed = 0;
 
             for (int cycle = 0; cycle < cycles; cycle++)
             {
-                ExportSequence sequence = BuildAnimation();
-                if (sequence == null)
+                Stopwatch constructionTimer = Stopwatch.StartNew();
+                ImmAuthoringResult<ImmAuthoringDocument> documentResult = BuildAnimation();
+                constructionTimer.Stop();
+                if (!documentResult.Succeeded)
                 {
-                    Debug.LogError($"{LogPrefix} cycle={cycle} failed=construction");
+                    Debug.LogError(
+                        $"{LogPrefix} cycle={cycle} failed=construction code={documentResult.ErrorCode} " +
+                        $"objectId={documentResult.ObjectId} message={documentResult.Message}");
                     yield break;
                 }
 
-                Stopwatch exportTimer = Stopwatch.StartNew();
-                bool exported = sequence.ExportToFile(outputPath);
-                exportTimer.Stop();
-                sequence.Dispose();
-                if (!exported)
+                ImmAuthoringExportResult export;
+                using (ImmAuthoringDocument authoringDocument = documentResult.Value)
+                    export = ImmAuthoringCompiler.ExportToMemory(authoringDocument);
+                if (!export.Succeeded)
                 {
-                    Debug.LogError($"{LogPrefix} cycle={cycle} failed=export");
+                    Debug.LogError(
+                        $"{LogPrefix} cycle={cycle} failed=compile code={export.ErrorCode} " +
+                        $"revision={export.SourceRevision} objectId={export.ObjectId} message={export.Message}");
                     yield break;
                 }
 
-                ImmPlayerManager manager = ImmPlayerManager.Instance;
-                manager.Initialize();
                 Stopwatch loadTimer = Stopwatch.StartNew();
-                ImmDocument document = manager.LoadDocument(outputPath);
-                if (document == null)
+                ImmDocument playbackDocument = manager.LoadDocumentFromMemory(
+                    export.Data,
+                    $"imm-runtime-animation-spike-{cycle}.imm");
+                if (playbackDocument == null)
                 {
                     Debug.LogError($"{LogPrefix} cycle={cycle} failed=load-start");
                     yield break;
                 }
 
                 float deadline = Time.realtimeSinceStartup + loadTimeoutSeconds;
-                while (!document.IsSequenceReady() && Time.realtimeSinceStartup < deadline)
+                while (!playbackDocument.IsSequenceReady() && Time.realtimeSinceStartup < deadline)
                     yield return null;
                 loadTimer.Stop();
 
-                if (!document.IsSequenceReady())
+                if (!playbackDocument.IsSequenceReady())
                 {
-                    manager.UnloadDocument(document);
+                    manager.UnloadDocument(playbackDocument);
                     Debug.LogError($"{LogPrefix} cycle={cycle} failed=load-timeout");
                     yield break;
                 }
 
-                ImmDocument.LayerInfo[] layers = document.GetLayersManaged();
                 bool foundExpectedFrames = false;
-                foreach (ImmDocument.LayerInfo layer in layers)
+                foreach (ImmDocument.LayerInfo layer in playbackDocument.GetLayersManaged())
                 {
                     if (layer.Type == ImmDocument.LayerType.Paint && layer.PaintNumFrames == frameCount)
                     {
@@ -99,96 +113,134 @@ namespace ImmPlayer.Samples
 
                 if (!foundExpectedFrames)
                 {
-                    manager.UnloadDocument(document);
+                    manager.UnloadDocument(playbackDocument);
                     Debug.LogError($"{LogPrefix} cycle={cycle} failed=frame-count expected={frameCount}");
                     yield break;
                 }
 
                 long seekTicks = ExportLayerTiming.FromFrames(frameCount / 2, frameRate).DurationTicks;
-                document.Pause();
-                document.SetTime(seekTicks, 0);
-                document.Resume();
+                playbackDocument.Pause();
+                playbackDocument.SetTime(seekTicks, 0);
+                playbackDocument.Resume();
+                Stopwatch firstRenderTimer = Stopwatch.StartNew();
                 yield return new WaitForEndOfFrame();
-                manager.UnloadDocument(document);
-                completed++;
+                firstRenderTimer.Stop();
+                manager.UnloadDocument(playbackDocument);
 
+                if (manager.LoadedDocumentCount != baselineDocuments ||
+                    manager.OwnedInputBufferCount != baselineBuffers)
+                {
+                    Debug.LogError(
+                        $"{LogPrefix} cycle={cycle} failed=lifecycle-balance " +
+                        $"documents={manager.LoadedDocumentCount} expectedDocuments={baselineDocuments} " +
+                        $"buffers={manager.OwnedInputBufferCount} expectedBuffers={baselineBuffers}");
+                    yield break;
+                }
+
+                completed++;
                 Debug.Log(
-                    $"{LogPrefix} cycle={cycle} exportMs={exportTimer.Elapsed.TotalMilliseconds:F3} " +
-                    $"loadReadyMs={loadTimer.Elapsed.TotalMilliseconds:F3} bytes={new FileInfo(outputPath).Length}");
+                    $"{LogPrefix} cycle={cycle} revision={export.SourceRevision} " +
+                    $"constructionMs={constructionTimer.Elapsed.TotalMilliseconds:F3} " +
+                    $"graphCompileMs={export.Statistics.GraphCompilationTime.TotalMilliseconds:F3} " +
+                    $"serializationMs={export.Statistics.SerializationTime.TotalMilliseconds:F3} " +
+                    $"loadReadyMs={loadTimer.Elapsed.TotalMilliseconds:F3} " +
+                    $"firstRenderMs={firstRenderTimer.Elapsed.TotalMilliseconds:F3} " +
+                    $"bytes={export.BytesWritten} documents={manager.LoadedDocumentCount} " +
+                    $"buffers={manager.OwnedInputBufferCount}");
             }
 
             totalTimer.Stop();
+            long finalManagedBytes = GC.GetTotalMemory(true);
             long finalWorkingSet = Process.GetCurrentProcess().WorkingSet64;
             Debug.Log(
                 $"{LogPrefix} passed cycles={completed} frames={frameCount} frameRate={frameRate} " +
                 $"elapsedMs={totalTimer.Elapsed.TotalMilliseconds:F3} " +
-                $"workingSetDeltaBytes={finalWorkingSet - initialWorkingSet}");
+                $"managedDeltaBytes={finalManagedBytes - initialManagedBytes} " +
+                $"workingSetDeltaBytes={finalWorkingSet - initialWorkingSet} " +
+                $"documents={manager.LoadedDocumentCount} buffers={manager.OwnedInputBufferCount}");
         }
 
-        private ExportSequence BuildAnimation()
+        private ImmAuthoringResult<ImmAuthoringDocument> BuildAnimation()
         {
-            ExportSequence sequence = ExportSequence.Create(
+            ImmAuthoringResult<ImmAuthoringDocument> create = ImmAuthoringDocument.Create(
                 ExportSequenceType.Animated,
                 frameRate,
-                Color.black,
-                new ExportRequirements());
-            if (sequence == null)
-                return null;
+                Color.black);
+            if (!create.Succeeded)
+                return create;
 
-            ExportPaintLayer paintLayer = sequence.CreatePaintLayer(
-                "Animated Paint",
-                timing: ExportLayerTiming.FromFrames(frameCount, frameRate, 0));
-            if (paintLayer == null)
-            {
-                sequence.Dispose();
-                return null;
-            }
+            ImmAuthoringDocument document = create.Value;
+            ImmAuthoringLayerProperties properties = ImmAuthoringLayerProperties.Default("Animated Paint");
+            ExportLayerTiming timing = ExportLayerTiming.FromFrames(frameCount, frameRate);
+            properties.IsTimeline = timing.IsTimeline;
+            properties.DurationTicks = timing.DurationTicks;
+            properties.MaxRepeatCount = timing.MaxRepeatCount;
+            ImmAuthoringResult<long> layer = document.CreatePaintLayer(0, properties);
+            if (!layer.Succeeded)
+                return DisposeFailure(document, layer);
 
             for (int frame = 0; frame < frameCount; frame++)
             {
-                using (ExportDrawing drawing = paintLayer.CreateDrawing())
+                ImmAuthoringResult<long> drawing = document.CreateDrawing(layer.Value);
+                if (!drawing.Succeeded)
+                    return DisposeFailure(document, drawing);
+
+                PaintPoint[] points = new PaintPoint[8];
+                for (int pointIndex = 0; pointIndex < points.Length; pointIndex++)
                 {
-                    if (drawing == null || !drawing.Init(1))
+                    float t = pointIndex / (points.Length - 1f);
+                    points[pointIndex] = new PaintPoint
                     {
-                        sequence.Dispose();
-                        return null;
-                    }
-
-                    ExportElement element = drawing.GetElement(0);
-                    if (element == null || !element.Init(8, BrushSectionType.Circle, VisibilityType.Always))
-                    {
-                        sequence.Dispose();
-                        return null;
-                    }
-
-                    for (uint pointIndex = 0; pointIndex < 8; pointIndex++)
-                    {
-                        float t = pointIndex / 7f;
-                        PaintPoint point = new PaintPoint
-                        {
-                            Position = new Vector3(t - 0.5f, frame * 0.01f, Mathf.Sin(t * Mathf.PI * 2f + frame * 0.2f) * 0.1f),
-                            Normal = Vector3.up,
-                            Direction = Vector3.forward,
-                            Color = Color.HSVToRGB(frame / (float)frameCount, 0.8f, 1f),
-                            Alpha = 1f,
-                            Width = 0.02f,
-                            Length = t,
-                            Time = t
-                        };
-                        if (!element.SetPoint(pointIndex, point))
-                        {
-                            sequence.Dispose();
-                            return null;
-                        }
-                    }
-
-                    element.ComputeBounds();
-                    drawing.ComputeBounds();
-                    paintLayer.AddFrame(drawing.DrawingIndex);
+                        Position = new Vector3(
+                            t - 0.5f,
+                            frame * 0.01f,
+                            Mathf.Sin(t * Mathf.PI * 2f + frame * 0.2f) * 0.1f),
+                        Normal = Vector3.up,
+                        Direction = Vector3.forward,
+                        Color = Color.HSVToRGB(frame / (float)frameCount, 0.8f, 1f),
+                        Alpha = 1f,
+                        Width = 0.02f,
+                        Length = t,
+                        Time = t
+                    };
                 }
+
+                ImmAuthoringResult<long> stroke = document.CreateStroke(
+                    drawing.Value,
+                    BrushSectionType.Circle,
+                    VisibilityType.Always,
+                    points);
+                if (!stroke.Succeeded)
+                    return DisposeFailure(document, stroke);
+
+                ImmAuthoringResult frameResult = document.AppendFrame(layer.Value, drawing.Value);
+                if (!frameResult.Succeeded)
+                    return DisposeFailure(document, frameResult);
             }
 
-            return sequence;
+            return ImmAuthoringResult<ImmAuthoringDocument>.Success(document);
+        }
+
+        private static ImmAuthoringResult<ImmAuthoringDocument> DisposeFailure<T>(
+            ImmAuthoringDocument document,
+            ImmAuthoringResult<T> failure)
+        {
+            document.Dispose();
+            return ImmAuthoringResult<ImmAuthoringDocument>.Failure(
+                failure.ErrorCode,
+                failure.Message,
+                failure.ObjectId);
+        }
+
+        private static ImmAuthoringResult<ImmAuthoringDocument> DisposeFailure(
+            ImmAuthoringDocument document,
+            ImmAuthoringResult failure)
+        {
+            document.Dispose();
+            return ImmAuthoringResult<ImmAuthoringDocument>.Failure(
+                failure.ErrorCode,
+                failure.Message,
+                failure.ObjectId);
         }
     }
 }

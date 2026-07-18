@@ -20,3 +20,18 @@ The component context menu also provides:
 
 The scene is intentionally an engine sample: it uses inspector properties and
 context-menu commands, without application-level animation-editor UI.
+## Phase 1 lifecycle and performance gate
+
+Add `ImmRuntimeAnimationSpike` to a scene with the existing IMM player setup.
+The component context menu provides:
+
+- **Run Animation Spike** for one end-to-end cycle.
+- **Run 100-cycle Lifecycle Gate** for the Phase 1 soak gate.
+
+Each cycle builds a mutable multi-frame paint document, compiles it to an owned
+memory buffer using the batch point ABI, loads it into the native player, seeks,
+plays one rendered frame, and unloads it. Logs use `[IMM_AUTHOR_SPIKE_P1]` and
+report construction, graph compilation, serialization, load-to-ready,
+first-render timing, output size, and memory deltas. The gate stops immediately
+if the manager's live-document or retained input-buffer count does not return to
+its starting value after an unload.

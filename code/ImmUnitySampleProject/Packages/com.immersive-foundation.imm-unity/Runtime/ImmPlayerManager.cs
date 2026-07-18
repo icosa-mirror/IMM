@@ -244,6 +244,12 @@ namespace ImmPlayer
 
         #endregion
 
+        /// <summary>Number of native player documents currently owned by this manager.</summary>
+        public int LoadedDocumentCount => _loadedDocuments.Count;
+
+        /// <summary>Number of unmanaged input buffers retained for asynchronous memory loads.</summary>
+        public int OwnedInputBufferCount => _documentMemoryPtrs.Count;
+
         #region Document Management
 
         /// <summary>
