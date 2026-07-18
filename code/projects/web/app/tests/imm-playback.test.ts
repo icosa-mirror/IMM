@@ -160,6 +160,24 @@ describe("IMM deterministic playback evaluation", () => {
         expect(controller.evaluate()).toEqual(fresh);
     });
 
+    test("holds a one-shot paint clip on its final frame instead of looping", () => {
+        const document = fixture();
+        const timeline = document.layers[1];
+        const paint = document.layers[2];
+        if (timeline === undefined || paint === undefined) throw new Error("Nested paint fixture is missing");
+        timeline.durationTicks = 1_000;
+        timeline.maxRepeatCount = 1;
+        timeline.keys = [];
+        paint.frameBuffer = new Uint32Array([0, 1, 2]);
+        paint.maxRepeatCount = 1;
+
+        expect(evaluateImmDocument(document, 15).layers.get(2)?.drawingIndex).toBe(1);
+        expect(evaluateImmDocument(document, 160).layers.get(2)?.drawingIndex).toBe(2);
+
+        paint.maxRepeatCount = 0;
+        expect(evaluateImmDocument(document, 160).layers.get(2)?.drawingIndex).toBe(1);
+    });
+
     test("waits one tick before stop markers and continue crosses deterministically", () => {
         const controller = new ImmPlaybackController(fixture());
         controller.advance(5);
