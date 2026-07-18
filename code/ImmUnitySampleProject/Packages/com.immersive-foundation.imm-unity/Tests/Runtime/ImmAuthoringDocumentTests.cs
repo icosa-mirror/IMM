@@ -124,6 +124,56 @@ namespace ImmPlayer.Tests
             }
         }
 
+        [Test]
+        public void TransactionCommitsAtomicallyWithOneRevisionAndNotification()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            using (ImmAuthoringTransaction transaction = Require(document.BeginEdit(document.Revision)))
+            {
+                List<ImmAuthoringChange> changes = new List<ImmAuthoringChange>();
+                document.Changed += changes.Add;
+                long group = Require(transaction.EditableDocument.CreateGroupLayer(
+                    0,
+                    ImmAuthoringLayerProperties.Default("Group")));
+                Require(transaction.EditableDocument.CreatePaintLayer(
+                    group,
+                    ImmAuthoringLayerProperties.Default("Paint")));
+
+                Assert.That(Require(document.CreateSnapshot()).Layers, Is.Empty);
+                long committedRevision = Require(transaction.Commit());
+                Assert.That(committedRevision, Is.EqualTo(1));
+                Assert.That(document.Revision, Is.EqualTo(1));
+                Assert.That(Require(document.CreateSnapshot()).Layers, Has.Count.EqualTo(2));
+                Assert.That(changes, Has.Count.EqualTo(1));
+                Assert.That(changes[0].AffectedObjectIds, Does.Contain(group));
+            }
+        }
+
+        [Test]
+        public void StaleOrAbortedTransactionDoesNotChangeDocument()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            using (ImmAuthoringTransaction first = Require(document.BeginEdit(0)))
+            using (ImmAuthoringTransaction stale = Require(document.BeginEdit(0)))
+            {
+                Require(first.EditableDocument.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("First")));
+                Require(stale.EditableDocument.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Stale")));
+                Require(first.Commit());
+
+                ImmAuthoringResult<long> staleResult = stale.Commit();
+                Assert.That(staleResult.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.RevisionConflict));
+                Assert.That(Require(document.CreateSnapshot()).Layers, Has.Count.EqualTo(1));
+            }
+
+            using (ImmAuthoringTransaction aborted = Require(document.BeginEdit(document.Revision)))
+            {
+                Require(aborted.EditableDocument.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Aborted")));
+                aborted.Abort();
+            }
+            Assert.That(document.Revision, Is.EqualTo(1));
+            Assert.That(Require(document.CreateSnapshot()).Layers, Has.Count.EqualTo(1));
+        }
+
         private static ImmAuthoringDocument CreateDocument()
         {
             return Require(ImmAuthoringDocument.Create(ExportSequenceType.Animated, 30, Color.black));

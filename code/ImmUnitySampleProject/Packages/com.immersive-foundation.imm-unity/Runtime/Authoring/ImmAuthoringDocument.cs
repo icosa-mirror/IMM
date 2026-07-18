@@ -26,14 +26,17 @@ namespace ImmPlayer.Authoring
             ExportSequenceType sequenceType,
             uint frameRate,
             Color backgroundColor,
-            ExportRequirements requirements)
+            ExportRequirements requirements,
+            ImmAuthoringState state = null,
+            long revision = 0)
         {
             DocumentId = Interlocked.Increment(ref sNextDocumentId);
             _sequenceType = sequenceType;
             _frameRate = frameRate;
             _backgroundColor = backgroundColor;
             _requirements = requirements;
-            _state = new ImmAuthoringState();
+            _state = state ?? new ImmAuthoringState();
+            _revision = revision;
         }
 
         public static ImmAuthoringResult<ImmAuthoringDocument> Create(
@@ -51,6 +54,33 @@ namespace ImmPlayer.Authoring
         public long Revision
         {
             get { lock (_gate) return _revision; }
+        }
+
+        public ImmAuthoringResult<ImmAuthoringTransaction> BeginEdit(long expectedRevision)
+        {
+            lock (_gate)
+            {
+                if (_disposed)
+                    return ImmAuthoringResult<ImmAuthoringTransaction>.Failure(
+                        ImmAuthoringErrorCode.Disposed,
+                        "Document is disposed.",
+                        DocumentId);
+                if (expectedRevision != _revision)
+                    return ImmAuthoringResult<ImmAuthoringTransaction>.Failure(
+                        ImmAuthoringErrorCode.RevisionConflict,
+                        $"Expected revision {expectedRevision}, but the document is at revision {_revision}.",
+                        DocumentId);
+
+                ImmAuthoringDocument editable = new ImmAuthoringDocument(
+                    _sequenceType,
+                    _frameRate,
+                    _backgroundColor,
+                    _requirements,
+                    _state.Clone(),
+                    _revision);
+                return ImmAuthoringResult<ImmAuthoringTransaction>.Success(
+                    new ImmAuthoringTransaction(this, editable, _revision));
+            }
         }
 
         public ImmAuthoringResult SetDocumentSettings(
@@ -664,8 +694,8 @@ namespace ImmPlayer.Authoring
         {
             if (!Enum.IsDefined(typeof(BrushSectionType), brushSection) || !Enum.IsDefined(typeof(VisibilityType), visibility))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke brush or visibility type is invalid.", objectId);
-            if (points == null || points.Length == 0)
-                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least one point.", objectId);
+            if (points == null || points.Length < 3)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least three points.", objectId);
             for (int i = 0; i < points.Length; i++)
             {
                 PaintPoint point = points[i];
@@ -754,5 +784,45 @@ namespace ImmPlayer.Authoring
         internal ImmAuthoringChange AdvanceRevisionUnsafe(long[] affectedIds) => AdvanceRevision(affectedIds);
         internal void PublishTransactionChange(ImmAuthoringChange change) => Publish(change);
         internal ImmAuthoringSnapshot CreateSnapshotInternalUnsafe() => CreateSnapshotUnsafe();
+
+        internal ImmAuthoringResult<long> CommitTransaction(
+            ImmAuthoringDocument editable,
+            long expectedRevision,
+            long[] affectedObjectIds)
+        {
+            ImmAuthoringChange change = null;
+            long committedRevision;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return ImmAuthoringResult<long>.Failure(ImmAuthoringErrorCode.Disposed, "Document is disposed.", DocumentId);
+                if (_revision != expectedRevision)
+                    return ImmAuthoringResult<long>.Failure(
+                        ImmAuthoringErrorCode.RevisionConflict,
+                        $"Expected revision {expectedRevision}, but the document is at revision {_revision}.",
+                        DocumentId);
+
+                lock (editable._gate)
+                {
+                    if (editable._disposed)
+                        return ImmAuthoringResult<long>.Failure(ImmAuthoringErrorCode.Disposed, "Transaction edit document is disposed.");
+                    ImmAuthoringResult validation = ValidateState(editable._state);
+                    if (!validation.Succeeded)
+                        return ImmAuthoringResult<long>.Failure(validation.ErrorCode, validation.Message, validation.ObjectId);
+                    if (editable._revision == expectedRevision)
+                        return ImmAuthoringResult<long>.Success(_revision);
+
+                    _state = editable._state.Clone();
+                    _sequenceType = editable._sequenceType;
+                    _frameRate = editable._frameRate;
+                    _backgroundColor = editable._backgroundColor;
+                    _requirements = editable._requirements;
+                    change = AdvanceRevision(affectedObjectIds);
+                    committedRevision = change.Revision;
+                }
+            }
+            Publish(change);
+            return ImmAuthoringResult<long>.Success(committedRevision);
+        }
     }
 }
