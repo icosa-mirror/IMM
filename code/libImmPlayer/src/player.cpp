@@ -1522,7 +1522,7 @@ namespace ImmPlayer
         return static_cast<int>(id);
     }
 
-    int Player::Load(piTArray<uint8_t>* imm, const wchar_t* name)
+    int Player::Load(const uint8_t* data, uint64_t size, const wchar_t* name)
     {
         mCPULoadStartTimeMS = std::chrono::system_clock::now();
 
@@ -1541,11 +1541,19 @@ namespace ImmPlayer
         Player::Command* newCommand = mCommandList.New(1, false);
         newCommand->mTarget = static_cast<int>(id);
         newCommand->mCommand.mType = Document::Command::Type::Load;
-        newCommand->mCommand.mArrayArg = imm;
+        newCommand->mCommand.mMemoryData = data;
+        newCommand->mCommand.mMemorySize = size;
         newCommand->mCommand.mFileType = Document::ImportType::IMM_memory;
         mSynced[id] = false;
         doc->SetCommandId(cmdId);
         return static_cast<int>(id);
+    }
+
+    bool Player::IsDocumentActive(int id) const
+    {
+        return id >= 0 &&
+               static_cast<uint64_t>(id) < mDocuments.GetMaxLength() &&
+               mDocuments.IsUsed(id);
     }
 
     void Player::Unload(int id)

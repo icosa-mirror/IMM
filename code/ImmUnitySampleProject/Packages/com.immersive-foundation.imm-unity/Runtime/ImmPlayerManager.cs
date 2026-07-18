@@ -124,6 +124,7 @@ namespace ImmPlayer
             if (_isInitialized)
             {
                 ImmNativePlugin.GlobalWork(1);
+                ReleaseCompletedMemoryBuffers();
             }
         }
 
@@ -228,14 +229,14 @@ namespace ImmPlayer
             }
             _loadedDocuments.Clear();
 
-            // Free any remaining memory allocated for documents loaded from memory
+            // Native shutdown synchronously stops document loading before input buffers are released.
+            ImmNativePlugin.End();
+
             foreach (var memPtr in _documentMemoryPtrs.Values)
             {
                 Marshal.FreeHGlobal(memPtr);
             }
             _documentMemoryPtrs.Clear();
-
-            ImmNativePlugin.End();
             _isInitialized = false;
             CleanupCommandBuffers();
 
@@ -328,22 +329,38 @@ namespace ImmPlayer
 
             int docId = document.DocumentId;
 
-            if (_loadedDocuments.ContainsKey(docId))
-            {
-                _loadedDocuments.Remove(docId);
-            }
-
-            // Free any memory that was allocated for loading from memory
-            if (_documentMemoryPtrs.TryGetValue(docId, out IntPtr memPtr))
-            {
-                _documentMemoryPtrs.Remove(docId);
-                Marshal.FreeHGlobal(memPtr);
-                Log($"Freed memory buffer for document {docId}");
-            }
-
             document.Unload();
+            _loadedDocuments.Remove(docId);
+            ReleaseCompletedMemoryBuffers();
         }
 
+        private void ReleaseCompletedMemoryBuffers()
+        {
+            if (_documentMemoryPtrs.Count == 0)
+                return;
+
+            List<int> completedDocumentIds = null;
+            foreach (KeyValuePair<int, IntPtr> entry in _documentMemoryPtrs)
+            {
+                if (_loadedDocuments.ContainsKey(entry.Key) || ImmNativePlugin.IsDocumentActive(entry.Key))
+                    continue;
+
+                if (completedDocumentIds == null)
+                    completedDocumentIds = new List<int>();
+                completedDocumentIds.Add(entry.Key);
+            }
+
+            if (completedDocumentIds == null)
+                return;
+
+            foreach (int documentId in completedDocumentIds)
+            {
+                IntPtr memPtr = _documentMemoryPtrs[documentId];
+                _documentMemoryPtrs.Remove(documentId);
+                Marshal.FreeHGlobal(memPtr);
+                Log($"Freed memory buffer for completed document {documentId}");
+            }
+        }
         #endregion
 
         #region Rendering

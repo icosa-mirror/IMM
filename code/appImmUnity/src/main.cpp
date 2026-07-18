@@ -919,11 +919,16 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, v
     }
     iLog().Printf(LT_DEBUG, L"loading from memory...\nfile name is %s\nsize is %d", pistr2ws(fileName), size);
 
-    piTArray<uint8_t> imm;
-    imm.Init(0, false);
-    imm.Set((uint8_t*)(data), (uint64_t)(size));
-    return iPlayer().Load(&imm, pistr2ws(fileName));
+    return iPlayer().Load(
+        static_cast<const uint8_t*>(data),
+        static_cast<uint64_t>(size),
+        pistr2ws(fileName));
 
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT IsDocumentActive(int id)
+{
+    return iPlayer().IsDocumentActive(id);
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Unload(int id)

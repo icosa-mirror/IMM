@@ -1,14 +1,20 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace ImmPlayer.Tests
 {
     public sealed class ImmAuthoringDocumentTests
     {
+        private const long MaxRetainedManagedBytes = 8L * 1024L * 1024L;
+        private const long MaxRetainedWorkingSetBytes = 64L * 1024L * 1024L;
         [Test]
         public void LayerHierarchyUsesStableIdsAndRejectsCycles()
         {
@@ -309,11 +315,184 @@ namespace ImmPlayer.Tests
                 Assert.That(first.Statistics.PointCount, Is.EqualTo(8));
             }
         }
+
+        [UnityTest]
+        public IEnumerator ExportedMemoryAndFileLoadThroughPlayerAndReleaseOwnership()
+        {
+            const int frameCount = 3;
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            Assert.That(manager.Initialize(), Is.True);
+            int baselineDocuments = manager.LoadedDocumentCount;
+            int baselineBuffers = manager.OwnedInputBufferCount;
+            string filePath = Path.Combine(
+                Application.temporaryCachePath,
+                $"imm-phase3-load-{Guid.NewGuid():N}.imm");
+            ImmDocument memoryPlayback = null;
+            ImmDocument filePlayback = null;
+
+            try
+            {
+                using (ImmAuthoringDocument document = CreatePlaybackDocument(frameCount))
+                {
+                    ImmAuthoringExportResult memory = ImmAuthoringCompiler.ExportToMemory(document);
+                    ImmAuthoringExportResult file = ImmAuthoringCompiler.ExportToFile(document, filePath);
+                    Assert.That(memory.Succeeded, Is.True, memory.Message);
+                    Assert.That(file.Succeeded, Is.True, file.Message);
+                    Assert.That(memory.SourceRevision, Is.EqualTo(document.Revision));
+                    Assert.That(file.SourceRevision, Is.EqualTo(document.Revision));
+                    Assert.That(file.BytesWritten, Is.EqualTo(new FileInfo(filePath).Length));
+                    Assert.That(File.ReadAllBytes(filePath), Is.EqualTo(memory.Data));
+
+                    memoryPlayback = manager.LoadDocumentFromMemory(memory.Data, "imm-phase3-memory.imm");
+                    Assert.That(memoryPlayback, Is.Not.Null);
+                    Assert.That(manager.LoadedDocumentCount, Is.EqualTo(baselineDocuments + 1));
+                    Assert.That(manager.OwnedInputBufferCount, Is.EqualTo(baselineBuffers + 1));
+                    float deadline = Time.realtimeSinceStartup + 30f;
+                    while (!IsPlaybackReady(memoryPlayback) && Time.realtimeSinceStartup < deadline)
+                        yield return null;
+                    Assert.That(IsPlaybackReady(memoryPlayback), Is.True, "Memory export did not become fully loaded.");
+                    Assert.That(HasPaintFrameCount(memoryPlayback, frameCount), Is.True);
+                    manager.UnloadDocument(memoryPlayback);
+                    memoryPlayback = null;
+                    deadline = Time.realtimeSinceStartup + 30f;
+                    while (manager.OwnedInputBufferCount != baselineBuffers && Time.realtimeSinceStartup < deadline)
+                        yield return null;
+                    Assert.That(manager.LoadedDocumentCount, Is.EqualTo(baselineDocuments));
+                    Assert.That(manager.OwnedInputBufferCount, Is.EqualTo(baselineBuffers));
+
+                    filePlayback = manager.LoadDocument(filePath);
+                    Assert.That(filePlayback, Is.Not.Null);
+                    deadline = Time.realtimeSinceStartup + 30f;
+                    while (!IsPlaybackReady(filePlayback) && Time.realtimeSinceStartup < deadline)
+                        yield return null;
+                    Assert.That(IsPlaybackReady(filePlayback), Is.True, "File export did not become fully loaded.");
+                    Assert.That(HasPaintFrameCount(filePlayback, frameCount), Is.True);
+                    manager.UnloadDocument(filePlayback);
+                    filePlayback = null;
+                }
+            }
+            finally
+            {
+                if (memoryPlayback != null)
+                    manager.UnloadDocument(memoryPlayback);
+                if (filePlayback != null)
+                    manager.UnloadDocument(filePlayback);
+                if (File.Exists(filePath))
+                    File.Delete(filePath);
+            }
+
+            Assert.That(manager.LoadedDocumentCount, Is.EqualTo(baselineDocuments));
+            Assert.That(manager.OwnedInputBufferCount, Is.EqualTo(baselineBuffers));
+            Debug.Log(
+                $"[IMM_PHASE3_LOAD_TEST] passed documents={manager.LoadedDocumentCount} " +
+                $"buffers={manager.OwnedInputBufferCount}");
+        }
+
+        [UnityTest]
+        [Category("ImmLifecycleGate")]
+        public IEnumerator RebuildLoadUnloadOneHundredCyclesKeepsNativeOwnershipBalanced()
+        {
+            const int cycles = 100;
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            Assert.That(manager.Initialize(), Is.True);
+            int baselineDocuments = manager.LoadedDocumentCount;
+            int baselineBuffers = manager.OwnedInputBufferCount;
+            long initialManagedBytes = GC.GetTotalMemory(true);
+            long initialWorkingSetBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+
+            for (int cycle = 0; cycle < cycles; cycle++)
+            {
+                ImmDocument playback = null;
+                try
+                {
+                    ImmAuthoringExportResult export;
+                    using (ImmAuthoringDocument document = CreatePlaybackDocument(1))
+                        export = ImmAuthoringCompiler.ExportToMemory(document);
+                    Assert.That(export.Succeeded, Is.True, $"Cycle {cycle}: {export.Message}");
+
+                    playback = manager.LoadDocumentFromMemory(
+                        export.Data,
+                        $"imm-lifecycle-gate-{cycle}.imm");
+                    Assert.That(playback, Is.Not.Null, $"Cycle {cycle} failed to start loading.");
+                    float deadline = Time.realtimeSinceStartup + 30f;
+                    while (!IsPlaybackReady(playback) && Time.realtimeSinceStartup < deadline)
+                        yield return null;
+                    Assert.That(IsPlaybackReady(playback), Is.True, $"Cycle {cycle} timed out.");
+                }
+                finally
+                {
+                    if (playback != null)
+                        manager.UnloadDocument(playback);
+                }
+
+                float releaseDeadline = Time.realtimeSinceStartup + 30f;
+                while (manager.OwnedInputBufferCount != baselineBuffers && Time.realtimeSinceStartup < releaseDeadline)
+                    yield return null;
+                Assert.That(manager.LoadedDocumentCount, Is.EqualTo(baselineDocuments), $"Cycle {cycle}");
+                Assert.That(manager.OwnedInputBufferCount, Is.EqualTo(baselineBuffers), $"Cycle {cycle}");
+            }
+
+            long managedDeltaBytes = GC.GetTotalMemory(true) - initialManagedBytes;
+            long workingSetDeltaBytes =
+                System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 - initialWorkingSetBytes;
+            Assert.That(managedDeltaBytes, Is.LessThanOrEqualTo(MaxRetainedManagedBytes));
+            Assert.That(workingSetDeltaBytes, Is.LessThanOrEqualTo(MaxRetainedWorkingSetBytes));
+            Debug.Log(
+                $"[IMM_P1_LIFECYCLE_GATE] passed cycles={cycles} " +
+                $"managedDeltaBytes={managedDeltaBytes} workingSetDeltaBytes={workingSetDeltaBytes} " +
+                $"documents={manager.LoadedDocumentCount} buffers={manager.OwnedInputBufferCount}");
+        }
 #endif
 
         private static ImmAuthoringDocument CreateDocument()
         {
             return Require(ImmAuthoringDocument.Create(ExportSequenceType.Animated, 30, Color.black));
+        }
+
+        private static ImmAuthoringDocument CreatePlaybackDocument(int frameCount)
+        {
+            ImmAuthoringDocument document = CreateDocument();
+            ImmAuthoringLayerProperties properties = ImmAuthoringLayerProperties.Default("Paint");
+            ExportLayerTiming timing = ExportLayerTiming.FromFrames(frameCount, 30);
+            properties.IsTimeline = timing.IsTimeline;
+            properties.DurationTicks = timing.DurationTicks;
+            properties.MaxRepeatCount = timing.MaxRepeatCount;
+            long layer = Require(document.CreatePaintLayer(0, properties));
+
+            for (int frame = 0; frame < frameCount; frame++)
+            {
+                long drawing = Require(document.CreateDrawing(layer));
+                PaintPoint[] points = new PaintPoint[8];
+                for (int pointIndex = 0; pointIndex < points.Length; pointIndex++)
+                {
+                    points[pointIndex] = Point(pointIndex);
+                    points[pointIndex].Position.y = frame * 0.01f;
+                }
+                Require(document.CreateStroke(
+                    drawing,
+                    BrushSectionType.Circle,
+                    VisibilityType.Always,
+                    points));
+                Require(document.AppendFrame(layer, drawing));
+            }
+
+            return document;
+        }
+
+        private static bool IsPlaybackReady(ImmDocument document)
+        {
+            return document.IsSequenceReady() &&
+                   document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded;
+        }
+
+        private static bool HasPaintFrameCount(ImmDocument document, int expectedFrameCount)
+        {
+            foreach (ImmDocument.LayerInfo layer in document.GetLayersManaged())
+            {
+                if (layer.Type == ImmDocument.LayerType.Paint && layer.PaintNumFrames == expectedFrameCount)
+                    return true;
+            }
+            return false;
         }
 
         private static PaintPoint Point(float x)
