@@ -15,6 +15,8 @@ namespace ImmPlayer.Samples
     public sealed class ImmRuntimeAnimationSpike : MonoBehaviour
     {
         private const string LogPrefix = "[IMM_AUTHOR_SPIKE_P1]";
+        private const long MaxRetainedManagedBytes = 8L * 1024L * 1024L;
+        private const long MaxRetainedWorkingSetBytes = 64L * 1024L * 1024L;
 
         [SerializeField] private bool runOnStart;
         [SerializeField] private uint frameRate = 30;
@@ -90,11 +92,11 @@ namespace ImmPlayer.Samples
                 }
 
                 float deadline = Time.realtimeSinceStartup + loadTimeoutSeconds;
-                while (!playbackDocument.IsSequenceReady() && Time.realtimeSinceStartup < deadline)
+                while (!IsPlaybackReady(playbackDocument) && Time.realtimeSinceStartup < deadline)
                     yield return null;
                 loadTimer.Stop();
 
-                if (!playbackDocument.IsSequenceReady())
+                if (!IsPlaybackReady(playbackDocument))
                 {
                     manager.UnloadDocument(playbackDocument);
                     Debug.LogError($"{LogPrefix} cycle={cycle} failed=load-timeout");
@@ -126,6 +128,9 @@ namespace ImmPlayer.Samples
                 yield return new WaitForEndOfFrame();
                 firstRenderTimer.Stop();
                 manager.UnloadDocument(playbackDocument);
+                deadline = Time.realtimeSinceStartup + loadTimeoutSeconds;
+                while (manager.OwnedInputBufferCount != baselineBuffers && Time.realtimeSinceStartup < deadline)
+                    yield return null;
 
                 if (manager.LoadedDocumentCount != baselineDocuments ||
                     manager.OwnedInputBufferCount != baselineBuffers)
@@ -152,12 +157,31 @@ namespace ImmPlayer.Samples
             totalTimer.Stop();
             long finalManagedBytes = GC.GetTotalMemory(true);
             long finalWorkingSet = Process.GetCurrentProcess().WorkingSet64;
+            long managedDeltaBytes = finalManagedBytes - initialManagedBytes;
+            long workingSetDeltaBytes = finalWorkingSet - initialWorkingSet;
+            if (managedDeltaBytes > MaxRetainedManagedBytes ||
+                workingSetDeltaBytes > MaxRetainedWorkingSetBytes)
+            {
+                Debug.LogError(
+                    $"{LogPrefix} failed=retained-memory cycles={completed} " +
+                    $"managedDeltaBytes={managedDeltaBytes} maxManagedBytes={MaxRetainedManagedBytes} " +
+                    $"workingSetDeltaBytes={workingSetDeltaBytes} " +
+                    $"maxWorkingSetBytes={MaxRetainedWorkingSetBytes}");
+                yield break;
+            }
+
             Debug.Log(
                 $"{LogPrefix} passed cycles={completed} frames={frameCount} frameRate={frameRate} " +
                 $"elapsedMs={totalTimer.Elapsed.TotalMilliseconds:F3} " +
-                $"managedDeltaBytes={finalManagedBytes - initialManagedBytes} " +
-                $"workingSetDeltaBytes={finalWorkingSet - initialWorkingSet} " +
+                $"managedDeltaBytes={managedDeltaBytes} " +
+                $"workingSetDeltaBytes={workingSetDeltaBytes} " +
                 $"documents={manager.LoadedDocumentCount} buffers={manager.OwnedInputBufferCount}");
+        }
+
+        private static bool IsPlaybackReady(ImmDocument document)
+        {
+            return document.IsSequenceReady() &&
+                   document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded;
         }
 
         private ImmAuthoringResult<ImmAuthoringDocument> BuildAnimation()

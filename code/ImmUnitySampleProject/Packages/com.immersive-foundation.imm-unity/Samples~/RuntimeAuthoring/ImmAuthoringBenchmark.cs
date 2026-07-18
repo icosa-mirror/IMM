@@ -92,11 +92,11 @@ namespace ImmPlayer.Samples
                 }
 
                 float deadline = Time.realtimeSinceStartup + loadTimeoutSeconds;
-                while (!document.IsSequenceReady() && Time.realtimeSinceStartup < deadline)
+                while (!IsPlaybackReady(document) && Time.realtimeSinceStartup < deadline)
                     yield return null;
                 loadTimer.Stop();
 
-                if (!document.IsSequenceReady())
+                if (!IsPlaybackReady(document))
                 {
                     manager.UnloadDocument(document);
                     Debug.LogError($"{LogPrefix} case={benchmarkCase.Name} failed=player-load-timeout timeoutSec={loadTimeoutSeconds:F1}");
@@ -119,6 +119,12 @@ namespace ImmPlayer.Samples
                 $"firstFrameMs={firstFrameMilliseconds:F3} outputBytes={outputBytes} " +
                 $"managedDeltaBytes={managedAfterExport - managedBefore} " +
                 $"workingSetDeltaBytes={workingSetAfterExport - workingSetBefore}");
+        }
+
+        private static bool IsPlaybackReady(ImmDocument document)
+        {
+            return document.IsSequenceReady() &&
+                   document.GetStateInfo().Loading == ImmDocument.LoadingState.Loaded;
         }
 
         private static ExportSequence BuildSequence(BenchmarkCase benchmarkCase)

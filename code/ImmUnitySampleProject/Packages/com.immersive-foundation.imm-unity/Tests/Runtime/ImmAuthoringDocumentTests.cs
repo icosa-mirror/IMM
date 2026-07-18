@@ -288,6 +288,20 @@ namespace ImmPlayer.Tests
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
         [Test]
+        public void ExportFailureForDisposedDocumentIdentifiesStableDocumentId()
+        {
+            ImmAuthoringDocument document = CreateDocument();
+            long documentId = document.DocumentId;
+            document.Dispose();
+
+            ImmAuthoringExportResult result = ImmAuthoringCompiler.ExportToMemory(document);
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Disposed));
+            Assert.That(result.ObjectId, Is.EqualTo(documentId));
+            Assert.That(result.Data, Is.Null);
+        }
+        [Test]
         public void ValidSnapshotExportsDeterministicallyToOwnedMemory()
         {
             using (ImmAuthoringDocument document = CreateDocument())

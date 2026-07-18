@@ -94,11 +94,57 @@ The runtime sample defines three synthetic cases:
 | Medium | 4 | 100 | 32 | 120 |
 | Large | 8 | 500 | 64 | 300 |
 
-Phase 1 records rather than assumes thresholds. The report must separate managed
-construction, native export, player load-to-ready, first rendered frame, output
-bytes, managed memory delta, and native process working-set delta. Phase 1's
-minimum lifecycle gate is 100 small-document export/load/unload cycles without a
-monotonically growing live-document count or unmanaged input allocation count.
+The large case is the Phase 0-3 planning envelope: 8 authored layers, 300 frame
+mappings per paint layer, 4,000 strokes, and 256,000 points. It is a benchmark
+envelope rather than a serialized-format limit; larger documents must return a
+measured result and must not rely on undefined behavior.
 
-Measured results will set release limits before Phase 4. No cache or incremental
-player-mutation design is justified solely by the four-point legacy sample.
+The Phase 0 reference machine is Windows 11 x64, Unity 2022.3.62f2, Direct3D 11,
+an AMD Ryzen 7 7800X3D (8 cores/16 logical processors), 32 GB system memory, and
+an NVIDIA GeForce RTX 4090 with 24 GB video memory. Initial engineering targets
+on that machine are:
+
+| Case | Compile + serialize | Player load-to-ready | First rendered frame |
+|---|---:|---:|---:|
+| Small | p95 <= 100 ms | p95 <= 250 ms | p95 <= 33.4 ms |
+| Medium | <= 1 s | <= 1 s | <= 50 ms |
+| Large | <= 10 s | <= 5 s | <= 100 ms |
+
+The report must separate managed construction, graph compilation, serialization,
+player load-to-ready, first rendered frame, output bytes, managed memory delta,
+and native process working-set delta. Phase 1's minimum lifecycle gate is 100
+small-document export/load/unload cycles. The live-document and retained input
+allocation counts must return to baseline after every cycle. After a forced
+collection, retained managed memory must be within 8 MiB of baseline and process
+working set within 64 MiB of baseline. A monotonic increase over repeated runs is
+a failure even when it remains below those allowances.
+
+## Recorded Phase 0-1 baseline and decision
+
+The benchmark harness was run in the Unity Editor on the reference machine on
+2026-07-19. These Phase 0 figures use the legacy file exporter and measure
+player load until `IsSequenceReady`; the Phase 1 lifecycle test separately waits
+for the player `Loaded` state before inspecting or releasing a document.
+
+| Case | Construction | File export | Load to sequence-ready | Next rendered frame | Bytes |
+|---|---:|---:|---:|---:|---:|
+| Small | 1.298 ms | 1.910 ms | 6.029 ms | 3.799 ms | 3,161 |
+| Medium | 4.444 ms | 48.349 ms | 58.868 ms | 1.983 ms | 94,103 |
+| Large | 80.060 ms | 466.323 ms | 202.166 ms | 2.245 ms | 984,363 |
+
+The optimized Phase 1 memory path completed 100 construct, compile, serialize,
+load-to-`Loaded`, seek-capable playback, unload, and input-buffer release cycles
+in 1.83 seconds. Retained managed memory was 2,224,128 bytes and retained process
+working set was zero bytes in that isolated run; every cycle returned native
+document and input-buffer counts to zero. A subsequent complete-suite run
+reported 1,376,256 retained managed bytes and zero retained working-set bytes.
+
+Decision: retain compile-and-reload through Phase 3. The representative corpus
+is inside the initial latency and memory gates, batch point transfer removes the
+per-point interop path from the mutable compiler, and owned memory export removes
+temporary-file serialization from runtime preview. Incremental live mutation is
+therefore deferred to Phase 4 measurement rather than required by Phases 0-3.
+These are development gates, not cross-hardware release guarantees. Phase 4 may
+revise them using product target hardware and representative application data.
+No cache or incremental player-mutation design is justified solely by the
+four-point legacy sample.
