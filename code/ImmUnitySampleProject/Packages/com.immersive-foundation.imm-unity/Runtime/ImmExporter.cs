@@ -248,6 +248,31 @@ namespace ImmPlayer.Exporter
             return Native.ImmExporter_ExportToFile(Handle, filePath, opusBitrate, (int)audioType);
         }
 
+        public byte[] ExportToMemory(int opusBitrate = 96000, ExportAudioType audioType = ExportAudioType.Opus)
+        {
+            if (!IsValid)
+                return null;
+
+            IntPtr memoryHandle = Native.ImmExporter_ExportToMemory(Handle, opusBitrate, (int)audioType);
+            if (memoryHandle == IntPtr.Zero)
+                return null;
+            try
+            {
+                ulong size = Native.ImmExporter_GetMemorySize(memoryHandle);
+                IntPtr data = Native.ImmExporter_GetMemoryData(memoryHandle);
+                if (size > int.MaxValue || (size != 0 && data == IntPtr.Zero))
+                    return null;
+                byte[] result = new byte[(int)size];
+                if (result.Length != 0)
+                    Marshal.Copy(data, result, 0, result.Length);
+                return result;
+            }
+            finally
+            {
+                Native.ImmExporter_DestroyMemory(memoryHandle);
+            }
+        }
+
         public void Dispose()
         {
             if (Handle != IntPtr.Zero)
@@ -447,6 +472,39 @@ namespace ImmPlayer.Exporter
             return Native.ImmExporter_ElementSetPoint(_elementHandle, pointIndex, ref native);
         }
 
+        public bool SetPoints(System.Collections.Generic.IReadOnlyList<PaintPoint> points, uint startPointIndex = 0)
+        {
+            if (points == null)
+                return false;
+            PointNative[] native = new PointNative[points.Count];
+            for (int i = 0; i < points.Count; i++)
+                native[i] = ToNative(points[i]);
+            return Native.ImmExporter_ElementSetPoints(_elementHandle, startPointIndex, native, (uint)native.Length);
+        }
+
+        private static PointNative ToNative(PaintPoint point)
+        {
+            return new PointNative
+            {
+                Px = point.Position.x,
+                Py = point.Position.y,
+                Pz = point.Position.z,
+                Nx = point.Normal.x,
+                Ny = point.Normal.y,
+                Nz = point.Normal.z,
+                Dx = point.Direction.x,
+                Dy = point.Direction.y,
+                Dz = point.Direction.z,
+                R = point.Color.r,
+                G = point.Color.g,
+                B = point.Color.b,
+                A = point.Alpha,
+                Width = point.Width,
+                Length = point.Length,
+                Time = point.Time
+            };
+        }
+
         public void ComputeBounds()
         {
             Native.ImmExporter_ComputeElementBounds(_elementHandle);
@@ -521,6 +579,13 @@ namespace ImmPlayer.Exporter
         public static extern bool ImmExporter_ElementSetPoint(IntPtr elementHandle, uint pointIndex, ref PointNative point);
 
         [DllImport(DllName)]
+        public static extern bool ImmExporter_ElementSetPoints(
+            IntPtr elementHandle,
+            uint startPointIndex,
+            [In] PointNative[] points,
+            uint pointCount);
+
+        [DllImport(DllName)]
         public static extern void ImmExporter_ComputeElementBounds(IntPtr elementHandle);
 
         [DllImport(DllName)]
@@ -531,6 +596,18 @@ namespace ImmPlayer.Exporter
 
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern bool ImmExporter_ExportToFile(IntPtr sequenceHandle, string fileName, int opusBitrate, int audioType);
+
+        [DllImport(DllName)]
+        public static extern IntPtr ImmExporter_ExportToMemory(IntPtr sequenceHandle, int opusBitrate, int audioType);
+
+        [DllImport(DllName)]
+        public static extern IntPtr ImmExporter_GetMemoryData(IntPtr memoryHandle);
+
+        [DllImport(DllName)]
+        public static extern ulong ImmExporter_GetMemorySize(IntPtr memoryHandle);
+
+        [DllImport(DllName)]
+        public static extern void ImmExporter_DestroyMemory(IntPtr memoryHandle);
     }
 
     internal static class TransformUtils
