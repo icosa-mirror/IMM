@@ -98,7 +98,11 @@ namespace ImmExporter
 			fp->WriteUInt64(0x65636e6575716553); // "Sequence"
 			const uint64_t seqSizeOffset = iWriteForward64(fp);
 
-			iWriteString(fp, sq->GetInitialSpawnArea()->GetFullName());
+            const Layer* initialSpawnArea = sq->GetInitialSpawnArea();
+            if (initialSpawnArea == nullptr)
+                iWriteString(fp, "");
+            else
+                iWriteString(fp, initialSpawnArea->GetFullName());
 			iWriteVec3f(fp, sq->GetBackgroundColor());
 
 			Layer* root = sq->GetRoot();

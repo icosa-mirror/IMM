@@ -1446,6 +1446,8 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreatePa
         return nullptr;
 
     ImmExporter::Layer* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    if (parent == nullptr)
+        parent = seq->GetRoot();
     ImmExporter::Layer* layer = seq->CreateLayer(parent);
     if (layer == nullptr)
         return nullptr;
@@ -1497,6 +1499,8 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateGr
         return nullptr;
 
     ImmExporter::Layer* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    if (parent == nullptr)
+        parent = seq->GetRoot();
     ImmExporter::Layer* layer = seq->CreateLayer(parent);
     if (layer == nullptr)
         return nullptr;

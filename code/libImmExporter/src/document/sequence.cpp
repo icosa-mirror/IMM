@@ -19,6 +19,7 @@ bool Sequence::Init(const Type & type, uint8_t caps, const Requirements & reqs, 
 	mType = type;
 	mCaps = caps;
     mSpawnAreaNeedsUpdate = false;
+    mInitialSpawnArea = nullptr;
     mFrameRate = frameRate;
     mRequirements = reqs;
 
@@ -28,6 +29,10 @@ bool Sequence::Init(const Type & type, uint8_t caps, const Requirements & reqs, 
 	mRoot = this->CreateLayer(nullptr);
 	if (!mRoot)
 		return false;
+
+    const trans3d identity = trans3d::identity();
+    if (!mRoot->Init(Layer::Type::Group, L"Root", true, identity, identity, 1.0f, false, piTick(0), 0))
+        return false;
 
     return true;
 }
