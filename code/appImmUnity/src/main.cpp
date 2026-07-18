@@ -1707,7 +1707,7 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_ExportTo
         return nullptr;
 
     ImmExporterMemoryHandle* result = new ImmExporterMemoryHandle();
-    if (!ImmExporter::ExportToMemory(
+    if (!result->data.Init(1024, false) || !ImmExporter::ExportToMemory(
             &result->data,
             seq,
             opusBitrate,

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using NUnit.Framework;
@@ -62,7 +63,7 @@ namespace ImmPlayer.Tests
             {
                 long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
                 long drawing = Require(document.CreateDrawing(layer));
-                PaintPoint[] source = { Point(0f), Point(1f) };
+                PaintPoint[] source = { Point(0f), Point(1f), Point(2f) };
                 long stroke = Require(document.CreateStroke(drawing, BrushSectionType.Circle, VisibilityType.Always, source));
                 source[0].Position = Vector3.one * 99f;
 
@@ -71,10 +72,14 @@ namespace ImmPlayer.Tests
                 Assert.That(firstStroke.Id, Is.EqualTo(stroke));
                 Assert.That(firstStroke.Points[0].Position, Is.EqualTo(Vector3.zero));
 
-                Require(document.ReplaceStroke(stroke, BrushSectionType.Square, VisibilityType.FadePow2, new[] { Point(2f) }));
+                Require(document.ReplaceStroke(
+                    stroke,
+                    BrushSectionType.Square,
+                    VisibilityType.FadePow2,
+                    new[] { Point(2f), Point(3f), Point(4f) }));
                 ImmAuthoringSnapshot second = Require(document.CreateSnapshot());
-                Assert.That(firstStroke.Points.Count, Is.EqualTo(2));
-                Assert.That(second.Layers[0].Drawings[0].Strokes[0].Points.Count, Is.EqualTo(1));
+                Assert.That(firstStroke.Points.Count, Is.EqualTo(3));
+                Assert.That(second.Layers[0].Drawings[0].Strokes[0].Points.Count, Is.EqualTo(3));
             }
         }
 
@@ -85,7 +90,10 @@ namespace ImmPlayer.Tests
             {
                 List<ImmAuthoringChange> changes = new List<ImmAuthoringChange>();
                 document.Changed += changes.Add;
-                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                ImmAuthoringLayerProperties properties = ImmAuthoringLayerProperties.Default("Paint");
+                properties.IsTimeline = true;
+                properties.DurationTicks = ExportLayerTiming.FromFrames(1, 30).DurationTicks;
+                long layer = Require(document.CreatePaintLayer(0, properties));
 
                 Assert.That(changes, Has.Count.EqualTo(1));
                 Assert.That(changes[0].DocumentId, Is.EqualTo(document.DocumentId));
@@ -173,6 +181,53 @@ namespace ImmPlayer.Tests
             Assert.That(document.Revision, Is.EqualTo(1));
             Assert.That(Require(document.CreateSnapshot()).Layers, Has.Count.EqualTo(1));
         }
+
+        [Test]
+        public void CancelledExportReturnsStructuredResultWithoutNativeWork()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            using (CancellationTokenSource cancellation = new CancellationTokenSource())
+            {
+                cancellation.Cancel();
+                ImmAuthoringExportResult result = ImmAuthoringCompiler.ExportToMemory(
+                    document,
+                    cancellationToken: cancellation.Token);
+                Assert.That(result.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Cancelled));
+                Assert.That(result.Data, Is.Null);
+                Assert.That(result.SourceRevision, Is.EqualTo(document.Revision));
+            }
+        }
+
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+        [Test]
+        public void ValidSnapshotExportsDeterministicallyToOwnedMemory()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                long drawing = Require(document.CreateDrawing(layer));
+                Require(document.CreateStroke(
+                    drawing,
+                    BrushSectionType.Circle,
+                    VisibilityType.Always,
+                    new[]
+                    {
+                        Point(0f), Point(1f), Point(2f), Point(3f),
+                        Point(4f), Point(5f), Point(6f), Point(7f)
+                    }));
+                Require(document.AppendFrame(layer, drawing));
+
+                ImmAuthoringExportResult first = ImmAuthoringCompiler.ExportToMemory(document);
+                ImmAuthoringExportResult second = ImmAuthoringCompiler.ExportToMemory(document);
+                Assert.That(first.Succeeded, Is.True, first.Message);
+                Assert.That(second.Succeeded, Is.True, second.Message);
+                Assert.That(first.SourceRevision, Is.EqualTo(document.Revision));
+                Assert.That(first.BytesWritten, Is.GreaterThan(0));
+                Assert.That(second.Data, Is.EqualTo(first.Data));
+                Assert.That(first.Statistics.PointCount, Is.EqualTo(8));
+            }
+        }
+#endif
 
         private static ImmAuthoringDocument CreateDocument()
         {
