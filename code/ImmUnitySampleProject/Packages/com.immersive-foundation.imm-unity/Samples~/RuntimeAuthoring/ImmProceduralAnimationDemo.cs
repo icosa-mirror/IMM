@@ -314,7 +314,8 @@ namespace ImmPlayer.Samples
             for (int pointIndex = 0; pointIndex < points.Length; pointIndex++)
             {
                 float t = pointIndex / (points.Length - 1f);
-                float envelope = Mathf.Pow(Mathf.Sin(t * Mathf.PI), 0.65f);
+                float envelopeBase = Mathf.Max(0f, Mathf.Sin(t * Mathf.PI));
+                float envelope = Mathf.Pow(envelopeBase, 0.65f);
                 float angle = t * turns * Mathf.PI * 2f + animationPhase + strandPhase;
                 Vector3 position = new Vector3(
                     (t - 0.5f) * 2.4f,
