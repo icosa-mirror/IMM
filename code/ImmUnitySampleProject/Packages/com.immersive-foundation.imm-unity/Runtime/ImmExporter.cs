@@ -41,6 +41,30 @@ namespace ImmPlayer.Exporter
         public long MaxSoundChannels;
     }
 
+    public struct ExportLayerTiming
+    {
+        public const long TicksPerSecond = 12600;
+
+        public bool IsTimeline;
+        public long DurationTicks;
+        public uint MaxRepeatCount;
+
+        public static ExportLayerTiming FromFrames(long frameCount, uint frameRate, uint maxRepeatCount = 0)
+        {
+            if (frameCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(frameCount));
+            if (frameRate == 0 || TicksPerSecond % frameRate != 0)
+                throw new ArgumentOutOfRangeException(nameof(frameRate), $"Frame rate must be a positive divisor of {TicksPerSecond}.");
+
+            return new ExportLayerTiming
+            {
+                IsTimeline = true,
+                DurationTicks = checked(frameCount * (TicksPerSecond / frameRate)),
+                MaxRepeatCount = maxRepeatCount
+            };
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct TransformNative
     {
@@ -127,7 +151,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -143,9 +168,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -157,7 +182,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -173,9 +199,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -188,7 +214,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid || parent == null || !parent.IsValid)
                 return null;
@@ -204,9 +231,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -249,7 +276,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -265,9 +293,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -279,7 +307,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -295,9 +324,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -323,6 +352,11 @@ namespace ImmPlayer.Exporter
 
             uint drawingIndex = Native.ImmExporter_GetDrawingIndex(drawingHandle);
             return new ExportDrawing(drawingHandle, Handle, drawingIndex);
+        }
+
+        public void AddFrame(uint drawingIndex)
+        {
+            Native.ImmExporter_PaintAddFrame(Handle, drawingIndex);
         }
     }
 
