@@ -1,6 +1,8 @@
+using System;
 using System.Collections;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using UnityEngine;
@@ -15,7 +17,7 @@ namespace ImmPlayer.Samples
     [RequireComponent(typeof(ImmAuthoringPreviewCoordinator))]
     public sealed class ImmProceduralAnimationDemo : MonoBehaviour
     {
-        private const string LogPrefix = "[IMM_PHASE5_VISUAL_DEMO]";
+        private const string LogPrefix = "[IMM_PHASE6_VISUAL_DEMO]";
         private const int CameraId = 0;
 
         [Header("Run")]
@@ -25,6 +27,7 @@ namespace ImmPlayer.Samples
         [SerializeField, Min(1f)] private float loadTimeoutSeconds = 30f;
         [SerializeField] private bool roundTripThroughImporter = true;
         [SerializeField] private bool modifyAfterInitialPreview = true;
+        [SerializeField] private bool demonstrateProductionChecksOnStart = true;
         [SerializeField, Min(0.1f)] private float automaticModificationDelaySeconds = 1.5f;
 
         [Header("Animation")]
@@ -52,6 +55,10 @@ namespace ImmPlayer.Samples
         [SerializeField] private int importedLayerCount;
         [SerializeField] private int importedStrokeCount;
         [SerializeField] private int structuralDifferenceCount;
+        [SerializeField] private string capabilitySummary;
+        [SerializeField] private string operationProgressStage = "Idle";
+        [SerializeField, Range(0f, 1f)] private float operationProgress;
+        [SerializeField] private string productionSafetyStatus = "Not run";
 
         private ImmDocument _loadedDocument;
         private ImmAuthoringDocument _authoringDocument;
@@ -79,6 +86,10 @@ namespace ImmPlayer.Samples
         public string ImportLossiness => importLossiness;
         public bool ImportedSourceCanBeOverwritten => importedSourceCanBeOverwritten;
         public int StructuralDifferenceCount => structuralDifferenceCount;
+        public string CapabilitySummary => capabilitySummary;
+        public string OperationProgressStage => operationProgressStage;
+        public float OperationProgress => operationProgress;
+        public string ProductionSafetyStatus => productionSafetyStatus;
 
         private void Awake()
         {
@@ -89,6 +100,8 @@ namespace ImmPlayer.Samples
             _useScriptableRenderPipeline = GraphicsSettings.currentRenderPipeline != null;
             if (targetCamera == null)
                 targetCamera = Camera.main;
+            ImmAuthoringCapabilities capabilities = ImmAuthoringRuntime.Capabilities;
+            capabilitySummary = $"{capabilities.Platform} {capabilities.Architecture}: {capabilities.Features}";
         }
 
         private void OnEnable()
@@ -220,6 +233,37 @@ namespace ImmPlayer.Samples
             SetStatus("Runtime authoring document and native preview unloaded");
         }
 
+        [ContextMenu("Run Phase 6 Controlled Failure Checks")]
+        public void RunProductionSafetyChecks()
+        {
+            if (!Application.isPlaying || _authoringDocument == null)
+            {
+                productionSafetyStatus = "Generate the runtime document in Play mode first.";
+                return;
+            }
+
+            ImmAuthoringLimits tinyOutputLimit = new ImmAuthoringLimits(maxOutputBytes: 1);
+            ImmAuthoringExportResult limited = ImmAuthoringCompiler.ExportToMemory(
+                _authoringDocument,
+                new ImmAuthoringOperationOptions(limits: tinyOutputLimit));
+            using (CancellationTokenSource cancellation = new CancellationTokenSource())
+            {
+                cancellation.Cancel();
+                ImmAuthoringExportResult cancelled = ImmAuthoringCompiler.ExportToMemory(
+                    _authoringDocument,
+                    new ImmAuthoringOperationOptions(cancellation.Token));
+                ImmAuthoringImportResult corrupt = ImmAuthoringImporter.ImportFromMemory(
+                    new byte[] { 0x49, 0x4d, 0x4d, 0x00 });
+                bool passed = limited.ErrorCode == ImmAuthoringErrorCode.ResourceLimitExceeded &&
+                              cancelled.ErrorCode == ImmAuthoringErrorCode.Cancelled &&
+                              corrupt.ErrorCode == ImmAuthoringErrorCode.CorruptInput;
+                productionSafetyStatus = passed
+                    ? $"Controlled failures: limit={limited.ErrorCode}, cancellation={cancelled.ErrorCode}, malformed={corrupt.ErrorCode}"
+                    : $"Unexpected results: limit={limited.ErrorCode}, cancellation={cancelled.ErrorCode}, malformed={corrupt.ErrorCode}";
+            }
+            Debug.Log($"{LogPrefix} {productionSafetyStatus}");
+        }
+
         private void StartOperation(bool exportToFile, bool loadAfterBuild)
         {
             if (!Application.isPlaying)
@@ -288,6 +332,9 @@ namespace ImmPlayer.Samples
             }
             authoringRevision = document.Revision;
 
+            if (demonstrateProductionChecksOnStart)
+                RunProductionSafetyChecks();
+
             if (roundTripThroughImporter)
             {
                 SetStatus($"Exporting revision {document.Revision} to memory for supported IMM import...");
@@ -307,7 +354,10 @@ namespace ImmPlayer.Samples
                 SetStatus($"Exporting revision {_authoringDocument.Revision}...");
                 yield return null;
 
-                ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(_authoringDocument, generatedFilePath);
+                ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(
+                    _authoringDocument,
+                    generatedFilePath,
+                    CreateOperationOptions());
                 if (!export.Succeeded)
                 {
                     SetError($"Export failed: {export.ErrorCode}: {export.Message}");
@@ -587,11 +637,15 @@ namespace ImmPlayer.Samples
             if (!sourceSnapshotResult.Succeeded)
                 return sourceSnapshotResult.WithoutValue();
 
-            ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToMemory(_authoringDocument);
+            ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToMemory(
+                _authoringDocument,
+                CreateOperationOptions());
             if (!export.Succeeded)
                 return ImmAuthoringResult.Failure(export.ErrorCode, export.Message);
 
-            ImmAuthoringImportResult import = ImmAuthoringImporter.ImportFromMemory(export.Data);
+            ImmAuthoringImportResult import = ImmAuthoringImporter.ImportFromMemory(
+                export.Data,
+                CreateOperationOptions());
             if (!import.Succeeded)
                 return ImmAuthoringResult.Failure(import.ErrorCode, import.Message);
 
@@ -736,6 +790,17 @@ namespace ImmPlayer.Samples
             return Path.Combine(Application.persistentDataPath, Path.GetFileName(fileName));
         }
 
+        private ImmAuthoringOperationOptions CreateOperationOptions()
+        {
+            return new ImmAuthoringOperationOptions(progress: new DemoProgress(ReportProgress));
+        }
+
+        private void ReportProgress(ImmAuthoringProgress progress)
+        {
+            operationProgressStage = progress.Stage.ToString();
+            operationProgress = progress.Fraction;
+        }
+
         private void DisposeAuthoringDocument()
         {
             _authoringDocument?.Dispose();
@@ -759,6 +824,18 @@ namespace ImmPlayer.Samples
         {
             status = message;
             Debug.LogError($"{LogPrefix} {message}");
+        }
+
+        private sealed class DemoProgress : IProgress<ImmAuthoringProgress>
+        {
+            private readonly Action<ImmAuthoringProgress> _report;
+
+            internal DemoProgress(Action<ImmAuthoringProgress> report)
+            {
+                _report = report;
+            }
+
+            public void Report(ImmAuthoringProgress value) => _report(value);
         }
     }
 }

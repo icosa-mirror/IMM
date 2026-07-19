@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using ImmPlayer.Exporter;
 using UnityEngine;
 
@@ -89,38 +90,96 @@ namespace ImmPlayer.Authoring
 
         public static ImmAuthoringImportResult ImportFromFile(string filePath, string nativeLogPath = null)
         {
-            if (string.IsNullOrWhiteSpace(filePath))
-                return Failure(ImmAuthoringErrorCode.InvalidArgument, "File path cannot be empty.");
-            if (!File.Exists(filePath))
-                return Failure(ImmAuthoringErrorCode.NotFound, $"IMM file was not found: {filePath}");
+            return ImportFromFile(filePath, ImmAuthoringOperationOptions.Default, nativeLogPath);
+        }
 
-            using (StrokeReaderDocument source = new StrokeReaderDocument())
+        public static ImmAuthoringImportResult ImportFromFile(
+            string filePath,
+            ImmAuthoringOperationOptions options,
+            string nativeLogPath = null)
+        {
+            options = options ?? ImmAuthoringOperationOptions.Default;
+            try
             {
-                return source.Load(filePath, nativeLogPath)
-                    ? ImportLoadedDocument(source)
-                    : Failure(ImmAuthoringErrorCode.ValidationFailed, $"The IMM importer could not read '{filePath}'.");
+                if (string.IsNullOrWhiteSpace(filePath))
+                    return Failure(ImmAuthoringErrorCode.InvalidArgument, "File path cannot be empty.");
+                if (!File.Exists(filePath))
+                    return Failure(ImmAuthoringErrorCode.NotFound, $"IMM file was not found: {filePath}");
+                long inputBytes = new FileInfo(filePath).Length;
+                if (inputBytes > options.Limits.MaxInputBytes)
+                    return Failure(ImmAuthoringErrorCode.ResourceLimitExceeded, $"IMM input contains {inputBytes:N0} bytes; the configured limit is {options.Limits.MaxInputBytes:N0}.");
+                options.CancellationToken.ThrowIfCancellationRequested();
+                options.Report(ImmAuthoringProgressStage.ReadingInput, 0, inputBytes, "Reading IMM file.");
+                using (StrokeReaderDocument source = new StrokeReaderDocument())
+                {
+                    if (!source.Load(filePath, nativeLogPath))
+                        return Failure(ImmAuthoringErrorCode.CorruptInput, $"The IMM importer could not read '{filePath}'.");
+                    options.CancellationToken.ThrowIfCancellationRequested();
+                    options.Report(ImmAuthoringProgressStage.ReadingInput, inputBytes, inputBytes, "IMM file loaded.");
+                    return ImportLoadedDocument(source, options);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return Failure(ImmAuthoringErrorCode.Cancelled, "Import was cancelled.");
+            }
+            catch (Exception exception)
+            {
+                return Failure(ImmAuthoringErrorCode.CorruptInput, exception.Message);
             }
         }
 
         public static ImmAuthoringImportResult ImportFromMemory(byte[] immBytes, string nativeLogPath = null)
         {
-            if (immBytes == null || immBytes.Length == 0)
-                return Failure(ImmAuthoringErrorCode.InvalidArgument, "IMM data cannot be null or empty.");
+            return ImportFromMemory(immBytes, ImmAuthoringOperationOptions.Default, nativeLogPath);
+        }
 
-            using (StrokeReaderDocument source = new StrokeReaderDocument())
+        public static ImmAuthoringImportResult ImportFromMemory(
+            byte[] immBytes,
+            ImmAuthoringOperationOptions options,
+            string nativeLogPath = null)
+        {
+            options = options ?? ImmAuthoringOperationOptions.Default;
+            try
             {
-                return source.Load(immBytes, nativeLogPath)
-                    ? ImportLoadedDocument(source)
-                    : Failure(ImmAuthoringErrorCode.ValidationFailed, "The IMM importer could not read the memory buffer.");
+                if (immBytes == null || immBytes.Length == 0)
+                    return Failure(ImmAuthoringErrorCode.InvalidArgument, "IMM data cannot be null or empty.");
+                if (immBytes.LongLength > options.Limits.MaxInputBytes)
+                    return Failure(ImmAuthoringErrorCode.ResourceLimitExceeded, $"IMM input contains {immBytes.LongLength:N0} bytes; the configured limit is {options.Limits.MaxInputBytes:N0}.");
+                options.CancellationToken.ThrowIfCancellationRequested();
+                options.Report(ImmAuthoringProgressStage.ReadingInput, 0, immBytes.LongLength, "Reading IMM memory buffer.");
+                using (StrokeReaderDocument source = new StrokeReaderDocument())
+                {
+                    if (!source.Load(immBytes, nativeLogPath))
+                        return Failure(ImmAuthoringErrorCode.CorruptInput, "The IMM importer could not read the memory buffer.");
+                    options.CancellationToken.ThrowIfCancellationRequested();
+                    options.Report(ImmAuthoringProgressStage.ReadingInput, immBytes.LongLength, immBytes.LongLength, "IMM memory buffer loaded.");
+                    return ImportLoadedDocument(source, options);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return Failure(ImmAuthoringErrorCode.Cancelled, "Import was cancelled.");
+            }
+            catch (Exception exception)
+            {
+                return Failure(ImmAuthoringErrorCode.CorruptInput, exception.Message);
             }
         }
 
-        private static ImmAuthoringImportResult ImportLoadedDocument(StrokeReaderDocument source)
+        private static ImmAuthoringImportResult ImportLoadedDocument(
+            StrokeReaderDocument source,
+            ImmAuthoringOperationOptions options)
         {
             ImmAuthoringImportStatistics statistics = new ImmAuthoringImportStatistics
             {
                 SourceLayerCount = source.LayerCount
             };
+            if (source.LayerCount < 0)
+                return Failure(ImmAuthoringErrorCode.CorruptInput, "The source reported a negative layer count.", statistics);
+            if (source.LayerCount > options.Limits.MaxLayers)
+                return Failure(ImmAuthoringErrorCode.ResourceLimitExceeded, $"IMM input contains {source.LayerCount:N0} layers; the configured limit is {options.Limits.MaxLayers:N0}.", statistics);
+            options.Report(ImmAuthoringProgressStage.InspectingSource, 0, source.LayerCount, "Inspecting IMM layer metadata.");
             List<ImmAuthoringImportIssue> issues = new List<ImmAuthoringImportIssue>();
             if (!source.GetDocumentInfo(out StrokeDocumentInfo documentInfo))
                 return Failure(ImmAuthoringErrorCode.ValidationFailed, "The source document metadata could not be read.", statistics);
@@ -128,6 +187,7 @@ namespace ImmPlayer.Authoring
             SourceLayer[] sourceLayers = new SourceLayer[source.LayerCount];
             for (int layerIndex = 0; layerIndex < sourceLayers.Length; layerIndex++)
             {
+                options.CancellationToken.ThrowIfCancellationRequested();
                 if (!source.GetLayerInfo(layerIndex, out StrokeLayerInfo info) ||
                     !ImmStrokeReader.StrokeReader_GetLayerTransform(source.DocId, layerIndex, out StrokeLayerTransform local, out _))
                 {
@@ -137,6 +197,7 @@ namespace ImmPlayer.Authoring
                         statistics);
                 }
                 sourceLayers[layerIndex] = new SourceLayer(layerIndex, info, local);
+                options.Report(ImmAuthoringProgressStage.InspectingSource, layerIndex + 1, sourceLayers.Length, $"Inspected source layer {layerIndex + 1}.");
             }
 
             ExportSequenceType sequenceType = ConvertSequenceType(documentInfo.sequenceType, issues);
@@ -177,6 +238,7 @@ namespace ImmPlayer.Authoring
 
                     foreach (SourceLayer sourceLayer in sourceLayers)
                     {
+                        options.CancellationToken.ThrowIfCancellationRequested();
                         if (sourceLayer.Info.type != SourceGroupLayerType && sourceLayer.Info.type != SourcePaintLayerType)
                         {
                             issues.Add(new ImmAuthoringImportIssue(
@@ -201,6 +263,7 @@ namespace ImmPlayer.Authoring
                         long importedLayerId = addLayer.Value;
                         importedLayers[sourceLayer.Info.id] = importedLayerId;
                         statistics.ImportedLayerCount++;
+                        options.Report(ImmAuthoringProgressStage.ImportingGraph, statistics.ImportedLayerCount, sourceLayers.Length, $"Imported layer '{sourceLayer.Info.name}'.");
 
                         ImmAuthoringResult keys = ImportAnimationKeys(
                             source,
@@ -208,7 +271,8 @@ namespace ImmPlayer.Authoring
                             editable,
                             importedLayerId,
                             issues,
-                            statistics);
+                            statistics,
+                            options);
                         if (!keys.Succeeded)
                             return DisposeAndFail(document, keys.ErrorCode, keys.Message, statistics, transaction);
 
@@ -221,7 +285,8 @@ namespace ImmPlayer.Authoring
                                 importedLayerId,
                                 frameRate,
                                 issues,
-                                statistics);
+                                statistics,
+                                options);
                             if (!paint.Succeeded)
                                 return DisposeAndFail(document, paint.ErrorCode, paint.Message, statistics, transaction);
                         }
@@ -232,12 +297,25 @@ namespace ImmPlayer.Authoring
                         return DisposeAndFail(document, commit.ErrorCode, commit.Message, statistics);
                 }
 
+                ImmAuthoringResult<ImmAuthoringSnapshot> importedSnapshot = document.CreateSnapshot();
+                if (!importedSnapshot.Succeeded)
+                    return DisposeAndFail(document, importedSnapshot.ErrorCode, importedSnapshot.Message, statistics);
+                ImmAuthoringResult limitValidation = ImmAuthoringLimitValidator.Validate(importedSnapshot.Value, options.Limits);
+                if (!limitValidation.Succeeded)
+                    return DisposeAndFail(document, limitValidation.ErrorCode, limitValidation.Message, statistics);
+                options.Report(ImmAuthoringProgressStage.Completed, 1, 1, "Import completed.");
+
                 return new ImmAuthoringImportResult(
                     ImmAuthoringErrorCode.None,
                     string.Empty,
                     document,
                     issues.ToArray(),
                     statistics);
+            }
+            catch (OperationCanceledException)
+            {
+                document.Dispose();
+                return Failure(ImmAuthoringErrorCode.Cancelled, "Import was cancelled.", statistics);
             }
             catch (Exception exception)
             {
@@ -253,12 +331,18 @@ namespace ImmPlayer.Authoring
             long importedLayerId,
             uint documentFrameRate,
             List<ImmAuthoringImportIssue> issues,
-            ImmAuthoringImportStatistics statistics)
+            ImmAuthoringImportStatistics statistics,
+            ImmAuthoringOperationOptions options)
         {
             int drawingCount = source.GetDrawingCount(sourceLayer.Index);
+            if (drawingCount < 0)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.CorruptInput, "Source reported a negative drawing count.", importedLayerId);
+            if ((long)statistics.ImportedDrawingCount + drawingCount > options.Limits.MaxDrawings)
+                return ImmAuthoringLimitValidator.Exceeded("drawings", (long)statistics.ImportedDrawingCount + drawingCount, options.Limits.MaxDrawings, importedLayerId);
             long[] drawingIds = new long[drawingCount];
             for (int drawingIndex = 0; drawingIndex < drawingCount; drawingIndex++)
             {
+                options.CancellationToken.ThrowIfCancellationRequested();
                 ImmAuthoringResult<long> drawing = editable.CreateDrawing(importedLayerId);
                 if (!drawing.Succeeded)
                     return drawing.WithoutValue();
@@ -266,8 +350,13 @@ namespace ImmPlayer.Authoring
                 statistics.ImportedDrawingCount++;
 
                 int strokeCount = source.GetStrokeCount(sourceLayer.Index, drawingIndex);
+                if (strokeCount < 0)
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.CorruptInput, "Source reported a negative stroke count.", importedLayerId);
+                if ((long)statistics.ImportedStrokeCount + strokeCount > options.Limits.MaxStrokes)
+                    return ImmAuthoringLimitValidator.Exceeded("strokes", (long)statistics.ImportedStrokeCount + strokeCount, options.Limits.MaxStrokes, importedLayerId);
                 for (int strokeIndex = 0; strokeIndex < strokeCount; strokeIndex++)
                 {
+                    options.CancellationToken.ThrowIfCancellationRequested();
                     if (!source.GetStrokeInfo(sourceLayer.Index, drawingIndex, strokeIndex, out StrokeInfo strokeInfo))
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Source stroke metadata could not be read.", importedLayerId);
                     if (strokeInfo.brushType <= (int)BrushSectionType.Point ||
@@ -284,6 +373,10 @@ namespace ImmPlayer.Authoring
                     StrokePoint[] sourcePoints = source.GetStrokePoints(sourceLayer.Index, drawingIndex, strokeIndex);
                     if (sourcePoints == null || sourcePoints.Length < 2)
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Source stroke points could not be read.", importedLayerId);
+                    if (sourcePoints.Length > options.Limits.MaxPointsPerStroke)
+                        return ImmAuthoringLimitValidator.Exceeded("points per stroke", sourcePoints.Length, options.Limits.MaxPointsPerStroke, importedLayerId);
+                    if (statistics.ImportedPointCount + sourcePoints.LongLength > options.Limits.MaxTotalPoints)
+                        return ImmAuthoringLimitValidator.Exceeded("total points", statistics.ImportedPointCount + sourcePoints.LongLength, options.Limits.MaxTotalPoints, importedLayerId);
                     PaintPoint[] points = new PaintPoint[sourcePoints.Length];
                     bool invalidPosition = false;
                     PointAdjustment adjustedPointMetadata = PointAdjustment.None;
@@ -364,6 +457,10 @@ namespace ImmPlayer.Authoring
                     out int frameCount,
                     out int paintMaxRepeatCount))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Paint frame metadata could not be read.", importedLayerId);
+            if (frameCount < 0)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.CorruptInput, "Source reported a negative frame count.", importedLayerId);
+            if ((long)statistics.ImportedFrameCount + frameCount > options.Limits.MaxFrames)
+                return ImmAuthoringLimitValidator.Exceeded("frames", (long)statistics.ImportedFrameCount + frameCount, options.Limits.MaxFrames, importedLayerId);
             ImmAuthoringResult<ImmAuthoringSnapshot> currentSnapshot = editable.CreateSnapshot();
             if (!currentSnapshot.Succeeded || !currentSnapshot.Value.TryGetLayer(importedLayerId, out ImmAuthoringLayerSnapshot importedLayer))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Imported paint layer could not be queried.", importedLayerId);
@@ -387,6 +484,7 @@ namespace ImmPlayer.Authoring
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Paint frame mapping could not be read.", importedLayerId);
                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
                 {
+                    options.CancellationToken.ThrowIfCancellationRequested();
                     int drawingIndex = frameBuffer[frameIndex];
                     if (drawingIndex < 0 || drawingIndex >= drawingIds.Length)
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.DanglingReference, "A source frame refers to a missing drawing.", importedLayerId);
@@ -405,11 +503,15 @@ namespace ImmPlayer.Authoring
             ImmAuthoringDocument editable,
             long importedLayerId,
             List<ImmAuthoringImportIssue> issues,
-            ImmAuthoringImportStatistics statistics)
+            ImmAuthoringImportStatistics statistics,
+            ImmAuthoringOperationOptions options)
         {
+            options.CancellationToken.ThrowIfCancellationRequested();
             StrokeAnimationKey[] keys = source.GetLayerAnimationKeys(sourceLayer.Index);
             if (keys == null)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer animation keys could not be read.", importedLayerId);
+            if ((long)statistics.ImportedAnimationKeyCount + keys.LongLength > options.Limits.MaxAnimationKeys)
+                return ImmAuthoringLimitValidator.Exceeded("animation keys", statistics.ImportedAnimationKeyCount + keys.LongLength, options.Limits.MaxAnimationKeys, importedLayerId);
             int visibilityKeyCount = 0;
             foreach (StrokeAnimationKey candidate in keys)
             {
@@ -418,6 +520,7 @@ namespace ImmPlayer.Authoring
             }
             foreach (StrokeAnimationKey sourceKey in keys)
             {
+                options.CancellationToken.ThrowIfCancellationRequested();
                 if (visibilityKeyCount == 1 &&
                     sourceKey.property == (int)ImmAuthoringAnimationProperty.Visibility &&
                     sourceKey.timeTicks == 0 &&

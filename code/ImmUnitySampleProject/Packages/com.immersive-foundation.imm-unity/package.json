@@ -2,7 +2,7 @@
   "name": "com.immersive-foundation.imm-unity",
   "version": "0.1.0",
   "displayName": "IMM Unity",
-  "description": "IMM Unity player runtime and samples.",
+  "description": "IMM playback and runtime paint-animation authoring engine for Unity.",
   "unity": "2021.3",
   "dependencies": {
     "com.immersive-foundation.imm-stroke-reader": "0.1.0"

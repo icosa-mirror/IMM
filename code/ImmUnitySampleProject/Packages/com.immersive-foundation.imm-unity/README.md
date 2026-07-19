@@ -2,6 +2,12 @@
 
 Local UPM package for the IMM Unity runtime, editor tools, and samples.
 
+The production authoring surface is currently available on Windows x64. Query
+`ImmAuthoringRuntime.Capabilities` at runtime instead of inferring support from
+the presence of a playback plugin. Detailed ownership, threading, limits,
+progress, cancellation, and recovery behavior is documented in
+`Documentation~/runtime-authoring.md`.
+
 The authoring graph uses stable document-local IDs for layers, drawings, frame
 mappings, strokes, and animation keys. Frame IDs remain stable when their list
 positions or referenced drawings change.
@@ -72,7 +78,30 @@ time are derived by the format rather than stored verbatim.
 The Runtime Authoring sample demonstrates memory export, lossless import,
 structural verification, stable-ID mutation of imported strokes, a frame
 mapping, and an animation key, and native preview replacement without writing
-an IMM file.
+an IMM file. It also exposes capability results and operation progress, and runs
+controlled resource-limit, cancellation, and malformed-input checks without
+disturbing the installed preview.
+
+## Production operation controls
+
+Compiler and importer overloads accept `ImmAuthoringOperationOptions`:
+
+```csharp
+ImmAuthoringOperationOptions options = new ImmAuthoringOperationOptions(
+    cancellationToken,
+    progress,
+    ImmAuthoringLimits.Default);
+
+ImmAuthoringExportResult export =
+    ImmAuthoringCompiler.ExportToMemory(document, options);
+```
+
+Progress is reported across validation, graph compilation/import, and
+serialization. Cancellation returns `ImmAuthoringErrorCode.Cancelled` without a
+partial public document or memory buffer. Configured safety envelopes return
+`ResourceLimitExceeded`; unreadable IMM input returns `CorruptInput`. File
+export uses a same-directory temporary file so a cancelled or failed operation
+does not replace an existing destination.
 
 ## Runtime navigation APIs
 

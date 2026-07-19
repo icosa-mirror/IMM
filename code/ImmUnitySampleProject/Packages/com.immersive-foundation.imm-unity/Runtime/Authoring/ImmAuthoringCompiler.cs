@@ -64,11 +64,28 @@ namespace ImmPlayer.Authoring
             ExportAudioType audioType = ExportAudioType.Opus,
             CancellationToken cancellationToken = default)
         {
+            return ExportToMemory(
+                document,
+                new ImmAuthoringOperationOptions(cancellationToken),
+                opusBitrate,
+                audioType);
+        }
+
+        public static ImmAuthoringExportResult ExportToMemory(
+            ImmAuthoringDocument document,
+            ImmAuthoringOperationOptions options,
+            int opusBitrate = 96000,
+            ExportAudioType audioType = ExportAudioType.Opus)
+        {
             if (document == null)
                 return Failure(ImmAuthoringErrorCode.InvalidArgument, "Document cannot be null.", 0, 0);
+            options = options ?? ImmAuthoringOperationOptions.Default;
+            options.Report(ImmAuthoringProgressStage.Validating, 0, 1, "Capturing immutable document snapshot.");
+            if (options.CancellationToken.IsCancellationRequested)
+                return Failure(ImmAuthoringErrorCode.Cancelled, "Export was cancelled.", document.DocumentId, document.Revision);
             ImmAuthoringResult<ImmAuthoringSnapshot> snapshot = document.CreateSnapshot();
             return snapshot.Succeeded
-                ? ExportToMemory(snapshot.Value, opusBitrate, audioType, cancellationToken)
+                ? ExportToMemory(snapshot.Value, options, opusBitrate, audioType)
                 : Failure(snapshot.ErrorCode, snapshot.Message, snapshot.ObjectId, document.Revision);
         }
 
@@ -78,17 +95,33 @@ namespace ImmPlayer.Authoring
             ExportAudioType audioType = ExportAudioType.Opus,
             CancellationToken cancellationToken = default)
         {
+            return ExportToMemory(
+                snapshot,
+                new ImmAuthoringOperationOptions(cancellationToken),
+                opusBitrate,
+                audioType);
+        }
+
+        public static ImmAuthoringExportResult ExportToMemory(
+            ImmAuthoringSnapshot snapshot,
+            ImmAuthoringOperationOptions options,
+            int opusBitrate = 96000,
+            ExportAudioType audioType = ExportAudioType.Opus)
+        {
             Stopwatch total = Stopwatch.StartNew();
             ImmAuthoringExportStatistics statistics = new ImmAuthoringExportStatistics();
+            options = options ?? ImmAuthoringOperationOptions.Default;
             try
             {
-                ImmAuthoringExportResult preflight = Preflight(snapshot, opusBitrate, audioType, statistics);
+                options.Report(ImmAuthoringProgressStage.Validating, 0, 1, "Validating content and resource limits.");
+                ImmAuthoringExportResult preflight = Preflight(snapshot, opusBitrate, audioType, statistics, options.Limits);
                 if (preflight != null)
                     return preflight;
-                cancellationToken.ThrowIfCancellationRequested();
+                options.CancellationToken.ThrowIfCancellationRequested();
+                options.Report(ImmAuthoringProgressStage.Validating, 1, 1, "Document is valid.");
 
                 Stopwatch graph = Stopwatch.StartNew();
-                ImmAuthoringResult<ExportSequence> compiled = Compile(snapshot, statistics, cancellationToken);
+                ImmAuthoringResult<ExportSequence> compiled = Compile(snapshot, statistics, options);
                 graph.Stop();
                 statistics.GraphCompilationTime = graph.Elapsed;
                 if (!compiled.Succeeded)
@@ -96,25 +129,39 @@ namespace ImmPlayer.Authoring
 
                 using (ExportSequence sequence = compiled.Value)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    options.CancellationToken.ThrowIfCancellationRequested();
+                    options.Report(ImmAuthoringProgressStage.Serializing, 0, 1, "Serializing IMM to owned memory.");
                     Stopwatch serialization = Stopwatch.StartNew();
                     byte[] data = sequence.ExportToMemory(opusBitrate, audioType);
                     serialization.Stop();
                     statistics.SerializationTime = serialization.Elapsed;
-                    total.Stop();
-                    statistics.TotalTime = total.Elapsed;
-                    return data == null
-                        ? Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native memory export failed.", 0, snapshot.Revision, statistics)
-                        : new ImmAuthoringExportResult(
-                            ImmAuthoringErrorCode.None,
-                            string.Empty,
+                    options.CancellationToken.ThrowIfCancellationRequested();
+                    if (data == null)
+                        return Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native memory export failed.", 0, snapshot.Revision, statistics, total);
+                    if (data.LongLength > options.Limits.MaxOutputBytes)
+                    {
+                        return Failure(
+                            ImmAuthoringErrorCode.ResourceLimitExceeded,
+                            $"Serialized IMM contains {data.LongLength:N0} bytes; the configured output limit is {options.Limits.MaxOutputBytes:N0}.",
                             0,
                             snapshot.Revision,
-                            data,
-                            null,
-                            data.LongLength,
-                            Array.Empty<string>(),
-                            statistics);
+                            statistics,
+                            total);
+                    }
+                    total.Stop();
+                    statistics.TotalTime = total.Elapsed;
+                    options.Report(ImmAuthoringProgressStage.Serializing, 1, 1, "Serialization completed.");
+                    options.Report(ImmAuthoringProgressStage.Completed, 1, 1, "Export completed.");
+                    return new ImmAuthoringExportResult(
+                        ImmAuthoringErrorCode.None,
+                        string.Empty,
+                        0,
+                        snapshot.Revision,
+                        data,
+                        null,
+                        data.LongLength,
+                        Array.Empty<string>(),
+                        statistics);
                 }
             }
             catch (OperationCanceledException)
@@ -134,11 +181,26 @@ namespace ImmPlayer.Authoring
             ExportAudioType audioType = ExportAudioType.Opus,
             CancellationToken cancellationToken = default)
         {
+            return ExportToFile(
+                document,
+                filePath,
+                new ImmAuthoringOperationOptions(cancellationToken),
+                opusBitrate,
+                audioType);
+        }
+
+        public static ImmAuthoringExportResult ExportToFile(
+            ImmAuthoringDocument document,
+            string filePath,
+            ImmAuthoringOperationOptions options,
+            int opusBitrate = 96000,
+            ExportAudioType audioType = ExportAudioType.Opus)
+        {
             if (document == null)
                 return Failure(ImmAuthoringErrorCode.InvalidArgument, "Document cannot be null.", 0, 0);
             ImmAuthoringResult<ImmAuthoringSnapshot> snapshot = document.CreateSnapshot();
             return snapshot.Succeeded
-                ? ExportToFile(snapshot.Value, filePath, opusBitrate, audioType, cancellationToken)
+                ? ExportToFile(snapshot.Value, filePath, options, opusBitrate, audioType)
                 : Failure(snapshot.ErrorCode, snapshot.Message, snapshot.ObjectId, document.Revision);
         }
 
@@ -149,47 +211,60 @@ namespace ImmPlayer.Authoring
             ExportAudioType audioType = ExportAudioType.Opus,
             CancellationToken cancellationToken = default)
         {
+            return ExportToFile(
+                snapshot,
+                filePath,
+                new ImmAuthoringOperationOptions(cancellationToken),
+                opusBitrate,
+                audioType);
+        }
+
+        public static ImmAuthoringExportResult ExportToFile(
+            ImmAuthoringSnapshot snapshot,
+            string filePath,
+            ImmAuthoringOperationOptions options,
+            int opusBitrate = 96000,
+            ExportAudioType audioType = ExportAudioType.Opus)
+        {
             Stopwatch total = Stopwatch.StartNew();
             ImmAuthoringExportStatistics statistics = new ImmAuthoringExportStatistics();
+            string temporaryPath = null;
             try
             {
                 if (string.IsNullOrWhiteSpace(filePath))
                     return Failure(ImmAuthoringErrorCode.InvalidArgument, "File path cannot be empty.", 0, snapshot?.Revision ?? 0);
-                ImmAuthoringExportResult preflight = Preflight(snapshot, opusBitrate, audioType, statistics);
-                if (preflight != null)
-                    return preflight;
-                cancellationToken.ThrowIfCancellationRequested();
+                options = options ?? ImmAuthoringOperationOptions.Default;
+                string fullPath = Path.GetFullPath(filePath);
+                string directory = Path.GetDirectoryName(fullPath);
+                if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+                    return Failure(ImmAuthoringErrorCode.InvalidArgument, $"Export directory does not exist: {directory}", 0, snapshot?.Revision ?? 0);
 
-                Stopwatch graph = Stopwatch.StartNew();
-                ImmAuthoringResult<ExportSequence> compiled = Compile(snapshot, statistics, cancellationToken);
-                graph.Stop();
-                statistics.GraphCompilationTime = graph.Elapsed;
-                if (!compiled.Succeeded)
-                    return Failure(compiled.ErrorCode, compiled.Message, compiled.ObjectId, snapshot.Revision, statistics, total);
+                ImmAuthoringExportResult memory = ExportToMemory(snapshot, options, opusBitrate, audioType);
+                statistics = memory.Statistics;
+                if (!memory.Succeeded)
+                    return new ImmAuthoringExportResult(memory.ErrorCode, memory.Message, memory.ObjectId, memory.SourceRevision, null, null, 0, Array.Empty<string>(), statistics);
 
-                using (ExportSequence sequence = compiled.Value)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    Stopwatch serialization = Stopwatch.StartNew();
-                    bool succeeded = sequence.ExportToFile(filePath, opusBitrate, audioType);
-                    serialization.Stop();
-                    statistics.SerializationTime = serialization.Elapsed;
-                    total.Stop();
-                    statistics.TotalTime = total.Elapsed;
-                    if (!succeeded)
-                        return Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native file export failed.", 0, snapshot.Revision, statistics);
-                    long bytes = new FileInfo(filePath).Length;
-                    return new ImmAuthoringExportResult(
-                        ImmAuthoringErrorCode.None,
-                        string.Empty,
-                        0,
-                        snapshot.Revision,
-                        null,
-                        filePath,
-                        bytes,
-                        Array.Empty<string>(),
-                        statistics);
-                }
+                options.CancellationToken.ThrowIfCancellationRequested();
+                temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+                File.WriteAllBytes(temporaryPath, memory.Data);
+                options.CancellationToken.ThrowIfCancellationRequested();
+                if (File.Exists(fullPath))
+                    File.Replace(temporaryPath, fullPath, null);
+                else
+                    File.Move(temporaryPath, fullPath);
+                temporaryPath = null;
+                total.Stop();
+                statistics.TotalTime = total.Elapsed;
+                return new ImmAuthoringExportResult(
+                    ImmAuthoringErrorCode.None,
+                    string.Empty,
+                    0,
+                    snapshot.Revision,
+                    null,
+                    fullPath,
+                    memory.BytesWritten,
+                    Array.Empty<string>(),
+                    statistics);
             }
             catch (OperationCanceledException)
             {
@@ -199,13 +274,27 @@ namespace ImmPlayer.Authoring
             {
                 return Failure(ImmAuthoringErrorCode.NativeExportFailed, exception.Message, 0, snapshot?.Revision ?? 0, statistics, total);
             }
+            finally
+            {
+                if (!string.IsNullOrEmpty(temporaryPath) && File.Exists(temporaryPath))
+                {
+                    try { File.Delete(temporaryPath); }
+                    catch { }
+                }
+            }
         }
 
         private static ImmAuthoringResult<ExportSequence> Compile(
             ImmAuthoringSnapshot snapshot,
             ImmAuthoringExportStatistics statistics,
-            CancellationToken cancellationToken)
+            ImmAuthoringOperationOptions options)
         {
+            long totalUnits = snapshot.Layers.Count;
+            foreach (ImmAuthoringLayerSnapshot item in snapshot.Layers)
+                foreach (ImmAuthoringDrawingSnapshot drawing in item.Drawings)
+                    totalUnits += drawing.Strokes.Count;
+            long completedUnits = 0;
+            options.Report(ImmAuthoringProgressStage.CompilingGraph, 0, totalUnits, "Creating native authoring graph.");
             ExportSequence sequence = ExportSequence.Create(
                 snapshot.SequenceType,
                 snapshot.FrameRate,
@@ -219,7 +308,7 @@ namespace ImmPlayer.Authoring
             {
                 foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    options.CancellationToken.ThrowIfCancellationRequested();
                     IntPtr parent = layer.ParentId == 0 ? IntPtr.Zero : layerHandles[layer.ParentId];
                     TransformNative transform = ToNative(layer.Properties.Transform);
                     TransformNative pivot = ToNative(layer.Properties.Pivot);
@@ -236,6 +325,7 @@ namespace ImmPlayer.Authoring
                         return CompileFailure(sequence, "Native layer creation failed.", layer.Id);
                     layerHandles.Add(layer.Id, handle);
                     statistics.LayerCount++;
+                    options.Report(ImmAuthoringProgressStage.CompilingGraph, ++completedUnits, totalUnits, $"Compiled layer '{layer.Properties.Name}'.");
 
                     foreach (ImmAuthoringAnimationKeySnapshot key in layer.AnimationKeys)
                     {
@@ -257,7 +347,7 @@ namespace ImmPlayer.Authoring
 
                     if (layer.Type == ImmAuthoringLayerType.Paint)
                     {
-                        ImmAuthoringResult paintResult = CompilePaintLayer(layer, handle, statistics, cancellationToken);
+                        ImmAuthoringResult paintResult = CompilePaintLayer(layer, handle, statistics, options, ref completedUnits, totalUnits);
                         if (!paintResult.Succeeded)
                             return CompileFailure(sequence, paintResult.Message, paintResult.ObjectId);
                     }
@@ -275,14 +365,16 @@ namespace ImmPlayer.Authoring
             ImmAuthoringLayerSnapshot layer,
             IntPtr layerHandle,
             ImmAuthoringExportStatistics statistics,
-            CancellationToken cancellationToken)
+            ImmAuthoringOperationOptions options,
+            ref long completedUnits,
+            long totalUnits)
         {
             Dictionary<long, uint> drawingIndices = new Dictionary<long, uint>();
             if (!Native.ImmExporter_PaintSetMaxRepeatCount(layerHandle, layer.Properties.PaintMaxRepeatCount))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native paint repeat-count setup failed.", layer.Id);
             foreach (ImmAuthoringDrawingSnapshot drawing in layer.Drawings)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                options.CancellationToken.ThrowIfCancellationRequested();
                 IntPtr drawingHandle = Native.ImmExporter_CreateDrawing(layerHandle);
                 if (drawingHandle == IntPtr.Zero)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native drawing creation failed.", drawing.Id);
@@ -295,7 +387,7 @@ namespace ImmPlayer.Authoring
 
                     for (int strokeIndex = 0; strokeIndex < drawing.Strokes.Count; strokeIndex++)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        options.CancellationToken.ThrowIfCancellationRequested();
                         ImmAuthoringStrokeSnapshot stroke = drawing.Strokes[strokeIndex];
                         IntPtr elementHandle = Native.ImmExporter_DrawingGetElement(drawingHandle, (uint)strokeIndex);
                         if (elementHandle == IntPtr.Zero ||
@@ -313,6 +405,7 @@ namespace ImmPlayer.Authoring
                         Native.ImmExporter_ComputeElementBounds(elementHandle);
                         statistics.StrokeCount++;
                         statistics.PointCount += points.LongLength;
+                        options.Report(ImmAuthoringProgressStage.CompilingGraph, ++completedUnits, totalUnits, $"Compiled stroke {stroke.Id}.");
                     }
                     Native.ImmExporter_ComputeDrawingBounds(drawingHandle);
                 }
@@ -331,7 +424,8 @@ namespace ImmPlayer.Authoring
             ImmAuthoringSnapshot snapshot,
             int opusBitrate,
             ExportAudioType audioType,
-            ImmAuthoringExportStatistics statistics)
+            ImmAuthoringExportStatistics statistics,
+            ImmAuthoringLimits limits = null)
         {
             if (snapshot == null)
                 return Failure(ImmAuthoringErrorCode.InvalidArgument, "Snapshot cannot be null.", 0, 0, statistics);
@@ -339,6 +433,9 @@ namespace ImmPlayer.Authoring
                 return Failure(ImmAuthoringErrorCode.Unsupported, "Comic authoring is not supported by the phase 3 compiler.", 0, snapshot.Revision, statistics);
             if (opusBitrate <= 0 || !Enum.IsDefined(typeof(ExportAudioType), audioType))
                 return Failure(ImmAuthoringErrorCode.InvalidArgument, "Audio export settings are invalid.", 0, snapshot.Revision, statistics);
+            ImmAuthoringResult limitsResult = ImmAuthoringLimitValidator.Validate(snapshot, limits);
+            if (!limitsResult.Succeeded)
+                return Failure(limitsResult.ErrorCode, limitsResult.Message, limitsResult.ObjectId, snapshot.Revision, statistics);
             return null;
         }
 

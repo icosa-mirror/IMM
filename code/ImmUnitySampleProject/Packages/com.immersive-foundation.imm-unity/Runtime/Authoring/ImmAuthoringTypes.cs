@@ -18,7 +18,9 @@ namespace ImmPlayer.Authoring
         Unsupported,
         ValidationFailed,
         NativeExportFailed,
-        Cancelled
+        Cancelled,
+        ResourceLimitExceeded,
+        CorruptInput
     }
 
     public readonly struct ImmAuthoringResult
