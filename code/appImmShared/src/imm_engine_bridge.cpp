@@ -524,7 +524,7 @@ namespace ImmShared
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
         const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal);
-        conf.depthBuffer = DepthBuffer::Linear01;
+        conf.depthBuffer = usesZeroToOneDepth ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;

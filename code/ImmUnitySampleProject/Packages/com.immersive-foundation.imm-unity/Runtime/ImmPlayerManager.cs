@@ -495,6 +495,13 @@ namespace ImmPlayer
                 return false;
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
+
+            // Unity's DX11 command-buffer plugin event renders into the camera target as
+            // a texture-style render target, even for Game cameras. Passing false here
+            // produces an invalid projection for the native renderer.
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
+                return true;
+
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
