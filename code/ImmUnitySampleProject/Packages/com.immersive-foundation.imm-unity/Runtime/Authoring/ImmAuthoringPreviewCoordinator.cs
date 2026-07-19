@@ -371,8 +371,7 @@ namespace ImmPlayer.Authoring
         {
             ImmAuthoringPreviewRequest request = _activeRequest;
             ImmDocument.DocumentStateInfo state = _candidateDocument.GetStateInfo();
-            if (state.Loading == ImmDocument.LoadingState.Failed ||
-                state.Loading == ImmDocument.LoadingState.Unloaded)
+            if (state.Loading == ImmDocument.LoadingState.Failed)
             {
                 ReleaseCandidate();
                 Complete(
