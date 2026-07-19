@@ -1,8 +1,8 @@
 # IMM runtime authoring engine contract
 
-This contract fixes the Phase 0 boundary for the first Windows paint-animation
-authoring release. It describes engine behavior; application UI and input policy
-are intentionally absent.
+This contract records the implemented Phase 0-5 boundary for the first Windows
+paint-animation authoring release. It describes engine behavior; application UI
+and input policy are intentionally absent.
 
 ## Supported content
 
@@ -12,19 +12,30 @@ are intentionally absent.
 - Layer name, local transform, pivot, visibility, opacity, timeline duration,
   and repeat count.
 - Paint drawings, ordered stroke elements, and frame-to-drawing mappings.
-- Point, segment, circle, ellipse, and square brush sections.
+- Segment, circle, ellipse, and square brush sections. The native IMM v2
+  exporter rejects point brush sections, so the managed model rejects them
+  before native work begins.
 - Always-visible and quadratic-fade stroke visibility.
-- Position, normal, direction, RGB, alpha, width, length, and time per point.
+- Position, normal, RGB, alpha, and width per point. View direction is preserved
+  for quadratic-fade strokes; the IMM binary codec omits it for always-visible
+  strokes. Point length and time are derived by the codec and are not claimed as
+  arbitrary lossless stored attributes.
+- Visibility, opacity, transform, draw-in-time, action, loop, and offset layer
+  animation keys. Legacy position, rotation, and scale keys are rejected in
+  favour of the IMM v2 transform key.
 
 Pictures, sound, models, effects, references, instances, spawn areas, comic
-chapters, and cross-platform authoring are outside the Phase 0-3 contract.
+chapters, root/comic animation, and cross-platform authoring are outside the
+Phase 0-5 contract.
 
 ## Identity and ownership
 
 - Every authoring document has a stable 64-bit ID and monotonically increasing
   64-bit revision.
-- Layers, drawings, and strokes have stable positive 64-bit IDs unique within
-  their document. IDs are never reused during a document's lifetime.
+- Layers, drawings, frame mappings, strokes, and animation keys have stable
+  positive 64-bit IDs unique within their document. IDs are never reused during
+  a document's lifetime. A frame's list index may change while its ID remains
+  stable.
 - A document owns its complete hierarchy. A layer owns its child order. A paint
   layer owns its drawings and frame mappings. A drawing owns its strokes. A
   stroke owns its point buffer.
@@ -32,6 +43,27 @@ chapters, and cross-platform authoring are outside the Phase 0-3 contract.
   structured `NotFound` result and never address a replacement object.
 - Public managed objects do not expose native pointers. Exporter handles are
   compilation details with deterministic lifetime.
+
+## Supported import and round trip
+
+- `ImmAuthoringImporter.ImportFromFile` and `ImportFromMemory` load supported
+  sequence metadata, nested group/paint hierarchy, local transforms, pivots,
+  layer properties, drawings, ordered strokes, frame mappings, and supported
+  animation keys into `ImmAuthoringDocument`.
+- Imported content uses the same query, mutation, transaction, snapshot,
+  compilation, and preview APIs as newly created content.
+- A successful caller owns the returned document and must dispose it.
+- Every import reports `Lossiness`, structured `Issues`, statistics, and
+  `CanOverwriteSource`. Safe overwrite is true only for a successful import
+  with no issue that omitted, repaired, reparented, or reinterpreted content.
+- Unsupported sequence/layer/brush/property data, root animation, capability
+  bits, transform flip, invalid values, reparenting, and frame-rate changes are
+  reported explicitly. Unsupported content is not silently treated as a
+  lossless round trip.
+- `ImmAuthoringStructuralComparer` compares the represented hierarchy,
+  ordering, layer properties, animation keys, frame mappings, strokes, and
+  points with an explicit floating-point tolerance and the binary-codec
+  exceptions listed above.
 
 ## Mutation and revisions
 
@@ -172,3 +204,36 @@ The native Windows plugin was rebuilt from the same source and the exporter C
 ABI smoke test exported and validated its fixture. Runtime preview replacement
 therefore remains on the measured memory compile-and-reload path; incremental
 mutation of an already loaded player document remains deferred.
+
+## Recorded Phase 5 verification
+
+Phase 5 maps the stroke-reader's supported paint data into the mutable managed
+graph. File and owned-memory import return a document, lossiness decision,
+structured issues, safe-overwrite decision, and import statistics. The returned
+document can be queried and edited by stable ID, compiled, re-imported,
+structurally compared, and installed through the Phase 4 preview coordinator.
+
+The Windows native plugins were rebuilt from the same source on 2026-07-19. A
+regression fixture mixes always-visible and quadratic-fade strokes inside each
+drawing; this covers the binary direction channel, which stores values only for
+directional strokes. The fixture also covers all four supported brush sections,
+both supported stroke visibility modes, repeated frame-to-drawing mappings,
+nested group/paint layers, layer and pivot transforms, and these animation-key
+properties: visibility, opacity, transform, draw-in-time, action, loop, and
+offset. The explicitly exercised interpolation set is none, linear, smoothstep,
+and ease-in.
+
+The focused import/mutate/re-export/re-import/playback test passed, followed by
+two final complete Windows Unity PlayMode runs: 29 of 29 tests passed in 2.082
+seconds and 29 of 29 tests passed in 1.905 seconds. Unsupported content is separately
+verified to make the import lossy and `CanOverwriteSource` false. Point brushes
+and obsolete component transform keys are rejected before native export.
+
+The runtime sample then generated 164,811 IMM bytes in memory, imported them as
+a lossless mutable revision with 450 strokes and zero structural differences,
+installed that graph, changed all 450 strokes plus one frame mapping and an
+opacity animation key by stable ID, and installed revision 2 from memory without
+writing a file. The final live state reported authoring revision 2, installed
+revision 2, one committed modification, lossless import, safe overwrite, and
+zero structural differences. The Game view rendered the resulting multicolour
+deformed ribbon, and the Unity console contained no errors.

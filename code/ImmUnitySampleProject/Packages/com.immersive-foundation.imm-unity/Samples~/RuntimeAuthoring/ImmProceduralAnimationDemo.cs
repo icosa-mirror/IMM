@@ -1,5 +1,6 @@
 using System.Collections;
 using System.IO;
+using System.Linq;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using UnityEngine;
@@ -14,7 +15,7 @@ namespace ImmPlayer.Samples
     [RequireComponent(typeof(ImmAuthoringPreviewCoordinator))]
     public sealed class ImmProceduralAnimationDemo : MonoBehaviour
     {
-        private const string LogPrefix = "[IMM_AUTHOR_VISUAL_DEMO]";
+        private const string LogPrefix = "[IMM_PHASE5_VISUAL_DEMO]";
         private const int CameraId = 0;
 
         [Header("Run")]
@@ -22,6 +23,7 @@ namespace ImmPlayer.Samples
         [SerializeField] private Camera targetCamera;
         [SerializeField] private string outputFileName = "procedural-ribbon.imm";
         [SerializeField, Min(1f)] private float loadTimeoutSeconds = 30f;
+        [SerializeField] private bool roundTripThroughImporter = true;
         [SerializeField] private bool modifyAfterInitialPreview = true;
         [SerializeField, Min(0.1f)] private float automaticModificationDelaySeconds = 1.5f;
 
@@ -42,7 +44,14 @@ namespace ImmPlayer.Samples
         [SerializeField] private long authoringRevision;
         [SerializeField] private long installedRevision;
         [SerializeField] private long stableStrokeId;
+        [SerializeField] private long stableFrameId;
+        [SerializeField] private long stableAnimationKeyId;
         [SerializeField] private int modificationCount;
+        [SerializeField] private string importLossiness = "Not imported";
+        [SerializeField] private bool importedSourceCanBeOverwritten;
+        [SerializeField] private int importedLayerCount;
+        [SerializeField] private int importedStrokeCount;
+        [SerializeField] private int structuralDifferenceCount;
 
         private ImmDocument _loadedDocument;
         private ImmAuthoringDocument _authoringDocument;
@@ -52,6 +61,10 @@ namespace ImmPlayer.Samples
         private long[] _strokeIds;
         private int _builtFrameCount;
         private int _builtStrandCount;
+        private long _frameId;
+        private long _firstFrameDrawingId;
+        private long _alternateFrameDrawingId;
+        private long _opacityKeyId;
 
         public string Status => status;
         public string GeneratedFilePath => generatedFilePath;
@@ -60,7 +73,12 @@ namespace ImmPlayer.Samples
         public long AuthoringRevision => authoringRevision;
         public long InstalledRevision => installedRevision;
         public long StableStrokeId => stableStrokeId;
+        public long StableFrameId => stableFrameId;
+        public long StableAnimationKeyId => stableAnimationKeyId;
         public int ModificationCount => modificationCount;
+        public string ImportLossiness => importLossiness;
+        public bool ImportedSourceCanBeOverwritten => importedSourceCanBeOverwritten;
+        public int StructuralDifferenceCount => structuralDifferenceCount;
 
         private void Awake()
         {
@@ -171,6 +189,28 @@ namespace ImmPlayer.Samples
             _operation = StartCoroutine(ModifyAndFinishOperation());
         }
 
+        [ContextMenu("Round Trip Current Graph Through Memory Import")]
+        public void RoundTripCurrentGraphThroughMemoryImport()
+        {
+            if (!Application.isPlaying)
+            {
+                SetError("Enter Play mode before importing the procedural demo.");
+                return;
+            }
+            if (_authoringDocument == null)
+            {
+                SetError("Generate the mutable authoring document before importing it.");
+                return;
+            }
+            if (_operation != null)
+            {
+                SetError("Wait for the current authoring operation to finish.");
+                return;
+            }
+
+            _operation = StartCoroutine(RoundTripAndPreviewOperation());
+        }
+
         [ContextMenu("Unload Generated IMM")]
         public void Unload()
         {
@@ -206,7 +246,14 @@ namespace ImmPlayer.Samples
             authoringRevision = 0;
             installedRevision = 0;
             stableStrokeId = 0;
+            stableFrameId = 0;
+            stableAnimationKeyId = 0;
             modificationCount = 0;
+            importLossiness = "Not imported";
+            importedSourceCanBeOverwritten = false;
+            importedLayerCount = 0;
+            importedStrokeCount = 0;
+            structuralDifferenceCount = 0;
             SetStatus("Building mutable authoring document...");
             yield return null;
 
@@ -241,13 +288,26 @@ namespace ImmPlayer.Samples
             }
             authoringRevision = document.Revision;
 
+            if (roundTripThroughImporter)
+            {
+                SetStatus($"Exporting revision {document.Revision} to memory for supported IMM import...");
+                yield return null;
+                ImmAuthoringResult importResult = RoundTripCurrentGraphThroughMemory();
+                if (!importResult.Succeeded)
+                {
+                    SetError($"Memory import failed: {importResult.ErrorCode}: {importResult.Message}");
+                    _operation = null;
+                    yield break;
+                }
+            }
+
             if (exportToFile)
             {
                 generatedFilePath = ResolveOutputPath();
-                SetStatus($"Exporting revision {document.Revision}...");
+                SetStatus($"Exporting revision {_authoringDocument.Revision}...");
                 yield return null;
 
-                ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(document, generatedFilePath);
+                ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(_authoringDocument, generatedFilePath);
                 if (!export.Succeeded)
                 {
                     SetError($"Export failed: {export.ErrorCode}: {export.Message}");
@@ -264,7 +324,7 @@ namespace ImmPlayer.Samples
 
             if (loadAfterBuild)
             {
-                yield return RequestAndInstallPreview(document, "initial");
+                yield return RequestAndInstallPreview(_authoringDocument, "initial");
                 if (_loadedDocument != null && modifyAfterInitialPreview)
                 {
                     yield return new WaitForSeconds(automaticModificationDelaySeconds);
@@ -277,6 +337,22 @@ namespace ImmPlayer.Samples
         private IEnumerator ModifyAndFinishOperation()
         {
             yield return ModifyAuthoringGraphAndReplacePreview();
+            _operation = null;
+        }
+
+        private IEnumerator RoundTripAndPreviewOperation()
+        {
+            SetStatus($"Exporting mutable revision {_authoringDocument.Revision} to memory for re-import...");
+            yield return null;
+            ImmAuthoringResult importResult = RoundTripCurrentGraphThroughMemory();
+            if (!importResult.Succeeded)
+            {
+                SetError($"Memory import failed: {importResult.ErrorCode}: {importResult.Message}");
+                _operation = null;
+                yield break;
+            }
+
+            yield return RequestAndInstallPreview(_authoringDocument, "imported");
             _operation = null;
         }
 
@@ -317,6 +393,46 @@ namespace ImmPlayer.Samples
                     }
                 }
 
+                if (_opacityKeyId != 0)
+                {
+                    ImmAuthoringResult<ImmAuthoringSnapshot> snapshotResult = editable.CreateSnapshot();
+                    if (!snapshotResult.Succeeded ||
+                        !snapshotResult.Value.TryGetAnimationKey(_opacityKeyId, out ImmAuthoringAnimationKeySnapshot opacityKey))
+                    {
+                        SetError($"Animation key {_opacityKeyId} could not be queried before replacement.");
+                        transaction.Abort();
+                        yield break;
+                    }
+
+                    float opacity = nextModification % 2 == 0 ? 0.3f : 0.9f;
+                    ImmAuthoringResult replaceKey = editable.ReplaceAnimationKey(
+                        _opacityKeyId,
+                        opacityKey.Property,
+                        opacityKey.TimeTicks,
+                        ImmAuthoringAnimationValue.FromFloat(opacity),
+                        opacityKey.Interpolation);
+                    if (!replaceKey.Succeeded)
+                    {
+                        SetError($"Animation key {_opacityKeyId} replacement failed: {replaceKey}");
+                        transaction.Abort();
+                        yield break;
+                    }
+                }
+
+                if (_frameId != 0 && _alternateFrameDrawingId != 0)
+                {
+                    long targetDrawingId = nextModification % 2 == 0
+                        ? _firstFrameDrawingId
+                        : _alternateFrameDrawingId;
+                    ImmAuthoringResult replaceFrame = editable.SetFrameDrawing(_frameId, targetDrawingId);
+                    if (!replaceFrame.Succeeded)
+                    {
+                        SetError($"Frame mapping {_frameId} replacement failed: {replaceFrame}");
+                        transaction.Abort();
+                        yield break;
+                    }
+                }
+
                 ImmAuthoringResult<long> commit = transaction.Commit();
                 if (!commit.Succeeded)
                 {
@@ -331,9 +447,14 @@ namespace ImmPlayer.Samples
             yield return RequestAndInstallPreview(_authoringDocument, "replacement");
             if (_loadedDocument != null && installedRevision == authoringRevision)
             {
+                string sourceDescription = roundTripThroughImporter
+                    ? "the graph was imported from IMM memory"
+                    : "the graph remained in the original mutable document";
                 SetStatus(
                     $"Replaced native preview with revision {installedRevision} after modifying " +
-                    $"{_strokeIds.Length:N0} existing strokes by stable ID; no IMM file was written");
+                    $"{_strokeIds.Length:N0} existing strokes, frame mapping {_frameId}, and animation key " +
+                    $"{_opacityKeyId} by stable ID; " +
+                    $"{sourceDescription} and no file was written");
             }
         }
 
@@ -383,6 +504,7 @@ namespace ImmPlayer.Samples
                 properties.IsTimeline = true;
                 properties.DurationTicks = ExportLayerTiming.FromFrames(frameCount, (uint)frameRate).DurationTicks;
                 properties.MaxRepeatCount = 0;
+                properties.PaintMaxRepeatCount = 0;
 
                 ImmAuthoringResult<long> layerResult = editable.CreatePaintLayer(0, properties);
                 if (!layerResult.Succeeded)
@@ -395,6 +517,10 @@ namespace ImmPlayer.Samples
                     if (!drawingResult.Succeeded)
                         return drawingResult.WithoutValue();
                     long drawingId = drawingResult.Value;
+                    if (frame == 0)
+                        _firstFrameDrawingId = drawingId;
+                    else if (frame == 1)
+                        _alternateFrameDrawingId = drawingId;
 
                     for (int strand = 0; strand < strandCount; strand++)
                     {
@@ -409,16 +535,134 @@ namespace ImmPlayer.Samples
                         _strokeIds[frame * _builtStrandCount + strand] = strokeResult.Value;
                     }
 
-                    ImmAuthoringResult frameResult = editable.AppendFrame(layerId, drawingId);
+                    ImmAuthoringResult<long> frameResult = editable.AppendFrameWithId(layerId, drawingId);
                     if (!frameResult.Succeeded)
-                        return frameResult;
+                        return frameResult.WithoutValue();
+                    if (frame == 0)
+                        _frameId = frameResult.Value;
                 }
+
+                ImmAuthoringResult<long> opacityStart = editable.CreateAnimationKey(
+                    layerId,
+                    ImmAuthoringAnimationProperty.Opacity,
+                    0,
+                    ImmAuthoringAnimationValue.FromFloat(0.45f),
+                    ImmAuthoringInterpolation.Smoothstep);
+                if (!opacityStart.Succeeded)
+                    return opacityStart.WithoutValue();
+                _opacityKeyId = opacityStart.Value;
+
+                ImmAuthoringResult<long> opacityMiddle = editable.CreateAnimationKey(
+                    layerId,
+                    ImmAuthoringAnimationProperty.Opacity,
+                    properties.DurationTicks / 2,
+                    ImmAuthoringAnimationValue.FromFloat(1f),
+                    ImmAuthoringInterpolation.Smoothstep);
+                if (!opacityMiddle.Succeeded)
+                    return opacityMiddle.WithoutValue();
+
+                ImmAuthoringResult<long> opacityEnd = editable.CreateAnimationKey(
+                    layerId,
+                    ImmAuthoringAnimationProperty.Opacity,
+                    properties.DurationTicks,
+                    ImmAuthoringAnimationValue.FromFloat(0.45f),
+                    ImmAuthoringInterpolation.Smoothstep);
+                if (!opacityEnd.Succeeded)
+                    return opacityEnd.WithoutValue();
 
                 ImmAuthoringResult<long> commit = transaction.Commit();
                 if (commit.Succeeded && _strokeIds.Length > 0)
+                {
                     stableStrokeId = _strokeIds[0];
+                    stableFrameId = _frameId;
+                    stableAnimationKeyId = _opacityKeyId;
+                }
                 return commit.WithoutValue();
             }
+        }
+
+        private ImmAuthoringResult RoundTripCurrentGraphThroughMemory()
+        {
+            ImmAuthoringResult<ImmAuthoringSnapshot> sourceSnapshotResult = _authoringDocument.CreateSnapshot();
+            if (!sourceSnapshotResult.Succeeded)
+                return sourceSnapshotResult.WithoutValue();
+
+            ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToMemory(_authoringDocument);
+            if (!export.Succeeded)
+                return ImmAuthoringResult.Failure(export.ErrorCode, export.Message);
+
+            ImmAuthoringImportResult import = ImmAuthoringImporter.ImportFromMemory(export.Data);
+            if (!import.Succeeded)
+                return ImmAuthoringResult.Failure(import.ErrorCode, import.Message);
+
+            ImmAuthoringResult<ImmAuthoringSnapshot> importedSnapshotResult = import.Document.CreateSnapshot();
+            if (!importedSnapshotResult.Succeeded)
+            {
+                import.Document.Dispose();
+                return importedSnapshotResult.WithoutValue();
+            }
+
+            ImmAuthoringSnapshot importedSnapshot = importedSnapshotResult.Value;
+            ImmAuthoringStructuralComparison comparison = ImmAuthoringStructuralComparer.Compare(
+                sourceSnapshotResult.Value,
+                importedSnapshot,
+                0.02f);
+            importLossiness = import.Lossiness.ToString();
+            importedSourceCanBeOverwritten = import.CanOverwriteSource;
+            importedLayerCount = import.Statistics.ImportedLayerCount;
+            importedStrokeCount = import.Statistics.ImportedStrokeCount;
+            structuralDifferenceCount = comparison.Differences.Count;
+            generatedBytes = export.BytesWritten;
+            generatedRevision = export.SourceRevision;
+
+            if (!import.CanOverwriteSource)
+            {
+                string issueSummary = string.Join("; ", import.Issues.Take(3).Select(issue => issue.Message));
+                import.Document.Dispose();
+                return ImmAuthoringResult.Failure(
+                    ImmAuthoringErrorCode.ValidationFailed,
+                    $"Import reported {import.Lossiness} content and cannot safely overwrite its source: {issueSummary}");
+            }
+            if (!comparison.Equivalent)
+            {
+                string differenceSummary = string.Join("; ", comparison.Differences.Take(3));
+                import.Document.Dispose();
+                return ImmAuthoringResult.Failure(
+                    ImmAuthoringErrorCode.ValidationFailed,
+                    $"Imported structure differs from the source graph: {differenceSummary}");
+            }
+
+            ImmAuthoringDocument previous = _authoringDocument;
+            _authoringDocument = import.Document;
+            previous.Dispose();
+            authoringRevision = _authoringDocument.Revision;
+            _strokeIds = importedSnapshot.Layers
+                .Where(layer => layer.Type == ImmAuthoringLayerType.Paint)
+                .SelectMany(layer => layer.Drawings)
+                .SelectMany(drawing => drawing.Strokes)
+                .Select(stroke => stroke.Id)
+                .ToArray();
+            ImmAuthoringLayerSnapshot importedPaintLayer = importedSnapshot.Layers
+                .FirstOrDefault(layer => layer.Type == ImmAuthoringLayerType.Paint);
+            _frameId = importedPaintLayer?.Frames.FirstOrDefault()?.Id ?? 0;
+            _firstFrameDrawingId = importedPaintLayer?.Frames.FirstOrDefault()?.DrawingId ?? 0;
+            _alternateFrameDrawingId = importedPaintLayer != null && importedPaintLayer.Frames.Count > 1
+                ? importedPaintLayer.Frames[1].DrawingId
+                : 0;
+            ImmAuthoringAnimationKeySnapshot importedOpacityKey = importedSnapshot.Layers
+                .SelectMany(layer => layer.AnimationKeys)
+                .FirstOrDefault(key => key.Property == ImmAuthoringAnimationProperty.Opacity);
+            _opacityKeyId = importedOpacityKey?.Id ?? 0;
+            stableStrokeId = _strokeIds.Length > 0 ? _strokeIds[0] : 0;
+            stableFrameId = _frameId;
+            stableAnimationKeyId = _opacityKeyId;
+
+            SetStatus(
+                $"Imported {generatedBytes:N0} IMM bytes into mutable revision {authoringRevision}: " +
+                $"{importLossiness}, overwrite safe={importedSourceCanBeOverwritten}, " +
+                $"{importedLayerCount} layers, {importedStrokeCount:N0} strokes, " +
+                $"{structuralDifferenceCount} structural differences");
+            return ImmAuthoringResult.Success();
         }
 
         private PaintPoint[] BuildStrand(int frame, int strand, int modification = 0)
@@ -462,7 +706,7 @@ namespace ImmPlayer.Samples
                     Alpha = 1f,
                     Width = strokeWidth * (1f + modification * 0.3f),
                     Length = accumulatedLength,
-                    Time = t
+                    Time = 0.5f * pointIndex / points.Length
                 };
             }
 
@@ -499,6 +743,10 @@ namespace ImmPlayer.Samples
             _strokeIds = null;
             _builtFrameCount = 0;
             _builtStrandCount = 0;
+            _frameId = 0;
+            _firstFrameDrawingId = 0;
+            _alternateFrameDrawingId = 0;
+            _opacityKeyId = 0;
         }
 
         private void SetStatus(string message)

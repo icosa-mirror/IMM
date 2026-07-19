@@ -209,9 +209,15 @@ An application-specific editable-project format is not required here. If the mut
 - Layer transforms, pivots, visibility, and opacity.
 - Multiple drawings per paint layer.
 - Frame-to-drawing mappings.
-- Supported brush section and visibility types.
-- Stroke point position, normal, direction, color, alpha, width, length, and time.
-- Basic visibility, opacity, transform, draw-in, loop, and action keys where supported by exporter and player.
+- Segment, circle, ellipse, and square brush sections with always-visible or
+  quadratic-fade visibility.
+- Stroke point position, normal, color, alpha, and width. Direction is preserved
+  for quadratic-fade strokes; always-visible direction is omitted by the binary
+  codec. Length and time are derived by that codec rather than treated as
+  arbitrary lossless stored values.
+- Visibility, opacity, transform, draw-in-time, action, loop, and offset layer
+  animation keys. Obsolete component position/rotation/scale keys are rejected
+  in favour of transform keys.
 - Import and export of the supported paint subset.
 - Authoritative playback through `libImmPlayer`.
 
@@ -288,6 +294,10 @@ The exact naming can change during implementation, but the supported operations 
 
 Estimated effort: 1 week.
 
+Status: completed on 2026-07-19. The contract, corpus, reference hardware,
+thresholds, and recorded baseline are in
+`docs/runtime-authoring-engine-contract.md`.
+
 Engine work:
 
 - Define the first supported paint and animation subset.
@@ -311,6 +321,10 @@ Exit criteria:
 ## Phase 1: Runtime-generated animation spike
 
 Estimated effort: 1–3 weeks.
+
+Status: completed on 2026-07-19. The runtime sample and benchmark harness prove
+generation, file/memory export, playback, seeking, rendering, and the 100-cycle
+lifecycle gate.
 
 Engine work:
 
@@ -344,6 +358,10 @@ Decision gate:
 
 Estimated effort: 3–5 weeks.
 
+Status: completed on 2026-07-19. The public managed graph covers the supported
+hierarchy, drawings, stable frame mappings, strokes, animation keys, snapshots,
+validation, revisions, notifications, and lifecycle rules without application UI.
+
 Engine work:
 
 - Implement mutable documents with stable IDs.
@@ -371,6 +389,10 @@ Exit criteria:
 ## Phase 3: Transactions, compilation, and memory export
 
 Estimated effort: 3–5 weeks.
+
+Status: completed on 2026-07-19. Atomic expected-revision transactions,
+deterministic snapshot compilation, batch point transfer, file/owned-memory
+export, structured results, and supported cancellation paths are verified.
 
 Engine work:
 
@@ -400,6 +422,10 @@ Exit criteria:
 
 Estimated effort: 2–4 weeks.
 
+Status: completed on 2026-07-19. The preview coordinator's revision,
+replacement, playback preservation, supersession, failure retention, and
+lifecycle behavior are covered by the runtime suite and sample.
+
 Engine work:
 
 - Implement the preview coordinator.
@@ -427,6 +453,9 @@ Exit criteria:
 
 Estimated effort: 4–8 weeks.
 
+Status: completed on 2026-07-19 for the explicitly supported Windows x64 paint
+subset defined in `docs/runtime-authoring-engine-contract.md`.
+
 Engine work:
 
 - Map stroke-reader output into the mutable runtime model.
@@ -448,6 +477,23 @@ Exit criteria:
 - Supported paint fixtures pass import, mutation, export, re-import, and playback tests.
 - Unsupported content is reported before export.
 - No lossless-round-trip claim is made for fields not explicitly tested.
+
+Completion evidence:
+
+- File and memory import map supported hierarchy, transforms, drawings,
+  strokes, frames, and animation keys into the mutable authoring graph.
+- Import results expose structured issues, statistics, lossiness, and a safe
+  overwrite decision; unsupported-content coverage verifies that lossy imports
+  cannot be treated as overwrite-safe.
+- The mixed-visibility round-trip fixture covers every supported brush section,
+  both supported stroke visibility modes, and every supported animation-key
+  property. It passes import, stable-ID mutation, export, re-import, structural
+  comparison, and native playback.
+- Two final complete Windows Unity PlayMode runs passed 29 of 29 tests. The extended
+  runtime sample also imported its generated IMM bytes in memory, modified 450
+  strokes, one frame mapping, and one animation key by stable ID, installed
+  revision 2 without a file, and rendered the changed result with zero
+  structural differences.
 
 ## Phase 6: Production hardening and engine packaging
 

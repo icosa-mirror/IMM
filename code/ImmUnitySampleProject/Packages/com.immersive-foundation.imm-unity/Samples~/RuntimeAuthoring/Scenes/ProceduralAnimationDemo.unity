@@ -166,7 +166,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2001}
-  - component: {fileID: 2002}
   - component: {fileID: 2003}
   m_Layer: 0
   m_Name: Procedural IMM Demo
@@ -190,21 +189,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2002
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2000}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2ed2a0034580937408fad05de71fd036, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
-  useLinearColorSpace: 1
-  antialiasingLevel: 8
-  logFileName: imm_player_log.txt
 --- !u!114 &2003
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -221,6 +205,9 @@ MonoBehaviour:
   targetCamera: {fileID: 1002}
   outputFileName: procedural-ribbon.imm
   loadTimeoutSeconds: 30
+  roundTripThroughImporter: 1
+  modifyAfterInitialPreview: 1
+  automaticModificationDelaySeconds: 1.5
   frameRate: 30
   frameCount: 90
   strandCount: 5
@@ -232,6 +219,17 @@ MonoBehaviour:
   generatedFilePath:
   generatedRevision: 0
   generatedBytes: 0
+  authoringRevision: 0
+  installedRevision: 0
+  stableStrokeId: 0
+  stableFrameId: 0
+  stableAnimationKeyId: 0
+  modificationCount: 0
+  importLossiness: Not imported
+  importedSourceCanBeOverwritten: 0
+  importedLayerCount: 0
+  importedStrokeCount: 0
+  structuralDifferenceCount: 0
 --- !u!1 &3000
 GameObject:
   m_ObjectHideFlags: 0
