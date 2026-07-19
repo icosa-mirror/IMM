@@ -158,8 +158,14 @@ namespace ImmPlayer.Tests
             long clearedRevision = coordinator.InstalledRevision;
             Object.Destroy(owner);
             yield return WaitForOwnership(manager, baselineDocuments, baselineBuffers);
-            Assert.That(manager.LoadedDocumentCount, Is.EqualTo(baselineDocuments));
-            Assert.That(manager.OwnedInputBufferCount, Is.EqualTo(baselineBuffers));
+            Assert.That(
+                manager.LoadedDocumentCount,
+                Is.EqualTo(baselineDocuments),
+                $"Loaded documents did not return to baseline; buffers={manager.OwnedInputBufferCount}.");
+            Assert.That(
+                manager.OwnedInputBufferCount,
+                Is.EqualTo(baselineBuffers),
+                $"Owned input buffers did not return to baseline; documents={manager.LoadedDocumentCount}.");
             Debug.Log($"[IMM_AUTHOR_PREVIEW_TEST] replacement-and-failure passed clearedRevision={clearedRevision}");
         }
 
@@ -249,8 +255,14 @@ namespace ImmPlayer.Tests
             coordinator.ClearPreview();
             Object.Destroy(owner);
             yield return WaitForOwnership(manager, baselineDocuments, baselineBuffers);
-            Assert.That(manager.LoadedDocumentCount, Is.EqualTo(baselineDocuments));
-            Assert.That(manager.OwnedInputBufferCount, Is.EqualTo(baselineBuffers));
+            Assert.That(
+                manager.LoadedDocumentCount,
+                Is.EqualTo(baselineDocuments),
+                $"Lifecycle loaded documents did not return to baseline; buffers={manager.OwnedInputBufferCount}.");
+            Assert.That(
+                manager.OwnedInputBufferCount,
+                Is.EqualTo(baselineBuffers),
+                $"Lifecycle owned input buffers did not return to baseline; documents={manager.LoadedDocumentCount}.");
             Debug.Log(
                 $"[IMM_AUTHOR_PREVIEW_LIFECYCLE] passed replacements={replacements} " +
                 $"documents={manager.LoadedDocumentCount} buffers={manager.OwnedInputBufferCount}");

@@ -880,19 +880,31 @@ namespace ImmPlayer
                         {
                             // free fully unloaded documents
                             mDocuments.Free(currDocId);
-                            if (cmdId == mCommandList.GetLength() - 1)
-                                mCommandList[cmdId].mCommand.mStrArg.End();
-                            mCommandList.RemoveAndShift(cmdId);
-                            for (int i = cmdId; i < mCommandList.GetLength(); i++)
+                            const int lastCommandId = static_cast<int>(mCommandList.GetLength()) - 1;
+                            if (cmdId != lastCommandId)
                             {
-                                int d = mCommandList[i].mTarget;
+                                Player::Command &destination = mCommandList[cmdId];
+                                Player::Command &source = mCommandList[lastCommandId];
+                                destination.mCommand.mStrArg.End();
+                                destination.mCommand.mStrArg.InitMove(&source.mCommand.mStrArg);
+                                destination.mCommand.mType = source.mCommand.mType;
+                                destination.mCommand.mMemoryData = source.mCommand.mMemoryData;
+                                destination.mCommand.mMemorySize = source.mCommand.mMemorySize;
+                                destination.mCommand.mIntArg = source.mCommand.mIntArg;
+                                destination.mCommand.mFileType = source.mCommand.mFileType;
+                                destination.mTarget = source.mTarget;
 
-                                if (d != -1 && mDocuments.IsUsed(d))
+                                if (destination.mTarget >= 0 && mDocuments.IsUsed(destination.mTarget))
                                 {
-                                    Document *doc = (Document *)mDocuments.GetAddress(d);
-                                    doc->SetCommandId(i);
+                                    Document *movedDocument = (Document *)mDocuments.GetAddress(destination.mTarget);
+                                    movedDocument->SetCommandId(cmdId);
                                 }
                             }
+                            else
+                            {
+                                mCommandList[cmdId].mCommand.mStrArg.End();
+                            }
+                            mCommandList.RemoveAndShift(lastCommandId);
                             mSynced[currDocId] = true;
                             continue;
                         }
@@ -911,6 +923,10 @@ namespace ImmPlayer
                         cmd = &cmdShow;
                     }
 
+                    const bool shouldResetDocumentCommand = cmd != nullptr &&
+                        cmdId >= 0 && cmdId < mCommandList.GetLength() &&
+                        cmd == &mCommandList[cmdId].mCommand;
+
                     // update loading process OR animation scenegraph
                     bool docReady = doc->UpdateStateCPU(&mLayerRenderSound, mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mColorSpace, mPaintRenderingTechnique, mSoundEngine, mLog, mTime, cmd);
                     if (docReady)
@@ -920,7 +936,8 @@ namespace ImmPlayer
                     anyDocReady |= docReady;
 
                     // reset the command
-                    mCommandList[cmdId].mCommand.mType = Document::Command::Type::None;
+                    if (shouldResetDocumentCommand)
+                        mCommandList[cmdId].mCommand.mType = Document::Command::Type::None;
                     //mCommandList[cmdId].mTarget = -1;
                 }
             }

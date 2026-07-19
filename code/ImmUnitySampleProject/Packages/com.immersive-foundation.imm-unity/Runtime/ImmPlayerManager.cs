@@ -57,6 +57,7 @@ namespace ImmPlayer
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
         private readonly Dictionary<int, ImmDocument> _pendingUnloadDocuments = new Dictionary<int, ImmDocument>();
+        private readonly HashSet<int> _nativeUnloadsInFlight = new HashSet<int>();
         private IntPtr _renderEventFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
@@ -126,6 +127,8 @@ namespace ImmPlayer
             {
                 ImmNativePlugin.GlobalWork(1);
                 ProcessPendingDocumentUnloads();
+                IssueNativeUnloadDrainEvent();
+                CompleteFinishedNativeUnloads();
                 ReleaseCompletedMemoryBuffers();
             }
         }
@@ -231,6 +234,7 @@ namespace ImmPlayer
             }
             _loadedDocuments.Clear();
             _pendingUnloadDocuments.Clear();
+            _nativeUnloadsInFlight.Clear();
 
             // Native shutdown synchronously stops document loading before input buffers are released.
             ImmNativePlugin.End();
@@ -388,9 +392,43 @@ namespace ImmPlayer
         private void CompleteDocumentUnload(ImmDocument document)
         {
             int documentId = document.DocumentId;
+            _nativeUnloadsInFlight.Add(documentId);
             document.Unload();
             _loadedDocuments.Remove(documentId);
             _pendingUnloadDocuments.Remove(documentId);
+            ReleaseDocumentMemoryBuffer(documentId);
+        }
+
+        private void CompleteFinishedNativeUnloads()
+        {
+            if (_nativeUnloadsInFlight.Count == 0)
+                return;
+
+            List<int> completedDocumentIds = null;
+            foreach (int documentId in _nativeUnloadsInFlight)
+            {
+                if (ImmNativePlugin.IsDocumentActive(documentId))
+                    continue;
+
+                if (completedDocumentIds == null)
+                    completedDocumentIds = new List<int>();
+                completedDocumentIds.Add(documentId);
+            }
+
+            if (completedDocumentIds == null)
+                return;
+
+            foreach (int documentId in completedDocumentIds)
+            {
+                _nativeUnloadsInFlight.Remove(documentId);
+                Log($"[IMM_NATIVE_UNLOAD_DRAIN] Completed native unload for document {documentId}");
+            }
+        }
+
+        private void IssueNativeUnloadDrainEvent()
+        {
+            if (_nativeUnloadsInFlight.Count > 0 && _renderEventFunc != IntPtr.Zero)
+                GL.IssuePluginEvent(_renderEventFunc, 0);
         }
 
         private void ReleaseCompletedMemoryBuffers()
@@ -413,12 +451,17 @@ namespace ImmPlayer
                 return;
 
             foreach (int documentId in completedDocumentIds)
-            {
-                IntPtr memPtr = _documentMemoryPtrs[documentId];
-                _documentMemoryPtrs.Remove(documentId);
-                Marshal.FreeHGlobal(memPtr);
-                Log($"Freed memory buffer for completed document {documentId}");
-            }
+                ReleaseDocumentMemoryBuffer(documentId);
+        }
+
+        private void ReleaseDocumentMemoryBuffer(int documentId)
+        {
+            if (!_documentMemoryPtrs.TryGetValue(documentId, out IntPtr memPtr))
+                return;
+
+            _documentMemoryPtrs.Remove(documentId);
+            Marshal.FreeHGlobal(memPtr);
+            Log($"Freed memory buffer for completed document {documentId}");
         }
         #endregion
 
@@ -576,6 +619,9 @@ namespace ImmPlayer
 
         private bool HasRenderableDocument()
         {
+            if (_nativeUnloadsInFlight.Count > 0)
+                return true;
+
             foreach (ImmDocument doc in _loadedDocuments.Values)
             {
                 if (doc != null && doc.IsSequenceReady())
