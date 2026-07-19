@@ -521,7 +521,11 @@ namespace ImmPlayer.Samples
 
             ImmAuthoringPreviewRequest preview = previewResult.Value;
             while (!preview.IsTerminal)
+            {
+                if (preview.HasProgress)
+                    ReportProgress(preview.Progress);
                 yield return null;
+            }
             if (preview.State != ImmAuthoringPreviewState.Installed)
             {
                 SetError($"Preview failed: {preview.ErrorCode}: {preview.Message}");

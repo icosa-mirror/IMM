@@ -79,8 +79,11 @@ namespace ImmPlayer.Authoring
 
     public sealed class ImmAuthoringPreviewRequest
     {
+        private readonly object _progressGate = new object();
         private readonly List<ImmAuthoringPreviewTransition> _transitions =
             new List<ImmAuthoringPreviewTransition>();
+        private ImmAuthoringProgress _progress;
+        private bool _hasProgress;
 
         public long RequestId { get; }
         public long DocumentId { get; }
@@ -93,6 +96,8 @@ namespace ImmPlayer.Authoring
         public long ObjectId { get; internal set; }
         public ImmAuthoringPreviewStatistics Statistics { get; } = new ImmAuthoringPreviewStatistics();
         public IReadOnlyList<ImmAuthoringPreviewTransition> Transitions => _transitions.AsReadOnly();
+        public bool HasProgress { get { lock (_progressGate) return _hasProgress; } }
+        public ImmAuthoringProgress Progress { get { lock (_progressGate) return _progress; } }
         public bool IsTerminal => State == ImmAuthoringPreviewState.Installed ||
                                   State == ImmAuthoringPreviewState.Failed ||
                                   State == ImmAuthoringPreviewState.Cancelled ||
@@ -104,6 +109,7 @@ namespace ImmPlayer.Authoring
         internal Stopwatch CompilationStopwatch { get; set; }
         internal Stopwatch LoadStopwatch { get; set; }
         internal Task<ImmAuthoringExportResult> CompilationTask { get; set; }
+        internal IProgress<ImmAuthoringProgress> ProgressSink { get; }
 
         internal ImmAuthoringPreviewRequest(
             long requestId,
@@ -121,6 +127,7 @@ namespace ImmPlayer.Authoring
             CompilationErrorCode = ImmAuthoringErrorCode.None;
             Message = string.Empty;
             Cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            ProgressSink = new PreviewProgress(this);
         }
 
         internal void AddTransition(ImmAuthoringPreviewState state) =>
@@ -133,6 +140,27 @@ namespace ImmPlayer.Authoring
         }
 
         internal void DisposeCancellation() => Cancellation.Dispose();
+
+        private void ReportProgress(ImmAuthoringProgress progress)
+        {
+            lock (_progressGate)
+            {
+                _progress = progress;
+                _hasProgress = true;
+            }
+        }
+
+        private sealed class PreviewProgress : IProgress<ImmAuthoringProgress>
+        {
+            private readonly ImmAuthoringPreviewRequest _owner;
+
+            internal PreviewProgress(ImmAuthoringPreviewRequest owner)
+            {
+                _owner = owner;
+            }
+
+            public void Report(ImmAuthoringProgress value) => _owner.ReportProgress(value);
+        }
     }
 
     /// <summary>
@@ -297,7 +325,7 @@ namespace ImmPlayer.Authoring
                 {
                     return ImmAuthoringCompiler.ExportToMemory(
                         request.Snapshot,
-                        cancellationToken: cancellationToken);
+                        new ImmAuthoringOperationOptions(cancellationToken, request.ProgressSink));
                 }
             });
         }

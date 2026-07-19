@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
@@ -28,6 +29,24 @@ namespace ImmPlayer.Tests
 #endif
         }
 
+        [Test]
+        public void IndependentApplicationAssemblyConsumesRuntimeWithoutSamples()
+        {
+            Type consumer = Type.GetType(
+                "ImmPackageConsumer.ImmPackageConsumerSmoke, ImmPhase6PackageConsumer",
+                throwOnError: true);
+            string description = (string)consumer.GetMethod(
+                "DescribeRuntime",
+                BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
+            object result = consumer.GetMethod(
+                "CreateAndDisposeDocument",
+                BindingFlags.Public | BindingFlags.Static)?.Invoke(null, null);
+
+            Assert.That(description, Does.Contain(ImmAuthoringRuntime.Capabilities.Platform));
+            Assert.That(result, Is.TypeOf<ImmAuthoringResult>());
+            Assert.That(((ImmAuthoringResult)result).Succeeded, Is.True);
+        }
+
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
         [Test]
         public void ExportReportsProgressAndHonoursOutputLimit()
@@ -52,6 +71,12 @@ namespace ImmPlayer.Tests
                 Assert.That(limited.Succeeded, Is.False);
                 Assert.That(limited.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.ResourceLimitExceeded));
                 Assert.That(limited.Data, Is.Null);
+
+                ImmAuthoringExportResult pointLimited = ImmAuthoringCompiler.ExportToMemory(
+                    document,
+                    new ImmAuthoringOperationOptions(limits: Limits(maxTotalPoints: 1)));
+                Assert.That(pointLimited.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.ResourceLimitExceeded));
+                Assert.That(pointLimited.Message, Does.Contain("total points"));
                 Assert.That(document.Validate().Succeeded, Is.True);
             }
         }
@@ -114,6 +139,27 @@ namespace ImmPlayer.Tests
                     Assert.That(cancelledImport.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Cancelled));
                     Assert.That(cancelledImport.Document, Is.Null);
                 }
+            }
+        }
+
+        [Test]
+        public void LargeGraphCancellationReleasesNativeCompilationAndAllowsRetry()
+        {
+            using (ImmAuthoringDocument document = CreateLargeFixture(80, 8, 16))
+            using (CancellationTokenSource cancellation = new CancellationTokenSource())
+            {
+                ThresholdCancellingProgress progress = new ThresholdCancellingProgress(cancellation, 100);
+                ImmAuthoringExportResult cancelled = ImmAuthoringCompiler.ExportToMemory(
+                    document,
+                    new ImmAuthoringOperationOptions(cancellation.Token, progress));
+
+                Assert.That(progress.HighestCompletedUnits, Is.GreaterThanOrEqualTo(100));
+                Assert.That(cancelled.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Cancelled));
+                Assert.That(cancelled.Data, Is.Null);
+                Assert.That(document.Validate().Succeeded, Is.True);
+
+                ImmAuthoringExportResult retry = ImmAuthoringCompiler.ExportToMemory(document);
+                Assert.That(retry.Succeeded, Is.True, retry.Message);
             }
         }
 
@@ -205,6 +251,32 @@ namespace ImmPlayer.Tests
             return document;
         }
 
+        private static ImmAuthoringDocument CreateLargeFixture(int drawingCount, int strokesPerDrawing, int pointsPerStroke)
+        {
+            ImmAuthoringDocument document = Require(ImmAuthoringDocument.Create(
+                ExportSequenceType.Animated,
+                30,
+                Color.black));
+            long paint = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Cancellation Paint")));
+            for (int drawingIndex = 0; drawingIndex < drawingCount; drawingIndex++)
+            {
+                long drawing = Require(document.CreateDrawing(paint));
+                for (int strokeIndex = 0; strokeIndex < strokesPerDrawing; strokeIndex++)
+                {
+                    PaintPoint[] points = new PaintPoint[pointsPerStroke];
+                    for (int pointIndex = 0; pointIndex < points.Length; pointIndex++)
+                    {
+                        points[pointIndex] = Point(
+                            new Vector3(pointIndex * 0.01f, strokeIndex * 0.01f, drawingIndex * 0.001f),
+                            Color.Lerp(Color.red, Color.blue, pointIndex / (points.Length - 1f)));
+                    }
+                    Require(document.CreateStroke(drawing, BrushSectionType.Circle, VisibilityType.Always, points));
+                }
+                Require(document.AppendFrame(paint, drawing));
+            }
+            return document;
+        }
+
         private static PaintPoint[] Points(float offset)
         {
             return new[]
@@ -227,9 +299,15 @@ namespace ImmPlayer.Tests
             };
         }
 
-        private static ImmAuthoringLimits Limits(long maxInputBytes = 256L * ImmAuthoringLimits.MiB, long maxOutputBytes = 256L * ImmAuthoringLimits.MiB)
+        private static ImmAuthoringLimits Limits(
+            long maxInputBytes = 256L * ImmAuthoringLimits.MiB,
+            long maxOutputBytes = 256L * ImmAuthoringLimits.MiB,
+            long maxTotalPoints = 16000000)
         {
-            return new ImmAuthoringLimits(maxInputBytes: maxInputBytes, maxOutputBytes: maxOutputBytes);
+            return new ImmAuthoringLimits(
+                maxInputBytes: maxInputBytes,
+                maxOutputBytes: maxOutputBytes,
+                maxTotalPoints: maxTotalPoints);
         }
 
         private static T Require<T>(ImmAuthoringResult<T> result)
@@ -263,6 +341,29 @@ namespace ImmPlayer.Tests
             public void Report(ImmAuthoringProgress value)
             {
                 if (value.Stage == _stage)
+                    _cancellation.Cancel();
+            }
+        }
+
+        private sealed class ThresholdCancellingProgress : IProgress<ImmAuthoringProgress>
+        {
+            private readonly CancellationTokenSource _cancellation;
+            private readonly long _threshold;
+
+            internal long HighestCompletedUnits { get; private set; }
+
+            internal ThresholdCancellingProgress(CancellationTokenSource cancellation, long threshold)
+            {
+                _cancellation = cancellation;
+                _threshold = threshold;
+            }
+
+            public void Report(ImmAuthoringProgress value)
+            {
+                if (value.Stage != ImmAuthoringProgressStage.CompilingGraph)
+                    return;
+                HighestCompletedUnits = Math.Max(HighestCompletedUnits, value.CompletedUnits);
+                if (HighestCompletedUnits >= _threshold)
                     _cancellation.Cancel();
             }
         }

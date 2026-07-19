@@ -302,6 +302,8 @@ namespace ImmPlayer.Tests
             Assert.That(coordinator.InstalledRevision, Is.EqualTo(expectedRevision));
             Assert.That(coordinator.InstalledAuthoringDocumentId, Is.EqualTo(request.DocumentId));
             Assert.That(coordinator.InstalledDocument, Is.Not.Null);
+            Assert.That(request.HasProgress, Is.True);
+            Assert.That(request.Progress.Stage, Is.EqualTo(ImmAuthoringProgressStage.Completed));
             Assert.That(request.Statistics.BytesCompiled, Is.GreaterThan(0));
             Assert.That(request.Statistics.CompilationTime, Is.GreaterThan(System.TimeSpan.Zero));
             Assert.That(request.Statistics.PlayerLoadTime, Is.GreaterThan(System.TimeSpan.Zero));
