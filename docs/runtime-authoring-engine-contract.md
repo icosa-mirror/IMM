@@ -148,3 +148,27 @@ These are development gates, not cross-hardware release guarantees. Phase 4 may
 revise them using product target hardware and representative application data.
 No cache or incremental player-mutation design is justified solely by the
 four-point legacy sample.
+
+## Recorded Phase 4 verification
+
+Phase 4 retains compile-and-reload and installs previews through
+`ImmAuthoringPreviewCoordinator`. The coordinator compiles immutable snapshots
+off the Unity main thread, loads owned memory through the player, and does not
+mark a replacement installed until its requested playback settings have had a
+Unity frame to reach the native state machine.
+
+The Windows Unity PlayMode suite was run on the reference machine on 2026-07-19.
+All 21 tests passed in 1.96 seconds. The suite includes:
+
+- Exact-revision request validation and observable installed revisions.
+- Playback state, time, and document-to-world preservation during replacement.
+- Cancellation, supersession, and reentrant terminal-state listeners.
+- Failed replacement while retaining the last valid native preview.
+- 25 sequential authoritative preview replacements returning managed document
+  and input-buffer ownership to baseline.
+- The Phase 1 100-cycle compile, memory-load, playback, and unload gate.
+
+The native Windows plugin was rebuilt from the same source and the exporter C
+ABI smoke test exported and validated its fixture. Runtime preview replacement
+therefore remains on the measured memory compile-and-reload path; incremental
+mutation of an already loaded player document remains deferred.
