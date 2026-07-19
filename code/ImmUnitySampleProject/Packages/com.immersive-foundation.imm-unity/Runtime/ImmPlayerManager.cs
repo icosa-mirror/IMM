@@ -56,6 +56,7 @@ namespace ImmPlayer
         private bool _isInitialized = false;
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
+        private readonly Dictionary<int, ImmDocument> _pendingUnloadDocuments = new Dictionary<int, ImmDocument>();
         private IntPtr _renderEventFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
@@ -124,6 +125,7 @@ namespace ImmPlayer
             if (_isInitialized)
             {
                 ImmNativePlugin.GlobalWork(1);
+                ProcessPendingDocumentUnloads();
                 ReleaseCompletedMemoryBuffers();
             }
         }
@@ -228,6 +230,7 @@ namespace ImmPlayer
                 doc.Unload();
             }
             _loadedDocuments.Clear();
+            _pendingUnloadDocuments.Clear();
 
             // Native shutdown synchronously stops document loading before input buffers are released.
             ImmNativePlugin.End();
@@ -253,6 +256,9 @@ namespace ImmPlayer
 
         /// <summary>Number of unmanaged input buffers retained for asynchronous memory loads.</summary>
         public int OwnedInputBufferCount => _documentMemoryPtrs.Count;
+
+        /// <summary>Number of documents waiting to reach a safe native unload boundary.</summary>
+        public int PendingUnloadDocumentCount => _pendingUnloadDocuments.Count;
 
         #region Document Management
 
@@ -331,10 +337,60 @@ namespace ImmPlayer
                 return;
 
             int docId = document.DocumentId;
+            if (!_loadedDocuments.ContainsKey(docId))
+                return;
 
-            document.Unload();
-            _loadedDocuments.Remove(docId);
+            ImmDocument.LoadingState loadingState = document.GetStateInfo().Loading;
+            if (loadingState == ImmDocument.LoadingState.Unloaded ||
+                loadingState == ImmDocument.LoadingState.Loading)
+            {
+                _pendingUnloadDocuments[docId] = document;
+                Log($"Deferred unload for loading document {docId} (state: {loadingState})");
+                return;
+            }
+
+            CompleteDocumentUnload(document);
             ReleaseCompletedMemoryBuffers();
+        }
+
+        private void ProcessPendingDocumentUnloads()
+        {
+            if (_pendingUnloadDocuments.Count == 0)
+                return;
+
+            List<int> readyDocumentIds = null;
+            foreach (KeyValuePair<int, ImmDocument> entry in _pendingUnloadDocuments)
+            {
+                ImmDocument.LoadingState loadingState = entry.Value.GetStateInfo().Loading;
+                if (loadingState != ImmDocument.LoadingState.Loaded &&
+                    loadingState != ImmDocument.LoadingState.Failed)
+                {
+                    continue;
+                }
+
+                if (readyDocumentIds == null)
+                    readyDocumentIds = new List<int>();
+                readyDocumentIds.Add(entry.Key);
+            }
+
+            if (readyDocumentIds == null)
+                return;
+
+            foreach (int documentId in readyDocumentIds)
+            {
+                ImmDocument document = _pendingUnloadDocuments[documentId];
+                document.Hide();
+                CompleteDocumentUnload(document);
+                Log($"Completed deferred unload for document {documentId}");
+            }
+        }
+
+        private void CompleteDocumentUnload(ImmDocument document)
+        {
+            int documentId = document.DocumentId;
+            document.Unload();
+            _loadedDocuments.Remove(documentId);
+            _pendingUnloadDocuments.Remove(documentId);
         }
 
         private void ReleaseCompletedMemoryBuffers()
