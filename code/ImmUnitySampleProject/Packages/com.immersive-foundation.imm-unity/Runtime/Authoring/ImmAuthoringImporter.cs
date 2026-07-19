@@ -20,6 +20,7 @@ namespace ImmPlayer.Authoring
         UnsupportedCapabilities,
         UnsupportedFlip,
         UnsupportedBrush,
+        UnsupportedAnimationProperty,
         InvalidSourceValue,
         ReparentedLayer,
         FrameRateChanged
@@ -285,7 +286,7 @@ namespace ImmPlayer.Authoring
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Source stroke points could not be read.", importedLayerId);
                     PaintPoint[] points = new PaintPoint[sourcePoints.Length];
                     bool invalidPosition = false;
-                    bool adjustedPointMetadata = false;
+                    PointAdjustment adjustedPointMetadata = PointAdjustment.None;
                     for (int pointIndex = 0; pointIndex < points.Length; pointIndex++)
                     {
                         StrokePoint point = sourcePoints[pointIndex];
@@ -306,15 +307,15 @@ namespace ImmPlayer.Authoring
                         float length = point.length;
                         float time = point.time;
 
-                        adjustedPointMetadata |= SanitizeVector(ref normal, Vector3.up);
-                        adjustedPointMetadata |= SanitizeVector(ref direction, Vector3.zero);
-                        adjustedPointMetadata |= SanitizeUnitValue(ref red, 1f);
-                        adjustedPointMetadata |= SanitizeUnitValue(ref green, 1f);
-                        adjustedPointMetadata |= SanitizeUnitValue(ref blue, 1f);
-                        adjustedPointMetadata |= SanitizeUnitValue(ref alpha, 1f);
-                        adjustedPointMetadata |= SanitizePositive(ref width, 0.000001f);
-                        adjustedPointMetadata |= SanitizeFinite(ref length, 0f);
-                        adjustedPointMetadata |= SanitizeFinite(ref time, 0f);
+                        if (SanitizeVector(ref normal, Vector3.up)) adjustedPointMetadata |= PointAdjustment.Normal;
+                        if (SanitizeVector(ref direction, Vector3.zero)) adjustedPointMetadata |= PointAdjustment.Direction;
+                        if (SanitizeUnitValue(ref red, 1f) |
+                            SanitizeUnitValue(ref green, 1f) |
+                            SanitizeUnitValue(ref blue, 1f)) adjustedPointMetadata |= PointAdjustment.Color;
+                        if (SanitizeUnitValue(ref alpha, 1f)) adjustedPointMetadata |= PointAdjustment.Alpha;
+                        if (SanitizePositive(ref width, 0.000001f)) adjustedPointMetadata |= PointAdjustment.Width;
+                        if (SanitizeFinite(ref length, 0f)) adjustedPointMetadata |= PointAdjustment.Length;
+                        if (SanitizeFinite(ref time, 0f)) adjustedPointMetadata |= PointAdjustment.Time;
 
                         points[pointIndex] = new PaintPoint
                         {
@@ -336,11 +337,11 @@ namespace ImmPlayer.Authoring
                             sourceLayer.Info.id));
                         continue;
                     }
-                    if (adjustedPointMetadata)
+                    if (adjustedPointMetadata != PointAdjustment.None)
                     {
                         issues.Add(new ImmAuthoringImportIssue(
                             ImmAuthoringImportIssueCode.InvalidSourceValue,
-                            $"Layer '{sourceLayer.Info.name}' contained invalid point metadata; affected values were clamped or replaced.",
+                            $"Layer '{sourceLayer.Info.name}' contained invalid point metadata ({adjustedPointMetadata}); affected values were clamped or replaced.",
                             sourceLayer.Info.id));
                     }
 
@@ -436,6 +437,16 @@ namespace ImmPlayer.Authoring
                 }
 
                 ImmAuthoringAnimationProperty property = (ImmAuthoringAnimationProperty)sourceKey.property;
+                if (property == ImmAuthoringAnimationProperty.Position ||
+                    property == ImmAuthoringAnimationProperty.Rotation ||
+                    property == ImmAuthoringAnimationProperty.Scale)
+                {
+                    issues.Add(new ImmAuthoringImportIssue(
+                        ImmAuthoringImportIssueCode.UnsupportedAnimationProperty,
+                        $"Layer '{sourceLayer.Info.name}' contains an obsolete {property} animation key; it was omitted in favour of IMM v2 Transform keys.",
+                        sourceLayer.Info.id));
+                    continue;
+                }
                 ImmAuthoringTransform transform = ConvertTransform(
                     sourceKey.transformValue,
                     sourceLayer.Info.id,
@@ -679,6 +690,19 @@ namespace ImmPlayer.Authoring
                 return false;
             value = fallback;
             return true;
+        }
+
+        [Flags]
+        private enum PointAdjustment
+        {
+            None = 0,
+            Normal = 1 << 0,
+            Direction = 1 << 1,
+            Color = 1 << 2,
+            Alpha = 1 << 3,
+            Width = 1 << 4,
+            Length = 1 << 5,
+            Time = 1 << 6
         }
 
         private sealed class SourceLayer

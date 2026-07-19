@@ -841,6 +841,13 @@ namespace ImmPlayer.Authoring
         {
             if (!Enum.IsDefined(typeof(BrushSectionType), brushSection) || !Enum.IsDefined(typeof(VisibilityType), visibility))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke brush or visibility type is invalid.", objectId);
+            if (brushSection == BrushSectionType.Point)
+            {
+                return ImmAuthoringResult.Failure(
+                    ImmAuthoringErrorCode.Unsupported,
+                    "Point brush sections are not supported by the IMM v2 paint exporter; use Segment, Circle, Ellipse, or Square.",
+                    objectId);
+            }
             if (points == null || points.Length < 2)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least two points.", objectId);
             for (int i = 0; i < points.Length; i++)
@@ -870,6 +877,16 @@ namespace ImmPlayer.Authoring
             if (timeTicks < 0)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Animation key time cannot be negative.", objectId);
 
+            if (property == ImmAuthoringAnimationProperty.Position ||
+                property == ImmAuthoringAnimationProperty.Rotation ||
+                property == ImmAuthoringAnimationProperty.Scale)
+            {
+                return ImmAuthoringResult.Failure(
+                    ImmAuthoringErrorCode.Unsupported,
+                    $"{property} animation keys are obsolete in IMM timeline version 2; use a Transform key.",
+                    objectId);
+            }
+
             switch (property)
             {
                 case ImmAuthoringAnimationProperty.Opacity:
@@ -884,9 +901,6 @@ namespace ImmPlayer.Authoring
                     if (value.UIntValue >= (uint)ImmAuthoringAction.MakeDefault + 1u)
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Action key value is invalid.", objectId);
                     break;
-                case ImmAuthoringAnimationProperty.Position:
-                case ImmAuthoringAnimationProperty.Rotation:
-                case ImmAuthoringAnimationProperty.Scale:
                 case ImmAuthoringAnimationProperty.Transform:
                     if (!value.TransformValue.IsFinite())
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Transform key value must be finite with positive scale.", objectId);

@@ -86,6 +86,8 @@ namespace ImmPlayer.Authoring
     {
         Visibility = 0,
         Opacity = 1,
+        // Retained to identify legacy imported content. Authoring IMM v2 files with
+        // component transform keys is unsupported; use Transform instead.
         Position = 2,
         Rotation = 3,
         Scale = 4,

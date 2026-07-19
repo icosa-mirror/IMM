@@ -19,8 +19,9 @@ namespace ImmPlayer.Tests
             {
                 ImmAuthoringSnapshot initial = Require(document.CreateSnapshot());
                 ImmAuthoringLayerSnapshot paint = initial.Layers.Single(layer => layer.Type == ImmAuthoringLayerType.Paint);
-                Assert.That(paint.AnimationKeys, Has.Count.EqualTo(3));
-                long keyId = paint.AnimationKeys[0].Id;
+                Assert.That(paint.AnimationKeys, Has.Count.EqualTo(8));
+                long keyId = paint.AnimationKeys.Single(key =>
+                    key.Property == ImmAuthoringAnimationProperty.Opacity && key.TimeTicks == 0).Id;
                 Assert.That(initial.TryGetAnimationKey(keyId, out ImmAuthoringAnimationKeySnapshot key), Is.True);
 
                 using (ImmAuthoringTransaction transaction = Require(document.BeginEdit(document.Revision)))
@@ -38,6 +39,56 @@ namespace ImmPlayer.Tests
                 Assert.That(changed.TryGetAnimationKey(keyId, out key), Is.True);
                 Assert.That(key.TimeTicks, Is.EqualTo(100));
                 Assert.That(key.Value.FloatValue, Is.EqualTo(0.35f));
+            }
+        }
+
+        [Test]
+        public void PointBrushIsRejectedBeforeNativeExport()
+        {
+            using (ImmAuthoringDocument document = Require(ImmAuthoringDocument.Create(
+                       ExportSequenceType.Still,
+                       30,
+                       Color.black)))
+            {
+                long paint = Require(document.CreatePaintLayer(
+                    0,
+                    ImmAuthoringLayerProperties.Default("Paint")));
+                long drawing = Require(document.CreateDrawing(paint));
+                ImmAuthoringResult<long> result = document.CreateStroke(
+                    drawing,
+                    BrushSectionType.Point,
+                    VisibilityType.Always,
+                    StrokePoints(0f, Color.white));
+
+                Assert.That(result.Succeeded, Is.False);
+                Assert.That(result.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Unsupported));
+                Assert.That(result.Message, Does.Contain("Segment, Circle, Ellipse, or Square"));
+            }
+        }
+
+        [TestCase(ImmAuthoringAnimationProperty.Position)]
+        [TestCase(ImmAuthoringAnimationProperty.Rotation)]
+        [TestCase(ImmAuthoringAnimationProperty.Scale)]
+        public void ObsoleteComponentAnimationKeysAreRejected(ImmAuthoringAnimationProperty property)
+        {
+            using (ImmAuthoringDocument document = Require(ImmAuthoringDocument.Create(
+                       ExportSequenceType.Animated,
+                       30,
+                       Color.black)))
+            {
+                long group = Require(document.CreateGroupLayer(
+                    0,
+                    ImmAuthoringLayerProperties.Default("Group")));
+                ImmAuthoringResult<long> result = document.CreateAnimationKey(
+                    group,
+                    property,
+                    0,
+                    ImmAuthoringAnimationValue.FromTransform(ImmAuthoringTransform.Identity),
+                    ImmAuthoringInterpolation.Linear);
+
+                Assert.That(result.Succeeded, Is.False);
+                Assert.That(result.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.Unsupported));
+                Assert.That(result.Message, Does.Contain("use a Transform key"));
             }
         }
 
@@ -161,10 +212,16 @@ namespace ImmPlayer.Tests
                     Rotation = Quaternion.Euler(0f, 15f, 0f),
                     Scale = 1.1f
                 };
+                groupProperties.Pivot = new ImmAuthoringTransform
+                {
+                    Position = new Vector3(0.05f, -0.1f, 0f),
+                    Rotation = Quaternion.Euler(5f, 0f, 0f),
+                    Scale = 0.9f
+                };
                 long group = Require(editable.CreateGroupLayer(0, groupProperties));
 
                 ImmAuthoringLayerProperties paintProperties = ImmAuthoringLayerProperties.Default("Editable Paint");
-                ExportLayerTiming timing = ExportLayerTiming.FromFrames(3, 24, 2);
+                ExportLayerTiming timing = ExportLayerTiming.FromFrames(4, 24, 2);
                 paintProperties.IsTimeline = timing.IsTimeline;
                 paintProperties.DurationTicks = timing.DurationTicks;
                 paintProperties.MaxRepeatCount = timing.MaxRepeatCount;
@@ -172,12 +229,23 @@ namespace ImmPlayer.Tests
                 long paint = Require(editable.CreatePaintLayer(group, paintProperties));
                 long firstDrawing = Require(editable.CreateDrawing(paint));
                 long secondDrawing = Require(editable.CreateDrawing(paint));
-                Require(editable.CreateStroke(firstDrawing, BrushSectionType.Circle, VisibilityType.Always, StrokePoints(0f, Color.red)));
-                Require(editable.CreateStroke(secondDrawing, BrushSectionType.Ellipse, VisibilityType.FadePow2, StrokePoints(0.4f, Color.blue)));
+                long thirdDrawing = Require(editable.CreateDrawing(paint));
+                long fourthDrawing = Require(editable.CreateDrawing(paint));
+                Require(editable.CreateStroke(firstDrawing, BrushSectionType.Segment, VisibilityType.Always, StrokePoints(0f, Color.red)));
+                Require(editable.CreateStroke(secondDrawing, BrushSectionType.Circle, VisibilityType.FadePow2, StrokePoints(0.2f, Color.green)));
+                Require(editable.CreateStroke(thirdDrawing, BrushSectionType.Ellipse, VisibilityType.Always, StrokePoints(0.4f, Color.blue)));
+                Require(editable.CreateStroke(fourthDrawing, BrushSectionType.Square, VisibilityType.FadePow2, StrokePoints(0.6f, Color.yellow)));
                 Require(editable.AppendFrame(paint, firstDrawing));
                 Require(editable.AppendFrame(paint, secondDrawing));
-                Require(editable.AppendFrame(paint, firstDrawing));
+                Require(editable.AppendFrame(paint, thirdDrawing));
+                Require(editable.AppendFrame(paint, fourthDrawing));
 
+                Require(editable.CreateAnimationKey(
+                    paint,
+                    ImmAuthoringAnimationProperty.Visibility,
+                    50,
+                    ImmAuthoringAnimationValue.FromBool(false),
+                    ImmAuthoringInterpolation.None));
                 Require(editable.CreateAnimationKey(
                     paint,
                     ImmAuthoringAnimationProperty.Opacity,
@@ -201,6 +269,30 @@ namespace ImmPlayer.Tests
                         Scale = 1f
                     }),
                     ImmAuthoringInterpolation.EaseIn));
+                Require(editable.CreateAnimationKey(
+                    paint,
+                    ImmAuthoringAnimationProperty.DrawInTime,
+                    100,
+                    ImmAuthoringAnimationValue.FromDouble(0.75d),
+                    ImmAuthoringInterpolation.Linear));
+                Require(editable.CreateAnimationKey(
+                    paint,
+                    ImmAuthoringAnimationProperty.Action,
+                    200,
+                    ImmAuthoringAnimationValue.FromUInt((uint)ImmAuthoringAction.Play),
+                    ImmAuthoringInterpolation.None));
+                Require(editable.CreateAnimationKey(
+                    paint,
+                    ImmAuthoringAnimationProperty.Loop,
+                    300,
+                    ImmAuthoringAnimationValue.FromBool(true),
+                    ImmAuthoringInterpolation.None));
+                Require(editable.CreateAnimationKey(
+                    paint,
+                    ImmAuthoringAnimationProperty.Offset,
+                    400,
+                    ImmAuthoringAnimationValue.FromUInt(7),
+                    ImmAuthoringInterpolation.None));
                 Require(transaction.Commit());
             }
             return document;
