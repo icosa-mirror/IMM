@@ -265,7 +265,7 @@ units, retry recovery, malformed memory, import limits, import cancellation,
 100 edit/export/import/dispose cycles, managed-memory retention, capability
 queries, 100 native preview replacements returning ownership to baseline, and
 an application assembly that references only `ImmUnity.Runtime`.
-Two final complete runs passed 37 of 37 tests in 3.471 seconds and 3.157
+Two final complete runs passed 37 of 37 tests in 3.247 seconds and 3.174
 seconds respectively.
 
 The Phase 6 sample reported Windows x64 playback, mutable graph, memory/file

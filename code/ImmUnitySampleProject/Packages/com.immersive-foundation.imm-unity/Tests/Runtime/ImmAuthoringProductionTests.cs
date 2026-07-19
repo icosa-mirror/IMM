@@ -66,6 +66,24 @@ namespace ImmPlayer.Tests
                 Assert.That(recorder.Items.Last().Stage, Is.EqualTo(ImmAuthoringProgressStage.Completed));
                 Assert.That(recorder.Items.All(item => item.Fraction >= 0f && item.Fraction <= 1f), Is.True);
 
+                string filePath = Path.Combine(Application.temporaryCachePath, $"imm-phase6-progress-{Guid.NewGuid():N}.imm");
+                try
+                {
+                    ProgressRecorder fileRecorder = new ProgressRecorder();
+                    ImmAuthoringExportResult file = ImmAuthoringCompiler.ExportToFile(
+                        document,
+                        filePath,
+                        new ImmAuthoringOperationOptions(progress: fileRecorder));
+                    Assert.That(file.Succeeded, Is.True, file.Message);
+                    Assert.That(fileRecorder.Items.Any(item => item.Stage == ImmAuthoringProgressStage.WritingOutput), Is.True);
+                    Assert.That(fileRecorder.Items.Last().Stage, Is.EqualTo(ImmAuthoringProgressStage.Completed));
+                }
+                finally
+                {
+                    if (File.Exists(filePath))
+                        File.Delete(filePath);
+                }
+
                 ImmAuthoringLimits tinyOutput = Limits(maxOutputBytes: 1);
                 ImmAuthoringExportResult limited = ImmAuthoringCompiler.ExportToMemory(
                     document,

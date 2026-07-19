@@ -108,6 +108,16 @@ namespace ImmPlayer.Authoring
             int opusBitrate = 96000,
             ExportAudioType audioType = ExportAudioType.Opus)
         {
+            return ExportToMemoryCore(snapshot, options, opusBitrate, audioType, true);
+        }
+
+        private static ImmAuthoringExportResult ExportToMemoryCore(
+            ImmAuthoringSnapshot snapshot,
+            ImmAuthoringOperationOptions options,
+            int opusBitrate,
+            ExportAudioType audioType,
+            bool reportOperationCompleted)
+        {
             Stopwatch total = Stopwatch.StartNew();
             ImmAuthoringExportStatistics statistics = new ImmAuthoringExportStatistics();
             options = options ?? ImmAuthoringOperationOptions.Default;
@@ -151,7 +161,8 @@ namespace ImmPlayer.Authoring
                     total.Stop();
                     statistics.TotalTime = total.Elapsed;
                     options.Report(ImmAuthoringProgressStage.Serializing, 1, 1, "Serialization completed.");
-                    options.Report(ImmAuthoringProgressStage.Completed, 1, 1, "Export completed.");
+                    if (reportOperationCompleted)
+                        options.Report(ImmAuthoringProgressStage.Completed, 1, 1, "Export completed.");
                     return new ImmAuthoringExportResult(
                         ImmAuthoringErrorCode.None,
                         string.Empty,
@@ -239,13 +250,14 @@ namespace ImmPlayer.Authoring
                 if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
                     return Failure(ImmAuthoringErrorCode.InvalidArgument, $"Export directory does not exist: {directory}", 0, snapshot?.Revision ?? 0);
 
-                ImmAuthoringExportResult memory = ExportToMemory(snapshot, options, opusBitrate, audioType);
+                ImmAuthoringExportResult memory = ExportToMemoryCore(snapshot, options, opusBitrate, audioType, false);
                 statistics = memory.Statistics;
                 if (!memory.Succeeded)
                     return new ImmAuthoringExportResult(memory.ErrorCode, memory.Message, memory.ObjectId, memory.SourceRevision, null, null, 0, Array.Empty<string>(), statistics);
 
                 options.CancellationToken.ThrowIfCancellationRequested();
                 temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+                options.Report(ImmAuthoringProgressStage.WritingOutput, 0, 1, "Writing atomic IMM output file.");
                 File.WriteAllBytes(temporaryPath, memory.Data);
                 options.CancellationToken.ThrowIfCancellationRequested();
                 if (File.Exists(fullPath))
@@ -255,6 +267,8 @@ namespace ImmPlayer.Authoring
                 temporaryPath = null;
                 total.Stop();
                 statistics.TotalTime = total.Elapsed;
+                options.Report(ImmAuthoringProgressStage.WritingOutput, 1, 1, "IMM output file replaced atomically.");
+                options.Report(ImmAuthoringProgressStage.Completed, 1, 1, "File export completed.");
                 return new ImmAuthoringExportResult(
                     ImmAuthoringErrorCode.None,
                     string.Empty,

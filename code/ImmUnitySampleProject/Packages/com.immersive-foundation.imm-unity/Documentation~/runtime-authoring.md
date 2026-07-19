@@ -39,6 +39,8 @@ are Unity-main-thread operations.
 
 Pass `ImmAuthoringOperationOptions` to compiler or importer overloads. Progress
 reports contain a stage, completed units, total units, fraction, and message.
+File export reports `WritingOutput` after serialization and does not report
+`Completed` until the destination has been replaced.
 Cancellation is cooperative at validation, source-inspection, layer, drawing,
 stroke, frame, and serialization boundaries. A native parser or serializer call
 already in progress cannot be interrupted; cancellation is observed immediately

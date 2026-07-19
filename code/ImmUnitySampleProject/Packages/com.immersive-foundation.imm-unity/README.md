@@ -96,8 +96,9 @@ ImmAuthoringExportResult export =
     ImmAuthoringCompiler.ExportToMemory(document, options);
 ```
 
-Progress is reported across validation, graph compilation/import, and
-serialization. Cancellation returns `ImmAuthoringErrorCode.Cancelled` without a
+Progress is reported across validation, graph compilation/import,
+serialization, and atomic file writing. Cancellation returns
+`ImmAuthoringErrorCode.Cancelled` without a
 partial public document or memory buffer. Configured safety envelopes return
 `ResourceLimitExceeded`; unreadable IMM input returns `CorruptInput`. File
 export uses a same-directory temporary file so a cancelled or failed operation

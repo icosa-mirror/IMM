@@ -131,6 +131,7 @@ namespace ImmPlayer.Authoring
         ImportingGraph,
         CompilingGraph,
         Serializing,
+        WritingOutput,
         Completed
     }
 
