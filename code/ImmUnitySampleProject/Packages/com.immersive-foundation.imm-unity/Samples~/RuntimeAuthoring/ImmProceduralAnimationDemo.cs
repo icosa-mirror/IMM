@@ -8,8 +8,8 @@ using UnityEngine.Rendering;
 namespace ImmPlayer.Samples
 {
     /// <summary>
-    /// Generates an animated IMM ribbon through the runtime authoring API, writes
-    /// it to disk, and previews the same revision through the runtime coordinator.
+    /// Generates an animated IMM ribbon through the runtime authoring API and
+    /// previews it directly from memory. File export remains an explicit option.
     /// </summary>
     [RequireComponent(typeof(ImmAuthoringPreviewCoordinator))]
     public sealed class ImmProceduralAnimationDemo : MonoBehaviour
@@ -126,13 +126,13 @@ namespace ImmPlayer.Samples
         [ContextMenu("Generate and Play")]
         public void GenerateAndPlay()
         {
-            StartOperation(true);
+            StartOperation(false, true);
         }
 
         [ContextMenu("Export IMM Only")]
         public void ExportOnly()
         {
-            StartOperation(false);
+            StartOperation(true, false);
         }
 
         [ContextMenu("Unload Generated IMM")]
@@ -143,7 +143,7 @@ namespace ImmPlayer.Samples
             SetStatus("Generated IMM unloaded");
         }
 
-        private void StartOperation(bool loadAfterExport)
+        private void StartOperation(bool exportToFile, bool loadAfterBuild)
         {
             if (!Application.isPlaying)
             {
@@ -157,12 +157,15 @@ namespace ImmPlayer.Samples
             }
             if (_operation != null)
                 StopCoroutine(_operation);
-            _operation = StartCoroutine(GenerateExportAndOptionallyPlay(loadAfterExport));
+            _operation = StartCoroutine(GenerateAnimation(exportToFile, loadAfterBuild));
         }
 
-        private IEnumerator GenerateExportAndOptionallyPlay(bool loadAfterExport)
+        private IEnumerator GenerateAnimation(bool exportToFile, bool loadAfterBuild)
         {
             Unload();
+            generatedFilePath = string.Empty;
+            generatedRevision = 0;
+            generatedBytes = 0;
             SetStatus("Building mutable authoring document...");
             yield return null;
 
@@ -195,27 +198,30 @@ namespace ImmPlayer.Samples
                     yield break;
                 }
 
-                generatedFilePath = ResolveOutputPath();
-                SetStatus($"Exporting revision {document.Revision}...");
-                yield return null;
-
-                ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(document, generatedFilePath);
-                if (!export.Succeeded)
+                if (exportToFile)
                 {
-                    SetError($"Export failed: {export.ErrorCode}: {export.Message}");
-                    _operation = null;
-                    yield break;
+                    generatedFilePath = ResolveOutputPath();
+                    SetStatus($"Exporting revision {document.Revision}...");
+                    yield return null;
+
+                    ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(document, generatedFilePath);
+                    if (!export.Succeeded)
+                    {
+                        SetError($"Export failed: {export.ErrorCode}: {export.Message}");
+                        _operation = null;
+                        yield break;
+                    }
+
+                    generatedRevision = export.SourceRevision;
+                    generatedBytes = export.BytesWritten;
+                    SetStatus(
+                        $"Exported {generatedBytes:N0} bytes from revision {generatedRevision} " +
+                        $"in {export.Statistics.TotalTime.TotalMilliseconds:F1} ms");
                 }
 
-                generatedRevision = export.SourceRevision;
-                generatedBytes = export.BytesWritten;
-                SetStatus(
-                    $"Exported {generatedBytes:N0} bytes from revision {generatedRevision} " +
-                    $"in {export.Statistics.TotalTime.TotalMilliseconds:F1} ms");
-
-                if (loadAfterExport)
+                if (loadAfterBuild)
                 {
-                    SetStatus($"Requesting native preview for revision {document.Revision}...");
+                    SetStatus($"Compiling revision {document.Revision} directly to memory...");
                     ImmAuthoringResult<ImmAuthoringPreviewRequest> previewResult =
                         _previewCoordinator.RequestPreview(document, document.Revision);
                     if (!previewResult.Succeeded)
@@ -236,9 +242,11 @@ namespace ImmPlayer.Samples
                     }
 
                     _loadedDocument = _previewCoordinator.InstalledDocument;
+                    generatedRevision = _previewCoordinator.InstalledRevision;
+                    generatedBytes = preview.Statistics.BytesCompiled;
                     SetStatus(
-                        $"Playing {frameCount} frames from revision {_previewCoordinator.InstalledRevision} " +
-                        $"({preview.Statistics.BytesCompiled:N0} bytes, " +
+                        $"Playing {frameCount} frames from revision {generatedRevision} directly from memory; " +
+                        $"no IMM file was written ({generatedBytes:N0} bytes, " +
                         $"{preview.Statistics.TotalTime.TotalMilliseconds:F1} ms preview latency)");
                 }
             }
