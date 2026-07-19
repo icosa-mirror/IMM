@@ -221,7 +221,7 @@ namespace ImmPlayer.Tests
                 long group = Require(editable.CreateGroupLayer(0, groupProperties));
 
                 ImmAuthoringLayerProperties paintProperties = ImmAuthoringLayerProperties.Default("Editable Paint");
-                ExportLayerTiming timing = ExportLayerTiming.FromFrames(4, 24, 2);
+                ExportLayerTiming timing = ExportLayerTiming.FromFrames(3, 24, 2);
                 paintProperties.IsTimeline = timing.IsTimeline;
                 paintProperties.DurationTicks = timing.DurationTicks;
                 paintProperties.MaxRepeatCount = timing.MaxRepeatCount;
@@ -229,16 +229,13 @@ namespace ImmPlayer.Tests
                 long paint = Require(editable.CreatePaintLayer(group, paintProperties));
                 long firstDrawing = Require(editable.CreateDrawing(paint));
                 long secondDrawing = Require(editable.CreateDrawing(paint));
-                long thirdDrawing = Require(editable.CreateDrawing(paint));
-                long fourthDrawing = Require(editable.CreateDrawing(paint));
                 Require(editable.CreateStroke(firstDrawing, BrushSectionType.Segment, VisibilityType.Always, StrokePoints(0f, Color.red)));
-                Require(editable.CreateStroke(secondDrawing, BrushSectionType.Circle, VisibilityType.FadePow2, StrokePoints(0.2f, Color.green)));
-                Require(editable.CreateStroke(thirdDrawing, BrushSectionType.Ellipse, VisibilityType.Always, StrokePoints(0.4f, Color.blue)));
-                Require(editable.CreateStroke(fourthDrawing, BrushSectionType.Square, VisibilityType.FadePow2, StrokePoints(0.6f, Color.yellow)));
+                Require(editable.CreateStroke(firstDrawing, BrushSectionType.Circle, VisibilityType.FadePow2, StrokePoints(0.2f, Color.green)));
+                Require(editable.CreateStroke(secondDrawing, BrushSectionType.Ellipse, VisibilityType.Always, StrokePoints(0.4f, Color.blue)));
+                Require(editable.CreateStroke(secondDrawing, BrushSectionType.Square, VisibilityType.FadePow2, StrokePoints(0.6f, Color.yellow)));
                 Require(editable.AppendFrame(paint, firstDrawing));
                 Require(editable.AppendFrame(paint, secondDrawing));
-                Require(editable.AppendFrame(paint, thirdDrawing));
-                Require(editable.AppendFrame(paint, fourthDrawing));
+                Require(editable.AppendFrame(paint, firstDrawing));
 
                 Require(editable.CreateAnimationKey(
                     paint,
