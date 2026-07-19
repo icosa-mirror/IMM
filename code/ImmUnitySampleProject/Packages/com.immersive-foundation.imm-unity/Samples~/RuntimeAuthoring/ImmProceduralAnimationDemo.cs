@@ -22,6 +22,8 @@ namespace ImmPlayer.Samples
         [SerializeField] private Camera targetCamera;
         [SerializeField] private string outputFileName = "procedural-ribbon.imm";
         [SerializeField, Min(1f)] private float loadTimeoutSeconds = 30f;
+        [SerializeField] private bool modifyAfterInitialPreview = true;
+        [SerializeField, Min(0.1f)] private float automaticModificationDelaySeconds = 1.5f;
 
         [Header("Animation")]
         [SerializeField, Min(1)] private int frameRate = 30;
@@ -37,16 +39,28 @@ namespace ImmPlayer.Samples
         [SerializeField] private string generatedFilePath;
         [SerializeField] private long generatedRevision;
         [SerializeField] private long generatedBytes;
+        [SerializeField] private long authoringRevision;
+        [SerializeField] private long installedRevision;
+        [SerializeField] private long stableStrokeId;
+        [SerializeField] private int modificationCount;
 
         private ImmDocument _loadedDocument;
+        private ImmAuthoringDocument _authoringDocument;
         private ImmAuthoringPreviewCoordinator _previewCoordinator;
         private Coroutine _operation;
         private bool _useScriptableRenderPipeline;
+        private long[] _strokeIds;
+        private int _builtFrameCount;
+        private int _builtStrandCount;
 
         public string Status => status;
         public string GeneratedFilePath => generatedFilePath;
         public long GeneratedRevision => generatedRevision;
         public long GeneratedBytes => generatedBytes;
+        public long AuthoringRevision => authoringRevision;
+        public long InstalledRevision => installedRevision;
+        public long StableStrokeId => stableStrokeId;
+        public int ModificationCount => modificationCount;
 
         private void Awake()
         {
@@ -135,12 +149,35 @@ namespace ImmPlayer.Samples
             StartOperation(true, false);
         }
 
+        [ContextMenu("Modify Existing Graph and Replace Preview")]
+        public void ModifyExistingGraphAndReplacePreview()
+        {
+            if (!Application.isPlaying)
+            {
+                SetError("Enter Play mode before modifying the procedural demo.");
+                return;
+            }
+            if (_authoringDocument == null)
+            {
+                SetError("Generate the mutable authoring document before modifying it.");
+                return;
+            }
+            if (_operation != null)
+            {
+                SetError("Wait for the current authoring operation to finish.");
+                return;
+            }
+
+            _operation = StartCoroutine(ModifyAndFinishOperation());
+        }
+
         [ContextMenu("Unload Generated IMM")]
         public void Unload()
         {
             _previewCoordinator?.ClearPreview();
             _loadedDocument = null;
-            SetStatus("Generated IMM unloaded");
+            DisposeAuthoringDocument();
+            SetStatus("Runtime authoring document and native preview unloaded");
         }
 
         private void StartOperation(bool exportToFile, bool loadAfterBuild)
@@ -166,6 +203,10 @@ namespace ImmPlayer.Samples
             generatedFilePath = string.Empty;
             generatedRevision = 0;
             generatedBytes = 0;
+            authoringRevision = 0;
+            installedRevision = 0;
+            stableStrokeId = 0;
+            modificationCount = 0;
             SetStatus("Building mutable authoring document...");
             yield return null;
 
@@ -188,73 +229,149 @@ namespace ImmPlayer.Samples
                 yield break;
             }
 
-            using (ImmAuthoringDocument document = createResult.Value)
+            ImmAuthoringDocument document = createResult.Value;
+            _authoringDocument = document;
+            ImmAuthoringResult buildResult = BuildDocument(document);
+            if (!buildResult.Succeeded)
             {
-                ImmAuthoringResult buildResult = BuildDocument(document);
-                if (!buildResult.Succeeded)
+                SetError($"Build failed: {buildResult}");
+                DisposeAuthoringDocument();
+                _operation = null;
+                yield break;
+            }
+            authoringRevision = document.Revision;
+
+            if (exportToFile)
+            {
+                generatedFilePath = ResolveOutputPath();
+                SetStatus($"Exporting revision {document.Revision}...");
+                yield return null;
+
+                ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(document, generatedFilePath);
+                if (!export.Succeeded)
                 {
-                    SetError($"Build failed: {buildResult}");
+                    SetError($"Export failed: {export.ErrorCode}: {export.Message}");
                     _operation = null;
                     yield break;
                 }
 
-                if (exportToFile)
+                generatedRevision = export.SourceRevision;
+                generatedBytes = export.BytesWritten;
+                SetStatus(
+                    $"Exported {generatedBytes:N0} bytes from revision {generatedRevision} " +
+                    $"in {export.Statistics.TotalTime.TotalMilliseconds:F1} ms");
+            }
+
+            if (loadAfterBuild)
+            {
+                yield return RequestAndInstallPreview(document, "initial");
+                if (_loadedDocument != null && modifyAfterInitialPreview)
                 {
-                    generatedFilePath = ResolveOutputPath();
-                    SetStatus($"Exporting revision {document.Revision}...");
-                    yield return null;
-
-                    ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToFile(document, generatedFilePath);
-                    if (!export.Succeeded)
-                    {
-                        SetError($"Export failed: {export.ErrorCode}: {export.Message}");
-                        _operation = null;
-                        yield break;
-                    }
-
-                    generatedRevision = export.SourceRevision;
-                    generatedBytes = export.BytesWritten;
-                    SetStatus(
-                        $"Exported {generatedBytes:N0} bytes from revision {generatedRevision} " +
-                        $"in {export.Statistics.TotalTime.TotalMilliseconds:F1} ms");
-                }
-
-                if (loadAfterBuild)
-                {
-                    SetStatus($"Compiling revision {document.Revision} directly to memory...");
-                    ImmAuthoringResult<ImmAuthoringPreviewRequest> previewResult =
-                        _previewCoordinator.RequestPreview(document, document.Revision);
-                    if (!previewResult.Succeeded)
-                    {
-                        SetError($"Preview request failed: {previewResult.ErrorCode}: {previewResult.Message}");
-                        _operation = null;
-                        yield break;
-                    }
-
-                    ImmAuthoringPreviewRequest preview = previewResult.Value;
-                    while (!preview.IsTerminal)
-                        yield return null;
-                    if (preview.State != ImmAuthoringPreviewState.Installed)
-                    {
-                        SetError($"Preview failed: {preview.ErrorCode}: {preview.Message}");
-                        _operation = null;
-                        yield break;
-                    }
-
-                    _loadedDocument = _previewCoordinator.InstalledDocument;
-                    generatedRevision = _previewCoordinator.InstalledRevision;
-                    generatedBytes = preview.Statistics.BytesCompiled;
-                    SetStatus(
-                        $"Playing {frameCount} frames from revision {generatedRevision} directly from memory; " +
-                        $"no IMM file was written ({generatedBytes:N0} bytes, " +
-                        $"{preview.Statistics.TotalTime.TotalMilliseconds:F1} ms preview latency)");
+                    yield return new WaitForSeconds(automaticModificationDelaySeconds);
+                    yield return ModifyAuthoringGraphAndReplacePreview();
                 }
             }
             _operation = null;
         }
 
+        private IEnumerator ModifyAndFinishOperation()
+        {
+            yield return ModifyAuthoringGraphAndReplacePreview();
+            _operation = null;
+        }
+
+        private IEnumerator ModifyAuthoringGraphAndReplacePreview()
+        {
+            long baseRevision = _authoringDocument.Revision;
+            int nextModification = modificationCount + 1;
+            SetStatus($"Editing existing graph at revision {baseRevision} using stable stroke IDs...");
+
+            ImmAuthoringResult<ImmAuthoringTransaction> transactionResult =
+                _authoringDocument.BeginEdit(baseRevision);
+            if (!transactionResult.Succeeded)
+            {
+                SetError($"Edit transaction failed: {transactionResult.ErrorCode}: {transactionResult.Message}");
+                yield break;
+            }
+
+            using (ImmAuthoringTransaction transaction = transactionResult.Value)
+            {
+                ImmAuthoringDocument editable = transaction.EditableDocument;
+                for (int frame = 0; frame < _builtFrameCount; frame++)
+                {
+                    for (int strand = 0; strand < _builtStrandCount; strand++)
+                    {
+                        int strokeIndex = frame * _builtStrandCount + strand;
+                        long strokeId = _strokeIds[strokeIndex];
+                        ImmAuthoringResult replace = editable.ReplaceStroke(
+                            strokeId,
+                            BrushSectionType.Circle,
+                            VisibilityType.Always,
+                            BuildStrand(frame, strand, nextModification));
+                        if (!replace.Succeeded)
+                        {
+                            SetError($"Stroke {strokeId} replacement failed: {replace}");
+                            transaction.Abort();
+                            yield break;
+                        }
+                    }
+                }
+
+                ImmAuthoringResult<long> commit = transaction.Commit();
+                if (!commit.Succeeded)
+                {
+                    SetError($"Edit commit failed: {commit.ErrorCode}: {commit.Message}");
+                    yield break;
+                }
+
+                authoringRevision = commit.Value;
+                modificationCount = nextModification;
+            }
+
+            yield return RequestAndInstallPreview(_authoringDocument, "replacement");
+            if (_loadedDocument != null && installedRevision == authoringRevision)
+            {
+                SetStatus(
+                    $"Replaced native preview with revision {installedRevision} after modifying " +
+                    $"{_strokeIds.Length:N0} existing strokes by stable ID; no IMM file was written");
+            }
+        }
+
+        private IEnumerator RequestAndInstallPreview(ImmAuthoringDocument document, string requestKind)
+        {
+            SetStatus($"Compiling {requestKind} revision {document.Revision} directly to memory...");
+            ImmAuthoringResult<ImmAuthoringPreviewRequest> previewResult =
+                _previewCoordinator.RequestPreview(document, document.Revision);
+            if (!previewResult.Succeeded)
+            {
+                SetError($"Preview request failed: {previewResult.ErrorCode}: {previewResult.Message}");
+                yield break;
+            }
+
+            ImmAuthoringPreviewRequest preview = previewResult.Value;
+            while (!preview.IsTerminal)
+                yield return null;
+            if (preview.State != ImmAuthoringPreviewState.Installed)
+            {
+                SetError($"Preview failed: {preview.ErrorCode}: {preview.Message}");
+                yield break;
+            }
+
+            _loadedDocument = _previewCoordinator.InstalledDocument;
+            generatedRevision = _previewCoordinator.InstalledRevision;
+            installedRevision = generatedRevision;
+            generatedBytes = preview.Statistics.BytesCompiled;
+            SetStatus(
+                $"Playing {frameCount} frames from revision {generatedRevision} directly from memory; " +
+                $"no IMM file was written ({generatedBytes:N0} bytes, " +
+                $"{preview.Statistics.TotalTime.TotalMilliseconds:F1} ms preview latency)");
+        }
+
         private ImmAuthoringResult BuildDocument(ImmAuthoringDocument document)
         {
+            _builtFrameCount = frameCount;
+            _builtStrandCount = strandCount;
+            _strokeIds = new long[_builtFrameCount * _builtStrandCount];
             ImmAuthoringResult<ImmAuthoringTransaction> transactionResult = document.BeginEdit(document.Revision);
             if (!transactionResult.Succeeded)
                 return transactionResult.WithoutValue();
@@ -289,6 +406,7 @@ namespace ImmPlayer.Samples
                             points);
                         if (!strokeResult.Succeeded)
                             return strokeResult.WithoutValue();
+                        _strokeIds[frame * _builtStrandCount + strand] = strokeResult.Value;
                     }
 
                     ImmAuthoringResult frameResult = editable.AppendFrame(layerId, drawingId);
@@ -297,11 +415,13 @@ namespace ImmPlayer.Samples
                 }
 
                 ImmAuthoringResult<long> commit = transaction.Commit();
+                if (commit.Succeeded && _strokeIds.Length > 0)
+                    stableStrokeId = _strokeIds[0];
                 return commit.WithoutValue();
             }
         }
 
-        private PaintPoint[] BuildStrand(int frame, int strand)
+        private PaintPoint[] BuildStrand(int frame, int strand, int modification = 0)
         {
             PaintPoint[] points = new PaintPoint[pointsPerStrand];
             float animationPhase = frame * Mathf.PI * 2f / frameCount;
@@ -315,10 +435,14 @@ namespace ImmPlayer.Samples
                 float envelopeBase = Mathf.Max(0f, Mathf.Sin(t * Mathf.PI));
                 float envelope = Mathf.Pow(envelopeBase, 0.65f);
                 float angle = t * turns * Mathf.PI * 2f + animationPhase + strandPhase;
+                float deformation = modification == 0
+                    ? 0f
+                    : Mathf.Sin(t * Mathf.PI * 2f + modification * 0.7f) * 0.32f * envelope;
+                float modifiedRadius = radius * (1f + 0.12f * modification);
                 Vector3 position = new Vector3(
                     (t - 0.5f) * 2.4f,
-                    Mathf.Sin(angle) * radius * envelope,
-                    Mathf.Cos(angle) * radius * envelope);
+                    Mathf.Sin(angle) * modifiedRadius * envelope + deformation,
+                    Mathf.Cos(angle) * modifiedRadius * envelope);
                 if (pointIndex != 0)
                     accumulatedLength += Vector3.Distance(previous, position);
                 previous = position;
@@ -329,11 +453,14 @@ namespace ImmPlayer.Samples
                     Normal = new Vector3(0f, Mathf.Cos(angle), -Mathf.Sin(angle)).normalized,
                     Direction = Vector3.forward,
                     Color = Color.HSVToRGB(
-                        Mathf.Repeat(strand / (float)strandCount + t * 0.2f + frame / (float)frameCount * 0.1f, 1f),
+                        Mathf.Repeat(
+                            strand / (float)strandCount + t * 0.2f +
+                            frame / (float)frameCount * 0.1f + modification * 0.13f,
+                            1f),
                         0.85f,
                         1f),
                     Alpha = 1f,
-                    Width = strokeWidth,
+                    Width = strokeWidth * (1f + modification * 0.3f),
                     Length = accumulatedLength,
                     Time = t
                 };
@@ -363,6 +490,15 @@ namespace ImmPlayer.Samples
             if (!fileName.EndsWith(".imm", System.StringComparison.OrdinalIgnoreCase))
                 fileName += ".imm";
             return Path.Combine(Application.persistentDataPath, Path.GetFileName(fileName));
+        }
+
+        private void DisposeAuthoringDocument()
+        {
+            _authoringDocument?.Dispose();
+            _authoringDocument = null;
+            _strokeIds = null;
+            _builtFrameCount = 0;
+            _builtStrandCount = 0;
         }
 
         private void SetStatus(string message)
