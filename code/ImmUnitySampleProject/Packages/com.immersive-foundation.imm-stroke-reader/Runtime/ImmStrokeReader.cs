@@ -115,6 +115,10 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetLayerCount(int docId);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetDocumentInfo(int docId, out StrokeDocumentInfo info);
+
         /// <summary>
         /// Get information about a layer.
         /// </summary>
@@ -129,6 +133,17 @@ namespace ImmPlayer
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetLayerTransform(int docId, int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetLayerAnimationKeyCount(int docId, int layerIdx);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetLayerAnimationKey(
+            int docId,
+            int layerIdx,
+            int keyIdx,
+            out StrokeAnimationKey key);
 
         /// <summary>
         /// Get the number of drawings in a layer.
@@ -219,6 +234,9 @@ namespace ImmPlayer
         /// <summary>Layer opacity (0-1)</summary>
         public float opacity;
 
+        /// <summary>Whether this spawn-area layer is the document default.</summary>
+        public int isDefaultSpawn;
+
         /// <summary>Pivot rotation (x,y,z,w)</summary>
         public float pivotRotX;
         public float pivotRotY;
@@ -235,6 +253,12 @@ namespace ImmPlayer
         public float pivotTransX;
         public float pivotTransY;
         public float pivotTransZ;
+
+        public int parentId;
+        public int childIndex;
+        public int isTimeline;
+        public long durationTicks;
+        public uint maxRepeatCount;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -333,6 +357,10 @@ namespace ImmPlayer
         /// <summary>Stroke width (quantized, may need conversion)</summary>
         public float width;
 
+        public float length;
+
+        public float time;
+
         /// <summary>Get position as Vector3</summary>
         public Vector3 Position => new Vector3(px, py, pz);
 
@@ -344,6 +372,31 @@ namespace ImmPlayer
 
         /// <summary>Get color as Color (with alpha)</summary>
         public Color Color => new Color(r, g, b, alpha);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeDocumentInfo
+    {
+        public int sequenceType;
+        public uint frameRate;
+        public float backgroundR;
+        public float backgroundG;
+        public float backgroundB;
+        public uint capabilities;
+        public int rootAnimationKeyCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeAnimationKey
+    {
+        public int property;
+        public long timeTicks;
+        public int interpolation;
+        public int boolValue;
+        public uint intValue;
+        public float floatValue;
+        public double doubleValue;
+        public StrokeLayerTransform transformValue;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -444,6 +497,12 @@ namespace ImmPlayer
         /// </summary>
         public int LayerCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetLayerCount(_docId) : 0;
 
+        public bool GetDocumentInfo(out StrokeDocumentInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetDocumentInfo(_docId, out info);
+        }
+
         public int ChapterCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetChapterCount(_docId) : 0;
 
         public int CurrentChapter => _docId > 0 ? ImmStrokeReader.StrokeReader_GetCurrentChapter(_docId) : 0;
@@ -466,6 +525,22 @@ namespace ImmPlayer
             info = default;
             if (_docId <= 0) return false;
             return ImmStrokeReader.StrokeReader_GetLayerInfo(_docId, layerIdx, out info);
+        }
+
+        public StrokeAnimationKey[] GetLayerAnimationKeys(int layerIdx)
+        {
+            if (_docId <= 0)
+                return Array.Empty<StrokeAnimationKey>();
+            int count = ImmStrokeReader.StrokeReader_GetLayerAnimationKeyCount(_docId, layerIdx);
+            if (count <= 0)
+                return Array.Empty<StrokeAnimationKey>();
+            StrokeAnimationKey[] keys = new StrokeAnimationKey[count];
+            for (int keyIndex = 0; keyIndex < count; keyIndex++)
+            {
+                if (!ImmStrokeReader.StrokeReader_GetLayerAnimationKey(_docId, layerIdx, keyIndex, out keys[keyIndex]))
+                    return null;
+            }
+            return keys;
         }
 
         /// <summary>

@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "libImmCore/src/libBasics/piStr.h"
+#include "libImmImporter/src/document/sequence.h"
 
 namespace ImmStrokeReader
 {
@@ -302,6 +303,11 @@ bool StrokeStore::GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const
     info->pivotTranslation[0] = pivot.translation[0];
     info->pivotTranslation[1] = pivot.translation[1];
     info->pivotTranslation[2] = pivot.translation[2];
+    info->parentId = layer.parentId;
+    info->childIndex = layer.childIndex;
+    info->isTimeline = layer.isTimeline ? 1 : 0;
+    info->durationTicks = layer.durationTicks;
+    info->maxRepeatCount = layer.maxRepeatCount;
 
     const std::string utf8Name = ToUtf8(layer.name);
     std::memset(info->name, 0, sizeof(info->name));
@@ -425,6 +431,8 @@ bool StrokeStore::GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, S
         if (widQ < 0) widQ = 0;
         if (widQ > 32767) widQ = 32767;
         dst.width = widthScale * static_cast<float>(widQ);
+        dst.length = src.mLen;
+        dst.time = src.mTim;
     }
 
     return true;
@@ -603,8 +611,135 @@ bool StrokeStore::GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames) 
     return true;
 }
 
+void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
+{
+    mDocument.sequenceType = static_cast<int>(sequence.GetType());
+    mDocument.frameRate = sequence.GetFrameRate();
+    const ImmCore::vec3 background = sequence.GetBackgroundColor();
+    mDocument.backgroundColor[0] = background.x;
+    mDocument.backgroundColor[1] = background.y;
+    mDocument.backgroundColor[2] = background.z;
+    mDocument.capabilities = sequence.GetCaps();
+    mDocument.rootAnimationKeyCount = 0;
+
+    ImmImporter::Layer* root = sequence.GetRoot();
+    if (root != nullptr)
+    {
+        for (int property = 0; property < static_cast<int>(ImmImporter::Layer::AnimProperty::MAX); property++)
+        {
+            mDocument.rootAnimationKeyCount += static_cast<int>(
+                root->GetNumAnimKeys(static_cast<ImmImporter::Layer::AnimProperty>(property)));
+        }
+    }
+
+    std::vector<StoredLayer> capturedLayers;
+    capturedLayers.reserve(mDocument.layers.size());
+    sequence.Recurse(
+        [this, root, &capturedLayers](ImmImporter::Layer* layer, int, int childIndex, bool) -> bool
+        {
+            if (layer == root)
+                return true;
+
+            StoredLayer captured;
+            auto existing = std::find_if(
+                mDocument.layers.begin(),
+                mDocument.layers.end(),
+                [layer](const StoredLayer& candidate) { return candidate.layerId == layer->GetID(); });
+            if (existing != mDocument.layers.end())
+                captured = std::move(*existing);
+
+            captured.layerId = layer->GetID();
+            captured.layerType = static_cast<uint32_t>(layer->GetType());
+            captured.name = layer->GetName().GetS();
+            captured.visible = layer->GetVisible();
+            captured.opacity = layer->GetOpacity();
+            captured.localTransform = layer->GetTransform();
+            captured.worldTransform = layer->GetTransformToWorld();
+            captured.pivotTransform = layer->GetPivot();
+            captured.parentId = layer->GetParent() == nullptr ? 0 : static_cast<int32_t>(layer->GetParent()->GetID());
+            captured.childIndex = childIndex;
+            captured.isTimeline = layer->GetIsTimeline();
+            captured.durationTicks = ImmCore::piTick::CastInt(layer->GetDuration());
+            captured.maxRepeatCount = layer->GetMaxRepeatCount();
+            captured.animationKeys.clear();
+
+            for (int property = 0; property < static_cast<int>(ImmImporter::Layer::AnimProperty::MAX); property++)
+            {
+                const ImmImporter::Layer::AnimProperty animProperty =
+                    static_cast<ImmImporter::Layer::AnimProperty>(property);
+                const uint32_t keyCount = layer->GetNumAnimKeys(animProperty);
+                for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++)
+                {
+                    const ImmImporter::Layer::AnimKey* source = layer->GetAnimKey(animProperty, keyIndex);
+                    if (source == nullptr)
+                        continue;
+                    StrokeAnimationKeyC key{};
+                    key.property = property;
+                    key.timeTicks = ImmCore::piTick::CastInt(source->mTime);
+                    key.interpolation = static_cast<int>(source->mInterpolation);
+                    key.boolValue = source->mValue.mBool ? 1 : 0;
+                    key.intValue = source->mValue.mInt;
+                    key.floatValue = source->mValue.mFloat;
+                    key.doubleValue = source->mValue.mDouble;
+                    key.transformValue = ToTransformC(source->mValue.mTransform);
+                    captured.animationKeys.push_back(key);
+                }
+            }
+
+            capturedLayers.push_back(std::move(captured));
+            return true;
+        },
+        false,
+        false,
+        false,
+        false);
+
+    mDocument.layers = std::move(capturedLayers);
+    mCurrentLayer = nullptr;
+    mCurrentDrawing = nullptr;
+}
+
+bool StrokeStore::GetDocumentInfo(StrokeDocumentInfoC* info) const
+{
+    if (info == nullptr)
+        return false;
+    info->sequenceType = mDocument.sequenceType;
+    info->frameRate = mDocument.frameRate;
+    info->backgroundColor[0] = mDocument.backgroundColor[0];
+    info->backgroundColor[1] = mDocument.backgroundColor[1];
+    info->backgroundColor[2] = mDocument.backgroundColor[2];
+    info->capabilities = mDocument.capabilities;
+    info->rootAnimationKeyCount = mDocument.rootAnimationKeyCount;
+    return true;
+}
+
+int StrokeStore::GetLayerAnimationKeyCount(int layerIdx) const
+{
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+        return 0;
+    return static_cast<int>(mDocument.layers[layerIdx].animationKeys.size());
+}
+
+bool StrokeStore::GetLayerAnimationKey(int layerIdx, int keyIdx, StrokeAnimationKeyC* key) const
+{
+    if (key == nullptr || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+        return false;
+    const std::vector<StrokeAnimationKeyC>& keys = mDocument.layers[layerIdx].animationKeys;
+    if (keyIdx < 0 || keyIdx >= static_cast<int>(keys.size()))
+        return false;
+    *key = keys[keyIdx];
+    return true;
+}
+
 void StrokeStore::Clear()
 {
+    mDocument.sequenceType = 0;
+    mDocument.frameRate = 24;
+    mDocument.backgroundColor[0] = 0.0f;
+    mDocument.backgroundColor[1] = 0.0f;
+    mDocument.backgroundColor[2] = 0.0f;
+    mDocument.capabilities = 0;
+    mDocument.rootAnimationKeyCount = 0;
     mDocument.layers.clear();
     mDocument.chapterStartTimes.clear();
     mDocument.currentChapter = 0;

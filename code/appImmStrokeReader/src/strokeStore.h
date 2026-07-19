@@ -8,6 +8,11 @@
 #include "libImmCore/src/libBasics/piVecTypes.h"
 #include "libImmCore/src/libBasics/piTick.h"
 
+namespace ImmImporter
+{
+class Sequence;
+}
+
 namespace ImmStrokeReader
 {
 
@@ -25,6 +30,11 @@ struct StrokeLayerInfoC
     float pivotScale;
     int pivotFlip;
     float pivotTranslation[3];
+    int parentId;
+    int childIndex;
+    int isTimeline;
+    int64_t durationTicks;
+    uint32_t maxRepeatCount;
 };
 
 struct StrokeLayerTransformC
@@ -52,6 +62,29 @@ struct StrokePointC
     float r, g, b;     // color
     float alpha;       // transparency (0-255 stored as int, converted to float 0-1)
     float width;       // stroke width (quantized int, needs conversion with biggestStroke)
+    float length;
+    float time;
+};
+
+struct StrokeDocumentInfoC
+{
+    int sequenceType;
+    uint32_t frameRate;
+    float backgroundColor[3];
+    uint32_t capabilities;
+    int rootAnimationKeyCount;
+};
+
+struct StrokeAnimationKeyC
+{
+    int property;
+    int64_t timeTicks;
+    int interpolation;
+    int boolValue;
+    uint32_t intValue;
+    float floatValue;
+    double doubleValue;
+    StrokeLayerTransformC transformValue;
 };
 
 struct StrokePictureInfoC
@@ -99,18 +132,28 @@ struct StoredLayer
     int pictureHeight = 0;
     bool pictureHasAlpha = false;
     bool isDefaultSpawn = false;
+    int32_t parentId = 0;
+    int32_t childIndex = 0;
+    bool isTimeline = false;
+    int64_t durationTicks = 0;
+    uint32_t maxRepeatCount = 0;
+    std::vector<StrokeAnimationKeyC> animationKeys;
     std::vector<uint8_t> picturePixels;
     std::vector<StoredDrawing> drawings;
     
     // Animation info for paint layers
     uint32_t frameRate = 24;
     uint32_t numFrames = 0;
-    uint32_t maxRepeatCount = 0;
     std::vector<uint32_t> frameBuffer;
 };
 
 struct StoredDocument
 {
+    int sequenceType = 0;
+    uint32_t frameRate = 24;
+    float backgroundColor[3] = { 0.0f, 0.0f, 0.0f };
+    uint32_t capabilities = 0;
+    int rootAnimationKeyCount = 0;
     std::vector<StoredLayer> layers;
     std::vector<ImmCore::piTick> chapterStartTimes;
     int currentChapter = 0;
@@ -173,6 +216,10 @@ public:
     bool SetCurrentChapter(int chapterIndex);
     void SetChapterStartTimes(const std::vector<ImmCore::piTick>& chapterStartTimes);
     int GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const;
+    void CaptureSequenceMetadata(ImmImporter::Sequence& sequence);
+    bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
+    int GetLayerAnimationKeyCount(int layerIdx) const;
+    bool GetLayerAnimationKey(int layerIdx, int keyIdx, StrokeAnimationKeyC* key) const;
 
     // Clear all stored data
     void Clear();
