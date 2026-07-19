@@ -499,6 +499,14 @@ Completion evidence:
 
 Estimated effort: 4–8 weeks.
 
+Status: completed on 2026-07-19 for the Windows x64 paint-animation engine.
+Runtime capability queries, operation progress, cooperative cancellation,
+configurable safety limits, atomic file replacement, corrupt-input recovery,
+soak/memory tests, package documentation, the minimal sample, and an
+independent package-consumer assembly are implemented and verified. IMM is the
+only engine persistence format, so the conditional snapshot/schema-migration
+item does not apply.
+
 Engine work:
 
 - Add large-document progress and cancellation callbacks.
@@ -522,6 +530,14 @@ Exit criteria:
 - Soak, malformed-input, cancellation, and recovery tests pass.
 - Public API documentation includes ownership, threading, limits, and error behavior.
 - The package can be consumed by the separate application without referencing sample code.
+
+Recorded result: the final Windows Unity PlayMode suite passed 37 of 37 tests
+in 2.061 seconds. The live sample reported all Phase 6 capability flags and
+progress stages, exercised controlled limit/cancellation/corrupt-input
+failures, and then rendered the revision-2 450-stroke animation after in-memory
+import and stable-ID edits. `Assets/Phase6PackageConsumer` compiles as a separate
+assembly referencing `ImmUnity.Runtime` only, and its reflection smoke test
+passed.
 
 ## Phase 7: Extended IMM feature surface and platforms
 

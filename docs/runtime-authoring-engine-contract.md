@@ -1,6 +1,6 @@
 # IMM runtime authoring engine contract
 
-This contract records the implemented Phase 0-5 boundary for the first Windows
+This contract records the implemented Phase 0-6 boundary for the first Windows
 paint-animation authoring release. It describes engine behavior; application UI
 and input policy are intentionally absent.
 
@@ -26,7 +26,7 @@ and input policy are intentionally absent.
 
 Pictures, sound, models, effects, references, instances, spawn areas, comic
 chapters, root/comic animation, and cross-platform authoring are outside the
-Phase 0-5 contract.
+Phase 0-6 contract.
 
 ## Identity and ownership
 
@@ -82,7 +82,8 @@ Public operations return a typed result with a stable error code, message, and,
 where applicable, the responsible object ID. Initial error codes cover invalid
 arguments, missing objects, invalid ownership, hierarchy cycles, invalid frame
 or drawing references, revision conflicts, disposed objects, unsupported
-features, native export failure, and cancellation.
+features, native export failure, cancellation, resource-limit exhaustion, and
+corrupt input.
 
 Validation checks at least:
 
@@ -104,6 +105,10 @@ Validation checks at least:
   snapshot has been captured.
 - Cancellation is cooperative between compilation stages. Cancellation returns
   no partial public buffer and leaves the source document unchanged.
+- `ImmAuthoringOperationOptions` supplies cancellation, progress, and content
+  limits to compilation and import. Callbacks run on the operation's thread.
+- Preview requests expose the latest thread-safe compiler progress value for
+  polling from an application UI.
 
 ## Serialization and buffers
 
@@ -130,6 +135,13 @@ The large case is the Phase 0-3 planning envelope: 8 authored layers, 300 frame
 mappings per paint layer, 4,000 strokes, and 256,000 points. It is a benchmark
 envelope rather than a serialized-format limit; larger documents must return a
 measured result and must not rely on undefined behavior.
+
+Phase 6 adds explicit default safety limits: 256 MiB input and output, 4,096
+layers, hierarchy depth 64, 65,536 drawings, 1,000,000 strokes, 1,000,000
+points per stroke, 16,000,000 total points, 1,000,000 frame mappings,
+1,000,000 animation keys, and 1,024 characters per layer name. Products can
+provide smaller positive limits per operation. Exceeding a configured limit
+returns `ResourceLimitExceeded` without a partial public document or buffer.
 
 The Phase 0 reference machine is Windows 11 x64, Unity 2022.3.62f2, Direct3D 11,
 an AMD Ryzen 7 7800X3D (8 cores/16 logical processors), 32 GB system memory, and
@@ -237,3 +249,29 @@ writing a file. The final live state reported authoring revision 2, installed
 revision 2, one committed modification, lossless import, safe overwrite, and
 zero structural differences. The Game view rendered the resulting multicolour
 deformed ribbon, and the Unity console contained no errors.
+
+## Recorded Phase 6 verification
+
+Phase 6 packages capability detection, immutable operation limits, progress,
+cooperative cancellation, atomic file replacement, controlled corrupt-input
+handling, public production documentation, and a minimal independent consumer
+assembly. The package has no second authoring persistence format: IMM remains
+the engine persistence boundary, so snapshot-schema migration is not required.
+
+The Windows Unity PlayMode production suite exercises progress stages, output
+and graph limits, pre-cancelled memory/file operations, atomic preservation of
+an existing destination, mid-graph cancellation after at least 100 compiled
+units, retry recovery, malformed memory, import limits, import cancellation,
+100 edit/export/import/dispose cycles, managed-memory retention, capability
+queries, 100 native preview replacements returning ownership to baseline, and
+an application assembly that references only `ImmUnity.Runtime`.
+The final complete run passed 37 of 37 tests in 2.061 seconds.
+
+The Phase 6 sample reported Windows x64 playback, mutable graph, memory/file
+export, paint import, preview, progress, and cancellation capabilities. It
+reported validation, compilation, serialization, source inspection, and graph
+import stages; returned the expected `ResourceLimitExceeded`, `Cancelled`, and
+`CorruptInput` failures; then installed revision 2 after editing 450 strokes,
+one frame mapping, and one animation key entirely in memory. The Game view
+rendered the multicolour procedural ribbon. No new error or exception was
+written during that run.

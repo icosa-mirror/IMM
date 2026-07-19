@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace ImmPlayer.Tests
 {
@@ -166,10 +168,22 @@ namespace ImmPlayer.Tests
         [Test]
         public void MalformedAndLimitedImportsFailWithoutPoisoningRecovery()
         {
-            ImmAuthoringImportResult malformed = ImmAuthoringImporter.ImportFromMemory(new byte[] { 0x49, 0x4d, 0x4d, 0x00 });
-            Assert.That(malformed.Succeeded, Is.False);
-            Assert.That(malformed.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.CorruptInput));
-            Assert.That(malformed.Document, Is.Null);
+            byte[] malformedBytes = { 0x49, 0x4d, 0x4d, 0x00 };
+            ImmAuthoringImportResult malformed = ImmAuthoringImporter.ImportFromMemory(malformedBytes);
+            AssertControlledCorruptInput(malformed);
+
+            string malformedPath = Path.Combine(Application.temporaryCachePath, $"imm-phase6-corrupt-{Guid.NewGuid():N}.imm");
+            File.WriteAllBytes(malformedPath, malformedBytes);
+            try
+            {
+                LogAssert.Expect(LogType.Error, new Regex("StrokeReaderDocument: Failed to load.*"));
+                AssertControlledCorruptInput(ImmAuthoringImporter.ImportFromFile(malformedPath));
+            }
+            finally
+            {
+                if (File.Exists(malformedPath))
+                    File.Delete(malformedPath);
+            }
 
             using (ImmAuthoringDocument source = CreateFixture())
             {
@@ -308,6 +322,13 @@ namespace ImmPlayer.Tests
                 maxInputBytes: maxInputBytes,
                 maxOutputBytes: maxOutputBytes,
                 maxTotalPoints: maxTotalPoints);
+        }
+
+        private static void AssertControlledCorruptInput(ImmAuthoringImportResult result)
+        {
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.CorruptInput));
+            Assert.That(result.Document, Is.Null);
         }
 
         private static T Require<T>(ImmAuthoringResult<T> result)

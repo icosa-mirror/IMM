@@ -219,7 +219,7 @@ namespace ImmPlayer.Tests
         [Category("ImmLifecycleGate")]
         public IEnumerator RepeatedPreviewReplacementKeepsOneInstalledDocumentAndReleasesBuffers()
         {
-            const int replacements = 25;
+            const int replacements = 100;
             ImmPlayerManager manager = ImmPlayerManager.Instance;
             Assert.That(manager.Initialize(), Is.True);
             int baselineDocuments = manager.LoadedDocumentCount;
