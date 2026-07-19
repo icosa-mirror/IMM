@@ -163,9 +163,13 @@ namespace ImmPlayer.Tests
         }
 
         [Test]
-        public void LargeGraphCancellationReleasesNativeCompilationAndAllowsRetry()
+        public void PlanningEnvelopeCancellationRetryAndImportReleaseManagedMemory()
         {
-            using (ImmAuthoringDocument document = CreateLargeFixture(80, 8, 16))
+            const int drawingCount = 500;
+            const int strokesPerDrawing = 8;
+            const int pointsPerStroke = 64;
+            long baseline = GC.GetTotalMemory(true);
+            using (ImmAuthoringDocument document = CreateLargeFixture(drawingCount, strokesPerDrawing, pointsPerStroke))
             using (CancellationTokenSource cancellation = new CancellationTokenSource())
             {
                 ThresholdCancellingProgress progress = new ThresholdCancellingProgress(cancellation, 100);
@@ -180,7 +184,22 @@ namespace ImmPlayer.Tests
 
                 ImmAuthoringExportResult retry = ImmAuthoringCompiler.ExportToMemory(document);
                 Assert.That(retry.Succeeded, Is.True, retry.Message);
+                ImmAuthoringImportResult import = ImmAuthoringImporter.ImportFromMemory(retry.Data);
+                try
+                {
+                    Assert.That(import.Succeeded, Is.True, import.Message);
+                    Assert.That(import.Statistics.ImportedDrawingCount, Is.EqualTo(drawingCount));
+                    Assert.That(import.Statistics.ImportedStrokeCount, Is.EqualTo(drawingCount * strokesPerDrawing));
+                    Assert.That(import.Statistics.ImportedPointCount, Is.EqualTo((long)drawingCount * strokesPerDrawing * pointsPerStroke));
+                }
+                finally
+                {
+                    import.Document?.Dispose();
+                }
             }
+
+            long retained = GC.GetTotalMemory(true) - baseline;
+            Assert.That(retained, Is.LessThanOrEqualTo(64L * 1024L * 1024L));
         }
 
         [Test]

@@ -261,7 +261,8 @@ the engine persistence boundary, so snapshot-schema migration is not required.
 The Windows Unity PlayMode production suite exercises progress stages, output
 and graph limits, pre-cancelled memory/file operations, atomic preservation of
 an existing destination, mid-graph cancellation after at least 100 compiled
-units, retry recovery, malformed memory, import limits, import cancellation,
+units in the 256,000-point planning envelope, full retry/import recovery,
+malformed memory, import limits, import cancellation,
 100 edit/export/import/dispose cycles, managed-memory retention, capability
 queries, 100 native preview replacements returning ownership to baseline, and
 an application assembly that references only `ImmUnity.Runtime`.
