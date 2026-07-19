@@ -248,6 +248,9 @@ namespace ImmPlayer
         /// <summary>Number of native player documents currently owned by this manager.</summary>
         public int LoadedDocumentCount => _loadedDocuments.Count;
 
+        /// <summary>Whether the native player has been initialized successfully.</summary>
+        public bool IsInitialized => _isInitialized;
+
         /// <summary>Number of unmanaged input buffers retained for asynchronous memory loads.</summary>
         public int OwnedInputBufferCount => _documentMemoryPtrs.Count;
 
