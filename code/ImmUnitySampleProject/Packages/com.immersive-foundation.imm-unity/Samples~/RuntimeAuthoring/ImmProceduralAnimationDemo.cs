@@ -102,6 +102,7 @@ namespace ImmPlayer.Samples
                 targetCamera = Camera.main;
             ImmAuthoringCapabilities capabilities = ImmAuthoringRuntime.Capabilities;
             capabilitySummary = $"{capabilities.Platform} {capabilities.Architecture}: {capabilities.Features}";
+            Debug.Log($"{LogPrefix} Capabilities: {capabilitySummary}");
         }
 
         private void OnEnable()
@@ -801,8 +802,11 @@ namespace ImmPlayer.Samples
 
         private void ReportProgress(ImmAuthoringProgress progress)
         {
+            string previousStage = operationProgressStage;
             operationProgressStage = progress.Stage.ToString();
             operationProgress = progress.Fraction;
+            if (operationProgressStage != previousStage)
+                Debug.Log($"{LogPrefix} Progress: {operationProgressStage} ({operationProgress:P0})");
         }
 
         private void DisposeAuthoringDocument()
