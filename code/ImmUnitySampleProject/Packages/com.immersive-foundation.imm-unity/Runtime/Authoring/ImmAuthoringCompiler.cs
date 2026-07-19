@@ -237,6 +237,24 @@ namespace ImmPlayer.Authoring
                     layerHandles.Add(layer.Id, handle);
                     statistics.LayerCount++;
 
+                    foreach (ImmAuthoringAnimationKeySnapshot key in layer.AnimationKeys)
+                    {
+                        TransformNative keyTransform = ToNative(key.Value.TransformValue);
+                        if (!Native.ImmExporter_LayerAddAnimationKey(
+                                handle,
+                                (int)key.Property,
+                                key.TimeTicks,
+                                (int)key.Interpolation,
+                                key.Value.BoolValue ? 1 : 0,
+                                key.Value.UIntValue,
+                                key.Value.FloatValue,
+                                key.Value.DoubleValue,
+                                ref keyTransform))
+                        {
+                            return CompileFailure(sequence, "Native animation key creation failed.", key.Id);
+                        }
+                    }
+
                     if (layer.Type == ImmAuthoringLayerType.Paint)
                     {
                         ImmAuthoringResult paintResult = CompilePaintLayer(layer, handle, statistics, cancellationToken);
@@ -260,6 +278,8 @@ namespace ImmPlayer.Authoring
             CancellationToken cancellationToken)
         {
             Dictionary<long, uint> drawingIndices = new Dictionary<long, uint>();
+            if (!Native.ImmExporter_PaintSetMaxRepeatCount(layerHandle, layer.Properties.PaintMaxRepeatCount))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native paint repeat-count setup failed.", layer.Id);
             foreach (ImmAuthoringDrawingSnapshot drawing in layer.Drawings)
             {
                 cancellationToken.ThrowIfCancellationRequested();

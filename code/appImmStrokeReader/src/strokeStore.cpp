@@ -178,7 +178,7 @@ void StrokeStore::OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint3
 
     mCurrentLayer->frameRate = frameRate;
     mCurrentLayer->numFrames = numFrames;
-    mCurrentLayer->maxRepeatCount = maxRepeatCount;
+    mCurrentLayer->paintMaxRepeatCount = maxRepeatCount;
 }
 
 void StrokeStore::OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames)
@@ -591,7 +591,7 @@ bool StrokeStore::GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint3
     const StoredLayer& layer = mDocument.layers[layerIdx];
     if (frameRate) *frameRate = layer.frameRate;
     if (numFrames) *numFrames = layer.numFrames;
-    if (maxRepeatCount) *maxRepeatCount = layer.maxRepeatCount;
+    if (maxRepeatCount) *maxRepeatCount = layer.paintMaxRepeatCount;
     return true;
 }
 
@@ -627,8 +627,21 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
     {
         for (int property = 0; property < static_cast<int>(ImmImporter::Layer::AnimProperty::MAX); property++)
         {
-            mDocument.rootAnimationKeyCount += static_cast<int>(
-                root->GetNumAnimKeys(static_cast<ImmImporter::Layer::AnimProperty>(property)));
+            const ImmImporter::Layer::AnimProperty animProperty =
+                static_cast<ImmImporter::Layer::AnimProperty>(property);
+            const uint32_t keyCount = root->GetNumAnimKeys(animProperty);
+            for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++)
+            {
+                const ImmImporter::Layer::AnimKey* key = root->GetAnimKey(animProperty, keyIndex);
+                const bool isImplicitDefaultVisibility =
+                    animProperty == ImmImporter::Layer::AnimProperty::Visibility &&
+                    keyCount == 1 && key != nullptr &&
+                    ImmCore::piTick::CastInt(key->mTime) == 0 &&
+                    key->mValue.mBool &&
+                    key->mInterpolation == ImmImporter::Layer::InterpolationType::None;
+                if (!isImplicitDefaultVisibility)
+                    mDocument.rootAnimationKeyCount++;
+            }
         }
     }
 

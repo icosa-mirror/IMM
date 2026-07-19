@@ -138,6 +138,100 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        public ImmAuthoringResult<long> CreateAnimationKey(
+            long layerId,
+            ImmAuthoringAnimationProperty property,
+            long timeTicks,
+            ImmAuthoringAnimationValue value,
+            ImmAuthoringInterpolation interpolation = ImmAuthoringInterpolation.Linear)
+        {
+            ImmAuthoringResult validation = ValidateAnimationKey(property, timeTicks, value, interpolation, layerId);
+            if (!validation.Succeeded)
+                return ImmAuthoringResult<long>.Failure(validation.ErrorCode, validation.Message, validation.ObjectId);
+
+            return ApplyMutation(
+                state =>
+                {
+                    if (!state.Layers.TryGetValue(layerId, out LayerNode layer))
+                        return ImmAuthoringResult<long>.Failure(ImmAuthoringErrorCode.NotFound, "Layer was not found.", layerId);
+                    if (FindAnimationKey(state, layer, property, timeTicks, 0) != null)
+                        return ImmAuthoringResult<long>.Failure(
+                            ImmAuthoringErrorCode.InvalidArgument,
+                            $"Layer already has a {property} key at tick {timeTicks}.",
+                            layerId);
+
+                    long id = state.AllocateId();
+                    AnimationKeyNode key = new AnimationKeyNode
+                    {
+                        Id = id,
+                        LayerId = layerId,
+                        Property = property,
+                        TimeTicks = timeTicks,
+                        Interpolation = interpolation,
+                        Value = value
+                    };
+                    state.AnimationKeys.Add(id, key);
+                    int insertIndex = FindAnimationKeyInsertIndex(state, layer, key);
+                    layer.AnimationKeyIds.Insert(insertIndex, id);
+                    return ImmAuthoringResult<long>.Success(id);
+                },
+                id => new[] { layerId, id });
+        }
+
+        public ImmAuthoringResult ReplaceAnimationKey(
+            long keyId,
+            ImmAuthoringAnimationProperty property,
+            long timeTicks,
+            ImmAuthoringAnimationValue value,
+            ImmAuthoringInterpolation interpolation = ImmAuthoringInterpolation.Linear)
+        {
+            ImmAuthoringResult validation = ValidateAnimationKey(property, timeTicks, value, interpolation, keyId);
+            if (!validation.Succeeded)
+                return validation;
+
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return Disposed();
+                if (!_state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key))
+                    return NotFound("Animation key", keyId);
+                LayerNode layer = _state.Layers[key.LayerId];
+                if (FindAnimationKey(_state, layer, property, timeTicks, keyId) != null)
+                    return ImmAuthoringResult.Failure(
+                        ImmAuthoringErrorCode.InvalidArgument,
+                        $"Layer already has a {property} key at tick {timeTicks}.",
+                        keyId);
+
+                layer.AnimationKeyIds.Remove(keyId);
+                key.Property = property;
+                key.TimeTicks = timeTicks;
+                key.Interpolation = interpolation;
+                key.Value = value;
+                layer.AnimationKeyIds.Insert(FindAnimationKeyInsertIndex(_state, layer, key), keyId);
+                change = AdvanceRevision(new[] { keyId, key.LayerId });
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
+        public ImmAuthoringResult RemoveAnimationKey(long keyId)
+        {
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return Disposed();
+                if (!_state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key))
+                    return NotFound("Animation key", keyId);
+                _state.Layers[key.LayerId].AnimationKeyIds.Remove(keyId);
+                _state.AnimationKeys.Remove(keyId);
+                change = AdvanceRevision(new[] { keyId, key.LayerId });
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
         public ImmAuthoringResult ReparentLayer(long layerId, long newParentId, int siblingIndex = -1)
         {
             ImmAuthoringChange change;
@@ -651,6 +745,11 @@ namespace ImmPlayer.Authoring
                 _state.Drawings.Remove(drawingId);
                 removedIds.Add(drawingId);
             }
+            foreach (long keyId in layer.AnimationKeyIds)
+            {
+                _state.AnimationKeys.Remove(keyId);
+                removedIds.Add(keyId);
+            }
             _state.Layers.Remove(layerId);
             removedIds.Add(layerId);
         }
@@ -742,8 +841,8 @@ namespace ImmPlayer.Authoring
         {
             if (!Enum.IsDefined(typeof(BrushSectionType), brushSection) || !Enum.IsDefined(typeof(VisibilityType), visibility))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke brush or visibility type is invalid.", objectId);
-            if (points == null || points.Length < 3)
-                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least three points.", objectId);
+            if (points == null || points.Length < 2)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Stroke must contain at least two points.", objectId);
             for (int i = 0; i < points.Length; i++)
             {
                 PaintPoint point = points[i];
@@ -754,6 +853,44 @@ namespace ImmPlayer.Authoring
                 {
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, $"Stroke point {i} contains invalid values.", objectId);
                 }
+            }
+            return ImmAuthoringResult.Success();
+        }
+
+        private static ImmAuthoringResult ValidateAnimationKey(
+            ImmAuthoringAnimationProperty property,
+            long timeTicks,
+            ImmAuthoringAnimationValue value,
+            ImmAuthoringInterpolation interpolation,
+            long objectId)
+        {
+            if (!Enum.IsDefined(typeof(ImmAuthoringAnimationProperty), property) ||
+                !Enum.IsDefined(typeof(ImmAuthoringInterpolation), interpolation))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Animation property or interpolation is invalid.", objectId);
+            if (timeTicks < 0)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Animation key time cannot be negative.", objectId);
+
+            switch (property)
+            {
+                case ImmAuthoringAnimationProperty.Opacity:
+                    if (!IsFinite(value.FloatValue) || value.FloatValue < 0f || value.FloatValue > 1f)
+                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Opacity key values must be finite and in the range 0-1.", objectId);
+                    break;
+                case ImmAuthoringAnimationProperty.DrawInTime:
+                    if (!IsFinite(value.DoubleValue) || value.DoubleValue < 0d)
+                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Draw-in key values must be finite and non-negative.", objectId);
+                    break;
+                case ImmAuthoringAnimationProperty.Action:
+                    if (value.UIntValue >= (uint)ImmAuthoringAction.MakeDefault + 1u)
+                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Action key value is invalid.", objectId);
+                    break;
+                case ImmAuthoringAnimationProperty.Position:
+                case ImmAuthoringAnimationProperty.Rotation:
+                case ImmAuthoringAnimationProperty.Scale:
+                case ImmAuthoringAnimationProperty.Transform:
+                    if (!value.TransformValue.IsFinite())
+                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Transform key value must be finite with positive scale.", objectId);
+                    break;
             }
             return ImmAuthoringResult.Success();
         }
@@ -772,6 +909,7 @@ namespace ImmPlayer.Authoring
 
             HashSet<long> reachableDrawings = new HashSet<long>();
             HashSet<long> reachableStrokes = new HashSet<long>();
+            HashSet<long> reachableAnimationKeys = new HashSet<long>();
             foreach (LayerNode layer in state.Layers.Values)
             {
                 foreach (long drawingId in layer.DrawingIds)
@@ -803,6 +941,21 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(
                     ImmAuthoringErrorCode.ValidationFailed,
                     "One or more strokes are unreachable from their drawing.");
+            foreach (LayerNode layer in state.Layers.Values)
+            {
+                foreach (long keyId in layer.AnimationKeyIds)
+                {
+                    if (!state.AnimationKeys.TryGetValue(keyId, out AnimationKeyNode key) || key.LayerId != layer.Id)
+                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer contains an invalid animation key.", keyId);
+                    if (!reachableAnimationKeys.Add(keyId))
+                        return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Animation key appears more than once in the document.", keyId);
+                    ImmAuthoringResult keyResult = ValidateAnimationKey(key.Property, key.TimeTicks, key.Value, key.Interpolation, keyId);
+                    if (!keyResult.Succeeded)
+                        return keyResult;
+                }
+            }
+            if (reachableAnimationKeys.Count != state.AnimationKeys.Count)
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "One or more animation keys are unreachable from their layer.");
             return ImmAuthoringResult.Success();
         }
 
@@ -851,6 +1004,35 @@ namespace ImmPlayer.Authoring
 
         private static bool IsFinite(Vector3 value) => IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static AnimationKeyNode FindAnimationKey(
+            ImmAuthoringState state,
+            LayerNode layer,
+            ImmAuthoringAnimationProperty property,
+            long timeTicks,
+            long excludedId)
+        {
+            foreach (long keyId in layer.AnimationKeyIds)
+            {
+                AnimationKeyNode key = state.AnimationKeys[keyId];
+                if (key.Id != excludedId && key.Property == property && key.TimeTicks == timeTicks)
+                    return key;
+            }
+            return null;
+        }
+
+        private static int FindAnimationKeyInsertIndex(ImmAuthoringState state, LayerNode layer, AnimationKeyNode candidate)
+        {
+            for (int index = 0; index < layer.AnimationKeyIds.Count; index++)
+            {
+                AnimationKeyNode current = state.AnimationKeys[layer.AnimationKeyIds[index]];
+                if ((int)current.Property > (int)candidate.Property ||
+                    (current.Property == candidate.Property && current.TimeTicks > candidate.TimeTicks))
+                    return index;
+            }
+            return layer.AnimationKeyIds.Count;
+        }
 
         private static ImmAuthoringResult NotFound(string type, long id) =>
             ImmAuthoringResult.Failure(ImmAuthoringErrorCode.NotFound, $"{type} was not found.", id);

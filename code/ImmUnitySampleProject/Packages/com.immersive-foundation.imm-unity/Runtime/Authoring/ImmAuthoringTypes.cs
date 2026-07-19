@@ -82,6 +82,78 @@ namespace ImmPlayer.Authoring
         Paint = 1
     }
 
+    public enum ImmAuthoringAnimationProperty
+    {
+        Visibility = 0,
+        Opacity = 1,
+        Position = 2,
+        Rotation = 3,
+        Scale = 4,
+        DrawInTime = 5,
+        Action = 6,
+        Loop = 7,
+        Offset = 8,
+        Transform = 9
+    }
+
+    public enum ImmAuthoringInterpolation
+    {
+        None = 0,
+        Linear = 1,
+        Smoothstep = 2,
+        EaseIn = 3,
+        EaseOut = 4,
+        Spline = 5,
+        Auto = 6
+    }
+
+    public enum ImmAuthoringAction
+    {
+        Stop = 0,
+        Play = 1,
+        Loop = 2,
+        MakeDefault = 3
+    }
+
+    [Serializable]
+    public struct ImmAuthoringAnimationValue
+    {
+        public bool BoolValue;
+        public uint UIntValue;
+        public float FloatValue;
+        public double DoubleValue;
+        public ImmAuthoringTransform TransformValue;
+
+        public static ImmAuthoringAnimationValue FromBool(bool value) => new ImmAuthoringAnimationValue
+        {
+            BoolValue = value,
+            TransformValue = ImmAuthoringTransform.Identity
+        };
+
+        public static ImmAuthoringAnimationValue FromUInt(uint value) => new ImmAuthoringAnimationValue
+        {
+            UIntValue = value,
+            TransformValue = ImmAuthoringTransform.Identity
+        };
+
+        public static ImmAuthoringAnimationValue FromFloat(float value) => new ImmAuthoringAnimationValue
+        {
+            FloatValue = value,
+            TransformValue = ImmAuthoringTransform.Identity
+        };
+
+        public static ImmAuthoringAnimationValue FromDouble(double value) => new ImmAuthoringAnimationValue
+        {
+            DoubleValue = value,
+            TransformValue = ImmAuthoringTransform.Identity
+        };
+
+        public static ImmAuthoringAnimationValue FromTransform(ImmAuthoringTransform value) => new ImmAuthoringAnimationValue
+        {
+            TransformValue = value
+        };
+    }
+
     [Serializable]
     public struct ImmAuthoringTransform
     {
@@ -117,6 +189,7 @@ namespace ImmPlayer.Authoring
         public bool IsTimeline;
         public long DurationTicks;
         public uint MaxRepeatCount;
+        public uint PaintMaxRepeatCount;
 
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {
@@ -127,7 +200,8 @@ namespace ImmPlayer.Authoring
             Pivot = ImmAuthoringTransform.Identity,
             IsTimeline = false,
             DurationTicks = 0,
-            MaxRepeatCount = 0
+            MaxRepeatCount = 0,
+            PaintMaxRepeatCount = 1
         };
     }
 
@@ -188,11 +262,38 @@ namespace ImmPlayer.Authoring
         }
     }
 
+    public sealed class ImmAuthoringAnimationKeySnapshot
+    {
+        public long Id { get; }
+        public long LayerId { get; }
+        public ImmAuthoringAnimationProperty Property { get; }
+        public long TimeTicks { get; }
+        public ImmAuthoringInterpolation Interpolation { get; }
+        public ImmAuthoringAnimationValue Value { get; }
+
+        internal ImmAuthoringAnimationKeySnapshot(
+            long id,
+            long layerId,
+            ImmAuthoringAnimationProperty property,
+            long timeTicks,
+            ImmAuthoringInterpolation interpolation,
+            ImmAuthoringAnimationValue value)
+        {
+            Id = id;
+            LayerId = layerId;
+            Property = property;
+            TimeTicks = timeTicks;
+            Interpolation = interpolation;
+            Value = value;
+        }
+    }
+
     public sealed class ImmAuthoringLayerSnapshot
     {
         private readonly long[] _childIds;
         private readonly ImmAuthoringDrawingSnapshot[] _drawings;
         private readonly long[] _frameDrawingIds;
+        private readonly ImmAuthoringAnimationKeySnapshot[] _animationKeys;
 
         public long Id { get; }
         public long ParentId { get; }
@@ -202,6 +303,7 @@ namespace ImmPlayer.Authoring
         public IReadOnlyList<long> ChildIds => Array.AsReadOnly(_childIds);
         public IReadOnlyList<ImmAuthoringDrawingSnapshot> Drawings => Array.AsReadOnly(_drawings);
         public IReadOnlyList<long> FrameDrawingIds => Array.AsReadOnly(_frameDrawingIds);
+        public IReadOnlyList<ImmAuthoringAnimationKeySnapshot> AnimationKeys => Array.AsReadOnly(_animationKeys);
 
         internal ImmAuthoringLayerSnapshot(
             long id,
@@ -211,7 +313,8 @@ namespace ImmPlayer.Authoring
             ImmAuthoringLayerProperties properties,
             long[] childIds,
             ImmAuthoringDrawingSnapshot[] drawings,
-            long[] frameDrawingIds)
+            long[] frameDrawingIds,
+            ImmAuthoringAnimationKeySnapshot[] animationKeys)
         {
             Id = id;
             ParentId = parentId;
@@ -221,6 +324,7 @@ namespace ImmPlayer.Authoring
             _childIds = childIds ?? Array.Empty<long>();
             _drawings = drawings ?? Array.Empty<ImmAuthoringDrawingSnapshot>();
             _frameDrawingIds = frameDrawingIds ?? Array.Empty<long>();
+            _animationKeys = animationKeys ?? Array.Empty<ImmAuthoringAnimationKeySnapshot>();
         }
     }
 
@@ -231,6 +335,7 @@ namespace ImmPlayer.Authoring
         private readonly Dictionary<long, ImmAuthoringLayerSnapshot> _layersById;
         private readonly Dictionary<long, ImmAuthoringDrawingSnapshot> _drawingsById;
         private readonly Dictionary<long, ImmAuthoringStrokeSnapshot> _strokesById;
+        private readonly Dictionary<long, ImmAuthoringAnimationKeySnapshot> _animationKeysById;
 
         public long DocumentId { get; }
         public long Revision { get; }
@@ -262,6 +367,7 @@ namespace ImmPlayer.Authoring
             _layersById = new Dictionary<long, ImmAuthoringLayerSnapshot>(_layers.Length);
             _drawingsById = new Dictionary<long, ImmAuthoringDrawingSnapshot>();
             _strokesById = new Dictionary<long, ImmAuthoringStrokeSnapshot>();
+            _animationKeysById = new Dictionary<long, ImmAuthoringAnimationKeySnapshot>();
             foreach (ImmAuthoringLayerSnapshot layer in _layers)
             {
                 _layersById.Add(layer.Id, layer);
@@ -271,6 +377,8 @@ namespace ImmPlayer.Authoring
                     foreach (ImmAuthoringStrokeSnapshot stroke in drawing.Strokes)
                         _strokesById.Add(stroke.Id, stroke);
                 }
+                foreach (ImmAuthoringAnimationKeySnapshot key in layer.AnimationKeys)
+                    _animationKeysById.Add(key.Id, key);
             }
         }
 
@@ -282,5 +390,8 @@ namespace ImmPlayer.Authoring
 
         public bool TryGetStroke(long strokeId, out ImmAuthoringStrokeSnapshot stroke) =>
             _strokesById.TryGetValue(strokeId, out stroke);
+
+        public bool TryGetAnimationKey(long keyId, out ImmAuthoringAnimationKeySnapshot key) =>
+            _animationKeysById.TryGetValue(keyId, out key);
     }
 }

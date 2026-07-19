@@ -144,6 +144,7 @@ struct StoredLayer
     // Animation info for paint layers
     uint32_t frameRate = 24;
     uint32_t numFrames = 0;
+    uint32_t paintMaxRepeatCount = 1;
     std::vector<uint32_t> frameBuffer;
 };
 

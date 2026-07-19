@@ -11,6 +11,7 @@ namespace ImmPlayer.Authoring
         internal readonly Dictionary<long, LayerNode> Layers = new Dictionary<long, LayerNode>();
         internal readonly Dictionary<long, DrawingNode> Drawings = new Dictionary<long, DrawingNode>();
         internal readonly Dictionary<long, StrokeNode> Strokes = new Dictionary<long, StrokeNode>();
+        internal readonly Dictionary<long, AnimationKeyNode> AnimationKeys = new Dictionary<long, AnimationKeyNode>();
 
         internal long AllocateId() => NextObjectId++;
 
@@ -36,6 +37,9 @@ namespace ImmPlayer.Authoring
                 StrokeNode stroke = item.Value.Clone();
                 clone.Strokes.Add(item.Key, stroke);
             }
+
+            foreach (KeyValuePair<long, AnimationKeyNode> item in AnimationKeys)
+                clone.AnimationKeys.Add(item.Key, item.Value.Clone());
 
             return clone;
         }
@@ -84,6 +88,20 @@ namespace ImmPlayer.Authoring
                 drawings[drawingIndex] = new ImmAuthoringDrawingSnapshot(drawing.Id, drawing.PaintLayerId, strokes);
             }
 
+            ImmAuthoringAnimationKeySnapshot[] animationKeys =
+                new ImmAuthoringAnimationKeySnapshot[layer.AnimationKeyIds.Count];
+            for (int keyIndex = 0; keyIndex < layer.AnimationKeyIds.Count; keyIndex++)
+            {
+                AnimationKeyNode key = AnimationKeys[layer.AnimationKeyIds[keyIndex]];
+                animationKeys[keyIndex] = new ImmAuthoringAnimationKeySnapshot(
+                    key.Id,
+                    key.LayerId,
+                    key.Property,
+                    key.TimeTicks,
+                    key.Interpolation,
+                    key.Value);
+            }
+
             output.Add(new ImmAuthoringLayerSnapshot(
                 layer.Id,
                 layer.ParentId,
@@ -92,7 +110,8 @@ namespace ImmPlayer.Authoring
                 layer.Properties,
                 layer.ChildIds.ToArray(),
                 drawings,
-                layer.FrameDrawingIds.ToArray()));
+                layer.FrameDrawingIds.ToArray(),
+                animationKeys));
 
             for (int childOrder = 0; childOrder < layer.ChildIds.Count; childOrder++)
                 AppendLayerSnapshot(layer.ChildIds[childOrder], childOrder, output);
@@ -108,6 +127,7 @@ namespace ImmPlayer.Authoring
         internal readonly List<long> ChildIds = new List<long>();
         internal readonly List<long> DrawingIds = new List<long>();
         internal readonly List<long> FrameDrawingIds = new List<long>();
+        internal readonly List<long> AnimationKeyIds = new List<long>();
 
         internal LayerNode Clone()
         {
@@ -121,6 +141,7 @@ namespace ImmPlayer.Authoring
             clone.ChildIds.AddRange(ChildIds);
             clone.DrawingIds.AddRange(DrawingIds);
             clone.FrameDrawingIds.AddRange(FrameDrawingIds);
+            clone.AnimationKeyIds.AddRange(AnimationKeyIds);
             return clone;
         }
     }
@@ -154,6 +175,26 @@ namespace ImmPlayer.Authoring
             BrushSection = BrushSection,
             Visibility = Visibility,
             Points = (PaintPoint[])Points.Clone()
+        };
+    }
+
+    internal sealed class AnimationKeyNode
+    {
+        internal long Id;
+        internal long LayerId;
+        internal ImmAuthoringAnimationProperty Property;
+        internal long TimeTicks;
+        internal ImmAuthoringInterpolation Interpolation;
+        internal ImmAuthoringAnimationValue Value;
+
+        internal AnimationKeyNode Clone() => new AnimationKeyNode
+        {
+            Id = Id,
+            LayerId = LayerId,
+            Property = Property,
+            TimeTicks = TimeTicks,
+            Interpolation = Interpolation,
+            Value = Value
         };
     }
 }

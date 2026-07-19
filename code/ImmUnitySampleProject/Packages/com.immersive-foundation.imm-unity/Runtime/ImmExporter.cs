@@ -558,6 +558,19 @@ namespace ImmPlayer.Exporter
             uint maxRepeatCount);
 
         [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_LayerAddAnimationKey(
+            IntPtr layerHandle,
+            int property,
+            long timeTicks,
+            int interpolation,
+            int boolValue,
+            uint intValue,
+            float floatValue,
+            double doubleValue,
+            ref TransformNative transformValue);
+
+        [DllImport(DllName)]
         public static extern IntPtr ImmExporter_CreateDrawing(IntPtr paintLayerHandle);
 
         [DllImport(DllName)]
@@ -593,6 +606,10 @@ namespace ImmPlayer.Exporter
 
         [DllImport(DllName)]
         public static extern void ImmExporter_PaintAddFrame(IntPtr paintLayerHandle, uint drawingIndex);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_PaintSetMaxRepeatCount(IntPtr paintLayerHandle, uint maxRepeatCount);
 
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern bool ImmExporter_ExportToFile(IntPtr sequenceHandle, string fileName, int opusBitrate, int audioType);

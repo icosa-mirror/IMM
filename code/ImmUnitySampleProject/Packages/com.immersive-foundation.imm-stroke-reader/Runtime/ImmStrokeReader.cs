@@ -480,6 +480,37 @@ namespace ImmPlayer
             return true;
         }
 
+        public bool Load(byte[] immBytes, string logPath = null, int chapterIndex = -1)
+        {
+            if (_docId > 0 || immBytes == null || immBytes.Length == 0)
+                return false;
+            if (!ImmStrokeReader.StrokeReader_IsInitialized() && ImmStrokeReader.StrokeReader_Init(logPath) != 0)
+                return false;
+
+            GCHandle pinned = GCHandle.Alloc(immBytes, GCHandleType.Pinned);
+            try
+            {
+                _docId = ImmStrokeReader.StrokeReader_LoadFromMemory(pinned.AddrOfPinnedObject(), immBytes.Length);
+            }
+            finally
+            {
+                pinned.Free();
+            }
+            if (_docId < 0)
+                return false;
+
+            if (chapterIndex >= 0)
+            {
+                int chapterCount = ImmStrokeReader.StrokeReader_GetChapterCount(_docId);
+                if (chapterIndex >= chapterCount || !ImmStrokeReader.StrokeReader_SetChapter(_docId, chapterIndex))
+                {
+                    Unload();
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>
         /// Unload the document.
         /// </summary>
