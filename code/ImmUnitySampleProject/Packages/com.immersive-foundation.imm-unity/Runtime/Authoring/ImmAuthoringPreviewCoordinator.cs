@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace ImmPlayer.Authoring
@@ -100,7 +101,9 @@ namespace ImmPlayer.Authoring
         internal ImmAuthoringSnapshot Snapshot { get; }
         internal CancellationTokenSource Cancellation { get; }
         internal Stopwatch TotalStopwatch { get; } = Stopwatch.StartNew();
+        internal Stopwatch CompilationStopwatch { get; set; }
         internal Stopwatch LoadStopwatch { get; set; }
+        internal Task<ImmAuthoringExportResult> CompilationTask { get; set; }
 
         internal ImmAuthoringPreviewRequest(
             long requestId,
@@ -139,6 +142,7 @@ namespace ImmPlayer.Authoring
     public sealed class ImmAuthoringPreviewCoordinator : MonoBehaviour
     {
         private const string LogPrefix = "[IMM_AUTHOR_PREVIEW]";
+        private static readonly object CompilationGate = new object();
 
         [SerializeField, Min(0.1f)] private float playerLoadTimeoutSeconds = 30f;
 
@@ -267,7 +271,10 @@ namespace ImmPlayer.Authoring
             switch (_activeRequest.State)
             {
                 case ImmAuthoringPreviewState.Queued:
-                    CompileActiveRequest();
+                    BeginActiveCompilation();
+                    break;
+                case ImmAuthoringPreviewState.Compiling:
+                    PollActiveCompilation();
                     break;
                 case ImmAuthoringPreviewState.Loading:
                     PollActiveLoad();
@@ -275,25 +282,50 @@ namespace ImmPlayer.Authoring
             }
         }
 
-        private void CompileActiveRequest()
+        private void BeginActiveCompilation()
         {
             ImmAuthoringPreviewRequest request = _activeRequest;
             CancellationToken cancellationToken = request.Cancellation.Token;
             Transition(request, ImmAuthoringPreviewState.Compiling);
             if (request != _activeRequest)
                 return;
-            Stopwatch compilation = Stopwatch.StartNew();
-            ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToMemory(
-                request.Snapshot,
-                cancellationToken: cancellationToken);
-            compilation.Stop();
-            request.Statistics.CompilationTime = compilation.Elapsed;
+            request.CompilationStopwatch = Stopwatch.StartNew();
+            request.CompilationTask = Task.Run(() =>
+            {
+                lock (CompilationGate)
+                {
+                    return ImmAuthoringCompiler.ExportToMemory(
+                        request.Snapshot,
+                        cancellationToken: cancellationToken);
+                }
+            });
+        }
+
+        private void PollActiveCompilation()
+        {
+            ImmAuthoringPreviewRequest request = _activeRequest;
+            if (request.CompilationTask == null || !request.CompilationTask.IsCompleted)
+                return;
+
+            request.CompilationStopwatch.Stop();
+            request.Statistics.CompilationTime = request.CompilationStopwatch.Elapsed;
+            ImmAuthoringExportResult export;
+            try
+            {
+                export = request.CompilationTask.GetAwaiter().GetResult();
+            }
+            catch (Exception exception)
+            {
+                Complete(
+                    request,
+                    ImmAuthoringPreviewState.Failed,
+                    ImmAuthoringPreviewErrorCode.CompilationFailed,
+                    $"Preview compilation task failed: {exception.Message}");
+                return;
+            }
             request.Statistics.GraphCompilationTime = export.Statistics.GraphCompilationTime;
             request.Statistics.SerializationTime = export.Statistics.SerializationTime;
             request.Statistics.BytesCompiled = export.BytesWritten;
-
-            if (request != _activeRequest)
-                return;
             if (!export.Succeeded)
             {
                 ImmAuthoringPreviewState terminalState = export.ErrorCode == ImmAuthoringErrorCode.Cancelled

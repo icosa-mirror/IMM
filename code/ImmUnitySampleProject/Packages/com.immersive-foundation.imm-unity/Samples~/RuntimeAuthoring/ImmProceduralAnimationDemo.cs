@@ -9,8 +9,9 @@ namespace ImmPlayer.Samples
 {
     /// <summary>
     /// Generates an animated IMM ribbon through the runtime authoring API, writes
-    /// it to disk, and leaves it loaded in the native player for visual inspection.
+    /// it to disk, and previews the same revision through the runtime coordinator.
     /// </summary>
+    [RequireComponent(typeof(ImmAuthoringPreviewCoordinator))]
     public sealed class ImmProceduralAnimationDemo : MonoBehaviour
     {
         private const string LogPrefix = "[IMM_AUTHOR_VISUAL_DEMO]";
@@ -38,6 +39,7 @@ namespace ImmPlayer.Samples
         [SerializeField] private long generatedBytes;
 
         private ImmDocument _loadedDocument;
+        private ImmAuthoringPreviewCoordinator _previewCoordinator;
         private Coroutine _operation;
         private bool _useScriptableRenderPipeline;
 
@@ -48,6 +50,10 @@ namespace ImmPlayer.Samples
 
         private void Awake()
         {
+            _previewCoordinator = GetComponent<ImmAuthoringPreviewCoordinator>();
+            if (_previewCoordinator == null)
+                _previewCoordinator = gameObject.AddComponent<ImmAuthoringPreviewCoordinator>();
+            _previewCoordinator.PlayerLoadTimeoutSeconds = loadTimeoutSeconds;
             _useScriptableRenderPipeline = GraphicsSettings.currentRenderPipeline != null;
             if (targetCamera == null)
                 targetCamera = Camera.main;
@@ -132,9 +138,7 @@ namespace ImmPlayer.Samples
         [ContextMenu("Unload Generated IMM")]
         public void Unload()
         {
-            if (_loadedDocument == null)
-                return;
-            ImmPlayerManager.Instance.UnloadDocument(_loadedDocument);
+            _previewCoordinator?.ClearPreview();
             _loadedDocument = null;
             SetStatus("Generated IMM unloaded");
         }
@@ -208,50 +212,36 @@ namespace ImmPlayer.Samples
                 SetStatus(
                     $"Exported {generatedBytes:N0} bytes from revision {generatedRevision} " +
                     $"in {export.Statistics.TotalTime.TotalMilliseconds:F1} ms");
+
+                if (loadAfterExport)
+                {
+                    SetStatus($"Requesting native preview for revision {document.Revision}...");
+                    ImmAuthoringResult<ImmAuthoringPreviewRequest> previewResult =
+                        _previewCoordinator.RequestPreview(document, document.Revision);
+                    if (!previewResult.Succeeded)
+                    {
+                        SetError($"Preview request failed: {previewResult.ErrorCode}: {previewResult.Message}");
+                        _operation = null;
+                        yield break;
+                    }
+
+                    ImmAuthoringPreviewRequest preview = previewResult.Value;
+                    while (!preview.IsTerminal)
+                        yield return null;
+                    if (preview.State != ImmAuthoringPreviewState.Installed)
+                    {
+                        SetError($"Preview failed: {preview.ErrorCode}: {preview.Message}");
+                        _operation = null;
+                        yield break;
+                    }
+
+                    _loadedDocument = _previewCoordinator.InstalledDocument;
+                    SetStatus(
+                        $"Playing {frameCount} frames from revision {_previewCoordinator.InstalledRevision} " +
+                        $"({preview.Statistics.BytesCompiled:N0} bytes, " +
+                        $"{preview.Statistics.TotalTime.TotalMilliseconds:F1} ms preview latency)");
+                }
             }
-
-            if (!loadAfterExport)
-            {
-                _operation = null;
-                yield break;
-            }
-
-            ImmPlayerManager manager = ImmPlayerManager.Instance;
-            if (!manager.Initialize())
-            {
-                SetError("IMM player initialization failed.");
-                _operation = null;
-                yield break;
-            }
-
-            SetStatus("Loading generated IMM into the native player...");
-            _loadedDocument = manager.LoadDocument(generatedFilePath);
-            if (_loadedDocument == null)
-            {
-                SetError("The generated IMM could not be loaded.");
-                _operation = null;
-                yield break;
-            }
-
-            float deadline = Time.realtimeSinceStartup + loadTimeoutSeconds;
-            while (!_loadedDocument.IsSequenceReady() && Time.realtimeSinceStartup < deadline)
-                yield return null;
-
-            if (!_loadedDocument.IsSequenceReady())
-            {
-                manager.UnloadDocument(_loadedDocument);
-                _loadedDocument = null;
-                SetError($"Player load timed out after {loadTimeoutSeconds:F1} seconds.");
-                _operation = null;
-                yield break;
-            }
-
-            _loadedDocument.Show();
-            _loadedDocument.Restart();
-            _loadedDocument.Resume();
-            SetStatus(
-                $"Playing {frameCount} frames from {Path.GetFileName(generatedFilePath)} " +
-                $"({generatedBytes:N0} bytes, revision {generatedRevision})");
             _operation = null;
         }
 
