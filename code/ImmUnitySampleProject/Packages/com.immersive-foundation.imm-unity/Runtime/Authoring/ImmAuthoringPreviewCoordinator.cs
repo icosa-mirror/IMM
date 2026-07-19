@@ -151,6 +151,7 @@ namespace ImmPlayer.Authoring
         private ImmAuthoringPreviewRequest _installedRequest;
         private ImmDocument _candidateDocument;
         private ImmDocument _installedDocument;
+        private bool _candidateSettingsApplied;
         private long _nextRequestId;
         private bool _disposed;
 
@@ -363,6 +364,7 @@ namespace ImmPlayer.Authoring
                 return;
             }
 
+            _candidateSettingsApplied = false;
             request.LoadStopwatch = Stopwatch.StartNew();
             Transition(request, ImmAuthoringPreviewState.Loading);
         }
@@ -396,10 +398,17 @@ namespace ImmPlayer.Authoring
             if (state.Loading != ImmDocument.LoadingState.Loaded || !_candidateDocument.IsSequenceReady())
                 return;
 
-            ApplySettings(_candidateDocument, request.Settings);
+            if (!_candidateSettingsApplied)
+            {
+                ApplySettings(_candidateDocument, request.Settings);
+                _candidateSettingsApplied = true;
+                return;
+            }
+
             ImmDocument replacedDocument = _installedDocument;
             _installedDocument = _candidateDocument;
             _candidateDocument = null;
+            _candidateSettingsApplied = false;
             _installedRequest = request;
             Complete(request, ImmAuthoringPreviewState.Installed, ImmAuthoringPreviewErrorCode.None, string.Empty);
 
@@ -459,6 +468,7 @@ namespace ImmPlayer.Authoring
                 return;
             PlayerManager.UnloadDocument(_candidateDocument);
             _candidateDocument = null;
+            _candidateSettingsApplied = false;
         }
 
         private void Complete(
