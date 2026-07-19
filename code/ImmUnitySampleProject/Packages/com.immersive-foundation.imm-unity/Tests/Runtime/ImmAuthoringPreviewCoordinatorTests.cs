@@ -59,6 +59,35 @@ namespace ImmPlayer.Tests
             Object.DestroyImmediate(owner);
         }
 
+        [Test]
+        public void TerminalStateListenerCanQueueTheNextRequest()
+        {
+            GameObject owner = new GameObject("IMM Phase 4 Reentrant Preview Test");
+            ImmAuthoringPreviewCoordinator coordinator = owner.AddComponent<ImmAuthoringPreviewCoordinator>();
+            using (ImmAuthoringDocument document = CreatePlaybackDocument(1))
+            {
+                ImmAuthoringPreviewRequest queuedByListener = null;
+                bool handled = false;
+                coordinator.StateChanged += request =>
+                {
+                    if (request.State == ImmAuthoringPreviewState.Cancelled && !handled)
+                    {
+                        handled = true;
+                        queuedByListener = Require(
+                            coordinator.RequestPreview(document, document.Revision));
+                    }
+                };
+
+                ImmAuthoringPreviewRequest cancelled = Require(
+                    coordinator.RequestPreview(document, document.Revision));
+                Assert.That(coordinator.CancelPreview(cancelled.RequestId), Is.True);
+                Assert.That(queuedByListener, Is.Not.Null);
+                Assert.That(coordinator.ActiveRequest, Is.SameAs(queuedByListener));
+                coordinator.CancelPreview(queuedByListener.RequestId);
+            }
+            Object.DestroyImmediate(owner);
+        }
+
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
         [UnityTest]
         public IEnumerator ReplacementPreservesRequestedStateAndFailureKeepsLastValidPreview()

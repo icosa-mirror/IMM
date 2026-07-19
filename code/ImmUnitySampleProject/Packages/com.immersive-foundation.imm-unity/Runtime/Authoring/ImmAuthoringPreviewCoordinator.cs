@@ -198,11 +198,22 @@ namespace ImmPlayer.Authoring
                     document.DocumentId);
             }
 
-            SupersedeActiveRequest();
             ImmAuthoringPreviewRequest request = new ImmAuthoringPreviewRequest(
                 ++_nextRequestId, snapshotResult.Value, settings, cancellationToken);
+            ImmAuthoringPreviewRequest obsolete = _activeRequest;
             _activeRequest = request;
-            Transition(request, ImmAuthoringPreviewState.Queued);
+            if (obsolete != null)
+            {
+                obsolete.Cancellation.Cancel();
+                ReleaseCandidate();
+                Complete(
+                    obsolete,
+                    ImmAuthoringPreviewState.Superseded,
+                    ImmAuthoringPreviewErrorCode.Superseded,
+                    "Preview request was superseded by a newer request.");
+            }
+            if (ReferenceEquals(_activeRequest, request))
+                Transition(request, ImmAuthoringPreviewState.Queued);
             return ImmAuthoringResult<ImmAuthoringPreviewRequest>.Success(request);
         }
 
@@ -218,7 +229,6 @@ namespace ImmPlayer.Authoring
                 ImmAuthoringPreviewState.Cancelled,
                 ImmAuthoringPreviewErrorCode.Cancelled,
                 "Preview request was cancelled.");
-            _activeRequest = null;
             return true;
         }
 
@@ -233,7 +243,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringPreviewState.Cancelled,
                     ImmAuthoringPreviewErrorCode.Cancelled,
                     "Preview was cleared.");
-                _activeRequest = null;
             }
 
             if (_installedDocument != null)
@@ -269,11 +278,14 @@ namespace ImmPlayer.Authoring
         private void CompileActiveRequest()
         {
             ImmAuthoringPreviewRequest request = _activeRequest;
+            CancellationToken cancellationToken = request.Cancellation.Token;
             Transition(request, ImmAuthoringPreviewState.Compiling);
+            if (request != _activeRequest)
+                return;
             Stopwatch compilation = Stopwatch.StartNew();
             ImmAuthoringExportResult export = ImmAuthoringCompiler.ExportToMemory(
                 request.Snapshot,
-                cancellationToken: request.Cancellation.Token);
+                cancellationToken: cancellationToken);
             compilation.Stop();
             request.Statistics.CompilationTime = compilation.Elapsed;
             request.Statistics.GraphCompilationTime = export.Statistics.GraphCompilationTime;
@@ -292,7 +304,6 @@ namespace ImmPlayer.Authoring
                     : ImmAuthoringPreviewErrorCode.CompilationFailed;
                 request.CompilationErrorCode = export.ErrorCode;
                 Complete(request, terminalState, errorCode, export.Message, export.ObjectId);
-                _activeRequest = null;
                 return;
             }
 
@@ -304,7 +315,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringPreviewState.Failed,
                     ImmAuthoringPreviewErrorCode.PlayerLoadFailed,
                     "IMM player initialization failed.");
-                _activeRequest = null;
                 return;
             }
 
@@ -318,7 +328,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringPreviewState.Failed,
                     ImmAuthoringPreviewErrorCode.PlayerLoadFailed,
                     "Native player rejected the compiled preview.");
-                _activeRequest = null;
                 return;
             }
 
@@ -339,7 +348,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringPreviewState.Failed,
                     ImmAuthoringPreviewErrorCode.PlayerLoadFailed,
                     $"Native player load ended in state {state.Loading}.");
-                _activeRequest = null;
                 return;
             }
 
@@ -351,7 +359,6 @@ namespace ImmPlayer.Authoring
                     ImmAuthoringPreviewState.Failed,
                     ImmAuthoringPreviewErrorCode.PlayerLoadTimedOut,
                     $"Native player load exceeded {playerLoadTimeoutSeconds:F1} seconds.");
-                _activeRequest = null;
                 return;
             }
 
@@ -364,7 +371,6 @@ namespace ImmPlayer.Authoring
             _candidateDocument = null;
             _installedRequest = request;
             Complete(request, ImmAuthoringPreviewState.Installed, ImmAuthoringPreviewErrorCode.None, string.Empty);
-            _activeRequest = null;
 
             if (replacedDocument != null)
                 PlayerManager.UnloadDocument(replacedDocument);
@@ -416,21 +422,6 @@ namespace ImmPlayer.Authoring
             }
         }
 
-        private void SupersedeActiveRequest()
-        {
-            if (_activeRequest == null)
-                return;
-
-            _activeRequest.Cancellation.Cancel();
-            ReleaseCandidate();
-            Complete(
-                _activeRequest,
-                ImmAuthoringPreviewState.Superseded,
-                ImmAuthoringPreviewErrorCode.Superseded,
-                "Preview request was superseded by a newer request.");
-            _activeRequest = null;
-        }
-
         private void ReleaseCandidate()
         {
             if (_candidateDocument == null)
@@ -455,6 +446,8 @@ namespace ImmPlayer.Authoring
             request.Message = message ?? string.Empty;
             request.ObjectId = objectId;
             request.FinishTiming();
+            if (ReferenceEquals(_activeRequest, request))
+                _activeRequest = null;
             Transition(request, state);
             request.DisposeCancellation();
         }
@@ -468,7 +461,22 @@ namespace ImmPlayer.Authoring
                 $"sourceRevision={request.SourceRevision} installedRevision={InstalledRevision} " +
                 $"state={state} elapsedMs={request.TotalStopwatch.Elapsed.TotalMilliseconds:F3} " +
                 $"bytes={request.Statistics.BytesCompiled} result={request.ErrorCode}");
-            StateChanged?.Invoke(request);
+            Action<ImmAuthoringPreviewRequest> handlers = StateChanged;
+            if (handlers == null)
+                return;
+            foreach (Action<ImmAuthoringPreviewRequest> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(request);
+                }
+                catch (Exception exception)
+                {
+                    UnityEngine.Debug.LogError(
+                        $"{LogPrefix} request={request.RequestId} state={state} " +
+                        $"subscriberException={exception.GetType().Name} message={exception.Message}");
+                }
+            }
         }
 
         private static bool ValidateSettings(ImmAuthoringPreviewSettings settings, out string error)
@@ -502,8 +510,8 @@ namespace ImmPlayer.Authoring
         {
             if (_disposed)
                 return;
-            ClearPreview();
             _disposed = true;
+            ClearPreview();
             StateChanged = null;
         }
     }
