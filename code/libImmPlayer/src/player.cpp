@@ -257,6 +257,8 @@ namespace ImmPlayer
             mDepthState = nullptr;
         }
 
+        for (uint64_t i = 0; i < mCommandList.GetLength(); i++)
+            mCommandList[i].mCommand.mStrArg.End();
         mCommandList.End();
         mSynced.End();
 
@@ -878,6 +880,8 @@ namespace ImmPlayer
                         {
                             // free fully unloaded documents
                             mDocuments.Free(currDocId);
+                            if (cmdId == mCommandList.GetLength() - 1)
+                                mCommandList[cmdId].mCommand.mStrArg.End();
                             mCommandList.RemoveAndShift(cmdId);
                             for (int i = cmdId; i < mCommandList.GetLength(); i++)
                             {
@@ -1524,21 +1528,40 @@ namespace ImmPlayer
 
     int Player::Load(const uint8_t* data, uint64_t size, const wchar_t* name)
     {
+        if (data == nullptr || size == 0 || name == nullptr || piwstrlen(name) == 0)
+            return -1;
+
         mCPULoadStartTimeMS = std::chrono::system_clock::now();
 
         uint64_t id;
         bool isNew;
-        mDocuments.Alloc(&isNew, &id, true);
-        Document *doc = (Document *)mDocuments.GetAddress(id);
+        Document *doc = (Document *)mDocuments.Alloc(&isNew, &id, true);
         if (!doc)
-            return false;
+            return -1;
 
         new (doc) Document();
 
         if (!doc->Init(name, static_cast<uint32_t>(id)))
-            return false;
+        {
+            mDocuments.Free(id);
+            return -1;
+        }
         int cmdId = static_cast<int>(mCommandList.GetLength());
         Player::Command* newCommand = mCommandList.New(1, false);
+        if (newCommand == nullptr)
+        {
+            doc->End();
+            mDocuments.Free(id);
+            return -1;
+        }
+        if (!newCommand->mCommand.mStrArg.InitCopyW(name))
+        {
+            newCommand->mCommand.mStrArg.End();
+            mCommandList.RemoveAndShift(cmdId);
+            doc->End();
+            mDocuments.Free(id);
+            return -1;
+        }
         newCommand->mTarget = static_cast<int>(id);
         newCommand->mCommand.mType = Document::Command::Type::Load;
         newCommand->mCommand.mMemoryData = data;
