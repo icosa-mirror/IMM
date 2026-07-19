@@ -290,10 +290,27 @@ namespace ImmPlayer.Authoring
         }
     }
 
+    public sealed class ImmAuthoringFrameSnapshot
+    {
+        public long Id { get; }
+        public long PaintLayerId { get; }
+        public int Index { get; }
+        public long DrawingId { get; }
+
+        internal ImmAuthoringFrameSnapshot(long id, long paintLayerId, int index, long drawingId)
+        {
+            Id = id;
+            PaintLayerId = paintLayerId;
+            Index = index;
+            DrawingId = drawingId;
+        }
+    }
+
     public sealed class ImmAuthoringLayerSnapshot
     {
         private readonly long[] _childIds;
         private readonly ImmAuthoringDrawingSnapshot[] _drawings;
+        private readonly ImmAuthoringFrameSnapshot[] _frames;
         private readonly long[] _frameDrawingIds;
         private readonly ImmAuthoringAnimationKeySnapshot[] _animationKeys;
 
@@ -304,6 +321,7 @@ namespace ImmPlayer.Authoring
         public ImmAuthoringLayerProperties Properties { get; }
         public IReadOnlyList<long> ChildIds => Array.AsReadOnly(_childIds);
         public IReadOnlyList<ImmAuthoringDrawingSnapshot> Drawings => Array.AsReadOnly(_drawings);
+        public IReadOnlyList<ImmAuthoringFrameSnapshot> Frames => Array.AsReadOnly(_frames);
         public IReadOnlyList<long> FrameDrawingIds => Array.AsReadOnly(_frameDrawingIds);
         public IReadOnlyList<ImmAuthoringAnimationKeySnapshot> AnimationKeys => Array.AsReadOnly(_animationKeys);
 
@@ -315,6 +333,7 @@ namespace ImmPlayer.Authoring
             ImmAuthoringLayerProperties properties,
             long[] childIds,
             ImmAuthoringDrawingSnapshot[] drawings,
+            long[] frameIds,
             long[] frameDrawingIds,
             ImmAuthoringAnimationKeySnapshot[] animationKeys)
         {
@@ -326,6 +345,12 @@ namespace ImmPlayer.Authoring
             _childIds = childIds ?? Array.Empty<long>();
             _drawings = drawings ?? Array.Empty<ImmAuthoringDrawingSnapshot>();
             _frameDrawingIds = frameDrawingIds ?? Array.Empty<long>();
+            long[] stableFrameIds = frameIds ?? Array.Empty<long>();
+            if (stableFrameIds.Length != _frameDrawingIds.Length)
+                throw new ArgumentException("Frame ID and drawing arrays must have the same length.");
+            _frames = new ImmAuthoringFrameSnapshot[stableFrameIds.Length];
+            for (int index = 0; index < stableFrameIds.Length; index++)
+                _frames[index] = new ImmAuthoringFrameSnapshot(stableFrameIds[index], id, index, _frameDrawingIds[index]);
             _animationKeys = animationKeys ?? Array.Empty<ImmAuthoringAnimationKeySnapshot>();
         }
     }
@@ -336,6 +361,7 @@ namespace ImmPlayer.Authoring
         private readonly long[] _rootLayerIds;
         private readonly Dictionary<long, ImmAuthoringLayerSnapshot> _layersById;
         private readonly Dictionary<long, ImmAuthoringDrawingSnapshot> _drawingsById;
+        private readonly Dictionary<long, ImmAuthoringFrameSnapshot> _framesById;
         private readonly Dictionary<long, ImmAuthoringStrokeSnapshot> _strokesById;
         private readonly Dictionary<long, ImmAuthoringAnimationKeySnapshot> _animationKeysById;
 
@@ -368,6 +394,7 @@ namespace ImmPlayer.Authoring
             _layers = layers ?? Array.Empty<ImmAuthoringLayerSnapshot>();
             _layersById = new Dictionary<long, ImmAuthoringLayerSnapshot>(_layers.Length);
             _drawingsById = new Dictionary<long, ImmAuthoringDrawingSnapshot>();
+            _framesById = new Dictionary<long, ImmAuthoringFrameSnapshot>();
             _strokesById = new Dictionary<long, ImmAuthoringStrokeSnapshot>();
             _animationKeysById = new Dictionary<long, ImmAuthoringAnimationKeySnapshot>();
             foreach (ImmAuthoringLayerSnapshot layer in _layers)
@@ -379,6 +406,8 @@ namespace ImmPlayer.Authoring
                     foreach (ImmAuthoringStrokeSnapshot stroke in drawing.Strokes)
                         _strokesById.Add(stroke.Id, stroke);
                 }
+                foreach (ImmAuthoringFrameSnapshot frame in layer.Frames)
+                    _framesById.Add(frame.Id, frame);
                 foreach (ImmAuthoringAnimationKeySnapshot key in layer.AnimationKeys)
                     _animationKeysById.Add(key.Id, key);
             }
@@ -389,6 +418,9 @@ namespace ImmPlayer.Authoring
 
         public bool TryGetDrawing(long drawingId, out ImmAuthoringDrawingSnapshot drawing) =>
             _drawingsById.TryGetValue(drawingId, out drawing);
+
+        public bool TryGetFrame(long frameId, out ImmAuthoringFrameSnapshot frame) =>
+            _framesById.TryGetValue(frameId, out frame);
 
         public bool TryGetStroke(long strokeId, out ImmAuthoringStrokeSnapshot stroke) =>
             _strokesById.TryGetValue(strokeId, out stroke);

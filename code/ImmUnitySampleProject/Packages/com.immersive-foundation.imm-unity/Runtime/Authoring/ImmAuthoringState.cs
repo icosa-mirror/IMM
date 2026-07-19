@@ -110,6 +110,7 @@ namespace ImmPlayer.Authoring
                 layer.Properties,
                 layer.ChildIds.ToArray(),
                 drawings,
+                layer.FrameIds.ToArray(),
                 layer.FrameDrawingIds.ToArray(),
                 animationKeys));
 
@@ -126,6 +127,7 @@ namespace ImmPlayer.Authoring
         internal ImmAuthoringLayerProperties Properties;
         internal readonly List<long> ChildIds = new List<long>();
         internal readonly List<long> DrawingIds = new List<long>();
+        internal readonly List<long> FrameIds = new List<long>();
         internal readonly List<long> FrameDrawingIds = new List<long>();
         internal readonly List<long> AnimationKeyIds = new List<long>();
 
@@ -140,6 +142,7 @@ namespace ImmPlayer.Authoring
             };
             clone.ChildIds.AddRange(ChildIds);
             clone.DrawingIds.AddRange(DrawingIds);
+            clone.FrameIds.AddRange(FrameIds);
             clone.FrameDrawingIds.AddRange(FrameDrawingIds);
             clone.AnimationKeyIds.AddRange(AnimationKeyIds);
             return clone;

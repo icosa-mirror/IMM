@@ -255,6 +255,63 @@ namespace ImmPlayer.Tests
         }
 
         [Test]
+        public void FrameMappingsKeepStableIdsAcrossInsertionMoveReplacementAndResize()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                long layer = Require(document.CreatePaintLayer(0, ImmAuthoringLayerProperties.Default("Paint")));
+                long firstDrawing = Require(document.CreateDrawing(layer));
+                long secondDrawing = Require(document.CreateDrawing(layer));
+                long insertedDrawing = Require(document.CreateDrawing(layer));
+                long firstFrame = Require(document.AppendFrameWithId(layer, firstDrawing));
+                long secondFrame = Require(document.AppendFrameWithId(layer, secondDrawing));
+                long insertedFrame = Require(document.InsertFrameWithId(layer, 1, insertedDrawing));
+
+                Require(document.MoveFrame(firstFrame, 2));
+                ImmAuthoringChange lastChange = null;
+                document.Changed += change => lastChange = change;
+                Require(document.SetFrameDrawing(firstFrame, secondDrawing));
+
+                ImmAuthoringSnapshot snapshot = Require(document.CreateSnapshot());
+                ImmAuthoringLayerSnapshot paint = snapshot.Layers[0];
+                Assert.That(
+                    paint.Frames,
+                    Has.Count.EqualTo(3));
+                Assert.That(
+                    new[] { paint.Frames[0].Id, paint.Frames[1].Id, paint.Frames[2].Id },
+                    Is.EqualTo(new[] { insertedFrame, secondFrame, firstFrame }));
+                Assert.That(
+                    new[] { paint.Frames[0].DrawingId, paint.Frames[1].DrawingId, paint.Frames[2].DrawingId },
+                    Is.EqualTo(new[] { insertedDrawing, secondDrawing, secondDrawing }));
+                Assert.That(paint.Frames[2].Index, Is.EqualTo(2));
+                Assert.That(snapshot.TryGetFrame(firstFrame, out ImmAuthoringFrameSnapshot firstFrameSnapshot), Is.True);
+                Assert.That(firstFrameSnapshot.PaintLayerId, Is.EqualTo(layer));
+                Assert.That(lastChange.AffectedObjectIds, Does.Contain(firstFrame));
+
+                Require(document.RemoveFrame(insertedFrame));
+                snapshot = Require(document.CreateSnapshot());
+                Assert.That(snapshot.TryGetFrame(insertedFrame, out _), Is.False);
+                Assert.That(
+                    new[] { snapshot.Layers[0].Frames[0].Id, snapshot.Layers[0].Frames[1].Id },
+                    Is.EqualTo(new[] { secondFrame, firstFrame }));
+
+                Require(document.ResizeFrameSequence(layer, 4, firstDrawing));
+                paint = Require(document.CreateSnapshot()).Layers[0];
+                Assert.That(paint.Frames[0].Id, Is.EqualTo(secondFrame));
+                Assert.That(paint.Frames[1].Id, Is.EqualTo(firstFrame));
+                HashSet<long> frameIds = new HashSet<long>();
+                foreach (ImmAuthoringFrameSnapshot frame in paint.Frames)
+                    Assert.That(frameIds.Add(frame.Id), Is.True, $"Duplicate frame ID {frame.Id}");
+
+                Require(document.ResizeFrameSequence(layer, 1));
+                snapshot = Require(document.CreateSnapshot());
+                Assert.That(snapshot.TryGetFrame(secondFrame, out _), Is.True);
+                Assert.That(snapshot.TryGetFrame(firstFrame, out _), Is.False);
+                Assert.That(document.Validate().Succeeded, Is.True);
+            }
+        }
+
+        [Test]
         public void RepeatedManagedLifecycleRejectsUseAfterDispose()
         {
             for (int iteration = 0; iteration < 100; iteration++)

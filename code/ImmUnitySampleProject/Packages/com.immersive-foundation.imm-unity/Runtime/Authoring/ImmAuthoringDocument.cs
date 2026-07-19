@@ -490,25 +490,45 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
-        public ImmAuthoringResult AppendFrame(long paintLayerId, long drawingId) => InsertFrame(paintLayerId, int.MaxValue, drawingId);
+        public ImmAuthoringResult AppendFrame(long paintLayerId, long drawingId) =>
+            AppendFrameWithId(paintLayerId, drawingId).WithoutValue();
 
-        public ImmAuthoringResult InsertFrame(long paintLayerId, int frameIndex, long drawingId)
+        public ImmAuthoringResult<long> AppendFrameWithId(long paintLayerId, long drawingId) =>
+            InsertFrameWithId(paintLayerId, int.MaxValue, drawingId);
+
+        public ImmAuthoringResult InsertFrame(long paintLayerId, int frameIndex, long drawingId) =>
+            InsertFrameWithId(paintLayerId, frameIndex, drawingId).WithoutValue();
+
+        public ImmAuthoringResult<long> InsertFrameWithId(long paintLayerId, int frameIndex, long drawingId)
         {
             ImmAuthoringChange change;
+            long frameId;
             lock (_gate)
             {
                 ImmAuthoringResult ownership = ValidateFrameOwnership(paintLayerId, drawingId);
                 if (!ownership.Succeeded)
-                    return ownership;
+                {
+                    return ImmAuthoringResult<long>.Failure(
+                        ownership.ErrorCode,
+                        ownership.Message,
+                        ownership.ObjectId);
+                }
                 LayerNode layer = _state.Layers[paintLayerId];
                 int insertIndex = frameIndex == int.MaxValue ? layer.FrameDrawingIds.Count : frameIndex;
                 if (insertIndex < 0 || insertIndex > layer.FrameDrawingIds.Count)
-                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Frame index is outside the paint layer.", paintLayerId);
+                {
+                    return ImmAuthoringResult<long>.Failure(
+                        ImmAuthoringErrorCode.InvalidArgument,
+                        "Frame index is outside the paint layer.",
+                        paintLayerId);
+                }
+                frameId = _state.AllocateId();
+                layer.FrameIds.Insert(insertIndex, frameId);
                 layer.FrameDrawingIds.Insert(insertIndex, drawingId);
-                change = AdvanceRevision(new[] { paintLayerId, drawingId });
+                change = AdvanceRevision(new[] { paintLayerId, frameId, drawingId });
             }
             Publish(change);
-            return ImmAuthoringResult.Success();
+            return ImmAuthoringResult<long>.Success(frameId);
         }
 
         public ImmAuthoringResult SetFrame(long paintLayerId, int frameIndex, long drawingId)
@@ -522,9 +542,30 @@ namespace ImmPlayer.Authoring
                 LayerNode layer = _state.Layers[paintLayerId];
                 if (frameIndex < 0 || frameIndex >= layer.FrameDrawingIds.Count)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Frame index is outside the paint layer.", paintLayerId);
+                long frameId = layer.FrameIds[frameIndex];
                 long previousDrawingId = layer.FrameDrawingIds[frameIndex];
                 layer.FrameDrawingIds[frameIndex] = drawingId;
-                change = AdvanceRevision(new[] { paintLayerId, previousDrawingId, drawingId });
+                change = AdvanceRevision(new[] { paintLayerId, frameId, previousDrawingId, drawingId });
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
+        public ImmAuthoringResult SetFrameDrawing(long frameId, long drawingId)
+        {
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return Disposed();
+                if (!TryFindFrame(frameId, out LayerNode layer, out int frameIndex))
+                    return NotFound("Frame", frameId);
+                ImmAuthoringResult ownership = ValidateFrameOwnership(layer.Id, drawingId);
+                if (!ownership.Succeeded)
+                    return ownership;
+                long previousDrawingId = layer.FrameDrawingIds[frameIndex];
+                layer.FrameDrawingIds[frameIndex] = drawingId;
+                change = AdvanceRevision(new[] { layer.Id, frameId, previousDrawingId, drawingId });
             }
             Publish(change);
             return ImmAuthoringResult.Success();
@@ -543,10 +584,35 @@ namespace ImmPlayer.Authoring
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Frames belong to paint layers.", paintLayerId);
                 if (oldIndex < 0 || oldIndex >= layer.FrameDrawingIds.Count || newIndex < 0 || newIndex >= layer.FrameDrawingIds.Count)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Frame index is outside the paint layer.", paintLayerId);
+                long frameId = layer.FrameIds[oldIndex];
                 long drawingId = layer.FrameDrawingIds[oldIndex];
+                layer.FrameIds.RemoveAt(oldIndex);
                 layer.FrameDrawingIds.RemoveAt(oldIndex);
+                layer.FrameIds.Insert(newIndex, frameId);
                 layer.FrameDrawingIds.Insert(newIndex, drawingId);
-                change = AdvanceRevision(new[] { paintLayerId, drawingId });
+                change = AdvanceRevision(new[] { paintLayerId, frameId, drawingId });
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
+        public ImmAuthoringResult MoveFrame(long frameId, int newIndex)
+        {
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return Disposed();
+                if (!TryFindFrame(frameId, out LayerNode layer, out int oldIndex))
+                    return NotFound("Frame", frameId);
+                if (newIndex < 0 || newIndex >= layer.FrameDrawingIds.Count)
+                    return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Frame index is outside the paint layer.", frameId);
+                long drawingId = layer.FrameDrawingIds[oldIndex];
+                layer.FrameIds.RemoveAt(oldIndex);
+                layer.FrameDrawingIds.RemoveAt(oldIndex);
+                layer.FrameIds.Insert(newIndex, frameId);
+                layer.FrameDrawingIds.Insert(newIndex, drawingId);
+                change = AdvanceRevision(new[] { layer.Id, frameId, drawingId });
             }
             Publish(change);
             return ImmAuthoringResult.Success();
@@ -565,9 +631,29 @@ namespace ImmPlayer.Authoring
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Frames belong to paint layers.", paintLayerId);
                 if (frameIndex < 0 || frameIndex >= layer.FrameDrawingIds.Count)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Frame index is outside the paint layer.", paintLayerId);
+                long frameId = layer.FrameIds[frameIndex];
                 long drawingId = layer.FrameDrawingIds[frameIndex];
+                layer.FrameIds.RemoveAt(frameIndex);
                 layer.FrameDrawingIds.RemoveAt(frameIndex);
-                change = AdvanceRevision(new[] { paintLayerId, drawingId });
+                change = AdvanceRevision(new[] { paintLayerId, frameId, drawingId });
+            }
+            Publish(change);
+            return ImmAuthoringResult.Success();
+        }
+
+        public ImmAuthoringResult RemoveFrame(long frameId)
+        {
+            ImmAuthoringChange change;
+            lock (_gate)
+            {
+                if (_disposed)
+                    return Disposed();
+                if (!TryFindFrame(frameId, out LayerNode layer, out int frameIndex))
+                    return NotFound("Frame", frameId);
+                long drawingId = layer.FrameDrawingIds[frameIndex];
+                layer.FrameIds.RemoveAt(frameIndex);
+                layer.FrameDrawingIds.RemoveAt(frameIndex);
+                change = AdvanceRevision(new[] { layer.Id, frameId, drawingId });
             }
             Publish(change);
             return ImmAuthoringResult.Success();
@@ -599,7 +685,13 @@ namespace ImmPlayer.Authoring
                 if (frameCount < layer.FrameDrawingIds.Count)
                 {
                     for (int index = frameCount; index < layer.FrameDrawingIds.Count; index++)
+                    {
+                        affectedIds.Add(layer.FrameIds[index]);
                         affectedIds.Add(layer.FrameDrawingIds[index]);
+                    }
+                    layer.FrameIds.RemoveRange(
+                        frameCount,
+                        layer.FrameIds.Count - frameCount);
                     layer.FrameDrawingIds.RemoveRange(
                         frameCount,
                         layer.FrameDrawingIds.Count - frameCount);
@@ -611,7 +703,12 @@ namespace ImmPlayer.Authoring
                         return ownership;
                     affectedIds.Add(fillDrawingId);
                     while (layer.FrameDrawingIds.Count < frameCount)
+                    {
+                        long frameId = _state.AllocateId();
+                        layer.FrameIds.Add(frameId);
                         layer.FrameDrawingIds.Add(fillDrawingId);
+                        affectedIds.Add(frameId);
+                    }
                 }
 
                 change = AdvanceRevision(affectedIds.ToArray());
@@ -715,6 +812,23 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
+        private bool TryFindFrame(long frameId, out LayerNode owner, out int frameIndex)
+        {
+            foreach (LayerNode layer in _state.Layers.Values)
+            {
+                int index = layer.FrameIds.IndexOf(frameId);
+                if (index >= 0)
+                {
+                    owner = layer;
+                    frameIndex = index;
+                    return true;
+                }
+            }
+            owner = null;
+            frameIndex = -1;
+            return false;
+        }
+
         private bool IsDescendantOf(long candidateId, long ancestorId)
         {
             long current = candidateId;
@@ -750,6 +864,7 @@ namespace ImmPlayer.Authoring
                 _state.AnimationKeys.Remove(keyId);
                 removedIds.Add(keyId);
             }
+            removedIds.AddRange(layer.FrameIds);
             _state.Layers.Remove(layerId);
             removedIds.Add(layerId);
         }
@@ -924,8 +1039,31 @@ namespace ImmPlayer.Authoring
             HashSet<long> reachableDrawings = new HashSet<long>();
             HashSet<long> reachableStrokes = new HashSet<long>();
             HashSet<long> reachableAnimationKeys = new HashSet<long>();
+            HashSet<long> reachableFrames = new HashSet<long>();
             foreach (LayerNode layer in state.Layers.Values)
             {
+                if (layer.FrameIds.Count != layer.FrameDrawingIds.Count)
+                {
+                    return ImmAuthoringResult.Failure(
+                        ImmAuthoringErrorCode.ValidationFailed,
+                        "Frame ID and drawing lists have different lengths.",
+                        layer.Id);
+                }
+                foreach (long frameId in layer.FrameIds)
+                {
+                    if (frameId <= 0 ||
+                        state.Layers.ContainsKey(frameId) ||
+                        state.Drawings.ContainsKey(frameId) ||
+                        state.Strokes.ContainsKey(frameId) ||
+                        state.AnimationKeys.ContainsKey(frameId) ||
+                        !reachableFrames.Add(frameId))
+                    {
+                        return ImmAuthoringResult.Failure(
+                            ImmAuthoringErrorCode.ValidationFailed,
+                            "Frame has an invalid or duplicate stable ID.",
+                            frameId);
+                    }
+                }
                 foreach (long drawingId in layer.DrawingIds)
                 {
                     if (!reachableDrawings.Add(drawingId))
@@ -984,7 +1122,8 @@ namespace ImmPlayer.Authoring
             ImmAuthoringResult properties = ValidateLayerProperties(layer.Properties, layerId);
             if (!properties.Succeeded)
                 return properties;
-            if (layer.Type == ImmAuthoringLayerType.Group && (layer.DrawingIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
+            if (layer.Type == ImmAuthoringLayerType.Group &&
+                (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Group layer contains paint data.", layerId);
             if (layer.Type == ImmAuthoringLayerType.Paint)
             {
