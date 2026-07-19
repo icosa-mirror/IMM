@@ -224,8 +224,8 @@ offset. The explicitly exercised interpolation set is none, linear, smoothstep,
 and ease-in.
 
 The focused import/mutate/re-export/re-import/playback test passed, followed by
-two final complete Windows Unity PlayMode runs: 29 of 29 tests passed in 2.082
-seconds and 29 of 29 tests passed in 1.905 seconds. Unsupported content is separately
+two final complete Windows Unity PlayMode runs: 29 of 29 tests passed in 2.001
+seconds and 29 of 29 tests passed in 1.970 seconds. Unsupported content is separately
 verified to make the import lossy and `CanOverwriteSource` false. Point brushes
 and obsolete component transform keys are rejected before native export.
 

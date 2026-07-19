@@ -140,7 +140,34 @@ namespace ImmPlayer.Tests
                         importedStroke.Visibility,
                         changedPoints));
 
+                    ImmAuthoringLayerSnapshot importedPaint = importedSnapshot.Layers
+                        .Single(layer => layer.Type == ImmAuthoringLayerType.Paint);
+                    ImmAuthoringFrameSnapshot importedFrame = importedPaint.Frames[0];
+                    long replacementDrawingId = importedPaint.Frames[1].DrawingId;
+                    Require(memoryImport.Document.SetFrameDrawing(importedFrame.Id, replacementDrawingId));
+
+                    ImmAuthoringAnimationKeySnapshot importedOpacityKey = importedPaint.AnimationKeys
+                        .Single(key =>
+                            key.Property == ImmAuthoringAnimationProperty.Opacity &&
+                            key.TimeTicks == 0);
+                    Require(memoryImport.Document.ReplaceAnimationKey(
+                        importedOpacityKey.Id,
+                        importedOpacityKey.Property,
+                        importedOpacityKey.TimeTicks,
+                        ImmAuthoringAnimationValue.FromFloat(0.55f),
+                        importedOpacityKey.Interpolation));
+
                     ImmAuthoringSnapshot modifiedSnapshot = Require(memoryImport.Document.CreateSnapshot());
+                    Assert.That(
+                        modifiedSnapshot.TryGetFrame(importedFrame.Id, out ImmAuthoringFrameSnapshot changedFrame),
+                        Is.True);
+                    Assert.That(changedFrame.DrawingId, Is.EqualTo(replacementDrawingId));
+                    Assert.That(
+                        modifiedSnapshot.TryGetAnimationKey(
+                            importedOpacityKey.Id,
+                            out ImmAuthoringAnimationKeySnapshot changedOpacityKey),
+                        Is.True);
+                    Assert.That(changedOpacityKey.Value.FloatValue, Is.EqualTo(0.55f));
                     ImmAuthoringExportResult modified = ImmAuthoringCompiler.ExportToMemory(memoryImport.Document);
                     Assert.That(modified.Succeeded, Is.True, modified.Message);
                     modifiedImport = ImmAuthoringImporter.ImportFromMemory(modified.Data);
