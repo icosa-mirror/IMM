@@ -532,7 +532,7 @@ Exit criteria:
 - The package can be consumed by the separate application without referencing sample code.
 
 Recorded result: two final Windows Unity PlayMode runs passed 37 of 37 tests
-in 3.097 seconds and 3.094 seconds. The live sample reported all Phase 6 capability flags and
+in 4.503 seconds and 4.152 seconds. The live sample reported all Phase 6 capability flags and
 progress stages, exercised controlled limit/cancellation/corrupt-input
 failures, and then rendered the revision-2 450-stroke animation after in-memory
 import and stable-ID edits. `Assets/Phase6PackageConsumer` compiles as a separate
