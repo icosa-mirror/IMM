@@ -103,6 +103,13 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetFrameBuffer(int docId, int layerIdx, [Out] int[] frames, int maxFrames);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetAuthoringLayerAnimationInfo(int docId, int layerIdx, out int frameRate, out int numFrames, out int maxRepeatCount);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetAuthoringFrameBuffer(int docId, int layerIdx, [Out] int[] frames, int maxFrames);
+
         #endregion
 
         #region Query API
@@ -114,6 +121,9 @@ namespace ImmPlayer
         /// <returns>Number of layers, or 0 if docId is invalid</returns>
         [DllImport(DllName)]
         public static extern int StrokeReader_GetLayerCount(int docId);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetAuthoringLayerCount(int docId);
 
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -130,9 +140,17 @@ namespace ImmPlayer
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetLayerInfo(int docId, int layerIdx, out StrokeLayerInfo info);
 
+        [DllImport(DllName, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetAuthoringLayerInfo(int docId, int layerIdx, out StrokeAuthoringLayerInfo info);
+
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetLayerTransform(int docId, int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetAuthoringLayerTransform(int docId, int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world);
 
         [DllImport(DllName)]
         public static extern int StrokeReader_GetLayerAnimationKeyCount(int docId, int layerIdx);
@@ -154,6 +172,9 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int StrokeReader_GetDrawingCount(int docId, int layerIdx);
 
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetAuthoringDrawingCount(int docId, int layerIdx);
+
         /// <summary>
         /// Get the number of strokes in a drawing.
         /// </summary>
@@ -163,6 +184,9 @@ namespace ImmPlayer
         /// <returns>Number of strokes, or 0 if indices are invalid</returns>
         [DllImport(DllName)]
         public static extern int StrokeReader_GetStrokeCount(int docId, int layerIdx, int drawingIdx);
+
+        [DllImport(DllName)]
+        public static extern int StrokeReader_GetAuthoringStrokeCount(int docId, int layerIdx, int drawingIdx);
 
         /// <summary>
         /// Get information about a stroke (brush type, visibility, point count, bounding box).
@@ -176,6 +200,12 @@ namespace ImmPlayer
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_GetStrokeInfo(
+            int docId, int layerIdx, int drawingIdx, int strokeIdx,
+            out StrokeInfo info);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetAuthoringStrokeInfo(
             int docId, int layerIdx, int drawingIdx, int strokeIdx,
             out StrokeInfo info);
 
@@ -194,6 +224,12 @@ namespace ImmPlayer
         public static extern bool StrokeReader_GetStrokePoints(
             int docId, int layerIdx, int drawingIdx, int strokeIdx,
             [Out] StrokePoint[] points, int maxPoints);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetAuthoringStrokePoints(
+            int docId, int layerIdx, int drawingIdx, int strokeIdx,
+            [Out] StrokeAuthoringPoint[] points, int maxPoints);
 
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -253,12 +289,34 @@ namespace ImmPlayer
         public float pivotTransX;
         public float pivotTransY;
         public float pivotTransZ;
+    }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct StrokeAuthoringLayerInfo
+    {
+        public StrokeLayerInfo legacy;
         public int parentId;
         public int childIndex;
         public int isTimeline;
         public long durationTicks;
         public uint maxRepeatCount;
+
+        public int id => legacy.id;
+        public int type => legacy.type;
+        public int numDrawings => legacy.numDrawings;
+        public string name => legacy.name;
+        public int visible => legacy.visible;
+        public float opacity => legacy.opacity;
+        public int isDefaultSpawn => legacy.isDefaultSpawn;
+        public float pivotRotX => legacy.pivotRotX;
+        public float pivotRotY => legacy.pivotRotY;
+        public float pivotRotZ => legacy.pivotRotZ;
+        public float pivotRotW => legacy.pivotRotW;
+        public float pivotScale => legacy.pivotScale;
+        public int pivotFlip => legacy.pivotFlip;
+        public float pivotTransX => legacy.pivotTransX;
+        public float pivotTransY => legacy.pivotTransY;
+        public float pivotTransZ => legacy.pivotTransZ;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -357,10 +415,6 @@ namespace ImmPlayer
         /// <summary>Stroke width (quantized, may need conversion)</summary>
         public float width;
 
-        public float length;
-
-        public float time;
-
         /// <summary>Get position as Vector3</summary>
         public Vector3 Position => new Vector3(px, py, pz);
 
@@ -372,6 +426,24 @@ namespace ImmPlayer
 
         /// <summary>Get color as Color (with alpha)</summary>
         public Color Color => new Color(r, g, b, alpha);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeAuthoringPoint
+    {
+        public StrokePoint legacy;
+        public float length;
+        public float time;
+
+        public float r => legacy.r;
+        public float g => legacy.g;
+        public float b => legacy.b;
+        public float alpha => legacy.alpha;
+        public float width => legacy.width;
+        public Vector3 Position => legacy.Position;
+        public Vector3 Normal => legacy.Normal;
+        public Vector3 ViewDirection => legacy.ViewDirection;
+        public Color Color => legacy.Color;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -528,6 +600,8 @@ namespace ImmPlayer
         /// </summary>
         public int LayerCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetLayerCount(_docId) : 0;
 
+        public int AuthoringLayerCount => _docId > 0 ? ImmStrokeReader.StrokeReader_GetAuthoringLayerCount(_docId) : 0;
+
         public bool GetDocumentInfo(out StrokeDocumentInfo info)
         {
             info = default;
@@ -558,6 +632,20 @@ namespace ImmPlayer
             return ImmStrokeReader.StrokeReader_GetLayerInfo(_docId, layerIdx, out info);
         }
 
+        public bool GetAuthoringLayerInfo(int layerIdx, out StrokeAuthoringLayerInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetAuthoringLayerInfo(_docId, layerIdx, out info);
+        }
+
+        public bool GetAuthoringLayerTransform(int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world)
+        {
+            local = default;
+            world = default;
+            return _docId > 0 &&
+                ImmStrokeReader.StrokeReader_GetAuthoringLayerTransform(_docId, layerIdx, out local, out world);
+        }
+
         public StrokeAnimationKey[] GetLayerAnimationKeys(int layerIdx)
         {
             if (_docId <= 0)
@@ -572,6 +660,41 @@ namespace ImmPlayer
                     return null;
             }
             return keys;
+        }
+
+        public int GetAuthoringDrawingCount(int layerIdx)
+        {
+            return _docId > 0 ? ImmStrokeReader.StrokeReader_GetAuthoringDrawingCount(_docId, layerIdx) : 0;
+        }
+
+        public int GetAuthoringStrokeCount(int layerIdx, int drawingIdx)
+        {
+            return _docId > 0 ? ImmStrokeReader.StrokeReader_GetAuthoringStrokeCount(_docId, layerIdx, drawingIdx) : 0;
+        }
+
+        public bool GetAuthoringStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, out StrokeInfo info)
+        {
+            info = default;
+            return _docId > 0 &&
+                ImmStrokeReader.StrokeReader_GetAuthoringStrokeInfo(_docId, layerIdx, drawingIdx, strokeIdx, out info);
+        }
+
+        public StrokeAuthoringPoint[] GetAuthoringStrokePoints(int layerIdx, int drawingIdx, int strokeIdx)
+        {
+            if (!GetAuthoringStrokeInfo(layerIdx, drawingIdx, strokeIdx, out StrokeInfo info))
+                return null;
+            if (info.numPoints <= 0)
+                return Array.Empty<StrokeAuthoringPoint>();
+            StrokeAuthoringPoint[] points = new StrokeAuthoringPoint[info.numPoints];
+            return ImmStrokeReader.StrokeReader_GetAuthoringStrokePoints(
+                _docId,
+                layerIdx,
+                drawingIdx,
+                strokeIdx,
+                points,
+                points.Length)
+                ? points
+                : null;
         }
 
         /// <summary>

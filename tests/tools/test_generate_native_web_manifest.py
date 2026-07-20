@@ -30,6 +30,7 @@ class NativeWebManifestTests(unittest.TestCase):
         )
 
     def test_ctypes_structs_match_native_field_sizes(self) -> None:
+        self.assertEqual(ctypes.sizeof(MODULE.StrokeLayerInfo), 316)
         self.assertEqual(ctypes.sizeof(MODULE.StrokeLayerTransform), 36)
         self.assertEqual(ctypes.sizeof(MODULE.StrokeInfo), 36)
         self.assertEqual(ctypes.sizeof(MODULE.StrokePoint), 56)

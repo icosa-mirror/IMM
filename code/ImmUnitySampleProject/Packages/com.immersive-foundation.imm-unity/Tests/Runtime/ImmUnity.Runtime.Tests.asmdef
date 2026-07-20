@@ -2,7 +2,8 @@
   "name": "ImmUnity.Runtime.Tests",
   "rootNamespace": "ImmPlayer.Tests",
   "references": [
-    "ImmUnity.Runtime"
+    "ImmUnity.Runtime",
+    "ImmStrokeReader.Runtime"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"

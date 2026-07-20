@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using ImmPlayer;
 using ImmPlayer.Authoring;
 using ImmPlayer.Exporter;
 using NUnit.Framework;
@@ -12,6 +14,17 @@ namespace ImmPlayer.Tests
 {
     public sealed class ImmAuthoringImportTests
     {
+        [Test]
+        public void StrokeReaderLegacyAndAuthoringStructLayoutsAreStable()
+        {
+            Assert.That(Marshal.SizeOf(typeof(StrokeLayerInfo)), Is.EqualTo(316));
+            Assert.That(Marshal.OffsetOf(typeof(StrokeLayerInfo), nameof(StrokeLayerInfo.pivotRotX)).ToInt32(), Is.EqualTo(280));
+            Assert.That(Marshal.SizeOf(typeof(StrokePoint)), Is.EqualTo(56));
+            Assert.That(Marshal.OffsetOf(typeof(StrokePoint), nameof(StrokePoint.width)).ToInt32(), Is.EqualTo(52));
+            Assert.That(Marshal.SizeOf(typeof(StrokeAuthoringLayerInfo)), Is.EqualTo(344));
+            Assert.That(Marshal.SizeOf(typeof(StrokeAuthoringPoint)), Is.EqualTo(64));
+        }
+
         [Test]
         public void AnimationKeysHaveStableIdsAndTransactionalMutation()
         {

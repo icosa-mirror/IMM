@@ -173,23 +173,23 @@ namespace ImmPlayer.Authoring
         {
             ImmAuthoringImportStatistics statistics = new ImmAuthoringImportStatistics
             {
-                SourceLayerCount = source.LayerCount
+                SourceLayerCount = source.AuthoringLayerCount
             };
-            if (source.LayerCount < 0)
+            if (source.AuthoringLayerCount < 0)
                 return Failure(ImmAuthoringErrorCode.CorruptInput, "The source reported a negative layer count.", statistics);
-            if (source.LayerCount > options.Limits.MaxLayers)
-                return Failure(ImmAuthoringErrorCode.ResourceLimitExceeded, $"IMM input contains {source.LayerCount:N0} layers; the configured limit is {options.Limits.MaxLayers:N0}.", statistics);
-            options.Report(ImmAuthoringProgressStage.InspectingSource, 0, source.LayerCount, "Inspecting IMM layer metadata.");
+            if (source.AuthoringLayerCount > options.Limits.MaxLayers)
+                return Failure(ImmAuthoringErrorCode.ResourceLimitExceeded, $"IMM input contains {source.AuthoringLayerCount:N0} layers; the configured limit is {options.Limits.MaxLayers:N0}.", statistics);
+            options.Report(ImmAuthoringProgressStage.InspectingSource, 0, source.AuthoringLayerCount, "Inspecting IMM layer metadata.");
             List<ImmAuthoringImportIssue> issues = new List<ImmAuthoringImportIssue>();
             if (!source.GetDocumentInfo(out StrokeDocumentInfo documentInfo))
                 return Failure(ImmAuthoringErrorCode.ValidationFailed, "The source document metadata could not be read.", statistics);
 
-            SourceLayer[] sourceLayers = new SourceLayer[source.LayerCount];
+            SourceLayer[] sourceLayers = new SourceLayer[source.AuthoringLayerCount];
             for (int layerIndex = 0; layerIndex < sourceLayers.Length; layerIndex++)
             {
                 options.CancellationToken.ThrowIfCancellationRequested();
-                if (!source.GetLayerInfo(layerIndex, out StrokeLayerInfo info) ||
-                    !ImmStrokeReader.StrokeReader_GetLayerTransform(source.DocId, layerIndex, out StrokeLayerTransform local, out _))
+                if (!source.GetAuthoringLayerInfo(layerIndex, out StrokeAuthoringLayerInfo info) ||
+                    !source.GetAuthoringLayerTransform(layerIndex, out StrokeLayerTransform local, out _))
                 {
                     return Failure(
                         ImmAuthoringErrorCode.ValidationFailed,
@@ -334,7 +334,7 @@ namespace ImmPlayer.Authoring
             ImmAuthoringImportStatistics statistics,
             ImmAuthoringOperationOptions options)
         {
-            int drawingCount = source.GetDrawingCount(sourceLayer.Index);
+            int drawingCount = source.GetAuthoringDrawingCount(sourceLayer.Index);
             if (drawingCount < 0)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.CorruptInput, "Source reported a negative drawing count.", importedLayerId);
             if ((long)statistics.ImportedDrawingCount + drawingCount > options.Limits.MaxDrawings)
@@ -349,7 +349,7 @@ namespace ImmPlayer.Authoring
                 drawingIds[drawingIndex] = drawing.Value;
                 statistics.ImportedDrawingCount++;
 
-                int strokeCount = source.GetStrokeCount(sourceLayer.Index, drawingIndex);
+                int strokeCount = source.GetAuthoringStrokeCount(sourceLayer.Index, drawingIndex);
                 if (strokeCount < 0)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.CorruptInput, "Source reported a negative stroke count.", importedLayerId);
                 if ((long)statistics.ImportedStrokeCount + strokeCount > options.Limits.MaxStrokes)
@@ -357,7 +357,7 @@ namespace ImmPlayer.Authoring
                 for (int strokeIndex = 0; strokeIndex < strokeCount; strokeIndex++)
                 {
                     options.CancellationToken.ThrowIfCancellationRequested();
-                    if (!source.GetStrokeInfo(sourceLayer.Index, drawingIndex, strokeIndex, out StrokeInfo strokeInfo))
+                    if (!source.GetAuthoringStrokeInfo(sourceLayer.Index, drawingIndex, strokeIndex, out StrokeInfo strokeInfo))
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Source stroke metadata could not be read.", importedLayerId);
                     if (strokeInfo.brushType <= (int)BrushSectionType.Point ||
                         strokeInfo.brushType > (int)BrushSectionType.Square ||
@@ -370,7 +370,7 @@ namespace ImmPlayer.Authoring
                         continue;
                     }
 
-                    StrokePoint[] sourcePoints = source.GetStrokePoints(sourceLayer.Index, drawingIndex, strokeIndex);
+                    StrokeAuthoringPoint[] sourcePoints = source.GetAuthoringStrokePoints(sourceLayer.Index, drawingIndex, strokeIndex);
                     if (sourcePoints == null || sourcePoints.Length < 2)
                         return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Source stroke points could not be read.", importedLayerId);
                     if (sourcePoints.Length > options.Limits.MaxPointsPerStroke)
@@ -382,7 +382,7 @@ namespace ImmPlayer.Authoring
                     PointAdjustment adjustedPointMetadata = PointAdjustment.None;
                     for (int pointIndex = 0; pointIndex < points.Length; pointIndex++)
                     {
-                        StrokePoint point = sourcePoints[pointIndex];
+                        StrokeAuthoringPoint point = sourcePoints[pointIndex];
                         Vector3 position = point.Position;
                         if (!IsFinite(position))
                         {
@@ -450,7 +450,7 @@ namespace ImmPlayer.Authoring
                 }
             }
 
-            if (!ImmStrokeReader.StrokeReader_GetLayerAnimationInfo(
+            if (!ImmStrokeReader.StrokeReader_GetAuthoringLayerAnimationInfo(
                     source.DocId,
                     sourceLayer.Index,
                     out int layerFrameRate,
@@ -479,7 +479,7 @@ namespace ImmPlayer.Authoring
             if (frameCount > 0)
             {
                 int[] frameBuffer = new int[frameCount];
-                int read = ImmStrokeReader.StrokeReader_GetFrameBuffer(source.DocId, sourceLayer.Index, frameBuffer, frameBuffer.Length);
+                int read = ImmStrokeReader.StrokeReader_GetAuthoringFrameBuffer(source.DocId, sourceLayer.Index, frameBuffer, frameBuffer.Length);
                 if (read != frameCount)
                     return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Paint frame mapping could not be read.", importedLayerId);
                 for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
@@ -718,7 +718,7 @@ namespace ImmPlayer.Authoring
                 foreach (SourceLayer layer in layers)
                 {
                     if (layer.Info.type == SourcePaintLayerType &&
-                        ImmStrokeReader.StrokeReader_GetLayerAnimationInfo(sourceDocumentId, layer.Index, out int paintRate, out _, out _) &&
+                        ImmStrokeReader.StrokeReader_GetAuthoringLayerAnimationInfo(sourceDocumentId, layer.Index, out int paintRate, out _, out _) &&
                         paintRate > 0)
                     {
                         frameRate = (uint)paintRate;
@@ -811,10 +811,10 @@ namespace ImmPlayer.Authoring
         private sealed class SourceLayer
         {
             internal int Index { get; }
-            internal StrokeLayerInfo Info { get; }
+            internal StrokeAuthoringLayerInfo Info { get; }
             internal StrokeLayerTransform LocalTransform { get; }
 
-            internal SourceLayer(int index, StrokeLayerInfo info, StrokeLayerTransform localTransform)
+            internal SourceLayer(int index, StrokeAuthoringLayerInfo info, StrokeLayerTransform localTransform)
             {
                 Index = index;
                 Info = info;

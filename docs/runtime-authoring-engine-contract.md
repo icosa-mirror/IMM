@@ -46,6 +46,13 @@ Phase 0-6 contract.
 
 ## Supported import and round trip
 
+- The stroke-reader native boundary exposes two separate views. The original
+  `StrokeReader_GetLayerCount`, `StrokeReader_GetLayerInfo`, and stroke-point
+  functions retain their flattened playback semantics and stable C structure
+  layouts. Authoring import uses the `StrokeReader_GetAuthoring*` functions for
+  the complete hierarchy, animation metadata, and point length/time. Authoring
+  layers reference existing collected drawing storage rather than duplicating
+  stroke or point buffers.
 - `ImmAuthoringImporter.ImportFromFile` and `ImportFromMemory` load supported
   sequence metadata, nested group/paint hierarchy, local transforms, pivots,
   layer properties, drawings, ordered strokes, frame mappings, and supported

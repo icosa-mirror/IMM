@@ -25,6 +25,7 @@ class StrokeLayerInfo(ctypes.Structure):
         ("name", ctypes.c_char * 256),
         ("visible", ctypes.c_int),
         ("opacity", ctypes.c_float),
+        ("is_default_spawn", ctypes.c_int),
         ("pivot_rotation", ctypes.c_float * 4),
         ("pivot_scale", ctypes.c_float),
         ("pivot_flip", ctypes.c_int),

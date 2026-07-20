@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <cstddef>
 #include "libImmImporter/src/fromImmersive/strokeCollector.h"
 #include "libImmImporter/src/document/layerPaint/element.h"
 #include "libImmCore/src/libBasics/piVecTypes.h"
@@ -30,6 +31,11 @@ struct StrokeLayerInfoC
     float pivotScale;
     int pivotFlip;
     float pivotTranslation[3];
+};
+
+struct StrokeAuthoringLayerInfoC
+{
+    StrokeLayerInfoC legacy;
     int parentId;
     int childIndex;
     int isTimeline;
@@ -62,9 +68,21 @@ struct StrokePointC
     float r, g, b;     // color
     float alpha;       // transparency (0-255 stored as int, converted to float 0-1)
     float width;       // stroke width (quantized int, needs conversion with biggestStroke)
+};
+
+struct StrokeAuthoringPointC
+{
+    StrokePointC legacy;
     float length;
     float time;
 };
+
+static_assert(sizeof(StrokeLayerInfoC) == 316, "StrokeLayerInfoC is a stable legacy ABI structure");
+static_assert(offsetof(StrokeLayerInfoC, pivotRotation) == 280, "StrokeLayerInfoC field offsets changed");
+static_assert(sizeof(StrokePointC) == 56, "StrokePointC is a stable legacy ABI structure");
+static_assert(offsetof(StrokePointC, width) == 52, "StrokePointC field offsets changed");
+static_assert(sizeof(StrokeAuthoringLayerInfoC) == 344, "StrokeAuthoringLayerInfoC layout changed");
+static_assert(sizeof(StrokeAuthoringPointC) == 64, "StrokeAuthoringPointC layout changed");
 
 struct StrokeDocumentInfoC
 {
@@ -117,6 +135,7 @@ struct StoredDrawing
 
 struct StoredLayer
 {
+    int legacyLayerIndex = -1;
     uint32_t layerId;
     uint32_t layerType;
     std::wstring name;
@@ -156,6 +175,7 @@ struct StoredDocument
     uint32_t capabilities = 0;
     int rootAnimationKeyCount = 0;
     std::vector<StoredLayer> layers;
+    std::vector<StoredLayer> authoringLayers;
     std::vector<ImmCore::piTick> chapterStartTimes;
     int currentChapter = 0;
 };
@@ -198,19 +218,19 @@ public:
     // Query interface
     int GetLayerCount() const;
     bool GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const;
-    bool GetLayerTransform(int layerIdx, StrokeLayerTransformC* local, StrokeLayerTransformC* world) const;
-    int GetDrawingCount(int layerIdx) const;
-    bool GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* biggestStroke) const;
-    int GetStrokeCount(int layerIdx, int drawingIdx) const;
-    bool GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info) const;
+    bool GetLayerTransform(int layerIdx, StrokeLayerTransformC* local, StrokeLayerTransformC* world, bool authoring = false) const;
+    int GetDrawingCount(int layerIdx, bool authoring = false) const;
+    bool GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* biggestStroke, bool authoring = false) const;
+    int GetStrokeCount(int layerIdx, int drawingIdx, bool authoring = false) const;
+    bool GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info, bool authoring = false) const;
     bool GetStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokePointC* points, int maxPoints) const;
     bool GetStrokePointTimes(int layerIdx, int drawingIdx, int strokeIdx, float* times, int maxPoints) const;
     bool GetPictureInfo(int layerIdx, StrokePictureInfoC* info) const;
     bool GetPicturePixels(int layerIdx, uint8_t* pixels, int maxBytes) const;
     
     // Frame buffer queries
-    bool GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount) const;
-    bool GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames) const;
+    bool GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount, bool authoring = false) const;
+    bool GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames, bool authoring = false) const;
     
     int GetChapterCount() const;
     int GetCurrentChapter() const;
@@ -219,6 +239,9 @@ public:
     int GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const;
     void CaptureSequenceMetadata(ImmImporter::Sequence& sequence);
     bool GetDocumentInfo(StrokeDocumentInfoC* info) const;
+    int GetAuthoringLayerCount() const;
+    bool GetAuthoringLayerInfo(int layerIdx, StrokeAuthoringLayerInfoC* info) const;
+    bool GetAuthoringStrokePoints(int layerIdx, int drawingIdx, int strokeIdx, StrokeAuthoringPointC* points, int maxPoints) const;
     int GetLayerAnimationKeyCount(int layerIdx) const;
     bool GetLayerAnimationKey(int layerIdx, int keyIdx, StrokeAnimationKeyC* key) const;
 
