@@ -218,6 +218,9 @@ An application-specific editable-project format is not required here. If the mut
 - Visibility, opacity, transform, draw-in-time, action, loop, and offset layer
   animation keys. Obsolete component position/rotation/scale keys are rejected
   in favour of transform keys.
+- Supported brush section and visibility types.
+- Stroke point position, normal, direction, color, alpha, width, length, and time.
+- Basic visibility, opacity, transform, draw-in, loop, and action keys where supported by exporter and player.
 - Import and export of the supported paint subset.
 - Authoritative playback through `libImmPlayer`.
 
