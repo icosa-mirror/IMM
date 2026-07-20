@@ -94,3 +94,14 @@ metal_player_debug.txt
 /code/projects/web/app/.vite/
 /code/projects/web/app/public/decoder/
 /code/projects/web/app/dist/
+
+# Godot GDExtension local build artifacts
+artifacts/
+thirdparty/godot-cpp/
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/godot-extension-dlls.txt
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.ilk
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.pdb
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
+code/appImmGodotGDExtension/src/*.os
+code/appImmGodotGDExtension/*.pdb
