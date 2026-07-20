@@ -1,0 +1,11 @@
+{
+  "name": "ImmPhase6PackageConsumer",
+  "rootNamespace": "ImmPackageConsumer",
+  "references": [
+    "ImmUnity.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "autoReferenced": true
+}

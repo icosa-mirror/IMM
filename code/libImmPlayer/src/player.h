@@ -66,7 +66,8 @@ namespace ImmPlayer {
             }mBackgrundColor;
         };
         int  Load(const wchar_t* name);
-        int  Load(ImmCore::piTArray<uint8_t>* imm, const wchar_t* name);
+        int  Load(const uint8_t* data, uint64_t size, const wchar_t* name);
+        bool IsDocumentActive(int id) const;
 
         void Unload(int id);
         void UnloadAll();

@@ -87,7 +87,8 @@ namespace ImmPlayer {
                 Continue = 10,
                 SetChapter = 11
             }mType;
-            ImmCore::piTArray<uint8_t>* mArrayArg = nullptr;
+            const uint8_t* mMemoryData = nullptr;
+            uint64_t mMemorySize = 0;
             ImmCore::piString mStrArg;
             uint64_t mIntArg;
             ImportType mFileType;
@@ -174,7 +175,9 @@ namespace ImmPlayer {
         ImmCore::trans3d      mDocumentToWorld;
         ImmCore::piString     mFileName;
         ImportType mFileType;
-        ImmCore::piTArray<uint8_t>* mIMM;
+        const uint8_t* mMemoryData;
+        uint64_t mMemorySize;
+        ImmCore::piTArray<uint8_t>* mMemoryView;
         ImmImporter::Sequence     mSequence;
         MngrPlayer   mPlayerManager;
         float        mMasterVolume;

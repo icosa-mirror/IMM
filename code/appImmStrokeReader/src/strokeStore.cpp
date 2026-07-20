@@ -1,12 +1,12 @@
 #include "strokeStore.h"
 
 #include <algorithm>
-#include <cstring>
-#include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 
 #include "libImmCore/src/libBasics/piStr.h"
+#include "libImmImporter/src/document/sequence.h"
 
 namespace ImmStrokeReader
 {
@@ -177,7 +177,7 @@ void StrokeStore::OnPaintLayerInfo(uint32_t frameRate, uint32_t numFrames, uint3
 
     mCurrentLayer->frameRate = frameRate;
     mCurrentLayer->numFrames = numFrames;
-    mCurrentLayer->maxRepeatCount = maxRepeatCount;
+    mCurrentLayer->paintMaxRepeatCount = maxRepeatCount;
 }
 
 void StrokeStore::OnFrameBuffer(const uint32_t* frameBuffer, uint32_t numFrames)
@@ -302,7 +302,6 @@ bool StrokeStore::GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const
     info->pivotTranslation[0] = pivot.translation[0];
     info->pivotTranslation[1] = pivot.translation[1];
     info->pivotTranslation[2] = pivot.translation[2];
-
     const std::string utf8Name = ToUtf8(layer.name);
     std::memset(info->name, 0, sizeof(info->name));
     const size_t copyLen = std::min(utf8Name.size(), sizeof(info->name) - 1);
@@ -311,30 +310,45 @@ bool StrokeStore::GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const
     return true;
 }
 
-bool StrokeStore::GetLayerTransform(int layerIdx, StrokeLayerTransformC* local, StrokeLayerTransformC* world) const
+bool StrokeStore::GetLayerTransform(int layerIdx, StrokeLayerTransformC* local, StrokeLayerTransformC* world, bool authoring) const
 {
-    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
+    const std::vector<StoredLayer>& layers = authoring ? mDocument.authoringLayers : mDocument.layers;
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(layers.size()))
         return false;
     if (!local || !world)
         return false;
 
-    const StoredLayer& layer = mDocument.layers[layerIdx];
+    const StoredLayer& layer = layers[layerIdx];
     *local = ToTransformC(layer.localTransform);
     *world = ToTransformC(layer.worldTransform);
     return true;
 }
 
-int StrokeStore::GetDrawingCount(int layerIdx) const
+int StrokeStore::GetDrawingCount(int layerIdx, bool authoring) const
 {
+    if (layerIdx < 0)
+        return 0;
+    if (authoring)
+    {
+        if (layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+            return 0;
+        layerIdx = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    }
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
         return 0;
     return static_cast<int>(mDocument.layers[layerIdx].drawings.size());
 }
 
-bool StrokeStore::GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* biggestStroke) const
+bool StrokeStore::GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* biggestStroke, bool authoring) const
 {
     if (!biggestStroke)
         return false;
+    if (authoring)
+    {
+        if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+            return false;
+        layerIdx = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    }
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
         return false;
     const auto& drawings = mDocument.layers[layerIdx].drawings;
@@ -345,8 +359,14 @@ bool StrokeStore::GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* b
     return true;
 }
 
-int StrokeStore::GetStrokeCount(int layerIdx, int drawingIdx) const
+int StrokeStore::GetStrokeCount(int layerIdx, int drawingIdx, bool authoring) const
 {
+    if (authoring)
+    {
+        if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+            return 0;
+        layerIdx = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    }
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
         return 0;
     const auto& drawings = mDocument.layers[layerIdx].drawings;
@@ -355,10 +375,16 @@ int StrokeStore::GetStrokeCount(int layerIdx, int drawingIdx) const
     return static_cast<int>(drawings[drawingIdx].strokes.size());
 }
 
-bool StrokeStore::GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info) const
+bool StrokeStore::GetStrokeInfo(int layerIdx, int drawingIdx, int strokeIdx, StrokeInfoC* info, bool authoring) const
 {
     if (!info)
         return false;
+    if (authoring)
+    {
+        if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+            return false;
+        layerIdx = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    }
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
         return false;
     const auto& drawings = mDocument.layers[layerIdx].drawings;
@@ -575,22 +601,34 @@ int StrokeStore::GetDrawingIndexForChapter(int layerIdx, int chapterIndex) const
     return static_cast<int>(drawingIndex);
 }
 
-bool StrokeStore::GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount) const
+bool StrokeStore::GetLayerAnimationInfo(int layerIdx, uint32_t* frameRate, uint32_t* numFrames, uint32_t* maxRepeatCount, bool authoring) const
 {
+    if (authoring)
+    {
+        if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+            return false;
+        layerIdx = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    }
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
         return false;
     
     const StoredLayer& layer = mDocument.layers[layerIdx];
     if (frameRate) *frameRate = layer.frameRate;
     if (numFrames) *numFrames = layer.numFrames;
-    if (maxRepeatCount) *maxRepeatCount = layer.maxRepeatCount;
+    if (maxRepeatCount) *maxRepeatCount = layer.paintMaxRepeatCount;
     return true;
 }
 
-bool StrokeStore::GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames) const
+bool StrokeStore::GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames, bool authoring) const
 {
     if (!frames || maxFrames <= 0)
         return false;
+    if (authoring)
+    {
+        if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+            return false;
+        layerIdx = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    }
     if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.layers.size()))
         return false;
     
@@ -603,9 +641,246 @@ bool StrokeStore::GetFrameBuffer(int layerIdx, uint32_t* frames, int maxFrames) 
     return true;
 }
 
+int StrokeStore::GetAuthoringLayerCount() const
+{
+    return static_cast<int>(mDocument.authoringLayers.size());
+}
+
+bool StrokeStore::GetAuthoringLayerInfo(int layerIdx, StrokeAuthoringLayerInfoC* info) const
+{
+    if (info == nullptr || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+        return false;
+
+    const StoredLayer& layer = mDocument.authoringLayers[layerIdx];
+    StrokeLayerInfoC& legacy = info->legacy;
+    legacy.id = static_cast<int>(layer.layerId);
+    legacy.type = static_cast<int>(layer.layerType);
+    legacy.numDrawings = layer.legacyLayerIndex >= 0 &&
+        layer.legacyLayerIndex < static_cast<int>(mDocument.layers.size())
+        ? static_cast<int>(mDocument.layers[layer.legacyLayerIndex].drawings.size())
+        : 0;
+    legacy.visible = layer.visible ? 1 : 0;
+    legacy.opacity = static_cast<float>(layer.opacity);
+    legacy.isDefaultSpawn = layer.isDefaultSpawn ? 1 : 0;
+
+    const StrokeLayerTransformC pivot = ToTransformC(layer.pivotTransform);
+    std::copy(std::begin(pivot.rotation), std::end(pivot.rotation), std::begin(legacy.pivotRotation));
+    legacy.pivotScale = pivot.scale;
+    legacy.pivotFlip = pivot.flip;
+    std::copy(std::begin(pivot.translation), std::end(pivot.translation), std::begin(legacy.pivotTranslation));
+
+    const std::string utf8Name = ToUtf8(layer.name);
+    std::memset(legacy.name, 0, sizeof(legacy.name));
+    const size_t copyLen = std::min(utf8Name.size(), sizeof(legacy.name) - 1);
+    std::memcpy(legacy.name, utf8Name.data(), copyLen);
+
+    info->parentId = layer.parentId;
+    info->childIndex = layer.childIndex;
+    info->isTimeline = layer.isTimeline ? 1 : 0;
+    info->durationTicks = layer.durationTicks;
+    info->maxRepeatCount = layer.maxRepeatCount;
+    return true;
+}
+
+bool StrokeStore::GetAuthoringStrokePoints(
+    int layerIdx,
+    int drawingIdx,
+    int strokeIdx,
+    StrokeAuthoringPointC* points,
+    int maxPoints) const
+{
+    if (points == nullptr || maxPoints <= 0 ||
+        layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+    {
+        return false;
+    }
+
+    const int legacyLayerIndex = mDocument.authoringLayers[layerIdx].legacyLayerIndex;
+    if (legacyLayerIndex < 0 || legacyLayerIndex >= static_cast<int>(mDocument.layers.size()))
+        return false;
+    const std::vector<StoredDrawing>& drawings = mDocument.layers[legacyLayerIndex].drawings;
+    if (drawingIdx < 0 || drawingIdx >= static_cast<int>(drawings.size()))
+        return false;
+    const std::vector<StoredStroke>& strokes = drawings[drawingIdx].strokes;
+    if (strokeIdx < 0 || strokeIdx >= static_cast<int>(strokes.size()))
+        return false;
+
+    const StoredStroke& stroke = strokes[strokeIdx];
+    const float biggestStroke = drawings[drawingIdx].biggestStroke;
+    const float widthScale = biggestStroke > 0.0f ? (1.7f * biggestStroke) / 32767.0f : 0.0f;
+    const int copyCount = std::min(static_cast<int>(stroke.points.size()), maxPoints);
+    for (int index = 0; index < copyCount; ++index)
+    {
+        const ImmImporter::Point& source = stroke.points[index];
+        StrokeAuthoringPointC& destination = points[index];
+        destination.legacy.px = source.mPos.x;
+        destination.legacy.py = source.mPos.y;
+        destination.legacy.pz = source.mPos.z;
+        destination.legacy.nx = source.mNor.x;
+        destination.legacy.ny = source.mNor.y;
+        destination.legacy.nz = source.mNor.z;
+        destination.legacy.dx = source.mDir.x;
+        destination.legacy.dy = source.mDir.y;
+        destination.legacy.dz = source.mDir.z;
+        destination.legacy.r = source.mCol.x;
+        destination.legacy.g = source.mCol.y;
+        destination.legacy.b = source.mCol.z;
+        destination.legacy.alpha = static_cast<float>(source.mTra) / 255.0f;
+        const int width = std::max(0, std::min(static_cast<int>(source.mWid), 32767));
+        destination.legacy.width = widthScale * static_cast<float>(width);
+        destination.length = source.mLen;
+        destination.time = source.mTim;
+    }
+    return true;
+}
+
+void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
+{
+    mDocument.sequenceType = static_cast<int>(sequence.GetType());
+    mDocument.frameRate = sequence.GetFrameRate();
+    const ImmCore::vec3 background = sequence.GetBackgroundColor();
+    mDocument.backgroundColor[0] = background.x;
+    mDocument.backgroundColor[1] = background.y;
+    mDocument.backgroundColor[2] = background.z;
+    mDocument.capabilities = sequence.GetCaps();
+    mDocument.rootAnimationKeyCount = 0;
+
+    ImmImporter::Layer* root = sequence.GetRoot();
+    if (root != nullptr)
+    {
+        for (int property = 0; property < static_cast<int>(ImmImporter::Layer::AnimProperty::MAX); property++)
+        {
+            const ImmImporter::Layer::AnimProperty animProperty =
+                static_cast<ImmImporter::Layer::AnimProperty>(property);
+            const uint32_t keyCount = root->GetNumAnimKeys(animProperty);
+            for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++)
+            {
+                const ImmImporter::Layer::AnimKey* key = root->GetAnimKey(animProperty, keyIndex);
+                const bool isImplicitDefaultVisibility =
+                    animProperty == ImmImporter::Layer::AnimProperty::Visibility &&
+                    keyCount == 1 && key != nullptr &&
+                    ImmCore::piTick::CastInt(key->mTime) == 0 &&
+                    key->mValue.mBool &&
+                    key->mInterpolation == ImmImporter::Layer::InterpolationType::None;
+                if (!isImplicitDefaultVisibility)
+                    mDocument.rootAnimationKeyCount++;
+            }
+        }
+    }
+
+    std::vector<StoredLayer> capturedLayers;
+    capturedLayers.reserve(mDocument.layers.size());
+    sequence.Recurse(
+        [this, root, &capturedLayers](ImmImporter::Layer* layer, int, int childIndex, bool) -> bool
+        {
+            if (layer == root)
+                return true;
+
+            StoredLayer captured;
+            auto existing = std::find_if(
+                mDocument.layers.begin(),
+                mDocument.layers.end(),
+                [layer](const StoredLayer& candidate) { return candidate.layerId == layer->GetID(); });
+            if (existing != mDocument.layers.end())
+            {
+                captured.legacyLayerIndex = static_cast<int>(std::distance(mDocument.layers.begin(), existing));
+                captured.isDefaultSpawn = existing->isDefaultSpawn;
+            }
+
+            captured.layerId = layer->GetID();
+            captured.layerType = static_cast<uint32_t>(layer->GetType());
+            captured.name = layer->GetName().GetS();
+            captured.visible = layer->GetVisible();
+            captured.opacity = layer->GetOpacity();
+            captured.localTransform = layer->GetTransform();
+            captured.worldTransform = layer->GetTransformToWorld();
+            captured.pivotTransform = layer->GetPivot();
+            captured.parentId = layer->GetParent() == nullptr ? 0 : static_cast<int32_t>(layer->GetParent()->GetID());
+            captured.childIndex = childIndex;
+            captured.isTimeline = layer->GetIsTimeline();
+            captured.durationTicks = ImmCore::piTick::CastInt(layer->GetDuration());
+            captured.maxRepeatCount = layer->GetMaxRepeatCount();
+            captured.animationKeys.clear();
+
+            for (int property = 0; property < static_cast<int>(ImmImporter::Layer::AnimProperty::MAX); property++)
+            {
+                const ImmImporter::Layer::AnimProperty animProperty =
+                    static_cast<ImmImporter::Layer::AnimProperty>(property);
+                const uint32_t keyCount = layer->GetNumAnimKeys(animProperty);
+                for (uint32_t keyIndex = 0; keyIndex < keyCount; keyIndex++)
+                {
+                    const ImmImporter::Layer::AnimKey* source = layer->GetAnimKey(animProperty, keyIndex);
+                    if (source == nullptr)
+                        continue;
+                    StrokeAnimationKeyC key{};
+                    key.property = property;
+                    key.timeTicks = ImmCore::piTick::CastInt(source->mTime);
+                    key.interpolation = static_cast<int>(source->mInterpolation);
+                    key.boolValue = source->mValue.mBool ? 1 : 0;
+                    key.intValue = source->mValue.mInt;
+                    key.floatValue = source->mValue.mFloat;
+                    key.doubleValue = source->mValue.mDouble;
+                    key.transformValue = ToTransformC(source->mValue.mTransform);
+                    captured.animationKeys.push_back(key);
+                }
+            }
+
+            capturedLayers.push_back(std::move(captured));
+            return true;
+        },
+        false,
+        false,
+        false,
+        false);
+
+    mDocument.authoringLayers = std::move(capturedLayers);
+    mCurrentLayer = nullptr;
+    mCurrentDrawing = nullptr;
+}
+
+bool StrokeStore::GetDocumentInfo(StrokeDocumentInfoC* info) const
+{
+    if (info == nullptr)
+        return false;
+    info->sequenceType = mDocument.sequenceType;
+    info->frameRate = mDocument.frameRate;
+    info->backgroundColor[0] = mDocument.backgroundColor[0];
+    info->backgroundColor[1] = mDocument.backgroundColor[1];
+    info->backgroundColor[2] = mDocument.backgroundColor[2];
+    info->capabilities = mDocument.capabilities;
+    info->rootAnimationKeyCount = mDocument.rootAnimationKeyCount;
+    return true;
+}
+
+int StrokeStore::GetLayerAnimationKeyCount(int layerIdx) const
+{
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+        return 0;
+    return static_cast<int>(mDocument.authoringLayers[layerIdx].animationKeys.size());
+}
+
+bool StrokeStore::GetLayerAnimationKey(int layerIdx, int keyIdx, StrokeAnimationKeyC* key) const
+{
+    if (key == nullptr || layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+        return false;
+    const std::vector<StrokeAnimationKeyC>& keys = mDocument.authoringLayers[layerIdx].animationKeys;
+    if (keyIdx < 0 || keyIdx >= static_cast<int>(keys.size()))
+        return false;
+    *key = keys[keyIdx];
+    return true;
+}
+
 void StrokeStore::Clear()
 {
+    mDocument.sequenceType = 0;
+    mDocument.frameRate = 24;
+    mDocument.backgroundColor[0] = 0.0f;
+    mDocument.backgroundColor[1] = 0.0f;
+    mDocument.backgroundColor[2] = 0.0f;
+    mDocument.capabilities = 0;
+    mDocument.rootAnimationKeyCount = 0;
     mDocument.layers.clear();
+    mDocument.authoringLayers.clear();
     mDocument.chapterStartTimes.clear();
     mDocument.currentChapter = 0;
     mCurrentLayer = nullptr;

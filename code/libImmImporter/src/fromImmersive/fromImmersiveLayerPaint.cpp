@@ -293,16 +293,26 @@ namespace ImmImporter
                     iReadData(&mData.mBrush, fp, numElements, 1, 8, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mVisible, fp, numElements, 1, 4, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mNumPoints, fp, numElements, 1, 16, &mTmp.mBufA, &mTmp.mBufB);
+                    uint32_t numDirectionalElements = 0;
+                    uint32_t numDirectionalPoints = 0;
+                    for (uint32_t elementIndex = 0; elementIndex < numElements; ++elementIndex)
+                    {
+                        if (static_cast<Element::VisibilityType>(mData.mVisible.Get(elementIndex)) != Element::VisibilityType::Always)
+                        {
+                            ++numDirectionalElements;
+                            numDirectionalPoints += mData.mNumPoints.Get(elementIndex);
+                        }
+                    }
                     iReadDataRaw(&mData.mBoxCorner, fp, numElements, &mTmp.mBufB);
                     iReadData(&mData.mPosDC, fp, numElements, 3, 16, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mNorDC, fp, numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
-                    iReadData(&mData.mDirDC, fp, numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
+                    iReadData(&mData.mDirDC, fp, numDirectionalElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mColDC, fp, numElements, 3, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mAlpDC, fp, numElements, 1, 9, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mWidDC, fp, numElements, 1, 16, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mPos, fp, numTotalPoints - numElements, 3, 16, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mNor, fp, numTotalPoints - numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
-                    iReadData(&mData.mDir, fp, numTotalPoints - numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
+                    iReadData(&mData.mDir, fp, numDirectionalPoints - numDirectionalElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mCol, fp, numTotalPoints - numElements, 3, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mAlp, fp, numTotalPoints - numElements, 1, 9, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mWid, fp, numTotalPoints - numElements, 1, 16, &mTmp.mBufA, &mTmp.mBufB);
@@ -333,16 +343,26 @@ namespace ImmImporter
                     iReadData(&mData.mBrush, fp, numElements, 1, 8, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mVisible, fp, numElements, 1, 4, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mNumPoints, fp, numElements, 1, 16, &mTmp.mBufA, &mTmp.mBufB);
+                    uint32_t numDirectionalElements = 0;
+                    uint32_t numDirectionalPoints = 0;
+                    for (uint32_t elementIndex = 0; elementIndex < numElements; ++elementIndex)
+                    {
+                        if (static_cast<Element::VisibilityType>(mData.mVisible.Get(elementIndex)) != Element::VisibilityType::Always)
+                        {
+                            ++numDirectionalElements;
+                            numDirectionalPoints += mData.mNumPoints.Get(elementIndex);
+                        }
+                    }
                     iReadDataRaw(&mData.mBoxCorner, fp, numElements, &mTmp.mBufB);
                     iReadData(&mData.mPosDC, fp, numElements, 3, 13, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mNorDC, fp, numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
-                    iReadData(&mData.mDirDC, fp, numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
+                    iReadData(&mData.mDirDC, fp, numDirectionalElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mColDC, fp, numElements, 3, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mAlpDC, fp, numElements, 1, 9, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mWidDC, fp, numElements, 1, 16, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mPos, fp, numTotalPoints - numElements, 3, 14, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mNor, fp, numTotalPoints - numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
-                    iReadData(&mData.mDir, fp, numTotalPoints - numElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
+                    iReadData(&mData.mDir, fp, numDirectionalPoints - numDirectionalElements, 2, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mCol, fp, numTotalPoints - numElements, 3, 11, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mAlp, fp, numTotalPoints - numElements, 1, 9, &mTmp.mBufA, &mTmp.mBufB);
                     iReadData(&mData.mWid, fp, numTotalPoints - numElements, 1, 16, &mTmp.mBufA, &mTmp.mBufB);

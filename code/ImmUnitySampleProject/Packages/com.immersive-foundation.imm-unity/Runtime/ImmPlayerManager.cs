@@ -56,6 +56,8 @@ namespace ImmPlayer
         private bool _isInitialized = false;
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
+        private readonly Dictionary<int, ImmDocument> _pendingUnloadDocuments = new Dictionary<int, ImmDocument>();
+        private readonly HashSet<int> _nativeUnloadsInFlight = new HashSet<int>();
         private IntPtr _renderEventFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
@@ -124,6 +126,10 @@ namespace ImmPlayer
             if (_isInitialized)
             {
                 ImmNativePlugin.GlobalWork(1);
+                ProcessPendingDocumentUnloads();
+                IssueNativeUnloadDrainEvent();
+                CompleteFinishedNativeUnloads();
+                ReleaseCompletedMemoryBuffers();
             }
         }
 
@@ -227,15 +233,17 @@ namespace ImmPlayer
                 doc.Unload();
             }
             _loadedDocuments.Clear();
+            _pendingUnloadDocuments.Clear();
+            _nativeUnloadsInFlight.Clear();
 
-            // Free any remaining memory allocated for documents loaded from memory
+            // Native shutdown synchronously stops document loading before input buffers are released.
+            ImmNativePlugin.End();
+
             foreach (var memPtr in _documentMemoryPtrs.Values)
             {
                 Marshal.FreeHGlobal(memPtr);
             }
             _documentMemoryPtrs.Clear();
-
-            ImmNativePlugin.End();
             _isInitialized = false;
             CleanupCommandBuffers();
 
@@ -243,6 +251,18 @@ namespace ImmPlayer
         }
 
         #endregion
+
+        /// <summary>Number of native player documents currently owned by this manager.</summary>
+        public int LoadedDocumentCount => _loadedDocuments.Count;
+
+        /// <summary>Whether the native player has been initialized successfully.</summary>
+        public bool IsInitialized => _isInitialized;
+
+        /// <summary>Number of unmanaged input buffers retained for asynchronous memory loads.</summary>
+        public int OwnedInputBufferCount => _documentMemoryPtrs.Count;
+
+        /// <summary>Number of documents waiting to reach a safe native unload boundary.</summary>
+        public int PendingUnloadDocumentCount => _pendingUnloadDocuments.Count;
 
         #region Document Management
 
@@ -321,23 +341,128 @@ namespace ImmPlayer
                 return;
 
             int docId = document.DocumentId;
+            if (!_loadedDocuments.ContainsKey(docId))
+                return;
 
-            if (_loadedDocuments.ContainsKey(docId))
+            ImmDocument.LoadingState loadingState = document.GetStateInfo().Loading;
+            if (loadingState == ImmDocument.LoadingState.Unloaded ||
+                loadingState == ImmDocument.LoadingState.Loading)
             {
-                _loadedDocuments.Remove(docId);
+                _pendingUnloadDocuments[docId] = document;
+                Log($"Deferred unload for loading document {docId} (state: {loadingState})");
+                return;
             }
 
-            // Free any memory that was allocated for loading from memory
-            if (_documentMemoryPtrs.TryGetValue(docId, out IntPtr memPtr))
-            {
-                _documentMemoryPtrs.Remove(docId);
-                Marshal.FreeHGlobal(memPtr);
-                Log($"Freed memory buffer for document {docId}");
-            }
-
-            document.Unload();
+            CompleteDocumentUnload(document);
+            ReleaseCompletedMemoryBuffers();
         }
 
+        private void ProcessPendingDocumentUnloads()
+        {
+            if (_pendingUnloadDocuments.Count == 0)
+                return;
+
+            List<int> readyDocumentIds = null;
+            foreach (KeyValuePair<int, ImmDocument> entry in _pendingUnloadDocuments)
+            {
+                ImmDocument.LoadingState loadingState = entry.Value.GetStateInfo().Loading;
+                if (loadingState != ImmDocument.LoadingState.Loaded &&
+                    loadingState != ImmDocument.LoadingState.Failed)
+                {
+                    continue;
+                }
+
+                if (readyDocumentIds == null)
+                    readyDocumentIds = new List<int>();
+                readyDocumentIds.Add(entry.Key);
+            }
+
+            if (readyDocumentIds == null)
+                return;
+
+            foreach (int documentId in readyDocumentIds)
+            {
+                ImmDocument document = _pendingUnloadDocuments[documentId];
+                document.Hide();
+                CompleteDocumentUnload(document);
+                Log($"Completed deferred unload for document {documentId}");
+            }
+        }
+
+        private void CompleteDocumentUnload(ImmDocument document)
+        {
+            int documentId = document.DocumentId;
+            _nativeUnloadsInFlight.Add(documentId);
+            document.Unload();
+            _loadedDocuments.Remove(documentId);
+            _pendingUnloadDocuments.Remove(documentId);
+            ReleaseDocumentMemoryBuffer(documentId);
+        }
+
+        private void CompleteFinishedNativeUnloads()
+        {
+            if (_nativeUnloadsInFlight.Count == 0)
+                return;
+
+            List<int> completedDocumentIds = null;
+            foreach (int documentId in _nativeUnloadsInFlight)
+            {
+                if (ImmNativePlugin.IsDocumentActive(documentId))
+                    continue;
+
+                if (completedDocumentIds == null)
+                    completedDocumentIds = new List<int>();
+                completedDocumentIds.Add(documentId);
+            }
+
+            if (completedDocumentIds == null)
+                return;
+
+            foreach (int documentId in completedDocumentIds)
+            {
+                _nativeUnloadsInFlight.Remove(documentId);
+                Log($"[IMM_NATIVE_UNLOAD_DRAIN] Completed native unload for document {documentId}");
+            }
+        }
+
+        private void IssueNativeUnloadDrainEvent()
+        {
+            if (_nativeUnloadsInFlight.Count > 0 && _renderEventFunc != IntPtr.Zero)
+                GL.IssuePluginEvent(_renderEventFunc, 0);
+        }
+
+        private void ReleaseCompletedMemoryBuffers()
+        {
+            if (_documentMemoryPtrs.Count == 0)
+                return;
+
+            List<int> completedDocumentIds = null;
+            foreach (KeyValuePair<int, IntPtr> entry in _documentMemoryPtrs)
+            {
+                if (_loadedDocuments.ContainsKey(entry.Key) || ImmNativePlugin.IsDocumentActive(entry.Key))
+                    continue;
+
+                if (completedDocumentIds == null)
+                    completedDocumentIds = new List<int>();
+                completedDocumentIds.Add(entry.Key);
+            }
+
+            if (completedDocumentIds == null)
+                return;
+
+            foreach (int documentId in completedDocumentIds)
+                ReleaseDocumentMemoryBuffer(documentId);
+        }
+
+        private void ReleaseDocumentMemoryBuffer(int documentId)
+        {
+            if (!_documentMemoryPtrs.TryGetValue(documentId, out IntPtr memPtr))
+                return;
+
+            _documentMemoryPtrs.Remove(documentId);
+            Marshal.FreeHGlobal(memPtr);
+            Log($"Freed memory buffer for completed document {documentId}");
+        }
         #endregion
 
         #region Rendering
@@ -370,6 +495,13 @@ namespace ImmPlayer
                 return false;
             if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
                 return true;
+
+            // Unity's DX11 command-buffer plugin event renders into the camera target as
+            // a texture-style render target, even for Game cameras. Passing false here
+            // produces an invalid projection for the native renderer.
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
+                return true;
+
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
@@ -494,6 +626,9 @@ namespace ImmPlayer
 
         private bool HasRenderableDocument()
         {
+            if (_nativeUnloadsInFlight.Count > 0)
+                return true;
+
             foreach (ImmDocument doc in _loadedDocuments.Values)
             {
                 if (doc != null && doc.IsSequenceReady())

@@ -47,6 +47,14 @@ jobs:
       with:
         python-version: '3.x'
 
+    - name: Smoke test Unity exporter bridge
+      shell: pwsh
+      run: python code/appImmUnity/tests/exporter_bridge_smoke.py
+
+    - name: Smoke test stroke-reader authoring API
+      shell: pwsh
+      run: python code/appImmStrokeReader/tests/authoring_api_smoke.py
+
     - name: Install SCons
       shell: pwsh
       run: python -m pip install scons

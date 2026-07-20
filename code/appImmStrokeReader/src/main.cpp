@@ -31,8 +31,8 @@ using namespace ImmStrokeReader;
 #endif
 
 // Bump this when you need to confirm Unity loaded the new dylib.
-static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53";
-static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-02-03T20:53";
+static const char* kImmStrokeReaderBuildIdA = "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5";
+static const wchar_t* kImmStrokeReaderBuildIdW = L"IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5";
 
 extern "C" UNITY_INTERFACE_EXPORT const char* UNITY_INTERFACE_API StrokeReader_GetBuildId()
 {
@@ -199,10 +199,13 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromF
         return -3;
     }
 
+    store->CaptureSequenceMetadata(seq);
+
     // Store and return document ID
     std::vector<piTick> chapterStartTimes;
     ExtractChapterStartTimes(seq, &chapterStartTimes);
     store->SetChapterStartTimes(chapterStartTimes);
+    seq.Deinit(&gStrokeReader.mLog);
 
     int docId = gStrokeReader.mNextDocId++;
     gStrokeReader.mDocuments[docId] = store;
@@ -258,10 +261,13 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_LoadFromM
         return -3;
     }
 
+    store->CaptureSequenceMetadata(seq);
+
     // Store and return document ID
     std::vector<piTick> chapterStartTimes;
     ExtractChapterStartTimes(seq, &chapterStartTimes);
     store->SetChapterStartTimes(chapterStartTimes);
+    seq.Deinit(&gStrokeReader.mLog);
 
     int docId = gStrokeReader.mNextDocId++;
     gStrokeReader.mDocuments[docId] = store;
@@ -306,6 +312,26 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerC
     return it->second->GetLayerCount();
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerCount(int docId)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized)
+        return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetAuthoringLayerCount();
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDocumentInfo(int docId, StrokeDocumentInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized || info == nullptr)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetDocumentInfo(info);
+}
+
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerInfo(int docId, int layerIdx, StrokeLayerInfoC* info)
 {
     std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
@@ -318,6 +344,18 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayer
         return false;
 
     return it->second->GetLayerInfo(layerIdx, info);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerInfo(
+    int docId,
+    int layerIdx,
+    StrokeAuthoringLayerInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || info == nullptr)
+        return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetAuthoringLayerInfo(layerIdx, info);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerTransform(int docId, int layerIdx, StrokeLayerTransformC* localTransform, StrokeLayerTransformC* worldTransform)
@@ -334,6 +372,46 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayer
     return it->second->GetLayerTransform(layerIdx, localTransform, worldTransform);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerTransform(
+    int docId,
+    int layerIdx,
+    StrokeLayerTransformC* localTransform,
+    StrokeLayerTransformC* worldTransform)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized)
+        return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() &&
+        it->second->GetLayerTransform(layerIdx, localTransform, worldTransform, true);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerAnimationKeyCount(int docId, int layerIdx)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized)
+        return 0;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetLayerAnimationKeyCount(layerIdx);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerAnimationKey(
+    int docId,
+    int layerIdx,
+    int keyIdx,
+    StrokeAnimationKeyC* key)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+
+    if (!gStrokeReader.mInitialized || key == nullptr)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetLayerAnimationKey(layerIdx, keyIdx, key);
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawingCount(int docId, int layerIdx)
 {
     std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
@@ -346,6 +424,15 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawin
         return 0;
 
     return it->second->GetDrawingCount(layerIdx);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringDrawingCount(int docId, int layerIdx)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized)
+        return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetDrawingCount(layerIdx, true);
 }
 
 extern "C" float UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetDrawingBiggestStroke(int docId, int layerIdx, int drawingIdx)
@@ -378,6 +465,18 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStroke
         return 0;
 
     return it->second->GetStrokeCount(layerIdx, drawingIdx);
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringStrokeCount(
+    int docId,
+    int layerIdx,
+    int drawingIdx)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized)
+        return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it == gStrokeReader.mDocuments.end() ? 0 : it->second->GetStrokeCount(layerIdx, drawingIdx, true);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetChapterCountFromFile(char* fileName)
@@ -482,6 +581,30 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayer
     return ok;
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerAnimationInfo(
+    int docId,
+    int layerIdx,
+    int* frameRate,
+    int* numFrames,
+    int* maxRepeatCount)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized)
+        return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return false;
+    uint32_t fr = 0, nf = 0, mrc = 0;
+    const bool ok = it->second->GetLayerAnimationInfo(layerIdx, &fr, &nf, &mrc, true);
+    if (ok)
+    {
+        if (frameRate) *frameRate = static_cast<int>(fr);
+        if (numFrames) *numFrames = static_cast<int>(nf);
+        if (maxRepeatCount) *maxRepeatCount = static_cast<int>(mrc);
+    }
+    return ok;
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetFrameBuffer(int docId, int layerIdx, int* frames, int maxFrames)
 {
     std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
@@ -521,6 +644,30 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetFrameB
     return count;
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringFrameBuffer(
+    int docId,
+    int layerIdx,
+    int* frames,
+    int maxFrames)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || frames == nullptr || maxFrames <= 0)
+        return 0;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    if (it == gStrokeReader.mDocuments.end())
+        return 0;
+    std::vector<uint32_t> source(static_cast<size_t>(maxFrames));
+    if (!it->second->GetFrameBuffer(layerIdx, source.data(), maxFrames, true))
+        return 0;
+    uint32_t frameCount = 0;
+    if (!it->second->GetLayerAnimationInfo(layerIdx, nullptr, &frameCount, nullptr, true))
+        return 0;
+    const int count = std::min(maxFrames, static_cast<int>(frameCount));
+    for (int index = 0; index < count; ++index)
+        frames[index] = static_cast<int>(source[index]);
+    return count;
+}
+
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrokeInfo(
     int docId, int layerIdx, int drawingIdx, int strokeIdx,
     StrokeInfoC* info)
@@ -537,6 +684,21 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrok
     return it->second->GetStrokeInfo(layerIdx, drawingIdx, strokeIdx, info);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringStrokeInfo(
+    int docId,
+    int layerIdx,
+    int drawingIdx,
+    int strokeIdx,
+    StrokeInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || info == nullptr)
+        return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() &&
+        it->second->GetStrokeInfo(layerIdx, drawingIdx, strokeIdx, info, true);
+}
+
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrokePoints(
     int docId, int layerIdx, int drawingIdx, int strokeIdx,
     StrokePointC* points, int maxPoints)
@@ -551,6 +713,22 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetStrok
         return false;
 
     return it->second->GetStrokePoints(layerIdx, drawingIdx, strokeIdx, points, maxPoints);
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringStrokePoints(
+    int docId,
+    int layerIdx,
+    int drawingIdx,
+    int strokeIdx,
+    StrokeAuthoringPointC* points,
+    int maxPoints)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || points == nullptr || maxPoints <= 0)
+        return false;
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() &&
+        it->second->GetAuthoringStrokePoints(layerIdx, drawingIdx, strokeIdx, points, maxPoints);
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetPictureInfo(

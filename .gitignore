@@ -105,3 +105,7 @@ code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
 code/appImmGodotGDExtension/src/*.os
 code/appImmGodotGDExtension/*.pdb
+
+# Unity  local testing artifacts
+/code/ImmUnitySampleProject/Assets/Samples
+code/ImmUnitySampleProject/Assets/Samples.meta

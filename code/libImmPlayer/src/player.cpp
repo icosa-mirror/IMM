@@ -257,6 +257,8 @@ namespace ImmPlayer
             mDepthState = nullptr;
         }
 
+        for (uint64_t i = 0; i < mCommandList.GetLength(); i++)
+            mCommandList[i].mCommand.mStrArg.End();
         mCommandList.End();
         mSynced.End();
 
@@ -878,17 +880,31 @@ namespace ImmPlayer
                         {
                             // free fully unloaded documents
                             mDocuments.Free(currDocId);
-                            mCommandList.RemoveAndShift(cmdId);
-                            for (int i = cmdId; i < mCommandList.GetLength(); i++)
+                            const int lastCommandId = static_cast<int>(mCommandList.GetLength()) - 1;
+                            if (cmdId != lastCommandId)
                             {
-                                int d = mCommandList[i].mTarget;
+                                Player::Command &destination = mCommandList[cmdId];
+                                Player::Command &source = mCommandList[lastCommandId];
+                                destination.mCommand.mStrArg.End();
+                                destination.mCommand.mStrArg.InitMove(&source.mCommand.mStrArg);
+                                destination.mCommand.mType = source.mCommand.mType;
+                                destination.mCommand.mMemoryData = source.mCommand.mMemoryData;
+                                destination.mCommand.mMemorySize = source.mCommand.mMemorySize;
+                                destination.mCommand.mIntArg = source.mCommand.mIntArg;
+                                destination.mCommand.mFileType = source.mCommand.mFileType;
+                                destination.mTarget = source.mTarget;
 
-                                if (d != -1 && mDocuments.IsUsed(d))
+                                if (destination.mTarget >= 0 && mDocuments.IsUsed(destination.mTarget))
                                 {
-                                    Document *doc = (Document *)mDocuments.GetAddress(d);
-                                    doc->SetCommandId(i);
+                                    Document *movedDocument = (Document *)mDocuments.GetAddress(destination.mTarget);
+                                    movedDocument->SetCommandId(cmdId);
                                 }
                             }
+                            else
+                            {
+                                mCommandList[cmdId].mCommand.mStrArg.End();
+                            }
+                            mCommandList.RemoveAndShift(lastCommandId);
                             mSynced[currDocId] = true;
                             continue;
                         }
@@ -907,6 +923,10 @@ namespace ImmPlayer
                         cmd = &cmdShow;
                     }
 
+                    const bool shouldResetDocumentCommand = cmd != nullptr &&
+                        cmdId >= 0 && cmdId < mCommandList.GetLength() &&
+                        cmd == &mCommandList[cmdId].mCommand;
+
                     // update loading process OR animation scenegraph
                     bool docReady = doc->UpdateStateCPU(&mLayerRenderSound, mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mColorSpace, mPaintRenderingTechnique, mSoundEngine, mLog, mTime, cmd);
                     if (docReady)
@@ -916,7 +936,8 @@ namespace ImmPlayer
                     anyDocReady |= docReady;
 
                     // reset the command
-                    mCommandList[cmdId].mCommand.mType = Document::Command::Type::None;
+                    if (shouldResetDocumentCommand)
+                        mCommandList[cmdId].mCommand.mType = Document::Command::Type::None;
                     //mCommandList[cmdId].mTarget = -1;
                 }
             }
@@ -1522,30 +1543,57 @@ namespace ImmPlayer
         return static_cast<int>(id);
     }
 
-    int Player::Load(piTArray<uint8_t>* imm, const wchar_t* name)
+    int Player::Load(const uint8_t* data, uint64_t size, const wchar_t* name)
     {
+        if (data == nullptr || size == 0 || name == nullptr || piwstrlen(name) == 0)
+            return -1;
+
         mCPULoadStartTimeMS = std::chrono::system_clock::now();
 
         uint64_t id;
         bool isNew;
-        mDocuments.Alloc(&isNew, &id, true);
-        Document *doc = (Document *)mDocuments.GetAddress(id);
+        Document *doc = (Document *)mDocuments.Alloc(&isNew, &id, true);
         if (!doc)
-            return false;
+            return -1;
 
         new (doc) Document();
 
         if (!doc->Init(name, static_cast<uint32_t>(id)))
-            return false;
+        {
+            mDocuments.Free(id);
+            return -1;
+        }
         int cmdId = static_cast<int>(mCommandList.GetLength());
         Player::Command* newCommand = mCommandList.New(1, false);
+        if (newCommand == nullptr)
+        {
+            doc->End();
+            mDocuments.Free(id);
+            return -1;
+        }
+        if (!newCommand->mCommand.mStrArg.InitCopyW(name))
+        {
+            newCommand->mCommand.mStrArg.End();
+            mCommandList.RemoveAndShift(cmdId);
+            doc->End();
+            mDocuments.Free(id);
+            return -1;
+        }
         newCommand->mTarget = static_cast<int>(id);
         newCommand->mCommand.mType = Document::Command::Type::Load;
-        newCommand->mCommand.mArrayArg = imm;
+        newCommand->mCommand.mMemoryData = data;
+        newCommand->mCommand.mMemorySize = size;
         newCommand->mCommand.mFileType = Document::ImportType::IMM_memory;
         mSynced[id] = false;
         doc->SetCommandId(cmdId);
         return static_cast<int>(id);
+    }
+
+    bool Player::IsDocumentActive(int id) const
+    {
+        return id >= 0 &&
+               static_cast<uint64_t>(id) < mDocuments.GetMaxLength() &&
+               mDocuments.IsUsed(id);
     }
 
     void Player::Unload(int id)

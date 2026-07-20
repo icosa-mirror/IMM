@@ -51,13 +51,17 @@ namespace ImmPlayer
         mMasterVolume = 1.0f;
         mCmdID = -1;
         mFileType = ImportType::IMM_disk;
-        mIMM = nullptr;
+        mMemoryData = nullptr;
+        mMemorySize = 0;
+        mMemoryView = nullptr;
         mSequenceReady = false;
         return true;
     }
 
     void Document::End(void)
     {
+        delete mMemoryView;
+        mMemoryView = nullptr;
         mFileName.End();
         mState.mMutex.End();
     }
@@ -200,7 +204,8 @@ namespace ImmPlayer
                 if (mState.mLoadingState == Document::LoadingState::LoadingPending || mState.mLoadingState == Document::LoadingState::UnloadingCompleted)
                 {
                     mState.mLoadingState = LoadingState::LoadingPending;
-                    mIMM = command->mArrayArg;
+                    mMemoryData = command->mMemoryData;
+                    mMemorySize = command->mMemorySize;
                     if (!mFileName.Copy(&command->mStrArg))
                         return false;
                     mFileType = command->mFileType;
@@ -615,8 +620,21 @@ namespace ImmPlayer
         }
         case ImportType::IMM_memory:
         {
-            if (!ImportFromMemory(mIMM, &mSequence, log, colorSpace, renderingTechnique))
+            if (mMemoryData == nullptr || mMemorySize == 0)
             {
+                log->Printf(LT_ERROR, L"IMM memory source is empty");
+                return false;
+            }
+
+            delete mMemoryView;
+            mMemoryView = new piTArray<uint8_t>();
+            if (mMemoryView == nullptr || !mMemoryView->Init(0, false))
+                return false;
+            mMemoryView->Set(const_cast<uint8_t*>(mMemoryData), mMemorySize);
+            if (!ImportFromMemory(mMemoryView, &mSequence, log, colorSpace, renderingTechnique))
+            {
+                delete mMemoryView;
+                mMemoryView = nullptr;
                 log->Printf(LT_ERROR, L"Could not load IMM from memory");
                 return false;
             }

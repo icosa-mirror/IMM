@@ -41,6 +41,30 @@ namespace ImmPlayer.Exporter
         public long MaxSoundChannels;
     }
 
+    public struct ExportLayerTiming
+    {
+        public const long TicksPerSecond = 12600;
+
+        public bool IsTimeline;
+        public long DurationTicks;
+        public uint MaxRepeatCount;
+
+        public static ExportLayerTiming FromFrames(long frameCount, uint frameRate, uint maxRepeatCount = 0)
+        {
+            if (frameCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(frameCount));
+            if (frameRate == 0 || TicksPerSecond % frameRate != 0)
+                throw new ArgumentOutOfRangeException(nameof(frameRate), $"Frame rate must be a positive divisor of {TicksPerSecond}.");
+
+            return new ExportLayerTiming
+            {
+                IsTimeline = true,
+                DurationTicks = checked(frameCount * (TicksPerSecond / frameRate)),
+                MaxRepeatCount = maxRepeatCount
+            };
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct TransformNative
     {
@@ -127,7 +151,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -143,9 +168,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -157,7 +182,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -173,9 +199,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -188,7 +214,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid || parent == null || !parent.IsValid)
                 return null;
@@ -204,9 +231,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -219,6 +246,31 @@ namespace ImmPlayer.Exporter
             if (!IsValid || string.IsNullOrEmpty(filePath))
                 return false;
             return Native.ImmExporter_ExportToFile(Handle, filePath, opusBitrate, (int)audioType);
+        }
+
+        public byte[] ExportToMemory(int opusBitrate = 96000, ExportAudioType audioType = ExportAudioType.Opus)
+        {
+            if (!IsValid)
+                return null;
+
+            IntPtr memoryHandle = Native.ImmExporter_ExportToMemory(Handle, opusBitrate, (int)audioType);
+            if (memoryHandle == IntPtr.Zero)
+                return null;
+            try
+            {
+                ulong size = Native.ImmExporter_GetMemorySize(memoryHandle);
+                IntPtr data = Native.ImmExporter_GetMemoryData(memoryHandle);
+                if (size > int.MaxValue || (size != 0 && data == IntPtr.Zero))
+                    return null;
+                byte[] result = new byte[(int)size];
+                if (result.Length != 0)
+                    Marshal.Copy(data, result, 0, result.Length);
+                return result;
+            }
+            finally
+            {
+                Native.ImmExporter_DestroyMemory(memoryHandle);
+            }
         }
 
         public void Dispose()
@@ -249,7 +301,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -265,9 +318,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -279,7 +332,8 @@ namespace ImmPlayer.Exporter
             string name,
             bool visible = true,
             float opacity = 1.0f,
-            Transform transform = null)
+            Transform transform = null,
+            ExportLayerTiming timing = default)
         {
             if (!IsValid)
                 return null;
@@ -295,9 +349,9 @@ namespace ImmPlayer.Exporter
                 opacity,
                 ref t,
                 ref pivot,
-                0,
-                0,
-                0);
+                timing.IsTimeline ? 1 : 0,
+                timing.DurationTicks,
+                timing.MaxRepeatCount);
 
             if (layerHandle == IntPtr.Zero)
                 return null;
@@ -324,6 +378,11 @@ namespace ImmPlayer.Exporter
             uint drawingIndex = Native.ImmExporter_GetDrawingIndex(drawingHandle);
             return new ExportDrawing(drawingHandle, Handle, drawingIndex);
         }
+
+        public void AddFrame(uint drawingIndex)
+        {
+            Native.ImmExporter_PaintAddFrame(Handle, drawingIndex);
+        }
     }
 
     public sealed class ExportDrawing : IDisposable
@@ -338,6 +397,8 @@ namespace ImmPlayer.Exporter
             _paintLayerHandle = paintLayerHandle;
             _drawingIndex = drawingIndex;
         }
+
+        public uint DrawingIndex => _drawingIndex;
 
         public bool Init(uint numElements, bool flipped = false)
         {
@@ -411,6 +472,39 @@ namespace ImmPlayer.Exporter
             return Native.ImmExporter_ElementSetPoint(_elementHandle, pointIndex, ref native);
         }
 
+        public bool SetPoints(System.Collections.Generic.IReadOnlyList<PaintPoint> points, uint startPointIndex = 0)
+        {
+            if (points == null)
+                return false;
+            PointNative[] native = new PointNative[points.Count];
+            for (int i = 0; i < points.Count; i++)
+                native[i] = ToNative(points[i]);
+            return Native.ImmExporter_ElementSetPoints(_elementHandle, startPointIndex, native, (uint)native.Length);
+        }
+
+        private static PointNative ToNative(PaintPoint point)
+        {
+            return new PointNative
+            {
+                Px = point.Position.x,
+                Py = point.Position.y,
+                Pz = point.Position.z,
+                Nx = point.Normal.x,
+                Ny = point.Normal.y,
+                Nz = point.Normal.z,
+                Dx = point.Direction.x,
+                Dy = point.Direction.y,
+                Dz = point.Direction.z,
+                R = point.Color.r,
+                G = point.Color.g,
+                B = point.Color.b,
+                A = point.Alpha,
+                Width = point.Width,
+                Length = point.Length,
+                Time = point.Time
+            };
+        }
+
         public void ComputeBounds()
         {
             Native.ImmExporter_ComputeElementBounds(_elementHandle);
@@ -464,6 +558,19 @@ namespace ImmPlayer.Exporter
             uint maxRepeatCount);
 
         [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_LayerAddAnimationKey(
+            IntPtr layerHandle,
+            int property,
+            long timeTicks,
+            int interpolation,
+            int boolValue,
+            uint intValue,
+            float floatValue,
+            double doubleValue,
+            ref TransformNative transformValue);
+
+        [DllImport(DllName)]
         public static extern IntPtr ImmExporter_CreateDrawing(IntPtr paintLayerHandle);
 
         [DllImport(DllName)]
@@ -485,6 +592,13 @@ namespace ImmPlayer.Exporter
         public static extern bool ImmExporter_ElementSetPoint(IntPtr elementHandle, uint pointIndex, ref PointNative point);
 
         [DllImport(DllName)]
+        public static extern bool ImmExporter_ElementSetPoints(
+            IntPtr elementHandle,
+            uint startPointIndex,
+            [In] PointNative[] points,
+            uint pointCount);
+
+        [DllImport(DllName)]
         public static extern void ImmExporter_ComputeElementBounds(IntPtr elementHandle);
 
         [DllImport(DllName)]
@@ -493,8 +607,24 @@ namespace ImmPlayer.Exporter
         [DllImport(DllName)]
         public static extern void ImmExporter_PaintAddFrame(IntPtr paintLayerHandle, uint drawingIndex);
 
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_PaintSetMaxRepeatCount(IntPtr paintLayerHandle, uint maxRepeatCount);
+
         [DllImport(DllName, CharSet = CharSet.Ansi)]
         public static extern bool ImmExporter_ExportToFile(IntPtr sequenceHandle, string fileName, int opusBitrate, int audioType);
+
+        [DllImport(DllName)]
+        public static extern IntPtr ImmExporter_ExportToMemory(IntPtr sequenceHandle, int opusBitrate, int audioType);
+
+        [DllImport(DllName)]
+        public static extern IntPtr ImmExporter_GetMemoryData(IntPtr memoryHandle);
+
+        [DllImport(DllName)]
+        public static extern ulong ImmExporter_GetMemorySize(IntPtr memoryHandle);
+
+        [DllImport(DllName)]
+        public static extern void ImmExporter_DestroyMemory(IntPtr memoryHandle);
     }
 
     internal static class TransformUtils

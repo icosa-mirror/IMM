@@ -102,6 +102,10 @@ namespace ImmPlayer
         /// </summary>
         /// <param name="id">Document ID</param>
         [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool IsDocumentActive(int id);
+
+        [DllImport(DllName)]
         public static extern void Unload(int id);
 
         #endregion

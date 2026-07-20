@@ -1,7 +1,9 @@
 {
   "name": "ImmUnity.Runtime",
   "rootNamespace": "ImmPlayer",
-  "references": [],
+  "references": [
+    "GUID:09b9ff65b0a14d8a8bafc507b3d5b6f1"
+  ],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
