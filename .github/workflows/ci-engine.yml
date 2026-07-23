@@ -75,7 +75,18 @@ jobs:
           if (-not (Test-Path $plugin)) {
             throw "Same-commit Unity native plugin was not built: $plugin"
           }
-          $exports = & dumpbin /exports $plugin
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installationPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $installationPath) {
+            throw "Visual Studio C++ tools installation was not found"
+          }
+          $vcToolsVersionPath = Join-Path $installationPath "VC\Auxiliary\Build\Microsoft.VCToolsVersion.default.txt"
+          $vcToolsVersion = (Get-Content -Raw $vcToolsVersionPath).Trim()
+          $dumpbin = Join-Path $installationPath "VC\Tools\MSVC\$vcToolsVersion\bin\Hostx64\x64\dumpbin.exe"
+          if (-not (Test-Path $dumpbin)) {
+            throw "dumpbin.exe was not found: $dumpbin"
+          }
+          $exports = & $dumpbin /exports $plugin
           if ($LASTEXITCODE -ne 0) {
             throw "dumpbin failed while inspecting $plugin"
           }
