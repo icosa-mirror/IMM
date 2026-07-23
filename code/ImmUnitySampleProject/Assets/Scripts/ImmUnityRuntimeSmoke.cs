@@ -38,6 +38,7 @@ namespace ImmPlayer
         private const float MinOrderedOverlayBottomLeftPaintToTopLeftRatio = 2.0f;
         private const int CaptureWidth = 1280;
         private const int CaptureHeight = 720;
+        private const long DefaultRenderFreezeTimeTicks = 25200;
         private const long DefaultCompositionFreezeTimeTicks = 37800;
         private static readonly Color FrontProbeColor = new Color(1.0f, 0.0f, 1.0f, 1.0f);
         private static readonly Color RearOccludedProbeColor = new Color(0.0f, 1.0f, 1.0f, 1.0f);
@@ -116,10 +117,10 @@ namespace ImmPlayer
             }
 
             yield return StabilizeSampleViewpoint();
+            FreezePlaybackIfRequested();
 
             if (_compositionProbeEnabled)
             {
-                FreezeCompositionPlaybackIfRequested();
                 if (_overlayProbeEnabled)
                 {
                     ConfigureRuntimeOverlayFixtureIfRequested();
@@ -384,16 +385,18 @@ namespace ImmPlayer
             Debug.LogWarning($"{Prefix}smoke spawn area 0 was not available before capture");
         }
 
-        private void FreezeCompositionPlaybackIfRequested()
+        private void FreezePlaybackIfRequested()
         {
             string freezeFlag = Environment.GetEnvironmentVariable(FreezePlaybackEnv);
             if (!string.IsNullOrEmpty(freezeFlag) && !IsTruthyValue(freezeFlag))
             {
-                Debug.Log($"{Prefix}composition playback freeze disabled");
+                Debug.Log($"{Prefix}playback freeze disabled");
                 return;
             }
 
-            long freezeTicks = DefaultCompositionFreezeTimeTicks;
+            long freezeTicks = _compositionProbeEnabled
+                ? DefaultCompositionFreezeTimeTicks
+                : DefaultRenderFreezeTimeTicks;
             string freezeTicksText = Environment.GetEnvironmentVariable(FreezeTimeTicksEnv);
             if (!string.IsNullOrEmpty(freezeTicksText) && long.TryParse(freezeTicksText, out long parsedTicks))
                 freezeTicks = Math.Max(0L, parsedTicks);
@@ -435,7 +438,8 @@ namespace ImmPlayer
             if (frozenDocuments > 0)
                 ImmNativePlugin.GlobalWork(1);
 
-            Debug.Log($"{Prefix}composition playback freeze documents={frozenDocuments} ticks={freezeTicks}");
+            string captureMode = _compositionProbeEnabled ? "composition" : "render";
+            Debug.Log($"{Prefix}{captureMode} playback freeze documents={frozenDocuments} ticks={freezeTicks}");
         }
 
         private static Texture2D CaptureOrderedCameraStackTexture(Camera finalCamera)
