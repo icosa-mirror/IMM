@@ -903,7 +903,12 @@ jobs:
           rm -f code/appImmGodotGDExtension/src/*.os
           rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib
           rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib
+          rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib
+          rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
           python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$PWD/thirdparty/godot-cpp" imm_godot_lib="$PWD/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$PWD/build/macos/godot/libImmGodotPlugin.dylib"
+          mkdir -p code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug
+          cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib
+          cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
 
       - name: Run Godot Metal visual smoke
         timeout-minutes: 8
