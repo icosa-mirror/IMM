@@ -118,6 +118,7 @@ func _setup_viewer() -> bool:
 
 	viewer.name = "ImmViewer"
 	viewer.document_path = _sample_document_path()
+	viewer.log_file_path = _get_env_string("IMM_GODOT_LOG_FILE", "user://imm_godot_log.txt")
 	viewer.load_on_ready = false
 	viewer.auto_play = true
 	viewer.auto_queue_render = true

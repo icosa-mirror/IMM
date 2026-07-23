@@ -925,8 +925,20 @@ Dictionary ImmViewerNode::get_render_diagnostics() const
     result["adapter_last_render_result"] = adapter_last_render_result;
     result["adapter_last_viewport_width"] = adapter_last_viewport.width;
     result["adapter_last_viewport_height"] = adapter_last_viewport.height;
+    result["native_backend_api_initialized"] = ImmGodot_IsInitialized() != 0;
+    result["document_id"] = _document_id;
+    result["cached_spawn_area_ids"] = _spawn_area_ids;
+    result["cached_active_spawn_area_index"] = _active_spawn_area_index;
+    if (_document_id >= 0)
+    {
+        result["native_spawn_area_count"] = ImmGodot_GetSpawnAreaCount(_document_id);
+        result["native_active_spawn_area_id"] = ImmGodot_GetActiveSpawnAreaId(_document_id);
+        result["native_initial_spawn_area_id"] = ImmGodot_GetInitialSpawnAreaId(_document_id);
+    }
     ImmGodotRenderPerformanceInfo performance_info = {};
-    if (ImmGodot_GetRenderPerformanceInfo(&performance_info) == 0)
+    const int performance_info_result = ImmGodot_GetRenderPerformanceInfo(&performance_info);
+    result["performance_info_result"] = performance_info_result;
+    if (performance_info_result == 0)
     {
         result["num_draw_calls"] = performance_info.numDrawCalls;
         result["num_draw_calls_culled"] = performance_info.numDrawCallsCulled;

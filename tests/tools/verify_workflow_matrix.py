@@ -418,6 +418,8 @@ def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str
         "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib",
         'arch="$(uname -m)"',
         'platform=macos target=template_release arch="$arch"',
+        "IMM_GODOT_DEBUG=1",
+        'IMM_GODOT_LOG_FILE="$PWD/artifacts/godot-smoke-macos-metal/imm-godot-native.log"',
     ]:
         if token not in body:
             errors.append(f"{workflow_rel} macos-godot-metal missing clean source-build token: {token}")
