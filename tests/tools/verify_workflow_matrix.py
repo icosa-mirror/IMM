@@ -392,6 +392,7 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
             "needs: unity-windows-native-plugin-build",
             "name: UnityWindowsNativePluginSourceBuild",
             "path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64",
+            "versioning: None",
         ]:
             if token not in body:
                 errors.append(f"{workflow_rel} {job_name} missing same-commit native plugin token: {token}")

@@ -260,6 +260,7 @@ jobs:
           projectPath: code/ImmUnitySampleProject
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneWindows64
+          versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsDirectXSmokePlayer
           customParameters: -logFile /github/workspace/artifacts/unity-windows-directx-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-directx-player/player/ImmUnitySmoke.exe
 
@@ -521,6 +522,7 @@ jobs:
           projectPath: code/ImmUnitySampleProject
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneWindows64
+          versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsVulkanSmokePlayer
           customParameters: -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
 
