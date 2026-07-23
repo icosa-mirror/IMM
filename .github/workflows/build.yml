@@ -71,7 +71,9 @@ jobs:
 
     - name: Build Solution
       working-directory: code/projects/windows
-      run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+      # Tracked generated binaries can otherwise look newer than their inputs after
+      # checkout and make an incremental build package an old DLL.
+      run: msbuild imm.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64 /m
 
     - name: Capture Windows DirectX standalone baseline
       shell: pwsh

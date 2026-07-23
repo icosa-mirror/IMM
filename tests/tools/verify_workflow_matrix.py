@@ -315,6 +315,7 @@ def verify_build_orchestration_contract(path: Path, workflow_rel: str, errors: l
             "release:",
             "if: inputs.mode == 'build'",
             "inputs.mode == 'publish'",
+            "msbuild imm.sln /t:Rebuild",
             "macos-standalone-metal-sample1.json",
             "[skip ci]",
         ]:
