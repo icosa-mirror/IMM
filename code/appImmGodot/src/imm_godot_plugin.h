@@ -24,6 +24,7 @@ extern "C"
         ImmGodotRendererApi_Direct3D = 2,
         ImmGodotRendererApi_GLES = 3,
         ImmGodotRendererApi_Metal = 4,
+        ImmGodotRendererApi_Vulkan = 5,
     };
 
     enum ImmGodotMetalFrameMode
@@ -63,6 +64,30 @@ extern "C"
         void *renderPassDescriptor;
         int width;
         int height;
+    };
+
+    struct ImmGodotVulkanFrame
+    {
+        uint32_t version;
+        void *instance;
+        void *physicalDevice;
+        void *device;
+        void *graphicsQueue;
+        uint32_t graphicsQueueFamilyIndex;
+        void *colorImage;
+        void *colorImageView;
+        uint32_t colorFormat;
+        void *depthImage;
+        void *depthImageView;
+        uint32_t depthFormat;
+        int width;
+        int height;
+        uint32_t flags;
+    };
+
+    enum ImmGodotVulkanFrameFlags
+    {
+        ImmGodotVulkanFrameFlag_ClearExternalDepth = 1u << 0,
     };
 
     struct ImmGodotPlayerInfo
@@ -130,6 +155,22 @@ extern "C"
         int transformOverrideEnabled;
     };
 
+    struct ImmGodotRenderPerformanceInfo
+    {
+        int numDrawCalls;
+        int numDrawCallsCulled;
+        int numPaintDrawCalls;
+        int numPictureDrawCalls;
+        int numPicture2DDrawCalls;
+        int numPicture360DrawCalls;
+        int numPicture360EquirectDrawCalls;
+        int numPicture360CubemapDrawCalls;
+        int numModelDrawCalls;
+        int numTriangles;
+        int numTrianglesCulled;
+        uint64_t validationTimeFrame;
+    };
+
     struct ImmGodotSpawnArea
     {
         enum Type : uint32_t
@@ -162,6 +203,10 @@ extern "C"
             {
                 float x, y, z;
             } offset;
+            struct
+            {
+                int x, y, z;
+            } allowTranslation;
         } volume;
 
         struct Transform
@@ -187,6 +232,8 @@ extern "C"
     IMMGODOT_EXPORT void ImmGodot_SetRenderAdapter(const ImmGodotRenderAdapter *adapter);
     IMMGODOT_EXPORT int ImmGodot_BeginMetalFrame(const ImmGodotMetalFrame *frame);
     IMMGODOT_EXPORT void ImmGodot_EndMetalFrame();
+    IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFrame *frame);
+    IMMGODOT_EXPORT void ImmGodot_EndVulkanFrame();
     IMMGODOT_EXPORT void ImmGodot_GlobalWork(int enabled);
     IMMGODOT_EXPORT void ImmGodot_SetCameraMatrices(int cameraID,
                                                     int stereoType,
@@ -204,6 +251,7 @@ extern "C"
                                               float viewportHeight,
                                               float minDepth,
                                               float maxDepth);
+    IMMGODOT_EXPORT int ImmGodot_GetRenderPerformanceInfo(ImmGodotRenderPerformanceInfo *info);
 
     IMMGODOT_EXPORT int ImmGodot_LoadFromFile(char *fileName);
     IMMGODOT_EXPORT void ImmGodot_Unload(int id);

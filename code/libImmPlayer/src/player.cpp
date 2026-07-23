@@ -42,6 +42,29 @@ namespace ImmPlayer
         return value != nullptr && value[0] != '\0' && value[0] != '0';
     }
 
+    static bool iGetValidationFixedDt(double *fixedDt)
+    {
+        const char *value = getenv("IMM_VIEWER_VALIDATE_FIXED_DT");
+        if (!value || !value[0])
+        {
+            value = getenv("IMM_GL_VALIDATE_FIXED_DT");
+        }
+        if (!value || !value[0])
+        {
+            return false;
+        }
+        const double parsed = atof(value);
+        if (parsed < 0.0)
+        {
+            return false;
+        }
+        if (fixedDt)
+        {
+            *fixedDt = parsed;
+        }
+        return true;
+    }
+
     static void iTraceUnityGlobalRender(const char *message)
     {
         if (!iEnvFlagEnabled("IMM_UNITY_TRACE_GLOBAL_RENDER"))
@@ -103,6 +126,7 @@ namespace ImmPlayer
         mLog = log;
         mTimer = timer;
         mFrame = 0;
+        mValidationTimeFrame = 0;
         mEnabled = true;
 		mAnyDocToRender = false;
         mDetphBufferMode = configuration->depthBuffer;
@@ -159,13 +183,16 @@ namespace ImmPlayer
         //----------------------------------------------------------------------------------------------------------------------------------------
 
         // render states
-        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::Metal)
+        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::Metal || renderer->GetAPI() == piRenderer::API::Vulkan)
         {
             mRasterState = renderer->CreateRasterState(false,true, piRenderer::CullMode::NONE, true, false); // note multisample is set to false
             if (!mRasterState) return false;
 
             mDepthState = renderer->CreateDepthState(true, (mDetphBufferMode==DepthBuffer::Linear01)?true:false); // set the second to true for non-unity DX. I know.
             if (!mDepthState) return false;
+
+            mBackgroundDepthState = renderer->CreateDepthState(false, true);
+            if (!mBackgroundDepthState) return false;
 
 #if CUSTOM_ALPHA_TO_COVERAGE==1
             mBlendState = renderer->CreateBlendState(false, false);
@@ -247,7 +274,7 @@ namespace ImmPlayer
         mRenderer->DestroyBuffer(mDisplayStateShaderConstans);
         mRenderer->DestroyBuffer(mPassStateShaderConstans);
 
-        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::Metal)
+        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::Metal || mRenderer->GetAPI() == piRenderer::API::Vulkan)
         {
             mRenderer->DestroyRasterState(mRasterState);
             mRasterState = nullptr;
@@ -255,6 +282,8 @@ namespace ImmPlayer
             mBlendState = nullptr;
             mRenderer->DestroyDepthState(mDepthState);
             mDepthState = nullptr;
+            mRenderer->DestroyDepthState(mBackgroundDepthState);
+            mBackgroundDepthState = nullptr;
         }
 
         for (uint64_t i = 0; i < mCommandList.GetLength(); i++)
@@ -833,7 +862,16 @@ namespace ImmPlayer
         //-----------------------------
         // set global info
         //-----------------------------
-        mTime = int64_t(mTimer->GetTimeTicks());
+        double validationFixedDt = 0.0;
+        if (iGetValidationFixedDt(&validationFixedDt))
+        {
+            const uint64_t validationTimeFrame = mAnyDocToRender ? mValidationTimeFrame++ : 0;
+            mTime = int64_t(piTick::CastInt(piTick::FromSeconds(double(validationTimeFrame) * validationFixedDt)));
+        }
+        else
+        {
+            mTime = int64_t(mTimer->GetTimeTicks());
+        }
         mFrameState.mTime = static_cast<float>(piTick::ToSeconds(mTime));
         mFrameState.mFrameID = mFrame++;
 
@@ -976,26 +1014,47 @@ namespace ImmPlayer
 
         //--- upload global info to the GPU --------------------------------------
 
-        iTraceUnityGlobalRender("before-update-frame-state");
-        mRenderer->UpdateBuffer(mFrameStateShaderConstans, &mFrameState, 0, sizeof(FrameState));
-        iTraceUnityGlobalRender("after-update-frame-state");
+        if (!iEnvFlagEnabled("IMM_UNITY_SKIP_FRAME_STATE_UPLOAD"))
+        {
+            iTraceUnityGlobalRender("before-update-frame-state");
+            mRenderer->UpdateBuffer(mFrameStateShaderConstans, &mFrameState, 0, sizeof(FrameState));
+            iTraceUnityGlobalRender("after-update-frame-state");
+        }
+        else
+        {
+            iTraceUnityGlobalRender("skip-update-frame-state");
+        }
 
         //------------------------------------------------------
         // view independant rendering here
         //------------------------------------------------------
 
-        mRenderer->AttachShaderConstants(mFrameStateShaderConstans, 0);
-        mRenderer->AttachShaderConstants(mLayerStateShaderConstans, 3);
-        mRenderer->AttachShaderConstants(mDisplayStateShaderConstans, 4);
-        mRenderer->AttachShaderConstants(mPassStateShaderConstans, 5);
-        mRenderer->AttachShaderConstants(mGlobalResourcesConstans, 7);
+        if (!iEnvFlagEnabled("IMM_UNITY_SKIP_SHADER_CONSTANT_ATTACH"))
+        {
+            mRenderer->AttachShaderConstants(mFrameStateShaderConstans, 0);
+            mRenderer->AttachShaderConstants(mLayerStateShaderConstans, 3);
+            mRenderer->AttachShaderConstants(mDisplayStateShaderConstans, 4);
+            mRenderer->AttachShaderConstants(mPassStateShaderConstans, 5);
+            mRenderer->AttachShaderConstants(mGlobalResourcesConstans, 7);
+        }
+        else
+        {
+            iTraceUnityGlobalRender("skip-attach-shader-constants");
+        }
 
-        iTraceUnityGlobalRender("before-prepare-display");
-        mLayerPaintRender->PrepareForDisplay(stereoMode);
-        mLayerRenderPicture.PrepareForDisplay(stereoMode);
-        mLayerRenderSound.PrepareForDisplay(stereoMode);
-        mLayerRenderModel.PrepareForDisplay(stereoMode);
-        iTraceUnityGlobalRender("after-prepare-display");
+        if (!iEnvFlagEnabled("IMM_UNITY_SKIP_LAYER_PREPARE_FOR_DISPLAY"))
+        {
+            iTraceUnityGlobalRender("before-prepare-display");
+            mLayerPaintRender->PrepareForDisplay(stereoMode);
+            mLayerRenderPicture.PrepareForDisplay(stereoMode);
+            mLayerRenderSound.PrepareForDisplay(stereoMode);
+            mLayerRenderModel.PrepareForDisplay(stereoMode);
+            iTraceUnityGlobalRender("after-prepare-display");
+        }
+        else
+        {
+            iTraceUnityGlobalRender("skip-prepare-display");
+        }
 
         mCurrentPerfInfo.numDrawCalls = 0;
         mCurrentPerfInfo.numDrawCallsCulled = 0;
@@ -1016,9 +1075,17 @@ namespace ImmPlayer
                 Document *doc = (Document *)mDocuments.GetAddress(i);
 
                 // update loading process ideally this happens only for the first camera. We need to have a frameID counter for that to detect changes in frameID
-                iTraceUnityGlobalRender("before-update-state-gpu");
-                const bool needRender = doc->UpdateStateGPU(mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mRenderer, mLog, mColorSpace);
-                iTraceUnityGlobalRender(needRender ? "after-update-state-gpu-ready" : "after-update-state-gpu-not-ready");
+                bool needRender = false;
+                if (!iEnvFlagEnabled("IMM_UNITY_SKIP_DOC_UPDATE_STATE_GPU"))
+                {
+                    iTraceUnityGlobalRender("before-update-state-gpu");
+                    needRender = doc->UpdateStateGPU(mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mRenderer, mLog, mColorSpace);
+                    iTraceUnityGlobalRender(needRender ? "after-update-state-gpu-ready" : "after-update-state-gpu-not-ready");
+                }
+                else
+                {
+                    iTraceUnityGlobalRender("skip-update-state-gpu");
+                }
                 anyDocReady |= needRender;
 
                 if (needRender)
@@ -1264,6 +1331,7 @@ namespace ImmPlayer
         mCurrentPerfInfo.numPicture360CubemapDrawCalls = pictureInfo.numPicture360CubemapDrawCalls;
         mCurrentPerfInfo.numModelDrawCalls = modelInfo.numDrawCalls;
         mCurrentPerfInfo.numTriangles = totalTriangles;
+        mCurrentPerfInfo.validationTimeFrame = mValidationTimeFrame;
 
 #if defined(RENDER_BUDGET) || defined(MEASURE_GPU_TIME)
         if (mEnablePerformanceMeasurement && mMicrosecondsLastFrame > 0)
@@ -1339,10 +1407,62 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT")) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE")) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND")) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        if (!iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL")) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        const bool skipPaint = iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT");
+        const bool skipPicture = iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE");
+        const bool skipSound = iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND");
+        const bool skipModel = iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL");
+
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        {
+            if (mRenderer->UsesExternalHostDepth())
+            {
+                // When Unity supplies the host depth buffer, keep the normal
+                // IMM ordering: paint writes depth, then the 360 picture draws
+                // as the far background and depth testing keeps it behind paint.
+                if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                if (!skipPicture) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            }
+            else
+            {
+                // Without usable host depth, draw the authored 360 picture as
+                // a color background before paint. In Unity host render passes,
+                // keep depth disabled for both passes so overlay composition
+                // does not read or write Unity's depth attachment.
+                const bool hostOverlayWithoutDepth = mRenderer->IsExternalHostFrame();
+                if (hostOverlayWithoutDepth)
+                {
+                    mRenderer->SetDepthState(mBackgroundDepthState);
+                    mRenderer->SetWriteMask(true, false, false, false, false);
+                }
+                if (!skipPicture)
+                {
+                    if (!hostOverlayWithoutDepth)
+                    {
+                        mRenderer->SetDepthState(mBackgroundDepthState);
+                        mRenderer->SetWriteMask(true, false, false, false, false);
+                    }
+                    mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                    if (!hostOverlayWithoutDepth)
+                    {
+                        mRenderer->SetDepthState(mDepthState);
+                        mRenderer->SetWriteMask(true, false, false, false, true);
+                    }
+                }
+                if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                if (hostOverlayWithoutDepth)
+                {
+                    mRenderer->SetDepthState(mDepthState);
+                    mRenderer->SetWriteMask(true, false, false, false, true);
+                }
+            }
+        }
+        else
+        {
+            if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!skipPicture) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        if (!skipSound) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!skipModel) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
         if (mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES)
         {
@@ -1415,10 +1535,71 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        const bool skipPaint = iEnvFlagEnabled("IMM_RENDER_SKIP_PAINT");
+        const bool skipPicture = iEnvFlagEnabled("IMM_RENDER_SKIP_PICTURE");
+        const bool skipSound = iEnvFlagEnabled("IMM_RENDER_SKIP_SOUND");
+        const bool skipModel = iEnvFlagEnabled("IMM_RENDER_SKIP_MODEL");
+        const bool isGles = mRenderer->GetAPI() == piRenderer::API::GLES;
+        const bool renderPictureBeforePaint = mRenderer->GetAPI() == piRenderer::API::Vulkan ||
+                                              isGles;
+        const bool renderPictureColorOnly = isGles;
+
+        if (renderPictureBeforePaint)
+        {
+            // Unity Android OpenXR/GLES renders the authored 360 picture layer
+            // as the scene background. Drawing it after paint hides otherwise
+            // valid paint draw calls in the headset, which made validation show
+            // only the background despite nonzero paintDrawCalls. Keep GLES on
+            // the same background-first path as Vulkan so foreground paint is
+            // composed over the sky dome.
+            if (!skipPicture)
+            {
+                if (renderPictureColorOnly)
+                {
+                    // On Unity Android OpenXR/GLES the 360 picture layer is an
+                    // infinite background. Letting that pass test/write depth can
+                    // reject all subsequent paint even though paint draw calls are
+                    // still issued. Render the background as color-only, then put
+                    // depth back for paint/model geometry. If 2D picture depth is
+                    // needed on this path later, split 360 and 2D picture passes
+                    // rather than removing this state reset.
+                    mRenderer->SetState(piSTATE_DEPTH_TEST, false);
+                    mRenderer->SetWriteMask(true, false, false, false, false);
+                }
+                mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+                if (renderPictureColorOnly)
+                {
+                    mRenderer->SetWriteMask(true, false, false, false, true);
+                    mRenderer->SetState(piSTATE_DEPTH_TEST, true);
+                    mRenderer->Clear(nullptr, nullptr, nullptr, nullptr, true);
+                }
+            }
+            if (isGles)
+            {
+                // Unity/OpenXR and the background pass both share this GLES
+                // context with IMM. Reassert the full paint boundary state here
+                // so opaque paint writes depth consistently on Adreno. IMM uses
+                // shader-written gl_SampleMask for alpha coverage
+                // (CUSTOM_ALPHA_TO_COVERAGE==1), so hardware alpha-to-coverage
+                // must stay disabled or opaque/depth behavior can depend on
+                // ambient Unity XR state.
+                mRenderer->SetWriteMask(true, false, false, false, true);
+                mRenderer->SetState(piSTATE_BLEND, false);
+                mRenderer->SetState(piSTATE_ALPHA_TO_COVERAGE, false);
+                mRenderer->SetState(piSTATE_DEPTH_TEST, true);
+                mRenderer->SetState(piSTATE_DEPTH_CLAMP, true);
+                mRenderer->SetState(piSTATE_FRONT_FACE, true);
+                mRenderer->SetState(piSTATE_CULL_FACE, true);
+            }
+            if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        else
+        {
+            if (!skipPaint) mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            if (!skipPicture) mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        if (!skipSound) mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (!skipModel) mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 
         if (mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES)
         {
@@ -1485,8 +1666,16 @@ namespace ImmPlayer
             mRenderer->SetBlendState(mBlendState);
         }
 
-        mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
-        mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        if (mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        {
+            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
+        else
+        {
+            mLayerPaintRender->DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+            mLayerRenderPicture.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
+        }
         mLayerRenderSound.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
         mLayerRenderModel.DisplayRender(mRenderer, mLog, mLayerStateShaderConstans, mDeltaCap);
 

@@ -74,6 +74,853 @@ static const char* fsMirror = ""
 "outColor = vec4(col, 1.0);"
 "}";
 
+#if defined(WINDOWS)
+namespace
+{
+    static constexpr int32_t kXrSuccess = 0;
+    static constexpr int32_t kXrTypeExtensionProperties = 2;
+    static constexpr int32_t kXrTypeInstanceCreateInfo = 3;
+    static constexpr int32_t kXrTypeSystemGetInfo = 4;
+    static constexpr int32_t kXrTypeSystemProperties = 5;
+    static constexpr int32_t kXrTypeSessionCreateInfo = 8;
+    static constexpr int32_t kXrTypeSwapchainCreateInfo = 9;
+    static constexpr int32_t kXrTypeGraphicsBindingVulkanKhr = 1000025000;
+    static constexpr int32_t kXrTypeSessionBeginInfo = 10;
+    static constexpr int32_t kXrTypeFrameWaitInfo = 33;
+    static constexpr int32_t kXrTypeFrameEndInfo = 12;
+    static constexpr int32_t kXrTypeCompositionLayerProjection = 35;
+    static constexpr int32_t kXrTypeFrameState = 44;
+    static constexpr int32_t kXrTypeFrameBeginInfo = 46;
+    static constexpr int32_t kXrTypeCompositionLayerProjectionView = 48;
+    static constexpr int32_t kXrTypeViewConfigurationView = 41;
+    static constexpr int32_t kXrTypeSwapchainImageAcquireInfo = 55;
+    static constexpr int32_t kXrTypeSwapchainImageWaitInfo = 56;
+    static constexpr int32_t kXrTypeSwapchainImageReleaseInfo = 57;
+    static constexpr int32_t kXrTypeSwapchainImageVulkanKhr = 1000025001;
+    static constexpr int32_t kXrTypeGraphicsRequirementsVulkanKhr = 1000025002;
+    static constexpr int32_t kXrFormFactorHmd = 1;
+    static constexpr int32_t kXrViewConfigurationPrimaryStereo = 2;
+    static constexpr int32_t kXrEnvironmentBlendModeOpaque = 1;
+    static constexpr uint64_t kXrSwapchainUsageColorAttachmentBit = 0x00000001ULL;
+    static constexpr uint64_t kXrCurrentApiVersion = (1ULL << 48);
+    static constexpr uint64_t kFakeVulkanInstance = 0x1111222233334444ULL;
+    static constexpr uint64_t kFakeVulkanPhysicalDevice = 0x2222333344445555ULL;
+    static constexpr uint64_t kFakeVulkanDevice = 0x3333444455556666ULL;
+
+    struct XrExtensionPropertiesImm
+    {
+        int32_t type;
+        void *next;
+        char extensionName[128];
+        uint32_t extensionVersion;
+    };
+
+    struct XrApplicationInfoImm
+    {
+        char applicationName[128];
+        uint32_t applicationVersion;
+        char engineName[128];
+        uint32_t engineVersion;
+        uint64_t apiVersion;
+    };
+
+    struct XrInstanceCreateInfoImm
+    {
+        int32_t type;
+        const void *next;
+        uint64_t createFlags;
+        XrApplicationInfoImm applicationInfo;
+        uint32_t enabledApiLayerCount;
+        const char *const *enabledApiLayerNames;
+        uint32_t enabledExtensionCount;
+        const char *const *enabledExtensionNames;
+    };
+
+    struct XrSystemGetInfoImm
+    {
+        int32_t type;
+        const void *next;
+        int32_t formFactor;
+    };
+
+    struct XrSystemGraphicsPropertiesImm
+    {
+        uint32_t maxSwapchainImageHeight;
+        uint32_t maxSwapchainImageWidth;
+        uint32_t maxLayerCount;
+    };
+
+    struct XrSystemTrackingPropertiesImm
+    {
+        uint32_t orientationTracking;
+        uint32_t positionTracking;
+    };
+
+    struct XrSystemPropertiesImm
+    {
+        int32_t type;
+        void *next;
+        uint64_t systemId;
+        uint32_t vendorId;
+        char systemName[256];
+        XrSystemGraphicsPropertiesImm graphicsProperties;
+        XrSystemTrackingPropertiesImm trackingProperties;
+    };
+
+    struct XrViewConfigurationViewImm
+    {
+        int32_t type;
+        void *next;
+        uint32_t recommendedImageRectWidth;
+        uint32_t maxImageRectWidth;
+        uint32_t recommendedImageRectHeight;
+        uint32_t maxImageRectHeight;
+        uint32_t recommendedSwapchainSampleCount;
+        uint32_t maxSwapchainSampleCount;
+    };
+
+    struct XrSessionCreateInfoImm
+    {
+        int32_t type;
+        const void *next;
+        uint64_t createFlags;
+        uint64_t systemId;
+    };
+
+    struct XrGraphicsBindingVulkanKhrImm
+    {
+        int32_t type;
+        const void *next;
+        uint64_t instance;
+        uint64_t physicalDevice;
+        uint64_t device;
+        uint32_t queueFamilyIndex;
+        uint32_t queueIndex;
+    };
+
+    struct XrSessionBeginInfoImm
+    {
+        int32_t type;
+        const void *next;
+        int32_t primaryViewConfigurationType;
+    };
+
+    struct XrFrameWaitInfoImm
+    {
+        int32_t type;
+        const void *next;
+    };
+
+    struct XrFrameStateImm
+    {
+        int32_t type;
+        void *next;
+        int64_t predictedDisplayTime;
+        int64_t predictedDisplayPeriod;
+        uint32_t shouldRender;
+    };
+
+    struct XrFrameBeginInfoImm
+    {
+        int32_t type;
+        const void *next;
+    };
+
+    struct XrFrameEndInfoImm
+    {
+        int32_t type;
+        const void *next;
+        int64_t displayTime;
+        int32_t environmentBlendMode;
+        uint32_t layerCount;
+        const void *const *layers;
+    };
+
+    struct XrSwapchainCreateInfoImm
+    {
+        int32_t type;
+        const void *next;
+        uint64_t createFlags;
+        uint64_t usageFlags;
+        int64_t format;
+        uint32_t sampleCount;
+        uint32_t width;
+        uint32_t height;
+        uint32_t faceCount;
+        uint32_t arraySize;
+        uint32_t mipCount;
+    };
+
+    struct XrSwapchainImageVulkanKhrImm
+    {
+        int32_t type;
+        void *next;
+        uint64_t image;
+    };
+
+    struct XrGraphicsRequirementsVulkanKhrImm
+    {
+        int32_t type;
+        void *next;
+        uint64_t minApiVersionSupported;
+        uint64_t maxApiVersionSupported;
+    };
+
+    struct XrSwapchainImageAcquireInfoImm
+    {
+        int32_t type;
+        const void *next;
+    };
+
+    struct XrSwapchainImageWaitInfoImm
+    {
+        int32_t type;
+        const void *next;
+        int64_t timeout;
+    };
+
+    struct XrSwapchainImageReleaseInfoImm
+    {
+        int32_t type;
+        const void *next;
+    };
+
+    struct XrVector3fImm
+    {
+        float x;
+        float y;
+        float z;
+    };
+
+    struct XrQuaternionfImm
+    {
+        float x;
+        float y;
+        float z;
+        float w;
+    };
+
+    struct XrPosefImm
+    {
+        XrQuaternionfImm orientation;
+        XrVector3fImm position;
+    };
+
+    struct XrFovfImm
+    {
+        float angleLeft;
+        float angleRight;
+        float angleUp;
+        float angleDown;
+    };
+
+    struct XrOffset2DiImm
+    {
+        int32_t x;
+        int32_t y;
+    };
+
+    struct XrExtent2DiImm
+    {
+        int32_t width;
+        int32_t height;
+    };
+
+    struct XrRect2DiImm
+    {
+        XrOffset2DiImm offset;
+        XrExtent2DiImm extent;
+    };
+
+    struct XrSwapchainSubImageImm
+    {
+        uint64_t swapchain;
+        XrRect2DiImm imageRect;
+        uint32_t imageArrayIndex;
+    };
+
+    struct XrCompositionLayerProjectionViewImm
+    {
+        int32_t type;
+        const void *next;
+        XrPosefImm pose;
+        XrFovfImm fov;
+        XrSwapchainSubImageImm subImage;
+    };
+
+    struct XrCompositionLayerProjectionImm
+    {
+        int32_t type;
+        const void *next;
+        uint64_t layerFlags;
+        uint64_t space;
+        uint32_t viewCount;
+        const XrCompositionLayerProjectionViewImm *views;
+    };
+
+    typedef int32_t(__stdcall *PFN_xrEnumerateInstanceExtensionPropertiesImm)(const char *, uint32_t, uint32_t *, XrExtensionPropertiesImm *);
+    typedef int32_t(__stdcall *PFN_xrCreateInstanceImm)(const XrInstanceCreateInfoImm *, uint64_t *);
+    typedef int32_t(__stdcall *PFN_xrGetInstanceProcAddrImm)(uint64_t, const char *, void **);
+    typedef int32_t(__stdcall *PFN_xrDestroyInstanceImm)(uint64_t);
+    typedef int32_t(__stdcall *PFN_xrGetSystemImm)(uint64_t, const XrSystemGetInfoImm *, uint64_t *);
+    typedef int32_t(__stdcall *PFN_xrGetSystemPropertiesImm)(uint64_t, uint64_t, XrSystemPropertiesImm *);
+    typedef int32_t(__stdcall *PFN_xrEnumerateViewConfigurationsImm)(uint64_t, uint64_t, uint32_t, uint32_t *, int32_t *);
+    typedef int32_t(__stdcall *PFN_xrEnumerateViewConfigurationViewsImm)(uint64_t, uint64_t, int32_t, uint32_t, uint32_t *, XrViewConfigurationViewImm *);
+    typedef int32_t(__stdcall *PFN_xrCreateSessionImm)(uint64_t, const XrSessionCreateInfoImm *, uint64_t *);
+    typedef int32_t(__stdcall *PFN_xrDestroySessionImm)(uint64_t);
+    typedef int32_t(__stdcall *PFN_xrBeginSessionImm)(uint64_t, const XrSessionBeginInfoImm *);
+    typedef int32_t(__stdcall *PFN_xrEndSessionImm)(uint64_t);
+    typedef int32_t(__stdcall *PFN_xrWaitFrameImm)(uint64_t, const XrFrameWaitInfoImm *, XrFrameStateImm *);
+    typedef int32_t(__stdcall *PFN_xrBeginFrameImm)(uint64_t, const XrFrameBeginInfoImm *);
+    typedef int32_t(__stdcall *PFN_xrEndFrameImm)(uint64_t, const XrFrameEndInfoImm *);
+    typedef int32_t(__stdcall *PFN_xrEnumerateSwapchainFormatsImm)(uint64_t, uint32_t, uint32_t *, int64_t *);
+    typedef int32_t(__stdcall *PFN_xrCreateSwapchainImm)(uint64_t, const XrSwapchainCreateInfoImm *, uint64_t *);
+    typedef int32_t(__stdcall *PFN_xrDestroySwapchainImm)(uint64_t);
+    typedef int32_t(__stdcall *PFN_xrEnumerateSwapchainImagesImm)(uint64_t, uint32_t, uint32_t *, XrSwapchainImageVulkanKhrImm *);
+    typedef int32_t(__stdcall *PFN_xrAcquireSwapchainImageImm)(uint64_t, const XrSwapchainImageAcquireInfoImm *, uint32_t *);
+    typedef int32_t(__stdcall *PFN_xrWaitSwapchainImageImm)(uint64_t, const XrSwapchainImageWaitInfoImm *);
+    typedef int32_t(__stdcall *PFN_xrReleaseSwapchainImageImm)(uint64_t, const XrSwapchainImageReleaseInfoImm *);
+    typedef int32_t(__stdcall *PFN_xrGetVulkanInstanceExtensionsKhrImm)(uint64_t, uint64_t, uint32_t, uint32_t *, char *);
+    typedef int32_t(__stdcall *PFN_xrGetVulkanDeviceExtensionsKhrImm)(uint64_t, uint64_t, uint32_t, uint32_t *, char *);
+    typedef int32_t(__stdcall *PFN_xrGetVulkanGraphicsRequirementsKhrImm)(uint64_t, uint64_t, XrGraphicsRequirementsVulkanKhrImm *);
+
+    static bool iQueryRegistryString(HKEY root, const wchar_t *keyPath, const wchar_t *valueName, wchar_t *out, DWORD outCount)
+    {
+        DWORD type = 0;
+        DWORD bytes = outCount * sizeof(wchar_t);
+        const LSTATUS result = RegGetValueW(root, keyPath, valueName, RRF_RT_REG_SZ, &type, out, &bytes);
+        return result == ERROR_SUCCESS && bytes > sizeof(wchar_t);
+    }
+
+    static bool iGetOpenXRLoaderPath(wchar_t *out, DWORD outCount)
+    {
+        if (GetModuleFileNameW(nullptr, out, outCount) == 0)
+        {
+            return false;
+        }
+
+        wchar_t runtimeJson[PATH_MAX] = {};
+        const wchar_t *keyPath = L"SOFTWARE\\Khronos\\OpenXR\\1";
+        if (!iQueryRegistryString(HKEY_CURRENT_USER, keyPath, L"ActiveRuntime", runtimeJson, PATH_MAX) &&
+            !iQueryRegistryString(HKEY_LOCAL_MACHINE, keyPath, L"ActiveRuntime", runtimeJson, PATH_MAX) &&
+            !iQueryRegistryString(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WOW6432Node\\Khronos\\OpenXR\\1", L"ActiveRuntime", runtimeJson, PATH_MAX))
+        {
+            return false;
+        }
+
+        wcsncpy(out, runtimeJson, outCount - 1);
+        out[outCount - 1] = 0;
+        wchar_t *slash = wcsrchr(out, L'\\');
+        if (!slash)
+        {
+            return false;
+        }
+
+        *slash = 0;
+        const wchar_t *loaderSuffix = L"\\bin\\win64\\openxr_loader.dll";
+        if (wcslen(out) + wcslen(loaderSuffix) + 1 >= outCount)
+        {
+            return false;
+        }
+        wcscat(out, loaderSuffix);
+        return true;
+    }
+
+    template <typename T>
+    static bool iLoadXrProc(HMODULE module, const char *name, T *out)
+    {
+        *out = reinterpret_cast<T>(GetProcAddress(module, name));
+        return *out != nullptr;
+    }
+
+    static const wchar_t *iXrResultName(int32_t result)
+    {
+        switch (result)
+        {
+        case 0: return L"XR_SUCCESS";
+        case -1: return L"XR_ERROR_VALIDATION_FAILURE";
+        case -2: return L"XR_ERROR_RUNTIME_FAILURE";
+        case -3: return L"XR_ERROR_OUT_OF_MEMORY";
+        case -4: return L"XR_ERROR_API_VERSION_UNSUPPORTED";
+        case -6: return L"XR_ERROR_INITIALIZATION_FAILED";
+        case -7: return L"XR_ERROR_FUNCTION_UNSUPPORTED";
+        case -8: return L"XR_ERROR_FEATURE_UNSUPPORTED";
+        case -9: return L"XR_ERROR_EXTENSION_NOT_PRESENT";
+        case -34: return L"XR_ERROR_FORM_FACTOR_UNSUPPORTED";
+        case -35: return L"XR_ERROR_FORM_FACTOR_UNAVAILABLE";
+        case -51: return L"XR_ERROR_RUNTIME_UNAVAILABLE";
+        default: return L"XR_RESULT_UNKNOWN";
+        }
+    }
+
+    static void iLogOpenXRText(piLog *log, const wchar_t *label, const char *text)
+    {
+        wchar_t tmp[512];
+        pistr2ws(tmp, 512, text ? text : "");
+        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE %s=%s", label, tmp);
+    }
+
+    static bool iProbeStandaloneOpenXR(piLog *log)
+    {
+        wchar_t loaderPath[PATH_MAX] = {};
+        wchar_t envLoaderPath[PATH_MAX] = {};
+        HMODULE loader = nullptr;
+        const DWORD envLoaderPathLength = GetEnvironmentVariableW(L"IMM_OPENXR_LOADER_DLL", envLoaderPath, PATH_MAX);
+        if (envLoaderPathLength > 0 && envLoaderPathLength < PATH_MAX)
+        {
+            loader = LoadLibraryW(envLoaderPath);
+            if (loader)
+            {
+                wcsncpy(loaderPath, envLoaderPath, PATH_MAX - 1);
+                loaderPath[PATH_MAX - 1] = 0;
+            }
+        }
+        else
+        {
+            loader = LoadLibraryW(L"openxr_loader.dll");
+        }
+        if (!loader)
+        {
+            if (!iGetOpenXRLoaderPath(loaderPath, PATH_MAX))
+            {
+                log->Printf(LT_ERROR, L"IMM_OPENXR_STANDALONE missing=loaderPath");
+                return false;
+            }
+            loader = LoadLibraryW(loaderPath);
+        }
+        if (!loader)
+        {
+            log->Printf(LT_ERROR, L"IMM_OPENXR_STANDALONE loadLoaderResult=%d", GetLastError());
+            return false;
+        }
+        if (loaderPath[0] != 0)
+        {
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE loader=%s", loaderPath);
+        }
+
+        PFN_xrEnumerateInstanceExtensionPropertiesImm xrEnumerateInstanceExtensionProperties = nullptr;
+        PFN_xrCreateInstanceImm xrCreateInstance = nullptr;
+        PFN_xrGetInstanceProcAddrImm xrGetInstanceProcAddr = nullptr;
+        PFN_xrDestroyInstanceImm xrDestroyInstance = nullptr;
+        PFN_xrGetSystemImm xrGetSystem = nullptr;
+        PFN_xrGetSystemPropertiesImm xrGetSystemProperties = nullptr;
+        PFN_xrEnumerateViewConfigurationsImm xrEnumerateViewConfigurations = nullptr;
+        PFN_xrEnumerateViewConfigurationViewsImm xrEnumerateViewConfigurationViews = nullptr;
+        PFN_xrCreateSessionImm xrCreateSession = nullptr;
+        PFN_xrDestroySessionImm xrDestroySession = nullptr;
+        PFN_xrBeginSessionImm xrBeginSession = nullptr;
+        PFN_xrEndSessionImm xrEndSession = nullptr;
+        PFN_xrWaitFrameImm xrWaitFrame = nullptr;
+        PFN_xrBeginFrameImm xrBeginFrame = nullptr;
+        PFN_xrEndFrameImm xrEndFrame = nullptr;
+        PFN_xrEnumerateSwapchainFormatsImm xrEnumerateSwapchainFormats = nullptr;
+        PFN_xrCreateSwapchainImm xrCreateSwapchain = nullptr;
+        PFN_xrDestroySwapchainImm xrDestroySwapchain = nullptr;
+        PFN_xrEnumerateSwapchainImagesImm xrEnumerateSwapchainImages = nullptr;
+        PFN_xrAcquireSwapchainImageImm xrAcquireSwapchainImage = nullptr;
+        PFN_xrWaitSwapchainImageImm xrWaitSwapchainImage = nullptr;
+        PFN_xrReleaseSwapchainImageImm xrReleaseSwapchainImage = nullptr;
+        if (!iLoadXrProc(loader, "xrEnumerateInstanceExtensionProperties", &xrEnumerateInstanceExtensionProperties) ||
+            !iLoadXrProc(loader, "xrCreateInstance", &xrCreateInstance) ||
+            !iLoadXrProc(loader, "xrGetInstanceProcAddr", &xrGetInstanceProcAddr) ||
+            !iLoadXrProc(loader, "xrDestroyInstance", &xrDestroyInstance) ||
+            !iLoadXrProc(loader, "xrGetSystem", &xrGetSystem) ||
+            !iLoadXrProc(loader, "xrGetSystemProperties", &xrGetSystemProperties) ||
+            !iLoadXrProc(loader, "xrEnumerateViewConfigurations", &xrEnumerateViewConfigurations) ||
+            !iLoadXrProc(loader, "xrEnumerateViewConfigurationViews", &xrEnumerateViewConfigurationViews) ||
+            !iLoadXrProc(loader, "xrCreateSession", &xrCreateSession) ||
+            !iLoadXrProc(loader, "xrDestroySession", &xrDestroySession) ||
+            !iLoadXrProc(loader, "xrBeginSession", &xrBeginSession) ||
+            !iLoadXrProc(loader, "xrEndSession", &xrEndSession) ||
+            !iLoadXrProc(loader, "xrWaitFrame", &xrWaitFrame) ||
+            !iLoadXrProc(loader, "xrBeginFrame", &xrBeginFrame) ||
+            !iLoadXrProc(loader, "xrEndFrame", &xrEndFrame) ||
+            !iLoadXrProc(loader, "xrEnumerateSwapchainFormats", &xrEnumerateSwapchainFormats) ||
+            !iLoadXrProc(loader, "xrCreateSwapchain", &xrCreateSwapchain) ||
+            !iLoadXrProc(loader, "xrDestroySwapchain", &xrDestroySwapchain) ||
+            !iLoadXrProc(loader, "xrEnumerateSwapchainImages", &xrEnumerateSwapchainImages) ||
+            !iLoadXrProc(loader, "xrAcquireSwapchainImage", &xrAcquireSwapchainImage) ||
+            !iLoadXrProc(loader, "xrWaitSwapchainImage", &xrWaitSwapchainImage) ||
+            !iLoadXrProc(loader, "xrReleaseSwapchainImage", &xrReleaseSwapchainImage))
+        {
+            log->Printf(LT_ERROR, L"IMM_OPENXR_STANDALONE missing=requiredExport");
+            FreeLibrary(loader);
+            return false;
+        }
+
+        uint32_t extensionCount = 0;
+        int32_t xr = xrEnumerateInstanceExtensionProperties(nullptr, 0, &extensionCount, nullptr);
+        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateExtensionsResult=%d count=%u", xr, extensionCount);
+        if (xr != kXrSuccess)
+        {
+            FreeLibrary(loader);
+            return false;
+        }
+
+        XrExtensionPropertiesImm extensions[64] = {};
+        const uint32_t extensionCapacity = extensionCount < 64 ? extensionCount : 64;
+        for (uint32_t i = 0; i < extensionCapacity; ++i)
+        {
+            extensions[i].type = kXrTypeExtensionProperties;
+        }
+        uint32_t filledExtensionCount = extensionCapacity;
+        xr = xrEnumerateInstanceExtensionProperties(nullptr, extensionCapacity, &filledExtensionCount, extensions);
+        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateExtensionsFillResult=%d count=%u", xr, filledExtensionCount);
+        if (xr == kXrSuccess)
+        {
+            const uint32_t logCount = filledExtensionCount < 12 ? filledExtensionCount : 12;
+            for (uint32_t i = 0; i < logCount; ++i)
+            {
+                iLogOpenXRText(log, L"extension", extensions[i].extensionName);
+            }
+        }
+        else
+        {
+            FreeLibrary(loader);
+            return false;
+        }
+
+        XrInstanceCreateInfoImm createInfo = {};
+        createInfo.type = kXrTypeInstanceCreateInfo;
+        strcpy(createInfo.applicationInfo.applicationName, "IMM Standalone");
+        createInfo.applicationInfo.applicationVersion = 1;
+        strcpy(createInfo.applicationInfo.engineName, "IMM");
+        createInfo.applicationInfo.engineVersion = 1;
+        createInfo.applicationInfo.apiVersion = kXrCurrentApiVersion;
+
+        uint64_t instance = 0;
+        xr = xrCreateInstance(&createInfo, &instance);
+        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE createInstanceResult=%d resultName=%s instance=%llu", xr, iXrResultName(xr), static_cast<unsigned long long>(instance));
+        if (xr != kXrSuccess)
+        {
+            FreeLibrary(loader);
+            return false;
+        }
+
+        XrSystemGetInfoImm systemInfo = {};
+        systemInfo.type = kXrTypeSystemGetInfo;
+        systemInfo.formFactor = kXrFormFactorHmd;
+        uint64_t systemId = 0;
+        xr = xrGetSystem(instance, &systemInfo, &systemId);
+        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getHmdSystemResult=%d resultName=%s systemId=%llu", xr, iXrResultName(xr), static_cast<unsigned long long>(systemId));
+        if (xr == kXrSuccess)
+        {
+            PFN_xrGetVulkanInstanceExtensionsKhrImm xrGetVulkanInstanceExtensionsKHR = nullptr;
+            PFN_xrGetVulkanDeviceExtensionsKhrImm xrGetVulkanDeviceExtensionsKHR = nullptr;
+            PFN_xrGetVulkanGraphicsRequirementsKhrImm xrGetVulkanGraphicsRequirementsKHR = nullptr;
+            void *xrProc = nullptr;
+            int32_t procResult = xrGetInstanceProcAddr(instance, "xrGetVulkanInstanceExtensionsKHR", &xrProc);
+            xrGetVulkanInstanceExtensionsKHR = reinterpret_cast<PFN_xrGetVulkanInstanceExtensionsKhrImm>(xrProc);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanInstanceExtensionsProcResult=%d resultName=%s available=%u", procResult, iXrResultName(procResult), xrGetVulkanInstanceExtensionsKHR ? 1u : 0u);
+            xrProc = nullptr;
+            procResult = xrGetInstanceProcAddr(instance, "xrGetVulkanDeviceExtensionsKHR", &xrProc);
+            xrGetVulkanDeviceExtensionsKHR = reinterpret_cast<PFN_xrGetVulkanDeviceExtensionsKhrImm>(xrProc);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanDeviceExtensionsProcResult=%d resultName=%s available=%u", procResult, iXrResultName(procResult), xrGetVulkanDeviceExtensionsKHR ? 1u : 0u);
+            xrProc = nullptr;
+            procResult = xrGetInstanceProcAddr(instance, "xrGetVulkanGraphicsRequirementsKHR", &xrProc);
+            xrGetVulkanGraphicsRequirementsKHR = reinterpret_cast<PFN_xrGetVulkanGraphicsRequirementsKhrImm>(xrProc);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanGraphicsRequirementsProcResult=%d resultName=%s available=%u", procResult, iXrResultName(procResult), xrGetVulkanGraphicsRequirementsKHR ? 1u : 0u);
+
+            if (xrGetVulkanInstanceExtensionsKHR)
+            {
+                uint32_t vulkanInstanceExtensionBytes = 0;
+                xr = xrGetVulkanInstanceExtensionsKHR(instance, systemId, 0, &vulkanInstanceExtensionBytes, nullptr);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanInstanceExtensionsResult=%d resultName=%s bytes=%u", xr, iXrResultName(xr), vulkanInstanceExtensionBytes);
+                if (xr == kXrSuccess && vulkanInstanceExtensionBytes > 0 && vulkanInstanceExtensionBytes < 512)
+                {
+                    char vulkanInstanceExtensions[512] = {};
+                    xr = xrGetVulkanInstanceExtensionsKHR(instance, systemId, vulkanInstanceExtensionBytes, &vulkanInstanceExtensionBytes, vulkanInstanceExtensions);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanInstanceExtensionsFillResult=%d resultName=%s bytes=%u", xr, iXrResultName(xr), vulkanInstanceExtensionBytes);
+                    if (xr == kXrSuccess)
+                    {
+                        iLogOpenXRText(log, L"vulkanInstanceExtensions", vulkanInstanceExtensions);
+                    }
+                }
+            }
+
+            if (xr == kXrSuccess && xrGetVulkanDeviceExtensionsKHR)
+            {
+                uint32_t vulkanDeviceExtensionBytes = 0;
+                xr = xrGetVulkanDeviceExtensionsKHR(instance, systemId, 0, &vulkanDeviceExtensionBytes, nullptr);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanDeviceExtensionsResult=%d resultName=%s bytes=%u", xr, iXrResultName(xr), vulkanDeviceExtensionBytes);
+                if (xr == kXrSuccess && vulkanDeviceExtensionBytes > 0 && vulkanDeviceExtensionBytes < 512)
+                {
+                    char vulkanDeviceExtensions[512] = {};
+                    xr = xrGetVulkanDeviceExtensionsKHR(instance, systemId, vulkanDeviceExtensionBytes, &vulkanDeviceExtensionBytes, vulkanDeviceExtensions);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanDeviceExtensionsFillResult=%d resultName=%s bytes=%u", xr, iXrResultName(xr), vulkanDeviceExtensionBytes);
+                    if (xr == kXrSuccess)
+                    {
+                        iLogOpenXRText(log, L"vulkanDeviceExtensions", vulkanDeviceExtensions);
+                    }
+                }
+            }
+
+            if (xr == kXrSuccess && xrGetVulkanGraphicsRequirementsKHR)
+            {
+                XrGraphicsRequirementsVulkanKhrImm graphicsRequirements = {};
+                graphicsRequirements.type = kXrTypeGraphicsRequirementsVulkanKhr;
+                xr = xrGetVulkanGraphicsRequirementsKHR(instance, systemId, &graphicsRequirements);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getVulkanGraphicsRequirementsResult=%d resultName=%s minApi=0x%llx maxApi=0x%llx",
+                            xr,
+                            iXrResultName(xr),
+                            static_cast<unsigned long long>(graphicsRequirements.minApiVersionSupported),
+                            static_cast<unsigned long long>(graphicsRequirements.maxApiVersionSupported));
+            }
+
+            XrSystemPropertiesImm properties = {};
+            properties.type = kXrTypeSystemProperties;
+            xr = xrGetSystemProperties(instance, systemId, &properties);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE getSystemPropertiesResult=%d", xr);
+            if (xr == kXrSuccess)
+            {
+                iLogOpenXRText(log, L"systemName", properties.systemName);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE maxSwapchain=%ux%u maxLayers=%u",
+                            properties.graphicsProperties.maxSwapchainImageWidth,
+                            properties.graphicsProperties.maxSwapchainImageHeight,
+                            properties.graphicsProperties.maxLayerCount);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE tracking orientation=%u position=%u",
+                            properties.trackingProperties.orientationTracking,
+                            properties.trackingProperties.positionTracking);
+            }
+
+            uint32_t viewConfigurationCount = 0;
+            xr = xrEnumerateViewConfigurations(instance, systemId, 0, &viewConfigurationCount, nullptr);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateViewConfigurationsResult=%d count=%u", xr, viewConfigurationCount);
+            int32_t viewConfigurationTypes[8] = {};
+            if (xr == kXrSuccess && viewConfigurationCount > 0)
+            {
+                uint32_t viewCapacity = viewConfigurationCount < 8 ? viewConfigurationCount : 8;
+                xr = xrEnumerateViewConfigurations(instance, systemId, viewCapacity, &viewCapacity, viewConfigurationTypes);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateViewConfigurationsFillResult=%d count=%u", xr, viewCapacity);
+                for (uint32_t i = 0; xr == kXrSuccess && i < viewCapacity; ++i)
+                {
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE viewConfigurationType=%d", viewConfigurationTypes[i]);
+                }
+            }
+
+            uint32_t stereoViewCount = 0;
+            xr = xrEnumerateViewConfigurationViews(instance, systemId, kXrViewConfigurationPrimaryStereo, 0, &stereoViewCount, nullptr);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateStereoViewsResult=%d count=%u", xr, stereoViewCount);
+            if (xr == kXrSuccess && stereoViewCount > 0 && stereoViewCount <= 8)
+            {
+                XrViewConfigurationViewImm views[8] = {};
+                for (uint32_t i = 0; i < stereoViewCount; ++i)
+                {
+                    views[i].type = kXrTypeViewConfigurationView;
+                }
+                xr = xrEnumerateViewConfigurationViews(instance, systemId, kXrViewConfigurationPrimaryStereo, stereoViewCount, &stereoViewCount, views);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateStereoViewsFillResult=%d count=%u", xr, stereoViewCount);
+                for (uint32_t i = 0; xr == kXrSuccess && i < stereoViewCount; ++i)
+                {
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE stereoView[%u] recommended=%ux%u max=%ux%u samples=%u/%u",
+                                i,
+                                views[i].recommendedImageRectWidth,
+                                views[i].recommendedImageRectHeight,
+                                views[i].maxImageRectWidth,
+                                views[i].maxImageRectHeight,
+                                views[i].recommendedSwapchainSampleCount,
+                                views[i].maxSwapchainSampleCount);
+                }
+            }
+
+            XrSessionCreateInfoImm sessionCreateInfo = {};
+            sessionCreateInfo.type = kXrTypeSessionCreateInfo;
+            sessionCreateInfo.systemId = systemId;
+            XrGraphicsBindingVulkanKhrImm graphicsBinding = {};
+            graphicsBinding.type = kXrTypeGraphicsBindingVulkanKhr;
+            graphicsBinding.instance = kFakeVulkanInstance;
+            graphicsBinding.physicalDevice = kFakeVulkanPhysicalDevice;
+            graphicsBinding.device = kFakeVulkanDevice;
+            graphicsBinding.queueFamilyIndex = 7;
+            graphicsBinding.queueIndex = 1;
+            sessionCreateInfo.next = &graphicsBinding;
+            log->Printf(LT_MESSAGE,
+                        L"IMM_OPENXR_STANDALONE vulkanGraphicsBinding type=%d instance=0x%llx physicalDevice=0x%llx device=0x%llx queueFamily=%u queueIndex=%u",
+                        graphicsBinding.type,
+                        static_cast<unsigned long long>(graphicsBinding.instance),
+                        static_cast<unsigned long long>(graphicsBinding.physicalDevice),
+                        static_cast<unsigned long long>(graphicsBinding.device),
+                        graphicsBinding.queueFamilyIndex,
+                        graphicsBinding.queueIndex);
+            uint64_t session = 0;
+            xr = xrCreateSession(instance, &sessionCreateInfo, &session);
+            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE createSessionResult=%d resultName=%s session=%llu", xr, iXrResultName(xr), static_cast<unsigned long long>(session));
+            if (xr == kXrSuccess)
+            {
+                uint64_t swapchain = 0;
+                XrSwapchainCreateInfoImm swapchainCreateInfo = {};
+                uint32_t formatCount = 0;
+                xr = xrEnumerateSwapchainFormats(session, 0, &formatCount, nullptr);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateSwapchainFormatsResult=%d resultName=%s count=%u", xr, iXrResultName(xr), formatCount);
+                int64_t swapchainFormats[8] = {};
+                if (xr == kXrSuccess && formatCount > 0)
+                {
+                    uint32_t formatCapacity = formatCount < 8 ? formatCount : 8;
+                    xr = xrEnumerateSwapchainFormats(session, formatCapacity, &formatCapacity, swapchainFormats);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateSwapchainFormatsFillResult=%d resultName=%s count=%u firstFormat=%lld", xr, iXrResultName(xr), formatCapacity, static_cast<long long>(swapchainFormats[0]));
+                }
+
+                if (xr == kXrSuccess)
+                {
+                    swapchainCreateInfo.type = kXrTypeSwapchainCreateInfo;
+                    swapchainCreateInfo.usageFlags = kXrSwapchainUsageColorAttachmentBit;
+                    swapchainCreateInfo.format = swapchainFormats[0];
+                    swapchainCreateInfo.sampleCount = 1;
+                    swapchainCreateInfo.width = 1600;
+                    swapchainCreateInfo.height = 1600;
+                    swapchainCreateInfo.faceCount = 1;
+                    swapchainCreateInfo.arraySize = 2;
+                    swapchainCreateInfo.mipCount = 1;
+                    xr = xrCreateSwapchain(session, &swapchainCreateInfo, &swapchain);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE createSwapchainResult=%d resultName=%s swapchain=%llu", xr, iXrResultName(xr), static_cast<unsigned long long>(swapchain));
+                }
+
+                if (xr == kXrSuccess)
+                {
+                    uint32_t imageCount = 0;
+                    xr = xrEnumerateSwapchainImages(swapchain, 0, &imageCount, nullptr);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateSwapchainImagesResult=%d resultName=%s count=%u", xr, iXrResultName(xr), imageCount);
+                    if (xr == kXrSuccess && imageCount > 0 && imageCount <= 4)
+                    {
+                        XrSwapchainImageVulkanKhrImm images[4] = {};
+                        for (uint32_t i = 0; i < imageCount; ++i)
+                        {
+                            images[i].type = kXrTypeSwapchainImageVulkanKhr;
+                        }
+                        xr = xrEnumerateSwapchainImages(swapchain, imageCount, &imageCount, images);
+                        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE enumerateSwapchainImagesFillResult=%d resultName=%s count=%u firstVkImage=0x%llx", xr, iXrResultName(xr), imageCount, static_cast<unsigned long long>(images[0].image));
+                        if (xr == kXrSuccess && imageCount > 0)
+                        {
+                            log->Printf(LT_MESSAGE,
+                                        L"IMM_OPENXR_STANDALONE rendererExternalImageFrameCandidate image=0x%llx vkFormat=%lld width=%u height=%u arrayLayers=%u",
+                                        static_cast<unsigned long long>(images[0].image),
+                                        static_cast<long long>(swapchainCreateInfo.format),
+                                        swapchainCreateInfo.width,
+                                        swapchainCreateInfo.height,
+                                        swapchainCreateInfo.arraySize);
+                        }
+                    }
+                }
+
+                XrSessionBeginInfoImm sessionBeginInfo = {};
+                sessionBeginInfo.type = kXrTypeSessionBeginInfo;
+                sessionBeginInfo.primaryViewConfigurationType = kXrViewConfigurationPrimaryStereo;
+                if (xr == kXrSuccess)
+                {
+                    xr = xrBeginSession(session, &sessionBeginInfo);
+                }
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE beginSessionResult=%d resultName=%s", xr, iXrResultName(xr));
+
+                if (xr == kXrSuccess)
+                {
+                    XrFrameWaitInfoImm frameWaitInfo = {};
+                    frameWaitInfo.type = kXrTypeFrameWaitInfo;
+                    XrFrameStateImm frameState = {};
+                    frameState.type = kXrTypeFrameState;
+                    xr = xrWaitFrame(session, &frameWaitInfo, &frameState);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE waitFrameResult=%d resultName=%s shouldRender=%u predictedDisplayTime=%lld", xr, iXrResultName(xr), frameState.shouldRender, static_cast<long long>(frameState.predictedDisplayTime));
+
+                    if (xr == kXrSuccess)
+                    {
+                        XrFrameBeginInfoImm frameBeginInfo = {};
+                        frameBeginInfo.type = kXrTypeFrameBeginInfo;
+                        xr = xrBeginFrame(session, &frameBeginInfo);
+                        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE beginFrameResult=%d resultName=%s", xr, iXrResultName(xr));
+
+                        if (xr == kXrSuccess)
+                        {
+                            uint32_t swapchainImageIndex = 0;
+                            XrSwapchainImageAcquireInfoImm acquireInfo = {};
+                            acquireInfo.type = kXrTypeSwapchainImageAcquireInfo;
+                            xr = xrAcquireSwapchainImage(swapchain, &acquireInfo, &swapchainImageIndex);
+                            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE acquireSwapchainImageResult=%d resultName=%s index=%u", xr, iXrResultName(xr), swapchainImageIndex);
+                        }
+
+                        if (xr == kXrSuccess)
+                        {
+                            XrSwapchainImageWaitInfoImm waitInfo = {};
+                            waitInfo.type = kXrTypeSwapchainImageWaitInfo;
+                            waitInfo.timeout = 0;
+                            xr = xrWaitSwapchainImage(swapchain, &waitInfo);
+                            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE waitSwapchainImageResult=%d resultName=%s", xr, iXrResultName(xr));
+                        }
+
+                        if (xr == kXrSuccess)
+                        {
+                            XrSwapchainImageReleaseInfoImm releaseInfo = {};
+                            releaseInfo.type = kXrTypeSwapchainImageReleaseInfo;
+                            xr = xrReleaseSwapchainImage(swapchain, &releaseInfo);
+                            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE releaseSwapchainImageResult=%d resultName=%s", xr, iXrResultName(xr));
+                        }
+
+                        if (xr == kXrSuccess)
+                        {
+                            XrCompositionLayerProjectionViewImm projectionViews[2] = {};
+                            for (uint32_t i = 0; i < 2; ++i)
+                            {
+                                projectionViews[i].type = kXrTypeCompositionLayerProjectionView;
+                                projectionViews[i].pose.orientation.w = 1.0f;
+                                projectionViews[i].fov.angleLeft = -0.7f;
+                                projectionViews[i].fov.angleRight = 0.7f;
+                                projectionViews[i].fov.angleUp = 0.7f;
+                                projectionViews[i].fov.angleDown = -0.7f;
+                                projectionViews[i].subImage.swapchain = swapchain;
+                                projectionViews[i].subImage.imageRect.extent.width = 1600;
+                                projectionViews[i].subImage.imageRect.extent.height = 1600;
+                                projectionViews[i].subImage.imageArrayIndex = i;
+                            }
+                            XrCompositionLayerProjectionImm projectionLayer = {};
+                            projectionLayer.type = kXrTypeCompositionLayerProjection;
+                            projectionLayer.space = 0;
+                            projectionLayer.viewCount = 2;
+                            projectionLayer.views = projectionViews;
+                            const void *layers[1] = { &projectionLayer };
+                            XrFrameEndInfoImm frameEndInfo = {};
+                            frameEndInfo.type = kXrTypeFrameEndInfo;
+                            frameEndInfo.displayTime = frameState.predictedDisplayTime;
+                            frameEndInfo.environmentBlendMode = kXrEnvironmentBlendModeOpaque;
+                            frameEndInfo.layerCount = 1;
+                            frameEndInfo.layers = layers;
+                            xr = xrEndFrame(session, &frameEndInfo);
+                            log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE endFrameResult=%d resultName=%s layerCount=%u projectionViews=%u", xr, iXrResultName(xr), frameEndInfo.layerCount, projectionLayer.viewCount);
+                        }
+                    }
+
+                    const int32_t endSessionResult = xrEndSession(session);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE endSessionResult=%d resultName=%s", endSessionResult, iXrResultName(endSessionResult));
+                    if (xr == kXrSuccess)
+                    {
+                        xr = endSessionResult;
+                    }
+                }
+
+                if (swapchain != 0)
+                {
+                    const int32_t destroySwapchainResult = xrDestroySwapchain(swapchain);
+                    log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE destroySwapchainResult=%d resultName=%s", destroySwapchainResult, iXrResultName(destroySwapchainResult));
+                    if (xr == kXrSuccess)
+                    {
+                        xr = destroySwapchainResult;
+                    }
+                }
+
+                const int32_t destroySessionResult = xrDestroySession(session);
+                log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE destroySessionResult=%d resultName=%s", destroySessionResult, iXrResultName(destroySessionResult));
+                if (xr == kXrSuccess)
+                {
+                    xr = destroySessionResult;
+                }
+            }
+        }
+
+        const int32_t destroyResult = xrDestroyInstance(instance);
+        log->Printf(LT_MESSAGE, L"IMM_OPENXR_STANDALONE destroyInstanceResult=%d", destroyResult);
+        FreeLibrary(loader);
+        return xr == kXrSuccess && destroyResult == kXrSuccess;
+    }
+}
+#endif
+
 
 class MainRenderReporter : public piRenderer::piReporter
 {
@@ -149,6 +996,20 @@ static uint8_t iFloatToByte(float value)
     return (uint8_t)(value * 255.0f + 0.5f);
 }
 
+static uint8_t iLinearFloatToSrgbByte(float value)
+{
+    if (value <= 0.0f)
+    {
+        return 0;
+    }
+    if (value >= 1.0f)
+    {
+        return 255;
+    }
+    const float encoded = value < 0.0031308f ? value * 12.92f : 1.055f * powf(value, 1.0f / 2.4f) - 0.055f;
+    return iFloatToByte(encoded);
+}
+
 static bool iPathHasExtension(const char *path, const char *extension)
 {
     if (!path || !extension)
@@ -182,23 +1043,24 @@ static bool iPathHasExtension(const char *path, const char *extension)
     return true;
 }
 
-static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int width, int height)
+static void iDecodeRG11B10Pixels(uint8_t *dstRGB, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     for (int y = 0; y < height; ++y)
     {
-        const uint32_t *srcRow = pixels + (size_t)y * (size_t)width;
+        const int srcY = flipVertical ? (height - 1 - y) : y;
+        const uint32_t *srcRow = pixels + (size_t)srcY * (size_t)width;
         uint8_t *dstRow = dstRGB + (size_t)y * (size_t)width * 3u;
         for (int x = 0; x < width; ++x)
         {
             const uint32_t pixel = srcRow[x];
-            dstRow[3 * x + 0] = iFloatToByte(iDecodeUnsignedFloat(pixel & 0x7ffu, 6));
-            dstRow[3 * x + 1] = iFloatToByte(iDecodeUnsignedFloat((pixel >> 11u) & 0x7ffu, 6));
-            dstRow[3 * x + 2] = iFloatToByte(iDecodeUnsignedFloat((pixel >> 22u) & 0x3ffu, 5));
+            dstRow[3 * x + 0] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat(pixel & 0x7ffu, 6));
+            dstRow[3 * x + 1] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((pixel >> 11u) & 0x7ffu, 6));
+            dstRow[3 * x + 2] = iLinearFloatToSrgbByte(iDecodeUnsignedFloat((pixel >> 22u) & 0x3ffu, 5));
         }
     }
 }
 
-static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (!path || !path[0] || !pixels || width <= 0 || height <= 0)
     {
@@ -218,7 +1080,7 @@ static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width
         fclose(file);
         return false;
     }
-    iDecodeRG11B10Pixels(rgb, pixels, width, height);
+    iDecodeRG11B10Pixels(rgb, pixels, width, height, flipVertical);
     const bool ok = fwrite(rgb, 3u, (size_t)width * (size_t)height, file) == (size_t)width * (size_t)height;
     free(rgb);
 
@@ -226,7 +1088,7 @@ static bool iWriteRG11B10PPM(const char *path, const uint32_t *pixels, int width
     return ok;
 }
 
-static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (!path || !path[0] || !pixels || width <= 0 || height <= 0)
     {
@@ -238,7 +1100,7 @@ static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width
     {
         return false;
     }
-    iDecodeRG11B10Pixels(rgb, pixels, width, height);
+    iDecodeRG11B10Pixels(rgb, pixels, width, height, flipVertical);
 
     wchar_t *widePath = pistr2ws(path);
     if (!widePath)
@@ -256,13 +1118,13 @@ static bool iWriteRG11B10PNG(const char *path, const uint32_t *pixels, int width
     return ok;
 }
 
-static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int width, int height)
+static bool iWriteRG11B10Capture(const char *path, const uint32_t *pixels, int width, int height, bool flipVertical)
 {
     if (iPathHasExtension(path, ".png"))
     {
-        return iWriteRG11B10PNG(path, pixels, width, height);
+        return iWriteRG11B10PNG(path, pixels, width, height, flipVertical);
     }
-    return iWriteRG11B10PPM(path, pixels, width, height);
+    return iWriteRG11B10PPM(path, pixels, width, height, flipVertical);
 }
 
 static bool iFileExistsUtf8(const char *path)
@@ -487,10 +1349,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     const wchar_t *renderingBackend =
         (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::DX) ? L"DirectX" :
         (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Metal) ? L"Metal" :
+        (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Vulkan) ? L"Vulkan" :
         (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::GLES) ? L"OpenGLES" :
         L"OpenGL";
     mLog.Printf(LT_MESSAGE, L"Rendering Backened: %s", renderingBackend);
     mLog.Printf(LT_MESSAGE, L"Rendering Technique: %s", (mSettings.mRendering.mRenderingTechnique==Settings::Rendering::Technique::Static)?L"Static":L"Pretessellated" );
+    mLog.Printf(LT_MESSAGE, L"XR Runtime: %s", (mSettings.mRendering.mXRRuntime == Settings::Rendering::XRRuntime::OpenXR) ? L"OpenXR" : L"Legacy");
     #if DISABLE_VR==0
     mLog.Printf(LT_MESSAGE, L"Rendering in VR: %s", (mSettings.mRendering.mEnableVR) ? L"yes" : L"no");
     #else
@@ -512,6 +1376,10 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     else if (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Metal)
     {
         rendererAPI = piRenderer::API::Metal;
+    }
+    else if (mSettings.mRendering.mRenderingAPI == Settings::Rendering::API::Vulkan)
+    {
+        rendererAPI = piRenderer::API::Vulkan;
     }
 
     mRenderer = piRenderer::Create(rendererAPI);
@@ -543,6 +1411,20 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     {
         mHMD = nullptr;
 
+        if (mSettings.mRendering.mXRRuntime == Settings::Rendering::XRRuntime::OpenXR)
+        {
+            if (iProbeStandaloneOpenXR(&mLog))
+            {
+                mLog.Printf(LT_ERROR, L"OpenXR standalone startup probe passed; the OpenXR VR backend is not implemented yet");
+            }
+            else
+            {
+                mLog.Printf(LT_ERROR, L"OpenXR standalone startup probe failed; the OpenXR VR backend is not implemented yet");
+            }
+            mSettings.End();
+            return false;
+        }
+
         float pd = mSettings.mRendering.mPixelDensity;
         if (pd < 0.1f) { pd = 0.1f; mLog.Printf(LT_WARNING, L"Pixel Density too small"); }
         if (pd > 3.0f) { pd = 3.0f; mLog.Printf(LT_WARNING, L"Pixel Density too big"); }
@@ -554,6 +1436,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mSettings.End();
             return false;
         }
+        mLog.Printf(LT_MESSAGE,
+                    L"IMM_LEGACY_VR_SMOKE hmd_initialized type=%d renderSize=%dx%d pixelDensity=%.3f",
+                    static_cast<int>(mHMD->mType),
+                    mHMD->mInfo.mVRXres,
+                    mHMD->mInfo.mVRYres,
+                    pd);
         mStereoMode = ImmPlayer::StereoMode::Preferred;
         mRenderSize = ivec2(mHMD->mInfo.mVRXres, mHMD->mInfo.mVRYres);
 
@@ -580,6 +1468,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                     }
                 }
             }
+
         }
         else if (mHMD->mType == piVRHMD::HTC_Vive)
         {
@@ -631,9 +1520,35 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
         }
 
 
-        if (!mRenderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT) || !mRenderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY))
+        // Legacy Oculus/OpenGL currently has correct eye placement in the slow
+        // multipass path and visibly wrong eye placement in the fast single-pass
+        // path. Keep that runtime on slow stereo by default so it remains a
+        // usable fallback while standalone OpenXR work proceeds. The opt-in env
+        // var is only for future debugging of the old fast path.
+        const bool forceSlowStereo = getenv("IMM_VIEWER_FORCE_SLOW_STEREO") != nullptr;
+        const bool allowLegacyOculusFastStereo = getenv("IMM_VIEWER_ENABLE_LEGACY_OCULUS_FAST_STEREO") != nullptr;
+        const bool legacyOculusHmd =
+            mHMD->mType == piVRHMD::Oculus_Rift ||
+            mHMD->mType == piVRHMD::Oculus_RiftS ||
+            mHMD->mType == piVRHMD::Oculus_Quest;
+        const bool forceLegacyOculusSlowStereo = legacyOculusHmd && !allowLegacyOculusFastStereo;
+        if (forceSlowStereo ||
+            forceLegacyOculusSlowStereo ||
+            !mRenderer->SupportsFeature(piRenderer::RendererFeature::VERTEX_VIEWPORT) ||
+            !mRenderer->SupportsFeature(piRenderer::RendererFeature::VIEWPORT_ARRAY))
         {
-            mLog.Printf(LT_WARNING, L"Fast stereo is not available, falling back to slow stereo");
+            if (forceSlowStereo)
+            {
+                mLog.Printf(LT_WARNING, L"Fast stereo disabled by IMM_VIEWER_FORCE_SLOW_STEREO, falling back to slow stereo");
+            }
+            else if (forceLegacyOculusSlowStereo)
+            {
+                mLog.Printf(LT_WARNING, L"Fast stereo disabled for legacy Oculus/OpenGL, falling back to slow stereo");
+            }
+            else
+            {
+                mLog.Printf(LT_WARNING, L"Fast stereo is not available, falling back to slow stereo");
+            }
             mStereoMode = ImmPlayer::StereoMode::Fallback;
         }
         else
@@ -737,11 +1652,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     const int vpmult = (mStereoMode == ImmPlayer::StereoMode::Preferred) ? 2 : 1;
+    const int renderSamples = validationRequested ? 1 : AA;
 
     if (mRenderer->GetAPI() != piRenderer::API::DX)
     {
-        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
+        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
+        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
         mLog.Printf(LT_MESSAGE, L"Creating render textures (%d x %d)", mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample);
         mColorTextureM = mRenderer->CreateTexture(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0);
         if (!mColorTextureM)
@@ -758,8 +1674,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     }
     else
     {
-        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
-        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
+        const piRenderer::TextureInfo infocm = { piRenderer::TextureType::T2D, piRenderer::Format::C3_11_11_10_FLOAT, mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
+        const piRenderer::TextureInfo infozm = { piRenderer::TextureType::T2D, piRenderer::Format::DS_24_8_UINT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, renderSamples };
         //const piRenderer::TextureInfo2 infozm = { piRenderer::TextureType::T2D, piRenderer::Format::D1_32_FLOAT,            mRenderSize.x * vpmult * mSuperSample, mRenderSize.y * mSuperSample, 1, AA };
         mColorTextureM = mRenderer->CreateTexture2(0, &infocm, false, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, 0, 1 + 2);
         if (!mColorTextureM)
@@ -789,7 +1705,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 
 
     mLog.Printf(LT_MESSAGE, L"Initializing resolve");
-    if (!mResolve.Init(mRenderer, mSuperSample, AA))
+    if (!mResolve.Init(mRenderer, mSuperSample, renderSamples, Resolve::OutputEncoding::DisplaySrgb))
     {
         mLog.Printf(LT_ERROR, L"Resolve init failed");
         mSettings.End();
@@ -815,6 +1731,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     float renderFps = 0.0;
     int totalFrames = 0;
     int done = 0;
+    bool loggedLegacyVrSmokeFrameSubmitted = false;
     bool doSave = true;
     double oldTime;
     bool enabled = true;
@@ -836,6 +1753,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     bool isFirstFrame = true;
     const bool validationEnabled = validationRequested;
     const uint64_t validationFrame = validationEnabled ? strtoull(validationFrameEnv, nullptr, 10) : 0;
+    double validationFixedDt = -1.0;
     uint64_t validationMaxFrame = validationFrame + 300;
     uint64_t validationMinNonZeroPixels = 16;
     uint64_t validationMinDrawCalls = 1;
@@ -844,6 +1762,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     uint64_t validationMinPicture360EquirectDrawCalls = 0;
     uint64_t validationMinPicture360CubemapDrawCalls = 0;
     uint64_t validationMinTriangles = 1;
+    uint64_t validationPlayerFrame = 0;
+    bool validationPlayerFrameEnabled = false;
     bool validationDone = false;
     int validationExitCode = 0;
     char validationCapturePath[PATH_MAX] = {};
@@ -852,6 +1772,11 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     if (validationMaxFrameEnv && validationMaxFrameEnv[0])
     {
         validationMaxFrame = strtoull(validationMaxFrameEnv, nullptr, 10);
+    }
+    const char *validationFixedDtEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_FIXED_DT", "IMM_GL_VALIDATE_FIXED_DT");
+    if (validationFixedDtEnv && validationFixedDtEnv[0])
+    {
+        validationFixedDt = atof(validationFixedDtEnv);
     }
     const char *validationMinNonZeroEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MIN_NONZERO", "IMM_GL_VALIDATE_MIN_NONZERO");
     if (validationMinNonZeroEnv && validationMinNonZeroEnv[0])
@@ -888,6 +1813,12 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     {
         validationMinTriangles = strtoull(validationMinTrianglesEnv, nullptr, 10);
     }
+    const char *validationPlayerFrameEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_PLAYER_FRAME", "IMM_GL_VALIDATE_PLAYER_FRAME");
+    if (validationPlayerFrameEnv && validationPlayerFrameEnv[0])
+    {
+        validationPlayerFrame = strtoull(validationPlayerFrameEnv, nullptr, 10);
+        validationPlayerFrameEnabled = true;
+    }
     const char *validationCapturePathEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_CAPTURE_PATH", "IMM_GL_VALIDATE_CAPTURE_PATH");
     if (validationCapturePathEnv && validationCapturePathEnv[0])
     {
@@ -899,7 +1830,11 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     {
         frameid++;
         const double time = mTimer.GetTime() - to;
-        const float dtime = float(time - oldTime);
+        float dtime = float(time - oldTime);
+        if (validationEnabled && validationFixedDt >= 0.0)
+        {
+            dtime = (float)validationFixedDt;
+        }
         oldTime = time;
 
         float mQuitFade = 1.0f;
@@ -994,6 +1929,18 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mRenderer->DettachShader();
 
             mHMD->EndFrame();
+            if (!loggedLegacyVrSmokeFrameSubmitted)
+            {
+                loggedLegacyVrSmokeFrameSubmitted = true;
+                mLog.Printf(LT_MESSAGE,
+                            L"IMM_LEGACY_VR_SMOKE frame_submitted frame=%d stereoMode=%d renderSize=%dx%d tid0=%d tid1=%d",
+                            frameid,
+                            static_cast<int>(mStereoMode),
+                            mRenderSize.x,
+                            mRenderSize.y,
+                            tid[0],
+                            tid[1]);
+            }
 
             mRenderer->SwapBuffers();
         }
@@ -1016,6 +1963,9 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mViewer.GlobalRender(vr_to_head, vec4(0.0f));
             // render
             mViewer.RenderMono(mRenderSize*mSuperSample, vr_to_head, 0);
+
+            // Resolve before validation so capture/readback observes the frame just rendered.
+            mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
 
             if (validationEnabled && !validationDone && (uint64_t)frameid >= validationFrame)
             {
@@ -1052,7 +2002,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         (uint64_t)perf.numPicture360DrawCalls >= validationMinPicture360DrawCalls &&
                         (uint64_t)perf.numPicture360EquirectDrawCalls >= validationMinPicture360EquirectDrawCalls &&
                         (uint64_t)perf.numPicture360CubemapDrawCalls >= validationMinPicture360CubemapDrawCalls &&
-                        (uint64_t)perf.numTriangles >= validationMinTriangles;
+                        (uint64_t)perf.numTriangles >= validationMinTriangles &&
+                        (!validationPlayerFrameEnabled || perf.validationTimeFrame >= validationPlayerFrame);
 
                     if (!passed && (uint64_t)frameid < validationMaxFrame)
                     {
@@ -1064,7 +2015,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                         if (!passed)
                         {
                             mLog.Printf(LT_ERROR,
-                                        L"IMM GL validation failed: frame=%d pixels=%llu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu picture360EquirectDrawCalls=%d minPicture360EquirectDrawCalls=%llu picture360CubemapDrawCalls=%d minPicture360CubemapDrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu culledCalls=%d",
+                                        L"IMM GL validation failed: frame=%d pixels=%llu nonZero=%llu minNonZero=%llu hash=%llu drawCalls=%d minDrawCalls=%llu paintDrawCalls=%d pictureDrawCalls=%d minPictureDrawCalls=%llu picture2DDrawCalls=%d picture360DrawCalls=%d minPicture360DrawCalls=%llu picture360EquirectDrawCalls=%d minPicture360EquirectDrawCalls=%llu picture360CubemapDrawCalls=%d minPicture360CubemapDrawCalls=%llu modelDrawCalls=%d triangles=%d minTriangles=%llu playerFrame=%llu culledCalls=%d",
                                         frameid,
                                         (unsigned long long)pixelCount,
                                         (unsigned long long)nonZeroPixels,
@@ -1085,13 +2036,14 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numModelDrawCalls,
                                         perf.numTriangles,
                                         (unsigned long long)validationMinTriangles,
+                                        (unsigned long long)perf.validationTimeFrame,
                                         perf.numDrawCallsCulled);
                             validationExitCode = 2;
                         }
                         else
                         {
                             mLog.Printf(LT_MESSAGE,
-                                        L"IMM GL validation: frame=%d pixels=%llu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d picture360EquirectDrawCalls=%d picture360CubemapDrawCalls=%d modelDrawCalls=%d triangles=%d culledCalls=%d",
+                                        L"IMM GL validation: frame=%d pixels=%llu nonZero=%llu hash=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture2DDrawCalls=%d picture360DrawCalls=%d picture360EquirectDrawCalls=%d picture360CubemapDrawCalls=%d modelDrawCalls=%d triangles=%d playerFrame=%llu culledCalls=%d",
                                         frameid,
                                         (unsigned long long)pixelCount,
                                         (unsigned long long)nonZeroPixels,
@@ -1105,6 +2057,7 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                                         perf.numPicture360CubemapDrawCalls,
                                         perf.numModelDrawCalls,
                                         perf.numTriangles,
+                                        (unsigned long long)perf.validationTimeFrame,
                                         perf.numDrawCallsCulled);
                             if (validationCapturePath[0])
                             {
@@ -1118,7 +2071,8 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
 #endif
                                     free(wideCapturePath);
                                 }
-                                if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y))
+                                const bool flipValidationCapture = mRenderer->GetAPI() == piRenderer::API::GL || mRenderer->GetAPI() == piRenderer::API::GLES;
+                                if (iWriteRG11B10Capture(validationCapturePath, pixels, mRenderSize.x, mRenderSize.y, flipValidationCapture))
                                 {
                                     if (iFileExistsUtf8(validationCapturePath))
                                     {
@@ -1143,10 +2097,10 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                 }
             }
 
-            // resolve multisampling and postpro
-            mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);
-
-            mRenderer->SwapBuffers();
+            if (!done)
+            {
+                mRenderer->SwapBuffers();
+            }
         }
 
         mSoundEngineBackend->Tick();

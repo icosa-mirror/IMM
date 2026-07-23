@@ -59,6 +59,7 @@
     <ClInclude Include="src\libRender\opengles\khrplatform.h" />
     <ClInclude Include="src\libRender\opengles\piGLES_Renderer.h" />
     <ClInclude Include="src\libRender\piRenderer.h" />
+    <ClInclude Include="src\libRender\vulkan\piVulkan_Renderer.h" />
     <ClInclude Include="src\libSound\piSound.h" />
     <ClInclude Include="src\libSound\piSoundEngine.h" />
     <ClInclude Include="src\libSound\piSoundEngineBackend.h" />
@@ -88,6 +89,7 @@
     <ClCompile Include="src\libRender\opengl4x\windows\piGL4X_RenderContextOS.cpp" />
     <ClCompile Include="src\libRender\opengles\piGLES_Renderer.cpp" />
     <ClCompile Include="src\libRender\piRenderer.cpp" />
+    <ClCompile Include="src\libRender\vulkan\piVulkan_Renderer.cpp" />
     <ClCompile Include="src\libSound\piSound.cpp" />
     <ClCompile Include="src\libSound\piSoundEngineNULL.cpp" />
     <ClCompile Include="src\libSound\windows\piSoundEngineAudioSDKBackend.cpp" />

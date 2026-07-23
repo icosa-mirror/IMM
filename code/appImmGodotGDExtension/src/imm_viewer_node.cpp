@@ -130,7 +130,7 @@ void ImmViewerNode::_bind_methods()
     ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "volume", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_volume", "get_volume");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "debug_logging"), "set_debug_logging", "get_debug_logging");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "color_space", PROPERTY_HINT_ENUM, "Linear,Gamma"), "set_color_space", "get_color_space");
-    ADD_PROPERTY(PropertyInfo(Variant::INT, "renderer_api", PROPERTY_HINT_ENUM, "Auto,OpenGL,Direct3D,GLES,Metal"), "set_renderer_api", "get_renderer_api");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "renderer_api", PROPERTY_HINT_ENUM, "Auto,OpenGL,Direct3D,GLES,Metal,Vulkan"), "set_renderer_api", "get_renderer_api");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "antialiasing", PROPERTY_HINT_RANGE, "1,16,1"), "set_antialiasing", "get_antialiasing");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "log_file_path"), "set_log_file_path", "get_log_file_path");
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "tmp_folder_path"), "set_tmp_folder_path", "get_tmp_folder_path");
@@ -184,7 +184,7 @@ void ImmViewerNode::_process(double)
         ImmGodot_GlobalWork(1);
         if (is_sequence_ready())
         {
-            if (!_sequence_ready_seen)
+            if (!_sequence_ready_seen || _spawn_area_ids.is_empty())
             {
                 refresh_spawn_areas();
                 _sequence_ready_seen = true;
@@ -278,7 +278,7 @@ int ImmViewerNode::get_color_space() const
 
 void ImmViewerNode::set_renderer_api(int value)
 {
-    _renderer_api = CLAMP(value, ImmGodotRendererApi_Auto, ImmGodotRendererApi_Metal);
+    _renderer_api = CLAMP(value, ImmGodotRendererApi_Auto, ImmGodotRendererApi_Vulkan);
 }
 
 int ImmViewerNode::get_renderer_api() const
@@ -925,6 +925,22 @@ Dictionary ImmViewerNode::get_render_diagnostics() const
     result["adapter_last_render_result"] = adapter_last_render_result;
     result["adapter_last_viewport_width"] = adapter_last_viewport.width;
     result["adapter_last_viewport_height"] = adapter_last_viewport.height;
+    ImmGodotRenderPerformanceInfo performance_info = {};
+    if (ImmGodot_GetRenderPerformanceInfo(&performance_info) == 0)
+    {
+        result["num_draw_calls"] = performance_info.numDrawCalls;
+        result["num_draw_calls_culled"] = performance_info.numDrawCallsCulled;
+        result["num_paint_draw_calls"] = performance_info.numPaintDrawCalls;
+        result["num_picture_draw_calls"] = performance_info.numPictureDrawCalls;
+        result["num_picture_2d_draw_calls"] = performance_info.numPicture2DDrawCalls;
+        result["num_picture_360_draw_calls"] = performance_info.numPicture360DrawCalls;
+        result["num_picture_360_equirect_draw_calls"] = performance_info.numPicture360EquirectDrawCalls;
+        result["num_picture_360_cubemap_draw_calls"] = performance_info.numPicture360CubemapDrawCalls;
+        result["num_model_draw_calls"] = performance_info.numModelDrawCalls;
+        result["num_triangles"] = performance_info.numTriangles;
+        result["num_triangles_culled"] = performance_info.numTrianglesCulled;
+        result["validation_time_frame"] = static_cast<int64_t>(performance_info.validationTimeFrame);
+    }
     return result;
 }
 
@@ -952,11 +968,25 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     const String effective_rendering_method = actual_rendering_method.is_empty() ? rendering_method : actual_rendering_method;
     const String effective_rendering_driver = actual_rendering_driver.is_empty() ? rendering_driver : actual_rendering_driver;
     const bool is_compatibility = effective_rendering_method == "gl_compatibility";
-    const bool wants_metal = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
+#if defined(__APPLE__)
+    const bool auto_wants_metal = true;
+    const bool auto_wants_vulkan = false;
+#elif defined(_WIN32) || defined(ANDROID)
+    const bool auto_wants_metal = false;
+    const bool auto_wants_vulkan = true;
+#else
+    const bool auto_wants_metal = false;
+    const bool auto_wants_vulkan = false;
+#endif
+    const bool wants_metal = (_renderer_api == ImmGodotRendererApi_Auto && auto_wants_metal) || _renderer_api == ImmGodotRendererApi_Metal;
+    const bool wants_vulkan = (_renderer_api == ImmGodotRendererApi_Auto && auto_wants_vulkan) || _renderer_api == ImmGodotRendererApi_Vulkan;
     const bool driver_is_metal = effective_rendering_driver == "metal";
+    const bool driver_is_vulkan = effective_rendering_driver.to_lower() == "vulkan";
     const bool has_generic_driver_resources = true;
+    const bool has_vulkan_driver_resources = has_generic_driver_resources;
     const bool has_compositor_effect_path = true;
     const bool metal_adapter_candidate = rendering_device != nullptr && !is_compatibility && wants_metal && driver_is_metal && has_generic_driver_resources && has_compositor_effect_path;
+    const bool vulkan_adapter_candidate = rendering_device != nullptr && !is_compatibility && wants_vulkan && driver_is_vulkan && has_vulkan_driver_resources && has_compositor_effect_path;
 
     Dictionary result;
     result["native_backend_initialized"] = _native_initialized;
@@ -968,9 +998,13 @@ Dictionary ImmViewerNode::get_render_backend_diagnostics() const
     result["has_rendering_device"] = rendering_device != nullptr;
     result["is_compatibility_renderer"] = is_compatibility;
     result["wants_metal_renderer"] = wants_metal;
+    result["wants_vulkan_renderer"] = wants_vulkan;
+    result["driver_is_vulkan"] = driver_is_vulkan;
     result["has_generic_driver_resources"] = has_generic_driver_resources;
+    result["has_vulkan_driver_resources"] = has_vulkan_driver_resources;
     result["has_compositor_effect_path"] = has_compositor_effect_path;
     result["metal_adapter_candidate"] = metal_adapter_candidate;
+    result["vulkan_adapter_candidate"] = vulkan_adapter_candidate;
     return result;
 }
 
@@ -1358,7 +1392,7 @@ void ImmViewerNode::refresh_spawn_areas()
     _spawn_area_ids.resize(count);
     ImmGodot_GetSpawnAreaList(_document_id, count, _spawn_area_ids.ptrw());
 
-    const int active = ImmGodot_GetActiveSpawnAreaId(_document_id);
+    int active = ImmGodot_GetActiveSpawnAreaId(_document_id);
     for (int i = 0; i < _spawn_area_ids.size(); ++i)
     {
         if (_spawn_area_ids[i] == active)
@@ -1366,6 +1400,26 @@ void ImmViewerNode::refresh_spawn_areas()
             _active_spawn_area_index = i;
             break;
         }
+    }
+
+    if (_active_spawn_area_index < 0)
+    {
+        active = ImmGodot_GetInitialSpawnAreaId(_document_id);
+        for (int i = 0; i < _spawn_area_ids.size(); ++i)
+        {
+            if (_spawn_area_ids[i] == active)
+            {
+                _active_spawn_area_index = i;
+                ImmGodot_SetActiveSpawnAreaId(_document_id, active);
+                break;
+            }
+        }
+    }
+
+    if (_active_spawn_area_index < 0 && !_spawn_area_ids.is_empty())
+    {
+        _active_spawn_area_index = 0;
+        ImmGodot_SetActiveSpawnAreaId(_document_id, _spawn_area_ids[0]);
     }
 }
 
@@ -1472,9 +1526,9 @@ Dictionary ImmViewerNode::spawn_area_to_dictionary(int spawn_area_id, const ImmG
     transform["position"] = Vector3(spawn_area.transform.posx,
                                     spawn_area.transform.posy,
                                     -spawn_area.transform.posz);
-    transform["basis_x"] = Vector3(m00, m10, -m20);
+    transform["basis_x"] = Vector3(-m00, -m10, m20);
     transform["basis_y"] = Vector3(m01, m11, -m21);
-    transform["basis_z"] = Vector3(-m02, -m12, m22);
+    transform["basis_z"] = Vector3(m02, m12, -m22);
     transform["raw_position"] = Vector3(spawn_area.transform.posx,
                                         spawn_area.transform.posy,
                                         spawn_area.transform.posz);
@@ -1493,6 +1547,9 @@ Dictionary ImmViewerNode::spawn_area_to_dictionary(int spawn_area_id, const ImmG
     volume["box_extent"] = Vector3(spawn_area.volume.boxExtent.x,
                                    spawn_area.volume.boxExtent.y,
                                    spawn_area.volume.boxExtent.z);
+    volume["allow_translation"] = Vector3(spawn_area.volume.allowTranslation.x != 0 ? 1.0f : 0.0f,
+                                          spawn_area.volume.allowTranslation.y != 0 ? 1.0f : 0.0f,
+                                          spawn_area.volume.allowTranslation.z != 0 ? 1.0f : 0.0f);
 
     Dictionary result;
     result["id"] = spawn_area_id;
@@ -1536,9 +1593,13 @@ PackedFloat32Array ImmViewerNode::make_perspective_projection(float fov_degrees,
     const float f = 1.0f / std::tan((fov_degrees * 0.017453292519943295769f) * 0.5f);
     const float depth = z_near - z_far;
 #if defined(__APPLE__)
-    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Auto || _renderer_api == ImmGodotRendererApi_Metal;
+    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Auto ||
+                                        _renderer_api == ImmGodotRendererApi_Metal ||
+                                        _renderer_api == ImmGodotRendererApi_Vulkan;
 #else
-    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Metal || _renderer_api == ImmGodotRendererApi_Direct3D;
+    const bool uses_zero_to_one_depth = _renderer_api == ImmGodotRendererApi_Metal ||
+                                        _renderer_api == ImmGodotRendererApi_Direct3D ||
+                                        _renderer_api == ImmGodotRendererApi_Vulkan;
 #endif
 
     PackedFloat32Array result;

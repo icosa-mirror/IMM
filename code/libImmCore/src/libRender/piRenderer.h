@@ -90,7 +90,8 @@ public:
 		GL = 0,
 		DX = 1,
 		GLES = 2,
-		Metal = 3
+		Metal = 3,
+		Vulkan = 4
 	};
 
 	enum class RendererFeature : int
@@ -334,6 +335,8 @@ public:
     virtual void      Deinitialize( void ) = 0;
 	virtual bool      SupportsFeature(RendererFeature feature) = 0;
 	virtual API       GetAPI(void) = 0;
+	virtual bool      UsesExternalHostDepth(void) const { return false; }
+	virtual bool      IsExternalHostFrame(void) const { return false; }
     virtual void      Report( void ) = 0;
 	// GL
     virtual void      SetActiveWindow( int id ) = 0;

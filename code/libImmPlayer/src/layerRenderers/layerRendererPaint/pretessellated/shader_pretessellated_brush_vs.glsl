@@ -24,17 +24,19 @@ layout (std140, row_major, binding=3) uniform LayersState
 }layer;
 
 
+struct display_eye_t
+{
+    //mat4x4      mMatrix_Prj;
+    //mat4x4      mMatrix_Cam;
+    mat4x4      mMatrix_CamPrj;
+    //mat4x4      mInvMatrix_Prj;
+    //mat4x4      mInvMatrix_Cam;
+    //mat4x4      mInvMatrix_CamPrj;
+};
+
 layout (std140, row_major, binding=4) uniform DisplayState
 {
-    struct
-    {
-        //mat4x4      mMatrix_Prj;
-        //mat4x4      mMatrix_Cam;
-        mat4x4      mMatrix_CamPrj;
-        //mat4x4      mInvMatrix_Prj;
-        //mat4x4      mInvMatrix_Cam;
-        //mat4x4      mInvMatrix_CamPrj;
-    }mEye[2];
+    display_eye_t mEye[2];
     vec2        mResolution;
 }display;
 
@@ -46,12 +48,14 @@ layout (std140, row_major, binding=5) uniform PassState
 	int kk3;
 }pass;
 
+struct chunk_data_entry_t
+{
+	uint mVertexOffset;
+};
+
 layout (std140, row_major, binding=9) uniform ChunkData
 {
-	struct
-	{
-		uint mVertexOffset;
-	}mData[128];
+	chunk_data_entry_t mData[128];
 }chunk_data;
 
 out V2CData
@@ -95,9 +99,6 @@ void main()
 	
 	vec3 cpos = (layer.mLayerToViewer * vec4(pos, 1.0)).xyz;
 
- 
- 	vg.mask = (inColAlpha.w>0.999) ? layer.mID : inInfo;
-
 	// directional stroke
     float f = 1.0;
 	vec3 ori = inOri;
@@ -109,7 +110,12 @@ void main()
         f = f*f;
     }
 
-    vg.col_tra.w = inColAlpha.w * f * layer.mOpacity;
+    float alpha = inColAlpha.w * f * layer.mOpacity;
+    vg.col_tra.w = alpha;
+    // Authored-opaque strokes can become partially covered after directional
+    // facing is applied. Use the final coverage alpha here; using the raw brush
+    // alpha reintroduces the Metal-era opaque-paint sample-mask bug.
+ 	vg.mask = (alpha > 0.999) ? layer.mID : inInfo;
 	#if COLOR_COMPRESSED==0
     vg.col_tra.xyz = inColAlpha.xyz * inColAlpha.xyz;
 	#endif

@@ -131,6 +131,7 @@ else:
 sources = [
     "src/imm_viewer_compositor_effect.cpp",
     "src/imm_viewer_metal_frame.mm",
+    "src/imm_viewer_vulkan_frame.cpp",
     "src/imm_viewer_node.cpp",
     "src/register_types.cpp",
 ]

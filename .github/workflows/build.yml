@@ -10,6 +10,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  IMM_CI_ENABLE_GPU_SMOKE: ${{ vars.IMM_CI_ENABLE_GPU_SMOKE || '0' }}
+
 jobs:
   build-windows:
     name: Windows
@@ -38,9 +41,69 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
+    - name: Install Vulkan shader tools
+      shell: pwsh
+      run: |
+        choco install vulkan-sdk --no-progress -y
+        $sdk = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $sdk) {
+          throw "Vulkan SDK install directory was not found under C:\VulkanSDK"
+        }
+        $bin = Join-Path $sdk.FullName "Bin"
+        if (-not (Test-Path (Join-Path $bin "glslangValidator.exe"))) {
+          throw "glslangValidator.exe was not found in $bin"
+        }
+        if (-not (Test-Path (Join-Path $bin "spirv-val.exe"))) {
+          throw "spirv-val.exe was not found in $bin"
+        }
+        "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+        $bin | Out-File -FilePath $env:GITHUB_PATH -Append
+
     - name: Build Solution
       working-directory: code/projects/windows
       run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+
+    - name: Capture Windows DirectX standalone baseline
+      shell: pwsh
+      run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+    - name: Smoke Windows Vulkan standalone viewer
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts
+
+    - name: Compare Windows Vulkan render metrics against committed DirectX baseline
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: >
+        python tests\tools\compare_render_metrics.py .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+        --reference tests\baselines\render\windows-directx-sample1.ppm
+        --contract tests\baselines\render\windows-directx-sample1.json
+        --json-output artifacts\render-metrics\vulkan-vs-committed-directx.json
+
+    - name: Write Windows Vulkan render report
+      if: always() && env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: >
+        python tests\tools\write_render_report.py
+        --metrics-json artifacts\render-metrics\vulkan-vs-committed-directx.json
+        --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+        --candidate-capture .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+        --output-dir artifacts\render-metrics\captures
+        --markdown-output artifacts\render-metrics\vulkan-vs-committed-directx.md
+
+    - name: Upload Windows Vulkan standalone smoke logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewerVulkanSmokeLogs-Windows
+        path: |
+          build/baseline-captures
+          artifacts/render-metrics
+          code/appImmViewer/exe/debug.txt
+          code/appImmViewer/exe/vulkan_sample1_smoke.ppm
+        if-no-files-found: ignore
+        retention-days: 7
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -54,6 +117,38 @@ jobs:
     - name: Smoke test stroke-reader authoring API
       shell: pwsh
       run: python code/appImmStrokeReader/tests/authoring_api_smoke.py
+
+    - name: Verify IMM content baseline
+      shell: pwsh
+      run: python tests\tools\verify_imm_baseline.py exampleImmFiles\sample1.imm --baseline tests\baselines\content\sample1.json --write-actual artifacts\baseline-content\sample1.actual.json
+
+    - name: Record Windows DirectX render metrics
+      shell: pwsh
+      run: >
+        python tests\tools\compare_render_metrics.py .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --reference tests\baselines\render\windows-directx-sample1.ppm
+        --contract tests\baselines\render\windows-directx-sample1.json
+        --json-output artifacts\render-metrics\windows-directx-playerframe60.json
+
+    - name: Write Windows DirectX render report
+      shell: pwsh
+      run: >
+        python tests\tools\write_render_report.py
+        --metrics-json artifacts\render-metrics\windows-directx-playerframe60.json
+        --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+        --candidate-capture .\build\baseline-captures\windows-directx-playerframe60.ppm
+        --output-dir artifacts\render-metrics\captures
+        --markdown-output artifacts\render-metrics\windows-directx-playerframe60.md
+
+    - name: Upload Windows DirectX baseline artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmViewer-Windows-DirectX-Baseline
+        path: |
+          build/baseline-captures
+          artifacts/render-metrics
+        if-no-files-found: error
+        retention-days: 14
 
     - name: Install SCons
       shell: pwsh
@@ -81,17 +176,20 @@ jobs:
         }
         "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-    - name: Run Godot script smoke test
-      shell: pwsh
-      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -LogDir artifacts\godot-smoke-script
-
     - name: Build Godot GDExtension
       shell: pwsh
       run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
 
-    - name: Check Godot GDExtension staging
+    - name: Run native Godot smoke test
       shell: pwsh
-      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight
+      run: .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -LogDir artifacts\godot-smoke-native -RendererApi 2 -PreflightOnly
+
+    - name: Smoke Windows Godot Vulkan playback
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      shell: pwsh
+      run: |
+        $env:IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE = "1"
+        .\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe $env:GODOT_EXE -RequireExtension -Headed -LogDir artifacts\godot-smoke-windows-vulkan
 
     - name: Upload Godot smoke logs
       if: failure()
@@ -99,15 +197,26 @@ jobs:
       with:
         name: ImmGodotSmokeLogs-Windows
         path: |
-          artifacts/godot-smoke-script
-          artifacts/godot-extension-preflight
+          artifacts/godot-smoke-native
+          artifacts/godot-smoke-windows-vulkan
         if-no-files-found: ignore
         retention-days: 7
+
+    - name: Upload Windows Godot GDExtension platform binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: Internal-ImmGodotGDExtension-Windows-platform
+        path: |
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.dll
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/*.dll
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/godot-extension-dlls.txt
+        if-no-files-found: error
+        retention-days: 1
 
     - name: Upload Stroke Reader DLL
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Windows
+        name: Internal-ImmStrokeReaderPlugin-Windows
         path: |
           code/appImmStrokeReader/exe/ImmStrokeReader.dll
         if-no-files-found: error
@@ -116,59 +225,61 @@ jobs:
     - name: Upload Unity Plugin DLL
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-Windows
+        name: Internal-ImmViewerPlugin-Windows
         path: |
           code/appImmUnity/exe/ImmUnityPlugin.dll
         if-no-files-found: error
         retention-days: 1
 
-    - name: Package Viewer Artifact
+    - name: Package Windows Viewer Artifact
       shell: pwsh
       run: |
         $staging = "viewer_artifact"
         New-Item -ItemType Directory -Force $staging | Out-Null
         Copy-Item code/appImmViewer/exe/appImmViewer_Release.exe $staging
-        Copy-Item code/appImmViewer/exe/settings.json $staging
         Copy-Item exampleImmFiles/sample1.imm $staging
         Copy-Item code/appImmViewer/exe/*.dll $staging
         Copy-Item docs/viewer_settings.md $staging
         Copy-Item docs/viewer_readme.md $staging/README.md
 
-    - name: Package Viewer Artifact (VR)
-      shell: pwsh
-      run: |
-        $staging = "viewer_artifact_vr"
-        New-Item -ItemType Directory -Force $staging | Out-Null
-        Copy-Item code/appImmViewer/exe/appImmViewer_Release.exe $staging
-        Copy-Item code/appImmViewer/exe/settings.json $staging
-        Copy-Item code/appImmViewer/exe/*.dll $staging
-        Copy-Item docs/viewer_settings.md $staging
-        Copy-Item docs/viewer_readme.md $staging/README.md
-        $settingsPath = Join-Path $staging "settings.json"
-        $json = Get-Content $settingsPath -Raw | ConvertFrom-Json
-        $json.Rendering.EnableVR = $true
-        $json.Rendering.RenderingAPI = "OpenGL"
-        $jsonText = $json | ConvertTo-Json -Depth 6
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($settingsPath, $jsonText, $utf8NoBom)
+        function Write-PackagedViewerSettings($SourcePath, $OutputName, $RenderingApi, $EnableVr) {
+          $outputPath = Join-Path $staging $OutputName
+          Copy-Item $SourcePath $outputPath
+          $json = Get-Content $outputPath -Raw | ConvertFrom-Json
+          $json.File.Load = @("sample1.imm")
+          $json.Rendering.RenderingAPI = $RenderingApi
+          $json.Rendering.EnableVR = $EnableVr
+          $jsonText = $json | ConvertTo-Json -Depth 6
+          [System.IO.File]::WriteAllText($outputPath, $jsonText, $utf8NoBom)
+        }
 
-    - name: Upload Viewer Executable
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings.json "settings.json" "OpenGL" $false
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings-vulkan-smoke.json "settings-vulkan.json" "Vulkan" $false
+        Write-PackagedViewerSettings code/appImmViewer/exe/settings-opengl-vr.json "settings-opengl-vr.json" "OpenGL" $true
+
+    - name: Write Windows viewer artifact manifest
+      shell: pwsh
+      run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output viewer_artifact\manifest.json --product standalone --platform-name windows --mode packaged --renderer mixed --include viewer_artifact
+
+    - name: Collect Windows viewer artifact summary
+      shell: pwsh
+      run: python tests\tools\collect_ci_artifacts.py --artifact-dir viewer_artifact --require-manifest --output viewer_artifact\artifact-summary.json
+
+    - name: Upload Windows Viewer Executable
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-Windows
         path: viewer_artifact
-        if-no-files-found: error
-    - name: Upload Viewer Executable (VR)
-      uses: actions/upload-artifact@v4
-      with:
-        name: ImmViewer-Windows-VR
-        path: viewer_artifact_vr
         if-no-files-found: error
 
   build-android:
     name: Android
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: ubuntu-latest
+    env:
+      GODOT_CPP_REF: godot-4.5-stable
+      GODOT_VERSION: 4.5-stable
 
     steps:
     - name: Checkout repository
@@ -188,12 +299,31 @@ jobs:
     - name: Cache Android NDK
       uses: actions/cache@v4
       with:
-        path: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
-        key: ndk-${{ runner.os }}-26.1.10909125
+        path: |
+          ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+          ${{ env.ANDROID_SDK_ROOT }}/ndk/28.1.13356709
+        key: ndk-${{ runner.os }}-26.1.10909125-28.1.13356709
 
     - name: Install Android NDK
       run: |
         sdkmanager --install "ndk;26.1.10909125"
+        sdkmanager --install "ndk;28.1.13356709"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install SCons
+      run: python -m pip install scons
+
+    - name: Cache godot-cpp
+      uses: actions/cache@v4
+      with:
+        path: thirdparty/godot-cpp
+        key: godot-cpp-android-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/android/build-godot-extension-android.ps1', 'code/projects/android/appImmGodot/CMakeLists.txt') }}
+        restore-keys: |
+          godot-cpp-android-${{ runner.os }}-${{ env.GODOT_CPP_REF }}-
 
     - name: Build libImmCore
       working-directory: code/projects/android
@@ -217,6 +347,14 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :appImmViewer:assembleDebug
 
+    - name: Build appImmViewer (Vulkan)
+      working-directory: code/projects/android
+      run: ./gradlew :appImmViewer:assembleDebug -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan
+
+    - name: Build Android Godot GDExtension
+      shell: pwsh
+      run: .\code\projects\android\build-godot-extension-android.ps1 -Configuration Debug -BootstrapGodotCpp -BuildGodotCpp -GodotCppRef $env:GODOT_CPP_REF
+
     - name: Build appImmViewer (VR)
       working-directory: code/projects/android
       run: ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug -PimmBuildDir=build_vr && ./gradlew :appImmViewer:assembleDebug -PimmNonVr=OFF -PimmBuildDir=build_vr
@@ -229,15 +367,15 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p artifacts/ImmViewerPlugin-Android
+        mkdir -p artifacts/Internal-ImmViewerPlugin-Android
         so_file=$(ls code/appImmUnity/Projects/Android/app/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmUnityPlugin.so | head -n 1)
-        cp "$so_file" artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
+        cp "$so_file" artifacts/Internal-ImmViewerPlugin-Android/libImmUnityPlugin.so
 
     - name: Upload Unity Plugin
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-Android
-        path: artifacts/ImmViewerPlugin-Android/libImmUnityPlugin.so
+        name: Internal-ImmViewerPlugin-Android
+        path: artifacts/Internal-ImmViewerPlugin-Android/libImmUnityPlugin.so
         if-no-files-found: error
         retention-days: 1
 
@@ -245,40 +383,77 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p artifacts/ImmStrokeReaderPlugin-Android
+        mkdir -p artifacts/Internal-ImmStrokeReaderPlugin-Android
         so_file=$(ls code/appImmStrokeReader/Projects/Android/build/intermediates/cxx/Debug/*/obj/arm64-v8a/libImmStrokeReader.so | head -n 1)
-        cp "$so_file" artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
+        cp "$so_file" artifacts/Internal-ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
 
     - name: Upload Stroke Reader
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Android
-        path: artifacts/ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
+        name: Internal-ImmStrokeReaderPlugin-Android
+        path: artifacts/Internal-ImmStrokeReaderPlugin-Android/libImmStrokeReader.so
         if-no-files-found: error
         retention-days: 1
 
-    - name: Upload Android Viewer
+    - name: Stage Android Viewer APKs
+      shell: bash
+      run: |
+        set -euo pipefail
+        staging="artifacts/ImmViewer-Android"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        shopt -s nullglob
+        default_apk=(code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk)
+        vr_apk=(code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk)
+        vulkan_apk=(code/projects/android/appImmViewer/build_vulkan/outputs/apk/debug/*.apk)
+        if [ ${#default_apk[@]} -eq 0 ]; then
+          echo "Missing default Android viewer APK"
+          exit 1
+        fi
+        if [ ${#vr_apk[@]} -eq 0 ]; then
+          echo "Missing VR Android viewer APK"
+          exit 1
+        fi
+        if [ ${#vulkan_apk[@]} -eq 0 ]; then
+          echo "Missing Vulkan Android viewer APK"
+          exit 1
+        fi
+        cp "${default_apk[0]}" "$staging/ImmViewer-Android-OpenGL.apk"
+        cp "${vr_apk[0]}" "$staging/ImmViewer-Android-OpenGL-VR.apk"
+        cp "${vulkan_apk[0]}" "$staging/ImmViewer-Android-Vulkan.apk"
+
+    - name: Write Android viewer artifact manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmViewer-Android/manifest.json --product standalone --platform-name android --mode packaged --renderer mixed --include artifacts/ImmViewer-Android
+
+    - name: Collect Android viewer artifact summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-Android --require-manifest --output artifacts/ImmViewer-Android/artifact-summary.json
+
+    - name: Upload Android Viewer APKs
       uses: actions/upload-artifact@v4
       with:
         name: ImmViewer-Android
         path: |
-          code/projects/android/appImmViewer/build/outputs/apk/debug/*.apk
+          artifacts/ImmViewer-Android
         if-no-files-found: error
 
-    - name: Upload Android Viewer VR
+    - name: Upload Android Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewer-Android-VR
+        name: Internal-ImmGodotGDExtension-Android-platform
         path: |
-          code/projects/android/appImmViewer/build_vr/outputs/apk/debug/*.apk
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so
+          code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug/godot-extension-android-libs.txt
         if-no-files-found: error
+        retention-days: 1
 
   build-macos:
     name: macOS
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
-    runs-on: macos-latest
+    runs-on: macos-14
     env:
       GODOT_CPP_REF: godot-4.5-stable
+      GODOT_VERSION: 4.5-stable
 
     steps:
     - name: Checkout repository
@@ -300,6 +475,9 @@ jobs:
 
     - name: Build macOS Metal standalone viewer
       run: cmake --build build/macos --target appImmViewerMetal --config Release
+
+    - name: Smoke macOS Metal standalone viewer
+      run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
 
     - name: Install Godot GDExtension build tools
       run: python3 -m pip install --break-system-packages scons
@@ -332,11 +510,53 @@ jobs:
           fi
         done
 
+    - name: Mirror macOS Godot release binaries for editor debug feature
+      run: |
+        set -euo pipefail
+        rm -rf code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug
+        cp -R code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug
+
+    - name: Download Godot for macOS
+      run: |
+        set -euo pipefail
+        version="$GODOT_VERSION"
+        zip_name="Godot_v${version}_macos.universal.zip"
+        url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
+        curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$url" -o "$zip_name"
+        unzip -tq "$zip_name"
+        unzip -q "$zip_name" -d godot
+        godot_exe="$(find godot -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
+        if [ -z "$godot_exe" ]; then
+          echo "Godot executable not found after extracting $zip_name" >&2
+          exit 1
+        fi
+        echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
+
+    - name: Smoke macOS Godot Metal visual playback
+      if: env.IMM_CI_ENABLE_GPU_SMOKE == '1'
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/godot-smoke-macos-metal
+        IMM_GODOT_VISUAL_SMOKE=1 \
+        IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
+        "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
+          > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1
+        grep -q "IMM Godot Metal visual smoke passed" artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
+
+    - name: Upload macOS Godot smoke logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmGodotSmokeLogs-macOS
+        path: artifacts/godot-smoke-macos-metal
+        if-no-files-found: ignore
+        retention-days: 7
+
     - name: Stage macOS Godot GDExtension binaries
       run: |
         set -euo pipefail
-        staging="artifacts/ImmGodotGDExtension-macOS-platform/bin/macos/release"
-        rm -rf artifacts/ImmGodotGDExtension-macOS-platform
+        staging="artifacts/Internal-ImmGodotGDExtension-macOS-platform/bin/macos/release"
+        rm -rf artifacts/Internal-ImmGodotGDExtension-macOS-platform
         mkdir -p "$staging"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib "$staging/"
         cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib "$staging/"
@@ -346,8 +566,8 @@ jobs:
     - name: Upload macOS Godot GDExtension platform binaries
       uses: actions/upload-artifact@v4
       with:
-        name: ImmGodotGDExtension-macOS-platform
-        path: artifacts/ImmGodotGDExtension-macOS-platform
+        name: Internal-ImmGodotGDExtension-macOS-platform
+        path: artifacts/Internal-ImmGodotGDExtension-macOS-platform
         if-no-files-found: error
         retention-days: 1
 
@@ -360,7 +580,7 @@ jobs:
     - name: Package macOS Metal standalone viewer app bundle
       run: |
         set -euo pipefail
-        staging="artifacts/ImmViewerMetal-macOS"
+        staging="artifacts/ImmViewer-macOS"
         app="build/macos/viewer/appImmViewerMetal.app"
         rm -rf "$staging"
         mkdir -p "$staging"
@@ -369,12 +589,32 @@ jobs:
         test -f "$staging/appImmViewerMetal.app/Contents/Info.plist"
         test -x "$staging/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
 
+    - name: Record macOS Metal render metrics
+      run: >
+        python3 tests/tools/compare_render_metrics.py build/macos/metal-validation-captures/static.ppm
+        --contract tests/baselines/render/macos-metal-sample1.json
+        --json-output artifacts/ImmViewer-macOS/validation/macos-metal-static.json
+
+    - name: Write macOS Metal render report
+      run: >
+        python3 tests/tools/write_render_report.py
+        --metrics-json artifacts/ImmViewer-macOS/validation/macos-metal-static.json
+        --candidate-capture build/macos/metal-validation-captures/static.ppm
+        --output-dir artifacts/ImmViewer-macOS/validation/captures
+        --markdown-output artifacts/ImmViewer-macOS/validation/macos-metal-static.md
+
+    - name: Write macOS viewer artifact manifest
+      run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmViewer-macOS/manifest.json --product standalone --platform-name macos --mode packaged --renderer metal --include artifacts/ImmViewer-macOS
+
+    - name: Collect macOS viewer artifact summary
+      run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmViewer-macOS --require-manifest --output artifacts/ImmViewer-macOS/artifact-summary.json
+
     - name: Upload macOS Metal Standalone Viewer
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerMetal-macOS
+        name: ImmViewer-macOS
         path: |
-          artifacts/ImmViewerMetal-macOS
+          artifacts/ImmViewer-macOS
         if-no-files-found: error
 
     - name: Build macOS Stroke Reader plugin
@@ -393,7 +633,7 @@ jobs:
     - name: Upload Unity Plugin Bundle
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-macOS
+        name: Internal-ImmViewerPlugin-macOS
         path: |
           build/macos/unity/ImmUnityPlugin.bundle
         if-no-files-found: error
@@ -402,7 +642,7 @@ jobs:
     - name: Upload Stroke Reader dylib
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-macOS
+        name: Internal-ImmStrokeReaderPlugin-macOS
         path: |
           code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/macOS/libImmStrokeReader.dylib
         if-no-files-found: error
@@ -411,7 +651,7 @@ jobs:
   build-ios:
     name: iOS
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
     - name: Checkout repository
@@ -441,7 +681,7 @@ jobs:
     - name: Upload Stroke Reader (iOS)
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-iOS
+        name: Internal-ImmStrokeReaderPlugin-iOS
         path: |
           build/ios/stroke-reader/libImmStrokeReader.a
         if-no-files-found: error
@@ -450,7 +690,7 @@ jobs:
     - name: Upload Unity Plugin (iOS)
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-iOS
+        name: Internal-ImmViewerPlugin-iOS
         path: |
           build/ios/unity/libImmUnityPlugin.a
         if-no-files-found: error
@@ -477,50 +717,50 @@ jobs:
     - name: Download Windows Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Windows
-        path: artifacts/ImmStrokeReaderPlugin-Windows
+        name: Internal-ImmStrokeReaderPlugin-Windows
+        path: artifacts/Internal-ImmStrokeReaderPlugin-Windows
 
     - name: Download Android Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-Android
-        path: artifacts/ImmStrokeReaderPlugin-Android
+        name: Internal-ImmStrokeReaderPlugin-Android
+        path: artifacts/Internal-ImmStrokeReaderPlugin-Android
 
     - name: Download macOS Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-macOS
-        path: artifacts/ImmStrokeReaderPlugin-macOS
+        name: Internal-ImmStrokeReaderPlugin-macOS
+        path: artifacts/Internal-ImmStrokeReaderPlugin-macOS
 
     - name: Download iOS Stroke Reader
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-iOS
-        path: artifacts/ImmStrokeReaderPlugin-iOS
+        name: Internal-ImmStrokeReaderPlugin-iOS
+        path: artifacts/Internal-ImmStrokeReaderPlugin-iOS
 
     - name: Download Windows ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-Windows
-        path: artifacts/ImmViewerPlugin-Windows
+        name: Internal-ImmViewerPlugin-Windows
+        path: artifacts/Internal-ImmViewerPlugin-Windows
 
     - name: Download Android ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-Android
-        path: artifacts/ImmViewerPlugin-Android
+        name: Internal-ImmViewerPlugin-Android
+        path: artifacts/Internal-ImmViewerPlugin-Android
 
     - name: Download macOS ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-macOS
-        path: artifacts/ImmViewerPlugin-macOS
+        name: Internal-ImmViewerPlugin-macOS
+        path: artifacts/Internal-ImmViewerPlugin-macOS
 
     - name: Download iOS ImmUnity Plugin
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-iOS
-        path: artifacts/ImmViewerPlugin-iOS
+        name: Internal-ImmViewerPlugin-iOS
+        path: artifacts/Internal-ImmViewerPlugin-iOS
 
     - name: Sync stroke reader package binaries
       shell: bash
@@ -528,16 +768,16 @@ jobs:
         set -euo pipefail
         stroke_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader"
         mkdir -p "$stroke_pkg/Plugins/x86_64" "$stroke_pkg/Plugins/Android/arm64-v8a" "$stroke_pkg/Plugins/macOS" "$stroke_pkg/Plugins/iOS"
-        cp artifacts/ImmStrokeReaderPlugin-Windows/ImmStrokeReader.dll "$stroke_pkg/Plugins/x86_64/ImmStrokeReader.dll"
+        cp artifacts/Internal-ImmStrokeReaderPlugin-Windows/ImmStrokeReader.dll "$stroke_pkg/Plugins/x86_64/ImmStrokeReader.dll"
         shopt -s nullglob globstar
-        android_so=(artifacts/ImmStrokeReaderPlugin-Android/**/libImmStrokeReader.so)
+        android_so=(artifacts/Internal-ImmStrokeReaderPlugin-Android/**/libImmStrokeReader.so)
         if [ ${#android_so[@]} -eq 0 ]; then
-          echo "Missing libImmStrokeReader.so in ImmStrokeReaderPlugin-Android artifact"
+          echo "Missing libImmStrokeReader.so in Internal-ImmStrokeReaderPlugin-Android artifact"
           exit 1
         fi
         cp "${android_so[0]}" "$stroke_pkg/Plugins/Android/arm64-v8a/libImmStrokeReader.so"
-        cp artifacts/ImmStrokeReaderPlugin-macOS/libImmStrokeReader.dylib "$stroke_pkg/Plugins/macOS/libImmStrokeReader.dylib"
-        cp artifacts/ImmStrokeReaderPlugin-iOS/libImmStrokeReader.a "$stroke_pkg/Plugins/iOS/libImmStrokeReader.a"
+        cp artifacts/Internal-ImmStrokeReaderPlugin-macOS/libImmStrokeReader.dylib "$stroke_pkg/Plugins/macOS/libImmStrokeReader.dylib"
+        cp artifacts/Internal-ImmStrokeReaderPlugin-iOS/libImmStrokeReader.a "$stroke_pkg/Plugins/iOS/libImmStrokeReader.a"
 
     - name: Sync ImmUnity package binaries
       shell: bash
@@ -545,45 +785,76 @@ jobs:
         set -euo pipefail
         unity_pkg="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity"
         mkdir -p "$unity_pkg/Plugins/x86_64" "$unity_pkg/Plugins/Android/libs/arm64-v8a" "$unity_pkg/Plugins/OSX" "$unity_pkg/Plugins/iOS"
-        cp artifacts/ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
+        cp artifacts/Internal-ImmViewerPlugin-Windows/ImmUnityPlugin.dll "$unity_pkg/Plugins/x86_64/ImmUnityPlugin.dll"
         shopt -s nullglob globstar
-        android_unity_so=(artifacts/ImmViewerPlugin-Android/**/libImmUnityPlugin.so)
+        android_unity_so=(artifacts/Internal-ImmViewerPlugin-Android/**/libImmUnityPlugin.so)
         if [ ${#android_unity_so[@]} -eq 0 ]; then
-          echo "Missing libImmUnityPlugin.so in ImmViewerPlugin-Android artifact"
+          echo "Missing libImmUnityPlugin.so in Internal-ImmViewerPlugin-Android artifact"
           exit 1
         fi
         cp "${android_unity_so[0]}" "$unity_pkg/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
         rm -rf "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
         mkdir -p "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle"
-        cp -R artifacts/ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
-        cp artifacts/ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
+        cp -R artifacts/Internal-ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
+        cp artifacts/Internal-ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
 
-    - name: Archive stroke reader UPM package
+    - name: Stage stroke reader Unity package
       shell: bash
       run: |
         set -euo pipefail
-        cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmStrokeReaderPlugin-UPM.zip" com.immersive-foundation.imm-stroke-reader
+        staging="artifacts/ImmStrokeReaderPlugin-Unity"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader "$staging/"
+        cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/README.md "$staging/README.md"
 
-    - name: Archive ImmUnity UPM package
+    - name: Verify stroke reader Unity package layout
+      run: python tests/tools/verify_package_layout.py unity artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+
+    - name: Write stroke reader Unity package manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmStrokeReaderPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmStrokeReaderPlugin-Unity
+
+    - name: Collect stroke reader Unity package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmStrokeReaderPlugin-Unity --require-manifest --output artifacts/ImmStrokeReaderPlugin-Unity/artifact-summary.json
+
+    - name: Stage ImmUnity Unity package
       shell: bash
       run: |
         set -euo pipefail
-        cd code/ImmUnitySampleProject/Packages
-        zip -r "$GITHUB_WORKSPACE/ImmViewerPlugin-UPM.zip" com.immersive-foundation.imm-unity
+        staging="artifacts/ImmPlayerPlugin-Unity"
+        rm -rf "$staging"
+        mkdir -p "$staging"
+        cp -R code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity "$staging/"
+        cp code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/README.md "$staging/README.md"
+
+    - name: Verify ImmUnity package layout
+      run: python tests/tools/verify_package_layout.py unity artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+
+    - name: Verify Unity package import harness
+      run: >
+        python tests/tools/verify_engine_package_import.py unity
+        --stroke-package artifacts/ImmStrokeReaderPlugin-Unity/com.immersive-foundation.imm-stroke-reader
+        --player-package artifacts/ImmPlayerPlugin-Unity/com.immersive-foundation.imm-unity
+        --workspace artifacts/UnityPackageImportHarness
+
+    - name: Write ImmUnity package manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmPlayerPlugin-Unity/manifest.json --product unity --platform-name all --mode package --renderer native --include artifacts/ImmPlayerPlugin-Unity
+
+    - name: Collect ImmUnity package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmPlayerPlugin-Unity --require-manifest --output artifacts/ImmPlayerPlugin-Unity/artifact-summary.json
 
     - name: Upload stroke reader UPM package
       uses: actions/upload-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
-        path: ImmStrokeReaderPlugin-UPM.zip
+        name: ImmStrokeReaderPlugin-Unity
+        path: artifacts/ImmStrokeReaderPlugin-Unity
         if-no-files-found: error
 
     - name: Upload ImmUnity UPM package
       uses: actions/upload-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
-        path: ImmViewerPlugin-UPM.zip
+        name: ImmPlayerPlugin-Unity
+        path: artifacts/ImmPlayerPlugin-Unity
         if-no-files-found: error
 
     - name: Delete intermediate plugin artifacts
@@ -591,14 +862,14 @@ jobs:
       with:
         script: |
           const targetNames = new Set([
-            'ImmStrokeReaderPlugin-Windows',
-            'ImmStrokeReaderPlugin-Android',
-            'ImmStrokeReaderPlugin-macOS',
-            'ImmStrokeReaderPlugin-iOS',
-            'ImmViewerPlugin-Windows',
-            'ImmViewerPlugin-Android',
-            'ImmViewerPlugin-macOS',
-            'ImmViewerPlugin-iOS',
+            'Internal-ImmStrokeReaderPlugin-Windows',
+            'Internal-ImmStrokeReaderPlugin-Android',
+            'Internal-ImmStrokeReaderPlugin-macOS',
+            'Internal-ImmStrokeReaderPlugin-iOS',
+            'Internal-ImmViewerPlugin-Windows',
+            'Internal-ImmViewerPlugin-Android',
+            'Internal-ImmViewerPlugin-macOS',
+            'Internal-ImmViewerPlugin-iOS',
           ]);
           const owner = context.repo.owner;
           const repo = context.repo.repo;
@@ -623,6 +894,8 @@ jobs:
     if: github.event_name != 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || contains(github.event.head_commit.message, '[CI BUILD]')
     runs-on: ubuntu-latest
     needs:
+      - build-windows
+      - build-android
       - build-macos
     permissions:
       actions: write
@@ -634,7 +907,7 @@ jobs:
     - name: Download Godot GDExtension platform binaries
       uses: actions/download-artifact@v4
       with:
-        pattern: ImmGodotGDExtension-*-platform
+        pattern: Internal-ImmGodotGDExtension-*-platform
         path: artifacts/platform-bins
         merge-multiple: true
 
@@ -647,6 +920,7 @@ jobs:
         addon="artifacts/ImmGodotGDExtension/addons/imm_viewer"
         rm -rf artifacts/ImmGodotGDExtension
         mkdir -p "$addon/bin"
+        cp code/ImmGodotSampleProject/addons/imm_viewer/README.md artifacts/ImmGodotGDExtension/README.md
         # Ship the manifest verbatim - it declares every platform up front so
         # Windows/Android binaries drop in later with no manifest or layout change.
         cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension "$addon/"
@@ -659,8 +933,24 @@ jobs:
         if [ -f code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd.uid ]; then
           cp code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd.uid "$addon/"
         fi
+        cp code/ImmGodotSampleProject/addons/imm_viewer/README.md "$addon/"
         # Merge whatever platform binaries were produced this run (bin/<platform>/...).
-        cp -R artifacts/platform-bins/bin/* "$addon/bin/"
+        if [ -d artifacts/platform-bins/bin ]; then
+          cp -R artifacts/platform-bins/bin/* "$addon/bin/"
+        fi
+        # upload-artifact preserves paths relative to the least common ancestor.
+        # Windows currently arrives as debug/release and Android as loose .so files.
+        if [ -d artifacts/platform-bins/release ] || [ -d artifacts/platform-bins/debug ]; then
+          mkdir -p "$addon/bin/windows"
+          [ ! -d artifacts/platform-bins/release ] || cp -R artifacts/platform-bins/release "$addon/bin/windows/"
+          [ ! -d artifacts/platform-bins/debug ] || cp -R artifacts/platform-bins/debug "$addon/bin/windows/"
+        fi
+        if [ -f artifacts/platform-bins/libimm_godot_extension.arm64.so ] || [ -f artifacts/platform-bins/libImmGodotPlugin.so ]; then
+          mkdir -p "$addon/bin/android/debug"
+          [ ! -f artifacts/platform-bins/libimm_godot_extension.arm64.so ] || cp artifacts/platform-bins/libimm_godot_extension.arm64.so "$addon/bin/android/debug/"
+          [ ! -f artifacts/platform-bins/libImmGodotPlugin.so ] || cp artifacts/platform-bins/libImmGodotPlugin.so "$addon/bin/android/debug/"
+          [ ! -f artifacts/platform-bins/godot-extension-android-libs.txt ] || cp artifacts/platform-bins/godot-extension-android-libs.txt "$addon/bin/android/debug/"
+        fi
         # Mirror release -> debug for any platform that only built a release binary
         # so the editor (which selects the debug feature tag) can load the extension.
         for plat in "$addon"/bin/*/; do
@@ -669,13 +959,32 @@ jobs:
           fi
         done
         test -f "$addon/imm_viewer.gdextension"
+        test -f "$addon/bin/windows/release/imm_godot_extension.dll"
+        test -f "$addon/bin/windows/release/ImmGodotPlugin.dll"
         test -f "$addon/bin/macos/release/libimm_godot_extension.dylib"
         test -f "$addon/bin/macos/release/libImmGodotPlugin.dylib"
+        test -f "$addon/bin/android/debug/libimm_godot_extension.arm64.so"
+        test -f "$addon/bin/android/debug/libImmGodotPlugin.so"
+
+    - name: Verify Godot addon package layout
+      run: python tests/tools/verify_package_layout.py godot artifacts/ImmGodotGDExtension
+
+    - name: Verify Godot package import harness
+      run: >
+        python tests/tools/verify_engine_package_import.py godot
+        --package artifacts/ImmGodotGDExtension
+        --workspace artifacts/GodotPackageImportHarness
+
+    - name: Write Godot addon package manifest
+      run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class packaging --output artifacts/ImmGodotGDExtension/manifest.json --product godot --platform-name all --mode package --renderer native --include artifacts/ImmGodotGDExtension
+
+    - name: Collect Godot addon package summary
+      run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/ImmGodotGDExtension --require-manifest --output artifacts/ImmGodotGDExtension/artifact-summary.json
 
     - name: Upload Godot GDExtension addon
       uses: actions/upload-artifact@v4
       with:
-        name: ImmGodotGDExtension
+        name: ImmPlayerPlugin-Godot
         path: artifacts/ImmGodotGDExtension
         if-no-files-found: error
 
@@ -692,7 +1001,7 @@ jobs:
             run_id,
           });
           for (const artifact of artifacts) {
-            if (artifact.name.startsWith('ImmGodotGDExtension-') && artifact.name.endsWith('-platform')) {
+            if (artifact.name.startsWith('Internal-ImmGodotGDExtension-') && artifact.name.endsWith('-platform')) {
               await github.rest.actions.deleteArtifact({
                 owner,
                 repo,
@@ -721,19 +1030,19 @@ jobs:
     - name: Download stroke reader UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
+        name: ImmStrokeReaderPlugin-Unity
         path: upm
 
     - name: Download ImmUnity UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
+        name: ImmPlayerPlugin-Unity
         path: upm
 
     - name: Download Godot GDExtension addon
       uses: actions/download-artifact@v4
       with:
-        name: ImmGodotGDExtension
+        name: ImmPlayerPlugin-Godot
         path: artifacts/ImmGodotGDExtension
 
     - name: Extract and sync plugin binaries
@@ -741,11 +1050,8 @@ jobs:
       run: |
         set -euo pipefail
 
-        unzip -q upm/ImmStrokeReaderPlugin-UPM.zip -d upm/stroke
-        unzip -q upm/ImmViewerPlugin-UPM.zip       -d upm/unity
-
-        stroke_src="upm/stroke/com.immersive-foundation.imm-stroke-reader/Plugins"
-        unity_src="upm/unity/com.immersive-foundation.imm-unity/Plugins"
+        stroke_src="upm/com.immersive-foundation.imm-stroke-reader/Plugins"
+        unity_src="upm/com.immersive-foundation.imm-unity/Plugins"
         stroke_dst="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins"
         unity_dst="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins"
 
@@ -789,6 +1095,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     needs:
+      - build-macos
       - build-windows
       - build-android
       - package-godot-extension
@@ -800,16 +1107,19 @@ jobs:
       actions: read
 
     steps:
-    - name: Download UPM packages
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download Unity stroke reader package
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
+        name: ImmStrokeReaderPlugin-Unity
         path: release-assets/upm
 
-    - name: Download UPM packages (ImmViewer)
+    - name: Download Unity player package
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
+        name: ImmPlayerPlugin-Unity
         path: release-assets/upm
 
     - name: Download Windows viewer
@@ -818,29 +1128,39 @@ jobs:
         name: ImmViewer-Windows
         path: release-assets/ImmViewer-Windows
 
-    - name: Download Windows viewer (VR)
-      uses: actions/download-artifact@v4
-      with:
-        name: ImmViewer-Windows-VR
-        path: release-assets/ImmViewer-Windows-VR
-
     - name: Download Android viewer
       uses: actions/download-artifact@v4
       with:
         name: ImmViewer-Android
         path: release-assets/ImmViewer-Android
 
-    - name: Download Android viewer (VR)
+    - name: Download macOS Metal viewer
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewer-Android-VR
-        path: release-assets/ImmViewer-Android-VR
+        name: ImmViewer-macOS
+        path: release-assets/ImmViewer-macOS
 
     - name: Download Godot GDExtension addon
       uses: actions/download-artifact@v4
       with:
-        name: ImmGodotGDExtension
-        path: release-assets/ImmGodotGDExtension
+        name: ImmPlayerPlugin-Godot
+        path: release-assets/ImmPlayerPlugin-Godot
+
+    - name: Verify release matrix status
+      run: |
+        python tests/tools/verify_matrix_status.py tests/matrix_status.json --release
+        python tests/tools/verify_workflow_matrix.py
+
+    - name: Verify downloaded release assets
+      shell: bash
+      run: |
+        set -euo pipefail
+        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-stroke-reader --expected-name com.immersive-foundation.imm-stroke-reader
+        python tests/tools/verify_package_layout.py unity release-assets/upm/com.immersive-foundation.imm-unity --expected-name com.immersive-foundation.imm-unity
+        python tests/tools/verify_package_layout.py godot release-assets/ImmPlayerPlugin-Godot
+        python tests/tools/verify_viewer_artifact.py windows release-assets/ImmViewer-Windows
+        python tests/tools/verify_viewer_artifact.py macos release-assets/ImmViewer-macOS
+        python tests/tools/verify_release_assets.py release-assets
 
     - name: Zip Windows viewer artifacts
       shell: bash
@@ -848,26 +1168,73 @@ jobs:
         set -euo pipefail
         cd release-assets
         zip -r ImmViewer-Windows.zip ImmViewer-Windows
-        zip -r ImmViewer-Windows-VR.zip ImmViewer-Windows-VR
-        zip -r ImmGodotGDExtension.zip ImmGodotGDExtension
+        zip -r ImmViewer-macOS.zip ImmViewer-macOS
+        (cd upm && zip -r ../ImmStrokeReaderPlugin-Unity.zip com.immersive-foundation.imm-stroke-reader)
+        (cd upm && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity)
+        (cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip README.md addons)
 
-    - name: Normalize Android APK names
+    - name: Verify Android APK names
       shell: bash
       run: |
         set -euo pipefail
-        shopt -s nullglob
-        apk=(release-assets/ImmViewer-Android/*.apk)
-        apk_vr=(release-assets/ImmViewer-Android-VR/*.apk)
-        if [ ${#apk[@]} -eq 0 ]; then
-          echo "Missing Android APK in ImmViewer-Android artifact"
-          exit 1
-        fi
-        if [ ${#apk_vr[@]} -eq 0 ]; then
-          echo "Missing Android APK in ImmViewer-Android-VR artifact"
-          exit 1
-        fi
-        cp "${apk[0]}" release-assets/ImmViewer-Android.apk
-        cp "${apk_vr[0]}" release-assets/ImmViewer-Android-VR.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk
+        test -f release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk
+
+    - name: Write release matrix audit report
+      run: |
+        python tests/tools/write_matrix_audit_report.py tests/matrix_status.json \
+          --json-output release-assets/matrix-audit.json \
+          --markdown-output release-assets/matrix-audit.md
+
+    - name: Generate release IMM baseline actual
+      run: |
+        python tests/tools/generate_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --output release-assets/sample1.actual.json
+
+    - name: Write release baseline drift report
+      run: |
+        python tests/tools/write_baseline_drift_report.py \
+          --expected tests/baselines/content/sample1.json \
+          --actual release-assets/sample1.actual.json \
+          --json-output release-assets/baseline-drift.json \
+          --markdown-output release-assets/baseline-drift.md
+
+    - name: Verify release IMM baseline
+      run: |
+        python tests/tools/verify_imm_baseline.py \
+          exampleImmFiles/sample1.imm \
+          --baseline tests/baselines/content/sample1.json \
+          --write-actual release-assets/sample1.actual.json
+
+    - name: Write release validation manifest
+      run: |
+        python tests/tools/write_ci_manifest.py \
+          --status "${{ job.status }}" \
+          --failure-class release-validation \
+          --output release-assets/release-validation-manifest.json \
+          --product release \
+          --platform-name all \
+          --mode release \
+          --renderer native \
+          --include tests/matrix_status.json \
+          --include release-assets/ImmViewer-Windows \
+          --include release-assets/ImmViewer-macOS \
+          --include release-assets/ImmViewer-Android \
+          --include release-assets/ImmPlayerPlugin-Godot \
+          --include release-assets/matrix-audit.json \
+          --include release-assets/matrix-audit.md \
+          --include release-assets/baseline-drift.json \
+          --include release-assets/baseline-drift.md \
+          --include release-assets/upm
+
+    - name: Collect release artifact summary
+      run: |
+        python tests/tools/collect_ci_artifacts.py \
+          --artifact-dir release-assets \
+          --require-manifest \
+          --output release-assets/release-artifact-summary.json
 
     - name: Compute release metadata
       id: release_meta
@@ -892,7 +1259,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n' \
+        release_notes="$(printf 'UPM Install URLs\n\nStroke Reader:\n`%s`\n\nImmUnity:\n`%s`\n\nValidation\n\nRelease validation manifest, artifact summary, matrix audit, and baseline drift reports are attached.\n' \
           "${{ steps.release_meta.outputs.stroke_url }}" \
           "${{ steps.release_meta.outputs.unity_url }}")"
         gh release create "${{ steps.release_meta.outputs.release_tag }}" \
@@ -900,14 +1267,21 @@ jobs:
           --title "${{ steps.release_meta.outputs.release_tag }}" \
           --generate-notes \
           --notes "$release_notes" \
-          release-assets/upm/ImmStrokeReaderPlugin-UPM.zip \
-          release-assets/upm/ImmViewerPlugin-UPM.zip \
+          release-assets/ImmStrokeReaderPlugin-Unity.zip \
+          release-assets/ImmPlayerPlugin-Unity.zip \
           release-assets/ImmViewer-Windows.zip \
-          release-assets/ImmViewer-Windows-VR.zip \
-          release-assets/ImmGodotGDExtension.zip \
-          release-assets/ImmViewer-Android.apk \
-          release-assets/ImmViewer-Android-VR.apk \
-          release-assets/ImmViewer-Windows/sample1.imm
+          release-assets/ImmViewer-macOS.zip \
+          release-assets/ImmPlayerPlugin-Godot.zip \
+          release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk \
+          release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk \
+          release-assets/ImmViewer-Windows/sample1.imm \
+          release-assets/release-validation-manifest.json \
+          release-assets/release-artifact-summary.json \
+          release-assets/matrix-audit.json \
+          release-assets/matrix-audit.md \
+          release-assets/baseline-drift.json \
+          release-assets/baseline-drift.md
 
   publish-upm:
     name: Publish UPM Branch
@@ -928,13 +1302,13 @@ jobs:
     - name: Download stroke reader UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmStrokeReaderPlugin-UPM
+        name: ImmStrokeReaderPlugin-Unity
         path: ${{ runner.temp }}/upm
 
     - name: Download ImmUnity UPM package
       uses: actions/download-artifact@v4
       with:
-        name: ImmViewerPlugin-UPM
+        name: ImmPlayerPlugin-Unity
         path: ${{ runner.temp }}/upm
 
     - name: Publish package contents to upm branch
@@ -961,8 +1335,8 @@ jobs:
           -exec rm -rf {} +
 
         mkdir -p Packages
-        unzip -q "$RUNNER_TEMP/upm/ImmStrokeReaderPlugin-UPM.zip" -d Packages
-        unzip -q "$RUNNER_TEMP/upm/ImmViewerPlugin-UPM.zip" -d Packages
+        cp -R "$RUNNER_TEMP/upm/com.immersive-foundation.imm-stroke-reader" Packages/
+        cp -R "$RUNNER_TEMP/upm/com.immersive-foundation.imm-unity" Packages/
 
         git add Packages
 

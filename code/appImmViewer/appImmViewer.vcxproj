@@ -127,8 +127,8 @@
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
     </CustomBuild>
     <CustomBuild Include="src\shader_resolve_fs.hlsl">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSS=0..1</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSS=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSS=0..1 -DOUTPUT_ENCODING=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSS=0..1 -DOUTPUT_ENCODING=0..1</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
     </CustomBuild>

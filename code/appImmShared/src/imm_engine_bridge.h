@@ -53,6 +53,7 @@ namespace ImmShared
 
         bool Init(const InitConfig &config);
         bool CompleteGraphicsInitialization();
+        bool CompleteGraphicsInitialization(void *graphicsDevice);
         void Shutdown();
 
         void GlobalWork(bool enabled, int budgetMicroseconds = 9000);
@@ -64,6 +65,8 @@ namespace ImmShared
                                const ImmCore::mat4x4 *leftEyeProjection,
                                const ImmCore::mat4x4 *world2RightEye,
                                const ImmCore::mat4x4 *rightEyeProjection);
+        bool PrepareCamera(int cameraID);
+        bool RenderPreparedCamera(int cameraID, const ViewportInfo &viewport, int eyeID = 0, bool tickSound = true);
         bool RenderCamera(int cameraID, const ViewportInfo &viewport, int eyeID = 0, bool tickSound = true);
 
         ImmPlayer::Player *GetPlayer();

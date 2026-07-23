@@ -37,7 +37,7 @@ Rendering
 - `Supersampling` (number, int): default `1`.
 
 File
-- `Load` (array of strings): list of `.imm` files to load. Required.
+- `Load` (array of strings): list of `.imm` files to load. In packaged viewer artifacts, `sample1.imm` is staged beside the executable and settings files use `"sample1.imm"`.
 
 Window
 - `FullScreen` (bool): default `false`.
@@ -70,7 +70,7 @@ Example
     "Supersampling": 1
   },
   "File": {
-    "Load": [ "../../../exampleImmFiles/sample1.imm" ]
+    "Load": [ "sample1.imm" ]
   },
   "Window": {
     "FullScreen": false,

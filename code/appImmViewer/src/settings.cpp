@@ -158,6 +158,7 @@ namespace ExePlayer
         // rendering
         mRendering.mEnableVR = true;
         mRendering.mRenderingAPI = Rendering::API::GL;
+        mRendering.mXRRuntime = Rendering::XRRuntime::Legacy;
         mRendering.mRenderingTechnique = Rendering::Technique::Static;
         mRendering.mPixelDensity = 1.0f;
         mRendering.mSupersampling = 1;
@@ -176,6 +177,16 @@ namespace ExePlayer
                      if (str == L"opengl" ) mRendering.mRenderingAPI = Rendering::API::GL;
                 else if (str == L"directx") mRendering.mRenderingAPI = Rendering::API::DX;
                 else if (str == L"metal"  ) mRendering.mRenderingAPI = Rendering::API::Metal;
+                else if (str == L"vulkan" ) mRendering.mRenderingAPI = Rendering::API::Vulkan;
+                else return false;
+            }
+
+            if (jo.count(L"XRRuntime") > 0)
+            {
+                std::wstring str = jo[L"XRRuntime"]->AsString();
+                std::transform(str.begin(), str.end(), str.begin(), ::tolower);
+                     if (str == L"legacy") mRendering.mXRRuntime = Rendering::XRRuntime::Legacy;
+                else if (str == L"openxr") mRendering.mXRRuntime = Rendering::XRRuntime::OpenXR;
                 else return false;
             }
 

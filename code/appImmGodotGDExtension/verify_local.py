@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import configparser
+import json
 import os
 import platform
 import re
@@ -29,11 +30,19 @@ WORKFLOW = ROOT / ".github/workflows/build.yml"
 SCONSTRUCT = ROOT / "code/appImmGodotGDExtension/SConstruct"
 GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runner.gd"
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
-GODOT_METAL_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/metal_visual_smoke_controller.gd"
+GODOT_ADDON_README = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/README.md"
+GODOT_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
 GODOT_SCRIPT_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/ScriptSmokeScene.tscn"
 GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
 GODOT_METAL_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/MetalVisualSmokeScene.tscn"
+GODOT_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/VisualSmokeScene.tscn"
+UNITY_PLAYER_MANAGER = ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs"
+UNITY_XR_SETTINGS = ROOT / "code/ImmUnitySampleProject/Assets/XR/XRGeneralSettingsPerBuildTarget.asset"
+UNITY_XR_BOOTSTRAP = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs"
+UNITY_XR_BOOTSTRAP_META = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs.meta"
+UNITY_VR_SCENE = ROOT / "code/ImmUnitySampleProject/Assets/Scenes/SampleSceneVR.unity"
+WINDOWS_OPENGL_VR_SETTINGS = ROOT / "code/appImmViewer/exe/settings-opengl-vr.json"
 GODOT_EXTENSION_SOURCES = [
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp",
     ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm",
@@ -213,27 +222,35 @@ def verify_render_thread_queue() -> None:
             raise RuntimeError(f"ImmViewerNode native render adapter diagnostics token is missing: {token}")
         if token not in script_stub:
             raise RuntimeError(f"ImmViewerNode script stub render adapter diagnostics token is missing: {token}")
-    if "queue_render_camera_transform" in sample or "register_render_camera" in sample or "unregister_render_camera" in sample:
-        raise RuntimeError("Sample controller should not own the per-frame render queue or render camera lifecycle")
-    for token in ["ImmGodotRendererApi_Metal", "ImmGodot_InitEx", "ImmGodotMetalFrame", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame"]:
+    if "register_render_camera" in sample or "unregister_render_camera" in sample:
+        raise RuntimeError("Sample controller should not own render camera lifecycle")
+    for token in ["ImmGodotRendererApi_Metal", "ImmGodot_InitEx", "ImmGodotMetalFrame", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame", "ImmGodotVulkanFrame", "ImmGodot_BeginVulkanFrame", "ImmGodot_EndVulkanFrame"]:
         if token not in abi_header or token not in abi_source:
             raise RuntimeError(f"ImmGodot native renderer selection token is missing from C ABI: {token}")
-    for token in ["renderer_api", "set_renderer_api", "get_renderer_api", "ImmGodot_InitEx", "get_render_backend_diagnostics", "actual_rendering_method", "actual_rendering_driver", "metal_adapter_candidate", "has_rendering_device", "has_generic_driver_resources", "has_compositor_effect_path"]:
+    for token in ["renderer_api", "set_renderer_api", "get_renderer_api", "ImmGodot_InitEx", "get_render_backend_diagnostics", "actual_rendering_method", "actual_rendering_driver", "metal_adapter_candidate", "vulkan_adapter_candidate", "wants_vulkan_renderer", "driver_is_vulkan", "has_rendering_device", "has_generic_driver_resources", "has_vulkan_driver_resources", "has_compositor_effect_path"]:
         if token not in source and token not in header:
             raise RuntimeError(f"ImmViewerNode native renderer selection token is missing: {token}")
-    for token in ["renderer_api", "get_render_backend_diagnostics", "actual_rendering_method", "actual_rendering_driver", "metal_adapter_candidate", "has_rendering_device", "has_generic_driver_resources", "has_compositor_effect_path"]:
+    for token in ["renderer_api", "Vulkan", "get_render_backend_diagnostics", "actual_rendering_method", "actual_rendering_driver", "metal_adapter_candidate", "vulkan_adapter_candidate", "wants_vulkan_renderer", "driver_is_vulkan", "has_rendering_device", "has_generic_driver_resources", "has_vulkan_driver_resources", "has_compositor_effect_path"]:
         if token not in script_stub:
             raise RuntimeError(f"ImmViewerNode script stub renderer backend token is missing: {token}")
-    for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "last_metal_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
+    for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "DRIVER_RESOURCE_VULKAN_INSTANCE", "DRIVER_RESOURCE_VULKAN_IMAGE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "ImmViewerGodotBeginVulkanTextureFrame", "last_metal_frame_started", "last_vulkan_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
         if token not in compositor_source and token not in compositor_header:
             raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
+    if "g_queued_render_request.queued = false" in compositor_source:
+        raise RuntimeError("ImmViewerCompositorEffect should keep the latest render request for continuous editor playback")
+    for token in ["ensure_intermediate_texture", "_intermediate_texture", "_intermediate_size", "_intermediate_format"]:
+        if token not in compositor_source and token not in compositor_header:
+            raise RuntimeError(f"ImmViewerCompositorEffect persistent intermediate token is missing: {token}")
     if "texture(source_color, uv_interp)" not in compositor_source:
         raise RuntimeError("ImmViewerCompositorEffect composite shader must sample the Metal intermediate texture without an extra vertical flip")
     if "1.0 - uv_interp.y" in compositor_source:
         raise RuntimeError("ImmViewerCompositorEffect composite shader should not vertically flip the Godot-owned intermediate texture")
     if "register_class<ImmViewerCompositorEffect>" not in register_types:
         raise RuntimeError("ImmViewerCompositorEffect is not registered with ClassDB")
-    for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
+    for token in ["register_extension_dll_directory", "GetModuleHandleExW", "GetModuleFileNameW", "AddDllDirectory", "SetDllDirectoryW"]:
+        if token not in register_types:
+            raise RuntimeError(f"Windows editor DLL dependency search token is missing: {token}")
+    for token in ["src/imm_viewer_compositor_effect.cpp", "src/imm_viewer_metal_frame.mm", "src/imm_viewer_vulkan_frame.cpp", "FRAMEWORKS=[\"Metal\", \"Foundation\"]"]:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing compositor/Metal build token: {token}")
     metal_helper = (ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm").read_text(encoding="utf-8")
@@ -244,10 +261,10 @@ def verify_render_thread_queue() -> None:
         raise RuntimeError("ImmViewerNode does not publish queued camera renders to ImmViewerCompositorEffect")
     if "src/imm_viewer_compositor_effect.cpp" not in sconstruct:
         raise RuntimeError("SConstruct does not build ImmViewerCompositorEffect")
-    visual_controller = GODOT_METAL_VISUAL_CONTROLLER.read_text(encoding="utf-8")
-    for token in ["IMM_GODOT_VISUAL_SMOKE", "IMM_GODOT_VISUAL_SMOKE_PNG", "IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", "_exercise_reload_cycles", "ClassDB.instantiate(\"ImmViewerNode\")", "ClassDB.instantiate(\"ImmViewerCompositorEffect\")", "Compositor.new", "camera.compositor", "renderer_api = IMM_RENDERER_API_METAL", "ProjectSettings.globalize_path", "SAMPLE_DOCUMENT_PATH", "callback_count", "last_command_queue_handle", "last_color_texture_handle", "last_metal_frame_started", "last_render_result", "MIN_ORIENTATION_LUMA_DELTA", "orientation_luma_delta", "visual smoke PNG orientation check failed", "IMM Godot Metal visual smoke passed"]:
+    visual_controller = GODOT_VISUAL_CONTROLLER.read_text(encoding="utf-8")
+    for token in ["IMM_GODOT_VISUAL_SMOKE", "IMM_GODOT_VISUAL_RENDERER_API", "IMM_GODOT_VISUAL_SMOKE_PNG", "IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", "_exercise_reload_cycles", "ClassDB.instantiate(\"ImmViewerNode\")", "ClassDB.instantiate(\"ImmViewerCompositorEffect\")", "Compositor.new", "camera.compositor", "_selected_renderer_api", "IMM_RENDERER_API_METAL", "IMM_RENDERER_API_VULKAN", "SAMPLE_DOCUMENT_PATH", "callback_count", "last_command_queue_handle", "last_color_texture_handle", "last_metal_frame_started", "last_vulkan_frame_started", "last_render_result", "MIN_ORIENTATION_LUMA_DELTA", "orientation_luma_delta", "visual smoke PNG orientation check failed", "IMM Godot Metal visual smoke passed", "IMM Godot Vulkan visual smoke passed"]:
         if token not in visual_controller:
-            raise RuntimeError(f"Metal visual smoke controller token is missing: {token}")
+            raise RuntimeError(f"Visual smoke controller token is missing: {token}")
 
     print("ImmViewerNode camera/viewport render queue ownership ok", flush=True)
 
@@ -287,11 +304,14 @@ def verify_godot_scenes() -> None:
     sample_resources, sample_nodes = parse_tscn(GODOT_SAMPLE_SCENE)
     script_resources, script_nodes = parse_tscn(GODOT_SCRIPT_SMOKE_SCENE)
     native_resources, native_nodes = parse_tscn(GODOT_NATIVE_SMOKE_SCENE)
-    visual_resources, visual_nodes = parse_tscn(GODOT_METAL_VISUAL_SCENE)
+    metal_visual_resources, metal_visual_nodes = parse_tscn(GODOT_METAL_VISUAL_SCENE)
+    visual_resources, visual_nodes = parse_tscn(GODOT_VISUAL_SCENE)
 
     sample_resource_paths = {resource["path"] for resource in sample_resources}
     script_resource_paths = {resource["path"] for resource in script_resources}
     native_resource_paths = {resource["path"] for resource in native_resources}
+    metal_visual_resource_paths = {resource["path"] for resource in metal_visual_resources}
+    visual_resource_paths = {resource["path"] for resource in visual_resources}
     visual_resource_paths = {resource["path"] for resource in visual_resources}
 
     if "res://scripts/sample_scene_controller.gd" not in sample_resource_paths:
@@ -306,10 +326,12 @@ def verify_godot_scenes() -> None:
         raise RuntimeError("NativeSmokeScene.tscn must not reference the script stub")
     if "res://scripts/sample_scene_controller.gd" not in native_resource_paths:
         raise RuntimeError("NativeSmokeScene.tscn does not reference sample_scene_controller.gd")
-    if "res://scripts/metal_visual_smoke_controller.gd" not in visual_resource_paths:
+    if "res://scripts/metal_visual_smoke_controller.gd" not in metal_visual_resource_paths:
         raise RuntimeError("MetalVisualSmokeScene.tscn does not reference metal_visual_smoke_controller.gd")
+    if "res://scripts/visual_smoke_controller.gd" not in visual_resource_paths:
+        raise RuntimeError("VisualSmokeScene.tscn does not reference visual_smoke_controller.gd")
     if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
-        raise RuntimeError("MetalVisualSmokeScene.tscn must not reference the script stub")
+        raise RuntimeError("VisualSmokeScene.tscn must not reference the script stub")
 
     if node_by_name(sample_nodes, "ImmViewer").get("type") != "ImmViewerNode":
         raise RuntimeError("SampleScene.tscn ImmViewer must be native ImmViewerNode")
@@ -318,7 +340,7 @@ def verify_godot_scenes() -> None:
     if node_by_name(native_nodes, "ImmViewer").get("type") != "ImmViewerNode":
         raise RuntimeError("NativeSmokeScene.tscn ImmViewer must be native ImmViewerNode")
     if any(node.get("type") == "ImmViewerNode" for node in visual_nodes):
-        raise RuntimeError("MetalVisualSmokeScene.tscn should create ImmViewerNode after explicitly loading the extension")
+        raise RuntimeError("VisualSmokeScene.tscn should create ImmViewerNode after explicitly loading the extension")
 
     for scene_name, nodes in [
         ("SampleScene.tscn", sample_nodes),
@@ -335,9 +357,10 @@ def verify_godot_scenes() -> None:
         node_by_name(sample_nodes, required)
         node_by_name(script_nodes, required)
         node_by_name(native_nodes, required)
+        node_by_name(metal_visual_nodes, required)
         node_by_name(visual_nodes, required)
 
-    print("Godot sample/script/native/Metal visual scenes ok", flush=True)
+    print("Godot sample/script/native/Metal/Vulkan visual scenes ok", flush=True)
 
 
 def verify_windows_build_wiring() -> None:
@@ -345,6 +368,7 @@ def verify_windows_build_wiring() -> None:
     smoke_helper = WINDOWS_SMOKE_HELPER.read_text(encoding="utf-8")
     smoke_runner = GODOT_SMOKE_RUNNER.read_text(encoding="utf-8")
     script_stub = GODOT_SCRIPT_STUB.read_text(encoding="utf-8")
+    godot_addon_readme = GODOT_ADDON_README.read_text(encoding="utf-8")
     sconstruct = SCONSTRUCT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
 
@@ -357,18 +381,21 @@ def verify_windows_build_wiring() -> None:
         if script_text.count("(") != script_text.count(")"):
             raise RuntimeError(f"PowerShell parenthesis balance looks wrong in {script_path}")
 
-    for token in ["BootstrapGodotCpp", "GodotCppRef", "PreflightOnly", "RunSmoke", "run-godot-smoke.ps1", "A full run with -BootstrapGodotCpp will clone", "Godot extension preflight passed", "godot-4.5-stable", "github.com/godotengine/godot-cpp.git", "godot-cpp generated bindings were not found yet", "Skipping godot-cpp build; cached library and generated bindings are already present", "(Join-Path $godotCpp \"bin\\libgodot-cpp.windows.$target.x86_64.lib\")", "(Join-Path $godotCpp \"bin\\libgodot-cpp.windows.$target.dev.x86_64.lib\")", "(Join-Path $godotCpp \"bin\\libgodot-cpp.windows.$shortTarget.x86_64.lib\")", "Godot staged output DLLs are missing", "Verified staged Godot DLL set", "ExpectedDllCount=", "GeneratedUtc=", "godot-extension-dlls.txt"]:
+    for token in ["BootstrapGodotCpp", "GodotCppRef", "PreflightOnly", "RunSmoke", "SmokeRendererApi", "run-godot-smoke.ps1", "A full run with -BootstrapGodotCpp will clone", "Godot extension preflight passed", "godot-4.5-stable", "github.com/godotengine/godot-cpp.git", "godot-cpp generated bindings were not found yet", "Skipping godot-cpp build; cached library and generated bindings are already present", "(Join-Path $godotCpp \"bin\\libgodot-cpp.windows.$target.x86_64.lib\")", "(Join-Path $godotCpp \"bin\\libgodot-cpp.windows.$target.dev.x86_64.lib\")", "(Join-Path $godotCpp \"bin\\libgodot-cpp.windows.$shortTarget.x86_64.lib\")", "Godot staged output DLLs are missing", "Verified staged Godot DLL set", "ExpectedDllCount=", "GeneratedUtc=", "godot-extension-dlls.txt"]:
         if token not in helper:
             raise RuntimeError(f"Windows Godot build helper is missing bootstrap wiring token: {token}")
 
     if re.search(r"^\s*class_name\s+ImmViewerNode\b", script_stub, re.MULTILINE):
         raise RuntimeError("Script stub must not claim the native ImmViewerNode class_name")
+    for token in ["Install in a new Godot project", "Create a new playback scene", "res://sample1.imm", "ImmViewerCompositorEffect", "auto_queue_render", "render_camera_path"]:
+        if token not in godot_addon_readme:
+            raise RuntimeError(f"Godot addon README is missing setup token: {token}")
 
-    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "addons\\imm_viewer\\bin\\windows\\$variant", "imm_godot_extension.dll", "ImmGodotPlugin.dll", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime DLLs are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-dlls.txt", "Expected staged DLLs:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "ScriptSmokeScene.tscn", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
+    for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "Join-Path $sampleProject", "$platform $variant", "imm_godot_extension.dll", "libimm_godot_extension.dylib", "ImmGodotPlugin.dll", "libImmGodotPlugin.dylib", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime files are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "RendererApi", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-files.txt", "Expected staged extension files:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension files for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "ScriptSmokeScene.tscn", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
-    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "NATIVE_SCENE", "IMM_GODOT_EXPECT_NATIVE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "document_loaded signal was not emitted by load_document", "document_unloaded signal was not emitted by unload_document", "playback_changed signal was not emitted by auto-play load", "spawn_area_changed signal was not emitted by next/previous spawn-area navigation", "native_backend_initialized", "native_backend_failed", "did not match expected_native", "_connect_viewer_signals", "_wait_for_timeline_ready", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "set_time", "get_time", "get_play_time", "get_play_time_seconds", "seek_relative_seconds", "seek_relative_seconds(0.5) did not advance get_play_time()", "seek_relative_seconds should clamp below zero", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "opacity_override_enabled", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_spawn_area_info", "get_active_spawn_area_info", "next_spawn_area", "previous_spawn_area", "get_active_spawn_area_index %d was outside %d authored spawn areas", "get_spawn_area_info(%d) returned an empty Dictionary", "get_active_spawn_area_info id %d did not match active spawn id %d", "next_spawn_area moved active index to %d instead of %d", "previous_spawn_area restored active index to %d instead of %d", "_validate_spawn_area_info", "_vector_is_finite", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale", "basis_x/basis_y were not orthogonal", "converted basis did not preserve right-handed orientation", "transform scale was not positive", "allow_translation", "locomotion", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "metal_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
+    for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "SCRIPT_SCENE", "NATIVE_SCENE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "requested_renderer_api", "render backend diagnostics reported renderer_api", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "document_loaded signal was not emitted by load_document", "document_unloaded signal was not emitted by unload_document", "playback_changed signal was not emitted by auto-play load", "spawn_area_changed signal was not emitted by next/previous spawn-area navigation", "native_backend_initialized", "native_backend_failed", "did not match expected_native", "_connect_viewer_signals", "_wait_for_timeline_ready", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "set_time", "get_time", "get_play_time", "get_play_time_seconds", "seek_relative_seconds", "seek_relative_seconds(0.5) did not advance get_play_time()", "seek_relative_seconds should clamp below zero", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "override-capable layer", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_spawn_area_info", "get_active_spawn_area_info", "next_spawn_area", "previous_spawn_area", "get_active_spawn_area_index %d was outside %d authored spawn areas", "get_spawn_area_info(%d) returned an empty Dictionary", "get_active_spawn_area_info id %d did not match active spawn id %d", "next_spawn_area moved active index to %d instead of %d", "previous_spawn_area restored active index to %d instead of %d", "_validate_spawn_area_info", "_vector_is_finite", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale", "basis_x/basis_y were not orthogonal", "converted basis did not preserve right-handed orientation", "transform scale was not positive", "allow_translation", "locomotion", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "vulkan_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
         if token not in smoke_runner:
             raise RuntimeError(f"Godot smoke runner is missing token: {token}")
     if "viewer.register_render_camera(CAMERA_ID)" in smoke_runner or "viewer.unregister_render_camera(CAMERA_ID)" in smoke_runner:
@@ -378,9 +405,42 @@ def verify_windows_build_wiring() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing Godot runtime dependency staging token: {token}")
 
-    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "Run Godot script smoke test", "Check Godot GDExtension staging", "-Configuration Release", "-LogDir artifacts\\godot-smoke-script", "-RequireExtension -PreflightOnly -LogDir artifacts\\godot-extension-preflight", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows"]:
+    for token in ["Build Godot GDExtension", "-BootstrapGodotCpp", "-BuildGodotCpp", "GODOT_CPP_REF", "GODOT_VERSION", "godot-4.5-stable", "4.5-stable", "Cache godot-cpp", "thirdparty/godot-cpp", "Download Godot", "IMM_CI_ENABLE_GPU_SMOKE", "Capture Windows DirectX standalone baseline", "Smoke Windows Vulkan standalone viewer", "ImmViewerVulkanSmokeLogs-Windows", "Run native Godot smoke test", "Smoke Windows Godot Vulkan playback", "IMM_GODOT_TRACE_INTERMEDIATE_TEXTURE", "-Configuration Release", "-RequireExtension -LogDir artifacts\\godot-smoke-native", "Upload Godot smoke logs", "ImmGodotSmokeLogs-Windows", "Upload Windows Godot GDExtension platform binaries", "Internal-ImmGodotGDExtension-Windows-platform", "Package Windows Viewer Artifact", "ImmViewer-Windows", "settings-vulkan.json", "settings-opengl-vr.json", "sample1.imm"]:
         if token not in workflow:
             raise RuntimeError(f"Windows workflow is missing Godot GDExtension build token: {token}")
+    for token in ["Smoke macOS Metal standalone viewer", "IMM_METAL_VALIDATE_EXPECTED_VALUES=0", "Download Godot for macOS", "code/appImmGodotGDExtension", "Smoke macOS Godot Metal visual playback", "ImmGodotSmokeLogs-macOS", "Internal-ImmGodotGDExtension-macOS-platform", "ImmViewer-macOS"]:
+        if token not in workflow:
+            raise RuntimeError(f"macOS workflow is missing Metal/Godot coverage token: {token}")
+    for token in ["build-windows", "build-android", "Internal-ImmGodotGDExtension-*-platform", "Internal-ImmGodotGDExtension-", "cp code/ImmGodotSampleProject/addons/imm_viewer/README.md artifacts/ImmGodotGDExtension/README.md", "cp code/ImmGodotSampleProject/addons/imm_viewer/README.md \"$addon/\"", "test -f \"$addon/bin/windows/release/imm_godot_extension.dll\"", "test -f \"$addon/bin/android/debug/libimm_godot_extension.arm64.so\""]:
+        if token not in workflow:
+            raise RuntimeError(f"Godot packaging workflow is missing platform merge token: {token}")
+    for token in ["Internal-ImmStrokeReaderPlugin-Windows", "Internal-ImmStrokeReaderPlugin-Android", "Internal-ImmStrokeReaderPlugin-macOS", "Internal-ImmStrokeReaderPlugin-iOS", "Internal-ImmViewerPlugin-Windows", "Internal-ImmViewerPlugin-Android", "Internal-ImmViewerPlugin-macOS", "Internal-ImmViewerPlugin-iOS"]:
+        if token not in workflow:
+            raise RuntimeError(f"Unity packaging workflow is missing internal platform artifact token: {token}")
+    for token in ["Stage Android Viewer APKs", "Upload Android Viewer APKs", "Verify Android APK names", "ImmViewer-Windows.zip", "ImmViewer-macOS.zip", "ImmPlayerPlugin-Unity", "ImmStrokeReaderPlugin-Unity", "ImmPlayerPlugin-Godot", "ImmPlayerPlugin-Godot.zip", "release-assets/ImmViewer-Android/ImmViewer-Android-Vulkan.apk", "release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL.apk", "release-assets/ImmViewer-Android/ImmViewer-Android-OpenGL-VR.apk", "(cd ImmPlayerPlugin-Godot && zip -r ../ImmPlayerPlugin-Godot.zip README.md addons)", "(cd upm && zip -r ../ImmPlayerPlugin-Unity.zip com.immersive-foundation.imm-unity)", "$staging/README.md"]:
+        if token not in workflow:
+            raise RuntimeError(f"Release workflow is missing supported viewer artifact token: {token}")
+    for stale_text in ["name: ImmViewerMetal-macOS", "ImmViewerMetal-macOS.zip", "name: ImmViewerPlugin-UPM", "ImmViewerPlugin-UPM.zip", "name: ImmStrokeReaderPlugin-UPM", "ImmStrokeReaderPlugin-UPM.zip", "name: ImmGodotGDExtension", "release-assets/ImmGodotGDExtension", "ImmGodotGDExtension.zip", "code/appImmPlayerPlugin-Godot", "Internal-ImmPlayerPlugin-Godot-platform"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still publishes an old final artifact name: {stale_text}")
+    for stale_text in ["name: ImmViewer-Android-VR", "name: ImmViewer-Android-Vulkan", "release-assets/ImmViewer-Android-VR", "release-assets/ImmViewer-Android-Vulkan"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still publishes a split Android viewer artifact: {stale_text}")
+    for stale_text in ["ImmViewer-Android.apk", "ImmViewer-Android-VR.apk", "release-assets/upm/ImmStrokeReaderPlugin-Unity.zip", "release-assets/upm/ImmPlayerPlugin-Unity.zip", "zip -r ImmPlayerPlugin-Godot.zip ImmPlayerPlugin-Godot", "path: ImmStrokeReaderPlugin-Unity.zip", "path: ImmPlayerPlugin-Unity.zip"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still uses an old packaged artifact layout: {stale_text}")
+    for stale_text in ["name: ImmViewerVulkan-Windows", "name: ImmViewer-Windows-VR", "ImmViewerVulkan-Windows.zip", "ImmViewer-Windows-VR.zip", "release-assets/ImmViewerVulkan-Windows", "release-assets/ImmViewer-Windows-VR"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still publishes a split Windows viewer artifact: {stale_text}")
+    for stale_text in ["settings-vulkan-sample1.json", "settings-vr.json"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still packages an old Windows viewer settings name: {stale_text}")
+    for stale_text in ["name: ImmStrokeReaderPlugin-Windows", "name: ImmStrokeReaderPlugin-Android", "name: ImmStrokeReaderPlugin-macOS", "name: ImmStrokeReaderPlugin-iOS", "name: ImmViewerPlugin-Windows", "name: ImmViewerPlugin-Android", "name: ImmViewerPlugin-macOS", "name: ImmViewerPlugin-iOS", "name: ImmGodotGDExtension-Windows-platform", "name: ImmGodotGDExtension-Android-platform", "name: ImmGodotGDExtension-macOS-platform", "pattern: ImmGodotGDExtension-*-platform"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Workflow still exposes an intermediate artifact without the Internal prefix: {stale_text}")
+    for stale_text in ["Run Godot script smoke test", "-LogDir artifacts\\godot-smoke-script"]:
+        if stale_text in workflow:
+            raise RuntimeError(f"Windows workflow still runs the removed script-stub Godot smoke path: {stale_text}")
     for stale_text in ["Run Godot native smoke test", "-RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\\godot-smoke-native"]:
         if stale_text in workflow:
             raise RuntimeError(f"Windows workflow still treats native Godot rendering smoke as a CI gate: {stale_text}")
@@ -394,7 +454,7 @@ def verify_windows_build_wiring() -> None:
     for stale_text in ["not yet buildable", "future binary location", "future render callback", "still does not prove visible Metal rendering", "now attempts to build an `MTLRenderPassDescriptor`", "RenderingServer.call_on_render_thread"]:
         if stale_text in readme:
             raise RuntimeError(f"GDExtension README still contains stale status text: {stale_text}")
-    for token in ["builds locally", "Forward+/Metal visual smoke", "Godot-created intermediate texture", "final composite into scene color", "verifies non-background content pixels"]:
+    for token in ["builds locally", "visual smoke path", "Godot-created intermediate texture", "final composite into scene color", "verifies non-background content pixels"]:
         if token not in readme:
             raise RuntimeError(f"GDExtension README is missing current status token: {token}")
 
@@ -419,6 +479,81 @@ def verify_shared_engine_bridge() -> None:
         if token not in bridge:
             raise RuntimeError(f"Shared IMM engine bridge is missing audio fallback token: {token}")
     print("Shared IMM engine bridge audio fallback ok", flush=True)
+
+
+def verify_unity_projection_guard() -> None:
+    manager = UNITY_PLAYER_MANAGER.read_text(encoding="utf-8")
+    for token in [
+        "IMM_UNITY_FORCE_BACKBUFFER_PROJECTION",
+        "IMM_UNITY_FORCE_TEXTURE_PROJECTION",
+        "GraphicsDeviceType.Direct3D11",
+        "GraphicsDeviceType.Vulkan",
+        "texture-style render target",
+        "GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture)",
+        "Unity can mark Game cameras as stereo/XR-active",
+        "!cam.stereoEnabled",
+        "stereoEnabled as a",
+        "CameraType.SceneView",
+    ]:
+        if token not in manager:
+            raise RuntimeError(f"Unity projection guard is missing token: {token}")
+    if not re.search(r"GraphicsDeviceType\.Direct3D11\)\s*\r?\n\s*return true;", manager):
+        raise RuntimeError("Unity D3D11 projection guard must preserve the current texture projection path")
+    if not re.search(r"GraphicsDeviceType\.Vulkan\s*&&\s*\r?\n\s*cam != null\s*&&\s*\r?\n\s*cam\.cameraType == CameraType\.Game\s*&&\s*\r?\n\s*!cam\.stereoEnabled\)\s*\r?\n\s*return true;", manager):
+        raise RuntimeError("Unity Vulkan projection guard must apply texture projection to non-XR Game cameras")
+    print("Unity D3D11/Vulkan/XR projection guard ok", flush=True)
+
+
+def verify_unity_xr_scene_bootstrap() -> None:
+    settings = UNITY_XR_SETTINGS.read_text(encoding="utf-8")
+    bootstrap = UNITY_XR_BOOTSTRAP.read_text(encoding="utf-8")
+    bootstrap_meta = UNITY_XR_BOOTSTRAP_META.read_text(encoding="utf-8")
+    vr_scene = UNITY_VR_SCENE.read_text(encoding="utf-8")
+
+    if "m_InitManagerOnStart: 1" in settings:
+        raise RuntimeError("Unity XR manager must not initialize on startup; XR should be scene-controlled")
+    for token in [
+        "m_InitManagerOnStart: 0",
+        "Standalone Settings",
+        "Android Settings",
+    ]:
+        if token not in settings:
+            raise RuntimeError(f"Unity XR settings are missing manual-start token: {token}")
+    for token in [
+        "XrSceneBootstrap",
+        "InitializeLoader",
+        "StartSubsystems",
+        "StopSubsystems",
+        "DeinitializeLoader",
+        "project-wide XR auto-start disabled",
+    ]:
+        if token not in bootstrap:
+            raise RuntimeError(f"Unity XR scene bootstrap is missing token: {token}")
+
+    guid_match = re.search(r"^guid:\s*([0-9a-f]{32})\s*$", bootstrap_meta, re.MULTILINE)
+    if not guid_match:
+        raise RuntimeError("Unity XR scene bootstrap meta is missing a script guid")
+    bootstrap_guid = guid_match.group(1)
+    if bootstrap_guid not in vr_scene:
+        raise RuntimeError("SampleSceneVR must reference XrSceneBootstrap")
+    if bootstrap_guid in (ROOT / "code/ImmUnitySampleProject/Assets/Scenes/SampleScene.unity").read_text(encoding="utf-8"):
+        raise RuntimeError("Desktop SampleScene must not reference XrSceneBootstrap")
+    print("Unity XR scene bootstrap ok", flush=True)
+
+
+def verify_windows_viewer_vr_settings() -> None:
+    settings = json.loads(WINDOWS_OPENGL_VR_SETTINGS.read_text(encoding="utf-8"))
+    rendering = settings.get("Rendering", {})
+    if rendering.get("EnableVR") is not True:
+        raise RuntimeError("settings-opengl-vr.json must enable VR")
+    if rendering.get("RenderingAPI") != "OpenGL":
+        raise RuntimeError("settings-opengl-vr.json must use OpenGL for the legacy Windows VR path")
+    if rendering.get("XRRuntime") != "Legacy":
+        raise RuntimeError("settings-opengl-vr.json must use the legacy Windows VR runtime")
+    load_files = settings.get("File", {}).get("Load", [])
+    if "../../../exampleImmFiles/sample1.imm" not in load_files:
+        raise RuntimeError("settings-opengl-vr.json must load the local sample1.imm")
+    print("Windows standalone OpenGL VR settings ok", flush=True)
 
 
 def verify_powershell_syntax() -> None:
@@ -589,6 +724,9 @@ def main() -> int:
     verify_windows_build_wiring()
     verify_runtime_dependency_sources()
     verify_shared_engine_bridge()
+    verify_unity_projection_guard()
+    verify_unity_xr_scene_bootstrap()
+    verify_windows_viewer_vr_settings()
     verify_powershell_syntax()
     run([sys.executable, str(extension_dir / "verify_sample_api.py")])
     run(
@@ -601,6 +739,11 @@ def main() -> int:
             str(extension_dir / "verify_local.py"),
         ]
     )
+
+    if env_flag_enabled("IMM_GODOT_SKIP_NATIVE_SYNTAX"):
+        print("IMM_GODOT_SKIP_NATIVE_SYNTAX is set; skipping native syntax-only compile")
+        verify_godot_script_smoke()
+        return 0
 
     clang = shutil.which("clang++")
     if clang is None:

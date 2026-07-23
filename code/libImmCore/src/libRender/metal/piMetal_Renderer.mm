@@ -1102,7 +1102,7 @@ void piRendererMetal::EndNativeFrame(void)
     {
         id<MTLCommandBuffer> commandBuffer = mState->commandBuffer;
         const bool logCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_LOG_COMMAND_BUFFER");
-        const bool waitCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_WAIT_COMMAND_BUFFER");
+        const bool waitCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_WAIT_COMMAND_BUFFER") || mState->nativeDrawable == nil;
         if (logCommandBuffer)
         {
             [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedCommandBuffer) {
@@ -1114,7 +1114,10 @@ void piRendererMetal::EndNativeFrame(void)
         if (waitCommandBuffer)
         {
             [commandBuffer waitUntilCompleted];
-            iReportCommandBufferStatus("after-wait", commandBuffer);
+            if (logCommandBuffer)
+            {
+                iReportCommandBufferStatus("after-wait", commandBuffer);
+            }
         }
         iReleaseOwnedCommandBuffer(commandBuffer);
     }

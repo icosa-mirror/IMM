@@ -38,12 +38,20 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     // Spaces_Player4
     const val EXTRA_QUILL_EYE_BUFFER_SCALE = "QUILL_EYE_BUFFER_SCALE"
     const val EXTRA_QUILL_RENDERING_TECHNIQUE = "QUILL_RENDERING_TECHNIQUE"
+    const val EXTRA_RENDERING_API = "RenderingAPI"
+    const val EXTRA_VALIDATION_RENDER_WIDTH = "ValidationRenderWidth"
+    const val EXTRA_VALIDATION_RENDER_HEIGHT = "ValidationRenderHeight"
+    const val EXTRA_VALIDATION_FIXED_DT = "ValidationFixedDt"
+    const val EXTRA_VALIDATION_PLAYER_FRAME = "ValidationPlayerFrame"
     const val PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 0x1
 
     @JvmStatic external fun nativeSetAssetDirectory(assetsDir: String?)
     @JvmStatic external fun nativeSetExternalFilesDirectory(externalDir: String?)
     @JvmStatic external fun nativeSendMessage(message: String?, messageType: Int)
     @JvmStatic external fun nativeSetQuillRenderingTechnique(renderingTechnique: Int)
+    @JvmStatic external fun nativeSetRenderingApi(renderingApi: String?)
+    @JvmStatic external fun nativeSetValidationRenderSize(width: Int, height: Int)
+    @JvmStatic external fun nativeSetValidationPlayback(fixedDt: Double, playerFrame: Long)
     @JvmStatic
     external fun nativeSetEyeBufferScale(
         scaleFactor: Float
@@ -79,18 +87,14 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    applyRenderingApiExtra(intent)
+    applyValidationRenderSizeExtra(intent)
+    applyValidationPlaybackExtra(intent)
     super.onCreate(savedInstanceState)
 
     if (intent != null)
         Log.d(TAG, "onCreate intent category: " + intent.categories + " action: " + intent.action)
     else Log.d(TAG, "onCreate null intent")
-
-    if (!requestExternalStoragePermission()) {
-      // Continue init even if the permission dialog is pending to avoid blocking startup.
-      Log.d(TAG, "Permissions pending; continuing init")
-      finishInit()
-      return
-    }
 
     finishInit()
   }
@@ -314,6 +318,9 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
           nativeSetQuillRenderingTechnique(renderingTechnique)
         }
       }
+      applyRenderingApiExtra(intent)
+      applyValidationRenderSizeExtra(intent)
+      applyValidationPlaybackExtra(intent)
       if (extras.containsKey(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)) {
         val spawnLocation = extras.getString(EXTRA_QUILL_PLAYER_SPAWN_LOCATION)
         Log.d(TAG, "found player spawn location extra $spawnLocation")
@@ -329,6 +336,57 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
       }
     }
     return false
+  }
+
+  private fun applyRenderingApiExtra(intent: Intent?) {
+    val extras = intent?.extras ?: return
+    if (!extras.containsKey(EXTRA_RENDERING_API)) {
+      return
+    }
+
+    val renderingApi = extras.getString(EXTRA_RENDERING_API, "")
+    if (renderingApi.isNotEmpty()) {
+      Log.d(TAG, "found rendering API extra $renderingApi")
+      nativeSetRenderingApi(renderingApi)
+    }
+  }
+
+  private fun applyValidationRenderSizeExtra(intent: Intent?) {
+    val extras = intent?.extras ?: return
+    if (!extras.containsKey(EXTRA_VALIDATION_RENDER_WIDTH) || !extras.containsKey(EXTRA_VALIDATION_RENDER_HEIGHT)) {
+      return
+    }
+
+    val width = extras.getInt(EXTRA_VALIDATION_RENDER_WIDTH, 0)
+    val height = extras.getInt(EXTRA_VALIDATION_RENDER_HEIGHT, 0)
+    if (width > 0 && height > 0) {
+      Log.d(TAG, "found validation render size ${width}x${height}")
+      nativeSetValidationRenderSize(width, height)
+    }
+  }
+
+  private fun applyValidationPlaybackExtra(intent: Intent?) {
+    val extras = intent?.extras ?: return
+    if (!extras.containsKey(EXTRA_VALIDATION_FIXED_DT) && !extras.containsKey(EXTRA_VALIDATION_PLAYER_FRAME)) {
+      return
+    }
+
+    val fixedDt = when (val value = extras.get(EXTRA_VALIDATION_FIXED_DT)) {
+      is Double -> value
+      is Float -> value.toDouble()
+      is String -> value.toDoubleOrNull() ?: -1.0
+      else -> -1.0
+    }
+    val playerFrame = when (val value = extras.get(EXTRA_VALIDATION_PLAYER_FRAME)) {
+      is Long -> value
+      is Int -> value.toLong()
+      is String -> value.toLongOrNull() ?: -1L
+      else -> -1L
+    }
+    if (fixedDt >= 0.0 || playerFrame >= 0L) {
+      Log.d(TAG, "found validation playback fixedDt=$fixedDt playerFrame=$playerFrame")
+      nativeSetValidationPlayback(fixedDt, playerFrame)
+    }
   }
 
   private fun loadImmPath(path: String) {
@@ -380,17 +438,13 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
 
   private fun requestExternalStoragePermission(): Boolean {
     if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
-        PackageManager.PERMISSION_GRANTED ||
-        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) !=
-            PackageManager.PERMISSION_GRANTED) {
+        PackageManager.PERMISSION_GRANTED) {
 
       ActivityCompat.requestPermissions(
           this,
           arrayOf(
               Manifest.permission.READ_EXTERNAL_STORAGE,
-              Manifest.permission.WRITE_EXTERNAL_STORAGE,
-              Manifest.permission.ACCESS_FINE_LOCATION,
-              Manifest.permission.ACCESS_COARSE_LOCATION),
+              Manifest.permission.WRITE_EXTERNAL_STORAGE),
           PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE)
       return false
     }

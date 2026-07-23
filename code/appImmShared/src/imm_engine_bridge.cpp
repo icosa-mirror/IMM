@@ -5,6 +5,9 @@
 #if defined(__APPLE__)
 #include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
 #endif
+#if defined(__ANDROID__) || defined(ANDROID)
+#include <android/log.h>
+#endif
 
 #include <cstdlib>
 #include <vector>
@@ -22,18 +25,30 @@ namespace ImmShared
 
         void Info(const char *str) override
         {
+#if defined(__ANDROID__) || defined(ANDROID)
+            // Android initializes the Unity GLES renderer from the render thread.
+            // Avoid piLog's wide printf path here: renderer capability strings
+            // are already narrow C strings and a format failure in this callback
+            // aborts the app before document loading can even begin.
+            __android_log_print(ANDROID_LOG_INFO, "ImmRenderReporter", "%s", (str == nullptr) ? "(null)" : str);
+#else
             piString wstr;
             wstr.InitCopyS(str);
             mLog->Printf(LT_MESSAGE, L"%s", wstr.GetS());
             wstr.End();
+#endif
         }
 
         void Error(const char *str, int) override
         {
+#if defined(__ANDROID__) || defined(ANDROID)
+            __android_log_print(ANDROID_LOG_ERROR, "ImmRenderReporter", "%s", (str == nullptr) ? "(null)" : str);
+#else
             piString wstr;
             wstr.InitCopyS(str);
             mLog->Printf(LT_ERROR, L"%s", wstr.GetS());
             wstr.End();
+#endif
         }
 
         void Begin(uint64_t memCurrent, uint64_t memPeak, int texCurrent, int texPeak) override
@@ -133,6 +148,13 @@ namespace ImmShared
         return true;
     }
 
+    bool ImmEngineBridge::CompleteGraphicsInitialization(void *graphicsDevice)
+    {
+        if (!mGraphicsInitialized)
+            mConfig.graphicsDevice = graphicsDevice;
+        return CompleteGraphicsInitialization();
+    }
+
     void ImmEngineBridge::Shutdown()
     {
         ShutdownRuntime();
@@ -171,7 +193,44 @@ namespace ImmShared
         if (rightEyeProjection != nullptr) camera.rightEyeProjection = *rightEyeProjection;
     }
 
-    bool ImmEngineBridge::RenderCamera(int cameraID, const ViewportInfo &viewport, int eyeID, bool tickSound)
+    bool ImmEngineBridge::PrepareCamera(int cameraID)
+    {
+        if (!mPlayerInitialized || !mGraphicsInitialized || mRenderer == nullptr)
+            return false;
+
+        if (cameraID < 0 || cameraID >= kMaxCameras)
+        {
+            if (mLogInitialized)
+                mLog.Printf(LT_ERROR, L"Invalid cameraID: %d", cameraID);
+            return false;
+        }
+
+        const CameraState &camera = mCamera[cameraID];
+        if (camera.stereoType == 0)
+        {
+            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
+                                 fromMatrix(f2d(camera.world2Head)),
+                                 camera.headProjection,
+                                 StereoMode::None);
+        }
+        else if (camera.stereoType == 1)
+        {
+            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
+                                 fromMatrix(f2d(camera.world2Head)),
+                                 camera.headProjection,
+                                 StereoMode::Fallback);
+        }
+        else if (camera.stereoType == 2)
+        {
+            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
+                                 fromMatrix(f2d(camera.world2Head)),
+                                 camera.headProjection,
+                                 StereoMode::Preferred);
+        }
+        return true;
+    }
+
+    bool ImmEngineBridge::RenderPreparedCamera(int cameraID, const ViewportInfo &viewport, int eyeID, bool tickSound)
     {
         if (!mPlayerInitialized || !mGraphicsInitialized || mRenderer == nullptr)
             return false;
@@ -256,10 +315,6 @@ namespace ImmShared
         }
         if (camera.stereoType == 0)
         {
-            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
-                                 fromMatrix(f2d(camera.world2Head)),
-                                 camera.headProjection,
-                                 StereoMode::None);
             mPlayer.RenderMono(res, 0);
         }
         else if (camera.stereoType == 1)
@@ -270,11 +325,6 @@ namespace ImmShared
                     mLog.Printf(LT_ERROR, L"Invalid eyeID: %d", eyeID);
                 return false;
             }
-
-            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
-                                 fromMatrix(f2d(camera.world2Head)),
-                                 camera.headProjection,
-                                 StereoMode::Fallback);
 
             if (eyeID == 0)
             {
@@ -292,11 +342,6 @@ namespace ImmShared
             const float oldVp[6] = { viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth };
             const float newVp[6] = { viewport.x, viewport.y, viewport.width * 2.0f, viewport.height, viewport.minDepth, viewport.maxDepth };
             mRenderer->SetViewports(1, newVp);
-
-            mPlayer.GlobalRender(fromMatrix(f2d(camera.world2Head)),
-                                 fromMatrix(f2d(camera.world2Head)),
-                                 camera.headProjection,
-                                 StereoMode::Preferred);
 
             const mat4x4d headToLeftEye = f2d(camera.world2LeftEye) * invert(f2d(camera.world2Head));
             const mat4x4d headToRightEye = f2d(camera.world2RightEye) * invert(f2d(camera.world2Head));
@@ -338,6 +383,13 @@ namespace ImmShared
         }
 
         return true;
+    }
+
+    bool ImmEngineBridge::RenderCamera(int cameraID, const ViewportInfo &viewport, int eyeID, bool tickSound)
+    {
+        if (!PrepareCamera(cameraID))
+            return false;
+        return RenderPreparedCamera(cameraID, viewport, eyeID, tickSound);
     }
 
     Player *ImmEngineBridge::GetPlayer()
@@ -478,8 +530,16 @@ namespace ImmShared
             return false;
         }
 
-        const char *apiName[] = { "GL", "DX", "GLES", "Metal" };
-        wchar_t *apiNameWide = pistr2ws(apiName[static_cast<int>(mConfig.rendererApi)]);
+        const char *apiName = "unknown";
+        switch (mConfig.rendererApi)
+        {
+        case piRenderer::API::GL: apiName = "GL"; break;
+        case piRenderer::API::DX: apiName = "DX"; break;
+        case piRenderer::API::GLES: apiName = "GLES"; break;
+        case piRenderer::API::Metal: apiName = "Metal"; break;
+        case piRenderer::API::Vulkan: apiName = "Vulkan"; break;
+        }
+        wchar_t *apiNameWide = pistr2ws(apiName);
         mLog.Printf(LT_DEBUG, L"API: %s", (apiNameWide == nullptr) ? L"unknown" : apiNameWide);
         if (apiNameWide != nullptr)
             std::free(apiNameWide);
@@ -523,12 +583,33 @@ namespace ImmShared
         Player::Configuration conf = {};
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
-        const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::Metal);
-        conf.depthBuffer = usesZeroToOneDepth ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
+        const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
+                                         mConfig.rendererApi == piRenderer::API::Metal ||
+                                         mConfig.rendererApi == piRenderer::API::Vulkan);
+        // DepthBuffer describes the renderer's clear/compare convention, not
+        // the host projection clip range. Hosted D3D11 in Unity still needs
+        // the legacy Linear10 path; hosted Metal/Vulkan use Linear01 so paint
+        // depth remains visible when composited into their external targets.
+        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-        conf.projectionMatrix = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
+        const bool vulkanProjectionAlreadyGpuAdjusted =
+            mConfig.rendererApi == piRenderer::API::Vulkan &&
+            std::getenv("IMM_UNITY_VK_PROJECTION_ALREADY_GPU") != nullptr;
+        conf.projectionMatrix = (usesZeroToOneDepth && !vulkanProjectionAlreadyGpuAdjusted)
+            ? ClipSpaceDepth::FromZeroToOne
+            : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
+#if defined(ANDROID) || defined(__ANDROID__)
+        if (mConfig.rendererApi == piRenderer::API::GLES)
+        {
+            // Android/GLES static paint uses the packed vertex path, which can
+            // submit valid draw calls while producing no visible foreground in
+            // plugin-owned render targets. Pretessellated paint keeps the
+            // authored stroke geometry explicit.
+            conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Pretessellated;
+        }
+#endif
 
         if (!mPlayer.Init(mRenderer, mSoundBackend->GetEngine(), &mLog, &mTimer, &conf))
         {

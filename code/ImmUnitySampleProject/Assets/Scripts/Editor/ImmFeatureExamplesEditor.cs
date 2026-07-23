@@ -187,12 +187,13 @@ public class ImmFeatureExamplesEditor : Editor
         // Find current selection index
         string currentFileName = selectedFileNameProp.stringValue;
         int currentIndex = System.Array.IndexOf(fileNames, currentFileName);
-        if (currentIndex < 0) currentIndex = 0;
+        bool missingCurrentFile = currentIndex < 0;
+        if (missingCurrentFile) currentIndex = 0;
 
         // Draw dropdown
         int newIndex = EditorGUILayout.Popup("IMM File", currentIndex, fileNames);
 
-        if (newIndex != currentIndex || string.IsNullOrEmpty(currentFileName))
+        if (newIndex != currentIndex || string.IsNullOrEmpty(currentFileName) || missingCurrentFile)
         {
             selectedFileNameProp.stringValue = fileNames[newIndex];
             serializedObject.ApplyModifiedProperties();

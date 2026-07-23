@@ -1,0 +1,1030 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI GPU Matrix
+
+on:
+  workflow_call:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  windows-standalone-directx:
+    name: Windows Standalone DirectX
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Preflight DirectX runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-standalone-directx --output artifacts\windows-standalone-directx\preflight.json --require-command msbuild
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture DirectX sample1
+        timeout-minutes: 5
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\artifacts\windows-standalone-directx\windows-directx-sample1.ppm
+
+      - name: Compare DirectX render metrics against committed DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py artifacts\windows-standalone-directx\windows-directx-sample1.ppm
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
+          --json-output artifacts\windows-standalone-directx\directx-vs-committed-directx-render-metrics.json
+
+      - name: Write DirectX render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\windows-standalone-directx\directx-vs-committed-directx-render-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\windows-standalone-directx\windows-directx-sample1.ppm
+          --output-dir artifacts\windows-standalone-directx\captures
+          --markdown-output artifacts\windows-standalone-directx\render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-directx\manifest.json --product standalone --platform-name windows --mode non-vr --renderer directx --include artifacts\windows-standalone-directx
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-directx --require-manifest --output artifacts\windows-standalone-directx\artifact-summary.json
+
+      - name: Upload DirectX artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneDirectX-GPU
+          path: artifacts/windows-standalone-directx
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-standalone-vulkan:
+    name: Windows Standalone Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Mesa lavapipe
+        id: msys2-standalone-vulkan
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-glslang
+            mingw-w64-x86_64-mesa
+            mingw-w64-x86_64-spirv-tools
+
+      - name: Configure Mesa lavapipe Vulkan ICD
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2-standalone-vulkan.outputs.msys2-location }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
+          $setupLog = "artifacts\windows-standalone-vulkan\vulkan-driver-setup.txt"
+          $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          $mingwBin = Join-Path ($searchRoots | Select-Object -First 1) "mingw64\bin"
+          if (Test-Path $mingwBin) {
+            $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+          "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
+          "Search roots:" | Out-File -FilePath $setupLog -Append
+          $searchRoots | Out-File -FilePath $setupLog -Append
+          $icds = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue })
+          $dlls = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue })
+          "ICD candidates:" | Out-File -FilePath $setupLog -Append
+          $icds.FullName | Out-File -FilePath $setupLog -Append
+          "DLL candidates:" | Out-File -FilePath $setupLog -Append
+          $dlls.FullName | Out-File -FilePath $setupLog -Append
+          $sourceIcd = $icds | Where-Object { $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Select-Object -First 1
+          }
+          if (-not $sourceIcd) {
+            throw "Mesa lavapipe ICD was not found under: $($searchRoots -join ', ')"
+          }
+          $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
+          $sourceDll = Join-Path $driverRoot "bin\vulkan_lvp.dll"
+          if (-not (Test-Path $sourceDll)) {
+            $sourceDll = ($dlls | Where-Object { $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
+          }
+          if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
+            throw "Mesa lavapipe DLL was not found for $($sourceIcd.FullName)"
+          }
+          $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
+          New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
+          $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
+          $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
+          $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
+          "Selected ICD=$($sourceIcd.FullName)" | Out-File -FilePath $setupLog -Append
+          "Selected DLL=$sourceDll" | Out-File -FilePath $setupLog -Append
+          "Workspace ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-Content -Raw $workspaceIcd | Out-File -FilePath $setupLog -Append
+          "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $registryTargets = @(
+            "HKCU\Software\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
+          )
+          $icdTargets = @($workspaceIcd, $sourceIcd.FullName) | Select-Object -Unique
+          foreach ($registryTarget in $registryTargets) {
+            reg add $registryTarget /f | Out-File -FilePath $setupLog -Append
+            foreach ($icdTarget in $icdTargets) {
+              reg add $registryTarget /v "$icdTarget" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
+              "Registered Vulkan ICD $icdTarget in $registryTarget" | Out-File -FilePath $setupLog -Append
+            }
+            reg query $registryTarget | Out-File -FilePath $setupLog -Append
+          }
+          (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Preflight GPU runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command msbuild --require-command glslangValidator --require-command spirv-val --require-env VK_ICD_FILENAMES
+
+      - name: Capture Vulkan diagnostics
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
+          $out = "artifacts\windows-standalone-vulkan\vulkaninfo.txt"
+          $vulkanInfo = Get-Command vulkaninfo -ErrorAction SilentlyContinue
+          if (-not $vulkanInfo) {
+            "vulkaninfo not found" | Out-File -FilePath $out
+            exit 0
+          }
+          "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES" | Out-File -FilePath $out
+          "VK_DRIVER_FILES=$env:VK_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "VK_ADD_DRIVER_FILES=$env:VK_ADD_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "ICD exists=$(Test-Path $env:VK_ICD_FILENAMES)" | Out-File -FilePath $out -Append
+          Get-Content -Raw $env:VK_ICD_FILENAMES | Out-File -FilePath $out -Append
+          $env:VK_LOADER_DEBUG = "error,warn"
+          & $vulkanInfo.Source --summary *>> $out
+          "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
+          exit 0
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture DirectX baseline
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm
+
+      - name: Run Vulkan smoke against baseline
+        timeout-minutes: 12
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -DurationSeconds 420 -PresentSeconds 120 -MaxFrame 7200
+
+      - name: Compare Vulkan render metrics against committed DirectX baseline
+        if: always()
+        shell: pwsh
+        run: |
+          $candidate = ".\code\appImmViewer\exe\vulkan_sample1_smoke.ppm"
+          $reference = ".\tests\baselines\render\windows-directx-sample1.ppm"
+          if ((Test-Path $candidate) -and (Test-Path $reference)) {
+            python tests\tools\compare_render_metrics.py $candidate `
+              --reference $reference `
+              --contract tests\baselines\render\windows-directx-sample1.json `
+              --json-output artifacts\windows-standalone-vulkan\vulkan-vs-committed-directx-render-metrics.json
+          }
+          else {
+            Write-Host "Skipping Vulkan metrics comparison because capture evidence is incomplete."
+            Write-Host "candidate_exists=$(Test-Path $candidate)"
+            Write-Host "reference_exists=$(Test-Path $reference)"
+          }
+
+      - name: Stage Vulkan capture evidence
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-vulkan | Out-Null
+          $captures = @(
+            @{
+              Source = ".\code\appImmViewer\exe\vulkan_sample1_smoke.ppm"
+              Target = "artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm"
+            },
+            @{
+              Source = ".\build\baseline-captures\windows-directx-playerframe60.ppm"
+              Target = "artifacts\windows-standalone-vulkan\windows-directx-playerframe60.ppm"
+            },
+            @{
+              Source = ".\tests\baselines\render\windows-directx-sample1.ppm"
+              Target = "artifacts\windows-standalone-vulkan\windows-directx-sample1-committed.ppm"
+            }
+          )
+          foreach ($capture in $captures) {
+            if (Test-Path $capture.Source) {
+              Copy-Item -Force $capture.Source $capture.Target
+              Write-Host "Staged capture evidence: $($capture.Target)"
+            }
+            else {
+              Write-Host "Capture evidence missing: $($capture.Source)"
+            }
+          }
+
+      - name: Write Vulkan render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\windows-standalone-vulkan\vulkan-vs-committed-directx-render-metrics.json
+          --reference-capture artifacts\windows-standalone-vulkan\windows-directx-sample1-committed.ppm
+          --candidate-capture artifacts\windows-standalone-vulkan\vulkan_sample1_smoke.ppm
+          --output-dir artifacts\windows-standalone-vulkan\captures
+          --markdown-output artifacts\windows-standalone-vulkan\render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-vulkan\manifest.json --product standalone --platform-name windows --mode non-vr --renderer vulkan --include artifacts\windows-standalone-vulkan
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-vulkan --require-manifest --output artifacts\windows-standalone-vulkan\artifact-summary.json
+
+      - name: Upload GPU artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneVulkan-GPU
+          path: |
+            artifacts/windows-standalone-vulkan
+            code/appImmViewer/exe/debug.txt
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-standalone-opengl:
+    name: Windows Standalone OpenGL
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Mesa llvmpipe OpenGL
+        id: msys2-standalone-opengl
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-mesa
+
+      - name: Configure Mesa llvmpipe OpenGL
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2-standalone-opengl.outputs.msys2-location }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\windows-standalone-opengl | Out-Null
+          $setupLog = "artifacts\windows-standalone-opengl\opengl-driver-setup.txt"
+          $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "Search roots:" | Out-File -FilePath $setupLog -Append
+          $searchRoots | Out-File -FilePath $setupLog -Append
+          $openglDll = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "opengl32.dll" -ErrorAction SilentlyContinue }) |
+            Where-Object { $_.FullName -like "*\mingw64\bin\*" } |
+            Select-Object -First 1
+          if (-not $openglDll) {
+            throw "Mesa opengl32.dll was not found under: $($searchRoots -join ', ')"
+          }
+          $mesaBin = Split-Path -Parent $openglDll.FullName
+          $viewerDir = "code\appImmViewer\exe"
+          New-Item -ItemType Directory -Force -Path $viewerDir | Out-Null
+          Copy-Item -Force $openglDll.FullName (Join-Path $viewerDir "opengl32.dll")
+          "Selected Mesa OpenGL DLL=$($openglDll.FullName)" | Out-File -FilePath $setupLog -Append
+          "Viewer OpenGL DLL=$(Join-Path $viewerDir "opengl32.dll")" | Out-File -FilePath $setupLog -Append
+          $mesaBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          "GALLIUM_DRIVER=llvmpipe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LIBGL_ALWAYS_SOFTWARE=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Preflight OpenGL runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-standalone-opengl --output artifacts\windows-standalone-opengl\preflight.json --require-command msbuild
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Capture OpenGL sample1
+        timeout-minutes: 5
+        shell: pwsh
+        run: >
+          .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
+          -Configuration Release
+          -SkipBuild
+          -SettingsPath .\code\appImmViewer\exe\settings-baseline-opengl-sample1.json
+          -OutputPath .\artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+
+      - name: Compare OpenGL render metrics against committed DirectX baseline
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\windows-directx-sample1.json
+          --json-output artifacts\windows-standalone-opengl\opengl-vs-committed-directx-render-metrics.json
+
+      - name: Write OpenGL render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\windows-standalone-opengl\opengl-vs-committed-directx-render-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+          --output-dir artifacts\windows-standalone-opengl\captures
+          --markdown-output artifacts\windows-standalone-opengl\render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\windows-standalone-opengl\manifest.json --product standalone --platform-name windows --mode non-vr --renderer opengl --include artifacts\windows-standalone-opengl
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-opengl --require-manifest --output artifacts\windows-standalone-opengl\artifact-summary.json
+
+      - name: Upload OpenGL artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneOpenGL-GPU
+          path: artifacts/windows-standalone-opengl
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-standalone-openxr-vr:
+    name: Windows Standalone OpenXR VR
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    runs-on: [self-hosted, windows, gpu, vr, openxr]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Windows OpenXR VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-openxr-vr --output artifacts\windows-standalone-openxr-vr\preflight.json --require-command msbuild
+
+      - name: Run Windows OpenXR VR smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\run-windows-openxr-vr-smoke.ps1 -Configuration Release -LogDir artifacts\windows-standalone-openxr-vr
+
+      - name: Verify Windows OpenXR VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\windows-standalone-openxr-vr\debug.txt
+          --label windows-standalone-openxr-vr
+          --require "XR Runtime: OpenXR"
+          --require "Rendering in VR: yes"
+          --require "IMM_OPENXR_STANDALONE createInstanceResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE getHmdSystemResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE enumerateStereoViewsFillResult=0"
+          --require "IMM_OPENXR_STANDALONE createSessionResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE beginSessionResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE waitFrameResult=0 resultName=XR_SUCCESS shouldRender=1"
+          --require "IMM_OPENXR_STANDALONE beginFrameResult=0 resultName=XR_SUCCESS"
+          --require "IMM_OPENXR_STANDALONE endFrameResult=0 resultName=XR_SUCCESS layerCount=1 projectionViews=2"
+          --require "OpenXR standalone startup probe passed"
+          --forbid "OpenXR standalone startup probe failed"
+          --forbid "Cannot do VR"
+          --output artifacts\windows-standalone-openxr-vr\openxr-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\windows-standalone-openxr-vr\manifest.json --product standalone --platform-name windows --mode vr --renderer openxr --include artifacts\windows-standalone-openxr-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-openxr-vr --require-manifest --output artifacts\windows-standalone-openxr-vr\artifact-summary.json
+
+      - name: Upload OpenXR VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneOpenXRVR-GPU
+          path: artifacts/windows-standalone-openxr-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-standalone-opengl-vr:
+    name: Windows Standalone OpenGL VR
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    runs-on: [self-hosted, windows, gpu, vr, opengl]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Windows OpenGL VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-opengl-vr --output artifacts\windows-standalone-opengl-vr\preflight.json --require-command msbuild
+
+      - name: Run Windows OpenGL VR smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: .\code\appImmViewer\scripts\run-windows-opengl-vr-smoke.ps1 -Configuration Release -LogDir artifacts\windows-standalone-opengl-vr
+
+      - name: Verify Windows OpenGL VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\windows-standalone-opengl-vr\debug.txt
+          --label windows-standalone-opengl-vr
+          --require "Rendering Backened: OpenGL"
+          --require "XR Runtime: Legacy"
+          --require "Rendering in VR: yes"
+          --require "IMM_LEGACY_VR_SMOKE hmd_initialized"
+          --require "Viewer initialized"
+          --require "IMM_LEGACY_VR_SMOKE frame_submitted"
+          --forbid "Cannot do VR"
+          --forbid "Viewer init failed"
+          --forbid "Failed to create render target"
+          --output artifacts\windows-standalone-opengl-vr\opengl-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\windows-standalone-opengl-vr\manifest.json --product standalone --platform-name windows --mode vr --renderer opengl --include artifacts\windows-standalone-opengl-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\windows-standalone-opengl-vr --require-manifest --output artifacts\windows-standalone-opengl-vr\artifact-summary.json
+
+      - name: Upload OpenGL VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsStandaloneOpenGLVR-GPU
+          path: artifacts/windows-standalone-opengl-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-godot-vulkan:
+    name: Windows Godot Vulkan
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Mesa lavapipe
+        id: msys2-godot-vulkan
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-glslang
+            mingw-w64-x86_64-mesa
+            mingw-w64-x86_64-spirv-tools
+
+      - name: Configure Mesa lavapipe Vulkan ICD
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2-godot-vulkan.outputs.msys2-location }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\godot-smoke-windows-vulkan | Out-Null
+          $setupLog = "artifacts\godot-smoke-windows-vulkan\vulkan-driver-setup.txt"
+          $searchRoots = @($env:MSYS2_LOCATION, "C:\msys64") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+          $mingwBin = Join-Path ($searchRoots | Select-Object -First 1) "mingw64\bin"
+          if (Test-Path $mingwBin) {
+            $mingwBin | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+          "MSYS2_LOCATION=$env:MSYS2_LOCATION" | Out-File -FilePath $setupLog
+          "MINGW64_BIN=$mingwBin" | Out-File -FilePath $setupLog -Append
+          "Search roots:" | Out-File -FilePath $setupLog -Append
+          $searchRoots | Out-File -FilePath $setupLog -Append
+          $icds = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "lvp_icd*.json" -ErrorAction SilentlyContinue })
+          $dlls = @($searchRoots | ForEach-Object { Get-ChildItem -Path $_ -Recurse -Filter "vulkan_lvp.dll" -ErrorAction SilentlyContinue })
+          "ICD candidates:" | Out-File -FilePath $setupLog -Append
+          $icds.FullName | Out-File -FilePath $setupLog -Append
+          "DLL candidates:" | Out-File -FilePath $setupLog -Append
+          $dlls.FullName | Out-File -FilePath $setupLog -Append
+          $sourceIcd = $icds | Where-Object { $_.FullName -like "*\mingw64\*" } | Select-Object -First 1
+          if (-not $sourceIcd) {
+            $sourceIcd = $icds | Select-Object -First 1
+          }
+          if (-not $sourceIcd) {
+            throw "Mesa lavapipe ICD was not found under: $($searchRoots -join ', ')"
+          }
+          $driverRoot = $sourceIcd.FullName -replace "\\share\\vulkan\\icd\.d\\.*$", ""
+          $sourceDll = Join-Path $driverRoot "bin\vulkan_lvp.dll"
+          if (-not (Test-Path $sourceDll)) {
+            $sourceDll = ($dlls | Where-Object { $_.FullName -like "$driverRoot\*" } | Select-Object -First 1).FullName
+          }
+          if (-not $sourceDll -or -not (Test-Path $sourceDll)) {
+            throw "Mesa lavapipe DLL was not found for $($sourceIcd.FullName)"
+          }
+          $icdDir = Join-Path $env:GITHUB_WORKSPACE "lavapipe-vulkan"
+          New-Item -ItemType Directory -Force -Path $icdDir | Out-Null
+          $workspaceIcd = Join-Path $icdDir "lvp_icd.x86_64.json"
+          $icdJson = Get-Content -Raw $sourceIcd.FullName | ConvertFrom-Json
+          $icdJson.ICD.library_path = $sourceDll.Replace("\", "/")
+          $icdJson | ConvertTo-Json -Depth 10 | Out-File -FilePath $workspaceIcd -Encoding utf8
+          "Selected ICD=$($sourceIcd.FullName)" | Out-File -FilePath $setupLog -Append
+          "Selected DLL=$sourceDll" | Out-File -FilePath $setupLog -Append
+          "Workspace ICD=$workspaceIcd" | Out-File -FilePath $setupLog -Append
+          Get-Content -Raw $workspaceIcd | Out-File -FilePath $setupLog -Append
+          "VK_ICD_FILENAMES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VK_ADD_DRIVER_FILES=$workspaceIcd" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $registryTargets = @(
+            "HKCU\Software\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\Khronos\Vulkan\Drivers",
+            "HKLM\SOFTWARE\WOW6432Node\Khronos\Vulkan\Drivers"
+          )
+          $icdTargets = @($workspaceIcd, $sourceIcd.FullName) | Select-Object -Unique
+          foreach ($registryTarget in $registryTargets) {
+            reg add $registryTarget /f | Out-File -FilePath $setupLog -Append
+            foreach ($icdTarget in $icdTargets) {
+              reg add $registryTarget /v "$icdTarget" /t REG_DWORD /d 0 /f | Out-File -FilePath $setupLog -Append
+              "Registered Vulkan ICD $icdTarget in $registryTarget" | Out-File -FilePath $setupLog -Append
+            }
+            reg query $registryTarget | Out-File -FilePath $setupLog -Append
+          }
+          (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Download Godot 4.5
+        shell: pwsh
+        run: |
+          $version = "4.5-stable"
+          $zipName = "Godot_v$($version)_win64.exe.zip"
+          $url = "https://github.com/godotengine/godot-builds/releases/download/$version/$zipName"
+          Invoke-WebRequest -Uri $url -OutFile $zipName
+          Expand-Archive -Path $zipName -DestinationPath godot
+          $godotExe = Get-ChildItem -Path godot -Filter "Godot*.exe" | Select-Object -First 1
+          if (-not $godotExe) {
+            throw "Godot executable not found after extracting $zipName"
+          }
+          "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install SCons
+        shell: pwsh
+        run: python -m pip install scons
+
+      - name: Preflight Godot Vulkan runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-command msbuild --require-command scons --require-env GODOT_EXE --require-env VK_ICD_FILENAMES
+
+      - name: Capture Godot Vulkan diagnostics
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts\godot-smoke-windows-vulkan | Out-Null
+          $out = "artifacts\godot-smoke-windows-vulkan\vulkaninfo.txt"
+          $vulkanInfo = Get-Command vulkaninfo -ErrorAction SilentlyContinue
+          if (-not $vulkanInfo) {
+            "vulkaninfo not found" | Out-File -FilePath $out
+            exit 0
+          }
+          "VK_ICD_FILENAMES=$env:VK_ICD_FILENAMES" | Out-File -FilePath $out
+          "VK_DRIVER_FILES=$env:VK_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "VK_ADD_DRIVER_FILES=$env:VK_ADD_DRIVER_FILES" | Out-File -FilePath $out -Append
+          "ICD exists=$(Test-Path $env:VK_ICD_FILENAMES)" | Out-File -FilePath $out -Append
+          Get-Content -Raw $env:VK_ICD_FILENAMES | Out-File -FilePath $out -Append
+          $env:VK_LOADER_DEBUG = "error,warn"
+          & $vulkanInfo.Source --summary *>> $out
+          "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
+          exit 0
+
+      - name: Build Godot extension
+        shell: pwsh
+        run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
+
+      - name: Build Windows viewer
+        working-directory: code/projects/windows
+        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Run Godot Vulkan visual baseline smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: >
+          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
+          -Configuration Release
+          -SkipBuild
+          -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm
+          -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          -LogDir artifacts\godot-smoke-windows-vulkan
+
+      - name: Record Godot Vulkan full depth metrics
+        shell: pwsh
+        run: |
+          python tests\tools\compare_render_metrics.py `
+            artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
+            --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
+
+      - name: Write Godot Vulkan render report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          --status-json artifacts\godot-smoke-windows-vulkan\composition-status.json
+          --output-dir artifacts\godot-smoke-windows-vulkan\captures
+          --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
+
+      - name: Run Godot Vulkan ordered overlay smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: >
+          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
+          -Configuration Release
+          -SkipBuild
+          -CompositionMode ordered_overlay
+          -CapturePath artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          -LogDir artifacts\godot-smoke-windows-vulkan-ordered-overlay
+
+      - name: Record Godot Vulkan ordered overlay metrics
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
+
+      - name: Write Godot Vulkan ordered overlay report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          --status-json artifacts\godot-smoke-windows-vulkan-ordered-overlay\composition-status.json
+          --output-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay\captures
+          --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: |
+          $status = "${{ job.status }}"
+          $failureClass = "visual"
+          $compositionStatusPath = "artifacts\godot-smoke-windows-vulkan\composition-status.json"
+          if (Test-Path $compositionStatusPath) {
+            $compositionStatus = Get-Content -Raw $compositionStatusPath | ConvertFrom-Json
+            if ($status -eq "success" -and $compositionStatus.compositing -eq "expected_failed" -and $compositionStatus.rendering -eq "success") {
+              $status = "expected_failed"
+              $failureClass = "compositing"
+            }
+          }
+          python tests\tools\write_ci_manifest.py --status "$status" --failure-class "$failureClass" --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\godot-smoke-windows-vulkan --require-manifest --output artifacts\godot-smoke-windows-vulkan\artifact-summary.json
+
+      - name: Upload Godot Vulkan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsGodotVulkan-GPU
+          path: |
+            artifacts/godot-smoke-windows-vulkan
+            artifacts/godot-smoke-windows-vulkan-ordered-overlay
+          if-no-files-found: ignore
+          retention-days: 14
+
+  windows-godot-openxr-vr:
+    name: Windows Godot OpenXR VR
+    # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    runs-on: [self-hosted, windows, gpu, godot, vr, openxr]
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Preflight Godot OpenXR VR runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile windows-godot-openxr-vr --output artifacts\godot-openxr-vr\preflight.json --require-command msbuild --require-env GODOT_EXE
+
+      - name: Build Godot extension
+        shell: pwsh
+        run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
+
+      - name: Run Godot OpenXR VR smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: .\code\projects\windows\run-godot-openxr-vr-smoke.ps1 -Configuration Release -SkipBuild -LogDir artifacts\godot-openxr-vr
+
+      - name: Verify Godot OpenXR VR log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\godot-openxr-vr\godot-openxr-vr-output.log
+          --label godot-openxr-vr
+          --require "IMM_GODOT_OPENXR_SMOKE begin"
+          --require "IMM_GODOT_OPENXR_SMOKE interface_initialized"
+          --require "IMM_GODOT_OPENXR_SMOKE viewport_use_xr=1"
+          --require "IMM_GODOT_OPENXR_SMOKE primary_interface=OpenXR"
+          --require "IMM_GODOT_OPENXR_SMOKE viewer_initialized"
+          --require "IMM_GODOT_OPENXR_SMOKE load_document_result=0"
+          --require "IMM_GODOT_OPENXR_SMOKE document_ready"
+          --require "IMM_GODOT_OPENXR_SMOKE frame_submitted"
+          --require "IMM Godot OpenXR VR smoke passed"
+          --forbid "IMM_GODOT_OPENXR_SMOKE failed"
+          --forbid "OpenXR interface was not found"
+          --forbid "OpenXR interface initialize() returned false"
+          --forbid "ImmViewer did not load"
+          --forbid "ImmViewer sequence was not ready"
+          --output artifacts\godot-openxr-vr\godot-openxr-vr-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class vr-device-infrastructure --output artifacts\godot-openxr-vr\manifest.json --product godot --platform-name windows --mode vr --renderer openxr --include artifacts\godot-openxr-vr
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\godot-openxr-vr --require-manifest --output artifacts\godot-openxr-vr\artifact-summary.json
+
+      - name: Upload Godot OpenXR VR artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindowsGodotOpenXRVR-GPU
+          path: artifacts/godot-openxr-vr
+          if-no-files-found: ignore
+          retention-days: 14
+
+  macos-standalone-metal:
+    name: macOS Standalone Metal
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: macos-14
+    timeout-minutes: 35
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CMake
+        run: command -v cmake >/dev/null 2>&1 || brew install cmake
+
+      - name: Preflight macOS Metal runner
+        run: python3 tests/tools/preflight_runner.py --profile macos-standalone-metal --output artifacts/macos-standalone-metal/preflight.json --require-command cmake --require-command git
+
+      - name: Configure macOS build
+        run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
+
+      - name: Build macOS Metal standalone viewer
+        run: cmake --build build/macos --target appImmViewerMetal --config Release
+
+      - name: Smoke macOS Metal standalone viewer
+        timeout-minutes: 8
+        run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
+
+      - name: Record macOS Metal render metrics
+        run: >
+          python3 tests/tools/compare_render_metrics.py build/macos/metal-validation-captures/static.ppm
+          --contract tests/baselines/render/macos-standalone-metal-sample1.json
+          --json-output artifacts/macos-standalone-metal/macos-metal-render-metrics.json
+
+      - name: Write macOS Metal render report
+        if: always()
+        run: >
+          python3 tests/tools/write_render_report.py
+          --metrics-json artifacts/macos-standalone-metal/macos-metal-render-metrics.json
+          --candidate-capture build/macos/metal-validation-captures/static.ppm
+          --output-dir artifacts/macos-standalone-metal/captures
+          --markdown-output artifacts/macos-standalone-metal/render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/macos-standalone-metal/manifest.json --product standalone --platform-name macos --mode non-vr --renderer metal --include artifacts/macos-standalone-metal
+
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/macos-standalone-metal --require-manifest --output artifacts/macos-standalone-metal/artifact-summary.json
+
+      - name: Upload macOS Standalone Metal artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOSStandaloneMetal-GPU
+          path: artifacts/macos-standalone-metal
+          if-no-files-found: ignore
+          retention-days: 14
+
+  macos-godot-metal:
+    name: macOS Godot Metal
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Godot for macOS
+        run: |
+          set -euo pipefail
+          version="${GODOT_VERSION:-4.5-stable}"
+          zip_name="Godot_v${version}_macos.universal.zip"
+          url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$url" -o "$zip_name"
+          mkdir -p godot-macos
+          unzip -q "$zip_name" -d godot-macos
+          godot_exe="$(find godot-macos -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
+          if [ -z "$godot_exe" ]; then
+            echo "Godot executable not found after extracting $zip_name" >&2
+            exit 1
+          fi
+          echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
+
+      - name: Preflight Godot Metal runner
+        run: python3 tests/tools/preflight_runner.py --profile macos-godot-metal --output artifacts/godot-smoke-macos-metal/preflight.json --require-command cmake --require-command git --require-env GODOT_EXE
+
+      - name: Configure macOS build
+        run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
+
+      - name: Build macOS Godot native plugin
+        run: cmake --build build/macos --target ImmGodotPlugin --config Release
+
+      - name: Build macOS Godot GDExtension
+        run: |
+          set -euo pipefail
+          python3 -m pip install --break-system-packages scons
+          if [ ! -d thirdparty/godot-cpp ]; then
+            git clone --depth 1 --branch godot-4.5-stable https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
+          fi
+          arch="$(uname -m)"
+          python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
+          python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$PWD/thirdparty/godot-cpp" imm_godot_lib="$PWD/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$PWD/build/macos/godot/libImmGodotPlugin.dylib"
+
+      - name: Run Godot Metal visual smoke
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
+          mkdir -p artifacts/godot-smoke-macos-metal
+          smoke_status=0
+          IMM_GODOT_VISUAL_SMOKE=1 \
+          IMM_GODOT_VISUAL_SMOKE_WIDTH=1024 \
+          IMM_GODOT_VISUAL_SMOKE_HEIGHT=576 \
+          IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA=1 \
+          IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
+          "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --resolution 1024x576 --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
+            > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1 || smoke_status=$?
+          python3 tests/tools/classify_godot_visual_smoke.py \
+            --log artifacts/godot-smoke-macos-metal/godot-metal-smoke.log \
+            --renderer metal \
+            --composition-mode full_depth \
+            --output artifacts/godot-smoke-macos-metal/composition-status.json
+          if [ "$smoke_status" -ne 0 ]; then
+            status="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"
+            if [ "$status" != "expected_failed" ]; then
+              exit "$smoke_status"
+            fi
+          fi
+
+      - name: Record Godot Metal render metrics
+        run: >
+          python3 tests/tools/compare_render_metrics.py
+          artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+          --contract tests/baselines/render/macos-metal-sample1.json
+          --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+
+      - name: Write Godot Metal render report
+        if: always()
+        run: >
+          python3 tests/tools/write_render_report.py
+          --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+          --candidate-capture artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+          --status-json artifacts/godot-smoke-macos-metal/composition-status.json
+          --output-dir artifacts/godot-smoke-macos-metal/captures
+          --markdown-output artifacts/godot-smoke-macos-metal/render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        run: |
+          status="${{ job.status }}"
+          failure_class="visual"
+          if [ -f artifacts/godot-smoke-macos-metal/composition-status.json ]; then
+            compositing="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"
+            rendering="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("rendering", ""))')"
+            if [ "$status" = "success" ] && [ "$compositing" = "expected_failed" ] && [ "$rendering" = "success" ]; then
+              status="expected_failed"
+              failure_class="compositing"
+            fi
+          fi
+          python3 tests/tools/write_ci_manifest.py --status "$status" --failure-class "$failure_class" --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-smoke-macos-metal --require-manifest --output artifacts/godot-smoke-macos-metal/artifact-summary.json
+
+      - name: Upload Godot Metal artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOSGodotMetal-GPU
+          path: artifacts/godot-smoke-macos-metal
+          if-no-files-found: ignore
+          retention-days: 14
+
+  gpu-evidence-report:
+    name: GPU Evidence Report
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - windows-standalone-directx
+      - windows-standalone-vulkan
+      - windows-standalone-opengl
+      - windows-standalone-openxr-vr
+      - windows-standalone-opengl-vr
+      - windows-godot-vulkan
+      - windows-godot-openxr-vr
+      - macos-standalone-metal
+      - macos-godot-metal
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download GPU artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/gpu-evidence/input
+
+      - name: Verify GPU matrix evidence
+        run: >
+          python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --gate-prefix "CI GPU Matrix /"
+          --evidence-root artifacts/gpu-evidence/input
+          --json-output artifacts/gpu-evidence/matrix-evidence.json
+          --markdown-output artifacts/gpu-evidence/matrix-evidence.md
+
+      - name: Upload GPU evidence report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPUMatrixEvidence
+          path: artifacts/gpu-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Hide per-lane GPU artifacts
+        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python tests/tools/delete_ci_artifacts.py
+          --name WindowsStandaloneDirectX-GPU
+          --name WindowsStandaloneVulkan-GPU
+          --name WindowsStandaloneOpenGL-GPU
+          --name WindowsStandaloneOpenXRVR-GPU
+          --name WindowsStandaloneOpenGLVR-GPU
+          --name WindowsGodotVulkan-GPU
+          --name WindowsGodotOpenXRVR-GPU
+          --name macOSStandaloneMetal-GPU
+          --name macOSGodotMetal-GPU

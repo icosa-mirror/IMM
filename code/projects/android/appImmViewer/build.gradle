@@ -19,13 +19,18 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         externalNativeBuild {
             cmake {
                 def immNonVr = project.findProperty("immNonVr") ?: "ON"
+                def immRendererApi = project.findProperty("immRendererApi") ?: (immNonVr == "ON" ? "Vulkan" : "GLES")
+                def immXrRuntime = project.findProperty("immXrRuntime") ?: "Legacy"
                 cppFlags "-std=c++17", "-D__ANDROID__", "-DANDROID"
                 arguments "-DANDROID_STL=c++_shared",
                         "-DIMM_ANDROID_NON_VR=${immNonVr}",
+                        "-DIMM_ANDROID_RENDERER_API=${immRendererApi}",
+                        "-DIMM_ANDROID_XR_RUNTIME=${immXrRuntime}",
                         "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
                         "-DCMAKE_C_COMPILER_WORKS=1",
                         "-DCMAKE_CXX_COMPILER_WORKS=1",
@@ -55,7 +60,10 @@ android {
 
     sourceSets {
         main {
+            def immNonVr = project.findProperty("immNonVr") ?: "ON"
+            def immManifest = project.findProperty("immManifest") ?: (immNonVr == "ON" ? "nonVr" : "vr")
             def viewerSrc = "${projectDir}/../../../appImmViewer/src/android"
+            manifest.srcFile immManifest == "vr" ? "src/vr/AndroidManifest.xml" : "src/nonVr/AndroidManifest.xml"
             java.srcDirs = ["${viewerSrc}/java"]
             res.srcDirs = ["${viewerSrc}/res"]
             assets.srcDirs = ["${viewerSrc}/assets", "${buildDir}/generated/assets"]
@@ -76,6 +84,9 @@ dependencies {
     implementation "androidx.core:core-ktx:1.13.1"
     implementation "androidx.annotation:annotation:1.8.0"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
 }
 
 def generatedAssetsDir = "${buildDir}/generated/assets"

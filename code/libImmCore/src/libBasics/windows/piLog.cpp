@@ -331,13 +331,15 @@ void piLog::Printf( const wchar_t *file, const wchar_t *func, int line, int type
     if( me->mNumLoggers<1 ) return;
 
     va_list arglist;
-
+    va_list measureArglist;
 
     va_start( arglist, format );
+    va_copy(measureArglist, arglist);
 
-	int maxLen = pivscwprintf( format, arglist ) + 1;
+	int maxLen = pivscwprintf( format, measureArglist ) + 1;
+    va_end(measureArglist);
 	wchar_t *tmpstr = (wchar_t*)_malloca( maxLen*sizeof(wchar_t) );
-	if (!tmpstr) return;
+	if (!tmpstr) { va_end(arglist); return; }
 
 
 	pivwsprintf(tmpstr, maxLen, format, arglist);

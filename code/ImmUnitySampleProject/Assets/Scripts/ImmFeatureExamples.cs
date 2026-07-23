@@ -3,7 +3,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Networking;
-using UnityEngine.XR;
+using Type = System.Type;
 
 namespace ImmPlayer
 {
@@ -278,7 +278,7 @@ namespace ImmPlayer
             }
             else
             {
-                LoadFromFileSystem();
+                yield return StartCoroutine(LoadFromFileSystem());
             }
 
             if (_doc == null)
@@ -334,26 +334,45 @@ namespace ImmPlayer
                 File.WriteAllBytes(destPath, data);
                 Debug.Log($"{DiagPrefix}Copied to: {destPath}");
 
+                yield return StartCoroutine(WaitForNativeDocumentLoadReady());
                 _doc = ImmPlayerManager.Instance.LoadDocument(destPath);
             }
         }
 
-        private void LoadFromFileSystem()
+        private IEnumerator LoadFromFileSystem()
         {
             if (string.IsNullOrEmpty(directoryPath))
             {
                 Debug.LogError($"{DiagPrefix}Directory path is empty");
-                return;
+                yield break;
             }
 
             string path = Path.Combine(directoryPath, selectedFileName);
             if (!File.Exists(path))
             {
                 Debug.LogError($"{DiagPrefix}File not found: {path}");
-                return;
+                yield break;
             }
 
+            yield return StartCoroutine(WaitForNativeDocumentLoadReady());
             _doc = ImmPlayerManager.Instance.LoadDocument(path);
+        }
+
+        private IEnumerator WaitForNativeDocumentLoadReady()
+        {
+            const int maxFrames = 240;
+            for (int frame = 0; frame < maxFrames; ++frame)
+            {
+                if (ImmPlayerManager.Instance.IsReadyForDocumentLoad)
+                    yield break;
+
+                yield return null;
+            }
+
+            // Android Unity completes IMM's GLES renderer from a render-thread
+            // plugin event. If this fires, the camera did not deliver that event
+            // within the startup window, so loading now would be a native crash.
+            Debug.LogError($"{DiagPrefix}Native IMM renderer was not ready for document load after {maxFrames} frames");
         }
 
         public void UnloadDocument()
@@ -469,6 +488,9 @@ namespace ImmPlayer
 
         private void ApplyDocumentBackgroundColor()
         {
+            if (!string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("IMM_UNITY_SKIP_DOCUMENT_BACKGROUND_COLOR")))
+                return;
+
             Camera cam = backgroundCamera != null ? backgroundCamera : Camera.main;
             if (cam == null)
                 return;
@@ -818,7 +840,7 @@ namespace ImmPlayer
                 out Pose targetPose))
             {
                 Pose finalPose = targetPose;
-                if (constrainViewpointRotationToYawInXR && XRSettings.enabled)
+                if (constrainViewpointRotationToYawInXR && IsXrSettingsEnabled())
                 {
                     Quaternion yawOnlyRotation = Quaternion.Euler(0.0f, targetPose.rotation.eulerAngles.y, 0.0f);
                     Vector3 headLocalPosition = target.InverseTransformPoint(head.position);
@@ -832,6 +854,13 @@ namespace ImmPlayer
 
                 target.SetPositionAndRotation(finalPose.position, finalPose.rotation);
             }
+        }
+
+        private static bool IsXrSettingsEnabled()
+        {
+            Type xrSettingsType = Type.GetType("UnityEngine.XR.XRSettings, UnityEngine.XRModule");
+            object value = xrSettingsType?.GetProperty("enabled")?.GetValue(null);
+            return value is bool enabled && enabled;
         }
 
         private Transform ResolveSpawnAreaTargetTransform()

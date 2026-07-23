@@ -19,8 +19,8 @@ static const char* fsShaderAAResolve = ""
 
 #if EXPLICIT_UNIFORMS
 "layout(binding = 0) uniform sampler2DMS unTex0;"
-"layout(location = 0) uniform vec4 unFade;"
-"layout(location = 1) uniform int  unXOffset;"
+"layout(location = 1) uniform vec4 unFade;"
+"layout(location = 2) uniform int  unXOffset;"
 #else
 "uniform sampler2DMS unTex0;"
 "uniform vec4 unFade;"
@@ -58,7 +58,9 @@ static const char* fsShaderAAResolve = ""
 
     //"col = pow(col, vec3(0.4545));"
 	// this would NOT be necessary if we had glEnable(GL_FRAMEBUFFER_SRGB); , which we don't
+    "\n#if OUTPUT_ENCODING==1\n"
 	"col = linear2srgb(col);"
+    "\n#endif\n"
 
 	"col *= unFade.x;"
 
@@ -69,8 +71,8 @@ static const char* fsShaderResolve = ""
 
 #if EXPLICIT_UNIFORMS
 "layout(binding = 0) uniform sampler2D unTex0;"
-"layout(location = 0) uniform vec4 unFade;"
-"layout(location = 1) uniform int  unXOffset;"
+"layout(location = 1) uniform vec4 unFade;"
+"layout(location = 2) uniform int  unXOffset;"
 #else
 "uniform sampler2D unTex0;"
 "uniform vec4 unFade;"
@@ -91,7 +93,9 @@ static const char* fsShaderResolve = ""
     "ivec2 p = ivec2(gl_FragCoord.xy);"
     "p.x += unXOffset;"
     "vec3 col = texelFetch(unTex0, p, 0).xyz;"
+    "\n#if OUTPUT_ENCODING==1\n"
     "col = linear2srgb(col);"
+    "\n#endif\n"
     "col *= unFade.x;"
     "outColor = vec4(col, 1.0);"
 "}";
@@ -104,7 +108,7 @@ using namespace ImmCore;
 
 namespace ExePlayer
 {
-    bool Resolve::Init(piRenderer* renderer, int superSample, int msaaSamples)
+    bool Resolve::Init(piRenderer* renderer, int superSample, int msaaSamples, OutputEncoding outputEncoding)
     {
         mExplicitUniforms = true;
 #if defined(__APPLE__)
@@ -122,7 +126,14 @@ namespace ExePlayer
         if (!mBlendStateNone)
             return false;
 
-        const piShaderOptions ops = { 2,{ { "SS", superSample }, { "EXPLICIT_UNIFORMS", mExplicitUniforms ? 1 : 0 } } };
+        const piShaderOptions ops = {
+            3,
+            {
+                { "SS", superSample },
+                { "EXPLICIT_UNIFORMS", mExplicitUniforms ? 1 : 0 },
+                { "OUTPUT_ENCODING", static_cast<int>(outputEncoding) }
+            }
+        };
         char error[2048];
         if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
         {
@@ -132,8 +143,9 @@ namespace ExePlayer
         else
         {
 #if !defined(ANDROID)
-            mAAResolveShader = renderer->CreateShaderBinary(nullptr, shader_resolve_vs_code[0], shader_resolve_vs_size[0],
-                nullptr, 0, nullptr, 0, nullptr, 0, shader_resolve_fs_code[0], shader_resolve_fs_size[0], error);
+            const int fsIndex = outputEncoding == OutputEncoding::DisplaySrgb ? 2 : 0;
+            mAAResolveShader = renderer->CreateShaderBinary(&ops, shader_resolve_vs_code[0], shader_resolve_vs_size[0],
+                nullptr, 0, nullptr, 0, nullptr, 0, shader_resolve_fs_code[fsIndex], shader_resolve_fs_size[fsIndex], error);
 #endif
         }
         if (!mAAResolveShader)
@@ -187,8 +199,8 @@ namespace ExePlayer
 
         float data[4] = { fade, 0.0f, 0.0f, 0.0f };
         renderer->AttachShader(mAAResolveShader);
-        const int fadeLoc = mExplicitUniforms ? 0 : mFadeLoc;
-        const int offsetLoc = mExplicitUniforms ? 1 : mOffsetLoc;
+        const int fadeLoc = mExplicitUniforms ? 1 : mFadeLoc;
+        const int offsetLoc = mExplicitUniforms ? 2 : mOffsetLoc;
         renderer->SetShaderConstant4F(fadeLoc, (float*)data, 1);
         renderer->SetShaderConstant1I(offsetLoc, &unXOffset, 1);
         if (!mExplicitUniforms)

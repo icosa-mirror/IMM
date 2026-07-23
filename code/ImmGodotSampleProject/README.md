@@ -5,20 +5,21 @@ This project mirrors the intent of the Unity sample project and exercises the na
 ## Current status
 
 - The scene and controls are in place.
-- The `ImmViewerNode` script mirrors the runtime API shape the native GDExtension exposes.
+- The `ImmViewerNode` script mirrors the runtime API shape for API-parity checks, but the sample scene uses the native GDExtension node.
 - The native `appImmGodot` plugin and GDExtension own native init/shutdown, camera registration, matrix submission, and compositor render request publishing.
 - A `.gdextension` manifest is present under `addons/imm_viewer/`.
-- The project Run button opens the macOS Forward+/Metal scene by default, and the script-stub smoke plus macOS Forward+/Metal visual smoke pass locally. Windows currently validates GDExtension build/staging in CI, not native rendering.
+- The project Run button opens `SampleScene.tscn`, which is the user-facing native-addon setup: an `ImmViewerNode` loads `sample1.imm`, queues the authored camera, and composites through `ImmViewerCompositorEffect`.
+- `VisualSmokeScene.tscn` is the deterministic visual validation harness. It defaults to Metal on macOS and Vulkan on Windows/Android when run by the smoke scripts.
 
 ## Open in Godot
 
 1. Open `code/ImmGodotSampleProject` in Godot 4.5 or newer.
 2. Use Forward+ rendering. On macOS, Godot 4.6.1 selects Metal for the Forward+ path.
-3. Press Run. The project main scene is `scenes/MetalVisualSmokeScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor.
+3. Press Run. The project main scene is `scenes/SampleScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor. The editor Play path uses the active authored spawn area for initial camera placement when one is available, converted for Godot's `Camera3D` `-Z` forward convention, with document-bounds framing only as a fallback.
 
 ## Using the addon in a new project
 
-The CI artifact (`ImmGodotGDExtension-macOS`) is a self-contained `addons/imm_viewer/` folder. Copy it into your Godot project's root so you have `res://addons/imm_viewer/`.
+The CI artifact (`ImmPlayerPlugin-Godot`) is a self-contained `addons/imm_viewer/` folder. Copy it into your Godot project's root so you have `res://addons/imm_viewer/`.
 
 ### macOS quarantine (required after downloading from CI)
 
@@ -34,7 +35,7 @@ Run this once from your project root before opening the project in Godot. If you
 
 1. **Add an `ImmViewerNode`** to your scene tree. Set its properties in the Inspector:
    - `document_path`: path to your `.imm` file (e.g. `res://myfile.imm`)
-   - `load_on_ready`: enable to load automatically when the scene starts
+   - `load_on_ready`: leave disabled when using the Vulkan compositor path; load after at least one camera/render warmup frame
    - `auto_play`: enable to start playback immediately after loading
    - `auto_queue_render`: enable to let the node submit camera transforms each frame
    - `render_camera_path`: set to the path of your `Camera3D` node
@@ -56,10 +57,12 @@ Node3D (root)
 ├── Camera3D          ← compositor → Compositor [ImmViewerCompositorEffect]
 └── ImmViewerNode     ← render_camera_path: ../Camera3D
                          document_path: res://myfile.imm
-                         load_on_ready: true
+                         load_on_ready: false
                          auto_play: true
                          auto_queue_render: true
 ```
+
+For Vulkan editor playback, queue the active camera for a few frames before calling `load_document()`. The sample controller does this automatically so Godot has exposed the external Vulkan frame resources before IMM loads GPU content.
 
 ## Sample controls
 
@@ -79,31 +82,31 @@ Node3D (root)
 
 ## Document path
 
-The default document path is set to `../../../exampleImmFiles/sample1.imm`, which points at the repository sample from this project directory.
+The default document path is set to `res://../../exampleImmFiles/sample1.imm`, which Godot globalizes to the repository sample from this project directory.
 
 ## Native build and validation
 
-Build the GDExtension with `godot-cpp`, run the script-stub smoke, and run the macOS Forward+/Metal visual smoke when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
+Build the GDExtension with `godot-cpp`, run the native smoke, and run the visual smoke scene when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
 
-For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native smoke scene immediately after the build. This is not the current Windows CI gate because Windows does not yet have a valid Godot-compatible production renderer backend.
+For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native `SampleScene.tscn` smoke immediately after the build. For visible validation, run the `VisualSmokeScene.tscn` harness with `IMM_GODOT_VISUAL_SMOKE=1`; on Windows it selects Vulkan by default.
 
-The native build scaffold writes the GDExtension DLL to `addons/imm_viewer/bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics. The addon is self-contained, so distributing it is just a matter of copying the `addons/imm_viewer/` folder.
+The native build scaffold writes the GDExtension DLL to `addons/imm_viewer/bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics. On Windows, the GDExtension registers its own binary directory with the process DLL search path during library initialization so editor Play can resolve delayed IMM dependencies without a wrapper-modified `PATH`. The addon is self-contained, so distributing it is just a matter of copying the `addons/imm_viewer/` folder.
 
-If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` checks the sample/native API boundary, `.gdextension` manifest paths, Forward+ project default, Run-button main scene, script-stub/native scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI/smoke wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the `appImmGodot` syntax-only compile when `clang++` is available. If `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a Godot 4.5 `godot-cpp` checkout with generated bindings, it also syntax-checks the GDExtension sources against the real Godot C++ headers. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -VerifyOnly` runs the same local verification without requiring MSBuild, SCons, or `godot-cpp`.
+Android native addon packaging is built from `code/projects/android`:
 
-With Godot installed, add `IMM_GODOT_RUN_LOCAL_SMOKE=1` to `verify_local.py` to run the script-stub smoke scene headlessly. This validates project loading, GDScript parsing, scene wiring, `auto_queue_render`, `load_document()`, `is_loaded()`, document state/background color, chapter/bounds/layer/spawn-area query APIs, playback controls, playback time snapshots/seek math, document/playback/spawn-area signals, native backend signal parity, the camera/viewport queue, and render diagnostics before the native Windows extension is available.
+```powershell
+.\code\projects\android\build-godot-extension-android.ps1 -Configuration Debug -BuildGodotCpp
+```
 
-The `ImmViewer` node has `auto_queue_render = true` and `render_camera_path = ../CameraRig/Camera3D`. That makes `ImmViewerNode` register camera 0 and queue the active camera transform, field of view, and viewport dimensions each frame while a document is loaded. In the Metal visual scene, queued work is consumed by `ImmViewerCompositorEffect` and rendered into Godot-owned render resources. Press `\` to queue a fixed-viewport diagnostic render request.
+That helper builds/stages `libImmGodotPlugin.so` and `libimm_godot_extension.arm64.so` under `addons/imm_viewer/bin/android/debug/`, matching the Android entries in `imm_viewer.gdextension`. It requires the usual Android SDK/NDK `26.1.10909125` for IMM plus NDK `28.1.13356709` for Godot 4.5 `godot-cpp`.
 
-With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` first verifies that the GDExtension DLL, `ImmGodotPlugin.dll`, and staged IMM runtime dependency DLLs exist, then runs the headless smoke script against `NativeSmokeScene.tscn`. It asserts `ImmViewer` is the native `ImmViewerNode`, verifies camera 0 was auto-registered by `auto_queue_render`, loads the sample document, checks document state/background color, exercises chapter/bounds/layer/spawn-area query APIs, validates every authored spawn-area dictionary, exercises playback controls and signal emissions, verifies playback time APIs remain safe before the native timeline-ready state, exercises the registered camera/viewport queue, validates render diagnostics including adapter graphics/before/after callback counts, and requires the `IMM Godot smoke test passed` output marker. Add `-LoadUnloadCycles 2` to repeatedly unload/reload the document while the render queue remains active, and add `-LogDir artifacts\godot-smoke` to save smoke output, run metadata, and the native staged-DLL inventory. Without `-RequireExtension`, the smoke script uses the script-stub `ScriptSmokeScene.tscn`.
+If Godot is not installed, `python code/appImmGodotGDExtension/verify_local.py` checks the sample/native API boundary, `.gdextension` manifest paths, Forward+ project default, Run-button main scene, native sample scene structure, visual smoke scene structure, native `ImmViewerNode` registration and method bindings, `ImmViewerNode` camera registration plus camera/viewport render queue ownership, Windows `godot-cpp` bootstrap/CI/smoke wiring, source paths for the IMM runtime dependency DLLs staged by SCons, PowerShell helper syntax when PowerShell is available, `ImmGodot` C ABI export alignment, local Python files, and the `appImmGodot` syntax-only compile when `clang++` is available. If `GODOT_CPP_PATH` or `thirdparty/godot-cpp` points at a Godot 4.5 `godot-cpp` checkout with generated bindings, it also syntax-checks the GDExtension sources against the real Godot C++ headers. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -VerifyOnly` runs the same local verification without requiring MSBuild, SCons, or `godot-cpp`.
 
-The Windows workflow runs `ScriptSmokeScene.tscn`, which contains no native
-resource types, before the native build. It runs a native-extension preflight
-after the GDExtension build. The preflight validates staged DLLs and Godot editor
-lookup paths without launching native IMM rendering, because Windows does not
-yet have a valid Godot-compatible production renderer backend. `SampleScene.tscn`
-remains the normal native sample rather than doubling as the pre-build stub test.
-Use macOS Forward+/Metal for the current visible-rendering gate.
+With Godot installed and the extension DLLs built, `.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -RequireExtension` verifies the staged native DLL set and runs the headless smoke script against `NativeSmokeScene.tscn`. It validates the native `ImmViewerNode`, camera registration and render queue, document loading and state, playback controls, chapter/layer/spawn-area queries, signal parity, render diagnostics, and repeated load/unload behavior. Without `-RequireExtension`, the script uses `ScriptSmokeScene.tscn`. Add `-LoadUnloadCycles 2` for repeated lifecycle coverage and `-LogDir artifacts\godot-smoke` to retain logs and the staged-file inventory.
+
+The `ImmViewer` node has `auto_queue_render = true` and `render_camera_path = ../CameraRig/Camera3D`. That makes `ImmViewerNode` register camera 0 and queue the active camera transform, field of view, and viewport dimensions each frame while a document is loaded. In the visual smoke scene, queued work is consumed by `ImmViewerCompositorEffect` and rendered into Godot-owned render resources. Press `\` to queue a fixed-viewport diagnostic render request.
+
+The validation matrix builds and exercises the Windows Godot Vulkan path on a hosted runner using Mesa lavapipe, including full-depth diagnostics and the supported ordered-overlay composition. It also validates Android Godot Vulkan and macOS Godot Metal. The Windows Godot OpenXR lane remains gated to an explicitly enabled headset-capable runner. Local visible validation can run `VisualSmokeScene.tscn` directly or use `run-godot-vulkan-visual-baseline-smoke.ps1`.
 
 The sample and smoke scenes apply the current IMM background color from `get_background_color()` to `RenderingServer.set_default_clear_color(...)` before camera rendering. The status label also displays that color for quick diagnostics.
 
@@ -121,6 +124,6 @@ The `V` key exercises the native layer override path by toggling the first layer
 
 The viewer API also mirrors Unity's layer transform override calls with `set_layer_transform()` and `clear_layer_transform_override()`.
 
-The viewer API now includes `set_document_transform()` and `get_document_transform()`. In the native GDExtension path this forwards to `ImmGodot_SetDocumentToWorld`; in the script stub it stores the value so sample code can call the same API before the native DLL is present.
+The viewer API now includes `set_document_transform()` and `get_document_transform()`. In the native GDExtension path this forwards to `ImmGodot_SetDocumentToWorld`; in the script stub it stores the value for API-parity checks.
 
-The spawn-area controls now query `get_active_spawn_area_info()` and move the camera rig to the active authored pose, including the same head-offset compensation used by the Unity sample. In script-stub mode no authored spawn-area data is available, so the keys only update status.
+The spawn-area controls now query `get_active_spawn_area_info()` and move the camera rig to the active authored pose, including the same head-offset compensation used by the Unity sample.

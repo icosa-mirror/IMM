@@ -27,6 +27,7 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libMesh/piRenderMesh.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libRender/piRenderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libRender/opengles/piGLES_Renderer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/libRender/vulkan/piVulkan_Renderer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/piWave.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveWAV.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOGG.cpp
@@ -88,6 +89,7 @@ find_library(egl-lib EGL)
 find_library(gl3-lib GLESv3)
 find_library(opensles-lib OpenSLES)
 find_library(mediandk-lib mediandk)
+find_library(dl-lib dl)
 
 # Link libraries
 target_link_libraries(
@@ -100,6 +102,7 @@ target_link_libraries(
     ${gl3-lib}
     ${opensles-lib}
     ${mediandk-lib}
+    ${dl-lib}
     ${android-lib}
 )
 

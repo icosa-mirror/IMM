@@ -5,6 +5,9 @@
 #if defined(__APPLE__)
 #include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
 #endif
+#if defined(_WIN32) || defined(ANDROID)
+#include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
+#endif
 
 #include <cstdlib>
 #include <cstdio>
@@ -100,12 +103,14 @@ namespace
             return piRenderer::API::GLES;
         case ImmGodotRendererApi_Metal:
             return piRenderer::API::Metal;
+        case ImmGodotRendererApi_Vulkan:
+            return piRenderer::API::Vulkan;
         case ImmGodotRendererApi_Auto:
         default:
 #if defined(__APPLE__)
             return piRenderer::API::Metal;
-#elif defined(ANDROID)
-            return piRenderer::API::GLES;
+#elif defined(_WIN32) || defined(ANDROID)
+            return piRenderer::API::Vulkan;
 #else
             return piRenderer::API::GL;
 #endif
@@ -144,6 +149,11 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     config.rendererApi = iResolveRendererApi(rendererApi);
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
+    if (config.rendererApi == piRenderer::API::Vulkan)
+    {
+        config.initializeRendererOnInit = false;
+        config.initializeFullscreen = false;
+    }
     const int result = gBridge.Init(config) ? 0 : -1;
     if (result == 0 && iDebugLoggingEnabled())
     {
@@ -246,6 +256,72 @@ extern "C" IMMGODOT_EXPORT void ImmGodot_EndMetalFrame()
 #endif
 }
 
+extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFrame *frame)
+{
+    if (frame == nullptr || (frame->version != 1 && frame->version != 2) || frame->width <= 0 || frame->height <= 0)
+        return -1;
+    if (!gBridge.IsInitialized() || gBridge.GetRenderer() == nullptr || gBridge.GetRenderer()->GetAPI() != piRenderer::API::Vulkan)
+        return -1;
+
+#if defined(_WIN32) || defined(ANDROID)
+    piVulkanExternalDevice externalDevice = {};
+    externalDevice.instance = frame->instance;
+    externalDevice.physicalDevice = frame->physicalDevice;
+    externalDevice.device = frame->device;
+    externalDevice.graphicsQueue = frame->graphicsQueue;
+    externalDevice.graphicsQueueFamilyIndex = frame->graphicsQueueFamilyIndex;
+    if (externalDevice.instance == nullptr ||
+        externalDevice.physicalDevice == nullptr ||
+        externalDevice.device == nullptr ||
+        externalDevice.graphicsQueue == nullptr)
+    {
+        return -1;
+    }
+
+    if (!gBridge.CompleteGraphicsInitialization(&externalDevice))
+    {
+        return -1;
+    }
+    piRendererVulkan *renderer = static_cast<piRendererVulkan *>(gBridge.GetRenderer());
+    const bool clearExternalDepth = frame->version >= 2 && (frame->flags & ImmGodotVulkanFrameFlag_ClearExternalDepth) != 0;
+    bool began = false;
+    if (frame->depthImage != nullptr && frame->depthImageView != nullptr && frame->depthFormat != 0)
+    {
+        began = renderer->BeginExternalImageFrame(frame->colorImage,
+                                                  frame->colorImageView,
+                                                  frame->colorFormat,
+                                                  frame->depthImage,
+                                                  frame->depthImageView,
+                                                  frame->depthFormat,
+                                                  frame->width,
+                                                  frame->height,
+                                                  clearExternalDepth);
+    }
+    else
+    {
+        began = renderer->BeginExternalImageFrame(frame->colorImage,
+                                                 frame->colorImageView,
+                                                 frame->colorFormat,
+                                                 frame->width,
+                                                 frame->height);
+    }
+
+    return began ? 0 : -1;
+#else
+    return -1;
+#endif
+}
+
+extern "C" IMMGODOT_EXPORT void ImmGodot_EndVulkanFrame()
+{
+#if defined(_WIN32) || defined(ANDROID)
+    if (gBridge.IsInitialized() && gBridge.GetRenderer() != nullptr && gBridge.GetRenderer()->GetAPI() == piRenderer::API::Vulkan)
+    {
+        static_cast<piRendererVulkan *>(gBridge.GetRenderer())->EndExternalImageFrame();
+    }
+#endif
+}
+
 extern "C" IMMGODOT_EXPORT void ImmGodot_GlobalWork(int enabled)
 {
     gBridge.GlobalWork(enabled == 1, 9000);
@@ -338,9 +414,32 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_RenderCamera(int cameraID,
     return result;
 }
 
+extern "C" IMMGODOT_EXPORT int ImmGodot_GetRenderPerformanceInfo(ImmGodotRenderPerformanceInfo *info)
+{
+    if (info == nullptr || !gBridge.IsInitialized() || gBridge.GetPlayer() == nullptr)
+        return -1;
+
+    const Player::PerformanceInfo &nativeInfo = iPlayer().GetPerformanceInfoForFrame();
+    info->numDrawCalls = nativeInfo.numDrawCalls;
+    info->numDrawCallsCulled = nativeInfo.numDrawCallsCulled;
+    info->numPaintDrawCalls = nativeInfo.numPaintDrawCalls;
+    info->numPictureDrawCalls = nativeInfo.numPictureDrawCalls;
+    info->numPicture2DDrawCalls = nativeInfo.numPicture2DDrawCalls;
+    info->numPicture360DrawCalls = nativeInfo.numPicture360DrawCalls;
+    info->numPicture360EquirectDrawCalls = nativeInfo.numPicture360EquirectDrawCalls;
+    info->numPicture360CubemapDrawCalls = nativeInfo.numPicture360CubemapDrawCalls;
+    info->numModelDrawCalls = nativeInfo.numModelDrawCalls;
+    info->numTriangles = nativeInfo.numTriangles;
+    info->numTrianglesCulled = nativeInfo.numTrianglesCulled;
+    info->validationTimeFrame = nativeInfo.validationTimeFrame;
+    return 0;
+}
+
 extern "C" IMMGODOT_EXPORT int ImmGodot_LoadFromFile(char *fileName)
 {
     if (fileName == nullptr || fileName[0] == '\0')
+        return -1;
+    if (!gBridge.IsInitialized() || !gBridge.IsGraphicsInitialized() || gBridge.GetPlayer() == nullptr)
         return -1;
     return iPlayer().Load(pistr2ws(fileName));
 }
@@ -706,6 +805,9 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_GetSpawnAreaInfo(int docId, int spawnAre
         (((spawnAreaInfo.mVolume.mAllowTranslationX ? 1 : 0) << 2) |
          ((spawnAreaInfo.mVolume.mAllowTranslationY ? 1 : 0) << 1) |
          ((spawnAreaInfo.mVolume.mAllowTranslationZ ? 1 : 0) << 0));
+    serializedSpawnArea->volume.allowTranslation.x = spawnAreaInfo.mVolume.mAllowTranslationX ? 1 : 0;
+    serializedSpawnArea->volume.allowTranslation.y = spawnAreaInfo.mVolume.mAllowTranslationY ? 1 : 0;
+    serializedSpawnArea->volume.allowTranslation.z = spawnAreaInfo.mVolume.mAllowTranslationZ ? 1 : 0;
 
     return 0;
 }

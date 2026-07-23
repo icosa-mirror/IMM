@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+}
+
+if (project.hasProperty("immBuildDir")) {
+    buildDir = file(project.property("immBuildDir"))
+}
+
+android {
+    namespace 'org.linuxfoundation.imm.godot.ftltest'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'org.linuxfoundation.imm.godot.ftltest'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+}
+
+dependencies {
+    androidTestImplementation "junit:junit:4.13.2"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
+}

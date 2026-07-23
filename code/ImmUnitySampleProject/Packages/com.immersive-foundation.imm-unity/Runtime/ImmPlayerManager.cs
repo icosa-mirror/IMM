@@ -1,10 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.XR;
 
 namespace ImmPlayer
 {
@@ -48,6 +48,7 @@ namespace ImmPlayer
         [SerializeField] private bool useLinearColorSpace = true;
         [SerializeField] private int antialiasingLevel = 8;
         [SerializeField] private string logFileName = "imm_player_log.txt";
+        [SerializeField] private Camera renderCamera = null;
 
         #endregion
 
@@ -59,12 +60,20 @@ namespace ImmPlayer
         private readonly Dictionary<int, ImmDocument> _pendingUnloadDocuments = new Dictionary<int, ImmDocument>();
         private readonly HashSet<int> _nativeUnloadsInFlight = new HashSet<int>();
         private IntPtr _renderEventFunc = IntPtr.Zero;
+        private IntPtr _renderEventAndDataFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
+        private readonly HashSet<Camera> _loggedVulkanRenderTargetSource = new HashSet<Camera>();
+        private readonly HashSet<Camera> _loggedVulkanPrepareWarning = new HashSet<Camera>();
+        private readonly HashSet<int> _configuredVulkanRenderEvents = new HashSet<int>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
+        private const int VulkanCustomBlitEventId = 6;
         private bool _useCommandBufferRendering = false;
         private bool _useCameraCallbackRendering = false;
+        private Coroutine _vulkanSampleEventCoroutine = null;
         private int _appleMetalEventLogCount = 0;
+        private static Mesh _vulkanOverlayFixtureMesh;
+        private static Material _vulkanOverlayFixtureMaterial;
 
         private static bool IsEnvFlagEnabled(string name)
         {
@@ -106,6 +115,10 @@ namespace ImmPlayer
             {
                 Camera.onPostRender += OnCameraPostRender;
             }
+            if (builtInPipeline && IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_WAIT_FOR_END_OF_FRAME"))
+            {
+                _vulkanSampleEventCoroutine = StartCoroutine(IssueVulkanSampleEventAfterEndOfFrame());
+            }
         }
 
         private void OnDisable()
@@ -117,6 +130,11 @@ namespace ImmPlayer
             if (_useCameraCallbackRendering)
             {
                 Camera.onPostRender -= OnCameraPostRender;
+            }
+            if (_vulkanSampleEventCoroutine != null)
+            {
+                StopCoroutine(_vulkanSampleEventCoroutine);
+                _vulkanSampleEventCoroutine = null;
             }
             CleanupCommandBuffers();
         }
@@ -130,6 +148,22 @@ namespace ImmPlayer
                 IssueNativeUnloadDrainEvent();
                 CompleteFinishedNativeUnloads();
                 ReleaseCompletedMemoryBuffers();
+                if (IsVulkanRuntime() &&
+                    _renderEventFunc != IntPtr.Zero &&
+                    !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_HOST_RENDER") &&
+                    IsEnvFlagEnabled("IMM_UNITY_VK_USE_PREPARE_EVENT"))
+                {
+                    foreach (PerCameraInfo info in _cameras.Values)
+                    {
+                        int prepareEventId = (info.CameraId << 8) | 0x80;
+                        if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(prepareEventId))
+                        {
+                            int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(prepareEventId);
+                            Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={prepareEventId} configured={configured}");
+                        }
+                        GL.IssuePluginEvent(_renderEventFunc, prepareEventId);
+                    }
+                }
             }
         }
 
@@ -193,6 +227,7 @@ namespace ImmPlayer
                 }
 
                 _renderEventFunc = ImmNativePlugin.GetRenderEventFunc();
+                _renderEventAndDataFunc = ImmNativePlugin.GetRenderEventAndDataFunc();
                 _isInitialized = true;
 
                 Log("=== IMM Player Initialized Successfully ===");
@@ -480,6 +515,26 @@ namespace ImmPlayer
 
         public bool UsesCommandBufferRendering => _useCommandBufferRendering;
 
+        public bool IsReadyForDocumentLoad
+        {
+            get
+            {
+                if (!_isInitialized)
+                    return false;
+
+                return RequiresNativeDocumentLoadReady() ? ImmNativePlugin.IsReadyForDocumentLoad() != 0 : true;
+            }
+        }
+
+        private static bool RequiresNativeDocumentLoadReady()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return true;
+#else
+            return false;
+#endif
+        }
+
         private static bool IsAppleMetalRuntime()
         {
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
@@ -487,6 +542,62 @@ namespace ImmPlayer
 #else
             return false;
 #endif
+        }
+
+        private static bool IsVulkanRuntime()
+        {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            return SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
+#else
+            return false;
+#endif
+        }
+
+        private static CameraEvent GetVulkanCommandBufferEvent()
+        {
+            string value = Environment.GetEnvironmentVariable("IMM_UNITY_VK_CAMERA_EVENT");
+            if (string.Equals(value, "AfterImageEffectsOpaque", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.AfterImageEffectsOpaque;
+            if (string.Equals(value, "AfterForwardOpaque", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.AfterForwardOpaque;
+            if (string.Equals(value, "AfterSkybox", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.AfterSkybox;
+            if (string.Equals(value, "BeforeImageEffectsOpaque", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.BeforeImageEffectsOpaque;
+            if (string.Equals(value, "AfterEverything", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.AfterEverything;
+            if (string.Equals(value, "BeforeForwardOpaque", StringComparison.OrdinalIgnoreCase))
+                return CameraEvent.BeforeForwardOpaque;
+
+            return CameraEvent.AfterSkybox;
+        }
+
+        public void SetRenderCamera(Camera camera)
+        {
+            renderCamera = camera;
+        }
+
+        public void ClearRenderCamera()
+        {
+            renderCamera = null;
+        }
+
+        private bool ShouldRenderCamera(Camera cam)
+        {
+            if (cam == null)
+                return false;
+
+            if (renderCamera != null && cam != renderCamera)
+                return false;
+
+            if (IsEnvFlagEnabled("IMM_UNITY_GAME_CAMERAS_ONLY") && cam.cameraType != CameraType.Game)
+                return false;
+
+            string cameraName = Environment.GetEnvironmentVariable("IMM_UNITY_CAMERA_NAME");
+            if (!string.IsNullOrEmpty(cameraName) && !string.Equals(cam.name, cameraName, StringComparison.Ordinal))
+                return false;
+
+            return true;
         }
 
         private static bool UseRenderIntoTextureProjection(Camera cam)
@@ -502,47 +613,68 @@ namespace ImmPlayer
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
                 return true;
 
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
+                cam != null &&
+                cam.cameraType == CameraType.Game &&
+                !cam.stereoEnabled)
+                return true;
+
+            // Unity can mark Game cameras as stereo/XR-active even when we are
+            // validating the editor Game view. Do not use stereoEnabled as a
+            // proxy for render-into-texture projection. SceneView is the other
+            // built-in path that needs texture-style projection here.
             return cam != null && cam.cameraType == CameraType.SceneView;
         }
 
         private void CleanupCommandBuffers()
         {
+            CameraEvent[] events =
+            {
+                CameraEvent.AfterImageEffectsOpaque,
+                CameraEvent.BeforeForwardOpaque,
+                CameraEvent.AfterForwardOpaque,
+                CameraEvent.AfterSkybox,
+                CameraEvent.BeforeImageEffectsOpaque,
+                CameraEvent.AfterEverything
+            };
             foreach (var kvp in _cameras)
             {
                 if (kvp.Key)
                 {
-                    kvp.Key.RemoveCommandBuffer(CameraEvent.AfterImageEffectsOpaque, kvp.Value.CommandBuffer);
+                    foreach (CameraEvent cameraEvent in events)
+                    {
+                        kvp.Key.RemoveCommandBuffer(cameraEvent, kvp.Value.CommandBuffer);
+                    }
                 }
             }
             _cameras.Clear();
+            _configuredVulkanRenderEvents.Clear();
         }
 
         private void OnCameraPreCull(Camera cam)
         {
             if (!_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
                 return;
-            if (!HasRenderableDocument())
+            if (!ShouldRenderCamera(cam))
                 return;
 
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
 
-            int stereoMode = (int)StereoMode.Mono;
-            if (cam.stereoEnabled)
+            if (!IsReadyForDocumentLoad)
             {
-                if (XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.MultiPass)
-                {
-                    stereoMode = (int)StereoMode.TwoPass;
-                }
-                else if (XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.SinglePass)
-                {
-                    stereoMode = (int)StereoMode.SinglePass;
-                }
-                else if (XRSettings.stereoRenderingMode == XRSettings.StereoRenderingMode.SinglePassInstanced)
-                {
-                    // The native plugin doesn't support instanced single-pass; force two-pass.
-                    stereoMode = (int)StereoMode.TwoPass;
-                }
+                // GLES on Android needs native renderer initialization to
+                // complete from Unity's render-thread plugin callback, where
+                // the GL context is current. Queue this pre-load event before a
+                // document exists so LoadFromFile cannot race renderer creation.
+                info.CommandBuffer.Clear();
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, info.CameraId << 8);
+                return;
             }
+
+            if (!HasRenderableDocument())
+                return;
+
+            int stereoMode = ResolveStereoMode(cam);
 
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
             bool renderIntoTexture = UseRenderIntoTextureProjection(cam);
@@ -574,6 +706,35 @@ namespace ImmPlayer
                 cam.stereoEnabled ? info.WorldToRight : null,
                 cam.stereoEnabled ? info.RightProj : null);
             ImmNativePlugin.SetCameraViewport(info.CameraId, cam.pixelWidth, cam.pixelHeight);
+            if (IsVulkanRuntime())
+            {
+                RenderTexture vulkanTargetTexture = cam.targetTexture != null ? cam.targetTexture : cam.activeTexture;
+                RenderBuffer colorBuffer = vulkanTargetTexture != null ? vulkanTargetTexture.colorBuffer : Display.main.colorBuffer;
+                RenderBuffer depthBuffer = vulkanTargetTexture != null ? vulkanTargetTexture.depthBuffer : Display.main.depthBuffer;
+                int vulkanSampleCount = vulkanTargetTexture != null
+                    ? Math.Max(1, vulkanTargetTexture.antiAliasing)
+                    : (cam.allowMSAA ? Math.Max(1, QualitySettings.antiAliasing) : 1);
+                if (!_loggedVulkanRenderTargetSource.Contains(cam))
+                {
+                    _loggedVulkanRenderTargetSource.Add(cam);
+                    string source = vulkanTargetTexture != null ? $"cameraTexture {vulkanTargetTexture.width}x{vulkanTargetTexture.height}" : "display";
+                    Debug.Log($"[IMM_UNITY_VK_RT_SRC_20260612] cam={cam.name} cameraId={info.CameraId} source={source} pixel={cam.pixelWidth}x{cam.pixelHeight} samples={vulkanSampleCount}");
+                }
+                ImmNativePlugin.SetVulkanCameraRenderBuffers(
+                    info.CameraId,
+                    colorBuffer.GetNativeRenderBufferPtr(),
+                    depthBuffer.GetNativeRenderBufferPtr(),
+                    cam.pixelWidth,
+                    cam.pixelHeight,
+                    vulkanSampleCount);
+                int prepared = IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_PREPARE")
+                    ? 0
+                    : ImmNativePlugin.PrepareCamera(info.CameraId);
+                if (prepared == 0 && _loggedVulkanPrepareWarning.Add(cam))
+                {
+                    Debug.LogWarning($"[IMM_UNITY_VK_PREPARE_20260612] cam={cam.name} cameraId={info.CameraId} prepared=0");
+                }
+            }
 
             if (_useCameraCallbackRendering)
                 return;
@@ -586,7 +747,81 @@ namespace ImmPlayer
 
             int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
             info.CommandBuffer.Clear();
-            info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+            if (IsVulkanRuntime())
+            {
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(eventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
+                    Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
+                }
+                bool useCustomBlit = IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT") && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
+                bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
+                var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
+                if (bindCameraTarget)
+                {
+                    if (IsEnvFlagEnabled("IMM_UNITY_VK_BIND_CAMERA_DEPTH_TARGET"))
+                    {
+                        info.CommandBuffer.SetRenderTarget(cameraTarget, new RenderTargetIdentifier(BuiltinRenderTextureType.Depth));
+                    }
+                    else
+                    {
+                        info.CommandBuffer.SetRenderTarget(cameraTarget);
+                    }
+                }
+                if (useCustomBlit && _renderEventAndDataFunc != IntPtr.Zero)
+                {
+                    if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(VulkanCustomBlitEventId))
+                    {
+                        int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(VulkanCustomBlitEventId);
+                        Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={VulkanCustomBlitEventId} configured={configured}");
+                    }
+                    info.CommandBuffer.IssuePluginCustomBlit(_renderEventAndDataFunc, (uint)eventId, cameraTarget, cameraTarget, 0, 0);
+                }
+                else
+                {
+                    info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+                }
+                AppendVulkanOverlayFixtureDraw(info.CommandBuffer, cam);
+            }
+            else
+            {
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+            }
+        }
+
+        private static void AppendVulkanOverlayFixtureDraw(CommandBuffer commandBuffer, Camera cam)
+        {
+            if (!IsEnvFlagEnabled("IMM_UNITY_VK_COMMAND_BUFFER_OVERLAY_FIXTURE") || commandBuffer == null || cam == null)
+                return;
+
+            if (_vulkanOverlayFixtureMesh == null)
+            {
+                _vulkanOverlayFixtureMesh = new Mesh { name = "IMM Vulkan Overlay Fixture Quad" };
+                _vulkanOverlayFixtureMesh.vertices = new[]
+                {
+                    new Vector3(-0.5f, -0.5f, 0.0f),
+                    new Vector3( 0.5f, -0.5f, 0.0f),
+                    new Vector3( 0.5f,  0.5f, 0.0f),
+                    new Vector3(-0.5f,  0.5f, 0.0f)
+                };
+                _vulkanOverlayFixtureMesh.triangles = new[] { 0, 1, 2, 0, 2, 3, 2, 1, 0, 3, 2, 0 };
+                _vulkanOverlayFixtureMesh.RecalculateBounds();
+            }
+
+            if (_vulkanOverlayFixtureMaterial == null)
+            {
+                Shader shader = Shader.Find("Hidden/Internal-Colored");
+                _vulkanOverlayFixtureMaterial = shader != null
+                    ? new Material(shader)
+                    : new Material(Shader.Find("Unlit/Color"));
+                _vulkanOverlayFixtureMaterial.color = new Color(1.0f, 0.05f, 0.02f, 1.0f);
+                _vulkanOverlayFixtureMaterial.SetInt("_ZTest", (int)CompareFunction.Always);
+                _vulkanOverlayFixtureMaterial.SetInt("_ZWrite", 0);
+                _vulkanOverlayFixtureMaterial.SetInt("_Cull", (int)CullMode.Off);
+            }
+
+            commandBuffer.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
+            commandBuffer.DrawMesh(_vulkanOverlayFixtureMesh, Matrix4x4.TRS(new Vector3(0.45f, -0.05f, 0.0f), Quaternion.identity, Vector3.one * 0.55f), _vulkanOverlayFixtureMaterial);
         }
 
         private PerCameraInfo GetOrCreateCameraInfo(Camera cam, bool attachCommandBuffer)
@@ -599,7 +834,12 @@ namespace ImmPlayer
                 _cameras[cam] = info;
                 if (attachCommandBuffer)
                 {
-                    cam.AddCommandBuffer(CameraEvent.AfterImageEffectsOpaque, info.CommandBuffer);
+                    CameraEvent renderEvent = IsVulkanRuntime() ? GetVulkanCommandBufferEvent() : CameraEvent.AfterImageEffectsOpaque;
+                    if (IsVulkanRuntime())
+                    {
+                        Debug.Log($"[IMM_UNITY_VK_EVENT_20260612] cam={cam.name} cameraId={info.CameraId} renderEvent={renderEvent}");
+                    }
+                    cam.AddCommandBuffer(renderEvent, info.CommandBuffer);
                 }
             }
             return info;
@@ -609,11 +849,30 @@ namespace ImmPlayer
         {
             if (!_useCameraCallbackRendering || !_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
                 return;
+            if (!ShouldRenderCamera(cam))
+                return;
             if (!HasRenderableDocument())
                 return;
 
             if (!_cameras.TryGetValue(cam, out PerCameraInfo info))
                 return;
+
+            if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_WAIT_FOR_END_OF_FRAME"))
+                return;
+
+            if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_EVENT1") && !IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_WAIT_FOR_END_OF_FRAME"))
+            {
+                const int sampleEventId = 1;
+                if (info.CameraId != 1)
+                    return;
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(sampleEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(sampleEventId);
+                    Debug.Log($"[IMM_UNITY_VK_SAMPLE_EVENT1_20260612] eventId={sampleEventId} camera={info.CameraId} configured={configured}");
+                }
+                GL.IssuePluginEvent(_renderEventFunc, sampleEventId);
+                return;
+            }
 
             int eventId = info.CameraId << 8;
             if (_appleMetalEventLogCount < 8)
@@ -622,6 +881,39 @@ namespace ImmPlayer
                 _appleMetalEventLogCount++;
             }
             GL.IssuePluginEvent(_renderEventFunc, eventId);
+        }
+
+        private IEnumerator IssueVulkanSampleEventAfterEndOfFrame()
+        {
+            WaitForEndOfFrame wait = new WaitForEndOfFrame();
+            while (enabled)
+            {
+                yield return wait;
+                if (!IsVulkanRuntime() || !IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_EVENT1") || !_isInitialized || _renderEventFunc == IntPtr.Zero)
+                    continue;
+                if (!HasRenderableDocument())
+                    continue;
+
+                bool hasMainCameraTarget = false;
+                foreach (PerCameraInfo info in _cameras.Values)
+                {
+                    if (info.CameraId == 1)
+                    {
+                        hasMainCameraTarget = true;
+                        break;
+                    }
+                }
+                if (!hasMainCameraTarget)
+                    continue;
+
+                const int sampleEventId = 1;
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(sampleEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(sampleEventId);
+                    Debug.Log($"[IMM_UNITY_VK_SAMPLE_WFE_20260612] eventId={sampleEventId} configured={configured}");
+                }
+                GL.IssuePluginEvent(_renderEventFunc, sampleEventId);
+            }
         }
 
         private bool HasRenderableDocument()
@@ -743,6 +1035,23 @@ namespace ImmPlayer
             {
                 dst[i] = matrix[i];
             }
+        }
+
+        private static int ResolveStereoMode(Camera cam)
+        {
+            if (!cam.stereoEnabled)
+                return (int)StereoMode.Mono;
+
+            // Keep XRSettings optional so non-XR Unity package builds compile without XR package symbols.
+            Type xrSettingsType = Type.GetType("UnityEngine.XR.XRSettings, UnityEngine.XRModule");
+            object mode = xrSettingsType?.GetProperty("stereoRenderingMode")?.GetValue(null);
+            string modeName = mode?.ToString();
+
+            if (modeName == "SinglePass")
+                return (int)StereoMode.SinglePass;
+
+            // The native plugin doesn't support instanced single-pass; force two-pass.
+            return (int)StereoMode.TwoPass;
         }
 
         #endregion

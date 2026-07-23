@@ -26,11 +26,15 @@ namespace ImmPlayer
 #if defined(WINDOWS)
     #include "tmp/shader_static_brush_vs_hlsl.inc"
     #include "tmp/shader_static_brush_fs_hlsl.inc"
+    #include "tmp/shader_static_brush_vs_spirv.inc"
+    #include "tmp/shader_static_brush_fs_spirv.inc"
     #include "shader_static_brush_vs.glsl"
     #include "shader_static_brush_fs.glsl"
 #elif defined(ANDROID)
-#include "shader_static_brush_vs.es.glsl"
+    #include "shader_static_brush_vs.es.glsl"
     #include "shader_static_brush_fs.es.glsl"
+    #include "tmp/shader_static_brush_vs_spirv.inc"
+    #include "tmp/shader_static_brush_fs_spirv.inc"
 #else
     #include "shader_static_brush_vs.glsl"
     #include "shader_static_brush_fs.glsl"
@@ -47,6 +51,27 @@ namespace ImmPlayer
     {
         const char *value = std::getenv("IMM_FORCE_PAINT_BRUSH_TYPE");
         return (value && value[0]) ? atoi(value) : -1;
+    }
+
+    static bool iPaintLayerAllowed(uint32_t layerId)
+    {
+        const char *value = std::getenv("IMM_FORCE_PAINT_LAYER_IDS");
+        if (value && value[0])
+        {
+            const char *cursor = value;
+            while (*cursor)
+            {
+                char *end = nullptr;
+                const long id = strtol(cursor, &end, 10);
+                if (end != cursor && id >= 0 && static_cast<uint32_t>(id) == layerId) return true;
+                cursor = (*end == ',') ? end + 1 : end;
+                if (cursor == end) break;
+            }
+            return false;
+        }
+
+        value = std::getenv("IMM_FORCE_PAINT_LAYER_ID");
+        return !(value && value[0]) || static_cast<uint32_t>(atoi(value)) == layerId;
     }
 
     
@@ -256,7 +281,33 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             char error[1024] = { 0 };
 
 
-if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+            if (renderer->GetAPI() == piRenderer::API::Vulkan)
+            {
+#if defined(WINDOWS) || defined(ANDROID)
+#if ST_VERTEX_FORMAT == 1
+                const int vs_index = i +
+                    k * 3 +
+                    l * 3 * 2 +
+                    (static_cast<int>(colorSpace)) * 5 * 3 * 2 +
+                    2 * 5 * 3 * 2 * 2;
+#else
+                const int vs_index = i +
+                    j * 3 +
+                    k * 3 * 2 +
+                    l * 3 * 2 * 2 +
+                    (static_cast<int>(colorSpace)) * 5 * 3 * 2 * 2;
+#endif
+                const int fs_index = i;
+                mShader[dindex] = renderer->CreateShaderBinary(&ops,
+                    reinterpret_cast<const uint8_t *>(shader_static_brush_vs_spirv_code[vs_index]), shader_static_brush_vs_spirv_size[vs_index],
+                    nullptr, 0, nullptr, 0, nullptr, 0,
+                    reinterpret_cast<const uint8_t *>(shader_static_brush_fs_spirv_code[fs_index]), shader_static_brush_fs_spirv_size[fs_index],
+                    error);
+#else
+                mShader[dindex] = renderer->CreateShader(&ops, shader_static_brush_vs, nullptr, nullptr, nullptr, shader_static_brush_fs, error);
+#endif
+            }
+            else if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
             {
                 mShader[dindex] = renderer->CreateShader(&ops, shader_static_brush_vs, nullptr, nullptr, nullptr, shader_static_brush_fs, error);
             }
@@ -622,8 +673,10 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
 
 
         const int forcedBrushType = iForcedPaintBrushType();
+        const bool traceDraws = std::getenv("IMM_TRACE_STATIC_PAINT_DRAWS") != nullptr;
         int lastShaderID = -1;
         int lastStateID = -1;
+        uint32_t traceDrawIndex = 0;
 
         const int stereoModeInt = static_cast<int>(mStereoMode);
 
@@ -659,6 +712,8 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
         for (uint64_t j = 0; j < numToRender; j++)
         {
             const uint32_t id = mVisibleLayerInfos.GetUInt32(j);
+            if (!iPaintLayerAllowed(id)) continue;
+
             iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(id);
 
             // upload to GPU, if needed. This should be commaded externally as we stream scenes. But for now we do it here
@@ -695,7 +750,7 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
                 if (numChunks == 0) continue;
 
                 // set shader and state
-                const int stateID = ((chunkType == static_cast<int>(Element::BrushSectionType::Segment)) ? 0 : 1);                                    
+                const int stateID = ((chunkType == static_cast<int>(Element::BrushSectionType::Segment)) ? 0 : 1);
                 if (stateID != lastStateID) { lastStateID = stateID; renderer->SetRasterState(mRasterState[stateID]); }
 
 #if !defined(ANDROID)
@@ -717,7 +772,7 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
 
                 // attach vertex and index data
                 renderer->AttachShaderBuffer(me->mBuffers[chunkType].mVertexData, 8);
-                if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES)
+                if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRenderer::API::GLES || renderer->GetAPI() == piRenderer::API::Vulkan)
                     renderer->AttachVertexArray(me->mBuffers[chunkType].mVertexArray[0]);
                 else
                     renderer->AttachVertexArray2(me->mBuffers[chunkType].mVertexArray[stereoModeInt]);
@@ -732,6 +787,27 @@ if (renderer->GetAPI() == piRenderer::API::GL || renderer->GetAPI() == piRendere
 
                     renderer->UpdateBuffer(mChunkData, &cd, 0, 1 * sizeof(ChunkData)); // TODO:  put this in an buffer so we only do one upload per chunkType, not per chunk
 
+                    if (traceDraws)
+                    {
+                        log->Printf(LT_MESSAGE,
+                                    L"IMM_VKPARITY_DRAW api=%d draw=%u layerId=%u chunkType=%d chunk=%llu shader=%d state=%d drawin=%d wiggle=%d opacity=%.6f drawInTime=%.6f layerStateId=%u vertexOffset=%u indexOffset=%u numIndices=%u biggestStroke=%.6f",
+                                    static_cast<int>(renderer->GetAPI()),
+                                    traceDrawIndex++,
+                                    id,
+                                    chunkType,
+                                    static_cast<unsigned long long>(i),
+                                    shaderID,
+                                    stateID,
+                                    me->mDrawin ? 1 : 0,
+                                    me->mWiggle ? 1 : 0,
+                                    me->mLayerState.mOpacity,
+                                    me->mLayerState.mDrawInTime,
+                                    me->mLayerState.mID,
+                                    chunk->mVertexOffset,
+                                    chunk->mIndexOffset,
+                                    chunk->mNumIndices,
+                                    chunk->mBiggestStroke);
+                    }
                     renderer->DrawPrimitiveIndexed(piRenderer::PrimitiveType::TriangleStrip, chunk->mNumIndices, numInstances, 0 /*chunk->mVertexOffset*/, 0, chunk->mIndexOffset);
                     mDrawCallInfo.numIndices += chunk->mNumIndices;
                     mDrawCallInfo.numTriangles += chunk->mNumPolygons * 2;

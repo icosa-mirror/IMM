@@ -10,7 +10,12 @@ param(
 
     [int]$LoadUnloadCycles = 0,
 
+    [ValidateRange(0, 5)]
+    [int]$RendererApi = 0,
+
     [switch]$RequireExtension,
+
+    [switch]$Headed,
 
     [switch]$PreflightOnly
 )
@@ -34,64 +39,70 @@ function Resolve-GodotExe([string]$requested) {
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
-$sampleProject = Join-Path $repoRoot "code\ImmGodotSampleProject"
+$sampleProject = Join-Path $repoRoot "code" "ImmGodotSampleProject"
 $smokeScript = "res://scripts/smoke_test_runner.gd"
+$platform = if ($IsMacOS) { "macos" } elseif ($IsWindows) { "windows" } else { throw "Unsupported platform for Godot smoke test" }
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
-$extensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$variant"
-$extensionDll = Join-Path $extensionDir "imm_godot_extension.dll"
+$extensionDir = Join-Path $sampleProject "addons" "imm_viewer" "bin" $platform $variant
+$extensionFile = if ($IsMacOS) { "libimm_godot_extension.dylib" } else { "imm_godot_extension.dll" }
+$extensionDll = Join-Path $extensionDir $extensionFile
 $editorVariant = if ($Configuration -eq "Release") { "debug" } else { $variant }
-$editorExtensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$editorVariant"
-$editorExtensionDll = Join-Path $editorExtensionDir "imm_godot_extension.dll"
+$editorExtensionDir = Join-Path $sampleProject "addons" "imm_viewer" "bin" $platform $editorVariant
+$editorExtensionDll = Join-Path $editorExtensionDir $extensionFile
 
 if ($LogDir) {
     $LogDir = (New-Item -ItemType Directory -Force $LogDir).FullName
 }
 
 if ($RequireExtension) {
-    $requiredDlls = @(
-        "imm_godot_extension.dll",
-        "ImmGodotPlugin.dll",
-        "Audio360.dll",
-        "opus.dll",
-        "opusenc.dll",
-        "vorbisenc.dll",
-        "zlib1.dll",
-        "jpeg62.dll",
-        "libpng16.dll",
-        "ogg.dll",
-        "vorbis.dll"
-    )
-    $missingDlls = @()
-    foreach ($dll in $requiredDlls) {
-        $candidate = Join-Path $extensionDir $dll
+    $requiredFiles = if ($IsMacOS) {
+        @("libimm_godot_extension.dylib", "libImmGodotPlugin.dylib")
+    } else {
+        @(
+            "imm_godot_extension.dll",
+            "ImmGodotPlugin.dll",
+            "Audio360.dll",
+            "opus.dll",
+            "opusenc.dll",
+            "vorbisenc.dll",
+            "zlib1.dll",
+            "jpeg62.dll",
+            "libpng16.dll",
+            "ogg.dll",
+            "vorbis.dll"
+        )
+    }
+    $missingFiles = @()
+    foreach ($f in $requiredFiles) {
+        $candidate = Join-Path $extensionDir $f
         if (-not (Test-Path $candidate)) {
-            $missingDlls += $candidate
+            $missingFiles += $candidate
         }
     }
     if ($LogDir) {
-        $inventory = @("Expected staged DLLs:")
-        foreach ($dll in $requiredDlls) {
-            $candidate = Join-Path $extensionDir $dll
+        $inventory = @("Expected staged extension files:")
+        foreach ($f in $requiredFiles) {
+            $candidate = Join-Path $extensionDir $f
             if (Test-Path $candidate) {
                 $item = Get-Item $candidate
                 $inventory += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
             }
             else {
-                $inventory += ("MISSING`t{0}" -f $dll)
+                $inventory += ("MISSING`t{0}" -f $f)
             }
         }
-        $inventory | Out-File -FilePath (Join-Path $LogDir "godot-extension-dlls.txt") -Encoding utf8
+        $inventory | Out-File -FilePath (Join-Path $LogDir "godot-extension-files.txt") -Encoding utf8
     }
-    if ($missingDlls.Count -gt 0) {
-        throw "Godot GDExtension runtime DLLs are missing:`n  $($missingDlls -join "`n  ")"
+    if ($missingFiles.Count -gt 0) {
+        throw "Godot GDExtension runtime files are missing:`n  $($missingFiles -join "`n  ")"
     }
 
     if ($editorExtensionDir -ne $extensionDir) {
         New-Item -ItemType Directory -Force $editorExtensionDir | Out-Null
-        foreach ($dll in $requiredDlls) {
-            Copy-Item -Force (Join-Path $extensionDir $dll) (Join-Path $editorExtensionDir $dll)
+        foreach ($f in $requiredFiles) {
+            Copy-Item -Force (Join-Path $extensionDir $f) (Join-Path $editorExtensionDir $f)
         }
-        Write-Host "Mirrored $Configuration GDExtension DLLs for Godot editor feature lookup: $editorExtensionDir"
+        Write-Host "Mirrored $Configuration GDExtension files for Godot editor feature lookup: $editorExtensionDir"
     }
 }
 
@@ -105,6 +116,7 @@ Write-Host "Running smoke script: $smokeScript"
 Write-Host "Smoke scene: $SmokeScene"
 Write-Host "GDExtension configuration: $Configuration"
 Write-Host "Load/unload cycles: $LoadUnloadCycles"
+Write-Host "Renderer API: $RendererApi"
 if ($RequireExtension) {
     Write-Host "GDExtension directory: $extensionDir"
     Write-Host "Godot editor extension directory: $editorExtensionDir"
@@ -119,10 +131,30 @@ if ($PreflightOnly) {
 }
 
 $env:IMM_GODOT_SMOKE_SCENE = $SmokeScene
-$env:IMM_GODOT_EXPECT_NATIVE = if ($RequireExtension) { "1" } else { "0" }
+$env:IMM_GODOT_EXPECT_NATIVE = "1"
 $env:IMM_GODOT_LOAD_UNLOAD_CYCLES = "$LoadUnloadCycles"
-$output = & $godot --headless --path $sampleProject --script $smokeScript 2>&1
-$exitCode = $LASTEXITCODE
+$env:IMM_GODOT_RENDERER_API = "$RendererApi"
+$previousPath = $env:PATH
+if ($RequireExtension) {
+    $env:PATH = "$extensionDir;$env:PATH"
+}
+$godotArgs = @()
+if (-not $Headed) {
+    $godotArgs += "--headless"
+}
+$godotArgs += @("--path", $sampleProject, "--script", $smokeScript)
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = "Continue"
+    $output = & $godot @godotArgs 2>&1
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+    if ($RequireExtension) {
+        $env:PATH = $previousPath
+    }
+}
 $output | ForEach-Object { Write-Host $_ }
 $successMarker = "IMM Godot smoke test passed"
 $hasSuccessMarker = ($output -join "`n").Contains($successMarker)
@@ -136,6 +168,8 @@ if ($LogDir) {
         "Configuration=$Configuration",
         "RequireExtension=$($RequireExtension.IsPresent)",
         "LoadUnloadCycles=$LoadUnloadCycles",
+        "RendererApi=$RendererApi",
+        "Headed=$($Headed.IsPresent)",
         "ExtensionDir=$extensionDir",
         "ExtensionDll=$extensionDll",
         "EditorExtensionDir=$editorExtensionDir",

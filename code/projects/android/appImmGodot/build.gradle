@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.library'
+}
+
+if (project.hasProperty("immBuildDir")) {
+    buildDir = file(project.property("immBuildDir"))
+}
+
+def immGodotCppPath = project.findProperty("immGodotCppPath") ?: "${rootProject.projectDir}/../../../thirdparty/godot-cpp"
+def immGodotCppLib = project.findProperty("immGodotCppLib") ?: ""
+def immGodotVariant = project.findProperty("immGodotVariant") ?: "debug"
+
+android {
+    namespace 'org.linuxfoundation.imm.godot'
+    compileSdk 34
+    ndkVersion "26.1.10909125"
+
+    defaultConfig {
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17", "-DANDROID", "-DANDROID_ENABLED"
+                arguments "-DANDROID_STL=c++_shared",
+                        "-DGODOT_CPP_PATH=${immGodotCppPath}",
+                        "-DGODOT_CPP_LIB=${immGodotCppLib}",
+                        "-DIMM_GODOT_VARIANT=${immGodotVariant}",
+                        "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
+                        "-DCMAKE_C_COMPILER_WORKS=1",
+                        "-DCMAKE_CXX_COMPILER_WORKS=1",
+                        "-DCMAKE_C_ABI_COMPILED=1",
+                        "-DCMAKE_CXX_ABI_COMPILED=1"
+                abiFilters "arm64-v8a"
+                targets "ImmGodotPlugin", "imm_godot_extension"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+        }
+    }
+}

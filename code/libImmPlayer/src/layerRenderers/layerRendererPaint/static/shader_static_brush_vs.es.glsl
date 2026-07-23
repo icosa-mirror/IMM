@@ -147,10 +147,13 @@ void main()
 
     float f = 1.0;
 
-    vg.mask = (inColAlpha.w>0.999) ? layer.mID : inInfo;
 
-
-    vg.col_tra.w = inColAlpha.w * f * layer.mOpacity;
+    float alpha = inColAlpha.w * f * layer.mOpacity;
+    vg.col_tra.w = alpha;
+    // Keep this based on final coverage alpha to match the desktop/Metal path.
+    // Android static paint has no authored direction vector, but layer opacity
+    // can still make authored-opaque strokes partially covered.
+    vg.mask = (alpha > 0.999) ? layer.mID : inInfo;
     #if COLOR_COMPRESSED==0
     vg.col_tra.xyz = inColAlpha.xyz * inColAlpha.xyz;
     #endif

@@ -11,6 +11,28 @@ In PowerShell or cmd.exe:
 msbuild code\projects\windows\imm.sln /p:Configuration=Release /p:Platform=x64 /m
 ```
 
+Vulkan renderer development additionally needs a Vulkan shader toolchain on PATH:
+
+- `glslangValidator` or `glslc` for GLSL-to-SPIR-V generation.
+- `dxc` for HLSL-to-SPIR-V experiments.
+- `spirv-val` and `spirv-dis` for validation and inspection.
+
+On Windows, the LunarG Vulkan SDK provides these tools. A local user-profile install via Scoop is:
+
+```powershell
+scoop install vulkan dxc glslang
+```
+
+The Windows GitHub Actions build installs `vulkan-sdk` before MSBuild so CI has the same SPIR-V tools available.
+
+Run the Windows standalone Vulkan sample smoke from the repository root:
+
+```powershell
+.\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1
+```
+
+The smoke builds `appImmViewer`, runs `settings-vulkan-smoke.json` against `exampleImmFiles/sample1.imm`, requires direct GPU swapchain presentation in `debug.txt`, rejects Vulkan placeholder/failure diagnostics, and validates the opt-in PPM capture dimensions plus minimum visible pixel counts. Use `-SkipBuild` for an already-built Debug viewer, or `-KeepArtifacts` to retain the PPM capture for visual inspection.
+
 In bash (Git Bash, WSL): use `-p:` not `/p:` — bash strips leading `/` from flags:
 ```
 msbuild "code/projects/windows/imm.sln" -p:Configuration=Release -p:Platform=x64 -m
@@ -169,11 +191,23 @@ The target generates a fresh `build/macos/reference-comparison/static.png`, comp
 The Windows CI job uploads `ImmViewer-Windows-DirectX-Baseline`, containing `windows-directx-static.png` and the runtime settings JSON used to create it.
 The macOS CI job uploads one standalone artifact, `ImmViewerMetal-macOS`, containing the standalone `.app` bundle plus `metal-static.png` and its validation log under `metal-baseline-captures/`. That PNG is generated through `validate_metal_standalone.sh`, so the uploaded capture path also exercises the same structural render checks, audio-free deterministic playback path, and zero Metal renderer resource cleanup gate as local validation.
 
-To generate the Windows DirectX baseline PNG from a Windows checkout:
+To generate the Windows DirectX baseline capture from a Windows checkout:
 
 ```powershell
 .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1
 ```
+
+For Vulkan parity work, the baseline script can emit the current DirectX `sample1.imm` PPM capture and compare it with the Vulkan smoke capture:
+
+```powershell
+.\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release
+.\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -SkipBuild -KeepArtifacts
+.\code\appImmViewer\scripts\compare-ppm-captures.ps1 `
+  -ReferencePath .\build\baseline-captures\windows-directx-static.ppm `
+  -CandidatePath .\code\appImmViewer\exe\vulkan_sample1_smoke.ppm
+```
+
+Use a current Release viewer for the DirectX baseline capture; old packaged Release executables and Debug breakpoint checks can prevent validation from reaching the capture frame.
 
 The downloaded `ImmViewer-Windows` artifact is self-contained for this baseline capture. From the artifact folder, run:
 

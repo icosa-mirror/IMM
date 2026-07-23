@@ -18,6 +18,11 @@ config/features=PackedStringArray("4.6")
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+window/frame_pacing/android/enable_frame_pacing=false
+
+[dotnet]
+
+project/assembly_name="IMM Godot Sample"
 
 [native_extensions]
 
@@ -25,4 +30,5 @@ paths=["res://addons/imm_viewer/imm_viewer.gdextension"]
 
 [rendering]
 
+textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.04, 0.05, 0.08, 1)
