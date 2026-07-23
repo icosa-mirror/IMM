@@ -331,6 +331,7 @@ def verify_build_orchestration_contract(path: Path, workflow_rel: str, errors: l
         "- full",
         "- release",
         "uses: ./.github/workflows/build.yml",
+        "actions: write",
         "contents: write",
         "mode: build",
         "mode: publish",

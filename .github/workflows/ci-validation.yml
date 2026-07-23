@@ -44,7 +44,7 @@ jobs:
       contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/build.yml
     permissions:
-      actions: read
+      actions: write
       contents: write
     with:
       mode: build
@@ -189,7 +189,7 @@ jobs:
       - validation-evidence
     uses: ./.github/workflows/build.yml
     permissions:
-      actions: read
+      actions: write
       contents: write
     with:
       mode: publish
