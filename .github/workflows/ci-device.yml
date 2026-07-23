@@ -414,7 +414,7 @@ jobs:
             exit 1
           }
           project_path="$project_dir/project.godot"
-          perl -0pi -e 's#run/main_scene="res://scenes/SampleScene\.tscn"#run/main_scene="res://scenes/VisualSmokeScene.tscn"#g' "$project_path"
+          perl -0pi -e 's#^run/main_scene=.*$#run/main_scene="res://scenes/VisualSmokeScene.tscn"#m' "$project_path"
           grep -q 'run/main_scene="res://scenes/VisualSmokeScene.tscn"' "$project_path" || {
             echo "Failed to update Godot main scene for Android visual smoke" >&2
             exit 1
