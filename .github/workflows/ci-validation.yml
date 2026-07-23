@@ -43,6 +43,9 @@ jobs:
       contains(github.event.head_commit.message, '[CI VALIDATION]') ||
       contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/build.yml
+    permissions:
+      actions: read
+      contents: write
     with:
       mode: build
     secrets: inherit
