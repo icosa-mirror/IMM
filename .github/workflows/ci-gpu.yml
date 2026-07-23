@@ -858,7 +858,7 @@ jobs:
   macos-godot-metal:
     name: macOS Godot Metal
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - name: Checkout repository
@@ -900,6 +900,9 @@ jobs:
           fi
           arch="$(uname -m)"
           python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
+          rm -f code/appImmGodotGDExtension/src/*.os
+          rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib
+          rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib
           python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$PWD/thirdparty/godot-cpp" imm_godot_lib="$PWD/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$PWD/build/macos/godot/libImmGodotPlugin.dylib"
 
       - name: Run Godot Metal visual smoke

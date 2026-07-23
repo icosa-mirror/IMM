@@ -57,7 +57,7 @@ REQUIRED_JOBS = {
         "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-standalone-metal": ["Preflight macOS Metal runner", "Configure macOS build", "Build macOS Metal standalone viewer", "Smoke macOS Metal standalone viewer", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
-        "macos-godot-metal": ["Preflight Godot Metal runner", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
+        "macos-godot-metal": ["Preflight Godot Metal runner", "Build macOS Godot native plugin", "Build macOS Godot GDExtension", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
     },
 }
@@ -90,7 +90,7 @@ REQUIRED_RUNS_ON = {
         "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
         "macos-standalone-metal": {"macos-14"},
-        "macos-godot-metal": {"macos-14"},
+        "macos-godot-metal": {"macos-15"},
     },
 }
 REQUIRED_JOB_TIMEOUTS = {
@@ -398,6 +398,31 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
                 errors.append(f"{workflow_rel} {job_name} missing same-commit native plugin token: {token}")
 
 
+def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-gpu.yml":
+        return
+
+    text = path.read_text(encoding="utf-8")
+    match = re.search(
+        r"^  macos-godot-metal:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return
+
+    body = match.group("body")
+    for token in [
+        "rm -f code/appImmGodotGDExtension/src/*.os",
+        "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib",
+        "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib",
+        'arch="$(uname -m)"',
+        'platform=macos target=template_release arch="$arch"',
+    ]:
+        if token not in body:
+            errors.append(f"{workflow_rel} macos-godot-metal missing clean source-build token: {token}")
+
+
 def verify_full_depth_validation_report_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
     if workflow_rel != ".github/workflows/ci-validation.yml":
         return
@@ -468,6 +493,7 @@ def main() -> int:
         verify_release_assets(workflow_path, workflow_rel, errors)
         verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)
         verify_unity_same_commit_native_plugin_contract(workflow_path, workflow_rel, errors)
+        verify_godot_macos_clean_source_build_contract(workflow_path, workflow_rel, errors)
         verify_full_depth_validation_report_contract(workflow_path, workflow_rel, errors)
         verify_ci_core_self_test_contract(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
