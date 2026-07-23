@@ -37,10 +37,11 @@ REQUIRED_JOBS = {
         "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report", "Hide per-lane device artifacts"],
     },
     ".github/workflows/ci-engine.yml": {
+        "unity-windows-native-plugin-build": ["Set up MSBuild", "Build same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
-        "unity-windows-directx-player-build": ["Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
+        "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
-        "unity-windows-vulkan-player-build": ["Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
+        "unity-windows-vulkan-player-build": ["Download same-commit Unity native plugin", "Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
         "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Write Unity Vulkan ordered overlay report", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
@@ -71,6 +72,7 @@ REQUIRED_RUNS_ON = {
         "ios-device-smoke": {"macos-14"},
     },
     ".github/workflows/ci-engine.yml": {
+        "unity-windows-native-plugin-build": {"windows-latest"},
         "unity-package-import": {"ubuntu-latest"},
         "unity-windows-directx-player-build": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
@@ -109,6 +111,7 @@ REQUIRED_JOB_TIMEOUTS = {
         "device-evidence-report",
     },
     ".github/workflows/ci-engine.yml": {
+        "unity-windows-native-plugin-build",
         "unity-package-import",
         "unity-windows-directx-player-build",
         "unity-windows-directx-composition",
@@ -353,6 +356,47 @@ def verify_unity_vulkan_full_depth_display_contract(path: Path, workflow_rel: st
             errors.append(f"{workflow_rel} unity-windows-vulkan-full-depth must not use camera-target diagnostic token: {token}")
 
 
+def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-engine.yml":
+        return
+
+    text = path.read_text(encoding="utf-8")
+    job_names = [
+        "unity-windows-native-plugin-build",
+        "unity-windows-directx-player-build",
+        "unity-windows-vulkan-player-build",
+    ]
+    job_bodies: dict[str, str] = {}
+    for job_name in job_names:
+        match = re.search(
+            rf"^  {re.escape(job_name)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+            text,
+            re.MULTILINE | re.DOTALL,
+        )
+        if match:
+            job_bodies[job_name] = match.group("body")
+
+    native_body = job_bodies.get("unity-windows-native-plugin-build", "")
+    for token in [
+        r"msbuild code\projects\windows\imm.sln /t:appImmUnity",
+        "GetRenderEventAndDataFunc",
+        "ConfigureVulkanRenderEvent",
+        "name: UnityWindowsNativePluginSourceBuild",
+    ]:
+        if token not in native_body:
+            errors.append(f"{workflow_rel} unity-windows-native-plugin-build missing same-commit contract token: {token}")
+
+    for job_name in ["unity-windows-directx-player-build", "unity-windows-vulkan-player-build"]:
+        body = job_bodies.get(job_name, "")
+        for token in [
+            "needs: unity-windows-native-plugin-build",
+            "name: UnityWindowsNativePluginSourceBuild",
+            "path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64",
+        ]:
+            if token not in body:
+                errors.append(f"{workflow_rel} {job_name} missing same-commit native plugin token: {token}")
+
+
 def verify_full_depth_validation_report_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
     if workflow_rel != ".github/workflows/ci-validation.yml":
         return
@@ -422,6 +466,7 @@ def main() -> int:
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)
         verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)
+        verify_unity_same_commit_native_plugin_contract(workflow_path, workflow_rel, errors)
         verify_full_depth_validation_report_contract(workflow_path, workflow_rel, errors)
         verify_ci_core_self_test_contract(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)

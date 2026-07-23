@@ -51,6 +51,48 @@ env:
     rgcrlr/fD+NorDVLfcu7D863QXkkuriILUIq2Q==</SignatureValue></Signature></root>
 
 jobs:
+  unity-windows-native-plugin-build:
+    name: Unity Windows Native Plugin Build
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build same-commit Unity native plugin
+        shell: pwsh
+        run: msbuild code\projects\windows\imm.sln /t:appImmUnity /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Verify Unity native plugin exports
+        shell: pwsh
+        run: |
+          $plugin = "code\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll"
+          if (-not (Test-Path $plugin)) {
+            throw "Same-commit Unity native plugin was not built: $plugin"
+          }
+          $exports = & dumpbin /exports $plugin
+          if ($LASTEXITCODE -ne 0) {
+            throw "dumpbin failed while inspecting $plugin"
+          }
+          foreach ($requiredExport in @("GetRenderEventFunc", "GetRenderEventAndDataFunc", "ConfigureVulkanRenderEvent")) {
+            if ($exports -notmatch "\b$requiredExport\b") {
+              throw "Same-commit Unity native plugin is missing required export: $requiredExport"
+            }
+          }
+
+      - name: Upload same-commit Unity native plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsNativePluginSourceBuild
+          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64/ImmUnityPlugin.dll
+          if-no-files-found: error
+          retention-days: 1
+
   unity-package-import:
     name: Unity Package Import
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
@@ -154,10 +196,17 @@ jobs:
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    needs: unity-windows-native-plugin-build
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Download same-commit Unity native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsNativePluginSourceBuild
+          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64
 
       - name: Restore Unity Library cache
         id: cache_library
@@ -408,10 +457,17 @@ jobs:
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    needs: unity-windows-native-plugin-build
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Download same-commit Unity native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsNativePluginSourceBuild
+          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64
 
       - name: Restore Unity Library cache
         id: cache_library
@@ -951,6 +1007,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:
+      - unity-windows-native-plugin-build
       - unity-package-import
       - unity-windows-directx-player-build
       - unity-windows-directx-composition
