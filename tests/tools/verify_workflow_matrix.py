@@ -90,7 +90,7 @@ REQUIRED_RUNS_ON = {
         "windows-godot-vulkan": {"windows-latest"},
         "windows-godot-openxr-vr": {"self-hosted", "windows", "gpu", "godot", "vr", "openxr"},
         "macos-standalone-metal": {"macos-14"},
-        "macos-godot-metal": {"macos-15"},
+        "macos-godot-metal": {"macos-14"},
     },
 }
 REQUIRED_JOB_TIMEOUTS = {
