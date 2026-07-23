@@ -27,6 +27,7 @@ COMPOSITOR_EFFECT_SOURCE = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_co
 WINDOWS_BUILD_HELPER = ROOT / "code/projects/windows/build-godot-extension.ps1"
 WINDOWS_SMOKE_HELPER = ROOT / "code/projects/windows/run-godot-smoke.ps1"
 WORKFLOW = ROOT / ".github/workflows/build.yml"
+CI_ORCHESTRATOR = ROOT / ".github/workflows/ci-validation.yml"
 SCONSTRUCT = ROOT / "code/appImmGodotGDExtension/SConstruct"
 GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runner.gd"
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
@@ -373,6 +374,7 @@ def verify_windows_build_wiring() -> None:
     godot_addon_readme = GODOT_ADDON_README.read_text(encoding="utf-8")
     sconstruct = SCONSTRUCT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
+    orchestrator = CI_ORCHESTRATOR.read_text(encoding="utf-8")
 
     for script_path, script_text in [
         (WINDOWS_BUILD_HELPER, helper),
@@ -446,9 +448,12 @@ def verify_windows_build_wiring() -> None:
     for stale_text in ["Run Godot native smoke test", "-RequireExtension -LoadUnloadCycles 2 -LogDir artifacts\\godot-smoke-native"]:
         if stale_text in workflow:
             raise RuntimeError(f"Windows workflow still treats native Godot rendering smoke as a CI gate: {stale_text}")
-    for token in ["- '**'", "contains(github.event.head_commit.message, '[CI BUILD]')", "Opt-in branch builds must not push generated binaries back", "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'"]:
+    for token in ["workflow_call:", "Opt-in branch builds must not push generated binaries back", "inputs.mode == 'publish'", "inputs.sync_binaries"]:
         if token not in workflow:
-            raise RuntimeError(f"Windows workflow is missing branch opt-in CI token: {token}")
+            raise RuntimeError(f"Reusable build workflow is missing orchestration token: {token}")
+    for token in ["- feature/**", "- experiment/**", "contains(github.event.head_commit.message, '[CI BUILD]')", "uses: ./.github/workflows/build.yml", "github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'"]:
+        if token not in orchestrator:
+            raise RuntimeError(f"CI orchestrator is missing branch/build token: {token}")
 
     readme = (ROOT / "code/appImmGodotGDExtension/README.md").read_text(encoding="utf-8")
     if "callbacks are currently no-op placeholders" in readme:

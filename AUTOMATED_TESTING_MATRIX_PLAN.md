@@ -2,7 +2,8 @@
 
 This plan defines a GitHub Actions testing matrix for IMM across standalone players, Unity packages, Godot GDExtension packages, Windows, Android, iOS, macOS, and VR/non-VR validation. It is grounded in the current repository state as of 2026-06-10:
 
-- Existing workflow: `.github/workflows/build.yml`
+- Event-driven orchestrator: `.github/workflows/ci-validation.yml`
+- Reusable build/publish implementation: `.github/workflows/build.yml`
 - Existing fixture: `exampleImmFiles/sample1.imm`
 - Existing Windows baseline capture path: `code/appImmViewer/scripts/capture_windows_directx_baseline.ps1`
 - Existing Windows Vulkan standalone smoke: `code/appImmViewer/scripts/run-vulkan-sample1-smoke.ps1`
@@ -117,9 +118,13 @@ Use these validation classes consistently across products.
 | Audio | Decode count, backend selected, play accepted, teardown clean | Required where existing smoke supports it | Required |
 | Repeated lifecycle | load/unload/reload, app relaunch, resource teardown | Required where existing smoke supports it | Required |
 
-## Proposed Workflow Structure
+## Workflow Structure
 
-Split the current monolithic `Build` workflow into reusable and targeted workflows over time. The existing `.github/workflows/build.yml` can stay as the release/package workflow until the matrix jobs are stable.
+`.github/workflows/ci-validation.yml` is the only event-driven entry point. It supports `quick`, `build`, `full`, and `release` dispatch modes and calls the reusable workflows below.
+
+`.github/workflows/build.yml` builds each release-equivalent platform artifact once. Engine, GPU, and VR validation jobs download those same-run artifacts rather than rebuilding or using tracked binaries. After the required validation jobs pass, the orchestrator calls `build.yml` in publish mode to synchronize generated binaries or create a release from the already-tested artifacts.
+
+The specialized Firebase APKs and Unity smoke players remain validation-specific builds because instrumentation and test-player configuration make them different products from the release artifacts.
 
 ### 1. `ci-core.yml`
 
@@ -456,7 +461,7 @@ Exit criteria:
 
 ### Phase 2: Hosted Matrix Cleanup
 
-1. Split build/package/test concerns in `.github/workflows/build.yml` or add new reusable workflows.
+1. Keep build/package/publish implementation reusable through `.github/workflows/build.yml` and event orchestration in `.github/workflows/ci-validation.yml`.
 2. Promote existing Windows, Android, macOS, and iOS builds into named matrix legs.
 3. Add package layout verification after Unity and Godot packaging.
 4. Add failure-only logs for every smoke job.

@@ -53,7 +53,9 @@ env:
 jobs:
   unity-windows-native-plugin-build:
     name: Unity Windows Native Plugin Build
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    if: >-
+      (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) &&
+      (vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true' || vars.CI_ENABLE_VR_CHECKS == 'true')
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -61,12 +63,21 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Download same-commit Unity native plugin build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmViewerPlugin-Windows
+          path: artifacts/prebuilt-unity-native
 
-      - name: Build same-commit Unity native plugin
+      - name: Stage same-commit Unity native plugin
         shell: pwsh
-        run: msbuild code\projects\windows\imm.sln /t:appImmUnity /p:Configuration=Release /p:Platform=x64 /m
+        run: |
+          $source = Get-ChildItem artifacts\prebuilt-unity-native -Recurse -Filter ImmUnityPlugin.dll | Select-Object -First 1
+          if (-not $source) {
+            throw "Build workflow did not provide ImmUnityPlugin.dll"
+          }
+          $destination = "code\ImmUnitySampleProject\Packages\com.immersive-foundation.imm-unity\Plugins\x86_64\ImmUnityPlugin.dll"
+          Copy-Item -Force $source.FullName $destination
 
       - name: Verify Unity native plugin exports
         shell: pwsh
@@ -904,12 +915,19 @@ jobs:
     name: Unity Windows OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    needs: unity-windows-native-plugin-build
     runs-on: [self-hosted, windows, unity, vr]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Download same-commit Windows native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsNativePluginSourceBuild
+          path: code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/x86_64
 
       - name: Preflight Unity OpenXR VR runner
         shell: pwsh
@@ -1037,7 +1055,14 @@ jobs:
       - name: Download engine artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "Unity*"
           path: artifacts/engine-evidence/input
+
+      - name: Download Godot engine artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: GodotPackageImport
+          path: artifacts/engine-evidence/input/GodotPackageImport
 
       - name: Verify engine matrix evidence
         run: >

@@ -37,27 +37,27 @@ REQUIRED_JOBS = {
         "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report", "Hide per-lane device artifacts"],
     },
     ".github/workflows/ci-engine.yml": {
-        "unity-windows-native-plugin-build": ["Set up MSBuild", "Build same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
+        "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-player-build": ["Download same-commit Unity native plugin", "Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
         "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Write Unity Vulkan ordered overlay report", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
-        "unity-windows-openxr-vr": ["Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "unity-windows-openxr-vr": ["Download same-commit Windows native plugin", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
         "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Write engine aggregate status manifests", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
     },
     ".github/workflows/ci-gpu.yml": {
-        "windows-standalone-directx": ["Preflight DirectX runner", "Build Windows viewer", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-directx": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight DirectX runner", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight GPU runner", "Run Vulkan smoke against baseline", "Compare Vulkan render metrics against committed DirectX baseline", "Stage Vulkan capture evidence", "Write Vulkan render report", "Write CI manifest", "Collect artifact summary"],
-        "windows-standalone-opengl": ["Install Mesa llvmpipe OpenGL", "Configure Mesa llvmpipe OpenGL", "Preflight OpenGL runner", "Build Windows viewer", "Capture OpenGL sample1", "Compare OpenGL render metrics against committed DirectX baseline", "Write OpenGL render report", "Write CI manifest", "Collect artifact summary"],
-        "windows-standalone-openxr-vr": ["Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-standalone-opengl-vr": ["Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Build Windows viewer", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-openxr-vr": ["Preflight Godot OpenXR VR runner", "Build Godot extension", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "macos-standalone-metal": ["Preflight macOS Metal runner", "Configure macOS build", "Build macOS Metal standalone viewer", "Smoke macOS Metal standalone viewer", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
-        "macos-godot-metal": ["Preflight Godot Metal runner", "Build macOS Godot native plugin", "Build macOS Godot GDExtension", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-opengl": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Install Mesa llvmpipe OpenGL", "Configure Mesa llvmpipe OpenGL", "Preflight OpenGL runner", "Capture OpenGL sample1", "Compare OpenGL render metrics against committed DirectX baseline", "Write OpenGL render report", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-openxr-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "windows-standalone-opengl-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-openxr-vr": ["Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Preflight Godot OpenXR VR runner", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
+        "macos-standalone-metal": ["Download macOS viewer build artifact", "Preflight macOS Metal runner", "Verify macOS Metal build artifact", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
+        "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
     },
 }
@@ -158,15 +158,19 @@ REQUIRED_STEP_TIMEOUTS = {
         "windows-standalone-opengl-vr": {"Run Windows OpenGL VR smoke"},
         "windows-godot-vulkan": {"Run Godot Vulkan visual baseline smoke"},
         "windows-godot-openxr-vr": {"Run Godot OpenXR VR smoke"},
-        "macos-standalone-metal": {"Smoke macOS Metal standalone viewer"},
+        "macos-standalone-metal": {"Verify macOS Metal build artifact"},
         "macos-godot-metal": {"Run Godot Metal visual smoke"},
     },
 }
 REQUIRED_WORKFLOW_TRIGGERS = {
-    ".github/workflows/ci-validation.yml": ["ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
+    ".github/workflows/ci-validation.yml": ["build.yml", "ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
-REQUIRED_VALIDATION_GATE = "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')"
 GATED_VALIDATION_JOBS = ["device", "engine", "gpu"]
+VALIDATION_JOB_LABELS = {
+    "device": "device-ci",
+    "engine": "engine-ci",
+    "gpu": "gpu-ci",
+}
 
 
 def step_names(job: dict) -> set[str]:
@@ -285,8 +289,54 @@ def verify_consolidated_workflow(path: Path, workflow_rel: str, workflow_files: 
             errors.append(f"{workflow_rel} missing gated validation job: {job_name}")
             continue
         job_block = match.group("body")
-        if f"if: {REQUIRED_VALIDATION_GATE}" not in job_block:
-            errors.append(f"{workflow_rel} job {job_name} must be gated by [CI VALIDATION], schedule, or workflow_dispatch")
+        for token in [
+            "github.event_name == 'schedule'",
+            "github.event_name == 'workflow_dispatch'",
+            "inputs.mode == 'full'",
+            "inputs.mode == 'release'",
+            "contains(github.event.head_commit.message, '[CI VALIDATION]')",
+            "contains(github.event.head_commit.message, '[RELEASE]')",
+            f"contains(github.event.pull_request.labels.*.name, '{VALIDATION_JOB_LABELS[job_name]}')",
+        ]:
+            if token not in job_block:
+                errors.append(f"{workflow_rel} job {job_name} missing validation gate token: {token}")
+
+
+def verify_build_orchestration_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    text = path.read_text(encoding="utf-8")
+    if workflow_rel == ".github/workflows/build.yml":
+        for forbidden in ["workflow_dispatch:", "\n  push:", "\n  pull_request:", "\n  schedule:"]:
+            if forbidden in text:
+                errors.append(f"{workflow_rel} must be reusable only; found event trigger {forbidden.strip()}")
+        for token in [
+            "workflow_call:",
+            "mode:",
+            "sync_binaries:",
+            "release:",
+            "if: inputs.mode == 'build'",
+            "inputs.mode == 'publish'",
+            "macos-standalone-metal-sample1.json",
+            "[skip ci]",
+        ]:
+            if token not in text:
+                errors.append(f"{workflow_rel} missing build/publish orchestration token: {token}")
+        return
+
+    if workflow_rel != ".github/workflows/ci-validation.yml":
+        return
+    for token in [
+        "name: Build and Validation Pipeline",
+        "- quick",
+        "- build",
+        "- full",
+        "- release",
+        "uses: ./.github/workflows/build.yml",
+        "mode: build",
+        "mode: publish",
+        "needs.validation-evidence.result == 'success'",
+    ]:
+        if token not in text:
+            errors.append(f"{workflow_rel} missing unified pipeline token: {token}")
 
 
 def verify_release_assets(path: Path, workflow_rel: str, errors: list[str]) -> None:
@@ -378,7 +428,9 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
 
     native_body = job_bodies.get("unity-windows-native-plugin-build", "")
     for token in [
-        r"msbuild code\projects\windows\imm.sln /t:appImmUnity",
+        "name: Internal-ImmViewerPlugin-Windows",
+        "path: artifacts/prebuilt-unity-native",
+        "Copy-Item -Force $source.FullName $destination",
         "GetRenderEventAndDataFunc",
         "ConfigureVulkanRenderEvent",
         "name: UnityWindowsNativePluginSourceBuild",
@@ -399,12 +451,13 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
 
 
 def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
-    if workflow_rel != ".github/workflows/ci-gpu.yml":
+    if workflow_rel not in {".github/workflows/build.yml", ".github/workflows/ci-gpu.yml"}:
         return
 
     text = path.read_text(encoding="utf-8")
+    job_name = "build-macos" if workflow_rel == ".github/workflows/build.yml" else "macos-godot-metal"
     match = re.search(
-        r"^  macos-godot-metal:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        rf"^  {re.escape(job_name)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
         text,
         re.MULTILINE | re.DOTALL,
     )
@@ -412,21 +465,30 @@ def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str
         return
 
     body = match.group("body")
-    for token in [
-        "rm -f code/appImmGodotGDExtension/src/*.os",
+    tokens = [
         "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib",
         "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib",
         "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib",
         "rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib",
-        "cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib",
-        "cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib",
-        'arch="$(uname -m)"',
-        'platform=macos target=template_release arch="$arch"',
-        "IMM_GODOT_DEBUG=1",
-        'IMM_GODOT_LOG_FILE="$PWD/artifacts/godot-smoke-macos-metal/imm-godot-native.log"',
-    ]:
+    ]
+    if workflow_rel == ".github/workflows/build.yml":
+        tokens.extend([
+            "rm -f code/appImmGodotGDExtension/src/*.os",
+            'arch="$(uname -m)"',
+            'platform=macos target=template_release arch="$arch"',
+        ])
+    else:
+        tokens.extend([
+            "name: Internal-ImmGodotGDExtension-macOS-platform",
+            "Stage macOS Godot extension build artifact",
+            "cp \"$extension\" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib",
+            "cp \"$native\" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib",
+            "IMM_GODOT_DEBUG=1",
+            'IMM_GODOT_LOG_FILE="$PWD/artifacts/godot-smoke-macos-metal/imm-godot-native.log"',
+        ])
+    for token in tokens:
         if token not in body:
-            errors.append(f"{workflow_rel} macos-godot-metal missing clean source-build token: {token}")
+            errors.append(f"{workflow_rel} {job_name} missing clean artifact contract token: {token}")
 
 
 def verify_full_depth_validation_report_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
@@ -493,8 +555,11 @@ def main() -> int:
         if not workflow_path.exists():
             errors.append(f"Missing workflow: {workflow_rel}")
             continue
-        if workflow_rel.startswith(".github/workflows/ci-") and workflow_rel != ".github/workflows/ci-validation.yml":
+        if workflow_rel == ".github/workflows/build.yml" or (
+            workflow_rel.startswith(".github/workflows/ci-") and workflow_rel != ".github/workflows/ci-validation.yml"
+        ):
             verify_reusable_workflow(workflow_path, workflow_rel, errors)
+        verify_build_orchestration_contract(workflow_path, workflow_rel, errors)
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)
         verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)

@@ -601,7 +601,14 @@ jobs:
       - name: Download device artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-Device"
           path: artifacts/device-evidence/input
+
+      - name: Download iOS device artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: iOSDeviceSmoke
+          path: artifacts/device-evidence/input/iOSDeviceSmoke
 
       - name: Verify device matrix evidence
         run: >

@@ -21,16 +21,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Download Windows viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-Windows
+          path: artifacts/prebuilt-windows-viewer
+
+      - name: Stage Windows viewer build artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts\prebuilt-windows-viewer -File |
+            Where-Object { $_.Extension -in @(".exe", ".dll") } |
+            Copy-Item -Destination code\appImmViewer\exe -Force
 
       - name: Preflight DirectX runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-standalone-directx --output artifacts\windows-standalone-directx\preflight.json --require-command msbuild
-
-      - name: Build Windows viewer
-        working-directory: code/projects/windows
-        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+        run: python tests\tools\preflight_runner.py --profile windows-standalone-directx --output artifacts\windows-standalone-directx\preflight.json
 
       - name: Capture DirectX sample1
         timeout-minutes: 5
@@ -85,8 +91,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Download Windows viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-Windows
+          path: artifacts/prebuilt-windows-viewer
+
+      - name: Stage Windows viewer build artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts\prebuilt-windows-viewer -File |
+            Where-Object { $_.Extension -in @(".exe", ".dll") } |
+            Copy-Item -Destination code\appImmViewer\exe -Force
 
       - name: Install Mesa lavapipe
         id: msys2-standalone-vulkan
@@ -167,7 +183,7 @@ jobs:
 
       - name: Preflight GPU runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command msbuild --require-command glslangValidator --require-command spirv-val --require-env VK_ICD_FILENAMES
+        run: python tests\tools\preflight_runner.py --profile windows-gpu-vulkan --output artifacts\windows-standalone-vulkan\preflight.json --require-command glslangValidator --require-command spirv-val --require-env VK_ICD_FILENAMES
 
       - name: Capture Vulkan diagnostics
         shell: pwsh
@@ -188,10 +204,6 @@ jobs:
           & $vulkanInfo.Source --summary *>> $out
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
-
-      - name: Build Windows viewer
-        working-directory: code/projects/windows
-        run: msbuild imm.sln /p:Configuration=Release /p:Platform=x64 /m
 
       - name: Capture DirectX baseline
         shell: pwsh
@@ -291,8 +303,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Download Windows viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-Windows
+          path: artifacts/prebuilt-windows-viewer
+
+      - name: Stage Windows viewer build artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts\prebuilt-windows-viewer -File |
+            Where-Object { $_.Extension -in @(".exe", ".dll") } |
+            Copy-Item -Destination code\appImmViewer\exe -Force
 
       - name: Install Mesa llvmpipe OpenGL
         id: msys2-standalone-opengl
@@ -331,11 +353,7 @@ jobs:
 
       - name: Preflight OpenGL runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-standalone-opengl --output artifacts\windows-standalone-opengl\preflight.json --require-command msbuild
-
-      - name: Build Windows viewer
-        working-directory: code/projects/windows
-        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
+        run: python tests\tools\preflight_runner.py --profile windows-standalone-opengl --output artifacts\windows-standalone-opengl\preflight.json
 
       - name: Capture OpenGL sample1
         timeout-minutes: 5
@@ -396,14 +414,27 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Download Windows viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-Windows
+          path: artifacts/prebuilt-windows-viewer
+
+      - name: Stage Windows viewer build artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts\prebuilt-windows-viewer -File |
+            Where-Object { $_.Extension -in @(".exe", ".dll") } |
+            Copy-Item -Destination code\appImmViewer\exe -Force
+
       - name: Preflight Windows OpenXR VR runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-openxr-vr --output artifacts\windows-standalone-openxr-vr\preflight.json --require-command msbuild
+        run: python tests\tools\preflight_runner.py --profile windows-openxr-vr --output artifacts\windows-standalone-openxr-vr\preflight.json
 
       - name: Run Windows OpenXR VR smoke
         timeout-minutes: 10
         shell: pwsh
-        run: .\code\appImmViewer\scripts\run-windows-openxr-vr-smoke.ps1 -Configuration Release -LogDir artifacts\windows-standalone-openxr-vr
+        run: .\code\appImmViewer\scripts\run-windows-openxr-vr-smoke.ps1 -Configuration Release -SkipBuild -LogDir artifacts\windows-standalone-openxr-vr
 
       - name: Verify Windows OpenXR VR log contract
         shell: pwsh
@@ -456,14 +487,27 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Download Windows viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-Windows
+          path: artifacts/prebuilt-windows-viewer
+
+      - name: Stage Windows viewer build artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts\prebuilt-windows-viewer -File |
+            Where-Object { $_.Extension -in @(".exe", ".dll") } |
+            Copy-Item -Destination code\appImmViewer\exe -Force
+
       - name: Preflight Windows OpenGL VR runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-opengl-vr --output artifacts\windows-standalone-opengl-vr\preflight.json --require-command msbuild
+        run: python tests\tools\preflight_runner.py --profile windows-opengl-vr --output artifacts\windows-standalone-opengl-vr\preflight.json
 
       - name: Run Windows OpenGL VR smoke
         timeout-minutes: 10
         shell: pwsh
-        run: .\code\appImmViewer\scripts\run-windows-opengl-vr-smoke.ps1 -Configuration Release -LogDir artifacts\windows-standalone-opengl-vr
+        run: .\code\appImmViewer\scripts\run-windows-opengl-vr-smoke.ps1 -Configuration Release -SkipBuild -LogDir artifacts\windows-standalone-opengl-vr
 
       - name: Verify Windows OpenGL VR log contract
         shell: pwsh
@@ -511,8 +555,40 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Download Windows viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-Windows
+          path: artifacts/prebuilt-windows-viewer
+
+      - name: Stage Windows viewer build artifact
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts\prebuilt-windows-viewer -File |
+            Where-Object { $_.Extension -in @(".exe", ".dll") } |
+            Copy-Item -Destination code\appImmViewer\exe -Force
+
+      - name: Download Windows Godot extension build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmGodotGDExtension-Windows-platform
+          path: artifacts/prebuilt-godot-windows
+
+      - name: Stage Windows Godot extension build artifact
+        shell: pwsh
+        run: |
+          $destinationRoot = "code\ImmGodotSampleProject\addons\imm_viewer\bin\windows"
+          foreach ($variant in @("debug", "release")) {
+            $destination = Join-Path $destinationRoot $variant
+            New-Item -ItemType Directory -Force $destination | Out-Null
+            Get-ChildItem $destination -Filter *.dll -File -ErrorAction SilentlyContinue | Remove-Item -Force
+            $sources = @(Get-ChildItem artifacts\prebuilt-godot-windows -Recurse -Filter *.dll -File |
+              Where-Object { $_.FullName -match "[\\/]$variant[\\/]" })
+            if (-not $sources) {
+              throw "Build workflow did not provide $variant Windows Godot DLLs"
+            }
+            $sources | Copy-Item -Destination $destination -Force
+          }
 
       - name: Install Mesa lavapipe
         id: msys2-godot-vulkan
@@ -605,13 +681,9 @@ jobs:
           }
           "GODOT_EXE=$($godotExe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-      - name: Install SCons
-        shell: pwsh
-        run: python -m pip install scons
-
       - name: Preflight Godot Vulkan runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-command msbuild --require-command scons --require-env GODOT_EXE --require-env VK_ICD_FILENAMES
+        run: python tests\tools\preflight_runner.py --profile windows-godot-vulkan --output artifacts\godot-smoke-windows-vulkan\preflight.json --require-env GODOT_EXE --require-env VK_ICD_FILENAMES
 
       - name: Capture Godot Vulkan diagnostics
         shell: pwsh
@@ -632,14 +704,6 @@ jobs:
           & $vulkanInfo.Source --summary *>> $out
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
-
-      - name: Build Godot extension
-        shell: pwsh
-        run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
-
-      - name: Build Windows viewer
-        working-directory: code/projects/windows
-        run: msbuild imm.sln /t:appImmViewer /p:Configuration=Release /p:Platform=x64 /m
 
       - name: Run Godot Vulkan visual baseline smoke
         timeout-minutes: 10
@@ -743,13 +807,31 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Download Windows Godot extension build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmGodotGDExtension-Windows-platform
+          path: artifacts/prebuilt-godot-windows
+
+      - name: Stage Windows Godot extension build artifact
+        shell: pwsh
+        run: |
+          $destinationRoot = "code\ImmGodotSampleProject\addons\imm_viewer\bin\windows"
+          foreach ($variant in @("debug", "release")) {
+            $destination = Join-Path $destinationRoot $variant
+            New-Item -ItemType Directory -Force $destination | Out-Null
+            Get-ChildItem $destination -Filter *.dll -File -ErrorAction SilentlyContinue | Remove-Item -Force
+            $sources = @(Get-ChildItem artifacts\prebuilt-godot-windows -Recurse -Filter *.dll -File |
+              Where-Object { $_.FullName -match "[\\/]$variant[\\/]" })
+            if (-not $sources) {
+              throw "Build workflow did not provide $variant Windows Godot DLLs"
+            }
+            $sources | Copy-Item -Destination $destination -Force
+          }
+
       - name: Preflight Godot OpenXR VR runner
         shell: pwsh
-        run: python tests\tools\preflight_runner.py --profile windows-godot-openxr-vr --output artifacts\godot-openxr-vr\preflight.json --require-command msbuild --require-env GODOT_EXE
-
-      - name: Build Godot extension
-        shell: pwsh
-        run: .\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp
+        run: python tests\tools\preflight_runner.py --profile windows-godot-openxr-vr --output artifacts\godot-openxr-vr\preflight.json --require-env GODOT_EXE
 
       - name: Run Godot OpenXR VR smoke
         timeout-minutes: 10
@@ -807,25 +889,25 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install CMake
-        run: command -v cmake >/dev/null 2>&1 || brew install cmake
+      - name: Download macOS viewer build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmViewer-macOS
+          path: artifacts/prebuilt-macos-viewer
 
       - name: Preflight macOS Metal runner
-        run: python3 tests/tools/preflight_runner.py --profile macos-standalone-metal --output artifacts/macos-standalone-metal/preflight.json --require-command cmake --require-command git
+        run: python3 tests/tools/preflight_runner.py --profile macos-standalone-metal --output artifacts/macos-standalone-metal/preflight.json --require-command git
 
-      - name: Configure macOS build
-        run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
-
-      - name: Build macOS Metal standalone viewer
-        run: cmake --build build/macos --target appImmViewerMetal --config Release
-
-      - name: Smoke macOS Metal standalone viewer
+      - name: Verify macOS Metal build artifact
         timeout-minutes: 8
-        run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
+        run: |
+          set -euo pipefail
+          test -x artifacts/prebuilt-macos-viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal
+          test -f artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
 
       - name: Record macOS Metal render metrics
         run: >
-          python3 tests/tools/compare_render_metrics.py build/macos/metal-validation-captures/static.ppm
+          python3 tests/tools/compare_render_metrics.py artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
           --contract tests/baselines/render/macos-standalone-metal-sample1.json
           --json-output artifacts/macos-standalone-metal/macos-metal-render-metrics.json
 
@@ -834,7 +916,7 @@ jobs:
         run: >
           python3 tests/tools/write_render_report.py
           --metrics-json artifacts/macos-standalone-metal/macos-metal-render-metrics.json
-          --candidate-capture build/macos/metal-validation-captures/static.ppm
+          --candidate-capture artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
           --output-dir artifacts/macos-standalone-metal/captures
           --markdown-output artifacts/macos-standalone-metal/render-report.md
 
@@ -883,32 +965,31 @@ jobs:
           echo "GODOT_EXE=$PWD/$godot_exe" >> "$GITHUB_ENV"
 
       - name: Preflight Godot Metal runner
-        run: python3 tests/tools/preflight_runner.py --profile macos-godot-metal --output artifacts/godot-smoke-macos-metal/preflight.json --require-command cmake --require-command git --require-env GODOT_EXE
+        run: python3 tests/tools/preflight_runner.py --profile macos-godot-metal --output artifacts/godot-smoke-macos-metal/preflight.json --require-command git --require-env GODOT_EXE
 
-      - name: Configure macOS build
-        run: cmake -S code/projects/macos -B build/macos -DIMM_BUILD_VIEWER=ON
+      - name: Download macOS Godot extension build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmGodotGDExtension-macOS-platform
+          path: artifacts/prebuilt-godot-macos
 
-      - name: Build macOS Godot native plugin
-        run: cmake --build build/macos --target ImmGodotPlugin --config Release
-
-      - name: Build macOS Godot GDExtension
+      - name: Stage macOS Godot extension build artifact
         run: |
           set -euo pipefail
-          python3 -m pip install --break-system-packages scons
-          if [ ! -d thirdparty/godot-cpp ]; then
-            git clone --depth 1 --branch godot-4.5-stable https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
-          fi
-          arch="$(uname -m)"
-          python3 -m SCons -C thirdparty/godot-cpp platform=macos target=template_release arch="$arch" generate_bindings=yes
-          rm -f code/appImmGodotGDExtension/src/*.os
+          extension="$(find artifacts/prebuilt-godot-macos -name libimm_godot_extension.dylib -type f | head -n 1)"
+          native="$(find artifacts/prebuilt-godot-macos -name libImmGodotPlugin.dylib -type f | head -n 1)"
+          test -n "$extension"
+          test -n "$native"
           rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib
           rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib
           rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib
           rm -f code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
-          python3 -m SCons -C code/appImmGodotGDExtension platform=macos target=template_release arch="$arch" godot_cpp="$PWD/thirdparty/godot-cpp" imm_godot_lib="$PWD/build/macos/godot/libImmGodotPlugin.dylib" imm_godot_runtime="$PWD/build/macos/godot/libImmGodotPlugin.dylib"
+          mkdir -p code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release
           mkdir -p code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug
-          cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib
-          cp code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
+          cp "$extension" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libimm_godot_extension.dylib
+          cp "$native" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/release/libImmGodotPlugin.dylib
+          cp "$extension" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib
+          cp "$native" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
 
       - name: Run Godot Metal visual smoke
         timeout-minutes: 8
@@ -1004,6 +1085,7 @@ jobs:
       - name: Download GPU artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-GPU"
           path: artifacts/gpu-evidence/input
 
       - name: Verify GPU matrix evidence

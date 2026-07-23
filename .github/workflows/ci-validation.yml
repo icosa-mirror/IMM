@@ -1,9 +1,20 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: CI Validation Matrix
+name: Build and Validation Pipeline
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Select how much of the pipeline to run.
+        required: true
+        default: full
+        type: choice
+        options:
+          - quick
+          - build
+          - full
+          - release
   schedule:
     - cron: '17 2 * * *'
   push:
@@ -21,6 +32,21 @@ permissions:
   contents: read
 
 jobs:
+  build:
+    name: Build
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode != 'quick') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+      contains(github.event.head_commit.message, '[CI BUILD]') ||
+      contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+      contains(github.event.head_commit.message, '[RELEASE]')
+    uses: ./.github/workflows/build.yml
+    with:
+      mode: build
+    secrets: inherit
+
   core:
     name: Core
     uses: ./.github/workflows/ci-core.yml
@@ -28,19 +54,37 @@ jobs:
 
   device:
     name: Device
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')
+    needs: build
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'device-ci')) ||
+      contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+      contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/ci-device.yml
     secrets: inherit
 
   engine:
     name: Engine
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')
+    needs: build
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'engine-ci')) ||
+      contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+      contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/ci-engine.yml
     secrets: inherit
 
   gpu:
     name: GPU
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || contains(github.event.head_commit.message, '[CI VALIDATION]')
+    needs: build
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'gpu-ci')) ||
+      contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+      contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/ci-gpu.yml
     secrets: inherit
 
@@ -61,7 +105,29 @@ jobs:
       - name: Download matrix evidence artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/validation-evidence/input
+          name: CoreMatrixEvidence
+          path: artifacts/validation-evidence/input/CoreMatrixEvidence
+
+      - name: Download device matrix evidence
+        if: needs.device.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: DeviceMatrixEvidence
+          path: artifacts/validation-evidence/input/DeviceMatrixEvidence
+
+      - name: Download engine matrix evidence
+        if: needs.engine.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: EngineValidationEvidence
+          path: artifacts/validation-evidence/input/EngineValidationEvidence
+
+      - name: Download GPU matrix evidence
+        if: needs.gpu.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: GPUMatrixEvidence
+          path: artifacts/validation-evidence/input/GPUMatrixEvidence
 
       - name: Write validation visual evidence report
         run: >
@@ -96,3 +162,34 @@ jobs:
           --name EngineValidationEvidence
           --name EngineMatrixDebugArtifacts
           --name GPUMatrixEvidence
+
+  publish:
+    name: Publish
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      needs.core.result == 'success' &&
+      (needs.device.result == 'success' || needs.device.result == 'skipped') &&
+      (needs.engine.result == 'success' || needs.engine.result == 'skipped') &&
+      (needs.gpu.result == 'success' || needs.gpu.result == 'skipped') &&
+      needs.validation-evidence.result == 'success' &&
+      (
+        (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'release')
+      )
+    needs:
+      - build
+      - core
+      - device
+      - engine
+      - gpu
+      - validation-evidence
+    uses: ./.github/workflows/build.yml
+    permissions:
+      actions: read
+      contents: write
+    with:
+      mode: publish
+      sync_binaries: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') }}
+      release: ${{ github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, '[RELEASE]') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'release')) }}
+    secrets: inherit

@@ -283,7 +283,26 @@ jobs:
       - name: Download core artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/core-evidence/input
+          name: BaselineContent-sample1
+          path: artifacts/core-evidence/input/BaselineContent-sample1
+
+      - name: Download package source layout artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: PackageSourceLayout
+          path: artifacts/core-evidence/input/PackageSourceLayout
+
+      - name: Download matrix status artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: MatrixStatus
+          path: artifacts/core-evidence/input/MatrixStatus
+
+      - name: Download Godot verifier artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: GodotLocalVerifier
+          path: artifacts/core-evidence/input/GodotLocalVerifier
 
       - name: Verify core matrix evidence
         run: >
@@ -296,7 +315,7 @@ jobs:
           --output artifacts/core-evidence/artifact-summary.json
 
       - name: Upload core evidence report
-        if: ${{ always() && vars.CI_VALIDATION_DEBUG_ARTIFACTS == 'true' }}
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: CoreMatrixEvidence
