@@ -11,7 +11,7 @@ compositor_effects = Array[CompositorEffect]([SubResource("ImmViewerCompositorEf
 script = ExtResource("1")
 
 [node name="ImmViewer" type="ImmViewerNode" parent="." unique_id=513623797]
-document_path = "../../exampleImmFiles/the-arrest-of-the-consul.imm"
+document_path = "../../exampleImmFiles/sample1.imm"
 load_on_ready = true
 auto_queue_render = true
 render_camera_path = NodePath("../CameraRig/Camera3D")

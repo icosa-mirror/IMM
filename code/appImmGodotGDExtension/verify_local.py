@@ -335,6 +335,8 @@ def verify_godot_scenes() -> None:
 
     if node_by_name(sample_nodes, "ImmViewer").get("type") != "ImmViewerNode":
         raise RuntimeError("SampleScene.tscn ImmViewer must be native ImmViewerNode")
+    if node_by_name(sample_nodes, "ImmViewer").get("document_path") != '"../../exampleImmFiles/sample1.imm"':
+        raise RuntimeError("SampleScene.tscn ImmViewer must reference the committed sample1.imm fixture")
     if node_by_name(script_nodes, "ImmViewer").get("type") != "Node":
         raise RuntimeError("ScriptSmokeScene.tscn ImmViewer must be a script-backed Node")
     if node_by_name(native_nodes, "ImmViewer").get("type") != "ImmViewerNode":
