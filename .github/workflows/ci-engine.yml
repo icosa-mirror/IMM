@@ -90,8 +90,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "dumpbin failed while inspecting $plugin"
           }
+          $exportsText = $exports -join "`n"
           foreach ($requiredExport in @("GetRenderEventFunc", "GetRenderEventAndDataFunc", "ConfigureVulkanRenderEvent")) {
-            if ($exports -notmatch "\b$requiredExport\b") {
+            if ($exportsText -notmatch "\b$requiredExport\b") {
               throw "Same-commit Unity native plugin is missing required export: $requiredExport"
             }
           }
