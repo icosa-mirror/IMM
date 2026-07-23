@@ -1,42 +1,14 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: Web Player Pages
+name: Web Player Build and Validation
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/web-pages.yml"
-      - "code/appImmStrokeReader/**"
-      - "code/libImmCore/**"
-      - "code/libImmImporter/**"
-      - "code/projects/web/**"
-      - "exampleImmFiles/sample1.imm"
-      - "tests/baselines/render/web-three-sample1.json"
-      - "tests/baselines/render/windows-directx-sample1.ppm"
-      - "tests/tools/compare_render_metrics.py"
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/web-pages.yml"
-      - "code/appImmStrokeReader/**"
-      - "code/libImmCore/**"
-      - "code/libImmImporter/**"
-      - "code/projects/web/**"
-      - "exampleImmFiles/sample1.imm"
-      - "tests/baselines/render/web-three-sample1.json"
-      - "tests/baselines/render/windows-directx-sample1.ppm"
-      - "tests/tools/compare_render_metrics.py"
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
   pages: write
   id-token: write
-
-concurrency:
-  group: web-player-pages
-  cancel-in-progress: true
 
 jobs:
   build:
@@ -219,20 +191,3 @@ jobs:
           path: artifacts/web-native
           if-no-files-found: ignore
           retention-days: 7
-
-  deploy:
-    name: Deploy web player
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5

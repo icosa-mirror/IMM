@@ -153,11 +153,12 @@ tracking label and measured offset.
 
 ## GitHub Pages
 
-`.github/workflows/web-pages.yml` builds and verifies the Wasm decoder and web
-application on pushes to `main`, then deploys the production bundle with the
-repository's GitHub Pages base path. The deployed bundle includes
-`sample1.imm` and loads it on startup. Pages builds scope the decoder, Wasm,
-geometry module, and sample scene beneath the Git commit ID. A small bootstrap
-in `index.html` checks a cache-busted `version.json` and reloads stale HTML with
-the current release ID. Local builds continue to use unversioned asset paths;
-`VITE_IMM_DEFAULT_SOURCE` can still override the initial scene.
+`.github/workflows/web-pages.yml` is called by the unified build and validation
+pipeline whenever its native build runs. It builds and verifies the Wasm
+decoder and web application and produces the GitHub Pages artifact. Successful
+`main` pipelines deploy that already-tested artifact. The deployed bundle
+includes `sample1.imm` and loads it on startup. Pages builds scope the decoder,
+Wasm, geometry module, and sample scene beneath the Git commit ID. A small
+bootstrap in `index.html` checks a cache-busted `version.json` and reloads stale
+HTML with the current release ID. Local builds continue to use unversioned
+asset paths; `VITE_IMM_DEFAULT_SOURCE` can still override the initial scene.

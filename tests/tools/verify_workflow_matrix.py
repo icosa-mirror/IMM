@@ -60,6 +60,11 @@ REQUIRED_JOBS = {
         "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
     },
+    ".github/workflows/web-pages.yml": {
+        "build": ["Build Wasm decoder", "Run playback tests", "Run browser smoke test", "Build Pages bundle", "Verify Pages bundle layout", "Upload Pages artifact"],
+        "verify": ["Download decoder artifact", "Run extended browser verification", "Upload failed browser evidence"],
+        "verify-firefox": ["Install Playwright Firefox and system dependencies", "Download decoder artifact", "Run Firefox browser verification", "Upload failed Firefox evidence"],
+    },
 }
 
 REQUIRED_RUNS_ON = {
@@ -163,7 +168,7 @@ REQUIRED_STEP_TIMEOUTS = {
     },
 }
 REQUIRED_WORKFLOW_TRIGGERS = {
-    ".github/workflows/ci-validation.yml": ["build.yml", "ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
+    ".github/workflows/ci-validation.yml": ["build.yml", "web-pages.yml", "ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
 GATED_VALIDATION_JOBS = ["device", "engine", "gpu"]
 VALIDATION_JOB_LABELS = {
@@ -332,14 +337,75 @@ def verify_build_orchestration_contract(path: Path, workflow_rel: str, errors: l
         "- full",
         "- release",
         "uses: ./.github/workflows/build.yml",
+        "uses: ./.github/workflows/web-pages.yml",
         "actions: write",
         "contents: write",
         "mode: build",
         "mode: publish",
         "needs.validation-evidence.result == 'success'",
+        "needs.web.result == 'success'",
+        "name: Deploy Web Player Pages",
+        "uses: actions/deploy-pages@v5",
     ]:
         if token not in text:
             errors.append(f"{workflow_rel} missing unified pipeline token: {token}")
+
+
+def verify_web_pipeline_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    text = path.read_text(encoding="utf-8")
+    if workflow_rel == ".github/workflows/web-pages.yml":
+        for token in ["workflow_call:", "uses: actions/upload-pages-artifact@v5"]:
+            if token not in text:
+                errors.append(f"{workflow_rel} missing reusable web build token: {token}")
+        for forbidden in ["\n  push:", "\n  pull_request:", "\n  paths:", "uses: actions/deploy-pages@"]:
+            if forbidden in text:
+                errors.append(f"{workflow_rel} must not trigger or deploy independently; found {forbidden.strip()}")
+        return
+
+    if workflow_rel != ".github/workflows/ci-validation.yml":
+        return
+
+    match = re.search(
+        r"^  web:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        errors.append(f"{workflow_rel} missing web orchestration job")
+        return
+
+    web_body = match.group("body")
+    for token in [
+        "github.event_name == 'pull_request'",
+        "github.event_name == 'schedule'",
+        "github.event_name == 'workflow_dispatch' && inputs.mode != 'quick'",
+        "github.event_name == 'push'",
+        "contains(github.event.head_commit.message, '[CI BUILD]')",
+        "contains(github.event.head_commit.message, '[CI VALIDATION]')",
+        "contains(github.event.head_commit.message, '[RELEASE]')",
+        "uses: ./.github/workflows/web-pages.yml",
+    ]:
+        if token not in web_body:
+            errors.append(f"{workflow_rel} web job missing build-equivalent gate token: {token}")
+
+    deploy_match = re.search(
+        r"^  deploy-pages:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not deploy_match:
+        errors.append(f"{workflow_rel} missing Pages deployment job")
+        return
+
+    deploy_body = deploy_match.group("body")
+    for token in [
+        "needs.web.result == 'success'",
+        "github.ref == 'refs/heads/main'",
+        "uses: actions/deploy-pages@v5",
+        "name: github-pages",
+    ]:
+        if token not in deploy_body:
+            errors.append(f"{workflow_rel} deploy-pages job missing deployment gate token: {token}")
 
 
 def verify_release_assets(path: Path, workflow_rel: str, errors: list[str]) -> None:
@@ -558,11 +624,12 @@ def main() -> int:
         if not workflow_path.exists():
             errors.append(f"Missing workflow: {workflow_rel}")
             continue
-        if workflow_rel == ".github/workflows/build.yml" or (
+        if workflow_rel in {".github/workflows/build.yml", ".github/workflows/web-pages.yml"} or (
             workflow_rel.startswith(".github/workflows/ci-") and workflow_rel != ".github/workflows/ci-validation.yml"
         ):
             verify_reusable_workflow(workflow_path, workflow_rel, errors)
         verify_build_orchestration_contract(workflow_path, workflow_rel, errors)
+        verify_web_pipeline_contract(workflow_path, workflow_rel, errors)
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)
         verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)

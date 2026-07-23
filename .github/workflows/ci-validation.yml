@@ -50,6 +50,22 @@ jobs:
       mode: build
     secrets: inherit
 
+  web:
+    name: Web
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode != 'quick') ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+      contains(github.event.head_commit.message, '[CI BUILD]') ||
+      contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+      contains(github.event.head_commit.message, '[RELEASE]')
+    uses: ./.github/workflows/web-pages.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
   core:
     name: Core
     uses: ./.github/workflows/ci-core.yml
@@ -166,11 +182,51 @@ jobs:
           --name EngineMatrixDebugArtifacts
           --name GPUMatrixEvidence
 
+  deploy-pages:
+    name: Deploy Web Player Pages
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      needs.web.result == 'success' &&
+      needs.core.result == 'success' &&
+      (needs.device.result == 'success' || needs.device.result == 'skipped') &&
+      (needs.engine.result == 'success' || needs.engine.result == 'skipped') &&
+      (needs.gpu.result == 'success' || needs.gpu.result == 'skipped') &&
+      needs.validation-evidence.result == 'success' &&
+      (
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode != 'quick')
+      )
+    needs:
+      - build
+      - web
+      - core
+      - device
+      - engine
+      - gpu
+      - validation-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: web-player-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+
   publish:
     name: Publish
     if: >-
       always() &&
       needs.build.result == 'success' &&
+      needs.web.result == 'success' &&
       needs.core.result == 'success' &&
       (needs.device.result == 'success' || needs.device.result == 'skipped') &&
       (needs.engine.result == 'success' || needs.engine.result == 'skipped') &&
@@ -182,6 +238,7 @@ jobs:
       )
     needs:
       - build
+      - web
       - core
       - device
       - engine
