@@ -571,7 +571,7 @@ jobs:
       - name: Download Windows Godot extension build artifact
         uses: actions/download-artifact@v4
         with:
-          name: Internal-ImmGodotGDExtension-Windows-platform
+          name: ImmPlayerPlugin-Godot
           path: artifacts/prebuilt-godot-windows
 
       - name: Stage Windows Godot extension build artifact
@@ -810,7 +810,7 @@ jobs:
       - name: Download Windows Godot extension build artifact
         uses: actions/download-artifact@v4
         with:
-          name: Internal-ImmGodotGDExtension-Windows-platform
+          name: ImmPlayerPlugin-Godot
           path: artifacts/prebuilt-godot-windows
 
       - name: Stage Windows Godot extension build artifact
@@ -902,7 +902,7 @@ jobs:
         timeout-minutes: 8
         run: |
           set -euo pipefail
-          test -x artifacts/prebuilt-macos-viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal
+          test -f artifacts/prebuilt-macos-viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal
           test -f artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
 
       - name: Record macOS Metal render metrics
@@ -970,7 +970,7 @@ jobs:
       - name: Download macOS Godot extension build artifact
         uses: actions/download-artifact@v4
         with:
-          name: Internal-ImmGodotGDExtension-macOS-platform
+          name: ImmPlayerPlugin-Godot
           path: artifacts/prebuilt-godot-macos
 
       - name: Stage macOS Godot extension build artifact

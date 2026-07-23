@@ -430,7 +430,7 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
 
     native_body = job_bodies.get("unity-windows-native-plugin-build", "")
     for token in [
-        "name: Internal-ImmViewerPlugin-Windows",
+        "name: ImmPlayerPlugin-Unity",
         "path: artifacts/prebuilt-unity-native",
         "Copy-Item -Force $source.FullName $destination",
         "GetRenderEventAndDataFunc",
@@ -481,7 +481,7 @@ def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str
         ])
     else:
         tokens.extend([
-            "name: Internal-ImmGodotGDExtension-macOS-platform",
+            "name: ImmPlayerPlugin-Godot",
             "Stage macOS Godot extension build artifact",
             "cp \"$extension\" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libimm_godot_extension.dylib",
             "cp \"$native\" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib",
