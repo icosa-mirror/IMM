@@ -120,7 +120,15 @@ Use these validation classes consistently across products.
 
 ## Workflow Structure
 
-`.github/workflows/ci-validation.yml` is the only event-driven entry point. It supports `quick`, `build`, `full`, and `release` dispatch modes and calls the reusable workflows below.
+`.github/workflows/ci-validation.yml` is the only event-driven entry point. It supports `quick`, `build`, `full`, `hardware`, and `release` dispatch modes and calls the reusable workflows below.
+
+`full` uses only GitHub-hosted runners and managed device infrastructure such
+as Firebase Test Lab. Scheduled runs, commit-message validation requests,
+release mode, and labelled pull requests use the same hosted-only boundary.
+`hardware` is the sole opt-in for jobs whose `runs-on` labels include
+`self-hosted`; it runs the hosted matrix as well as explicitly enabled private
+GPU, VR, OpenXR, and device lanes. Reusable workflows default their `hardware`
+input to `false`, and every self-hosted job must require that input.
 
 `.github/workflows/build.yml` builds each release-equivalent platform artifact once. Engine, GPU, and VR validation jobs download those same-run artifacts rather than rebuilding or using tracked binaries. After the required validation jobs pass, the orchestrator calls `build.yml` in publish mode to synchronize generated binaries or create a release from the already-tested artifacts.
 
@@ -176,7 +184,9 @@ Jobs:
 
 ### 2. `ci-gpu.yml`
 
-Runs on `workflow_dispatch`, nightly schedule, and protected branch pushes. Also runs on PRs when a label such as `gpu-ci` is present.
+The hosted GPU matrix runs on `full`, nightly schedule, protected branch
+validation, and labelled pull requests. Self-hosted GPU/VR lanes run only from
+an explicit `hardware` dispatch.
 
 Jobs:
 
@@ -197,7 +207,9 @@ Jobs:
 
 ### 3. `ci-device.yml`
 
-Runs on nightly, release branches, and manual dispatch. It can become required for releases once device stability is proven.
+Managed Firebase and hosted device/package lanes run on nightly, release, and
+`full` validation. Physical Quest/OpenXR lanes run only from an explicit
+`hardware` dispatch and still require their feature variables to be enabled.
 
 Jobs:
 

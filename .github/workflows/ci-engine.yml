@@ -4,6 +4,12 @@ name: CI Engine Matrix
 
 on:
   workflow_call:
+    inputs:
+      hardware:
+        description: Run explicitly requested jobs requiring private hardware.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -585,7 +591,7 @@ jobs:
 
   unity-windows-vulkan-ordered-overlay:
     name: Unity Windows Vulkan Ordered Overlay
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: [self-hosted, windows]
     timeout-minutes: 25
     needs: unity-windows-vulkan-player-build
@@ -758,7 +764,7 @@ jobs:
 
   unity-windows-vulkan-full-depth:
     name: Unity Windows Vulkan Full Depth
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: [self-hosted, windows]
     timeout-minutes: 25
     needs: unity-windows-vulkan-player-build
@@ -914,7 +920,7 @@ jobs:
   unity-windows-openxr-vr:
     name: Unity Windows OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     needs: unity-windows-native-plugin-build
     runs-on: [self-hosted, windows, unity, vr]
     timeout-minutes: 45

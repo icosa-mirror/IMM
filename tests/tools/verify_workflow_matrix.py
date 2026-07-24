@@ -298,7 +298,9 @@ def verify_consolidated_workflow(path: Path, workflow_rel: str, workflow_files: 
             "github.event_name == 'schedule'",
             "github.event_name == 'workflow_dispatch'",
             "inputs.mode == 'full'",
+            "inputs.mode == 'hardware'",
             "inputs.mode == 'release'",
+            "hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}",
             "contains(github.event.head_commit.message, '[CI VALIDATION]')",
             "contains(github.event.head_commit.message, '[RELEASE]')",
             f"contains(github.event.pull_request.labels.*.name, '{VALIDATION_JOB_LABELS[job_name]}')",
@@ -335,6 +337,7 @@ def verify_build_orchestration_contract(path: Path, workflow_rel: str, errors: l
         "- quick",
         "- build",
         "- full",
+        "- hardware",
         "- release",
         "uses: ./.github/workflows/build.yml",
         "uses: ./.github/workflows/web-pages.yml",
@@ -349,6 +352,41 @@ def verify_build_orchestration_contract(path: Path, workflow_rel: str, errors: l
     ]:
         if token not in text:
             errors.append(f"{workflow_rel} missing unified pipeline token: {token}")
+
+
+def verify_self_hosted_hardware_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    hardware_workflows = {
+        ".github/workflows/ci-device.yml",
+        ".github/workflows/ci-engine.yml",
+        ".github/workflows/ci-gpu.yml",
+    }
+    if workflow_rel not in hardware_workflows:
+        return
+
+    text = path.read_text(encoding="utf-8")
+    for token in [
+        "workflow_call:",
+        "hardware:",
+        "description: Run explicitly requested jobs requiring private hardware.",
+        "default: false",
+        "type: boolean",
+    ]:
+        if token not in text:
+            errors.append(f"{workflow_rel} missing hardware input contract token: {token}")
+
+    for match in re.finditer(
+        r"^  (?P<name>[A-Za-z0-9_-]+):\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    ):
+        job_name = match.group("name")
+        body = match.group("body")
+        self_hosted = re.search(r"^    runs-on:.*\bself-hosted\b", body, re.MULTILINE) is not None
+        hardware_gated = "inputs.hardware" in body
+        if self_hosted and not hardware_gated:
+            errors.append(f"{workflow_rel} self-hosted job {job_name} must require inputs.hardware")
+        if hardware_gated and not self_hosted:
+            errors.append(f"{workflow_rel} hosted job {job_name} must not require inputs.hardware")
 
 
 def verify_web_pipeline_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
@@ -567,6 +605,7 @@ def verify_full_depth_validation_report_contract(path: Path, workflow_rel: str, 
     text = path.read_text(encoding="utf-8")
     required_tokens = [
         "Verify full depth validation evidence",
+        "github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware'",
         "needs.engine.result != 'skipped' && needs.gpu.result != 'skipped'",
         "python tests/tools/verify_full_depth_evidence_report.py",
         "--report artifacts/validation-evidence/view/VALIDATION_REPORT.md",
@@ -629,6 +668,7 @@ def main() -> int:
         ):
             verify_reusable_workflow(workflow_path, workflow_rel, errors)
         verify_build_orchestration_contract(workflow_path, workflow_rel, errors)
+        verify_self_hosted_hardware_contract(workflow_path, workflow_rel, errors)
         verify_web_pipeline_contract(workflow_path, workflow_rel, errors)
         verify_manifest_status_arguments(workflow_path, workflow_rel, errors)
         verify_release_assets(workflow_path, workflow_rel, errors)

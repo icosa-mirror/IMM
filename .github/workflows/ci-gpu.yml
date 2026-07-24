@@ -4,6 +4,12 @@ name: CI GPU Matrix
 
 on:
   workflow_call:
+    inputs:
+      hardware:
+        description: Run explicitly requested jobs requiring private hardware.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -405,7 +411,7 @@ jobs:
   windows-standalone-openxr-vr:
     name: Windows Standalone OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, gpu, vr, openxr]
     timeout-minutes: 30
     steps:
@@ -478,7 +484,7 @@ jobs:
   windows-standalone-opengl-vr:
     name: Windows Standalone OpenGL VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, gpu, vr, opengl]
     timeout-minutes: 30
     steps:
@@ -798,7 +804,7 @@ jobs:
   windows-godot-openxr-vr:
     name: Windows Godot OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'gpu-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, windows, gpu, godot, vr, openxr]
     timeout-minutes: 45
     steps:

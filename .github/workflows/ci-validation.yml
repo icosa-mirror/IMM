@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: Select how much of the pipeline to run.
+        description: Select pipeline depth; hardware is the only mode that can use self-hosted runners.
         required: true
         default: full
         type: choice
@@ -14,6 +14,7 @@ on:
           - quick
           - build
           - full
+          - hardware
           - release
   schedule:
     - cron: '17 2 * * *'
@@ -76,11 +77,13 @@ jobs:
     needs: build
     if: >-
       github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'hardware' || inputs.mode == 'release')) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'device-ci')) ||
       contains(github.event.head_commit.message, '[CI VALIDATION]') ||
       contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/ci-device.yml
+    with:
+      hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
     secrets: inherit
 
   engine:
@@ -88,11 +91,13 @@ jobs:
     needs: build
     if: >-
       github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'hardware' || inputs.mode == 'release')) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'engine-ci')) ||
       contains(github.event.head_commit.message, '[CI VALIDATION]') ||
       contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/ci-engine.yml
+    with:
+      hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
     secrets: inherit
 
   gpu:
@@ -100,11 +105,13 @@ jobs:
     needs: build
     if: >-
       github.event_name == 'schedule' ||
-      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'hardware' || inputs.mode == 'release')) ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'gpu-ci')) ||
       contains(github.event.head_commit.message, '[CI VALIDATION]') ||
       contains(github.event.head_commit.message, '[RELEASE]')
     uses: ./.github/workflows/ci-gpu.yml
+    with:
+      hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
     secrets: inherit
 
   validation-evidence:
@@ -157,7 +164,7 @@ jobs:
           --markdown-output artifacts/validation-evidence/view/VALIDATION_REPORT.md
 
       - name: Verify full depth validation evidence
-        if: needs.engine.result != 'skipped' && needs.gpu.result != 'skipped'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && needs.engine.result != 'skipped' && needs.gpu.result != 'skipped'
         run: >
           python tests/tools/verify_full_depth_evidence_report.py
           --report artifacts/validation-evidence/view/VALIDATION_REPORT.md

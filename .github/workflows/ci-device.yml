@@ -4,6 +4,12 @@ name: CI Device Matrix
 
 on:
   workflow_call:
+    inputs:
+      hardware:
+        description: Run explicitly requested jobs requiring private hardware.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -269,7 +275,7 @@ jobs:
   android-openxr-probe:
     name: Android OpenXR Probe
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, quest, openxr]
     timeout-minutes: 30
     steps:
@@ -499,7 +505,7 @@ jobs:
   android-quest-vr:
     name: Android Quest VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
-    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
+    if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'device-ci')) && vars.CI_ENABLE_VR_CHECKS == 'true'
     runs-on: [self-hosted, quest, vr]
     timeout-minutes: 30
     steps:
