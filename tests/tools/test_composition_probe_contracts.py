@@ -24,7 +24,8 @@ def main() -> int:
             "OverlayProbeEnv",
             "CaptureCameraTexture",
             "CaptureWidth",
-            "IMM_UNITY_FORCE_TEXTURE_PROJECTION",
+            "captureCamera.targetTexture = renderTexture",
+            "camera.targetTexture = renderTexture",
             "Resources.Load<Shader>(\"ImmUnitySmokeUnlitColor\")",
             "scene composition overlay rear probe failed",
             "scene composition ordered overlay orientation failed",
@@ -99,6 +100,14 @@ def main() -> int:
         missing = require_tokens(path, tokens)
         for token in missing:
             errors.append(f"{path.relative_to(ROOT)} missing token: {token}")
+
+    unity_smoke = (
+        ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
+    ).read_text(encoding="utf-8")
+    if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in unity_smoke:
+        errors.append(
+            "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
+        )
 
     if errors:
         for error in errors:

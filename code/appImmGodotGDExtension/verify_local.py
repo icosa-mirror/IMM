@@ -39,6 +39,8 @@ GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmoke
 GODOT_METAL_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/MetalVisualSmokeScene.tscn"
 GODOT_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/VisualSmokeScene.tscn"
 UNITY_PLAYER_MANAGER = ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs"
+UNITY_RUNTIME_SMOKE = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
+UNITY_PROJECTION_TESTS = ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Tests/Runtime/ImmProjectionDestinationResolverTests.cs"
 UNITY_XR_SETTINGS = ROOT / "code/ImmUnitySampleProject/Assets/XR/XRGeneralSettingsPerBuildTarget.asset"
 UNITY_XR_BOOTSTRAP = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs"
 UNITY_XR_BOOTSTRAP_META = ROOT / "code/ImmUnitySampleProject/Assets/Scripts/XrSceneBootstrap.cs.meta"
@@ -493,26 +495,67 @@ def verify_unity_projection_guard() -> None:
     for token in [
         "IMM_UNITY_FORCE_BACKBUFFER_PROJECTION",
         "IMM_UNITY_FORCE_TEXTURE_PROJECTION",
-        "GraphicsDeviceType.Direct3D11",
         "GraphicsDeviceType.Vulkan",
-        "backbuffer projection path",
-        "keep XR separate from this path",
         "GL.GetGPUProjectionMatrix(headProjection, renderIntoTexture)",
-        "D3D11 desktop Game cameras",
-        "Unity can mark Game cameras as stereo/XR-active",
-        "!cam.stereoEnabled",
-        "stereoEnabled as a",
+        "ImmProjectionDestination.Backbuffer",
+        "ImmProjectionDestination.ExplicitRenderTexture",
+        "ImmProjectionDestination.EditorGameView",
+        "ImmProjectionDestination.EditorSceneView",
+        "ImmProjectionDestination.VulkanHostAttachment",
+        "ImmProjectionDestination.XrDisplay",
+        "hasExplicitRenderTexture",
+        "isEditor && cameraType == CameraType.Game",
+        "if (stereoEnabled)",
         "CameraType.SceneView",
+        "ProjectionDestinationDiagPrefix",
+        "[IMM_PROJECTION_TARGET_20260725]",
     ]:
         if token not in manager:
             raise RuntimeError(f"Unity projection guard is missing token: {token}")
-    if re.search(r"GraphicsDeviceType\.Direct3D11\)\s*\r?\n\s*return true;", manager):
-        raise RuntimeError("Unity D3D11 projection guard must not apply texture projection to XR/stereo Game cameras")
-    if not re.search(r"GraphicsDeviceType\.Direct3D11\s*&&\s*\r?\n\s*cam != null\s*&&\s*\r?\n\s*cam\.cameraType == CameraType\.Game\s*&&\s*\r?\n\s*!cam\.stereoEnabled\)\s*\r?\n\s*return false;", manager):
-        raise RuntimeError("Unity D3D11 projection guard must be limited to non-XR Game cameras")
-    if not re.search(r"GraphicsDeviceType\.Vulkan\s*&&\s*\r?\n\s*cam != null\s*&&\s*\r?\n\s*cam\.cameraType == CameraType\.Game\s*&&\s*\r?\n\s*!cam\.stereoEnabled\)\s*\r?\n\s*return true;", manager):
-        raise RuntimeError("Unity Vulkan projection guard must apply texture projection to non-XR Game cameras")
-    print("Unity D3D11/Vulkan/XR projection guards ok", flush=True)
+    if not re.search(
+        r"if \(hasExplicitRenderTexture\)\s*\r?\n\s*return ImmProjectionDestination\.ExplicitRenderTexture;",
+        manager,
+    ):
+        raise RuntimeError("Unity projection destination must prioritize explicit RenderTextures")
+    if not re.search(
+        r"if \(stereoEnabled\)\s*\r?\n\s*return ImmProjectionDestination\.XrDisplay;",
+        manager,
+    ):
+        raise RuntimeError("Unity projection destination must preserve the XR projection path")
+    if not re.search(
+        r"if \(isEditor && cameraType == CameraType\.Game\)\s*\r?\n\s*return ImmProjectionDestination\.EditorGameView;",
+        manager,
+    ):
+        raise RuntimeError("Unity Editor Game view must use its texture-backed projection path")
+    if not re.search(
+        r"GraphicsDeviceType\.Vulkan\s*&&\s*\r?\n\s*cameraType == CameraType\.Game\)\s*\r?\n\s*return ImmProjectionDestination\.VulkanHostAttachment;",
+        manager,
+    ):
+        raise RuntimeError("Unity Vulkan host attachment must preserve texture projection")
+
+    smoke = UNITY_RUNTIME_SMOKE.read_text(encoding="utf-8")
+    if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in smoke:
+        raise RuntimeError("Unity capture must not override the production projection destination")
+    for token in ["captureCamera.targetTexture = renderTexture", "camera.targetTexture = renderTexture"]:
+        if token not in smoke:
+            raise RuntimeError(f"Unity capture is missing explicit RenderTexture assignment: {token}")
+
+    projection_tests = UNITY_PROJECTION_TESTS.read_text(encoding="utf-8")
+    for token in [
+        "GraphicsDeviceType.Direct3D11",
+        "ImmProjectionDestination.EditorGameView",
+        "ImmProjectionDestination.Backbuffer",
+        "ImmProjectionDestination.ExplicitRenderTexture",
+        "ImmProjectionDestination.EditorSceneView",
+        "ImmProjectionDestination.XrDisplay",
+        "GraphicsDeviceType.Vulkan",
+        "ImmProjectionDestination.VulkanHostAttachment",
+        "DiagnosticBackbufferOverrideKeepsExistingPrecedence",
+    ]:
+        if token not in projection_tests:
+            raise RuntimeError(f"Unity projection destination tests are missing token: {token}")
+
+    print("Unity projection destination contract ok", flush=True)
 
 
 def verify_unity_xr_scene_bootstrap() -> None:
