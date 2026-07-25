@@ -543,13 +543,13 @@ def verify_unity_projection_guard() -> None:
     projection_tests = UNITY_PROJECTION_TESTS.read_text(encoding="utf-8")
     for token in [
         "GraphicsDeviceType.Direct3D11",
-        "ImmProjectionDestination.EditorGameView",
-        "ImmProjectionDestination.Backbuffer",
-        "ImmProjectionDestination.ExplicitRenderTexture",
-        "ImmProjectionDestination.EditorSceneView",
-        "ImmProjectionDestination.XrDisplay",
+        '"EditorGameView"',
+        '"Backbuffer"',
+        '"ExplicitRenderTexture"',
+        '"EditorSceneView"',
+        '"XrDisplay"',
         "GraphicsDeviceType.Vulkan",
-        "ImmProjectionDestination.VulkanHostAttachment",
+        '"VulkanHostAttachment"',
         "DiagnosticBackbufferOverrideKeepsExistingPrecedence",
     ]:
         if token not in projection_tests:

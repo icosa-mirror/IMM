@@ -12,7 +12,7 @@ namespace ImmPlayer.Tests
             false,
             false,
             true,
-            ImmProjectionDestination.EditorGameView,
+            "EditorGameView",
             true)]
         [TestCase(
             GraphicsDeviceType.Direct3D11,
@@ -20,7 +20,7 @@ namespace ImmPlayer.Tests
             false,
             false,
             false,
-            ImmProjectionDestination.Backbuffer,
+            "Backbuffer",
             false)]
         [TestCase(
             GraphicsDeviceType.Direct3D11,
@@ -28,7 +28,7 @@ namespace ImmPlayer.Tests
             false,
             true,
             false,
-            ImmProjectionDestination.ExplicitRenderTexture,
+            "ExplicitRenderTexture",
             true)]
         [TestCase(
             GraphicsDeviceType.Direct3D11,
@@ -36,7 +36,7 @@ namespace ImmPlayer.Tests
             false,
             false,
             true,
-            ImmProjectionDestination.EditorSceneView,
+            "EditorSceneView",
             true)]
         [TestCase(
             GraphicsDeviceType.Direct3D11,
@@ -44,7 +44,7 @@ namespace ImmPlayer.Tests
             true,
             false,
             true,
-            ImmProjectionDestination.XrDisplay,
+            "XrDisplay",
             false)]
         [TestCase(
             GraphicsDeviceType.Vulkan,
@@ -52,7 +52,7 @@ namespace ImmPlayer.Tests
             false,
             false,
             false,
-            ImmProjectionDestination.VulkanHostAttachment,
+            "VulkanHostAttachment",
             true)]
         [TestCase(
             GraphicsDeviceType.Metal,
@@ -60,7 +60,7 @@ namespace ImmPlayer.Tests
             false,
             false,
             true,
-            ImmProjectionDestination.EditorGameView,
+            "EditorGameView",
             true)]
         public void ResolvesDestinationAndProjectionMode(
             GraphicsDeviceType graphicsDeviceType,
@@ -68,7 +68,7 @@ namespace ImmPlayer.Tests
             bool stereoEnabled,
             bool hasExplicitRenderTexture,
             bool isEditor,
-            ImmProjectionDestination expectedDestination,
+            string expectedDestination,
             bool expectedRenderIntoTexture)
         {
             ImmProjectionDestination destination = ImmProjectionDestinationResolver.Resolve(
@@ -80,7 +80,7 @@ namespace ImmPlayer.Tests
                 false,
                 false);
 
-            Assert.That(destination, Is.EqualTo(expectedDestination));
+            Assert.That(destination.ToString(), Is.EqualTo(expectedDestination));
             Assert.That(
                 ImmProjectionDestinationResolver.UsesRenderTextureProjection(destination),
                 Is.EqualTo(expectedRenderIntoTexture));
