@@ -48,8 +48,7 @@ namespace ImmPlayer
             if (cameraType == CameraType.SceneView)
                 return ImmProjectionDestination.EditorSceneView;
 
-            // Preserve the existing XR projection behavior. XR render targets
-            // have their own runtime-controlled presentation contract.
+            // XR displays render into runtime-managed swapchain textures.
             if (stereoEnabled)
                 return ImmProjectionDestination.XrDisplay;
 
@@ -72,6 +71,7 @@ namespace ImmPlayer
                 case ImmProjectionDestination.EditorGameView:
                 case ImmProjectionDestination.EditorSceneView:
                 case ImmProjectionDestination.VulkanHostAttachment:
+                case ImmProjectionDestination.XrDisplay:
                 case ImmProjectionDestination.ForcedRenderTexture:
                     return true;
                 default:

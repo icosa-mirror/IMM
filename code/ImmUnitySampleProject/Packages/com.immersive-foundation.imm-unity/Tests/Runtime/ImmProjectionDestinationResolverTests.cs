@@ -45,7 +45,7 @@ namespace ImmPlayer.Tests
             false,
             true,
             "XrDisplay",
-            false)]
+            true)]
         [TestCase(
             GraphicsDeviceType.Vulkan,
             CameraType.Game,
