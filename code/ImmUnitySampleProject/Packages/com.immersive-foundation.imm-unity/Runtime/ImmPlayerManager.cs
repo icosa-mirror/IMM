@@ -2,12 +2,84 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
+[assembly: InternalsVisibleTo("ImmUnity.Runtime.Tests")]
+
 namespace ImmPlayer
 {
+    internal enum ImmProjectionDestination
+    {
+        Backbuffer,
+        ExplicitRenderTexture,
+        EditorGameView,
+        EditorSceneView,
+        VulkanHostAttachment,
+        XrDisplay,
+        ForcedBackbuffer,
+        ForcedRenderTexture,
+    }
+
+    internal static class ImmProjectionDestinationResolver
+    {
+        internal static ImmProjectionDestination Resolve(
+            GraphicsDeviceType graphicsDeviceType,
+            CameraType cameraType,
+            bool stereoEnabled,
+            bool hasExplicitRenderTexture,
+            bool isEditor,
+            bool forceBackbuffer,
+            bool forceRenderTexture)
+        {
+            // Preserve the existing diagnostic override precedence.
+            if (forceBackbuffer)
+                return ImmProjectionDestination.ForcedBackbuffer;
+            if (forceRenderTexture)
+                return ImmProjectionDestination.ForcedRenderTexture;
+
+            // The destination is more important than the graphics backend.
+            // Unity requires texture-backed projections for explicit render
+            // textures and for the Editor's internally texture-backed views.
+            if (hasExplicitRenderTexture)
+                return ImmProjectionDestination.ExplicitRenderTexture;
+            if (cameraType == CameraType.SceneView)
+                return ImmProjectionDestination.EditorSceneView;
+
+            // Preserve the existing XR projection behavior. XR render targets
+            // have their own runtime-controlled presentation contract.
+            if (stereoEnabled)
+                return ImmProjectionDestination.XrDisplay;
+
+            if (isEditor && cameraType == CameraType.Game)
+                return ImmProjectionDestination.EditorGameView;
+
+            // Preserve the verified non-XR Vulkan host-attachment behavior.
+            if (graphicsDeviceType == GraphicsDeviceType.Vulkan &&
+                cameraType == CameraType.Game)
+                return ImmProjectionDestination.VulkanHostAttachment;
+
+            return ImmProjectionDestination.Backbuffer;
+        }
+
+        internal static bool UsesRenderTextureProjection(ImmProjectionDestination destination)
+        {
+            switch (destination)
+            {
+                case ImmProjectionDestination.ExplicitRenderTexture:
+                case ImmProjectionDestination.EditorGameView:
+                case ImmProjectionDestination.EditorSceneView:
+                case ImmProjectionDestination.VulkanHostAttachment:
+                case ImmProjectionDestination.ForcedRenderTexture:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
     /// <summary>
     /// High-level manager for the IMM Player plugin
     /// Handles initialization, rendering, and document management
@@ -63,10 +135,12 @@ namespace ImmPlayer
         private IntPtr _renderEventAndDataFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
+        private readonly Dictionary<Camera, ImmProjectionDestination> _lastProjectionDestinationLogged = new Dictionary<Camera, ImmProjectionDestination>();
         private readonly HashSet<Camera> _loggedVulkanRenderTargetSource = new HashSet<Camera>();
         private readonly HashSet<Camera> _loggedVulkanPrepareWarning = new HashSet<Camera>();
         private readonly HashSet<int> _configuredVulkanRenderEvents = new HashSet<int>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
+        private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
         private bool _useCommandBufferRendering = false;
         private bool _useCameraCallbackRendering = false;
@@ -600,33 +674,37 @@ namespace ImmPlayer
             return true;
         }
 
-        private static bool UseRenderIntoTextureProjection(Camera cam)
+        private ImmProjectionDestination ResolveProjectionDestination(Camera cam)
         {
-            if (IsEnvFlagEnabled("IMM_UNITY_FORCE_BACKBUFFER_PROJECTION"))
-                return false;
-            if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
-                return true;
+            ImmProjectionDestination destination = ImmProjectionDestinationResolver.Resolve(
+                SystemInfo.graphicsDeviceType,
+                cam != null ? cam.cameraType : CameraType.Game,
+                cam != null && cam.stereoEnabled,
+                cam != null && cam.targetTexture != null,
+                Application.isEditor,
+                IsEnvFlagEnabled("IMM_UNITY_FORCE_BACKBUFFER_PROJECTION"),
+                IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"));
 
-            // D3D11 desktop Game cameras currently render upright with the
-            // backbuffer projection path. Keep the env overrides above for
-            // capture/projection A/B tests and keep XR separate from this path.
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 &&
-                cam != null &&
-                cam.cameraType == CameraType.Game &&
-                !cam.stereoEnabled)
-                return false;
+            if (cam != null &&
+                (!_lastProjectionDestinationLogged.TryGetValue(cam, out ImmProjectionDestination previous) ||
+                 previous != destination))
+            {
+                _lastProjectionDestinationLogged[cam] = destination;
+                bool renderIntoTexture = ImmProjectionDestinationResolver.UsesRenderTextureProjection(destination);
+                Debug.Log(
+                    $"{ProjectionDestinationDiagPrefix}camera={cam.name} cameraType={cam.cameraType} " +
+                    $"backend={SystemInfo.graphicsDeviceType} stereo={cam.stereoEnabled} " +
+                    $"explicitTarget={cam.targetTexture != null} destination={destination} " +
+                    $"renderIntoTexture={renderIntoTexture}");
+            }
 
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
-                cam != null &&
-                cam.cameraType == CameraType.Game &&
-                !cam.stereoEnabled)
-                return true;
+            return destination;
+        }
 
-            // Unity can mark Game cameras as stereo/XR-active even when we are
-            // validating the editor Game view. Do not use stereoEnabled as a
-            // proxy for render-into-texture projection. SceneView is the other
-            // built-in path that needs texture-style projection here.
-            return cam != null && cam.cameraType == CameraType.SceneView;
+        private bool UseRenderIntoTextureProjection(Camera cam)
+        {
+            return ImmProjectionDestinationResolver.UsesRenderTextureProjection(
+                ResolveProjectionDestination(cam));
         }
 
         private void CleanupCommandBuffers()

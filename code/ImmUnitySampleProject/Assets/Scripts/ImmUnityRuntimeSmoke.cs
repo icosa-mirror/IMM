@@ -308,10 +308,8 @@ namespace ImmPlayer
             RenderTexture renderTexture = new RenderTexture(CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32);
             RenderTexture previousActive = RenderTexture.active;
             RenderTexture previousTarget = captureCamera.targetTexture;
-            string previousForceTextureProjection = Environment.GetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION");
             try
             {
-                Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", "1");
                 captureCamera.targetTexture = renderTexture;
                 RenderTexture.active = renderTexture;
                 captureCamera.Render();
@@ -323,10 +321,6 @@ namespace ImmPlayer
             }
             finally
             {
-                if (previousForceTextureProjection == null)
-                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", null);
-                else
-                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", previousForceTextureProjection);
                 captureCamera.targetTexture = previousTarget;
                 RenderTexture.active = previousActive;
                 renderTexture.Release();
@@ -445,11 +439,9 @@ namespace ImmPlayer
 
             RenderTexture renderTexture = new RenderTexture(CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32);
             RenderTexture previousActive = RenderTexture.active;
-            string previousForceTextureProjection = Environment.GetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION");
             var previousTargets = new Dictionary<Camera, RenderTexture>();
             try
             {
-                Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", "1");
                 RenderTexture.active = renderTexture;
                 GL.Clear(true, true, Color.clear);
 
@@ -475,10 +467,6 @@ namespace ImmPlayer
             }
             finally
             {
-                if (previousForceTextureProjection == null)
-                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", null);
-                else
-                    Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION", previousForceTextureProjection);
                 foreach (KeyValuePair<Camera, RenderTexture> entry in previousTargets)
                 {
                     if (entry.Key != null)
