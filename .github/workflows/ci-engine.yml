@@ -284,13 +284,14 @@ jobs:
           allowDirtyBuild: true
           enableGpu: true
           cacheUnityInstallationOnMac: true
-          customParameters: -logFile "${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-editor.log" -immSmokePlayerPath "${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app"
+          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-editor.log -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app
 
       - name: Run Unity macOS Metal visual smokes
         timeout-minutes: 8
         run: |
           set -euo pipefail
           app="$PWD/build/unity-smoke/macos-metal/ImmUnitySmoke.app"
+          test -d "$app/Contents/MacOS"
           player="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 | head -n 1)"
           artifact_dir="$PWD/artifacts/unity-macos-metal-composition"
           test -n "$player"
