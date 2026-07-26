@@ -565,9 +565,9 @@ namespace ImmShared
         }
 
 #if defined(__APPLE__)
-        if (mConfig.rendererApi == piRenderer::API::Metal && mConfig.metalExternalShaderAdjust)
+        if (mConfig.rendererApi == piRenderer::API::Metal && mConfig.metalUnityProjectionAdjusted)
         {
-            static_cast<piRendererMetal *>(mRenderer)->SetExternalShaderAdjust(true);
+            static_cast<piRendererMetal *>(mRenderer)->SetUnityProjectionAdjusted(true);
         }
 #endif
 
@@ -586,11 +586,13 @@ namespace ImmShared
         const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
                                          mConfig.rendererApi == piRenderer::API::Metal ||
                                          mConfig.rendererApi == piRenderer::API::Vulkan);
-        // DepthBuffer describes the renderer's clear/compare convention, not
-        // the host projection clip range. Hosted D3D11 in Unity still needs
-        // the legacy Linear10 path; hosted Metal/Vulkan use Linear01 so paint
-        // depth remains visible when composited into their external targets.
-        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX) ? DepthBuffer::Linear10 : DepthBuffer::Linear01;
+        // DepthBuffer describes the host target's clear/compare convention,
+        // not its projection clip range. Unity uses reversed Z for both D3D11
+        // and Metal; standalone and Godot Metal retain their existing Linear01
+        // convention unless their host explicitly opts in.
+        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX || mConfig.reverseDepthBuffer)
+            ? DepthBuffer::Linear10
+            : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
         const bool vulkanProjectionAlreadyGpuAdjusted =
             mConfig.rendererApi == piRenderer::API::Vulkan &&

@@ -355,6 +355,14 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 	        {
 	            gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 	        }
+            std::fprintf(
+                stderr,
+                "IMM_UNITY_METAL_DEVICE_INIT renderer=%d v1=%d v2=%d device=%p\n",
+                static_cast<int>(apiType),
+                gImmUnityPlugin.UnityAPI.mMetal ? 1 : 0,
+                gImmUnityPlugin.UnityAPI.mMetalV2 ? 1 : 0,
+                gImmUnityPlugin.UnityAPI.mDevice);
+            std::fflush(stderr);
 		}
 #endif
 	}
@@ -974,7 +982,10 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
     void *unityMetalRenderPassDescriptor = nullptr;
     bool unityMetalFrameBegun = false;
     const bool useUnityMetalOffscreen = isUnityMetal && iEnvFlagEnabled("IMM_UNITY_METAL_OFFSCREEN");
-    const bool deferUnityMetalFrameBegin = isUnityMetal && !iEnvFlagEnabled("IMM_UNITY_METAL_BEGIN_BEFORE_GLOBAL");
+    // ImmEngineBridge owns both the global and camera render phases. Begin the
+    // external frame before entering the bridge so all GPU work is encoded in
+    // Unity's active command buffer.
+    const bool deferUnityMetalFrameBegin = false;
     const bool useUnityMetalPluginCommandBuffer = isUnityMetal && gImmUnityPlugin.UnityAPI.mMetalV2 && iEnvFlagEnabled("IMM_UNITY_METAL_USE_PLUGIN_COMMAND_BUFFER");
     const bool useUnityMetalOwnedEncoder = isUnityMetal && !useUnityMetalPluginCommandBuffer && iEnvFlagEnabled("IMM_UNITY_METAL_USE_OWNED_ENCODER");
     if (isUnityMetal)
@@ -1236,6 +1247,14 @@ extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnit
 {
 	gImmUnityPlugin.UnityAPI.mUnityInterfaces = unityInterfaces;
 	gImmUnityPlugin.UnityAPI.mGraphics = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphics>();
+#if defined(__APPLE__)
+    std::fprintf(
+        stderr,
+        "IMM_UNITY_METAL_PLUGIN_LOAD interfaces=%p graphics=%p\n",
+        static_cast<void *>(unityInterfaces),
+        static_cast<void *>(gImmUnityPlugin.UnityAPI.mGraphics));
+    std::fflush(stderr);
+#endif
 	gImmUnityPlugin.UnityAPI.mGraphics->RegisterDeviceEventCallback(iOnGraphicsDeviceEvent);
 
 	// Run OnGraphicsDeviceEvent(initialize) manually on plugin load
@@ -1436,7 +1455,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         }
         config.rendererApi = piRenderer::API::Metal;
         config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
-        config.metalExternalShaderAdjust = true;
+        config.metalUnityProjectionAdjusted = true;
+        config.reverseDepthBuffer = true;
     }
     else if (gfx == kUnityGfxRendererOpenGLCore)
     {

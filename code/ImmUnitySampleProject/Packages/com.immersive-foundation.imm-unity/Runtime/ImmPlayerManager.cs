@@ -146,6 +146,7 @@ namespace ImmPlayer
         private bool _useCameraCallbackRendering = false;
         private Coroutine _vulkanSampleEventCoroutine = null;
         private int _appleMetalEventLogCount = 0;
+        private int _appleMetalQueueLogCount = 0;
         private static Mesh _vulkanOverlayFixtureMesh;
         private static Material _vulkanOverlayFixtureMaterial;
 
@@ -181,6 +182,17 @@ namespace ImmPlayer
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
+            if (IsAppleMetalRuntime())
+            {
+                string pipelineName = GraphicsSettings.currentRenderPipeline == null
+                    ? "BuiltIn"
+                    : GraphicsSettings.currentRenderPipeline.GetType().FullName;
+                Debug.Log(
+                    $"[IMM_UNITY_METAL_MANAGED_SETUP] unity={Application.unityVersion} " +
+                    $"pipeline={pipelineName} graphics={SystemInfo.graphicsDeviceType} " +
+                    $"commandBuffer={_useCommandBufferRendering} cameraCallback={_useCameraCallbackRendering} " +
+                    $"forceCameraCallback={forceCameraCallback}");
+            }
             if (_useCommandBufferRendering || _useCameraCallbackRendering)
             {
                 Camera.onPreCull += OnCameraPreCull;
@@ -867,6 +879,14 @@ namespace ImmPlayer
             else
             {
                 info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
+                if (IsAppleMetalRuntime() && _appleMetalQueueLogCount < 16)
+                {
+                    Debug.Log(
+                        $"[IMM_UNITY_METAL_MANAGED_QUEUE] cam={cam.name} type={cam.cameraType} " +
+                        $"cameraId={info.CameraId} eventId={eventId} viewport={cam.pixelWidth}x{cam.pixelHeight} " +
+                        $"commandBufferSize={info.CommandBuffer.sizeInBytes}");
+                    _appleMetalQueueLogCount++;
+                }
             }
         }
 
@@ -921,6 +941,13 @@ namespace ImmPlayer
                         Debug.Log($"[IMM_UNITY_VK_EVENT_20260612] cam={cam.name} cameraId={info.CameraId} renderEvent={renderEvent}");
                     }
                     cam.AddCommandBuffer(renderEvent, info.CommandBuffer);
+                    if (IsAppleMetalRuntime())
+                    {
+                        int attachedCount = cam.GetCommandBuffers(renderEvent).Length;
+                        Debug.Log(
+                            $"[IMM_UNITY_METAL_MANAGED_ATTACH] cam={cam.name} type={cam.cameraType} " +
+                            $"cameraId={info.CameraId} renderEvent={renderEvent} attachedAtEvent={attachedCount}");
+                    }
                 }
             }
             return info;

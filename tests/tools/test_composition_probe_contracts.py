@@ -93,6 +93,22 @@ def main() -> int:
             "depth_interleaving",
             "render_only",
         ],
+        ROOT / "code/appImmUnity/src/main.cpp": [
+            "const bool deferUnityMetalFrameBegin = false;",
+            "config.metalUnityProjectionAdjusted = true;",
+            "config.reverseDepthBuffer = true;",
+        ],
+        ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
+            "mConfig.reverseDepthBuffer",
+            "DepthBuffer::Linear10",
+            "SetUnityProjectionAdjusted(true)",
+        ],
+        ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm": [
+            "if (mState->unityProjectionAdjusted)",
+            'withString:@"out.position.z = 0.0;"',
+            "iAttachRetainedBufferCleanup(mState);",
+            "[previous release];",
+        ],
     }
 
     errors: list[str] = []
@@ -107,6 +123,34 @@ def main() -> int:
     if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in unity_smoke:
         errors.append(
             "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
+        )
+
+    metal_renderer = (
+        ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm"
+    ).read_text(encoding="utf-8")
+    unity_adjust_start = metal_renderer.find("if (mState->unityProjectionAdjusted)")
+    unity_adjust_end = metal_renderer.find("NSError *compileError", unity_adjust_start)
+    if unity_adjust_start < 0 or unity_adjust_end < 0:
+        errors.append("Unity Metal projection-adjust block could not be located")
+    else:
+        unity_adjust = metal_renderer[unity_adjust_start:unity_adjust_end]
+        if "out.position.y = -out.position.y" in unity_adjust:
+            errors.append(
+                "Unity Metal projection is already render-target adjusted and must not be flipped again"
+            )
+        if 'withString:@"out.position.z = 0.0;"' not in unity_adjust:
+            errors.append(
+                "Unity Metal reversed-Z backdrop must remain at depth zero"
+            )
+
+    skipped_external_cleanup = (
+        "if (!mState->externalCommandBuffer)\n"
+        "    {\n"
+        "        iAttachRetainedBufferCleanup(mState);"
+    )
+    if skipped_external_cleanup in metal_renderer:
+        errors.append(
+            "Unity-owned Metal command buffers must retire replaced buffers on completion"
         )
 
     if errors:

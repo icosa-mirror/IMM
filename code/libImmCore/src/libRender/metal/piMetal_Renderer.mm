@@ -154,6 +154,7 @@ struct piMetalState
     bool cullFaceEnabled = true;
 	    bool frontFaceCCW = true;
 	    bool externalShaderAdjust = false;
+    bool unityProjectionAdjusted = false;
     bool unsupportedReported[(int)piMetalUnsupportedFeature::Count] = {};
     int numViewports = 1;
     float viewports[6 * 16] = {};
@@ -942,6 +943,11 @@ void piRendererMetal::SetExternalShaderAdjust(bool enabled)
     mState->externalShaderAdjust = enabled;
 }
 
+void piRendererMetal::SetUnityProjectionAdjusted(bool enabled)
+{
+    mState->unityProjectionAdjusted = enabled;
+}
+
 bool piRendererMetal::BeginExternalCommandEncoderFrame(void *commandBuffer, void *commandEncoder, void *renderPassDescriptor, int width, int height)
 {
     EndNativeFrame();
@@ -1094,10 +1100,10 @@ void piRendererMetal::EndNativeFrame(void)
     {
         [mState->commandBuffer presentDrawable:mState->nativeDrawable];
     }
-    if (!mState->externalCommandBuffer)
-    {
-        iAttachRetainedBufferCleanup(mState);
-    }
+    // Dynamic buffers replaced while encoding must remain alive until the GPU
+    // has consumed this command buffer. Unity owns and commits its external
+    // command buffer, but Metal still permits us to attach a completion handler.
+    iAttachRetainedBufferCleanup(mState);
     if (!mState->externalCommandBuffer && !mState->externalCommandEncoder)
     {
         id<MTLCommandBuffer> commandBuffer = mState->commandBuffer;
@@ -2424,6 +2430,17 @@ piShader piRendererMetal::CreateShader(const piShaderOptions *options, const cha
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(wpos, 1.0)); out.position.y = -out.position.y;"];
 	        source = [source stringByReplacingOccurrencesOfString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0));" withString:@"out.position = mul_row_major(display.mEye[eye].mViewerToEyePrj, float4(viewerPosition, 1.0)); out.position.y = -out.position.y;"];
 	    }
+
+	    if (mState->unityProjectionAdjusted)
+	    {
+	        // Unity's managed projection resolver already supplies the
+	        // render-target-adjusted GPU projection, so no native Y inversion
+	        // is needed here.
+	        // Unity's Metal targets use reversed Z. A 360 backdrop placed at
+	        // z=w becomes the nearest surface and occludes every paint layer;
+	        // keep the Unity-hosted backdrop at the far plane instead.
+	        source = [source stringByReplacingOccurrencesOfString:@"out.position.z = out.position.w;" withString:@"out.position.z = 0.0;"];
+	    }
 	
 	    NSError *compileError = nil;
     id<MTLLibrary> library = [mState->device newLibraryWithSource:source options:nil error:&compileError];
@@ -2686,6 +2703,7 @@ void piRendererMetal::CreateBufferMapped_End(piBuffer) {}
 void piRendererMetal::DestroyBuffer(piBuffer obj)
 {
     if (!obj) return;
+    [obj->buffer release];
     obj->buffer = nil;
     if (mState->liveBuffers > 0) --mState->liveBuffers;
     delete obj;
@@ -2700,12 +2718,16 @@ void piRendererMetal::UpdateBuffer(piBuffer obj, const void *data, int offset, i
         id<MTLBuffer> replacement = [mState->device newBufferWithLength:obj->size options:MTLResourceStorageModeShared];
         if (!replacement) return;
 
-        memcpy([replacement contents], [obj->buffer contents], (size_t)obj->size);
+        id<MTLBuffer> previous = obj->buffer;
+        memcpy([replacement contents], [previous contents], (size_t)obj->size);
         if (mState->retainedBuffers)
         {
-            [mState->retainedBuffers addObject:obj->buffer];
+            // The array retains the previous allocation through command-buffer
+            // completion; relinquish the piBuffer wrapper's ownership below.
+            [mState->retainedBuffers addObject:previous];
         }
         obj->buffer = replacement;
+        [previous release];
     }
 
     memcpy((char *)[obj->buffer contents] + offset, data, (size_t)len);
