@@ -568,7 +568,8 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         'chmod +x "$plugin_binary"',
         "codesign --verify --deep --strict",
         "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
-        "Print :CFBundleExecutable",
+        '$app/Contents/MacOS',
+        "-perm -111",
         "enableGpu: true",
         "cacheUnityInstallationOnMac: true",
     ]:

@@ -291,9 +291,9 @@ jobs:
         run: |
           set -euo pipefail
           app="$PWD/build/unity-smoke/macos-metal/ImmUnitySmoke.app"
-          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
-          player="$app/Contents/MacOS/$executable_name"
+          player="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -111 | head -n 1)"
           artifact_dir="$PWD/artifacts/unity-macos-metal-composition"
+          test -n "$player"
           test -x "$player"
 
           IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
