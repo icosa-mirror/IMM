@@ -28,6 +28,7 @@ namespace ImmPlayer
         private const string OverlayProbeArg = "-immSmokeOverlayProbe";
         private const string XrProbeArg = "-immSmokeXrProbe";
         private const string ExpectedGraphicsApiArg = "-immSmokeExpectedGraphicsApi";
+        private const string MinOrderedOverlayImmUniqueColorsArg = "-immSmokeMinOrderedOverlayImmUniqueColors";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
         private const float MinDominantShare = 0.80f;
@@ -205,8 +206,11 @@ namespace ImmPlayer
                 if (_overlayProbeEnabled)
                 {
                     OrderedOverlayImmResult immResult = AnalyzeOrderedOverlayImmContent(pixels, width, height);
+                    int minOrderedOverlayImmUniqueColors = GetPositiveCommandLineInt(
+                        MinOrderedOverlayImmUniqueColorsArg,
+                        MinOrderedOverlayImmUniqueColors);
                     Debug.Log($"{Prefix}composition orderedOverlayImm={immResult}");
-                    if (immResult.Share < MinOrderedOverlayImmShare || immResult.UniqueColors < MinOrderedOverlayImmUniqueColors)
+                    if (immResult.Share < MinOrderedOverlayImmShare || immResult.UniqueColors < minOrderedOverlayImmUniqueColors)
                     {
                         RecordCompositionFailure($"scene composition ordered overlay IMM background failed: {immResult}");
                     }
@@ -1027,6 +1031,16 @@ namespace ImmPlayer
             }
 
             return string.Empty;
+        }
+
+        private static int GetPositiveCommandLineInt(string key, int fallback)
+        {
+            string value = GetCommandLineValue(key);
+            return !string.IsNullOrEmpty(value) &&
+                int.TryParse(value, out int parsed) &&
+                parsed > 0
+                ? parsed
+                : fallback;
         }
     }
 }

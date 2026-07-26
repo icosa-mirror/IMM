@@ -64,6 +64,7 @@ def main() -> int:
             "composition validation uses scene probes and render metrics",
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
+            "unity-macos-metal-composition",
             "unity-windows-directx-composition",
             "unity-windows-vulkan-ordered-overlay",
             "unity-windows-vulkan-full-depth",
@@ -77,6 +78,17 @@ def main() -> int:
             "unity-windows-directx-composition.png",
             "unity-windows-vulkan-ordered-overlay.png",
             "unity-windows-vulkan-full-depth.png",
+            "unity-macos-metal-full-depth.png",
+            "unity-macos-metal-ordered-overlay.png",
+            "-immSmokeFrames 120",
+            "-immSmokeExpectedGraphicsApi Metal",
+            "-immSmokeMinOrderedOverlayImmUniqueColors 3000",
+        ],
+        ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs": [
+            "BuildMacOSMetalSmokePlayer",
+            "GraphicsDeviceType.Metal",
+            "BuildTarget.StandaloneOSX",
+            "EditorSmokePlayerPathArg",
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",

@@ -39,6 +39,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
+        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-player-build": ["Download same-commit Unity native plugin", "Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
@@ -79,6 +80,7 @@ REQUIRED_RUNS_ON = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": {"windows-latest"},
         "unity-package-import": {"ubuntu-latest"},
+        "unity-macos-metal-composition": {"macos-14"},
         "unity-windows-directx-player-build": {"ubuntu-latest"},
         "unity-windows-directx-composition": {"windows-latest"},
         "unity-windows-vulkan-player-build": {"ubuntu-latest"},
@@ -118,6 +120,7 @@ REQUIRED_JOB_TIMEOUTS = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build",
         "unity-package-import",
+        "unity-macos-metal-composition",
         "unity-windows-directx-player-build",
         "unity-windows-directx-composition",
         "unity-windows-vulkan-player-build",
@@ -150,6 +153,7 @@ REQUIRED_STEP_TIMEOUTS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"Run Unity batchmode package import tests"},
+        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player", "Run Unity macOS Metal visual smokes"},
         "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
         "unity-windows-vulkan-ordered-overlay": {"Run Unity Vulkan ordered overlay smoke"},
         "unity-windows-vulkan-full-depth": {"Run Unity Vulkan full depth smoke"},
@@ -520,6 +524,7 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
     text = path.read_text(encoding="utf-8")
     job_names = [
         "unity-windows-native-plugin-build",
+        "unity-macos-metal-composition",
         "unity-windows-directx-player-build",
         "unity-windows-vulkan-player-build",
     ]
@@ -555,6 +560,22 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         ]:
             if token not in body:
                 errors.append(f"{workflow_rel} {job_name} missing same-commit native plugin token: {token}")
+
+    macos_body = job_bodies.get("unity-macos-metal-composition", "")
+    for token in [
+        "name: ImmPlayerPlugin-Unity",
+        "Plugins/OSX/ImmUnityPlugin.bundle",
+        'chmod +x "$plugin_binary"',
+        "codesign --verify --deep --strict",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
+        "Print :CFBundleExecutable",
+        "enableGpu: true",
+        "cacheUnityInstallationOnMac: true",
+    ]:
+        if token not in macos_body:
+            errors.append(
+                f"{workflow_rel} unity-macos-metal-composition missing same-commit native plugin token: {token}"
+            )
 
 
 def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:

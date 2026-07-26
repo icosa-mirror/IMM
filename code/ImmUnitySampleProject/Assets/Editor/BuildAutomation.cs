@@ -88,6 +88,29 @@ namespace ImmPlayer.Editor
             BuildPlayer(BuildTarget.StandaloneOSX, outputApp, BuildOptions.Development, "macOS");
         }
 
+        public static void BuildMacOSMetalSmokePlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneOSX, "macOS");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneOSX, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneOSX, new[] { GraphicsDeviceType.Metal });
+
+            string outputPath = GetCommandLineValue(EditorSmokePlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "macos-metal-smoke-player", "ImmUnitySmoke.app");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+
+            string outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+
+            BuildPlayer(BuildTarget.StandaloneOSX, outputPath, BuildOptions.Development, "macOS Metal smoke player");
+        }
+
         public static void BuildIOSDevelopment()
         {
             EnsureBuildTargetSupported(BuildTargetGroup.iOS, BuildTarget.iOS, "iOS");

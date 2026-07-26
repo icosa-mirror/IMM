@@ -148,12 +148,34 @@
       "product": "unity",
       "platform": "all",
       "mode": "non-vr",
-      "renderer": "native",
+      "renderer": "preflight",
       "status": "supported",
-      "hosted_gate": "CI Engine Matrix / Unity Package Import and Unity Windows DirectX Composition",
+      "hosted_gate": "CI Engine Matrix / Unity Package Import",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "CI Engine Matrix validates the cross-platform Unity package import and API surface independently of platform-specific runtime rendering."
+    },
+    {
+      "product": "unity",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "directx",
+      "status": "supported",
+      "hosted_gate": "CI Engine Matrix / Unity Windows DirectX Composition",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
-      "reason": "CI Engine Matrix runs Unity package import tests, builds a Windows DirectX smoke player on a hosted Linux runner, runs the player on a hosted Windows runner, compares the render capture against the committed Windows DirectX sample1 reference, and reports composition separately from render parity."
+      "reason": "CI Engine Matrix builds a same-commit Windows DirectX Unity smoke player, runs it on a hosted Windows runner, validates render parity, and records full-depth composition status separately."
+    },
+    {
+      "product": "unity",
+      "platform": "macos",
+      "mode": "non-vr",
+      "renderer": "metal",
+      "status": "supported",
+      "hosted_gate": "CI Engine Matrix / Unity macOS Metal Composition",
+      "hardware_gate": null,
+      "baseline": null,
+      "reason": "CI Engine Matrix builds a same-commit Unity Metal player on a hosted macOS runner and runs short full-depth and ordered-overlay captures that detect black output, reversed depth, and vertical inversion."
     },
     {
       "product": "unity",

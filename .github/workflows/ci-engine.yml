@@ -186,7 +186,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_package_import_tests.outcome }}" --failure-class api --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_package_import_tests.outcome }}" --failure-class api --output artifacts/unity-package-import/manifest.json --product unity --platform-name all --mode non-vr --renderer preflight --include artifacts
       - name: Collect artifact summary
         if: always()
         run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-package-import --require-manifest --output artifacts/unity-package-import/artifact-summary.json
@@ -217,6 +217,194 @@ jobs:
         with:
           name: UnityPackageImport
           path: artifacts
+          if-no-files-found: ignore
+          retention-days: 14
+
+  unity-macos-metal-composition:
+    name: Unity macOS Metal Composition
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download same-commit macOS Unity package
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmPlayerPlugin-Unity
+          path: artifacts/prebuilt-unity-package
+
+      - name: Stage same-commit macOS Unity native plugin
+        run: |
+          set -euo pipefail
+          source_bundle="$(find artifacts/prebuilt-unity-package -path '*/Plugins/OSX/ImmUnityPlugin.bundle' -type d | head -n 1)"
+          test -n "$source_bundle"
+          destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/OSX/ImmUnityPlugin.bundle"
+          rm -rf "$destination"
+          ditto "$source_bundle" "$destination"
+          plugin_binary="$(find "$destination/Contents/MacOS" -type f | head -n 1)"
+          test -n "$plugin_binary"
+          chmod +x "$plugin_binary"
+          codesign --force --sign - --deep "$destination"
+          codesign --verify --deep --strict "$destination"
+
+      - name: Restore Unity macOS Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-
+
+      - name: Preflight Unity macOS Metal runner
+        run: python3 tests/tools/preflight_runner.py --profile unity --output artifacts/unity-macos-metal-composition/preflight.json
+
+      - name: Prepare Unity macOS Metal artifact directory
+        run: mkdir -p artifacts/unity-macos-metal-composition build/unity-smoke/macos-metal
+
+      - name: Build Unity macOS Metal smoke player
+        id: unity_macos_metal_player_build
+        timeout-minutes: 25
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneOSX
+          versioning: None
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer
+          allowDirtyBuild: true
+          enableGpu: true
+          cacheUnityInstallationOnMac: true
+          customParameters: -logFile "${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-editor.log" -immSmokePlayerPath "${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app"
+
+      - name: Run Unity macOS Metal visual smokes
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          app="$PWD/build/unity-smoke/macos-metal/ImmUnitySmoke.app"
+          executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          player="$app/Contents/MacOS/$executable_name"
+          artifact_dir="$PWD/artifacts/unity-macos-metal-composition"
+          test -x "$player"
+
+          IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
+          "$player" \
+            -logFile "$artifact_dir/unity-full-depth-player.log" \
+            -screen-width 1280 \
+            -screen-height 720 \
+            -screen-fullscreen 0 \
+            -force-metal \
+            -immSmokeCapturePath "$artifact_dir/unity-macos-metal-full-depth.png" \
+            -immSmokeFrames 120 \
+            -immSmokeQuit 1 \
+            -immSmokeCompositionProbe 1 \
+            -immSmokeExpectedGraphicsApi Metal
+
+          IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
+          IMM_UNITY_SMOKE_OVERLAY_FIXTURE=1 \
+          "$player" \
+            -logFile "$artifact_dir/unity-ordered-overlay-player.log" \
+            -screen-width 1280 \
+            -screen-height 720 \
+            -screen-fullscreen 0 \
+            -force-metal \
+            -immSmokeCapturePath "$artifact_dir/unity-macos-metal-ordered-overlay.png" \
+            -immSmokeFrames 120 \
+            -immSmokeQuit 1 \
+            -immSmokeCompositionProbe 1 \
+            -immSmokeOverlayProbe 1 \
+            -immSmokeMinOrderedOverlayImmUniqueColors 3000 \
+            -immSmokeExpectedGraphicsApi Metal
+
+      - name: Classify Unity macOS Metal visual smokes
+        run: |
+          python3 tests/tools/classify_unity_visual_smoke.py \
+            --log artifacts/unity-macos-metal-composition/unity-full-depth-player.log \
+            --capture artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
+            --composition-mode full_depth \
+            --output artifacts/unity-macos-metal-composition/full-depth-status.json
+          python3 tests/tools/classify_unity_visual_smoke.py \
+            --log artifacts/unity-macos-metal-composition/unity-ordered-overlay-player.log \
+            --capture artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay.png \
+            --composition-mode ordered_overlay \
+            --output artifacts/unity-macos-metal-composition/ordered-overlay-status.json
+
+      - name: Record Unity macOS Metal render metrics
+        run: |
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
+            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay.png \
+            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay-metrics.json
+
+      - name: Write Unity macOS Metal render reports
+        if: always()
+        run: |
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json \
+            --candidate-capture artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
+            --status-json artifacts/unity-macos-metal-composition/full-depth-status.json \
+            --output-dir artifacts/unity-macos-metal-composition/captures/full-depth \
+            --markdown-output artifacts/unity-macos-metal-composition/full-depth-render-report.md
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay-metrics.json \
+            --candidate-capture artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay.png \
+            --status-json artifacts/unity-macos-metal-composition/ordered-overlay-status.json \
+            --output-dir artifacts/unity-macos-metal-composition/captures/ordered-overlay \
+            --markdown-output artifacts/unity-macos-metal-composition/ordered-overlay-render-report.md
+
+      - name: Verify Unity macOS Metal log contract
+        run: |
+          python3 tests/tools/verify_log_markers.py \
+            --log artifacts/unity-macos-metal-composition/unity-full-depth-player.log \
+            --label unity-macos-metal-full-depth \
+            --require "[IMM_UNITY_SMOKE] graphics api expected=Metal actual=Metal" \
+            --require "[IMM_UNITY_SMOKE] capture=" \
+            --forbid "[IMM_UNITY_SMOKE] scene composition front occluder failed" \
+            --forbid "[IMM_UNITY_SMOKE] scene composition rear visible probe failed" \
+            --output artifacts/unity-macos-metal-composition/full-depth-log-contract.json
+          python3 tests/tools/verify_log_markers.py \
+            --log artifacts/unity-macos-metal-composition/unity-ordered-overlay-player.log \
+            --label unity-macos-metal-ordered-overlay \
+            --require "[IMM_UNITY_SMOKE] graphics api expected=Metal actual=Metal" \
+            --require "[IMM_UNITY_SMOKE] scene composition overlay probe passed" \
+            --require "[IMM_UNITY_SMOKE] capture=" \
+            --output artifacts/unity-macos-metal-composition/ordered-overlay-log-contract.json
+
+      - name: Write CI manifest
+        if: always()
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/unity-macos-metal-composition/manifest.json --product unity --platform-name macos --mode non-vr --renderer metal --include artifacts/unity-macos-metal-composition
+
+      - name: Collect artifact summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-macos-metal-composition --require-manifest --output artifacts/unity-macos-metal-composition/artifact-summary.json
+
+      - name: Save Unity macOS Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-macos-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity macOS Metal artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityMacOSMetalComposition
+          path: artifacts/unity-macos-metal-composition
           if-no-files-found: ignore
           retention-days: 14
 
@@ -283,7 +471,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_directx_player_build.outcome }}" --failure-class build --output artifacts/unity-windows-directx-player/manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts/unity-windows-directx-player
+        run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_directx_player_build.outcome }}" --failure-class build --output artifacts/unity-windows-directx-player/manifest.json --product unity --platform-name windows --mode non-vr --renderer directx --include artifacts/unity-windows-directx-player
 
       - name: Collect artifact summary
         if: always()
@@ -466,7 +654,7 @@ jobs:
               $failureClass = "compositing"
             }
           }
-          python tests\tools\write_ci_manifest.py --status $status --failure-class $failureClass --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name all --mode non-vr --renderer native --include artifacts\unity-windows-directx-composition
+          python tests\tools\write_ci_manifest.py --status $status --failure-class $failureClass --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name windows --mode non-vr --renderer directx --include artifacts\unity-windows-directx-composition
 
       - name: Collect artifact summary
         if: always()
@@ -1047,6 +1235,7 @@ jobs:
     needs:
       - unity-windows-native-plugin-build
       - unity-package-import
+      - unity-macos-metal-composition
       - unity-windows-directx-player-build
       - unity-windows-directx-composition
       - unity-windows-vulkan-player-build
@@ -1094,6 +1283,7 @@ jobs:
           unity_failure_class=""
           for result in \
             "${{ needs.unity-package-import.result }}" \
+            "${{ needs.unity-macos-metal-composition.result }}" \
             "${{ needs.unity-windows-directx-player-build.result }}" \
             "${{ needs.unity-windows-directx-composition.result }}" \
             "${{ needs.unity-windows-vulkan-player-build.result }}"
@@ -1121,6 +1311,7 @@ jobs:
             unity_failure_class="compositing"
           fi
           if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-macos-metal-composition.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-vulkan-player-build.result }}" != "skipped" ] || \
@@ -1162,6 +1353,7 @@ jobs:
         run: >
           python tests/tools/delete_ci_artifacts.py
           --name UnityPackageImport
+          --name UnityMacOSMetalComposition
           --name UnityWindowsDirectXPlayer
           --name UnityWindowsDirectXPlayerBuildEvidence
           --name UnityWindowsDirectXComposition
