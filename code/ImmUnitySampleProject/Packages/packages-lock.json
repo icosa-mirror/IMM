@@ -163,7 +163,7 @@
     },
     "com.unity.services.core": {
       "version": "1.14.0",
-      "depth": 1,
+      "depth": 2,
       "source": "registry",
       "dependencies": {
         "com.unity.modules.androidjni": "1.0.0",
