@@ -1125,7 +1125,7 @@ jobs:
       - name: Download same-commit Android Unity native plugin
         uses: actions/download-artifact@v4
         with:
-          name: Internal-ImmViewerPlugin-Android
+          name: ImmPlayerPlugin-Unity
           path: artifacts/unity-android-vulkan/native-plugin
 
       - name: Stage same-commit Android Unity native plugin
@@ -1134,7 +1134,7 @@ jobs:
           set -euo pipefail
           plugin="$(find artifacts/unity-android-vulkan/native-plugin -name libImmUnityPlugin.so -type f | head -n 1)"
           if [ -z "$plugin" ]; then
-            echo "Same-commit Android Unity native plugin was not downloaded"
+            echo "Same-commit Android Unity native plugin was not present in ImmPlayerPlugin-Unity"
             exit 1
           fi
           destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
