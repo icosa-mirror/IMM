@@ -180,8 +180,20 @@ namespace ImmPlayer
         {
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
+#if UNITY_ANDROID
+            // Unity's Android Vulkan command-buffer plugin event can stop being
+            // replayed after the external target is accessed. Issue the event
+            // from the camera callback every frame instead.
+            forceCameraCallback |= IsVulkanRuntime();
+#endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
+            if (IsVulkanRuntime())
+            {
+                Debug.Log(
+                    $"[IMM_UNITY_ANDROID_VK_CALLBACK_20260729] unity={Application.unityVersion} " +
+                    $"commandBuffer={_useCommandBufferRendering} cameraCallback={_useCameraCallbackRendering}");
+            }
             if (IsAppleMetalRuntime())
             {
                 string pipelineName = GraphicsSettings.currentRenderPipeline == null
@@ -988,6 +1000,13 @@ namespace ImmPlayer
             }
 
             int eventId = info.CameraId << 8;
+            if (IsVulkanRuntime() &&
+                !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                _configuredVulkanRenderEvents.Add(eventId))
+            {
+                int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
+                Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
+            }
             if (_appleMetalEventLogCount < 8)
             {
                 Debug.Log($"[IMM_UNITY_METAL_EVENT] camera={info.CameraId} viewport={cam.pixelWidth}x{cam.pixelHeight} eventId={eventId}");

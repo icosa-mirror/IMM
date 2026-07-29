@@ -110,8 +110,10 @@ def main() -> int:
         ],
         ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [
             "#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_ANDROID",
+            "forceCameraCallback |= IsVulkanRuntime();",
             "SetVulkanCameraRenderBuffers",
             "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
+            "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]",
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",
