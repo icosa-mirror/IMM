@@ -89,6 +89,7 @@ def main() -> int:
             "-immSmokeMinOrderedOverlayImmUniqueColors 3000",
             "unity-android-vulkan:",
             "name: ImmPlayerPlugin-Unity",
+            "model=akita,version=34",
             "Build Unity Android Vulkan smoke player",
             "Run Unity Android Vulkan smoke in Firebase Test Lab",
             "--test-type robo",

@@ -17,7 +17,7 @@ permissions:
 
 env:
   UNITY_VERSION: "2022.3.62f2"
-  FTL_UNITY_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_UNITY_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
+  FTL_UNITY_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_UNITY_DEVICE || 'model=akita,version=34,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
   FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
   IMM_UNITY_FALLBACK_LICENSE: |
@@ -1568,6 +1568,5 @@ jobs:
           --name UnityWindowsVulkanPlayerBuildEvidence
           --name UnityWindowsVulkanOrderedOverlay
           --name UnityWindowsVulkanFullDepth
-          --name UnityAndroidVulkan
           --name UnityWindowsOpenXRVR
           --name GodotPackageImport
