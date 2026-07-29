@@ -37,6 +37,8 @@ def main() -> int:
             "unity-android-vulkan.png",
             'expected = "Vulkan";',
             "enableDiagnosticCameraTarget = true;",
+            "frameCount = 90;",
+            "[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729]",
         ],
         ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd": [
             "_analyze_scene_probe_region",

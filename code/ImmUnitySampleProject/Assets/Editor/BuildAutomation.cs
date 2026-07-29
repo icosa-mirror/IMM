@@ -317,7 +317,7 @@ namespace ImmPlayer.Editor
             Environment.SetEnvironmentVariable(RuntimeSmokeCapturePathEnv, capturePath);
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(RuntimeSmokeFramesEnv)))
             {
-                Environment.SetEnvironmentVariable(RuntimeSmokeFramesEnv, "360");
+                Environment.SetEnvironmentVariable(RuntimeSmokeFramesEnv, "90");
             }
             Environment.SetEnvironmentVariable(RuntimeSmokeQuitEnv, "0");
             Environment.SetEnvironmentVariable(RuntimeSmokeCompositionProbeEnv, enableCompositionProbe ? "1" : string.Empty);

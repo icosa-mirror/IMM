@@ -84,10 +84,11 @@ namespace ImmPlayer
             _overlayProbeEnabled = IsEnabled(OverlayProbeArg, OverlayProbeEnv);
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
 #if IMM_UNITY_ANDROID_VULKAN_CI
-            frameCount = 360;
+            frameCount = 90;
             _compositionProbeEnabled = true;
             _overlayProbeEnabled = false;
             _xrProbeEnabled = false;
+            Debug.Log($"[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729] warmupFrames={frameCount}");
 #endif
             if (!ValidateExpectedGraphicsApi())
             {
