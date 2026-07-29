@@ -632,7 +632,7 @@ namespace ImmPlayer
 
         private static bool IsVulkanRuntime()
         {
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_ANDROID
             return SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
 #else
             return false;
@@ -807,16 +807,21 @@ namespace ImmPlayer
                 int vulkanSampleCount = vulkanTargetTexture != null
                     ? Math.Max(1, vulkanTargetTexture.antiAliasing)
                     : (cam.allowMSAA ? Math.Max(1, QualitySettings.antiAliasing) : 1);
+                IntPtr colorRenderBuffer = colorBuffer.GetNativeRenderBufferPtr();
+                IntPtr depthRenderBuffer = depthBuffer.GetNativeRenderBufferPtr();
                 if (!_loggedVulkanRenderTargetSource.Contains(cam))
                 {
                     _loggedVulkanRenderTargetSource.Add(cam);
                     string source = vulkanTargetTexture != null ? $"cameraTexture {vulkanTargetTexture.width}x{vulkanTargetTexture.height}" : "display";
-                    Debug.Log($"[IMM_UNITY_VK_RT_SRC_20260612] cam={cam.name} cameraId={info.CameraId} source={source} pixel={cam.pixelWidth}x{cam.pixelHeight} samples={vulkanSampleCount}");
+                    Debug.Log(
+                        $"[IMM_UNITY_ANDROID_VK_TARGET_20260729] cam={cam.name} cameraId={info.CameraId} " +
+                        $"source={source} pixel={cam.pixelWidth}x{cam.pixelHeight} samples={vulkanSampleCount} " +
+                        $"colorRenderBuffer=0x{colorRenderBuffer.ToInt64():x} depthRenderBuffer=0x{depthRenderBuffer.ToInt64():x}");
                 }
                 ImmNativePlugin.SetVulkanCameraRenderBuffers(
                     info.CameraId,
-                    colorBuffer.GetNativeRenderBufferPtr(),
-                    depthBuffer.GetNativeRenderBufferPtr(),
+                    colorRenderBuffer,
+                    depthRenderBuffer,
                     cam.pixelWidth,
                     cam.pixelHeight,
                     vulkanSampleCount);

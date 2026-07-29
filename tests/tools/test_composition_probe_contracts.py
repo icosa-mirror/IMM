@@ -108,6 +108,11 @@ def main() -> int:
             "AndroidArchitecture.ARM64",
             'new[] { "IMM_UNITY_ANDROID_VULKAN_CI" }',
         ],
+        ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [
+            "#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_ANDROID",
+            "SetVulkanCameraRenderBuffers",
+            "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
+        ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",
             "-CompositionMode ordered_overlay",
