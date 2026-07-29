@@ -6,6 +6,8 @@ using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEditor.XR.Management;
+using UnityEngine.XR.Management;
 
 namespace ImmPlayer.Editor
 {
@@ -71,6 +73,55 @@ namespace ImmPlayer.Editor
             }
 
             UnityEngine.Debug.Log($"[IMM_AUTOBUILD] Android build succeeded: {outputApk}");
+        }
+
+        public static void BuildAndroidVulkanSmokePlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android, "Android");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
+
+            string outputPath = GetCommandLineValue(EditorSmokePlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "android-vulkan-smoke-player", "ImmUnitySmoke.apk");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+
+            string outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+
+            AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
+            XRGeneralSettings androidXrSettings =
+                XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
+            bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
+            try
+            {
+                PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                if (androidXrSettings != null)
+                {
+                    androidXrSettings.InitManagerOnStart = false;
+                }
+
+                BuildPlayer(
+                    BuildTarget.Android,
+                    outputPath,
+                    BuildOptions.Development,
+                    "Android Vulkan non-XR smoke player",
+                    new[] { "IMM_UNITY_ANDROID_VULKAN_CI" });
+            }
+            finally
+            {
+                PlayerSettings.Android.targetArchitectures = previousArchitectures;
+                if (androidXrSettings != null)
+                {
+                    androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
+                }
+            }
         }
 
         public static void BuildMacOSDevelopment()
@@ -437,7 +488,12 @@ namespace ImmPlayer.Editor
             UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE_MSAA_20260612] set camera MSAA for diagnostic smoke antiAliasing={antiAliasing}");
         }
 
-        private static void BuildPlayer(BuildTarget target, string outputPath, BuildOptions options, string label)
+        private static void BuildPlayer(
+            BuildTarget target,
+            string outputPath,
+            BuildOptions options,
+            string label,
+            string[] extraScriptingDefines = null)
         {
             foreach (string scene in SmokeScenes)
             {
@@ -452,7 +508,8 @@ namespace ImmPlayer.Editor
                 scenes = SmokeScenes,
                 locationPathName = outputPath,
                 target = target,
-                options = options
+                options = options,
+                extraScriptingDefines = extraScriptingDefines ?? Array.Empty<string>()
             };
 
             BuildReport report = BuildPipeline.BuildPlayer(buildOptions);

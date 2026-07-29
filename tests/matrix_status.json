@@ -1,6 +1,6 @@
 {
   "schema": "imm-testing-matrix-status-v1",
-  "updated": "2026-06-10",
+  "updated": "2026-07-29",
   "rows": [
     {
       "product": "standalone",
@@ -176,6 +176,17 @@
       "hardware_gate": null,
       "baseline": null,
       "reason": "CI Engine Matrix builds a same-commit Unity Metal player on a hosted macOS runner and runs short full-depth and ordered-overlay captures that detect black output, reversed depth, and vertical inversion."
+    },
+    {
+      "product": "unity",
+      "platform": "android",
+      "mode": "non-vr",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": "CI Engine Matrix / Unity Android Vulkan",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "CI Engine Matrix builds a Vulkan-only non-XR Unity Android player with the same-commit native plugin, runs it in Firebase Test Lab, requires Unity and native Vulkan host-render markers, and pulls a non-empty rendered PNG."
     },
     {
       "product": "unity",

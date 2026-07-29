@@ -102,6 +102,8 @@
 #if defined(WINDOWS)
 #include "IUnityGraphicsD3D11.h"
 #include "IUnityGraphicsD3D12.h"
+#endif
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 #include "IUnityGraphicsVulkanMinimal.h"
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #endif
@@ -199,7 +201,7 @@ struct ImmUnityPlugin
 			IUnityGraphics   * mGraphics = nullptr;
 			void             * mDevice = nullptr;
 	        UnityGfxRenderer mRenderer = kUnityGfxRendererNull;
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
             IUnityGraphicsVulkan *mVulkan = nullptr;
             UnityVulkanInstance mVulkanInstance = {};
             struct
@@ -271,8 +273,6 @@ static bool AndroidCompleteInit() {
 		return false;
 	}
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
 	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
 
 	sAndroidDeferredInit.isInitialized = true;
@@ -281,7 +281,7 @@ static bool AndroidCompleteInit() {
 }
 #endif
 
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 static constexpr int kUnityVulkanPrepareEventFlag = 0x80;
 static constexpr int kUnityVulkanCustomBlitEventID = 6;
 static void iConfigureUnityVulkanEvent(int eventID, bool logEvent);
@@ -332,6 +332,32 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 		{
 			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 		}
+        else if (apiType == kUnityGfxRendererVulkan)
+        {
+            gImmUnityPlugin.UnityAPI.mVulkan = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsVulkan>();
+            if (gImmUnityPlugin.UnityAPI.mVulkan)
+            {
+                gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
+                for (int cameraID = 0; cameraID < 256; ++cameraID)
+                {
+                    iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
+                    iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
+                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
+                }
+                iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
+            }
+            gImmUnityPlugin.UnityAPI.mDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
+            __android_log_print(
+                ANDROID_LOG_INFO,
+                "ImmUnityPlugin",
+                "Unity Android Vulkan interface initialized: interface=%p instance=%p physicalDevice=%p device=%p queue=%p family=%u",
+                gImmUnityPlugin.UnityAPI.mVulkan,
+                gImmUnityPlugin.UnityAPI.mVulkanInstance.instance,
+                gImmUnityPlugin.UnityAPI.mVulkanInstance.physicalDevice,
+                gImmUnityPlugin.UnityAPI.mVulkanInstance.device,
+                gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue,
+                gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex);
+        }
 #else
 		if (apiType == kUnityGfxRendererOpenGLCore)
 		{
@@ -397,12 +423,19 @@ static uint32_t iEnvUIntOrDefault(const char *name, uint32_t fallback)
     return static_cast<uint32_t>(parsed);
 }
 
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
 {
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
+#if defined(__ANDROID__) || defined(ANDROID)
+    // Android renders through Unity-owned images outside Unity's render pass so
+    // the plugin can query the real VkImage formats instead of assuming a
+    // platform-specific swapchain format.
+    config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
+#else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
+#endif
     if (!prepareEvent && iEnvFlagEnabled("IMM_UNITY_VK_DONTCARE_RENDERPASS"))
     {
         config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
@@ -528,7 +561,7 @@ static bool IsReasonableBound3(const bound3& b)
 
 static void UNITY_INTERFACE_API iOnRenderEvent(int event_id);
 
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 struct UnityVulkanRenderContext
 {
     piRenderer *renderer = nullptr;
@@ -947,7 +980,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 		return;
 	}
 
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
     {
         if ((event_id & kUnityVulkanPrepareEventFlag) != 0)
@@ -965,12 +998,16 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             return;
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
+#if defined(__ANDROID__) || defined(ANDROID)
+        iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+#else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
             return;
         }
         iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
+#endif
         return;
     }
 #endif
@@ -1273,7 +1310,7 @@ extern "C" UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRen
 
 extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventAndDataFunc()
 {
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     return iOnRenderEventAndData;
 #else
     return nullptr;
@@ -1282,7 +1319,7 @@ extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ConfigureVulkanRenderEvent(int eventID)
 {
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     if (!gImmUnityPlugin.UnityAPI.mVulkan || gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan)
     {
         return 0;
@@ -1310,6 +1347,8 @@ extern "C" void UNITY_INTERFACE_EXPORT Debug()
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API IsReadyForDocumentLoad()
 {
 #if defined(__ANDROID__) || defined(ANDROID)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
+        return gImmUnityPlugin.mBridge.IsInitialized() ? 1 : 0;
     return (gImmUnityPlugin.mBridge.IsInitialized() && sAndroidDeferredInit.isInitialized) ? 1 : 0;
 #else
     return gImmUnityPlugin.mBridge.IsInitialized() ? 1 : 0;
@@ -1381,7 +1420,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetCameraViewport(int
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraRenderBuffers(int cameraID, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples)
 {
     if (cameraID < 0 || cameraID > 255) return;
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     IMM_UNITY_NATIVE_LOCK();
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].color = static_cast<UnityRenderBuffer>(colorRenderBuffer);
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].depth = static_cast<UnityRenderBuffer>(depthRenderBuffer);
@@ -1408,11 +1447,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolferName;
 
-#if defined(__ANDROID__) || defined(ANDROID)
-    config.rendererApi = piRenderer::API::GLES;
-    config.initializeRendererOnInit = false;
-    config.initializeDisplay = 1;
-#elif defined(WINDOWS)
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
     {
         if (!gImmUnityPlugin.UnityAPI.mVulkan ||
@@ -1421,8 +1456,12 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
             !gImmUnityPlugin.UnityAPI.mVulkanInstance.device ||
             !gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue)
         {
+#if defined(__ANDROID__) || defined(ANDROID)
+            __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Unity Vulkan interface is unavailable in ImmUnityPlugin");
+#else
             std::fprintf(stderr, "Unity Vulkan interface is unavailable in ImmUnityPlugin.\n");
             std::fflush(stderr);
+#endif
             return -1;
         }
         static piVulkanExternalDevice unityVulkanDevice = {};
@@ -1438,10 +1477,16 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     }
     else
     {
+#if defined(__ANDROID__) || defined(ANDROID)
+        config.rendererApi = piRenderer::API::GLES;
+        config.initializeRendererOnInit = false;
+        config.initializeDisplay = 1;
+#else
         config.rendererApi = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
         config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
         config.initializeRendererOnInit = true;
         config.initializeFullscreen = true;
+#endif
     }
 #else
     UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
@@ -1475,11 +1520,20 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         return -1;
 
 #if defined(__ANDROID__) || defined(ANDROID)
-    sAndroidDeferredInit.colorSpace = colorSpace;
-    sAndroidDeferredInit.antialiasing = antialiasing;
-    sAndroidDeferredInit.needsInit = true;
-    sAndroidDeferredInit.isInitialized = false;
-    __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - renderer init deferred to render thread");
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
+    {
+        sAndroidDeferredInit.needsInit = false;
+        sAndroidDeferredInit.isInitialized = true;
+        __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Unity Android Vulkan renderer initialized from host device");
+    }
+    else
+    {
+        sAndroidDeferredInit.colorSpace = colorSpace;
+        sAndroidDeferredInit.antialiasing = antialiasing;
+        sAndroidDeferredInit.needsInit = true;
+        sAndroidDeferredInit.isInitialized = false;
+        __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - GLES renderer init deferred to render thread");
+    }
 #endif
     return 0;
 }
@@ -1502,7 +1556,7 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
     // plugin event. Loading before that event leaves Player partially
     // initialized and crashes in Player::Load; report a load failure instead
     // so managed code can wait for the render-thread readiness signal.
-    if (!sAndroidDeferredInit.isInitialized)
+    if (gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan && !sAndroidDeferredInit.isInitialized)
     {
         __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "LoadFromFile blocked until Android deferred renderer init completes");
         iLog().Printf(LT_ERROR, L"LoadFromFile blocked until Android deferred renderer init completes");

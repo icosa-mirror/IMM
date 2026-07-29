@@ -17,6 +17,9 @@ permissions:
 
 env:
   UNITY_VERSION: "2022.3.62f2"
+  FTL_UNITY_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_UNITY_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
+  FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
+  FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
   IMM_UNITY_FALLBACK_LICENSE: |
     <?xml version="1.0" encoding="UTF-8"?><root><TimeStamp Value="chxldhvc0zh5Vw=="/>
         <License id="Terms">
@@ -1106,6 +1109,196 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  unity-android-vulkan:
+    name: Unity Android Vulkan
+    if: >-
+      (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download same-commit Android Unity native plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: Internal-ImmViewerPlugin-Android
+          path: artifacts/unity-android-vulkan/native-plugin
+
+      - name: Stage same-commit Android Unity native plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          plugin="$(find artifacts/unity-android-vulkan/native-plugin -name libImmUnityPlugin.so -type f | head -n 1)"
+          if [ -z "$plugin" ]; then
+            echo "Same-commit Android Unity native plugin was not downloaded"
+            exit 1
+          fi
+          destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          cp "$plugin" "$destination"
+
+      - name: Restore Unity Android Library cache
+        id: cache_unity_android_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-android-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-android-vulkan-${{ env.UNITY_VERSION }}-
+
+      - name: Restore Unity PackageCache cache
+        id: cache_unity_android_packagecache
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityPackageCache-${{ env.UNITY_VERSION }}-
+
+      - name: Preflight Unity Android Vulkan runner
+        run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-android-vulkan/preflight.json
+
+      - name: Build Unity Android Vulkan smoke player
+        id: unity_android_vulkan_build
+        timeout-minutes: 30
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: Android
+          versioning: None
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
+          customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-android-vulkan/ImmUnitySmoke.apk
+
+      - name: Check Firebase Test Lab configuration
+        env:
+          FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${FTL_PROJECT_ID:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_PROJECT_ID"
+            missing=1
+          fi
+          if [ -z "${FTL_RESULTS_BUCKET:-}" ]; then
+            echo "Missing repository variable FIREBASE_TEST_LAB_RESULTS_BUCKET"
+            missing=1
+          fi
+          if [ -z "${FTL_SERVICE_ACCOUNT_JSON:-}" ]; then
+            echo "Missing repository secret FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON"
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run Unity Android Vulkan smoke in Firebase Test Lab
+        timeout-minutes: 30
+        shell: bash
+        run: >
+          python tests/tools/run_firebase_test_lab_android.py
+          --project "$FTL_PROJECT_ID"
+          --results-bucket "$FTL_RESULTS_BUCKET"
+          --results-dir "imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-unity-android-vulkan"
+          --device "$FTL_UNITY_DEVICE"
+          --app artifacts/unity-android-vulkan/ImmUnitySmoke.apk
+          --test-type robo
+          --artifact-dir artifacts/unity-android-vulkan
+          --timeout 5m
+          --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files
+          --required-marker "[IMM_UNITY_SMOKE] Android Vulkan CI smoke installed"
+          --required-marker "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan"
+          --required-marker "Unity Android Vulkan interface initialized"
+          --required-marker "Unity Android Vulkan renderer initialized from host device"
+          --required-marker "Loaded in CPU"
+          --required-marker "Loaded in GPU"
+          --required-marker "Unity Vulkan render:"
+          --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
+          --required-marker "[IMM_UNITY_SMOKE] capture="
+          --required-capture-name unity-android-vulkan.png
+          --client-label "IMM Unity Android Vulkan"
+
+      - name: Record Unity Android Vulkan screenshot metrics
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($capture) {
+            python tests/tools/compare_render_metrics.py $capture.FullName `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+          } else {
+            '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+          }
+
+      - name: Write Unity Android Vulkan screenshot report
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/unity-android-vulkan/missing-unity-android-vulkan.png" }
+          python tests/tools/write_render_report.py `
+            --metrics-json artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json `
+            --candidate-capture $captureArg `
+            --output-dir artifacts/unity-android-vulkan/captures `
+            --markdown-output artifacts/unity-android-vulkan/render-report.md
+
+      - name: Write CI manifest
+        if: always()
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts/unity-android-vulkan/manifest.json --product unity --platform-name android --mode non-vr --renderer vulkan --include artifacts/unity-android-vulkan
+
+      - name: Collect artifact summary
+        if: always()
+        run: python tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-android-vulkan --require-manifest --output artifacts/unity-android-vulkan/artifact-summary.json
+
+      - name: Save Unity PackageCache cache
+        if: always() && steps.cache_unity_android_packagecache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library/PackageCache
+          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Android Library cache
+        if: always() && steps.cache_unity_android_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-android-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity Android Vulkan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityAndroidVulkan
+          path: artifacts/unity-android-vulkan
+          if-no-files-found: ignore
+          retention-days: 14
+
   unity-windows-openxr-vr:
     name: Unity Windows OpenXR VR
     # Keep lane code in place; run only when headset-capable CI is explicitly enabled.
@@ -1230,7 +1423,11 @@ jobs:
 
   engine-evidence-report:
     name: Engine Evidence Report
-    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci'))
+    if: >-
+      always() &&
+      (github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:
@@ -1242,6 +1439,7 @@ jobs:
       - unity-windows-vulkan-player-build
       - unity-windows-vulkan-ordered-overlay
       - unity-windows-vulkan-full-depth
+      - unity-android-vulkan
       - unity-windows-openxr-vr
       - godot-package-import
     steps:
@@ -1311,13 +1509,21 @@ jobs:
             unity_status="cancelled"
             unity_failure_class="compositing"
           fi
+          if [ "${{ needs.unity-android-vulkan.result }}" = "failure" ]; then
+            unity_status="failed"
+            unity_failure_class="compositing"
+          elif [ "${{ needs.unity-android-vulkan.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
+            unity_status="cancelled"
+            unity_failure_class="compositing"
+          fi
           if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
              [ "${{ needs.unity-macos-metal-composition.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-vulkan-player-build.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-vulkan-full-depth.result }}" != "skipped" ]; then
+             [ "${{ needs.unity-windows-vulkan-full-depth.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-android-vulkan.result }}" != "skipped" ]; then
             python tests/tools/write_ci_manifest.py \
               --status "$unity_status" \
               --failure-class "$unity_failure_class" \
@@ -1362,5 +1568,6 @@ jobs:
           --name UnityWindowsVulkanPlayerBuildEvidence
           --name UnityWindowsVulkanOrderedOverlay
           --name UnityWindowsVulkanFullDepth
+          --name UnityAndroidVulkan
           --name UnityWindowsOpenXRVR
           --name GodotPackageImport

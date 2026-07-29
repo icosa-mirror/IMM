@@ -52,12 +52,18 @@ namespace ImmPlayer
             {
                 capturePath = Environment.GetEnvironmentVariable(CapturePathEnv);
             }
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            capturePath = Path.Combine(Application.persistentDataPath, "imm-ci", "unity-android-vulkan.png");
+#endif
             if (string.IsNullOrEmpty(capturePath))
                 return;
 
             var go = new GameObject("IMM Unity Runtime Smoke");
             DontDestroyOnLoad(go);
             go.AddComponent<ImmUnityRuntimeSmoke>()._capturePath = capturePath;
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
+#endif
         }
 
         private string _capturePath;
@@ -77,6 +83,12 @@ namespace ImmPlayer
             _compositionProbeEnabled = IsEnabled(CompositionProbeArg, CompositionProbeEnv);
             _overlayProbeEnabled = IsEnabled(OverlayProbeArg, OverlayProbeEnv);
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            frameCount = 360;
+            _compositionProbeEnabled = true;
+            _overlayProbeEnabled = false;
+            _xrProbeEnabled = false;
+#endif
             if (!ValidateExpectedGraphicsApi())
             {
                 QuitIfRequested(6);
@@ -96,7 +108,12 @@ namespace ImmPlayer
                 }
                 Debug.Log($"{Prefix}runtime diagnostic MSAA disabled");
             }
-            if (IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv)))
+            bool enableDiagnosticCameraTarget =
+                IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv));
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            enableDiagnosticCameraTarget = true;
+#endif
+            if (enableDiagnosticCameraTarget)
             {
                 ConfigureDiagnosticCameraTargetTexture();
             }
@@ -863,6 +880,9 @@ namespace ImmPlayer
             {
                 expected = Environment.GetEnvironmentVariable(ExpectedGraphicsApiEnv);
             }
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            expected = "Vulkan";
+#endif
             if (string.IsNullOrEmpty(expected))
             {
                 return true;
@@ -1008,6 +1028,10 @@ namespace ImmPlayer
 
         private static void QuitIfRequested(int exitCode)
         {
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            Application.Quit(exitCode);
+            return;
+#endif
             string quit = GetCommandLineValue(QuitArg);
             if (string.IsNullOrEmpty(quit))
             {

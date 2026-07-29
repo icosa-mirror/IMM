@@ -16,8 +16,11 @@ TEXT_SUFFIXES = {"", ".log", ".txt", ".xml", ".json"}
 DIAGNOSTIC_PATTERNS = [
     "IMMAVAL",
     "IMM Android",
+    "IMM_UNITY_SMOKE",
+    "ImmUnityPlugin",
     "Loaded in CPU",
     "Loaded in GPU",
+    "Unity Vulkan",
     "Vulkan renderer",
     "native render capture",
     "FATAL EXCEPTION",
