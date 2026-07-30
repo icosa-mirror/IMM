@@ -286,6 +286,7 @@ static bool AndroidCompleteInit() {
 #if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 static constexpr int kUnityVulkanPrepareEventFlag = 0x80;
 static constexpr int kUnityVulkanQueueEventFlag = 0x40;
+static constexpr int kUnityVulkanFinalizeEventFlag = 0x20;
 static constexpr int kUnityVulkanCustomBlitEventID = 6;
 static void iConfigureUnityVulkanEvent(int eventID, bool logEvent);
 #endif
@@ -325,6 +326,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanQueueEventFlag, false);
+                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanFinalizeEventFlag, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
                 }
                 iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
@@ -347,6 +349,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanQueueEventFlag, false);
+                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanFinalizeEventFlag, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
                 }
                 iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
@@ -843,6 +846,72 @@ static bool iRenderPreparedUnityVulkanCameraQueue(int cameraID, int event_id, pi
     return true;
 }
 
+static bool iFinalizePreparedUnityVulkanCamera(int cameraID)
+{
+    if (!gImmUnityPlugin.UnityAPI.mVulkan ||
+        gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan)
+    {
+        return false;
+    }
+
+    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
+    UnityRenderBuffer colorTarget = target.color;
+    if ((!colorTarget && !target.colorTexture) || target.width <= 0 || target.height <= 0)
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"Unity Vulkan presentation finalize skipped: missing color render buffer for camera=%d",
+            cameraID);
+        return true;
+    }
+
+    constexpr VkImageLayout kShaderReadLayout = 5; // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    constexpr VkPipelineStageFlags kFragmentShaderStage = 0x00000080; // VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+    constexpr VkAccessFlags kShaderReadAccess = 0x00000020; // VK_ACCESS_SHADER_READ_BIT
+
+    gImmUnityPlugin.UnityAPI.mVulkan->EnsureOutsideRenderPass();
+
+    UnityVulkanImage colorImage = {};
+    const bool accessedColor = target.colorTexture
+        ? gImmUnityPlugin.UnityAPI.mVulkan->AccessTexture(
+            target.colorTexture,
+            UnityVulkanWholeImage,
+            kShaderReadLayout,
+            kFragmentShaderStage,
+            kShaderReadAccess,
+            kUnityVulkanResourceAccess_PipelineBarrier,
+            &colorImage)
+        : gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+            colorTarget,
+            UnityVulkanWholeImage,
+            kShaderReadLayout,
+            kFragmentShaderStage,
+            kShaderReadAccess,
+            kUnityVulkanResourceAccess_PipelineBarrier,
+            &colorImage);
+    if (!accessedColor)
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"Unity Vulkan presentation finalize failed to transition color target for camera=%d",
+            cameraID);
+        return true;
+    }
+
+    static int finalizeReportCount = 0;
+    if (finalizeReportCount < 8)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u",
+            cameraID,
+            static_cast<unsigned long long>(colorImage.image),
+            static_cast<unsigned int>(colorImage.layout));
+        ++finalizeReportCount;
+    }
+    return true;
+}
+
 static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id, piRenderer *renderer, UnityRenderBuffer colorTarget)
 {
     if (!gImmUnityPlugin.UnityAPI.mVulkan || gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan)
@@ -1123,6 +1192,11 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         if ((event_id & kUnityVulkanQueueEventFlag) != 0)
         {
             iRenderPreparedUnityVulkanCameraQueue(unityVulkanCameraID, event_id, renderer);
+            return;
+        }
+        if ((event_id & kUnityVulkanFinalizeEventFlag) != 0)
+        {
+            iFinalizePreparedUnityVulkanCamera(unityVulkanCameraID);
             return;
         }
         if (iEnvFlagEnabled("IMM_UNITY_VK_SKIP_HOST_RENDER"))

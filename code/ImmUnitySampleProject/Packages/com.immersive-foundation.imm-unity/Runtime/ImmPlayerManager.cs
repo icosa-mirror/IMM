@@ -17,6 +17,7 @@ namespace ImmPlayer
         internal IntPtr RenderEventFunction { get; set; }
         internal int RenderEventId { get; set; }
         internal int QueueRenderEventId { get; set; }
+        internal int FinalizeRenderEventId { get; set; }
         internal Mesh PresentationMesh { get; set; }
         internal Material PresentationMaterial { get; set; }
 
@@ -26,6 +27,7 @@ namespace ImmPlayer
             {
                 GL.IssuePluginEvent(RenderEventFunction, RenderEventId);
                 GL.IssuePluginEvent(RenderEventFunction, QueueRenderEventId);
+                GL.IssuePluginEvent(RenderEventFunction, FinalizeRenderEventId);
             }
         }
 
@@ -942,6 +944,7 @@ namespace ImmPlayer
             {
                 int presentationEventId = info.CameraId << 8;
                 int queueEventId = presentationEventId | 0x40;
+                int finalizeEventId = presentationEventId | 0x20;
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
                     _configuredVulkanRenderEvents.Add(presentationEventId))
                 {
@@ -958,9 +961,18 @@ namespace ImmPlayer
                         $"[IMM_UNITY_VK_PRESENT_QUEUE_EVENT_20260730] eventId={queueEventId} " +
                         $"camera={info.CameraId} configured={configured}");
                 }
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                    _configuredVulkanRenderEvents.Add(finalizeEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(finalizeEventId);
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_PRESENT_FINALIZE_EVENT_20260730] eventId={finalizeEventId} " +
+                        $"camera={info.CameraId} configured={configured}");
+                }
                 presenter.RenderEventFunction = _renderEventFunc;
                 presenter.RenderEventId = presentationEventId;
                 presenter.QueueRenderEventId = queueEventId;
+                presenter.FinalizeRenderEventId = finalizeEventId;
             }
 #endif
 #if UNITY_ANDROID
