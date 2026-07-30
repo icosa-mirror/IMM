@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 public final class GodotVulkanFtlSmokeTest {
     private static final String PACKAGE_NAME = "org.linuxfoundation.imm.godot.sample";
     private static final String ACTIVITY_NAME = "com.godot.game.GodotApp";
-    private static final String CAPTURE_NAME = "vulkan_visual_smoke.png";
+    private static final String DEVICE_CAPTURE_NAME = "device_after_smoke.png";
 
     @Test
     public void rendersGodotVulkanSampleFrame() throws Exception {
@@ -33,7 +33,7 @@ public final class GodotVulkanFtlSmokeTest {
         File artifactDir = new File(targetContext.getExternalFilesDir(null), "imm-ftl");
         assertTrue("Could not create artifact directory: " + artifactDir, artifactDir.mkdirs() || artifactDir.isDirectory());
         File logcatPath = new File(artifactDir, "logcat_after.txt");
-        File capturePath = new File(artifactDir, CAPTURE_NAME);
+        File capturePath = new File(artifactDir, DEVICE_CAPTURE_NAME);
 
         runShell(device, "logcat -c");
         runShell(device, "am force-stop " + PACKAGE_NAME);
@@ -56,8 +56,8 @@ public final class GodotVulkanFtlSmokeTest {
         forbidMarker(logcat, "ImmViewerCompositorEffect setup failed");
         forbidMarker(logcat, "visual smoke failures");
 
-        assertTrue("Godot visual smoke capture missing: " + capturePath, capturePath.isFile());
-        assertTrue("Godot visual smoke capture is empty: " + capturePath, capturePath.length() > 0L);
+        assertTrue("Godot diagnostic device capture missing: " + capturePath, capturePath.isFile());
+        assertTrue("Godot diagnostic device capture is empty: " + capturePath, capturePath.length() > 0L);
     }
 
     private static String waitForSmoke(UiDevice device, int waitSeconds) throws Exception {

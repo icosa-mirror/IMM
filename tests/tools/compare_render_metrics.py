@@ -205,13 +205,27 @@ def luma_at(pixels: bytes, index: int) -> int:
 
 
 def compute_spatial_luma_grid(width: int, height: int, pixels: bytes, grid_width: int, grid_height: int) -> list[float]:
+    return compute_spatial_luma_grid_region(width, height, pixels, grid_width, grid_height, 0, 0, width, height)
+
+
+def compute_spatial_luma_grid_region(
+    width: int,
+    height: int,
+    pixels: bytes,
+    grid_width: int,
+    grid_height: int,
+    region_x: int,
+    region_y: int,
+    region_width: int,
+    region_height: int,
+) -> list[float]:
     values: list[float] = []
     for grid_y in range(grid_height):
-        y0 = grid_y * height // grid_height
-        y1 = (grid_y + 1) * height // grid_height
+        y0 = region_y + grid_y * region_height // grid_height
+        y1 = region_y + (grid_y + 1) * region_height // grid_height
         for grid_x in range(grid_width):
-            x0 = grid_x * width // grid_width
-            x1 = (grid_x + 1) * width // grid_width
+            x0 = region_x + grid_x * region_width // grid_width
+            x1 = region_x + (grid_x + 1) * region_width // grid_width
             total = 0
             count = 0
             for y in range(y0, y1):
@@ -221,6 +235,19 @@ def compute_spatial_luma_grid(width: int, height: int, pixels: bytes, grid_width
                     count += 1
             values.append((total / count / 255.0) if count else 0.0)
     return values
+
+
+def center_crop_region(width: int, height: int, aspect_ratio: float | None) -> tuple[int, int, int, int]:
+    if aspect_ratio is None:
+        return 0, 0, width, height
+    if not math.isfinite(aspect_ratio) or aspect_ratio <= 0:
+        raise ValueError(f"center crop aspect ratio must be positive, got {aspect_ratio!r}")
+    source_ratio = width / height
+    if source_ratio > aspect_ratio:
+        crop_width = max(1, min(width, round(height * aspect_ratio)))
+        return (width - crop_width) // 2, 0, crop_width, height
+    crop_height = max(1, min(height, round(width / aspect_ratio)))
+    return 0, (height - crop_height) // 2, width, crop_height
 
 
 def compare_luma_grids(reference_grid: list[float], candidate_grid: list[float]) -> dict:
@@ -239,19 +266,47 @@ def compare_luma_grids(reference_grid: list[float], candidate_grid: list[float])
     return {"mean_abs_delta": mean_abs_delta, "rmse": rmse, "correlation": correlation}
 
 
-def collect_spatial_metrics(reference_path: Path, candidate_path: Path, grid_width: int, grid_height: int) -> dict:
+def collect_spatial_metrics(
+    reference_path: Path,
+    candidate_path: Path,
+    grid_width: int,
+    grid_height: int,
+    center_crop_aspect_ratio: float | None = None,
+) -> dict:
     reference_width, reference_height, reference_pixels, _ = read_rgb_capture(reference_path)
     candidate_width, candidate_height, candidate_pixels, _ = read_rgb_capture(candidate_path)
-    if reference_width != candidate_width or reference_height != candidate_height:
-        return {
+    reference_region = center_crop_region(reference_width, reference_height, center_crop_aspect_ratio)
+    candidate_region = center_crop_region(candidate_width, candidate_height, center_crop_aspect_ratio)
+    reference_grid = compute_spatial_luma_grid_region(
+        reference_width, reference_height, reference_pixels, grid_width, grid_height, *reference_region
+    )
+    candidate_grid = compute_spatial_luma_grid_region(
+        candidate_width, candidate_height, candidate_pixels, grid_width, grid_height, *candidate_region
+    )
+    metrics = compare_luma_grids(reference_grid, candidate_grid)
+    metrics.update(
+        {
             "grid_width": grid_width,
             "grid_height": grid_height,
-            "error": f"dimensions differ: reference={reference_width}x{reference_height} candidate={candidate_width}x{candidate_height}",
+            "reference_width": reference_width,
+            "reference_height": reference_height,
+            "candidate_width": candidate_width,
+            "candidate_height": candidate_height,
+            "center_crop_aspect_ratio": center_crop_aspect_ratio,
+            "reference_crop": {
+                "x": reference_region[0],
+                "y": reference_region[1],
+                "width": reference_region[2],
+                "height": reference_region[3],
+            },
+            "candidate_crop": {
+                "x": candidate_region[0],
+                "y": candidate_region[1],
+                "width": candidate_region[2],
+                "height": candidate_region[3],
+            },
         }
-    reference_grid = compute_spatial_luma_grid(reference_width, reference_height, reference_pixels, grid_width, grid_height)
-    candidate_grid = compute_spatial_luma_grid(candidate_width, candidate_height, candidate_pixels, grid_width, grid_height)
-    metrics = compare_luma_grids(reference_grid, candidate_grid)
-    metrics.update({"grid_width": grid_width, "grid_height": grid_height})
+    )
     return metrics
 
 
@@ -389,17 +444,18 @@ def collect_metrics(path: Path) -> dict:
     return data
 
 
-def compare_metrics(reference: dict, candidate: dict) -> list[str]:
+def compare_metrics(reference: dict, candidate: dict, allow_dimension_mismatch: bool = False) -> list[str]:
     errors = []
-    for key in ["width", "height"]:
-        if key in reference and key in candidate and reference[key] != candidate[key]:
-            errors.append(f"{key} differs: reference={reference[key]!r} candidate={candidate[key]!r}")
+    if not allow_dimension_mismatch:
+        for key in ["width", "height"]:
+            if key in reference and key in candidate and reference[key] != candidate[key]:
+                errors.append(f"{key} differs: reference={reference[key]!r} candidate={candidate[key]!r}")
     if candidate.get("format") in {"ppm-p6", "png"} and candidate.get("non_black_pixels", 0) <= 0:
         errors.append("candidate capture has no non-black pixels")
     if reference.get("format") in {"ppm-p6", "png"} and candidate.get("format") in {"ppm-p6", "png"}:
         ref_visible = reference.get("non_black_pixels", 0)
         cand_visible = candidate.get("non_black_pixels", 0)
-        if ref_visible > 0:
+        if ref_visible > 0 and not allow_dimension_mismatch:
             visible_ratio = cand_visible / ref_visible
             if visible_ratio < 0.65 or visible_ratio > 1.35:
                 errors.append(f"visible pixel count drifted: reference={ref_visible} candidate={cand_visible} ratio={visible_ratio:.3f}")
@@ -464,6 +520,14 @@ def validate_contract(contract: dict, candidate: dict) -> list[str]:
         for key in ["width", "height"]:
             if key in dimensions and candidate.get(key) != dimensions[key]:
                 errors.append(f"{key} differs from contract: expected={dimensions[key]!r} candidate={candidate.get(key)!r}")
+
+    minimum_dimensions = validation.get("minimum_dimensions")
+    if minimum_dimensions:
+        for key in ["width", "height"]:
+            if key in minimum_dimensions and candidate.get(key, 0) < minimum_dimensions[key]:
+                errors.append(
+                    f"{key} is below contract minimum: minimum={minimum_dimensions[key]!r} candidate={candidate.get(key)!r}"
+                )
 
     minimum_non_black = validation.get("minimum_non_black_pixels")
     if minimum_non_black is not None and candidate.get("non_black_pixels", 0) < minimum_non_black:
@@ -676,6 +740,11 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path, required=True)
     args = parser.parse_args()
 
+    contract = json.loads(args.contract.read_text(encoding="utf-8")) if args.contract else {}
+    validation = contract.get("validation", {}) if isinstance(contract, dict) else {}
+    allow_dimension_mismatch = bool(
+        isinstance(validation, dict) and validation.get("allow_reference_dimension_mismatch")
+    )
     candidate = collect_metrics(args.candidate)
     output = {"candidate": candidate}
     errors: list[str] = []
@@ -683,16 +752,25 @@ def main() -> int:
     if args.reference:
         reference = collect_metrics(args.reference)
         output["reference"] = reference
-        errors = compare_metrics(reference, candidate)
+        errors = compare_metrics(reference, candidate, allow_dimension_mismatch)
     if args.contract:
-        contract = json.loads(args.contract.read_text(encoding="utf-8"))
         output["contract"] = {"path": args.contract.as_posix(), "schema": contract.get("schema"), "baseline": contract.get("baseline")}
-        validation = contract.get("validation", {})
         expected_grid = validation.get("expected_spatial_luma_grid") if isinstance(validation, dict) else None
         if isinstance(expected_grid, dict):
             grid_width = int(expected_grid.get("width", 32))
             grid_height = int(expected_grid.get("height", 18))
-            spatial_metrics = collect_spatial_metrics(args.reference, args.candidate, grid_width, grid_height) if args.reference else None
+            crop_aspect_ratio = expected_grid.get("center_crop_aspect_ratio")
+            spatial_metrics = (
+                collect_spatial_metrics(
+                    args.reference,
+                    args.candidate,
+                    grid_width,
+                    grid_height,
+                    float(crop_aspect_ratio) if crop_aspect_ratio is not None else None,
+                )
+                if args.reference
+                else None
+            )
             output["spatial_luma_grid"] = spatial_metrics
         errors.extend(validate_contract(contract, candidate))
         errors.extend(validate_spatial_contract(contract, spatial_metrics))

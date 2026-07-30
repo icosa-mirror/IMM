@@ -10,6 +10,7 @@ namespace ImmPlayer
     public sealed class ImmUnityRuntimeSmoke : MonoBehaviour
     {
         private const string CapturePathEnv = "IMM_UNITY_SMOKE_CAPTURE_PATH";
+        private const string RenderCapturePathEnv = "IMM_UNITY_SMOKE_RENDER_CAPTURE_PATH";
         private const string FramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string QuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
@@ -22,6 +23,7 @@ namespace ImmPlayer
         private const string DisableMsaaEnv = "IMM_UNITY_SMOKE_DISABLE_MSAA";
         private const string CaptureCameraTextureEnv = "IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE";
         private const string CapturePathArg = "-immSmokeCapturePath";
+        private const string RenderCapturePathArg = "-immSmokeRenderCapturePath";
         private const string FramesArg = "-immSmokeFrames";
         private const string QuitArg = "-immSmokeQuit";
         private const string CompositionProbeArg = "-immSmokeCompositionProbe";
@@ -60,13 +62,21 @@ namespace ImmPlayer
 
             var go = new GameObject("IMM Unity Runtime Smoke");
             DontDestroyOnLoad(go);
-            go.AddComponent<ImmUnityRuntimeSmoke>()._capturePath = capturePath;
+            ImmUnityRuntimeSmoke smoke = go.AddComponent<ImmUnityRuntimeSmoke>();
+            smoke._capturePath = capturePath;
+            smoke._renderCapturePath = GetCommandLineValue(RenderCapturePathArg);
+            if (string.IsNullOrEmpty(smoke._renderCapturePath))
+            {
+                smoke._renderCapturePath = Environment.GetEnvironmentVariable(RenderCapturePathEnv);
+            }
 #if IMM_UNITY_ANDROID_VULKAN_CI
+            smoke._renderCapturePath = Path.Combine(Application.persistentDataPath, "imm-ci", "unity-android-vulkan-render.png");
             Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
 #endif
         }
 
         private string _capturePath;
+        private string _renderCapturePath;
         private bool _compositionProbeEnabled;
         private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
@@ -135,6 +145,22 @@ namespace ImmPlayer
             }
 
             yield return StabilizeSampleViewpoint();
+
+            if (!string.IsNullOrEmpty(_renderCapturePath))
+            {
+                yield return new WaitForEndOfFrame();
+                Camera renderCaptureCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
+                if (renderCaptureCamera == null)
+                {
+                    Debug.LogError($"{Prefix}missing render baseline capture camera");
+                    QuitIfRequested(2);
+                    yield break;
+                }
+                Texture2D renderCapture = _diagnosticCameraTargetTexture != null
+                    ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
+                    : CaptureCameraTexture(renderCaptureCamera);
+                WriteCapture(renderCapture, _renderCapturePath, "render baseline");
+            }
 
             if (_compositionProbeEnabled)
             {
@@ -269,6 +295,19 @@ namespace ImmPlayer
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             ReleaseDiagnosticCameraTargetTexture();
             QuitIfRequested(0);
+        }
+
+        private static void WriteCapture(Texture2D texture, string capturePath, string label)
+        {
+            string fullPath = Path.GetFullPath(capturePath);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            File.WriteAllBytes(fullPath, texture.EncodeToPNG());
+            Debug.Log($"{Prefix}{label} capture={fullPath} width={texture.width} height={texture.height}");
+            UnityEngine.Object.Destroy(texture);
         }
 
         private void ConfigureDiagnosticCameraTargetTexture()

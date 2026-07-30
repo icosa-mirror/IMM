@@ -178,6 +178,29 @@ def main() -> int:
         passed_report = json.loads((temp / "passing-output/matrix-evidence.json").read_text(encoding="utf-8"))
         assert passed_report["passed"] is True
         assert passed_report["required_row_count"] == 3
+
+        expected_failed_artifact = artifact(
+            "standalone",
+            "windows",
+            "non-vr",
+            "vulkan",
+            with_capture=True,
+            with_metrics=True,
+            with_report=True,
+        )
+        expected_failed_artifact["manifests"][0]["content"]["classification"]["result"] = "expected_failed"
+        expected_failed_summary = temp / "expected-failed-summary.json"
+        write_summary(expected_failed_summary, [expected_failed_artifact])
+        expected_failed = run_verify(
+            matrix_path,
+            expected_failed_summary,
+            temp / "expected-failed-output",
+            "--scope",
+            "hardware",
+            "--gate-prefix",
+            "CI GPU Matrix /",
+        )
+        assert expected_failed.returncode == 1, "Expected-failed evidence must not satisfy a supported matrix row"
         assert "# IMM Matrix Evidence Report" in (temp / "passing-output/matrix-evidence.md").read_text(encoding="utf-8")
 
         failing_summary = temp / "failing-summary.json"

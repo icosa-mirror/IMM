@@ -267,6 +267,8 @@ def main() -> int:
                 str(output),
                 "--matrix-status",
                 str(matrix),
+                "--required-evidence-scope",
+                "hosted",
                 "--markdown-output",
                 str(report),
             ],
@@ -274,14 +276,15 @@ def main() -> int:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 1, "Expected invalid supported visual evidence to fail aggregation"
+        assert "standalone/macos/non-vr/metal (missing evidence)" in result.stdout
         text = report.read_text(encoding="utf-8")
         assert "## Matrix Coverage" in text
         assert "| unity/all/non-vr/native | supported | passed | yes |" in text
         assert "| standalone/macos/non-vr/metal | supported | missing evidence | yes |" in text
         assert "| godot/windows/vr/openxr | deferred | deferred | no |" in text
         assert "| godot/windows/non-vr/preflight | supported | passed | no |" in text
-        assert "| godot/windows/non-vr/vulkan | supported | expected failure | yes |" in text
+        assert "| godot/windows/non-vr/vulkan | supported | failed | yes |" in text
         assert "| standalone/ios/non-vr/native | unsupported | unsupported | no |" in text
         assert "## Unity Windows DirectX Composition" in text
         assert "Composition mode: full_depth" in text

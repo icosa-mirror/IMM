@@ -94,7 +94,7 @@ def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], lis
                 if content.get("schema") != "imm-ci-artifact-manifest-v1":
                     continue
                 classification = content.get("classification", {})
-                if not isinstance(classification, dict) or classification.get("result") not in {"passed", "expected_failed"}:
+                if not isinstance(classification, dict) or classification.get("result") != "passed":
                     continue
                 matrix = content.get("matrix", {})
                 if not isinstance(matrix, dict):

@@ -2,6 +2,7 @@
   "baseline": "macos-metal-sample1",
   "capture_source": "validateAppImmViewerMetalPlayback",
   "fixture": "exampleImmFiles/sample1.imm",
+  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "png",
@@ -13,6 +14,13 @@
         "top_left": 0.237,
         "top_right": 0.424
       }
+    },
+    "allow_reference_dimension_mismatch": true,
+    "expected_spatial_luma_grid": {
+      "height": 18,
+      "max_mean_abs_delta": 0.12,
+      "min_correlation": 0.75,
+      "width": 32
     },
     "expected_vertical_luma_profile": {
       "tolerance": 0.14,

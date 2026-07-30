@@ -612,6 +612,7 @@ jobs:
     - name: Record macOS Metal render metrics
       run: >
         python3 tests/tools/compare_render_metrics.py artifacts/ImmViewer-macOS/validation/macos-metal-static.ppm
+        --reference tests/baselines/render/windows-directx-sample1.ppm
         --contract tests/baselines/render/macos-standalone-metal-sample1.json
         --json-output artifacts/ImmViewer-macOS/validation/macos-metal-static.json
 

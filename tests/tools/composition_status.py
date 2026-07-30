@@ -7,8 +7,8 @@ from __future__ import annotations
 COMPOSITION_CONTRACTS = {
     "full_depth": {
         "composition_contract": "depth_composition",
-        "depth_interleaving": "expected_failed",
-        "failure_status": "expected_failed",
+        "depth_interleaving": "failed",
+        "failure_status": "failed",
     },
     "ordered_overlay": {
         "composition_contract": "ordered_overlay",
@@ -33,8 +33,8 @@ def build_composition_fields(mode: str, rendering_succeeded: bool, composition_f
     elif composition_failures:
         compositing = contract["failure_status"]
         ordered_overlay = "failed" if mode == "ordered_overlay" else "not_tested"
-        depth_composition = "expected_failed" if mode == "full_depth" else "not_claimed"
-        depth_interleaving = "expected_failed" if mode == "full_depth" else contract["depth_interleaving"]
+        depth_composition = "failed" if mode == "full_depth" else "not_claimed"
+        depth_interleaving = "failed" if mode == "full_depth" else contract["depth_interleaving"]
     else:
         compositing = "success" if rendering_succeeded else "unknown"
         ordered_overlay = "success" if mode == "ordered_overlay" and rendering_succeeded else "not_tested"
@@ -54,6 +54,5 @@ def build_composition_fields(mode: str, rendering_succeeded: bool, composition_f
 def classification_succeeded(status: dict) -> bool:
     return status.get("rendering") == "success" and status.get("compositing") in {
         "success",
-        "expected_failed",
         "not_tested",
     }

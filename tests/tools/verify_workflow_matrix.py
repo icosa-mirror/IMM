@@ -56,15 +56,15 @@ REQUIRED_JOBS = {
         "windows-standalone-opengl": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Install Mesa llvmpipe OpenGL", "Configure Mesa llvmpipe OpenGL", "Preflight OpenGL runner", "Capture OpenGL sample1", "Compare OpenGL render metrics against committed DirectX baseline", "Write OpenGL render report", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-openxr-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-opengl-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Run Godot Vulkan render-only baseline smoke", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Write Godot Vulkan render baseline report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write Godot Vulkan ordered overlay baseline report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Preflight Godot OpenXR VR runner", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-standalone-metal": ["Download macOS viewer build artifact", "Preflight macOS Metal runner", "Verify macOS Metal build artifact", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
-        "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write CI manifest", "Collect artifact summary"],
+        "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write Godot Metal composition report", "Write CI manifest", "Collect artifact summary"],
         "gpu-evidence-report": ["Download GPU artifacts", "Verify GPU matrix evidence", "Upload GPU evidence report", "Hide per-lane GPU artifacts"],
     },
     ".github/workflows/web-pages.yml": {
         "build": ["Build Wasm decoder", "Run playback tests", "Run browser smoke test", "Build Pages bundle", "Verify Pages bundle layout", "Upload Pages artifact"],
-        "verify": ["Download decoder artifact", "Run extended browser verification", "Upload failed browser evidence"],
+        "verify": ["Download decoder artifact", "Run extended browser verification", "Write WebAssembly player render report", "Write WebAssembly player CI manifest", "Collect WebAssembly player evidence", "Upload WebAssembly player validation evidence", "Upload failed browser evidence"],
         "verify-firefox": ["Install Playwright Firefox and system dependencies", "Download decoder artifact", "Run Firefox browser verification", "Upload failed Firefox evidence"],
     },
 }
@@ -646,10 +646,60 @@ def verify_ci_core_self_test_contract(path: Path, workflow_rel: str, errors: lis
     required_tokens = [
         "python tests/tools/test_write_visual_evidence_report.py",
         "python tests/tools/test_verify_full_depth_evidence_report.py",
+        "python tests/tools/test_classify_composition_modes.py",
     ]
     for token in required_tokens:
         if token not in text:
             errors.append(f"{workflow_rel} missing CI tool self-test command: {token}")
+
+
+def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    required_by_workflow = {
+        ".github/workflows/build.yml": [
+            "--reference tests/baselines/render/windows-directx-sample1.ppm",
+            "--contract tests/baselines/render/macos-standalone-metal-sample1.json",
+        ],
+        ".github/workflows/ci-device.yml": [
+            "godot-android-vulkan-sample1.json",
+            "vulkan_render_baseline.png",
+            "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl",
+        ],
+        ".github/workflows/ci-engine.yml": [
+            "unity-macos-metal-render.png",
+            "unity-macos-metal-sample1.json",
+            "unity-windows-vulkan-render.png",
+            "unity-render-player.log",
+            "unity-android-vulkan-render.png",
+            "unity-android-vulkan-sample1.json",
+            "--reference tests/baselines/render/windows-directx-sample1.ppm",
+            "render baseline capture=",
+        ],
+        ".github/workflows/ci-gpu.yml": [
+            "godot-vulkan-render.ppm",
+            "Run Godot Vulkan render-only baseline smoke",
+            "godot-windows-vulkan-sample1.json",
+            "metal_render_baseline.png",
+            "--reference tests/baselines/render/windows-directx-sample1.ppm",
+        ],
+        ".github/workflows/web-pages.yml": [
+            "sample1-web-render-metrics.json",
+            "WebPlayerValidationEvidence",
+            "--product web",
+            "--renderer webgl",
+        ],
+        ".github/workflows/ci-validation.yml": [
+            "WebPlayerValidationEvidence",
+            "needs.web.result",
+            "--required-evidence-scope",
+        ],
+    }
+    required_tokens = required_by_workflow.get(workflow_rel)
+    if not required_tokens:
+        return
+    text = path.read_text(encoding="utf-8")
+    for token in required_tokens:
+        if token not in text:
+            errors.append(f"{workflow_rel} missing strict visual validation token: {token}")
 
 
 def verify_godot_vulkan_smoke_contract(root: Path, errors: list[str]) -> None:
@@ -700,6 +750,7 @@ def main() -> int:
         verify_godot_macos_clean_source_build_contract(workflow_path, workflow_rel, errors)
         verify_full_depth_validation_report_contract(workflow_path, workflow_rel, errors)
         verify_ci_core_self_test_contract(workflow_path, workflow_rel, errors)
+        verify_strict_visual_validation_contract(workflow_path, workflow_rel, errors)
         workflow = load_workflow(workflow_path)
         actual_jobs = workflow.get("jobs", {})
         for job_name, required_steps in jobs.items():

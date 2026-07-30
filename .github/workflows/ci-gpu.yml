@@ -711,6 +711,19 @@ jobs:
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
 
+      - name: Run Godot Vulkan render-only baseline smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: >
+          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
+          -Configuration Release
+          -SkipBuild
+          -CompositionMode render_only
+          -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm
+          -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm
+          -RenderCapturePath artifacts\godot-smoke-windows-vulkan-render-only\godot-vulkan-render-precheck.ppm
+          -LogDir artifacts\godot-smoke-windows-vulkan-render-only
+
       - name: Run Godot Vulkan visual baseline smoke
         timeout-minutes: 10
         shell: pwsh
@@ -720,11 +733,18 @@ jobs:
           -SkipBuild
           -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm
           -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          -RenderCapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-preprobe.ppm
           -LogDir artifacts\godot-smoke-windows-vulkan
 
       - name: Record Godot Vulkan full depth metrics
         shell: pwsh
         run: |
+          python tests\tools\compare_render_metrics.py `
+            artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\godot-windows-vulkan-sample1.json `
+            --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-render-metrics.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests\tools\compare_render_metrics.py `
             artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
             --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
@@ -739,6 +759,15 @@ jobs:
           --status-json artifacts\godot-smoke-windows-vulkan\composition-status.json
           --output-dir artifacts\godot-smoke-windows-vulkan\captures
           --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
+      - name: Write Godot Vulkan render baseline report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-render-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm
+          --output-dir artifacts\godot-smoke-windows-vulkan\captures\render
+          --markdown-output artifacts\godot-smoke-windows-vulkan\render-baseline-report.md
 
       - name: Run Godot Vulkan ordered overlay smoke
         timeout-minutes: 10
@@ -749,15 +778,22 @@ jobs:
           -SkipBuild
           -CompositionMode ordered_overlay
           -CapturePath artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
+          -RenderCapturePath artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-preprobe.ppm
           -LogDir artifacts\godot-smoke-windows-vulkan-ordered-overlay
 
       - name: Record Godot Vulkan ordered overlay metrics
         if: always()
         shell: pwsh
-        run: >
-          python tests\tools\compare_render_metrics.py
-          artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm
-          --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
+        run: |
+          python tests\tools\compare_render_metrics.py `
+            artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\godot-windows-vulkan-sample1.json `
+            --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-render-metrics.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\tools\compare_render_metrics.py `
+            artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm `
+            --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
 
       - name: Write Godot Vulkan ordered overlay report
         if: always()
@@ -769,22 +805,20 @@ jobs:
           --status-json artifacts\godot-smoke-windows-vulkan-ordered-overlay\composition-status.json
           --output-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay\captures
           --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-report.md
+      - name: Write Godot Vulkan ordered overlay baseline report
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-render-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm
+          --output-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay\captures\render
+          --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-baseline-report.md
 
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: |
-          $status = "${{ job.status }}"
-          $failureClass = "visual"
-          $compositionStatusPath = "artifacts\godot-smoke-windows-vulkan\composition-status.json"
-          if (Test-Path $compositionStatusPath) {
-            $compositionStatus = Get-Content -Raw $compositionStatusPath | ConvertFrom-Json
-            if ($status -eq "success" -and $compositionStatus.compositing -eq "expected_failed" -and $compositionStatus.rendering -eq "success") {
-              $status = "expected_failed"
-              $failureClass = "compositing"
-            }
-          }
-          python tests\tools\write_ci_manifest.py --status "$status" --failure-class "$failureClass" --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -914,6 +948,7 @@ jobs:
       - name: Record macOS Metal render metrics
         run: >
           python3 tests/tools/compare_render_metrics.py artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
+          --reference tests/baselines/render/windows-directx-sample1.ppm
           --contract tests/baselines/render/macos-standalone-metal-sample1.json
           --json-output artifacts/macos-standalone-metal/macos-metal-render-metrics.json
 
@@ -1010,6 +1045,7 @@ jobs:
           IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA=1 \
           IMM_GODOT_DEBUG=1 \
           IMM_GODOT_LOG_FILE="$PWD/artifacts/godot-smoke-macos-metal/imm-godot-native.log" \
+          IMM_GODOT_VISUAL_SMOKE_RENDER_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_render_baseline.png" \
           IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_visual_smoke.png" \
           "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --resolution 1024x576 --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
             > artifacts/godot-smoke-macos-metal/godot-metal-smoke.log 2>&1 || smoke_status=$?
@@ -1019,43 +1055,41 @@ jobs:
             --composition-mode full_depth \
             --output artifacts/godot-smoke-macos-metal/composition-status.json
           if [ "$smoke_status" -ne 0 ]; then
-            status="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"
-            if [ "$status" != "expected_failed" ]; then
-              exit "$smoke_status"
-            fi
+            exit "$smoke_status"
           fi
 
       - name: Record Godot Metal render metrics
-        run: >
-          python3 tests/tools/compare_render_metrics.py
-          artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
-          --contract tests/baselines/render/macos-metal-sample1.json
-          --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+        run: |
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/godot-smoke-macos-metal/metal_render_baseline.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/macos-metal-sample1.json \
+            --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/godot-smoke-macos-metal/metal_visual_smoke.png \
+            --json-output artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json
 
       - name: Write Godot Metal render report
         if: always()
         run: >
           python3 tests/tools/write_render_report.py
           --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+          --candidate-capture artifacts/godot-smoke-macos-metal/metal_render_baseline.png
+          --output-dir artifacts/godot-smoke-macos-metal/captures/render
+          --markdown-output artifacts/godot-smoke-macos-metal/render-report.md
+      - name: Write Godot Metal composition report
+        if: always()
+        run: >
+          python3 tests/tools/write_render_report.py
+          --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json
           --candidate-capture artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
           --status-json artifacts/godot-smoke-macos-metal/composition-status.json
-          --output-dir artifacts/godot-smoke-macos-metal/captures
-          --markdown-output artifacts/godot-smoke-macos-metal/render-report.md
+          --output-dir artifacts/godot-smoke-macos-metal/captures/composition
+          --markdown-output artifacts/godot-smoke-macos-metal/composition-render-report.md
 
       - name: Write CI manifest
         if: always()
-        run: |
-          status="${{ job.status }}"
-          failure_class="visual"
-          if [ -f artifacts/godot-smoke-macos-metal/composition-status.json ]; then
-            compositing="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("compositing", ""))')"
-            rendering="$(python3 -c 'import json; print(json.load(open("artifacts/godot-smoke-macos-metal/composition-status.json")).get("rendering", ""))')"
-            if [ "$status" = "success" ] && [ "$compositing" = "expected_failed" ] && [ "$rendering" = "success" ]; then
-              status="expected_failed"
-              failure_class="compositing"
-            fi
-          fi
-          python3 tests/tools/write_ci_manifest.py --status "$status" --failure-class "$failure_class" --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
       - name: Collect artifact summary
         if: always()
         run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-smoke-macos-metal --require-manifest --output artifacts/godot-smoke-macos-metal/artifact-summary.json

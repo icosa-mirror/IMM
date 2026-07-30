@@ -134,6 +134,45 @@ jobs:
           IMM_WEB_HEADLESS: "1"
         run: bun run test:browser
 
+      - name: Write WebAssembly player render report
+        if: always()
+        run: >
+          python tests/tools/write_render_report.py
+          --metrics-json artifacts/web-native/sample1-web-render-metrics.json
+          --candidate-capture artifacts/web-native/sample1-web-1280x720.png
+          --output-dir artifacts/web-native/captures
+          --markdown-output artifacts/web-native/render-report.md
+
+      - name: Write WebAssembly player CI manifest
+        if: always()
+        run: >
+          python tests/tools/write_ci_manifest.py
+          --status "${{ job.status }}"
+          --failure-class visual
+          --output artifacts/web-native/manifest.json
+          --product web
+          --platform-name browser
+          --mode non-vr
+          --renderer webgl
+          --include artifacts/web-native
+
+      - name: Collect WebAssembly player evidence
+        if: always()
+        run: >
+          python tests/tools/collect_ci_artifacts.py
+          --artifact-dir artifacts/web-native
+          --require-manifest
+          --output artifacts/web-native/artifact-summary.json
+
+      - name: Upload WebAssembly player validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebPlayerValidationEvidence
+          path: artifacts/web-native
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload failed browser evidence
         if: failure()
         uses: actions/upload-artifact@v4

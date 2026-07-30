@@ -28,6 +28,7 @@ REQUIRED_ROWS = {
     ("godot", "macos", "non-vr"),
     ("godot", "windows", "vr"),
     ("godot", "android", "vr"),
+    ("web", "browser", "non-vr"),
 }
 KNOWN_HOSTED_GATES = {
     "Build / Android",
@@ -44,6 +45,7 @@ KNOWN_HOSTED_GATES = {
     "CI Core Matrix / Package Source Layout",
     "Godot local verifier checks Unity XR scene bootstrap",
     "Godot local verifier checks Windows standalone OpenGL VR settings",
+    "Web Player Build and Validation / Extended browser verification",
 }
 KNOWN_HARDWARE_GATES = {
     "CI Device Matrix / Android Godot Vulkan",
@@ -53,6 +55,7 @@ KNOWN_HARDWARE_GATES = {
     "CI Device Matrix / Android Standalone Vulkan",
     "CI Engine Matrix / Unity Package Import",
     "CI Engine Matrix / Unity Windows OpenXR VR",
+    "CI Engine Matrix / Unity Windows Vulkan",
     "CI GPU Matrix / macOS Godot Metal",
     "CI GPU Matrix / Windows Godot Vulkan",
     "CI GPU Matrix / Windows Godot OpenXR VR",

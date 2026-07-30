@@ -29,6 +29,7 @@ const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
 const COMPOSITION_MODE_FULL_DEPTH := "full_depth"
 const COMPOSITION_MODE_ORDERED_OVERLAY := "ordered_overlay"
+const COMPOSITION_MODE_RENDER_ONLY := "render_only"
 const SCENE_FRONT_PROBE_COLOR := Color(1.0, 0.0, 1.0, 1.0)
 const SCENE_REAR_OCCLUDED_PROBE_COLOR := Color(0.0, 1.0, 1.0, 1.0)
 const SCENE_REAR_VISIBLE_PROBE_COLOR := Color(1.0, 1.0, 0.0, 1.0)
@@ -231,7 +232,9 @@ func _run_visual_smoke() -> void:
 
 	if sequence_ready:
 		await _wait_for_forced_player_frame(forced_player_frame)
-		_setup_scene_composition_probe()
+		await _capture_render_baseline(failures, selected_renderer_name)
+		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
+			_setup_scene_composition_probe()
 		for _frame in range(6):
 			_queue_active_camera()
 			await get_tree().process_frame
@@ -288,7 +291,9 @@ func _run_visual_smoke() -> void:
 		var image: Image = get_viewport().get_texture().get_image()
 		var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
 		var ordered_overlay_imm_diagnostics := _analyze_ordered_overlay_imm_pixels(image, viewer.get_background_color())
-		var scene_composition_diagnostics := _analyze_scene_composition_pixels(image)
+		var scene_composition_diagnostics := {}
+		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
+			scene_composition_diagnostics = _analyze_scene_composition_pixels(image)
 		print("IMM Godot %s visual smoke content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
 		print("IMM Godot %s visual smoke ordered overlay IMM diagnostics: %s" % [selected_renderer_name, str(ordered_overlay_imm_diagnostics)])
 		print("IMM Godot %s visual smoke scene composition diagnostics: %s" % [selected_renderer_name, str(scene_composition_diagnostics)])
@@ -305,7 +310,8 @@ func _run_visual_smoke() -> void:
 		if selected_renderer_api == IMM_RENDERER_API_METAL and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
 			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % orientation_luma_delta)
 		_append_imm_visibility_failures(ordered_overlay_imm_diagnostics, failures, "PNG")
-		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PNG")
+		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
+			_append_scene_composition_failures(scene_composition_diagnostics, failures, "PNG")
 		var screenshot_dir: String = screenshot_path.get_base_dir()
 		if not screenshot_dir.is_empty():
 			DirAccess.make_dir_recursive_absolute(screenshot_dir)
@@ -321,14 +327,17 @@ func _run_visual_smoke() -> void:
 		var image: Image = get_viewport().get_texture().get_image()
 		var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
 		var ordered_overlay_imm_diagnostics := _analyze_ordered_overlay_imm_pixels(image, viewer.get_background_color())
-		var scene_composition_diagnostics := _analyze_scene_composition_pixels(image)
+		var scene_composition_diagnostics := {}
+		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
+			scene_composition_diagnostics = _analyze_scene_composition_pixels(image)
 		print("IMM Godot %s visual smoke PPM content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
 		print("IMM Godot %s visual smoke PPM ordered overlay IMM diagnostics: %s" % [selected_renderer_name, str(ordered_overlay_imm_diagnostics)])
 		print("IMM Godot %s visual smoke PPM scene composition diagnostics: %s" % [selected_renderer_name, str(scene_composition_diagnostics)])
 		if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
 			failures.append("visual smoke PPM had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
 		_append_imm_visibility_failures(ordered_overlay_imm_diagnostics, failures, "PPM")
-		_append_scene_composition_failures(scene_composition_diagnostics, failures, "PPM")
+		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
+			_append_scene_composition_failures(scene_composition_diagnostics, failures, "PPM")
 		var save_result := _save_ppm(image, ppm_path)
 		if save_result != OK:
 			failures.append("Failed to save visual smoke PPM %s: %d" % [ppm_path, int(save_result)])
@@ -336,6 +345,42 @@ func _run_visual_smoke() -> void:
 			print("IMM Godot %s visual smoke PPM: %s" % [selected_renderer_name, ppm_path])
 
 	_finish_visual_smoke(failures, backend_diagnostics, document_state, document_bounds, render_diagnostics, compositor_diagnostics)
+
+func _capture_render_baseline(failures: Array[String], selected_renderer_name: String) -> void:
+	var png_path: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_RENDER_PNG", "")
+	var ppm_path: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_RENDER_PPM", "")
+	if png_path.is_empty() and ppm_path.is_empty():
+		return
+	_apply_background_color()
+	_queue_active_camera()
+	await RenderingServer.frame_post_draw
+	var image: Image = get_viewport().get_texture().get_image()
+	var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
+	var imm_diagnostics := _analyze_ordered_overlay_imm_pixels(image, viewer.get_background_color())
+	print("IMM Godot %s render baseline content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
+	print("IMM Godot %s render baseline IMM diagnostics: %s" % [selected_renderer_name, str(imm_diagnostics)])
+	if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
+		failures.append("render baseline had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
+	if int(content_diagnostics.get("content_bounds_width", 0)) < MIN_CONTENT_BOUNDS_SIZE or int(content_diagnostics.get("content_bounds_height", 0)) < MIN_CONTENT_BOUNDS_SIZE:
+		failures.append("render baseline content bounds were too small: %sx%s" % [
+			str(content_diagnostics.get("content_bounds_width", 0)),
+			str(content_diagnostics.get("content_bounds_height", 0)),
+		])
+	_append_imm_visibility_failures(imm_diagnostics, failures, "render baseline")
+	if not png_path.is_empty():
+		DirAccess.make_dir_recursive_absolute(png_path.get_base_dir())
+		var png_result := image.save_png(png_path)
+		if png_result != OK:
+			failures.append("Failed to save render baseline PNG %s: %d" % [png_path, int(png_result)])
+		else:
+			print("IMM Godot %s render baseline PNG: %s" % [selected_renderer_name, png_path])
+	if not ppm_path.is_empty():
+		DirAccess.make_dir_recursive_absolute(ppm_path.get_base_dir())
+		var ppm_result := _save_ppm(image, ppm_path)
+		if ppm_result != OK:
+			failures.append("Failed to save render baseline PPM %s: %d" % [ppm_path, int(ppm_result)])
+		else:
+			print("IMM Godot %s render baseline PPM: %s" % [selected_renderer_name, ppm_path])
 
 func _finish_visual_smoke(
 	failures: Array[String],
@@ -524,6 +569,8 @@ func _visual_smoke_composition_mode() -> String:
 	var mode: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE", COMPOSITION_MODE_FULL_DEPTH)
 	if mode == COMPOSITION_MODE_ORDERED_OVERLAY:
 		return COMPOSITION_MODE_ORDERED_OVERLAY
+	if mode == COMPOSITION_MODE_RENDER_ONLY:
+		return COMPOSITION_MODE_RENDER_ONLY
 	return COMPOSITION_MODE_FULL_DEPTH
 
 func _select_visual_smoke_spawn_area() -> void:
@@ -748,7 +795,7 @@ func _analyze_ordered_overlay_imm_pixels(image: Image, background: Color) -> Dic
 
 func _append_imm_visibility_failures(diagnostics: Dictionary, failures: Array[String], label: String) -> void:
 	var composition_mode: String = _visual_smoke_composition_mode()
-	if composition_mode != COMPOSITION_MODE_ORDERED_OVERLAY and composition_mode != COMPOSITION_MODE_FULL_DEPTH:
+	if composition_mode != COMPOSITION_MODE_ORDERED_OVERLAY and composition_mode != COMPOSITION_MODE_FULL_DEPTH and composition_mode != COMPOSITION_MODE_RENDER_ONLY:
 		return
 	if int(diagnostics.get("imm_like_pixels", 0)) < MIN_ORDERED_OVERLAY_IMM_PIXELS:
 		failures.append("scene composition %s %s IMM visibility failed: %s" % [label, composition_mode, str(diagnostics)])

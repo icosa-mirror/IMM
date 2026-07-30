@@ -16,6 +16,8 @@ RENDER_FAILURE_MARKERS = [
     "[IMM_EDITOR_SMOKE] failed:",
     "[IMM_UNITY_SMOKE] invalid screen size",
     "[IMM_UNITY_SMOKE] graphics api probe failed",
+    "[IMM_DIAG] Failed to load",
+    "Failed to load from StreamingAssets",
 ]
 
 CAPTURE_METRICS_RE = re.compile(r"\[IMM_UNITY_SMOKE\] capture=.*?\bnonZero=(?P<non_zero>\d+)\b.*?\bcolorBuckets=(?P<color_buckets>\d+)\b")

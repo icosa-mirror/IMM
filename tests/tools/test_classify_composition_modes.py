@@ -76,21 +76,21 @@ def main() -> int:
             ]
         )
         returncode, status = run_unity_classifier(temp, "full_depth", full_depth_log)
-        assert returncode == 0
+        assert returncode == 1
         assert status["composition_mode"] == "full_depth"
         assert status["composition_contract"] == "depth_composition"
-        assert status["compositing"] == "expected_failed"
-        assert status["depth_composition"] == "expected_failed"
+        assert status["compositing"] == "failed"
+        assert status["depth_composition"] == "failed"
         assert status["ordered_overlay"] == "not_tested"
-        assert status["depth_interleaving"] == "expected_failed"
+        assert status["depth_interleaving"] == "failed"
 
         full_depth_missing_probe_log = "[IMM_UNITY_SMOKE] capture=C:/tmp/full_depth_missing_probe.png width=1280 height=720"
         returncode, status = run_unity_classifier(temp, "full_depth", full_depth_missing_probe_log)
-        assert returncode == 0
+        assert returncode == 1
         assert status["composition_mode"] == "full_depth"
-        assert status["compositing"] == "expected_failed"
-        assert status["depth_composition"] == "expected_failed"
-        assert status["depth_interleaving"] == "expected_failed"
+        assert status["compositing"] == "failed"
+        assert status["depth_composition"] == "failed"
+        assert status["depth_interleaving"] == "failed"
         assert "scene composition full depth probe missing failed" in status["failures"]
 
         full_depth_black_capture_log = "\n".join(
@@ -103,7 +103,7 @@ def main() -> int:
         assert returncode == 1
         assert status["rendering"] == "failed"
         assert status["composition_mode"] == "full_depth"
-        assert status["compositing"] == "expected_failed"
+        assert status["compositing"] == "failed"
         assert "rendering failure marker: capture has no non-zero pixels" in status["failures"]
         assert "rendering failure marker: capture has only 1 color bucket(s)" in status["failures"]
 
@@ -167,6 +167,18 @@ def main() -> int:
         assert status["depth_composition"] == "not_claimed"
         assert status["depth_interleaving"] == "not_claimed"
 
+        load_failure_log = "\n".join(
+            [
+                "[IMM_UNITY_SMOKE] capture=C:/tmp/no_imm.png width=1280 height=720 pixels=921600 nonZero=921600 colorBuckets=8 hash=1",
+                "[IMM_DIAG] Failed to load from StreamingAssets: Cannot connect to destination host",
+                "[IMM_UNITY_SMOKE] scene composition overlay probe passed",
+            ]
+        )
+        returncode, status = run_unity_classifier(temp, "ordered_overlay", load_failure_log)
+        assert returncode == 1
+        assert status["rendering"] == "failed"
+        assert any("[IMM_DIAG] Failed to load" in failure for failure in status["failures"])
+
         returncode, status = run_unity_classifier(
             temp,
             "render_only",
@@ -188,11 +200,11 @@ def main() -> int:
             ]
         )
         returncode, status = run_godot_classifier(temp, "full_depth", godot_missing_probe_log)
-        assert returncode == 0
+        assert returncode == 1
         assert status["composition_mode"] == "full_depth"
-        assert status["compositing"] == "expected_failed"
-        assert status["depth_composition"] == "expected_failed"
-        assert status["depth_interleaving"] == "expected_failed"
+        assert status["compositing"] == "failed"
+        assert status["depth_composition"] == "failed"
+        assert status["depth_interleaving"] == "failed"
         assert "scene composition full depth probe missing failed" in status["failures"]
 
         godot_full_depth_pass_log = "\n".join(

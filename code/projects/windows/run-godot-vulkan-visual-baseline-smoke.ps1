@@ -8,9 +8,11 @@ param(
 
     [string]$CapturePath = "",
 
+    [string]$RenderCapturePath = "",
+
     [string]$LogDir = "",
 
-    [ValidateSet("full_depth", "ordered_overlay")]
+    [ValidateSet("render_only", "full_depth", "ordered_overlay")]
     [string]$CompositionMode = "full_depth",
 
     [int]$PlayerFrame = 60,
@@ -62,8 +64,12 @@ $LogDir = (New-Item -ItemType Directory -Force $LogDir).FullName
 if (-not $CapturePath) {
     $CapturePath = Join-Path $LogDir "godot-vulkan-visual.ppm"
 }
+if (-not $RenderCapturePath) {
+    $RenderCapturePath = Join-Path $LogDir "godot-vulkan-render.ppm"
+}
 $ReferencePath = [System.IO.Path]::GetFullPath($ReferencePath)
 $CapturePath = [System.IO.Path]::GetFullPath($CapturePath)
+$RenderCapturePath = [System.IO.Path]::GetFullPath($RenderCapturePath)
 
 if (-not $SkipBuild) {
     & (Join-Path $scriptDir "build-godot-extension.ps1") -Configuration $Configuration
@@ -107,6 +113,7 @@ if ($editorExtensionDir -ne $extensionDir) {
 }
 
 Remove-Item -LiteralPath $CapturePath -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $RenderCapturePath -Force -ErrorAction SilentlyContinue
 
 $godot = Resolve-GodotExe $GodotExe
 $outputPath = Join-Path $LogDir "godot-visual-baseline-output.log"
@@ -116,6 +123,7 @@ $previousEnv = @{
     IMM_GODOT_VISUAL_SMOKE = $env:IMM_GODOT_VISUAL_SMOKE
     IMM_GODOT_VISUAL_RENDERER_API = $env:IMM_GODOT_VISUAL_RENDERER_API
     IMM_GODOT_VISUAL_SMOKE_PPM = $env:IMM_GODOT_VISUAL_SMOKE_PPM
+    IMM_GODOT_VISUAL_SMOKE_RENDER_PPM = $env:IMM_GODOT_VISUAL_SMOKE_RENDER_PPM
     IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME
     IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA
     IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE
@@ -131,6 +139,7 @@ try {
     $env:IMM_GODOT_VISUAL_SMOKE = "1"
     $env:IMM_GODOT_VISUAL_RENDERER_API = "5"
     $env:IMM_GODOT_VISUAL_SMOKE_PPM = $CapturePath
+    $env:IMM_GODOT_VISUAL_SMOKE_RENDER_PPM = $RenderCapturePath
     $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = "$PlayerFrame"
     $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = "1"
     $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $CompositionMode
@@ -198,15 +207,23 @@ if ($CompositionMode -eq "full_depth" -and $compositionFailures.Count -eq 0 -and
 if ($CompositionMode -eq "ordered_overlay" -and $compositionFailures.Count -eq 0 -and -not $hasOrderedOverlayDiagnostics) {
     $compositionFailures += "scene composition ordered overlay probe missing failed"
 }
-$compositionContract = if ($CompositionMode -eq "ordered_overlay") { "ordered_overlay" } else { "depth_composition" }
-$failureStatus = if ($CompositionMode -eq "ordered_overlay") { "failed" } else { "expected_failed" }
-$knownCompositionOnly = $CompositionMode -eq "full_depth" `
-    -and $exitCode -ne 0 `
-    -and $compositionFailures.Count -gt 0 `
-    -and (Test-Path -LiteralPath $CapturePath -PathType Leaf) `
-    -and $outputText -notmatch "CrashHandlerException|Fatal signal|visual smoke PNG was too flat|visual smoke PPM had only|visual smoke PNG had only|content bounds were too small|orientation check failed|ImmViewer did not load|ImmViewer sequence was not ready|render diagnostics did not|ImmGodot_RenderCamera returned"
-$renderingStatus = if ($knownCompositionOnly -or $exitCode -eq 0) { "success" } else { "unknown" }
-$compositingStatus = if ($compositionFailures.Count -gt 0) { $failureStatus } elseif ($renderingStatus -eq "success") { "success" } else { "unknown" }
+$compositionContract = if ($CompositionMode -eq "ordered_overlay") {
+    "ordered_overlay"
+} elseif ($CompositionMode -eq "full_depth") {
+    "depth_composition"
+} else {
+    "render_only"
+}
+$renderingStatus = if ($exitCode -eq 0) { "success" } else { "failed" }
+$compositingStatus = if ($CompositionMode -eq "render_only") {
+    "not_tested"
+} elseif ($compositionFailures.Count -gt 0) {
+    "failed"
+} elseif ($renderingStatus -eq "success") {
+    "success"
+} else {
+    "unknown"
+}
 
 $compositionStatus = [ordered]@{
     schema = "imm-composition-status-v1"
@@ -215,40 +232,35 @@ $compositionStatus = [ordered]@{
     composition_contract = $compositionContract
     compositing = $compositingStatus
     ordered_overlay = if ($CompositionMode -eq "ordered_overlay") { $compositingStatus } else { "not_tested" }
-    depth_composition = if ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "expected_failed" } else { "success" }
-    depth_interleaving = if ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "expected_failed" } else { "success" }
-    expected = $CompositionMode -eq "full_depth" -and $compositionFailures.Count -gt 0
+    depth_composition = if ($CompositionMode -eq "render_only") { "not_tested" } elseif ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "failed" } else { "success" }
+    depth_interleaving = if ($CompositionMode -eq "render_only") { "not_claimed" } elseif ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "failed" } else { "success" }
+    expected = $false
     failure_class = if ($compositionFailures.Count -gt 0) { "compositing" } else { "" }
     failures = $compositionFailures
 }
 $compositionStatus | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 -LiteralPath $compositionStatusPath
 
-if ($exitCode -ne 0 -and -not $knownCompositionOnly) {
+if ($exitCode -ne 0) {
     throw "Godot Vulkan visual baseline smoke failed with exit code $exitCode"
 }
-if (-not $knownCompositionOnly -and -not $outputText.Contains("IMM Godot Vulkan visual smoke passed")) {
+if (-not $outputText.Contains("IMM Godot Vulkan visual smoke passed")) {
     throw "Godot Vulkan visual baseline smoke did not print the success marker."
 }
 if (-not (Test-Path -LiteralPath $CapturePath -PathType Leaf)) {
     throw "Godot Vulkan visual baseline smoke did not write capture: $CapturePath"
+}
+if (-not (Test-Path -LiteralPath $RenderCapturePath -PathType Leaf)) {
+    throw "Godot Vulkan visual baseline smoke did not write render baseline capture: $RenderCapturePath"
 }
 
 if ($CompositionMode -eq "ordered_overlay" -or $CompositionMode -eq "full_depth") {
     Write-Output "Skipping DirectX baseline PPM comparison for $CompositionMode composition mode; composition validation uses scene probes and render metrics."
 }
 else {
-    try {
-        & (Join-Path $repoRoot "code\appImmViewer\scripts\compare-ppm-captures.ps1") `
-            -ReferencePath $ReferencePath `
-            -CandidatePath $CapturePath `
-            -MaxMeanAbsoluteError $MaxMeanAbsoluteError `
-            -MaxRootMeanSquareError $MaxRootMeanSquareError `
-            -MinVisibleOverlap $MinVisibleOverlap
-    }
-    catch {
-        if (-not $knownCompositionOnly) {
-            throw
-        }
-        Write-Warning "Godot Vulkan capture differs from the DirectX baseline because the known scene compositing probe failed: $($_.Exception.Message)"
-    }
+    & (Join-Path $repoRoot "code\appImmViewer\scripts\compare-ppm-captures.ps1") `
+        -ReferencePath $ReferencePath `
+        -CandidatePath $CapturePath `
+        -MaxMeanAbsoluteError $MaxMeanAbsoluteError `
+        -MaxRootMeanSquareError $MaxRootMeanSquareError `
+        -MinVisibleOverlap $MinVisibleOverlap
 }

@@ -48,6 +48,25 @@ def compress_contrast(pixels: list[tuple[int, int, int]]) -> list[tuple[int, int
     return [(96 + r // 8, 96 + g // 8, 96 + b // 8) for r, g, b in pixels]
 
 
+def scale_2x(width: int, height: int, pixels: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+    scaled: list[tuple[int, int, int]] = []
+    for y in range(height):
+        row = pixels[y * width : (y + 1) * width]
+        doubled_row = [pixel for pixel in row for _ in range(2)]
+        scaled.extend(doubled_row)
+        scaled.extend(doubled_row)
+    return scaled
+
+
+def add_horizontal_bars(width: int, height: int, pixels: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+    barred: list[tuple[int, int, int]] = []
+    black_bar = [(0, 0, 0)] * (width // 2)
+    for y in range(height):
+        row = pixels[y * width : (y + 1) * width]
+        barred.extend(black_bar + row + black_bar)
+    return barred
+
+
 def main() -> int:
     width = 8
     height = 8
@@ -57,6 +76,8 @@ def main() -> int:
         flipped_path = temp / "flipped.ppm"
         dark_path = temp / "dark.ppm"
         compressed_path = temp / "compressed.ppm"
+        scaled_path = temp / "scaled.ppm"
+        barred_path = temp / "barred.ppm"
         png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
         contract_path = temp / "contract.json"
@@ -66,6 +87,8 @@ def main() -> int:
         write_ppm(flipped_path, width, height, flip_vertical(width, height, pixels))
         write_ppm(dark_path, width, height, darken(pixels))
         write_ppm(compressed_path, width, height, compress_contrast(pixels))
+        write_ppm(scaled_path, width * 2, height * 2, scale_2x(width, height, pixels))
+        write_ppm(barred_path, width * 2, height, add_horizontal_bars(width, height, pixels))
         write_render_report.write_png(
             png_path,
             width,
@@ -137,8 +160,26 @@ def main() -> int:
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), reference) == []
         assert compare_render_metrics.validate_contract(json.loads(contract_path.read_text(encoding="utf-8")), png) == []
         same_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, png_path, 4, 4)
+        scaled_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, scaled_path, 4, 4)
         flipped_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, flipped_path, 4, 4)
+        barred_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, barred_path, 4, 4)
+        cropped_barred_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, barred_path, 4, 4, 1.0)
         assert compare_render_metrics.validate_spatial_contract(contract, same_spatial) == []
+        assert compare_render_metrics.validate_spatial_contract(contract, scaled_spatial) == []
+        assert compare_render_metrics.validate_spatial_contract(contract, cropped_barred_spatial) == []
+        assert compare_render_metrics.validate_spatial_contract(contract, barred_spatial)
+        scaled = compare_render_metrics.collect_metrics(scaled_path)
+        assert any("width differs" in error for error in compare_render_metrics.compare_metrics(reference, scaled))
+        assert not any(
+            "width differs" in error or "height differs" in error
+            for error in compare_render_metrics.compare_metrics(reference, scaled, allow_dimension_mismatch=True)
+        )
+        minimum_dimensions_contract = {"validation": {"minimum_dimensions": {"width": width, "height": height}}}
+        assert compare_render_metrics.validate_contract(minimum_dimensions_contract, reference) == []
+        assert compare_render_metrics.validate_contract(
+            {"validation": {"minimum_dimensions": {"width": width * 2, "height": height}}},
+            reference,
+        )
         assert any(
             "spatial luma grid" in error
             for error in compare_render_metrics.validate_spatial_contract(contract, flipped_spatial)

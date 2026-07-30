@@ -308,6 +308,7 @@ jobs:
             -screen-fullscreen 0 \
             -force-metal \
             -immSmokeCapturePath "$artifact_dir/unity-macos-metal-full-depth.png" \
+            -immSmokeRenderCapturePath "$artifact_dir/unity-macos-metal-render.png" \
             -immSmokeFrames 120 \
             -immSmokeQuit 1 \
             -immSmokeCompositionProbe 1 \
@@ -345,6 +346,11 @@ jobs:
       - name: Record Unity macOS Metal render metrics
         run: |
           python3 tests/tools/compare_render_metrics.py \
+            artifacts/unity-macos-metal-composition/unity-macos-metal-render.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/unity-macos-metal-sample1.json \
+            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-render-metrics.json
+          python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
             --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json
           python3 tests/tools/compare_render_metrics.py \
@@ -354,6 +360,11 @@ jobs:
       - name: Write Unity macOS Metal render reports
         if: always()
         run: |
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-render-metrics.json \
+            --candidate-capture artifacts/unity-macos-metal-composition/unity-macos-metal-render.png \
+            --output-dir artifacts/unity-macos-metal-composition/captures/render \
+            --markdown-output artifacts/unity-macos-metal-composition/render-report.md
           python3 tests/tools/write_render_report.py \
             --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json \
             --candidate-capture artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
@@ -373,9 +384,14 @@ jobs:
             --log artifacts/unity-macos-metal-composition/unity-full-depth-player.log \
             --label unity-macos-metal-full-depth \
             --require "[IMM_UNITY_SMOKE] graphics api expected=Metal actual=Metal" \
+            --require "[IMM_UNITY_SMOKE] render baseline capture=" \
             --require "[IMM_UNITY_SMOKE] capture=" \
+            --require "Loaded in CPU" \
+            --require "Loaded in GPU" \
+            --forbid "[IMM_DIAG] Failed to load" \
             --forbid "[IMM_UNITY_SMOKE] scene composition front occluder failed" \
             --forbid "[IMM_UNITY_SMOKE] scene composition rear visible probe failed" \
+            --forbid "[IMM_UNITY_SMOKE] scene composition rear occlusion probe failed" \
             --output artifacts/unity-macos-metal-composition/full-depth-log-contract.json
           python3 tests/tools/verify_log_markers.py \
             --log artifacts/unity-macos-metal-composition/unity-ordered-overlay-player.log \
@@ -647,18 +663,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: |
-          $status = "${{ job.status }}"
-          $failureClass = "visual"
-          $compositionStatusPath = "artifacts\unity-windows-directx-composition\composition-status.json"
-          if (Test-Path $compositionStatusPath) {
-            $compositionStatus = Get-Content -Raw $compositionStatusPath | ConvertFrom-Json
-            if ($status -eq "success" -and $compositionStatus.rendering -eq "success" -and $compositionStatus.compositing -eq "expected_failed") {
-              $status = "expected_failed"
-              $failureClass = "compositing"
-            }
-          }
-          python tests\tools\write_ci_manifest.py --status $status --failure-class $failureClass --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name windows --mode non-vr --renderer directx --include artifacts\unity-windows-directx-composition
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name windows --mode non-vr --renderer directx --include artifacts\unity-windows-directx-composition
 
       - name: Collect artifact summary
         if: always()
@@ -836,7 +841,38 @@ jobs:
             throw "Unity Vulkan smoke player was not built: $player"
           }
           $capturePath = Join-Path $artifactDir "unity-windows-vulkan-ordered-overlay.png"
+          $renderCapturePath = Join-Path $artifactDir "unity-windows-vulkan-render.png"
+          $renderPlayerLog = Join-Path $artifactDir "unity-render-player.log"
           $playerLog = Join-Path $artifactDir "unity-player.log"
+          $renderPlayerArgs = @(
+            "-logFile", $renderPlayerLog,
+            "-screen-width", "1280",
+            "-screen-height", "720",
+            "-screen-fullscreen", "0",
+            "-force-vulkan",
+            "-immSmokeCapturePath", $renderCapturePath,
+            "-immSmokeFrames", "360",
+            "-immSmokeQuit", "1",
+            "-immSmokeExpectedGraphicsApi", "Vulkan",
+            "-immSmokeCompositionProbe", "0"
+          )
+          $renderProcess = Start-Process -FilePath $player -ArgumentList $renderPlayerArgs -PassThru
+          if (-not $renderProcess.WaitForExit(240000)) {
+            Stop-Process -Id $renderProcess.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $renderPlayerLog) {
+              Get-Content $renderPlayerLog
+            }
+            throw "Unity Vulkan render-only smoke timed out"
+          }
+          if (Test-Path $renderPlayerLog) {
+            Get-Content $renderPlayerLog
+          }
+          if (-not (Test-Path $renderCapturePath)) {
+            throw "Unity Vulkan render-only capture was not written: $renderCapturePath"
+          }
+          if ($renderProcess.ExitCode -ne 0) {
+            throw "Unity Vulkan render-only smoke failed with exit code $($renderProcess.ExitCode)"
+          }
           $env:IMM_UNITY_SMOKE_OVERLAY_FIXTURE = "1"
           $env:IMM_UNITY_SKIP_DOCUMENT_BACKGROUND_COLOR = "1"
           $env:IMM_UNITY_EXPECT_GRAPHICS_API = "Vulkan"
@@ -891,6 +927,12 @@ jobs:
         shell: pwsh
         run: |
           python tests\tools\compare_render_metrics.py `
+            artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render.png `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\windows-directx-sample1.json `
+            --json-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render-metrics.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png `
             --json-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay-metrics.json
           python tests\tools\write_render_report.py `
@@ -899,6 +941,11 @@ jobs:
             --status-json artifacts\unity-windows-vulkan-ordered-overlay\composition-status.json `
             --output-dir artifacts\unity-windows-vulkan-ordered-overlay\captures `
             --markdown-output artifacts\unity-windows-vulkan-ordered-overlay\render-report.md
+          python tests\tools\write_render_report.py `
+            --metrics-json artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render-metrics.json `
+            --candidate-capture artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render.png `
+            --output-dir artifacts\unity-windows-vulkan-ordered-overlay\captures\render `
+            --markdown-output artifacts\unity-windows-vulkan-ordered-overlay\render-baseline-report.md
 
       - name: Stage Unity Vulkan ordered overlay capture evidence
         if: always()
@@ -920,6 +967,19 @@ jobs:
           --require "[IMM_UNITY_SMOKE] capture="
           --require "scene composition overlay probe passed"
           --output artifacts\unity-windows-vulkan-ordered-overlay\unity-vulkan-overlay-log-contract.json
+
+      - name: Verify Unity Vulkan ordered overlay render-only log contract
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-vulkan-ordered-overlay\unity-render-player.log
+          --label unity-windows-vulkan-ordered-overlay-render-only
+          --require "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan"
+          --require "[IMM_UNITY_SMOKE] capture="
+          --forbid "[IMM_DIAG] Failed to load"
+          --forbid "Failed to load from StreamingAssets"
+          --output artifacts\unity-windows-vulkan-ordered-overlay\unity-vulkan-overlay-render-log-contract.json
 
       - name: Verify Unity Vulkan ordered overlay native render contract
         if: always()
@@ -985,7 +1045,38 @@ jobs:
             throw "Unity Vulkan smoke player was not built: $player"
           }
           $capturePath = Join-Path $artifactDir "unity-windows-vulkan-full-depth.png"
+          $renderCapturePath = Join-Path $artifactDir "unity-windows-vulkan-render.png"
+          $renderPlayerLog = Join-Path $artifactDir "unity-render-player.log"
           $playerLog = Join-Path $artifactDir "unity-player.log"
+          $renderPlayerArgs = @(
+            "-logFile", $renderPlayerLog,
+            "-screen-width", "1280",
+            "-screen-height", "720",
+            "-screen-fullscreen", "0",
+            "-force-vulkan",
+            "-immSmokeCapturePath", $renderCapturePath,
+            "-immSmokeFrames", "360",
+            "-immSmokeQuit", "1",
+            "-immSmokeExpectedGraphicsApi", "Vulkan",
+            "-immSmokeCompositionProbe", "0"
+          )
+          $renderProcess = Start-Process -FilePath $player -ArgumentList $renderPlayerArgs -PassThru
+          if (-not $renderProcess.WaitForExit(240000)) {
+            Stop-Process -Id $renderProcess.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $renderPlayerLog) {
+              Get-Content $renderPlayerLog
+            }
+            throw "Unity Vulkan render-only smoke timed out"
+          }
+          if (Test-Path $renderPlayerLog) {
+            Get-Content $renderPlayerLog
+          }
+          if (-not (Test-Path $renderCapturePath)) {
+            throw "Unity Vulkan render-only capture was not written: $renderCapturePath"
+          }
+          if ($renderProcess.ExitCode -ne 0) {
+            throw "Unity Vulkan render-only smoke failed with exit code $($renderProcess.ExitCode)"
+          }
           $env:IMM_UNITY_SKIP_DOCUMENT_BACKGROUND_COLOR = "1"
           $env:IMM_UNITY_EXPECT_GRAPHICS_API = "Vulkan"
           $env:IMM_UNITY_VK_USE_HOST_DEPTH = "1"
@@ -1041,6 +1132,12 @@ jobs:
         shell: pwsh
         run: |
           python tests\tools\compare_render_metrics.py `
+            artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render.png `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\windows-directx-sample1.json `
+            --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render-metrics.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth.png `
             --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-metrics.json
           python tests\tools\write_render_report.py `
@@ -1049,6 +1146,11 @@ jobs:
             --status-json artifacts\unity-windows-vulkan-full-depth\composition-status.json `
             --output-dir artifacts\unity-windows-vulkan-full-depth\captures `
             --markdown-output artifacts\unity-windows-vulkan-full-depth\render-report.md
+          python tests\tools\write_render_report.py `
+            --metrics-json artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render-metrics.json `
+            --candidate-capture artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render.png `
+            --output-dir artifacts\unity-windows-vulkan-full-depth\captures\render `
+            --markdown-output artifacts\unity-windows-vulkan-full-depth\render-baseline-report.md
 
       - name: Stage Unity Vulkan full depth capture evidence
         if: always()
@@ -1072,6 +1174,19 @@ jobs:
           --require "source=display"
           --require "scene composition probe passed"
           --output artifacts\unity-windows-vulkan-full-depth\unity-vulkan-full-depth-log-contract.json
+
+      - name: Verify Unity Vulkan full depth render-only log contract
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\unity-windows-vulkan-full-depth\unity-render-player.log
+          --label unity-windows-vulkan-full-depth-render-only
+          --require "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan"
+          --require "[IMM_UNITY_SMOKE] capture="
+          --forbid "[IMM_DIAG] Failed to load"
+          --forbid "Failed to load from StreamingAssets"
+          --output artifacts\unity-windows-vulkan-full-depth\unity-vulkan-full-depth-render-log-contract.json
 
       - name: Verify Unity Vulkan full depth native render contract
         if: always()
@@ -1234,7 +1349,9 @@ jobs:
           --required-marker "Loaded in GPU"
           --required-marker "Unity Vulkan render:"
           --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
+          --required-marker "[IMM_UNITY_SMOKE] render baseline capture="
           --required-marker "[IMM_UNITY_SMOKE] capture="
+          --required-capture-name unity-android-vulkan-render.png
           --required-capture-name unity-android-vulkan.png
           --client-label "IMM Unity Android Vulkan"
 
@@ -1242,25 +1359,34 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($capture) {
             python tests/tools/compare_render_metrics.py $capture.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } else {
-            '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+            '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan-render.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
+            throw "Missing Firebase Test Lab unity-android-vulkan-render.png"
           }
 
       - name: Write Unity Android Vulkan screenshot report
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
-          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/unity-android-vulkan/missing-unity-android-vulkan.png" }
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/unity-android-vulkan/missing-unity-android-vulkan-render.png" }
           python tests/tools/write_render_report.py `
             --metrics-json artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json `
             --candidate-capture $captureArg `
             --output-dir artifacts/unity-android-vulkan/captures `
             --markdown-output artifacts/unity-android-vulkan/render-report.md
+          $compositionCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($compositionCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/composition | Out-Null
+            Copy-Item -LiteralPath $compositionCapture.FullName -Destination artifacts/unity-android-vulkan/captures/composition/unity-android-vulkan-composition.png -Force
+          }
 
       - name: Write CI manifest
         if: always()

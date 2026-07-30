@@ -126,6 +126,7 @@ jobs:
       - device
       - engine
       - gpu
+      - web
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -157,13 +158,36 @@ jobs:
           name: GPUMatrixEvidence
           path: artifacts/validation-evidence/input/GPUMatrixEvidence
 
+      - name: Download WebAssembly player evidence
+        if: needs.web.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: WebPlayerValidationEvidence
+          path: artifacts/validation-evidence/input/WebPlayerValidationEvidence
+
       - name: Write validation visual evidence report
-        run: >
-          python tests/tools/write_visual_evidence_report.py
-          --input-root artifacts/validation-evidence/input
-          --output-dir artifacts/validation-evidence/view
-          --matrix-status tests/matrix_status.json
-          --markdown-output artifacts/validation-evidence/view/VALIDATION_REPORT.md
+        env:
+          VALIDATION_EVIDENCE_SCOPE: >-
+            ${{
+              (github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all') ||
+              (
+                (
+                  github.event_name == 'schedule' ||
+                  (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'release')) ||
+                  contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+                  contains(github.event.head_commit.message, '[RELEASE]')
+                ) &&
+                'hosted'
+              ) ||
+              'none'
+            }}
+        run: |
+          python tests/tools/write_visual_evidence_report.py \
+            --input-root artifacts/validation-evidence/input \
+            --output-dir artifacts/validation-evidence/view \
+            --matrix-status tests/matrix_status.json \
+            --required-evidence-scope "$VALIDATION_EVIDENCE_SCOPE" \
+            --markdown-output artifacts/validation-evidence/view/VALIDATION_REPORT.md
 
       - name: Verify full depth validation evidence
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && needs.engine.result != 'skipped' && needs.gpu.result != 'skipped'
@@ -172,6 +196,7 @@ jobs:
           --report artifacts/validation-evidence/view/VALIDATION_REPORT.md
 
       - name: Upload validation evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: CIValidationEvidence

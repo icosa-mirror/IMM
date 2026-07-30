@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+VISUAL_RENDERERS = {"directx", "gles", "metal", "opengl", "vulkan", "webgl"}
 REPORT_SUFFIX = "-render-report.md"
 AGGREGATE_REPORT_NAMES = {
     "VALIDATION_REPORT.md",
@@ -232,6 +233,11 @@ def observed_matrix_results(input_root: Path, report_keys: set[str]) -> dict[str
             result = ""
             if isinstance(classification, dict):
                 result = str(classification.get("result") or "")
+                if str(classification.get("failure_class") or "") == "build":
+                    continue
+            renderer = str(matrix.get("renderer") or "")
+            if renderer in VISUAL_RENDERERS and not find_strict_metrics(manifest_path.parent):
+                result = "failed"
             observed.setdefault(key, set()).add(result or "present")
     return observed
 
@@ -258,9 +264,9 @@ def coverage_status_for(row: dict, results: set[str]) -> str:
         return "failed"
     if "expected_failed" in results:
         return "expected failure"
-    if "passed" in results or "present" in results:
+    if "passed" in results:
         return "passed"
-    return "present"
+    return "failed"
 
 
 def matrix_coverage_rows(matrix_status: Path | None, input_root: Path, reports: list[tuple[str, Path]]) -> list[dict]:
@@ -445,9 +451,38 @@ def find_manifest(root: Path, key: str) -> dict:
 
 
 def find_metrics(root: Path) -> dict:
-    for path in sorted(root.glob("*metrics*.json")):
+    fallback: dict = {}
+    for path in sorted(root.rglob("*metrics*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and "candidate" in data:
+            if not fallback:
+                fallback = data
+            if strict_metrics_evidence(data):
+                return data
+    return fallback
+
+
+def strict_metrics_evidence(metrics: dict) -> bool:
+    spatial = metrics.get("spatial_luma_grid")
+    return (
+        metrics.get("passed") is True
+        and isinstance(metrics.get("candidate"), dict)
+        and isinstance(metrics.get("reference"), dict)
+        and isinstance(metrics.get("contract"), dict)
+        and isinstance(spatial, dict)
+        and not spatial.get("error")
+        and isinstance(spatial.get("mean_abs_delta"), (int, float))
+        and isinstance(spatial.get("correlation"), (int, float))
+    )
+
+
+def find_strict_metrics(root: Path) -> dict:
+    for path in sorted(root.rglob("*metrics*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict) and strict_metrics_evidence(data):
             return data
     return {}
 
@@ -456,17 +491,19 @@ def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, 
     errors = metrics.get("errors") or []
     if errors or metrics.get("passed") is False:
         return ("failed", "rendering")
+    if not strict_metrics_evidence(metrics):
+        return ("failed", "visual-contract")
     classification = manifest.get("classification") or {}
     result = classification.get("result")
     failure_class = classification.get("failure_class", "")
     if result in {"failed", "failure", "cancelled"}:
         return ("failed", failure_class)
     if result == "expected_failed":
-        return ("expected failure", failure_class)
+        return ("failed", failure_class or "compositing")
     if result == "passed":
         return ("passed", failure_class)
     if status.get("compositing") == "expected_failed":
-        return ("expected failure", "compositing")
+        return ("failed", "compositing")
     if status.get("compositing") == "failed":
         return ("failed", "compositing")
     if status.get("rendering") == "success" or metrics.get("passed") is True:
@@ -519,6 +556,12 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--markdown-output", type=Path, required=True)
     parser.add_argument("--matrix-status", type=Path)
+    parser.add_argument(
+        "--required-evidence-scope",
+        choices=["none", "hosted", "all"],
+        default="none",
+        help="Fail when supported rows in the selected scope have no evidence.",
+    )
     args = parser.parse_args()
 
     input_root = args.input_root.resolve()
@@ -605,6 +648,21 @@ def main() -> int:
 
     report_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8", newline="\n")
     print(f"Visual evidence report written: {report_path}")
+    invalid_supported = []
+    for row in coverage:
+        if row["status"] != "supported":
+            continue
+        evidence_invalid = row["coverage_status"] in {"failed", "expected failure"}
+        missing_required = row["coverage_status"] == "missing evidence" and (
+            args.required_evidence_scope == "all"
+            or (args.required_evidence_scope == "hosted" and bool(row["hosted_gate"]))
+        )
+        if evidence_invalid or missing_required:
+            invalid_supported.append(row)
+    if invalid_supported:
+        for row in invalid_supported:
+            print(f"Supported validation evidence is not valid: {row['key']} ({row['coverage_status']})")
+        return 1
     return 0
 
 

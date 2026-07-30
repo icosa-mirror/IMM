@@ -1,0 +1,25 @@
+{
+  "baseline": "godot-android-vulkan-sample1",
+  "capture_source": "VisualSmokeScene render baseline capture",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "allow_reference_dimension_mismatch": true,
+    "format": "png",
+    "expected_spatial_luma_grid": {
+      "center_crop_aspect_ratio": 1.7777777778,
+      "height": 18,
+      "max_mean_abs_delta": 0.12,
+      "min_correlation": 0.75,
+      "width": 32
+    },
+    "expected_visible_luma_mean": { "max": 95, "min": 25 },
+    "minimum_luma_span": 16,
+    "minimum_near_visible_pixels": 10000,
+    "minimum_non_black_pixels": 20000,
+    "minimum_dimensions": { "height": 720, "width": 1280 },
+    "requires_nonblank_capture": true,
+    "requires_orientation_metrics": true
+  }
+}

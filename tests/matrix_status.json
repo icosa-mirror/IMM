@@ -168,14 +168,25 @@
     },
     {
       "product": "unity",
+      "platform": "windows",
+      "mode": "non-vr",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": null,
+      "hardware_gate": "CI Engine Matrix / Unity Windows Vulkan",
+      "baseline": "tests/baselines/render/windows-directx-sample1.json",
+      "reason": "CI Engine Matrix requires a strict render baseline comparison and successful full-depth and ordered-overlay composition probes for Unity Vulkan."
+    },
+    {
+      "product": "unity",
       "platform": "macos",
       "mode": "non-vr",
       "renderer": "metal",
       "status": "supported",
       "hosted_gate": "CI Engine Matrix / Unity macOS Metal Composition",
       "hardware_gate": null,
-      "baseline": null,
-      "reason": "CI Engine Matrix builds a same-commit Unity Metal player on a hosted macOS runner and runs short full-depth and ordered-overlay captures that detect black output, reversed depth, and vertical inversion."
+      "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
+      "reason": "CI Engine Matrix requires a committed-reference render comparison plus successful full-depth and ordered-overlay probes from the same Unity Metal player."
     },
     {
       "product": "unity",
@@ -185,8 +196,8 @@
       "status": "supported",
       "hosted_gate": "CI Engine Matrix / Unity Android Vulkan",
       "hardware_gate": null,
-      "baseline": "tests/baselines/content/sample1.json",
-      "reason": "CI Engine Matrix builds a Vulkan-only non-XR Unity Android player with the same-commit native plugin, runs it in Firebase Test Lab, requires Unity and native Vulkan host-render markers, and pulls a non-empty rendered PNG."
+      "baseline": "tests/baselines/render/unity-android-vulkan-sample1.json",
+      "reason": "CI Engine Matrix runs the Vulkan-only Unity Android player in Firebase Test Lab and requires separate strict render-baseline and full-depth composition evidence."
     },
     {
       "product": "unity",
@@ -231,8 +242,8 @@
       "status": "supported",
       "hosted_gate": "Build / Android",
       "hardware_gate": "CI Device Matrix / Android Godot Vulkan",
-      "baseline": "tests/baselines/content/sample1.json",
-      "reason": "Hosted CI builds Android GDExtension artifacts and ci-device.yml defines a GitHub-hosted Android Godot Vulkan smoke lane."
+      "baseline": "tests/baselines/render/godot-android-vulkan-sample1.json",
+      "reason": "CI Device Matrix pulls the app-generated Godot Vulkan render and composition captures separately and validates the render capture against a committed reference contract."
     },
     {
       "product": "godot",
@@ -256,6 +267,17 @@
       "hardware_gate": "CI GPU Matrix / macOS Godot Metal",
       "baseline": "tests/baselines/render/macos-metal-sample1.json",
       "reason": "Hosted CI builds macOS Godot artifacts and CI GPU Matrix runs the visual Metal smoke on a hosted macOS runner."
+    },
+    {
+      "product": "web",
+      "platform": "browser",
+      "mode": "non-vr",
+      "renderer": "webgl",
+      "status": "supported",
+      "hosted_gate": "Web Player Build and Validation / Extended browser verification",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/render/web-three-sample1.json",
+      "reason": "Hosted CI builds the pinned Emscripten decoder, loads sample1 in the WebGL player, verifies exact decoded and GPU geometry counts, and compares a deterministic 1280x720 browser capture against the committed render contract."
     },
     {
       "product": "godot",

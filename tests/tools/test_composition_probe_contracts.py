@@ -79,7 +79,6 @@ def main() -> int:
             "--composition-mode ordered_overlay",
             "IMM_UNITY_SMOKE_OVERLAY_FIXTURE",
             "composition-status.json",
-            "expected_failed",
             "Compare Unity DirectX render metrics against committed DirectX baseline",
             "unity-windows-directx-composition.png",
             "unity-windows-vulkan-ordered-overlay.png",
@@ -167,6 +166,11 @@ def main() -> int:
         errors.append(
             "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
         )
+
+    for workflow_name in ["ci-engine.yml", "ci-gpu.yml"]:
+        workflow_text = (ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
+        if "expected_failed" in workflow_text:
+            errors.append(f"{workflow_name} must not downgrade composition failures to expected_failed")
 
     metal_renderer = (
         ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm"
