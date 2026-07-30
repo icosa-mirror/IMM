@@ -24,12 +24,8 @@ namespace ImmPlayer
 
         private void OnPreRender()
         {
-            if (RenderEventFunction != IntPtr.Zero)
-            {
-                GL.IssuePluginEvent(RenderEventFunction, RenderEventId);
-                GL.IssuePluginEvent(RenderEventFunction, QueueRenderEventId);
-                GL.IssuePluginEvent(RenderEventFunction, FinalizeRenderEventId);
-            }
+            // Vulkan rendering is queued by the source camera's OnPostRender so
+            // Unity cannot clear the presentation texture after the plugin.
         }
 
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
@@ -190,6 +186,7 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, RenderTexture> _vulkanPresentationTargets = new Dictionary<Camera, RenderTexture>();
         private readonly Dictionary<Camera, VulkanPresentationCamera> _vulkanPresentationCameras =
             new Dictionary<Camera, VulkanPresentationCamera>();
+        private int _androidVulkanPostRenderPresentationCount;
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
@@ -1261,13 +1258,37 @@ namespace ImmPlayer
                 return;
             if (!HasRenderableDocument())
                 return;
-#if UNITY_ANDROID
-            if (IsVulkanRuntime() && _vulkanPresentationTargets.ContainsKey(cam))
-                return;
-#endif
 
             if (!_cameras.TryGetValue(cam, out PerCameraInfo info))
                 return;
+#if UNITY_ANDROID
+            if (IsVulkanRuntime() &&
+                _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
+            {
+                if (presenter.RenderEventFunction == IntPtr.Zero)
+                    return;
+
+                GL.IssuePluginEvent(
+                    presenter.RenderEventFunction,
+                    presenter.RenderEventId);
+                GL.IssuePluginEvent(
+                    presenter.RenderEventFunction,
+                    presenter.QueueRenderEventId);
+                GL.IssuePluginEvent(
+                    presenter.RenderEventFunction,
+                    presenter.FinalizeRenderEventId);
+
+                if (_androidVulkanPostRenderPresentationCount < 8)
+                {
+                    ++_androidVulkanPostRenderPresentationCount;
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730] camera={info.CameraId} " +
+                        $"renderEvent={presenter.RenderEventId} queueEvent={presenter.QueueRenderEventId} " +
+                        $"finalizeEvent={presenter.FinalizeRenderEventId}");
+                }
+                return;
+            }
+#endif
 
             if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_WAIT_FOR_END_OF_FRAME"))
                 return;
