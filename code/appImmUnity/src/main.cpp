@@ -431,10 +431,12 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Android renders IMM into an explicit Unity RenderTexture by recording
-    // directly into Unity's command buffer. Attachment access and IMM's own
-    // render pass both require being outside Unity's current render pass.
-    config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
+    // Android's source camera targets an explicit presentation RenderTexture.
+    // Record inside Unity's active pass so Unity owns the framebuffer, image
+    // views, attachment layouts, and the final presentation blit.
+    config.renderPassPrecondition = prepareEvent
+        ? kUnityVulkanRenderPass_EnsureOutside
+        : kUnityVulkanRenderPass_EnsureInside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
 #endif
@@ -906,20 +908,15 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
 #endif
     const uint32_t colorSamples = static_cast<uint32_t>(target.samples > 0 ? target.samples : 1);
 #if defined(__ANDROID__) || defined(ANDROID)
-    const bool assumeHostDepth = false;
+    const bool assumeHostDepth = target.depth != nullptr;
 #else
     const bool assumeHostDepth = iEnvFlagEnabled("IMM_UNITY_VK_ASSUME_HOST_DEPTH");
 #endif
     // Display render-buffer pointers can be null while Unity's active Vulkan render pass still owns depth.
     const bool hostRenderPassHasDepth = iEnvFlagEnabled("IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH") || assumeHostDepth;
-    const bool hasDepthAttachment =
+    const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth;
 #if defined(__ANDROID__) || defined(ANDROID)
-        false;
-#else
-        target.depth != nullptr || hostRenderPassHasDepth;
-#endif
-#if defined(__ANDROID__) || defined(ANDROID)
-    const bool useHostDepth = false;
+    const bool useHostDepth = hasDepthAttachment;
 #else
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
 #endif
@@ -948,6 +945,8 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
     if (!vulkanRenderer->BeginHostRenderPassFrame(
             recordingState.commandBuffer,
+            recordingState.currentFrameNumber,
+            recordingState.safeFrameNumber,
             reinterpret_cast<void *>(static_cast<uintptr_t>(recordingState.renderPass)),
             reinterpret_cast<void *>(static_cast<uintptr_t>(recordingState.framebuffer)),
             colorFormat,
@@ -1063,18 +1062,14 @@ static void UNITY_INTERFACE_API iOnRenderEventAndData(int event_id, void *data)
         {
             const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
             UnityRenderBuffer colorTarget = params->destination ? params->destination : target.color;
-#if defined(__ANDROID__) || defined(ANDROID)
-        iRenderUnityVulkanCamera(cameraID, vulkanEventId, renderer, colorTarget);
-#else
-        if (hasRecordingState)
-        {
-            iRenderUnityVulkanCameraInHostRenderPass(cameraID, vulkanEventId, renderer, colorTarget);
-        }
-        else
-        {
-            iRenderUnityVulkanCamera(cameraID, vulkanEventId, renderer, colorTarget);
-        }
-#endif
+            if (hasRecordingState)
+            {
+                iRenderUnityVulkanCameraInHostRenderPass(cameraID, vulkanEventId, renderer, colorTarget);
+            }
+            else
+            {
+                iRenderUnityVulkanCamera(cameraID, vulkanEventId, renderer, colorTarget);
+            }
         }
         return;
     }
@@ -1143,10 +1138,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             return;
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
-#if defined(__ANDROID__) || defined(ANDROID)
-        iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
-        return;
-#else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
@@ -1154,7 +1145,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
         return;
-#endif
     }
 #endif
 

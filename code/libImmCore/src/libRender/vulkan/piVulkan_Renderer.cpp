@@ -1353,6 +1353,7 @@ struct piVulkanState
     bool externalFrameHostDepthReverseZ = false;
     bool externalFramePreservesHostColor = false;
     bool externalCommandBufferFrameActive = false;
+    bool borrowedFrameResourcesActive = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
     VkBuffer hostTransientUniformBuffer = VK_NULL_BUFFER;
@@ -3142,7 +3143,7 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     {
         return false;
     }
-    if (state->externalCommandBufferFrameActive)
+    if (state->borrowedFrameResourcesActive)
     {
         if (state->borrowedStaticPaintSetCursor >= kBorrowedStaticPaintSetsPerFrame)
         {
@@ -3360,7 +3361,7 @@ static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piRepo
     {
         return false;
     }
-    if (state->externalCommandBufferFrameActive)
+    if (state->borrowedFrameResourcesActive)
     {
         if (state->borrowedPictureSetCursor >= kBorrowedPictureSetsPerFrame)
         {
@@ -6983,6 +6984,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
     mState->externalFrameHostDepthReverseZ = false;
     mState->externalFramePreservesHostColor = false;
     mState->externalCommandBufferFrameActive = false;
+    mState->borrowedFrameResourcesActive = false;
     mState->hostRenderPassFrameActive = false;
     if (wasHostRenderPassFrame || wasExternalCommandBufferFrame)
     {
@@ -6996,11 +6998,40 @@ void piRendererVulkan::EndExternalImageFrame(void)
     }
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, bool hostDepthReverseZ, uint32_t subpass, int width, int height)
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, bool hostDepthReverseZ, uint32_t subpass, int width, int height)
 {
     EndExternalImageFrame();
     if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
     {
+        return false;
+    }
+
+    uint32_t frameSlot = kBorrowedFrameSlotCount;
+    bool continuingFrame = false;
+    for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
+    {
+        if (mState->borrowedFrameNumbers[i] == currentFrameNumber)
+        {
+            frameSlot = i;
+            continuingFrame = true;
+            break;
+        }
+    }
+    if (!continuingFrame)
+    {
+        for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
+        {
+            const uint64_t slotFrame = mState->borrowedFrameNumbers[i];
+            if (slotFrame == ~0ull || slotFrame <= safeFrameNumber)
+            {
+                frameSlot = i;
+                break;
+            }
+        }
+    }
+    if (frameSlot >= kBorrowedFrameSlotCount)
+    {
+        iError(mReporter, "Vulkan renderer has no safe Unity render-pass frame slot");
         return false;
     }
 
@@ -7032,9 +7063,19 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->externalFrameUsesHostDepth = useHostDepth;
     mState->externalFrameHostDepthReverseZ = useHostDepth && hostDepthReverseZ;
     mState->externalFramePreservesHostColor = true;
+    mState->borrowedFrameResourcesActive = true;
     mState->hostRenderPassFrameActive = true;
-    mState->hostTransientUniformOffset = 0;
-    mState->hostTransientUniformLimit = kBorrowedUniformBytesPerFrame;
+    mState->borrowedFrameSlot = frameSlot;
+    if (!continuingFrame)
+    {
+        mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
+        mState->borrowedStaticPaintSetCursor = 0;
+        mState->borrowedPictureSetCursor = 0;
+        mState->hostTransientUniformOffset =
+            static_cast<VkDeviceSize>(frameSlot) * kBorrowedUniformBytesPerFrame;
+        mState->hostTransientUniformLimit =
+            mState->hostTransientUniformOffset + kBorrowedUniformBytesPerFrame;
+    }
     SetRenderTarget(target);
 
     if (!mState->hostRenderPassFrameReported)
@@ -7327,6 +7368,7 @@ bool piRendererVulkan::BeginExternalImageCommandBufferFramePreserveColor(void *c
     mState->hostPreviousCommandBuffer = previousCommandBuffer;
     mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
     mState->externalCommandBufferFrameActive = true;
+    mState->borrowedFrameResourcesActive = true;
     mState->borrowedFrameSlot = frameSlot;
     if (!continuingFrame)
     {

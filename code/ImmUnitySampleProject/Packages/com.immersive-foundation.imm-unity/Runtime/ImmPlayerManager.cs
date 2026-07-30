@@ -16,51 +16,7 @@ namespace ImmPlayer
         internal RenderTexture PresentationSource { get; set; }
         internal Mesh PresentationMesh { get; set; }
         internal Material PresentationMaterial { get; set; }
-        private Camera _camera;
-        private CommandBuffer _renderCommandBuffer;
-        private IntPtr _renderEventFunction;
-        private int _renderEventId = -1;
         private bool _loggedPresentationBlit;
-
-        internal void ConfigureRenderEvent(IntPtr renderEventFunction, int renderEventId)
-        {
-            if (_renderCommandBuffer != null &&
-                _renderEventFunction == renderEventFunction &&
-                _renderEventId == renderEventId)
-            {
-                return;
-            }
-
-            RemoveRenderCommandBuffer();
-            _renderEventFunction = renderEventFunction;
-            _renderEventId = renderEventId;
-            if (_renderEventFunction == IntPtr.Zero)
-                return;
-
-            _camera = GetComponent<Camera>();
-            if (_camera == null)
-                return;
-
-            _renderCommandBuffer = new CommandBuffer
-            {
-                name = "Render IMM Into Vulkan Presentation Texture"
-            };
-            _renderCommandBuffer.IssuePluginEvent(_renderEventFunction, _renderEventId);
-            _camera.AddCommandBuffer(CameraEvent.BeforeImageEffects, _renderCommandBuffer);
-            Debug.Log(
-                $"[IMM_UNITY_VK_PRESENT_COMMAND_20260730] event={_renderEventId} " +
-                $"cameraEvent={CameraEvent.BeforeImageEffects}");
-        }
-
-        private void RemoveRenderCommandBuffer()
-        {
-            if (_renderCommandBuffer == null)
-                return;
-            if (_camera != null)
-                _camera.RemoveCommandBuffer(CameraEvent.BeforeImageEffects, _renderCommandBuffer);
-            _renderCommandBuffer.Release();
-            _renderCommandBuffer = null;
-        }
 
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
@@ -82,7 +38,6 @@ namespace ImmPlayer
 
         private void OnDestroy()
         {
-            RemoveRenderCommandBuffer();
             if (PresentationMaterial != null)
                 Destroy(PresentationMaterial);
             if (PresentationMesh != null)
@@ -265,10 +220,11 @@ namespace ImmPlayer
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
 #if UNITY_ANDROID
-            // Queue a fresh event from the presentation camera every frame.
-            // Persistent Vulkan plugin events in an attached camera command
-            // buffer stop replaying on some Android Unity players.
-            forceCameraCallback |= IsVulkanRuntime();
+            // The Vulkan source camera targets an explicit RenderTexture. Its
+            // attached command buffer records IMM inside Unity's live render
+            // pass so Unity owns attachment state and synchronization.
+            if (IsVulkanRuntime())
+                forceCameraCallback = false;
 #endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
@@ -752,7 +708,11 @@ namespace ImmPlayer
             if (string.Equals(value, "BeforeForwardOpaque", StringComparison.OrdinalIgnoreCase))
                 return CameraEvent.BeforeForwardOpaque;
 
+#if UNITY_ANDROID
+            return CameraEvent.AfterForwardOpaque;
+#else
             return CameraEvent.AfterSkybox;
+#endif
         }
 
         public void SetRenderCamera(Camera camera)
@@ -1001,7 +961,7 @@ namespace ImmPlayer
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
 #if UNITY_ANDROID
             if (IsVulkanRuntime() &&
-                _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
+                _vulkanPresentationCameras.ContainsKey(cam))
             {
                 int presentationEventId = info.CameraId << 8;
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
@@ -1012,7 +972,6 @@ namespace ImmPlayer
                         $"[IMM_UNITY_VK_PRESENT_EVENT_20260730] eventId={presentationEventId} " +
                         $"camera={info.CameraId} configured={configured}");
                 }
-                presenter.ConfigureRenderEvent(_renderEventFunc, presentationEventId);
             }
 #endif
 #if UNITY_ANDROID
@@ -1128,11 +1087,8 @@ namespace ImmPlayer
             {
                 bool populateCommandBuffer = true;
 #if UNITY_ANDROID
-                // Unity does not reliably replay a Vulkan command buffer that
-                // is cleared and repopulated while it remains attached to a
-                // camera. The event payload is stable for a mono camera, so
-                // record it once and update matrices/resource metadata through
-                // the native API before each replay.
+                // The payload is stable for a mono camera. Matrices and native
+                // render-buffer metadata are updated before each replay.
                 populateCommandBuffer = cam.stereoEnabled || !info.VulkanCommandBufferPopulated;
 #endif
                 if (!populateCommandBuffer)
@@ -1146,7 +1102,7 @@ namespace ImmPlayer
                 }
                 bool useCustomBlit = IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT") && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
 #if UNITY_ANDROID
-                useCustomBlit = !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
+                useCustomBlit = false;
 #endif
                 bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
