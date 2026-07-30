@@ -818,6 +818,11 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
             context.height);
         ++preparedTargetReportCount;
     }
+    gImmUnityPlugin.UnityAPI.mVulkan->AccessQueue(
+        iUnityVulkanQueueRenderCallback,
+        event_id,
+        &context,
+        true);
     return true;
 }
 

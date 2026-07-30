@@ -1271,20 +1271,13 @@ namespace ImmPlayer
                 GL.IssuePluginEvent(
                     presenter.RenderEventFunction,
                     presenter.RenderEventId);
-                GL.IssuePluginEvent(
-                    presenter.RenderEventFunction,
-                    presenter.QueueRenderEventId);
-                GL.IssuePluginEvent(
-                    presenter.RenderEventFunction,
-                    presenter.FinalizeRenderEventId);
 
                 if (_androidVulkanPostRenderPresentationCount < 8)
                 {
                     ++_androidVulkanPostRenderPresentationCount;
                     Debug.Log(
                         $"[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730] camera={info.CameraId} " +
-                        $"renderEvent={presenter.RenderEventId} queueEvent={presenter.QueueRenderEventId} " +
-                        $"finalizeEvent={presenter.FinalizeRenderEventId}");
+                        $"renderEvent={presenter.RenderEventId} queueSubmission=AccessQueue");
                 }
                 return;
             }

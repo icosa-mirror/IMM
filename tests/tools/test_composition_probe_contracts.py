@@ -101,7 +101,8 @@ def main() -> int:
             "--test-type robo",
             'required-marker "Unity Android Vulkan renderer initialized from host device"',
             'required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"',
-            'required-marker "[IMM_UNITY_VK_PRESENT_QUEUE_20260730]"',
+            'required-marker "[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730]"',
+            'required-marker "[IMM_UNITY_VK_PRESENT_BLIT_20260730]"',
             'required-marker "colorTexture=0x"',
             'required-marker "Vulkan renderer began external image frame preserving host color with host depth"',
             'required-marker "Unity Vulkan render:"',
@@ -152,6 +153,7 @@ def main() -> int:
             "config.reverseDepthBuffer = true;",
             "SetVulkanCameraTexture",
             "AccessTexture(",
+            "AccessQueue(",
             "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]",
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
