@@ -1362,6 +1362,7 @@ jobs:
           --required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"
           --required-marker "[IMM_UNITY_VK_PRESENT_QUEUE_20260730]"
           --required-marker "[IMM_UNITY_VK_PRESENT_FINALIZE_20260730]"
+          --required-marker "[IMM_UNITY_VK_PRESENT_BLIT_20260730]"
           --required-marker "colorTexture=0x"
           --required-marker "Vulkan renderer began external image frame preserving host color with host depth"
           --required-marker "Loaded in CPU"

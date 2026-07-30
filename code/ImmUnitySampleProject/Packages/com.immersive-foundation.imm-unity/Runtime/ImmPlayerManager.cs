@@ -20,6 +20,7 @@ namespace ImmPlayer
         internal int FinalizeRenderEventId { get; set; }
         internal Mesh PresentationMesh { get; set; }
         internal Material PresentationMaterial { get; set; }
+        private bool _loggedPresentationBlit;
 
         private void OnPreRender()
         {
@@ -28,6 +29,24 @@ namespace ImmPlayer
                 GL.IssuePluginEvent(RenderEventFunction, RenderEventId);
                 GL.IssuePluginEvent(RenderEventFunction, QueueRenderEventId);
                 GL.IssuePluginEvent(RenderEventFunction, FinalizeRenderEventId);
+            }
+        }
+
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        {
+            if (PresentationSource == null)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            Graphics.Blit(PresentationSource, destination);
+            if (!_loggedPresentationBlit)
+            {
+                _loggedPresentationBlit = true;
+                Debug.Log(
+                    $"[IMM_UNITY_VK_PRESENT_BLIT_20260730] source={PresentationSource.width}x{PresentationSource.height} " +
+                    $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")}");
             }
         }
 

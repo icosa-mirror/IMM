@@ -103,7 +103,7 @@ def main() -> int:
             'required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"',
             'required-marker "[IMM_UNITY_VK_PRESENT_QUEUE_20260730]"',
             'required-marker "colorTexture=0x"',
-            'required-marker "Vulkan renderer began external image frame preserving host color without host depth"',
+            'required-marker "Vulkan renderer began external image frame preserving host color with host depth"',
             'required-marker "Unity Vulkan render:"',
             'required-marker "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]"',
             'required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"',
