@@ -39,6 +39,8 @@ def main() -> int:
             "enableDiagnosticCameraTarget = true;",
             "frameCount = 90;",
             "[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729]",
+            "FindObjectOfType<ImmFeatureExamples>()",
+            "FreezeCompositionPlaybackIfRequested();",
         ],
         ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd": [
             "_analyze_scene_probe_region",
@@ -59,6 +61,7 @@ def main() -> int:
             "target_share",
             "scene composition %s rear occlusion leakage probe failed",
             "unproject_position",
+            'return configured_value != "0"',
         ],
         ROOT / "code/projects/windows/run-godot-vulkan-visual-baseline-smoke.ps1": [
             "CompositionMode",
@@ -67,7 +70,8 @@ def main() -> int:
             "depth_composition",
             "not_claimed",
             'IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION = "1"',
-            "composition validation uses scene probes and render metrics",
+            "Render-only baseline comparison is performed by the shared render-metrics contract.",
+            "render fidelity is validated from the separate render-only capture",
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
             "unity-macos-metal-composition",
@@ -165,6 +169,20 @@ def main() -> int:
     if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in unity_smoke:
         errors.append(
             "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
+        )
+    if unity_smoke.find("FreezeCompositionPlaybackIfRequested();") > unity_smoke.find(
+        'WriteCapture(renderCapture, _renderCapturePath, "render baseline");'
+    ):
+        errors.append(
+            "Unity composition playback must be frozen before its render baseline is captured"
+        )
+
+    windows_godot_smoke = (
+        ROOT / "code/projects/windows/run-godot-vulkan-visual-baseline-smoke.ps1"
+    ).read_text(encoding="utf-8")
+    if "compare-ppm-captures.ps1" in windows_godot_smoke:
+        errors.append(
+            "Godot Vulkan smoke must use only the shared render-metrics baseline comparator"
         )
 
     for workflow_name in ["ci-engine.yml", "ci-gpu.yml"]:

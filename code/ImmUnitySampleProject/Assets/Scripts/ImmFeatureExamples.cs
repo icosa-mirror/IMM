@@ -313,16 +313,19 @@ namespace ImmPlayer
         private IEnumerator LoadFromStreamingAssets(string fileName)
         {
             string streamingPath = Path.Combine(Application.streamingAssetsPath, fileName);
-            Debug.Log($"{DiagPrefix}Loading from StreamingAssets: {streamingPath}");
+            string requestPath = streamingPath.Contains("://")
+                ? streamingPath
+                : new System.Uri(streamingPath).AbsoluteUri;
+            Debug.Log($"{DiagPrefix}Loading from StreamingAssets: {requestPath}");
 
-            using (UnityWebRequest request = UnityWebRequest.Get(streamingPath))
+            using (UnityWebRequest request = UnityWebRequest.Get(requestPath))
             {
                 yield return request.SendWebRequest();
 
                 if (request.result != UnityWebRequest.Result.Success)
                 {
                     Debug.LogError($"{DiagPrefix}Failed to load from StreamingAssets: {request.error}");
-                    Debug.LogError($"{DiagPrefix}  Path: {streamingPath}");
+                    Debug.LogError($"{DiagPrefix}  Path: {requestPath}");
                     yield break;
                 }
 
@@ -439,6 +442,19 @@ namespace ImmPlayer
         public void JumpToSpawnArea()
         {
             SetSpawnAreaByIndex(targetSpawnAreaIndex);
+        }
+
+        public bool TrySetSmokeSpawnArea(int spawnAreaIndex)
+        {
+            if (_doc == null || !_doc.IsLoaded)
+                return false;
+
+            SyncSpawnAreaSelection();
+            if (_spawnAreaIds.Length == 0)
+                return false;
+
+            SetSpawnAreaByIndex(spawnAreaIndex);
+            return true;
         }
 
         public void RefreshLayerList()

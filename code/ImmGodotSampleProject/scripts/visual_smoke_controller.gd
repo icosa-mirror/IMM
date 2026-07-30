@@ -563,7 +563,8 @@ func _frame_camera_from_document(prefer_spawn_area: bool = true) -> bool:
 	return true
 
 func _visual_smoke_prefers_spawn_area() -> bool:
-	return OS.get_environment("IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA") == "1"
+	var configured_value: String = OS.get_environment("IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA")
+	return configured_value != "0"
 
 func _visual_smoke_composition_mode() -> String:
 	var mode: String = _get_env_string("IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE", COMPOSITION_MODE_FULL_DEPTH)

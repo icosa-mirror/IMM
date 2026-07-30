@@ -737,6 +737,7 @@ jobs:
           -LogDir artifacts\godot-smoke-windows-vulkan
 
       - name: Record Godot Vulkan full depth metrics
+        if: always()
         shell: pwsh
         run: |
           python tests\tools\compare_render_metrics.py `
@@ -770,6 +771,7 @@ jobs:
           --markdown-output artifacts\godot-smoke-windows-vulkan\render-baseline-report.md
 
       - name: Run Godot Vulkan ordered overlay smoke
+        if: always()
         timeout-minutes: 10
         shell: pwsh
         run: >
@@ -818,7 +820,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-render-only --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -831,6 +833,7 @@ jobs:
           name: WindowsGodotVulkan-GPU
           path: |
             artifacts/godot-smoke-windows-vulkan
+            artifacts/godot-smoke-windows-vulkan-render-only
             artifacts/godot-smoke-windows-vulkan-ordered-overlay
           if-no-files-found: ignore
           retention-days: 14
@@ -1059,6 +1062,7 @@ jobs:
           fi
 
       - name: Record Godot Metal render metrics
+        if: always()
         run: |
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-smoke-macos-metal/metal_render_baseline.png \

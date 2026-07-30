@@ -253,14 +253,9 @@ if (-not (Test-Path -LiteralPath $RenderCapturePath -PathType Leaf)) {
     throw "Godot Vulkan visual baseline smoke did not write render baseline capture: $RenderCapturePath"
 }
 
-if ($CompositionMode -eq "ordered_overlay" -or $CompositionMode -eq "full_depth") {
-    Write-Output "Skipping DirectX baseline PPM comparison for $CompositionMode composition mode; composition validation uses scene probes and render metrics."
+if ($CompositionMode -eq "render_only") {
+    Write-Output "Render-only baseline comparison is performed by the shared render-metrics contract."
 }
 else {
-    & (Join-Path $repoRoot "code\appImmViewer\scripts\compare-ppm-captures.ps1") `
-        -ReferencePath $ReferencePath `
-        -CandidatePath $CapturePath `
-        -MaxMeanAbsoluteError $MaxMeanAbsoluteError `
-        -MaxRootMeanSquareError $MaxRootMeanSquareError `
-        -MinVisibleOverlap $MinVisibleOverlap
+    Write-Output "Composition validation for $CompositionMode uses scene probes; render fidelity is validated from the separate render-only capture."
 }

@@ -172,6 +172,28 @@ REQUIRED_STEP_TIMEOUTS = {
         "macos-godot-metal": {"Run Godot Metal visual smoke"},
     },
 }
+REQUIRED_ALWAYS_STEPS = {
+    ".github/workflows/ci-engine.yml": {
+        "unity-macos-metal-composition": {
+            "Classify Unity macOS Metal visual smokes",
+            "Record Unity macOS Metal render metrics",
+            "Verify Unity macOS Metal log contract",
+        },
+        "unity-windows-directx-composition": {
+            "Compare Unity DirectX render metrics against committed DirectX baseline",
+            "Verify Unity DirectX composition log contract",
+        },
+    },
+    ".github/workflows/ci-gpu.yml": {
+        "windows-godot-vulkan": {
+            "Record Godot Vulkan full depth metrics",
+            "Run Godot Vulkan ordered overlay smoke",
+        },
+        "macos-godot-metal": {
+            "Record Godot Metal render metrics",
+        },
+    },
+}
 REQUIRED_WORKFLOW_TRIGGERS = {
     ".github/workflows/ci-validation.yml": ["build.yml", "web-pages.yml", "ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
@@ -249,12 +271,20 @@ def load_workflow(path: Path) -> dict:
             continue
 
         if in_steps and indent >= 4 and stripped.startswith("- name:"):
-            current_step = {"name": stripped.split(":", 1)[1].strip().strip("'\""), "timeout-minutes": None}
+            current_step = {
+                "name": stripped.split(":", 1)[1].strip().strip("'\""),
+                "timeout-minutes": None,
+                "if": None,
+            }
             jobs[current_job]["steps"].append(current_step)
             continue
 
         if in_steps and current_step is not None and indent >= 8 and stripped.startswith("timeout-minutes:"):
             current_step["timeout-minutes"] = stripped.split(":", 1)[1].strip()
+            continue
+
+        if in_steps and current_step is not None and indent >= 8 and stripped.startswith("if:"):
+            current_step["if"] = stripped.split(":", 1)[1].strip()
 
     return {"jobs": jobs}
 
@@ -772,6 +802,12 @@ def main() -> int:
                 step = actual_steps.get(step_name)
                 if step is not None and not has_positive_timeout(step.get("timeout-minutes")):
                     errors.append(f"{workflow_rel} job {job_name} step {step_name!r} must set a positive timeout-minutes")
+
+            required_always_steps = REQUIRED_ALWAYS_STEPS.get(workflow_rel, {}).get(job_name, set())
+            for step_name in required_always_steps:
+                step = actual_steps.get(step_name)
+                if step is not None and step.get("if") != "always()":
+                    errors.append(f"{workflow_rel} job {job_name} step {step_name!r} must run with if: always()")
 
             required_labels = REQUIRED_RUNS_ON.get(workflow_rel, {}).get(job_name)
             if required_labels:

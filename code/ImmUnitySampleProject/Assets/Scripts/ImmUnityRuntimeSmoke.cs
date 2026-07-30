@@ -146,6 +146,15 @@ namespace ImmPlayer
 
             yield return StabilizeSampleViewpoint();
 
+            if (_compositionProbeEnabled)
+            {
+                FreezeCompositionPlaybackIfRequested();
+                for (int settleFrame = 0; settleFrame < 5; ++settleFrame)
+                {
+                    yield return null;
+                }
+            }
+
             if (!string.IsNullOrEmpty(_renderCapturePath))
             {
                 yield return new WaitForEndOfFrame();
@@ -164,7 +173,6 @@ namespace ImmPlayer
 
             if (_compositionProbeEnabled)
             {
-                FreezeCompositionPlaybackIfRequested();
                 if (_overlayProbeEnabled)
                 {
                     ConfigureRuntimeOverlayFixtureIfRequested();
@@ -418,15 +426,22 @@ namespace ImmPlayer
         private static IEnumerator StabilizeSampleViewpoint()
         {
             ImmPlayerExample example = FindObjectOfType<ImmPlayerExample>();
-            if (example == null)
+            ImmFeatureExamples featureExamples = FindObjectOfType<ImmFeatureExamples>();
+            if (example == null && featureExamples == null)
+            {
+                Debug.LogWarning($"{Prefix}smoke viewpoint target was not found");
                 yield break;
+            }
 
             const int maxAttempts = 180;
             for (int i = 0; i < maxAttempts; ++i)
             {
-                if (example.TrySetSmokeSpawnArea(0))
+                bool applied = example != null
+                    ? example.TrySetSmokeSpawnArea(0)
+                    : featureExamples.TrySetSmokeSpawnArea(0);
+                if (applied)
                 {
-                    Debug.Log($"{Prefix}smoke spawn area 0 applied after {i + 1} attempt(s)");
+                    Debug.Log($"{Prefix}smoke spawn area 0 applied to {(example != null ? nameof(ImmPlayerExample) : nameof(ImmFeatureExamples))} after {i + 1} attempt(s)");
                     for (int settleFrame = 0; settleFrame < 10; ++settleFrame)
                     {
                         yield return null;

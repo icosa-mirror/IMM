@@ -300,6 +300,7 @@ jobs:
           test -n "$player"
           test -x "$player"
 
+          full_depth_status=0
           IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
           "$player" \
             -logFile "$artifact_dir/unity-full-depth-player.log" \
@@ -312,8 +313,9 @@ jobs:
             -immSmokeFrames 120 \
             -immSmokeQuit 1 \
             -immSmokeCompositionProbe 1 \
-            -immSmokeExpectedGraphicsApi Metal
+            -immSmokeExpectedGraphicsApi Metal || full_depth_status=$?
 
+          ordered_overlay_status=0
           IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
           IMM_UNITY_SMOKE_OVERLAY_FIXTURE=1 \
           "$player" \
@@ -328,22 +330,33 @@ jobs:
             -immSmokeCompositionProbe 1 \
             -immSmokeOverlayProbe 1 \
             -immSmokeMinOrderedOverlayImmUniqueColors 3000 \
-            -immSmokeExpectedGraphicsApi Metal
+            -immSmokeExpectedGraphicsApi Metal || ordered_overlay_status=$?
+
+          if [ "$full_depth_status" -ne 0 ] || [ "$ordered_overlay_status" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Classify Unity macOS Metal visual smokes
+        if: always()
         run: |
+          full_depth_status=0
           python3 tests/tools/classify_unity_visual_smoke.py \
             --log artifacts/unity-macos-metal-composition/unity-full-depth-player.log \
             --capture artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
             --composition-mode full_depth \
-            --output artifacts/unity-macos-metal-composition/full-depth-status.json
+            --output artifacts/unity-macos-metal-composition/full-depth-status.json || full_depth_status=$?
+          ordered_overlay_status=0
           python3 tests/tools/classify_unity_visual_smoke.py \
             --log artifacts/unity-macos-metal-composition/unity-ordered-overlay-player.log \
             --capture artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay.png \
             --composition-mode ordered_overlay \
-            --output artifacts/unity-macos-metal-composition/ordered-overlay-status.json
+            --output artifacts/unity-macos-metal-composition/ordered-overlay-status.json || ordered_overlay_status=$?
+          if [ "$full_depth_status" -ne 0 ] || [ "$ordered_overlay_status" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Record Unity macOS Metal render metrics
+        if: always()
         run: |
           python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-render.png \
@@ -379,6 +392,7 @@ jobs:
             --markdown-output artifacts/unity-macos-metal-composition/ordered-overlay-render-report.md
 
       - name: Verify Unity macOS Metal log contract
+        if: always()
         run: |
           python3 tests/tools/verify_log_markers.py \
             --log artifacts/unity-macos-metal-composition/unity-full-depth-player.log \
@@ -602,11 +616,6 @@ jobs:
               if (Test-Path $playerLog) {
                 Get-Content $playerLog
               }
-              $compositionOnly = $CompositionProbe -eq "1" -and (Test-Path $capturePath) -and (Test-Path $playerLog) -and (Select-String -Path $playerLog -Pattern "\[IMM_UNITY_SMOKE\] scene composition .* failed" -Quiet)
-              if ($compositionOnly) {
-                Write-Warning "Unity DirectX smoke reported expected scene composition probe failures for $CaptureName"
-                return
-              }
               throw "Unity DirectX smoke player failed with exit code $($process.ExitCode) for $CaptureName"
             }
             if (-not (Test-Path $capturePath)) {
@@ -631,6 +640,7 @@ jobs:
           --output artifacts\unity-windows-directx-composition\composition-status.json
 
       - name: Compare Unity DirectX render metrics against committed DirectX baseline
+        if: always()
         shell: pwsh
         run: >
           python tests\tools\compare_render_metrics.py
@@ -652,6 +662,7 @@ jobs:
           --markdown-output artifacts\unity-windows-directx-composition\render-report.md
 
       - name: Verify Unity DirectX composition log contract
+        if: always()
         shell: pwsh
         run: >
           python tests\tools\verify_log_markers.py
