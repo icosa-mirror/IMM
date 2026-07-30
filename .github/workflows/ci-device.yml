@@ -132,7 +132,7 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime-launch --output artifacts/android-standalone-gles/manifest.json --product standalone --platform-name android --mode non-vr --renderer gles --include artifacts/android-standalone-gles
+          python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/android-standalone-gles/manifest.json --product standalone --platform-name android --mode non-vr --renderer gles --include artifacts/android-standalone-gles
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -258,7 +258,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime-launch --output artifacts/android-standalone-vulkan/manifest.json --product standalone --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-standalone-vulkan
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/android-standalone-vulkan/manifest.json --product standalone --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-standalone-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -466,15 +466,15 @@ jobs:
             --required-marker "Vulkan renderer submitted picture draw commands" \
             --required-marker "Vulkan renderer submitted static paint draw commands" \
             --required-marker "last_vulkan_frame_started" \
-            --required-marker "render baseline PNG:" \
-            --required-capture-name vulkan_render_baseline.png \
+            --required-marker "render candidate PNG:" \
+            --required-capture-name vulkan_render_candidate.png \
             --required-capture-name vulkan_visual_smoke.png \
             --client-label "IMM Android Godot Vulkan"
       - name: Record Android Godot Vulkan screenshot metrics
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_render_baseline.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_render_candidate.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($capture) {
             python tests/tools/compare_render_metrics.py $capture.FullName `
               --reference tests/baselines/render/windows-directx-sample1.ppm `
@@ -483,15 +483,15 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           } else {
             New-Item -ItemType Directory -Force artifacts/android-godot-vulkan | Out-Null
-            '{"passed":false,"errors":["missing Firebase Test Lab vulkan_render_baseline.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
-            throw "Missing Firebase Test Lab vulkan_render_baseline.png"
+            '{"passed":false,"errors":["missing Firebase Test Lab vulkan_render_candidate.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
+            throw "Missing Firebase Test Lab vulkan_render_candidate.png"
           }
       - name: Write Android Godot Vulkan screenshot report
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_render_baseline.png -ErrorAction SilentlyContinue | Select-Object -First 1
-          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-godot-vulkan/missing-vulkan_render_baseline.png" }
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_render_candidate.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-godot-vulkan/missing-vulkan_render_candidate.png" }
           python tests/tools/write_render_report.py --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-godot-vulkan/captures --markdown-output artifacts/android-godot-vulkan/render-report.md
           $compositionCapture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($compositionCapture) {
@@ -501,7 +501,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime-launch --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh

@@ -357,30 +357,30 @@ func _capture_render_baseline(failures: Array[String], selected_renderer_name: S
 	var image: Image = get_viewport().get_texture().get_image()
 	var content_diagnostics := _analyze_content_pixels(image, viewer.get_background_color())
 	var imm_diagnostics := _analyze_ordered_overlay_imm_pixels(image, viewer.get_background_color())
-	print("IMM Godot %s render baseline content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
-	print("IMM Godot %s render baseline IMM diagnostics: %s" % [selected_renderer_name, str(imm_diagnostics)])
+	print("IMM Godot %s render candidate content diagnostics: %s" % [selected_renderer_name, str(content_diagnostics)])
+	print("IMM Godot %s render candidate IMM diagnostics: %s" % [selected_renderer_name, str(imm_diagnostics)])
 	if int(content_diagnostics.get("content_pixels", 0)) < MIN_CONTENT_PIXELS:
-		failures.append("render baseline had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
+		failures.append("render candidate had only %d content pixels" % int(content_diagnostics.get("content_pixels", 0)))
 	if int(content_diagnostics.get("content_bounds_width", 0)) < MIN_CONTENT_BOUNDS_SIZE or int(content_diagnostics.get("content_bounds_height", 0)) < MIN_CONTENT_BOUNDS_SIZE:
-		failures.append("render baseline content bounds were too small: %sx%s" % [
+		failures.append("render candidate content bounds were too small: %sx%s" % [
 			str(content_diagnostics.get("content_bounds_width", 0)),
 			str(content_diagnostics.get("content_bounds_height", 0)),
 		])
-	_append_imm_visibility_failures(imm_diagnostics, failures, "render baseline")
+	_append_imm_visibility_failures(imm_diagnostics, failures, "render candidate")
 	if not png_path.is_empty():
 		DirAccess.make_dir_recursive_absolute(png_path.get_base_dir())
 		var png_result := image.save_png(png_path)
 		if png_result != OK:
-			failures.append("Failed to save render baseline PNG %s: %d" % [png_path, int(png_result)])
+			failures.append("Failed to save render candidate PNG %s: %d" % [png_path, int(png_result)])
 		else:
-			print("IMM Godot %s render baseline PNG: %s" % [selected_renderer_name, png_path])
+			print("IMM Godot %s render candidate PNG: %s" % [selected_renderer_name, png_path])
 	if not ppm_path.is_empty():
 		DirAccess.make_dir_recursive_absolute(ppm_path.get_base_dir())
 		var ppm_result := _save_ppm(image, ppm_path)
 		if ppm_result != OK:
-			failures.append("Failed to save render baseline PPM %s: %d" % [ppm_path, int(ppm_result)])
+			failures.append("Failed to save render candidate PPM %s: %d" % [ppm_path, int(ppm_result)])
 		else:
-			print("IMM Godot %s render baseline PPM: %s" % [selected_renderer_name, ppm_path])
+			print("IMM Godot %s render candidate PPM: %s" % [selected_renderer_name, ppm_path])
 
 func _finish_visual_smoke(
 	failures: Array[String],

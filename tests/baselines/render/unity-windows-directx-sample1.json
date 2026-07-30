@@ -6,6 +6,12 @@
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "ppm-p6",
+    "expected_spatial_luma_grid": {
+      "height": 18,
+      "max_mean_abs_delta": 0.06,
+      "min_correlation": 0.85,
+      "width": 32
+    },
     "expected_quadrant_luma_share": {
       "tolerance": 0.12,
       "values": {

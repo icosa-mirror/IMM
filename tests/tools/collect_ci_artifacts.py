@@ -12,6 +12,8 @@ from pathlib import Path
 
 EMBEDDABLE_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 CAPTURE_SUFFIXES = EMBEDDABLE_IMAGE_SUFFIXES | {".ppm"}
+VISUAL_RENDERERS = {"directx", "vulkan", "opengl", "metal", "gles", "webgl", "openxr"}
+VISUAL_FAILURE_CLASSES = {"visual", "compositing"}
 
 
 def sha256_file(path: Path) -> str:
@@ -63,7 +65,13 @@ def collect_artifact_dir(path: Path, root: Path) -> dict:
             }
             for p in preflight_paths
         ],
-        "metrics": [collect_file(p, root) for p in metrics_paths],
+        "metrics": [
+            {
+                **collect_file(p, root),
+                "content": load_json(p),
+            }
+            for p in metrics_paths
+        ],
         "reports": [collect_file(p, root) for p in report_paths],
         "contracts": [
             {
@@ -100,6 +108,55 @@ def validate_manifest(manifest: object, path: str) -> list[str]:
             if not matrix.get(key):
                 errors.append(f"Manifest missing matrix.{key}: {path}")
     return errors
+
+
+def validate_metric(metric: dict, path: str) -> list[str]:
+    content = metric.get("content")
+    if not isinstance(content, dict):
+        return [f"Visual metrics are not valid JSON: {path}"]
+    if content.get("passed") is not True:
+        return [f"Visual metrics do not report passed=true: {path}"]
+    return []
+
+
+def is_passed_manifest(manifest: dict) -> bool:
+    content = manifest.get("content")
+    return (
+        isinstance(content, dict)
+        and isinstance(content.get("classification"), dict)
+        and content["classification"].get("result") == "passed"
+    )
+
+
+def requires_reference_visual_evidence(manifest: dict) -> bool:
+    content = manifest.get("content")
+    if not isinstance(content, dict):
+        return False
+    classification = content.get("classification")
+    matrix = content.get("matrix")
+    return (
+        isinstance(classification, dict)
+        and classification.get("result") == "passed"
+        and classification.get("failure_class") in VISUAL_FAILURE_CLASSES
+        and isinstance(matrix, dict)
+        and matrix.get("renderer") in VISUAL_RENDERERS
+    )
+
+
+def is_passing_reference_metric(metric: dict) -> bool:
+    content = metric.get("content")
+    candidate = content.get("candidate") if isinstance(content, dict) else None
+    reference = content.get("reference") if isinstance(content, dict) else None
+    return (
+        isinstance(content, dict)
+        and content.get("passed") is True
+        and isinstance(candidate, dict)
+        and bool(candidate.get("path"))
+        and bool(candidate.get("sha256"))
+        and isinstance(reference, dict)
+        and bool(reference.get("path"))
+        and bool(reference.get("sha256"))
+    )
 
 
 def markdown_table(rows: list[list[str]]) -> list[str]:
@@ -261,6 +318,14 @@ def main() -> int:
         if args.require_manifest:
             for manifest in artifact["manifests"]:
                 errors.extend(validate_manifest(manifest["content"], manifest["file"]))
+            if any(is_passed_manifest(manifest) for manifest in artifact["manifests"]):
+                for metric in artifact["metrics"]:
+                    errors.extend(validate_metric(metric, metric["path"]))
+            if (
+                any(requires_reference_visual_evidence(manifest) for manifest in artifact["manifests"])
+                and not any(is_passing_reference_metric(metric) for metric in artifact["metrics"])
+            ):
+                errors.append(f"Passed visual artifact has no passing candidate-to-reference metrics: {item}")
         artifacts.append(artifact)
 
     summary = {

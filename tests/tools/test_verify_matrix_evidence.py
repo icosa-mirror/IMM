@@ -53,7 +53,18 @@ def artifact(
         "total_bytes": 128,
         "manifests": [{"file": "manifest.json", "content": artifact_manifest}],
         "preflights": [{"file": "preflight.json", "content": {"passed": True, "errors": []}}] if with_preflight else [],
-        "metrics": [{"path": "render-metrics.json", "byte_size": 12, "sha256": "abc"}] if with_metrics else [],
+        "metrics": [
+            {
+                "path": "render-metrics.json",
+                "byte_size": 12,
+                "sha256": "abc",
+                "content": {
+                    "passed": True,
+                    "candidate": {"path": "capture.png", "sha256": "candidate"},
+                    "reference": {"path": "reference.ppm", "sha256": "reference"},
+                },
+            }
+        ] if with_metrics else [],
         "reports": [{"path": "render-report.md", "byte_size": 12, "sha256": "ghi"}] if with_report else [],
         "contracts": [{"file": "openxr-log-contract.json", "content": {"passed": True, "errors": []}}] if with_contract else [],
         "captures": [{"path": "capture.png", "byte_size": 8, "sha256": "def"}] if with_capture else [],
@@ -202,6 +213,30 @@ def main() -> int:
         )
         assert expected_failed.returncode == 1, "Expected-failed evidence must not satisfy a supported matrix row"
         assert "# IMM Matrix Evidence Report" in (temp / "passing-output/matrix-evidence.md").read_text(encoding="utf-8")
+
+        log_only_visual = artifact(
+            "standalone",
+            "windows",
+            "non-vr",
+            "vulkan",
+            with_capture=True,
+            with_metrics=True,
+            with_report=True,
+        )
+        log_only_visual["metrics"][0]["content"] = {"passed": True, "candidate": {}}
+        log_only_summary = temp / "log-only-summary.json"
+        write_summary(log_only_summary, [log_only_visual])
+        log_only = run_verify(
+            matrix_path,
+            log_only_summary,
+            temp / "log-only-output",
+            "--scope",
+            "hardware",
+            "--gate-prefix",
+            "CI GPU Matrix /",
+        )
+        assert log_only.returncode == 1, "metrics without a reference comparison must not satisfy a visual row"
+        assert "missing passing candidate-to-reference visual metrics evidence" in log_only.stdout
 
         failing_summary = temp / "failing-summary.json"
         write_summary(

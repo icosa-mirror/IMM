@@ -23,6 +23,7 @@ def main() -> int:
             "MaxOccludedShare",
             "OverlayProbeEnv",
             "CaptureCameraTexture",
+            "CaptureOrderedCameraStackTexture(captureCamera)",
             "CaptureWidth",
             "captureCamera.targetTexture = renderTexture",
             "camera.targetTexture = renderTexture",
@@ -171,10 +172,10 @@ def main() -> int:
             "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
         )
     if unity_smoke.find("FreezeCompositionPlaybackIfRequested();") > unity_smoke.find(
-        'WriteCapture(renderCapture, _renderCapturePath, "render baseline");'
+        'WriteCapture(renderCapture, _renderCapturePath, "render candidate");'
     ):
         errors.append(
-            "Unity composition playback must be frozen before its render baseline is captured"
+            "Unity composition playback must be frozen before its render candidate is captured"
         )
 
     windows_godot_smoke = (

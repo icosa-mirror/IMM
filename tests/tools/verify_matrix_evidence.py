@@ -79,6 +79,26 @@ def passing_preflights(artifact: dict) -> list[dict]:
     return preflights
 
 
+def passing_reference_metrics(artifact: dict) -> list[dict]:
+    metrics = []
+    for metric in artifact.get("metrics", []):
+        content = metric.get("content") if isinstance(metric, dict) else None
+        candidate = content.get("candidate") if isinstance(content, dict) else None
+        reference = content.get("reference") if isinstance(content, dict) else None
+        if (
+            isinstance(content, dict)
+            and content.get("passed") is True
+            and isinstance(candidate, dict)
+            and bool(candidate.get("path"))
+            and bool(candidate.get("sha256"))
+            and isinstance(reference, dict)
+            and bool(reference.get("path"))
+            and bool(reference.get("sha256"))
+        ):
+            metrics.append(metric)
+    return metrics
+
+
 def has_firebase_test_lab_result(files: list[dict]) -> bool:
     return any(str(item.get("path", "")).endswith("firebase-test-lab-result.json") for item in files)
 
@@ -111,6 +131,7 @@ def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], lis
                         "artifact": artifact.get("path", ""),
                         "manifest": manifest.get("file", ""),
                         "metrics": artifact.get("metrics", []),
+                        "passing_reference_metrics": passing_reference_metrics(artifact),
                         "reports": artifact.get("reports", []),
                         "captures": artifact.get("captures", []),
                         "contracts": artifact.get("contracts", []),
@@ -151,8 +172,8 @@ def evaluate_row(row: dict, evidence: list[dict]) -> dict:
         errors.append("missing passing runner preflight evidence")
 
     if is_visual_row(row):
-        if not any(item["metrics"] for item in evidence):
-            errors.append("missing render metrics evidence")
+        if not any(item["passing_reference_metrics"] for item in evidence):
+            errors.append("missing passing candidate-to-reference visual metrics evidence")
         if not any(item["reports"] for item in evidence):
             errors.append("missing human-readable render report evidence")
         if not any(item["captures"] for item in evidence):

@@ -504,7 +504,15 @@ def verify_render_contract_references(root: Path, errors: list[str]) -> None:
             continue
         reference_capture = contract.get("reference_capture")
         if not reference_capture:
+            errors.append(
+                f"{contract_path.relative_to(root).as_posix()} must name a committed reference_capture"
+            )
             continue
+        validation = contract.get("validation")
+        if not isinstance(validation, dict) or not isinstance(validation.get("expected_spatial_luma_grid"), dict):
+            errors.append(
+                f"{contract_path.relative_to(root).as_posix()} must require expected_spatial_luma_grid comparison"
+            )
         reference_path = root / str(reference_capture)
         if not reference_path.exists():
             errors.append(
@@ -691,7 +699,7 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
         ],
         ".github/workflows/ci-device.yml": [
             "godot-android-vulkan-sample1.json",
-            "vulkan_render_baseline.png",
+            "vulkan_render_candidate.png",
             "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl",
         ],
         ".github/workflows/ci-engine.yml": [
@@ -702,7 +710,7 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "unity-android-vulkan-render.png",
             "unity-android-vulkan-sample1.json",
             "--reference tests/baselines/render/windows-directx-sample1.ppm",
-            "render baseline capture=",
+            "render candidate capture=",
         ],
         ".github/workflows/ci-gpu.yml": [
             "godot-vulkan-render.ppm",

@@ -54,6 +54,16 @@ def main() -> int:
         (artifact / "capture.png").write_bytes(b"\x89PNG\r\n\x1a\n")
         (artifact / "capture.ppm").write_bytes(b"P6\n1 1\n255\n\x00\x00\x00")
         (artifact / "render-report.md").write_text("# Render Validation Report\n", encoding="utf-8")
+        (artifact / "render-metrics.json").write_text(
+            json.dumps(
+                {
+                    "passed": True,
+                    "candidate": {"path": "capture.png", "sha256": "candidate"},
+                    "reference": {"path": "reference.ppm", "sha256": "reference"},
+                }
+            ) + "\n",
+            encoding="utf-8",
+        )
 
         ok = run_collect(
             "--repo-root",
@@ -69,6 +79,7 @@ def main() -> int:
         assert summary["passed"] is True
         assert summary["artifacts"][0]["manifests"][0]["content"]["schema"] == "imm-ci-artifact-manifest-v1"
         assert summary["artifacts"][0]["contracts"][0]["content"]["schema"] == "imm-log-marker-contract-v1"
+        assert summary["artifacts"][0]["metrics"][0]["content"]["passed"] is True
         assert len(summary["artifacts"][0]["captures"]) == 2
         assert summary["artifacts"][0]["reports"][0]["path"] == "artifact/render-report.md"
         report = (artifact / "validation-report.md").read_text(encoding="utf-8")
@@ -115,6 +126,45 @@ def main() -> int:
         assert "Manifest reports failed result" in failed_manifest_result.stdout
         failed_manifest_report = (failed_manifest_dir / "validation-report.md").read_text(encoding="utf-8")
         assert "- Result: failed" in failed_manifest_report
+
+        failed_metrics_dir = root / "failed-metrics"
+        failed_metrics_dir.mkdir()
+        (failed_metrics_dir / "manifest.json").write_text(json.dumps(valid_manifest()) + "\n", encoding="utf-8")
+        (failed_metrics_dir / "render-metrics.json").write_text(
+            json.dumps({"passed": False, "errors": ["candidate differs from reference"]}) + "\n",
+            encoding="utf-8",
+        )
+        failed_metrics_result = run_collect(
+            "--repo-root",
+            str(root),
+            "--artifact-dir",
+            str(failed_metrics_dir),
+            "--require-manifest",
+            "--output",
+            str(failed_metrics_dir / "artifact-summary.json"),
+        )
+        assert failed_metrics_result.returncode != 0, "failed visual metrics must fail artifact validation"
+        assert "Visual metrics do not report passed=true" in failed_metrics_result.stdout
+
+        missing_visual_metrics_dir = root / "missing-visual-metrics"
+        missing_visual_metrics_dir.mkdir()
+        visual_manifest = valid_manifest()
+        visual_manifest["classification"]["failure_class"] = "visual"
+        (missing_visual_metrics_dir / "manifest.json").write_text(
+            json.dumps(visual_manifest) + "\n",
+            encoding="utf-8",
+        )
+        missing_visual_metrics_result = run_collect(
+            "--repo-root",
+            str(root),
+            "--artifact-dir",
+            str(missing_visual_metrics_dir),
+            "--require-manifest",
+            "--output",
+            str(missing_visual_metrics_dir / "artifact-summary.json"),
+        )
+        assert missing_visual_metrics_result.returncode != 0
+        assert "Passed visual artifact has no passing candidate-to-reference metrics" in missing_visual_metrics_result.stdout
 
         broken = root / "broken"
         broken.mkdir()

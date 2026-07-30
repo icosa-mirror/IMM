@@ -54,7 +54,34 @@ def main() -> int:
         capture.parent.mkdir(parents=True)
         capture.write_bytes(b"png")
         logcat = root / "ftl-results/device/logcat"
-        logcat.write_text("06-12 IMMAVAL renderFrame frame=60 drawCalls=12\n", encoding="utf-8")
+        logcat.write_text(
+            "06-12 IMMAVAL renderFrame frame=60 drawCalls=12\n"
+            "Missing required log marker: NEGATED_SUCCESS\n",
+            encoding="utf-8",
+        )
+        result_xml = root / "ftl-results/device/test_result_1.xml"
+        result_xml.write_text(
+            '<testsuites><testsuite tests="1" failures="1" errors="0">'
+            '<testcase name="visualSmoke"><failure>Missing required log marker: XML_ONLY_SUCCESS</failure></testcase>'
+            "</testsuite></testsuites>\n",
+            encoding="utf-8",
+        )
+        instrumentation_result = root / "ftl-results/device/instrumentation.results"
+        instrumentation_result.write_text(
+            "FAILURES!!!\nINSTRUMENTATION_CODE: -1\n",
+            encoding="utf-8",
+        )
+        marker_matches, searched_logs = tool.find_text_with_markers(
+            root / "ftl-results",
+            ["IMMAVAL renderFrame", "NEGATED_SUCCESS", "XML_ONLY_SUCCESS"],
+        )
+        assert marker_matches["IMMAVAL renderFrame"] == ["device/logcat"]
+        assert marker_matches["NEGATED_SUCCESS"] == []
+        assert marker_matches["XML_ONLY_SUCCESS"] == []
+        assert searched_logs == ["device/logcat"]
+        result_failures = tool.find_failed_test_results(root / "ftl-results")
+        assert any("1 failure(s) and 0 error(s)" in failure for failure in result_failures)
+        assert any("instrumentation.results failed (code -1)" in failure for failure in result_failures)
         diagnostics = tool.collect_diagnostic_lines(root / "ftl-results")
         assert diagnostics == ["device/logcat: 06-12 IMMAVAL renderFrame frame=60 drawCalls=12"]
         summary_path = tool.write_summary(

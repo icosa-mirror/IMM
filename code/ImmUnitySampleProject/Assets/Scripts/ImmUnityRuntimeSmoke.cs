@@ -161,14 +161,14 @@ namespace ImmPlayer
                 Camera renderCaptureCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
                 if (renderCaptureCamera == null)
                 {
-                    Debug.LogError($"{Prefix}missing render baseline capture camera");
+                    Debug.LogError($"{Prefix}missing render candidate capture camera");
                     QuitIfRequested(2);
                     yield break;
                 }
                 Texture2D renderCapture = _diagnosticCameraTargetTexture != null
                     ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
                     : CaptureCameraTexture(renderCaptureCamera);
-                WriteCapture(renderCapture, _renderCapturePath, "render baseline");
+                WriteCapture(renderCapture, _renderCapturePath, "render candidate");
             }
 
             if (_compositionProbeEnabled)
@@ -202,7 +202,9 @@ namespace ImmPlayer
                 (_compositionProbeEnabled && SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan));
             Texture2D tex = _diagnosticCameraTargetTexture != null
                 ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
-                : (usePresentedFrameCapture ? CaptureScreenTexture() : CaptureCameraTexture(captureCamera));
+                : (_overlayProbeEnabled && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Vulkan
+                    ? CaptureOrderedCameraStackTexture(captureCamera)
+                    : (usePresentedFrameCapture ? CaptureScreenTexture() : CaptureCameraTexture(captureCamera)));
 
             int width = tex.width;
             int height = tex.height;

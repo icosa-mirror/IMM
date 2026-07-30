@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -26,6 +28,13 @@ DIAGNOSTIC_PATTERNS = [
     "FATAL EXCEPTION",
     "backtrace:",
 ]
+INVALID_MARKER_CONTEXTS = (
+    "missing required",
+    "expected log marker",
+    "assertionerror",
+    "failure:",
+    "failed:",
+)
 
 
 def resolve_gcloud() -> str:
@@ -65,19 +74,55 @@ def find_text_with_markers(root: Path, markers: list[str]) -> tuple[dict[str, li
     searched: list[str] = []
     if not root.exists():
         return matches, searched
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    for path in sorted(p for p in root.rglob("*") if p.is_file() and "logcat" in p.name.lower()):
         if path.stat().st_size > 25 * 1024 * 1024:
-            continue
-        if path.suffix.lower() not in TEXT_SUFFIXES and "log" not in path.name.lower():
             continue
         text = decode_text(path)
         if not text:
             continue
-        searched.append(path.relative_to(root).as_posix())
+        relative = path.relative_to(root).as_posix()
+        searched.append(relative)
         for marker in markers:
-            if marker in text:
-                matches[marker].append(path.relative_to(root).as_posix())
+            for line in text.splitlines():
+                lowered = line.lower()
+                if marker in line and not any(context in lowered for context in INVALID_MARKER_CONTEXTS):
+                    matches[marker].append(relative)
+                    break
     return matches, searched
+
+
+def find_failed_test_results(root: Path) -> list[str]:
+    failures: list[str] = []
+    if not root.exists():
+        return failures
+
+    for path in sorted(p for p in root.rglob("test_result*.xml") if p.is_file()):
+        relative = path.relative_to(root).as_posix()
+        try:
+            document = ET.parse(path)
+        except ET.ParseError as exc:
+            failures.append(f"Malformed Firebase Test Lab result XML {relative}: {exc}")
+            continue
+        failure_count = 0
+        error_count = 0
+        for suite in document.getroot().iter("testsuite"):
+            failure_count += int(suite.attrib.get("failures", "0"))
+            error_count += int(suite.attrib.get("errors", "0"))
+        if failure_count or error_count:
+            failures.append(
+                f"Firebase Test Lab result {relative} reports "
+                f"{failure_count} failure(s) and {error_count} error(s)"
+            )
+
+    for path in sorted(p for p in root.rglob("*") if p.is_file() and p.name.lower() == "instrumentation.results"):
+        relative = path.relative_to(root).as_posix()
+        text = decode_text(path)
+        codes = [int(value) for value in re.findall(r"INSTRUMENTATION_CODE:\s*(-?\d+)", text)]
+        if "FAILURES!!!" in text or any(code != 0 for code in codes):
+            code_text = ", ".join(str(code) for code in codes) if codes else "not reported"
+            failures.append(f"Firebase instrumentation result {relative} failed (code {code_text})")
+
+    return failures
 
 
 def collect_diagnostic_lines(root: Path, patterns: list[str] | None = None, limit: int = 80) -> list[str]:
@@ -249,6 +294,7 @@ def main() -> int:
     results_root = args.artifact_dir / "ftl-results"
     marker_matches, searched_logs = find_text_with_markers(results_root, args.required_marker)
     diagnostic_lines = collect_diagnostic_lines(results_root)
+    errors.extend(find_failed_test_results(results_root))
     for marker, paths in marker_matches.items():
         if not paths:
             errors.append(f"Missing required Firebase Test Lab log marker: {marker}")
@@ -262,9 +308,9 @@ def main() -> int:
             captures.extend(found)
 
     gcloud_exit_ignored = gcloud_exit != 0 and is_tool_results_api_disabled(stderr_path) and not errors
-    write_summary(args, gcloud_exit, gcloud_exit_ignored, copy_info, errors, marker_matches, searched_logs, captures, diagnostic_lines)
     if gcloud_exit != 0 and not gcloud_exit_ignored:
         errors.append(f"gcloud firebase test android run exited with {gcloud_exit}")
+    write_summary(args, gcloud_exit, gcloud_exit_ignored, copy_info, errors, marker_matches, searched_logs, captures, diagnostic_lines)
     if errors:
         if diagnostic_lines:
             print("Firebase Test Lab diagnostic log excerpt:", file=sys.stderr)

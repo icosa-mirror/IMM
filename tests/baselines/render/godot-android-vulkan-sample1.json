@@ -1,6 +1,6 @@
 {
   "baseline": "godot-android-vulkan-sample1",
-  "capture_source": "VisualSmokeScene render baseline capture",
+  "capture_source": "VisualSmokeScene render candidate capture",
   "fixture": "exampleImmFiles/sample1.imm",
   "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
