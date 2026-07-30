@@ -285,6 +285,7 @@ static bool AndroidCompleteInit() {
 
 #if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 static constexpr int kUnityVulkanPrepareEventFlag = 0x80;
+static constexpr int kUnityVulkanQueueEventFlag = 0x40;
 static constexpr int kUnityVulkanCustomBlitEventID = 6;
 static void iConfigureUnityVulkanEvent(int eventID, bool logEvent);
 #endif
@@ -323,6 +324,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
                 {
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
+                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanQueueEventFlag, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
                 }
                 iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
@@ -344,6 +346,7 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
                 {
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
+                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanQueueEventFlag, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
                 }
                 iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
@@ -430,6 +433,7 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
 {
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
+    const bool queueEvent = (eventID & kUnityVulkanQueueEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
     // Android renders IMM into an explicit Unity RenderTexture from the
     // presentation callback. Resource access and the external queue callback
@@ -442,10 +446,17 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     {
         config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
     }
-    config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
-    config.flags = prepareEvent
-        ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission | kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
-        : kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
+    config.graphicsQueueAccess = queueEvent
+        ? kUnityVulkanGraphicsQueueAccess_Allow
+        : kUnityVulkanGraphicsQueueAccess_DontCare;
+    config.flags = queueEvent
+        ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission |
+           kUnityVulkanEventConfigFlag_FlushCommandBuffers |
+           kUnityVulkanEventConfigFlag_SyncWorkerThreads |
+           kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
+        : (prepareEvent
+            ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission | kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
+            : kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState);
     if (iEnvFlagEnabled("IMM_UNITY_VK_NO_MODIFIES_STATE"))
     {
         config.flags &= ~kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
@@ -790,32 +801,45 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     context.width = width;
     context.height = height;
 
-    gImmUnityPlugin.UnityAPI.mVulkan->AccessQueue(iUnityVulkanQueueRenderCallback, event_id, &context, true);
-    constexpr VkImageLayout kShaderReadLayout = 5; // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    constexpr VkPipelineStageFlags kFragmentShaderStage = 0x00000080; // VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-    constexpr VkAccessFlags kShaderReadAccess = 0x00000020; // VK_ACCESS_SHADER_READ_BIT
-    UnityVulkanImage presentedColorImage = {};
-    const bool preparedForPresentation = target.colorTexture
-        ? gImmUnityPlugin.UnityAPI.mVulkan->AccessTexture(
-            target.colorTexture,
-            UnityVulkanWholeImage,
-            kShaderReadLayout,
-            kFragmentShaderStage,
-            kShaderReadAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &presentedColorImage)
-        : gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-            colorTarget,
-            UnityVulkanWholeImage,
-            kShaderReadLayout,
-            kFragmentShaderStage,
-            kShaderReadAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &presentedColorImage);
-    if (!preparedForPresentation)
+    static int preparedTargetReportCount = 0;
+    if (preparedTargetReportCount < 8)
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan render failed to prepare color target for presentation camera=%d", cameraID);
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_PRESENT_TARGET_20260730] camera=%d event=%d colorImage=0x%llx depthImage=0x%llx viewport=%dx%d",
+            cameraID,
+            event_id,
+            static_cast<unsigned long long>(context.colorImage),
+            static_cast<unsigned long long>(context.depthImage),
+            context.width,
+            context.height);
+        ++preparedTargetReportCount;
     }
+    return true;
+}
+
+static bool iRenderPreparedUnityVulkanCameraQueue(int cameraID, int event_id, piRenderer *renderer)
+{
+    UnityVulkanRenderContext &context = sUnityVulkanRenderContext[cameraID];
+    if (!renderer || context.renderer != renderer || context.colorImage == 0 || context.width <= 0 || context.height <= 0)
+    {
+        return false;
+    }
+    context.eventID = event_id & ~kUnityVulkanQueueEventFlag;
+    static int queueReportCount = 0;
+    if (queueReportCount < 8)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_PRESENT_QUEUE_20260730] camera=%d event=%d colorImage=0x%llx viewport=%dx%d",
+            cameraID,
+            event_id,
+            static_cast<unsigned long long>(context.colorImage),
+            context.width,
+            context.height);
+        ++queueReportCount;
+    }
+    iUnityVulkanQueueRenderCallback(context.eventID, &context);
     return true;
 }
 
@@ -1094,6 +1118,11 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         if ((event_id & kUnityVulkanPrepareEventFlag) != 0)
         {
             iPrepareUnityVulkanCamera(unityVulkanCameraID);
+            return;
+        }
+        if ((event_id & kUnityVulkanQueueEventFlag) != 0)
+        {
+            iRenderPreparedUnityVulkanCameraQueue(unityVulkanCameraID, event_id, renderer);
             return;
         }
         if (iEnvFlagEnabled("IMM_UNITY_VK_SKIP_HOST_RENDER"))

@@ -16,13 +16,17 @@ namespace ImmPlayer
         internal RenderTexture PresentationSource { get; set; }
         internal IntPtr RenderEventFunction { get; set; }
         internal int RenderEventId { get; set; }
+        internal int QueueRenderEventId { get; set; }
         internal Mesh PresentationMesh { get; set; }
         internal Material PresentationMaterial { get; set; }
 
         private void OnPreRender()
         {
             if (RenderEventFunction != IntPtr.Zero)
+            {
                 GL.IssuePluginEvent(RenderEventFunction, RenderEventId);
+                GL.IssuePluginEvent(RenderEventFunction, QueueRenderEventId);
+            }
         }
 
         private void OnDestroy()
@@ -937,6 +941,7 @@ namespace ImmPlayer
                 _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
             {
                 int presentationEventId = info.CameraId << 8;
+                int queueEventId = presentationEventId | 0x40;
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
                     _configuredVulkanRenderEvents.Add(presentationEventId))
                 {
@@ -945,8 +950,17 @@ namespace ImmPlayer
                         $"[IMM_UNITY_VK_PRESENT_EVENT_20260730] eventId={presentationEventId} " +
                         $"camera={info.CameraId} configured={configured}");
                 }
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                    _configuredVulkanRenderEvents.Add(queueEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(queueEventId);
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_PRESENT_QUEUE_EVENT_20260730] eventId={queueEventId} " +
+                        $"camera={info.CameraId} configured={configured}");
+                }
                 presenter.RenderEventFunction = _renderEventFunc;
                 presenter.RenderEventId = presentationEventId;
+                presenter.QueueRenderEventId = queueEventId;
             }
 #endif
 #if UNITY_ANDROID
