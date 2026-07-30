@@ -119,6 +119,7 @@ def main() -> int:
         args.environment_variable = []
         args.required_capture_name = []
         args.required_marker = []
+        args.robo_script = Path("unity-wait.roboscript")
         args.test = Path("ftl-test.apk")
         args.timeout = "7m"
 
@@ -129,6 +130,9 @@ def main() -> int:
         assert "--test" in command
         test_index = command.index("--test")
         assert command[test_index + 1] == "ftl-test.apk"
+        assert "--robo-script" in command
+        robo_script_index = command.index("--robo-script")
+        assert command[robo_script_index + 1] == "unity-wait.roboscript"
 
     print("Firebase Test Lab wrapper tests passed")
     return 0

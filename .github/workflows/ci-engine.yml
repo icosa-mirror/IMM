@@ -1349,6 +1349,7 @@ jobs:
           --device "$FTL_UNITY_DEVICE"
           --app artifacts/unity-android-vulkan/ImmUnitySmoke.apk
           --test-type robo
+          --robo-script tests/fixtures/firebase/unity_android_vulkan_wait.roboscript
           --artifact-dir artifacts/unity-android-vulkan
           --timeout 5m
           --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files

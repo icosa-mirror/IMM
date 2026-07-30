@@ -199,6 +199,8 @@ def build_firebase_command(args: argparse.Namespace, results_dir: str) -> list[s
     ]
     if args.test:
         command.extend(["--test", args.test.as_posix()])
+    if args.robo_script:
+        command.extend(["--robo-script", args.robo_script.as_posix()])
     if args.additional_apk:
         command.extend(["--additional-apks", ",".join(Path(value).as_posix() for value in args.additional_apk)])
     for value in args.environment_variable:
@@ -252,6 +254,7 @@ def main() -> int:
     parser.add_argument("--device", required=True)
     parser.add_argument("--app", type=Path, required=True)
     parser.add_argument("--test", type=Path)
+    parser.add_argument("--robo-script", type=Path)
     parser.add_argument("--additional-apk", action="append", default=[])
     parser.add_argument("--test-type", choices=["instrumentation", "robo"], default="instrumentation")
     parser.add_argument("--artifact-dir", type=Path, required=True)
