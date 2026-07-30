@@ -118,7 +118,7 @@ def find_failed_test_results(root: Path) -> list[str]:
         relative = path.relative_to(root).as_posix()
         text = decode_text(path)
         codes = [int(value) for value in re.findall(r"INSTRUMENTATION_CODE:\s*(-?\d+)", text)]
-        if "FAILURES!!!" in text or any(code != 0 for code in codes):
+        if "FAILURES!!!" in text or any(code != -1 for code in codes):
             code_text = ", ".join(str(code) for code in codes) if codes else "not reported"
             failures.append(f"Firebase instrumentation result {relative} failed (code {code_text})")
 

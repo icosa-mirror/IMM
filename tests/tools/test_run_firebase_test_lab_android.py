@@ -82,6 +82,17 @@ def main() -> int:
         result_failures = tool.find_failed_test_results(root / "ftl-results")
         assert any("1 failure(s) and 0 error(s)" in failure for failure in result_failures)
         assert any("instrumentation.results failed (code -1)" in failure for failure in result_failures)
+        instrumentation_result.write_text("INSTRUMENTATION_CODE: -1\n", encoding="utf-8")
+        result_xml.write_text(
+            '<testsuites><testsuite tests="1" failures="0" errors="0"/></testsuites>\n',
+            encoding="utf-8",
+        )
+        assert tool.find_failed_test_results(root / "ftl-results") == []
+        instrumentation_result.write_text("INSTRUMENTATION_CODE: 0\n", encoding="utf-8")
+        assert any(
+            "instrumentation.results failed (code 0)" in failure
+            for failure in tool.find_failed_test_results(root / "ftl-results")
+        )
         diagnostics = tool.collect_diagnostic_lines(root / "ftl-results")
         assert diagnostics == ["device/logcat: 06-12 IMMAVAL renderFrame frame=60 drawCalls=12"]
         summary_path = tool.write_summary(
