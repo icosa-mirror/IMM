@@ -2,7 +2,7 @@ Configuration=Debug
 OutputDir=/home/runner/work/IMM/IMM/code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug
 ExpectedLibraryCount=2
 GodotCppLib=/home/runner/work/IMM/IMM/thirdparty/godot-cpp/bin/libgodot-cpp.android.template_debug.arm64.a
-GeneratedUtc=2026-07-30T13:55:15.4258538Z
+GeneratedUtc=2026-07-30T16:53:52.3153988Z
 Libraries:
-FOUND	libimm_godot_extension.arm64.so	6058352	2026-07-30T13:55:14.3362036Z
-FOUND	libImmGodotPlugin.so	12791840	2026-07-30T13:55:12.9032012Z
+FOUND	libimm_godot_extension.arm64.so	6058352	2026-07-30T16:53:51.1506524Z
+FOUND	libImmGodotPlugin.so	12792536	2026-07-30T16:53:50.1406609Z
