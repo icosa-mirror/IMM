@@ -101,15 +101,22 @@ def main() -> int:
             "--test-type robo",
             'required-marker "Unity Android Vulkan renderer initialized from host device"',
             'required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"',
+            'required-marker "[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730]"',
             'required-marker "[IMM_UNITY_VK_PRESENT_FINALIZE_20260730]"',
+            'required-marker "[IMM_UNITY_VK_PRESENT_COMMAND_20260730]"',
             'required-marker "[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730]"',
             'required-marker "[IMM_UNITY_VK_PRESENT_BLIT_20260730]"',
-            'required-marker "colorTexture=0x"',
-            'required-marker "Vulkan renderer began external image frame preserving host color with host depth"',
+            'required-marker "colorRenderBuffer=0x"',
+            'required-marker "Vulkan renderer began Unity-owned command buffer frame with IMM render pass"',
+            'required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presentation-texture"',
             'required-marker "Unity Vulkan render:"',
             'required-marker "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]"',
             'required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"',
             "--required-capture-name unity-android-vulkan.png",
+            "Record Unity Android Vulkan visual metrics",
+            "unity-android-vulkan-composition-metrics.json",
+            "windows-directx-sample1.ppm",
+            "unity-android-vulkan-sample1.json",
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs": [
             "BuildMacOSMetalSmokePlayer",
@@ -152,9 +159,10 @@ def main() -> int:
             "config.rendererApi = piRenderer::API::Vulkan;",
             "config.projectionMatrixAlreadyGpuAdjusted = true;",
             "config.reverseDepthBuffer = true;",
-            "SetVulkanCameraTexture",
-            "AccessTexture(",
-            "AccessQueue(",
+            "AccessRenderBufferTexture(",
+            "CommandRecordingState(",
+            "BeginExternalImageCommandBufferFramePreserveColor(",
+            "[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730]",
             "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]",
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
@@ -176,6 +184,12 @@ def main() -> int:
         missing = require_tokens(path, tokens)
         for token in missing:
             errors.append(f"{path.relative_to(ROOT)} missing token: {token}")
+
+    unity_native = (
+        ROOT / "code/appImmUnity/src/main.cpp"
+    ).read_text(encoding="utf-8")
+    if "AccessQueue(" in unity_native:
+        errors.append("Unity Vulkan same-frame render path must not submit through AccessQueue")
 
     unity_smoke = (
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"

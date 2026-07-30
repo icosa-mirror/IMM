@@ -1360,15 +1360,18 @@ jobs:
           --required-marker "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]"
           --required-marker "commandBuffer=False cameraCallback=True"
           --required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"
+          --required-marker "[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730]"
           --required-marker "[IMM_UNITY_VK_PRESENT_FINALIZE_20260730]"
+          --required-marker "[IMM_UNITY_VK_PRESENT_COMMAND_20260730]"
           --required-marker "[IMM_UNITY_VK_PRESENT_BLIT_20260730]"
           --required-marker "[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730]"
-          --required-marker "colorTexture=0x"
-          --required-marker "Vulkan renderer began external image frame preserving host color with host depth"
+          --required-marker "colorRenderBuffer=0x"
+          --required-marker "Vulkan renderer began Unity-owned command buffer frame with IMM render pass"
           --required-marker "Loaded in CPU"
           --required-marker "Loaded in GPU"
           --required-marker "Unity Vulkan render:"
           --required-marker "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]"
+          --required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presentation-texture"
           --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
           --required-marker "[IMM_UNITY_SMOKE] render candidate capture="
           --required-marker "[IMM_UNITY_SMOKE] capture="
@@ -1376,21 +1379,38 @@ jobs:
           --required-capture-name unity-android-vulkan.png
           --client-label "IMM Unity Android Vulkan"
 
-      - name: Record Unity Android Vulkan screenshot metrics
+      - name: Record Unity Android Vulkan visual metrics
         if: always()
         shell: pwsh
         run: |
-          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($capture) {
-            python tests/tools/compare_render_metrics.py $capture.FullName `
+          $failed = $false
+          $renderCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($renderCapture) {
+            python tests/tools/compare_render_metrics.py $renderCapture.FullName `
               --reference tests/baselines/render/windows-directx-sample1.ppm `
               --contract tests/baselines/render/unity-android-vulkan-sample1.json `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
           } else {
             '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan-render.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
-            throw "Missing Firebase Test Lab unity-android-vulkan-render.png"
+            Write-Warning "Missing Firebase Test Lab unity-android-vulkan-render.png"
+            $failed = $true
           }
+
+          $compositionCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($compositionCapture) {
+            python tests/tools/compare_render_metrics.py $compositionCapture.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          } else {
+            '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
+            Write-Warning "Missing Firebase Test Lab unity-android-vulkan.png"
+            $failed = $true
+          }
+
+          if ($failed) { exit 1 }
 
       - name: Write Unity Android Vulkan screenshot report
         if: always()

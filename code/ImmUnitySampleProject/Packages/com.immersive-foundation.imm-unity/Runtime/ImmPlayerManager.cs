@@ -14,18 +14,52 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RenderTexture PresentationSource { get; set; }
-        internal IntPtr RenderEventFunction { get; set; }
-        internal int RenderEventId { get; set; }
-        internal int QueueRenderEventId { get; set; }
-        internal int FinalizeRenderEventId { get; set; }
         internal Mesh PresentationMesh { get; set; }
         internal Material PresentationMaterial { get; set; }
+        private Camera _camera;
+        private CommandBuffer _renderCommandBuffer;
+        private IntPtr _renderEventFunction;
+        private int _renderEventId = -1;
         private bool _loggedPresentationBlit;
 
-        private void OnPreRender()
+        internal void ConfigureRenderEvent(IntPtr renderEventFunction, int renderEventId)
         {
-            // Vulkan rendering is queued by the source camera's OnPostRender so
-            // Unity cannot clear the presentation texture after the plugin.
+            if (_renderCommandBuffer != null &&
+                _renderEventFunction == renderEventFunction &&
+                _renderEventId == renderEventId)
+            {
+                return;
+            }
+
+            RemoveRenderCommandBuffer();
+            _renderEventFunction = renderEventFunction;
+            _renderEventId = renderEventId;
+            if (_renderEventFunction == IntPtr.Zero)
+                return;
+
+            _camera = GetComponent<Camera>();
+            if (_camera == null)
+                return;
+
+            _renderCommandBuffer = new CommandBuffer
+            {
+                name = "Render IMM Into Vulkan Presentation Texture"
+            };
+            _renderCommandBuffer.IssuePluginEvent(_renderEventFunction, _renderEventId);
+            _camera.AddCommandBuffer(CameraEvent.BeforeImageEffects, _renderCommandBuffer);
+            Debug.Log(
+                $"[IMM_UNITY_VK_PRESENT_COMMAND_20260730] event={_renderEventId} " +
+                $"cameraEvent={CameraEvent.BeforeImageEffects}");
+        }
+
+        private void RemoveRenderCommandBuffer()
+        {
+            if (_renderCommandBuffer == null)
+                return;
+            if (_camera != null)
+                _camera.RemoveCommandBuffer(CameraEvent.BeforeImageEffects, _renderCommandBuffer);
+            _renderCommandBuffer.Release();
+            _renderCommandBuffer = null;
         }
 
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
@@ -48,6 +82,7 @@ namespace ImmPlayer
 
         private void OnDestroy()
         {
+            RemoveRenderCommandBuffer();
             if (PresentationMaterial != null)
                 Destroy(PresentationMaterial);
             if (PresentationMesh != null)
@@ -945,6 +980,16 @@ namespace ImmPlayer
 #endif
         }
 
+#if IMM_UNITY_ANDROID_VULKAN_CI
+        public RenderTexture GetAndroidVulkanPresentationTargetForValidation(Camera cam)
+        {
+            if (cam == null)
+                return null;
+            _vulkanPresentationTargets.TryGetValue(cam, out RenderTexture target);
+            return target;
+        }
+#endif
+
         private void OnCameraPreCull(Camera cam)
         {
             if (!_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
@@ -959,8 +1004,6 @@ namespace ImmPlayer
                 _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
             {
                 int presentationEventId = info.CameraId << 8;
-                int queueEventId = presentationEventId | 0x40;
-                int finalizeEventId = presentationEventId | 0x20;
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
                     _configuredVulkanRenderEvents.Add(presentationEventId))
                 {
@@ -969,26 +1012,7 @@ namespace ImmPlayer
                         $"[IMM_UNITY_VK_PRESENT_EVENT_20260730] eventId={presentationEventId} " +
                         $"camera={info.CameraId} configured={configured}");
                 }
-                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
-                    _configuredVulkanRenderEvents.Add(queueEventId))
-                {
-                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(queueEventId);
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_PRESENT_QUEUE_EVENT_20260730] eventId={queueEventId} " +
-                        $"camera={info.CameraId} configured={configured}");
-                }
-                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
-                    _configuredVulkanRenderEvents.Add(finalizeEventId))
-                {
-                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(finalizeEventId);
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_PRESENT_FINALIZE_EVENT_20260730] eventId={finalizeEventId} " +
-                        $"camera={info.CameraId} configured={configured}");
-                }
-                presenter.RenderEventFunction = _renderEventFunc;
-                presenter.RenderEventId = presentationEventId;
-                presenter.QueueRenderEventId = queueEventId;
-                presenter.FinalizeRenderEventId = finalizeEventId;
+                presenter.ConfigureRenderEvent(_renderEventFunc, presentationEventId);
             }
 #endif
 #if UNITY_ANDROID
@@ -1064,9 +1088,6 @@ namespace ImmPlayer
                     : (cam.allowMSAA ? Math.Max(1, QualitySettings.antiAliasing) : 1);
                 IntPtr colorRenderBuffer = colorBuffer.GetNativeRenderBufferPtr();
                 IntPtr depthRenderBuffer = depthBuffer.GetNativeRenderBufferPtr();
-                IntPtr colorTexture = vulkanTargetTexture != null
-                    ? vulkanTargetTexture.GetNativeTexturePtr()
-                    : IntPtr.Zero;
                 if (!_loggedVulkanRenderTargetSource.Contains(cam))
                 {
                     _loggedVulkanRenderTargetSource.Add(cam);
@@ -1074,29 +1095,16 @@ namespace ImmPlayer
                     Debug.Log(
                         $"[IMM_UNITY_ANDROID_VK_TARGET_20260729] cam={cam.name} cameraId={info.CameraId} " +
                         $"source={source} pixel={cam.pixelWidth}x{cam.pixelHeight} samples={vulkanSampleCount} " +
-                        $"colorRenderBuffer=0x{colorRenderBuffer.ToInt64():x} colorTexture=0x{colorTexture.ToInt64():x} " +
+                        $"colorRenderBuffer=0x{colorRenderBuffer.ToInt64():x} " +
                         $"depthRenderBuffer=0x{depthRenderBuffer.ToInt64():x}");
                 }
-                if (colorTexture != IntPtr.Zero)
-                {
-                    ImmNativePlugin.SetVulkanCameraTexture(
-                        info.CameraId,
-                        colorTexture,
-                        depthRenderBuffer,
-                        cam.pixelWidth,
-                        cam.pixelHeight,
-                        vulkanSampleCount);
-                }
-                else
-                {
-                    ImmNativePlugin.SetVulkanCameraRenderBuffers(
-                        info.CameraId,
-                        colorRenderBuffer,
-                        depthRenderBuffer,
-                        cam.pixelWidth,
-                        cam.pixelHeight,
-                        vulkanSampleCount);
-                }
+                ImmNativePlugin.SetVulkanCameraRenderBuffers(
+                    info.CameraId,
+                    colorRenderBuffer,
+                    depthRenderBuffer,
+                    cam.pixelWidth,
+                    cam.pixelHeight,
+                    vulkanSampleCount);
                 int prepared = IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_PREPARE")
                     ? 0
                     : ImmNativePlugin.PrepareCamera(info.CameraId);
@@ -1265,23 +1273,12 @@ namespace ImmPlayer
             if (IsVulkanRuntime() &&
                 _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
             {
-                if (presenter.RenderEventFunction == IntPtr.Zero)
-                    return;
-
-                GL.IssuePluginEvent(
-                    presenter.RenderEventFunction,
-                    presenter.RenderEventId);
-                GL.IssuePluginEvent(
-                    presenter.RenderEventFunction,
-                    presenter.FinalizeRenderEventId);
-
                 if (_androidVulkanPostRenderPresentationCount < 8)
                 {
                     ++_androidVulkanPostRenderPresentationCount;
                     Debug.Log(
                         $"[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730] camera={info.CameraId} " +
-                        $"renderEvent={presenter.RenderEventId} queueSubmission=AccessQueue " +
-                        $"finalizeEvent={presenter.FinalizeRenderEventId}");
+                        $"submission=presenterCommandBuffer");
                 }
                 return;
             }

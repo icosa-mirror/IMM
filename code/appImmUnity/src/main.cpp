@@ -285,8 +285,6 @@ static bool AndroidCompleteInit() {
 
 #if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
 static constexpr int kUnityVulkanPrepareEventFlag = 0x80;
-static constexpr int kUnityVulkanQueueEventFlag = 0x40;
-static constexpr int kUnityVulkanFinalizeEventFlag = 0x20;
 static constexpr int kUnityVulkanCustomBlitEventID = 6;
 static void iConfigureUnityVulkanEvent(int eventID, bool logEvent);
 #endif
@@ -325,8 +323,6 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
                 {
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
-                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanQueueEventFlag, false);
-                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanFinalizeEventFlag, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
                 }
                 iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
@@ -348,8 +344,6 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
                 {
                     iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
-                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanQueueEventFlag, false);
-                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanFinalizeEventFlag, false);
                     iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
                 }
                 iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
@@ -436,11 +430,10 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
 {
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
-    const bool queueEvent = (eventID & kUnityVulkanQueueEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Android renders IMM into an explicit Unity RenderTexture from the
-    // presentation callback. Resource access and the external queue callback
-    // both require being outside Unity's render pass.
+    // Android renders IMM into an explicit Unity RenderTexture by recording
+    // directly into Unity's command buffer. Attachment access and IMM's own
+    // render pass both require being outside Unity's current render pass.
     config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
@@ -449,17 +442,10 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     {
         config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
     }
-    config.graphicsQueueAccess = queueEvent
-        ? kUnityVulkanGraphicsQueueAccess_Allow
-        : kUnityVulkanGraphicsQueueAccess_DontCare;
-    config.flags = queueEvent
-        ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission |
-           kUnityVulkanEventConfigFlag_FlushCommandBuffers |
-           kUnityVulkanEventConfigFlag_SyncWorkerThreads |
-           kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
-        : (prepareEvent
-            ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission | kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
-            : kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState);
+    config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
+    config.flags = prepareEvent
+        ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission | kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
+        : kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
     if (iEnvFlagEnabled("IMM_UNITY_VK_NO_MODIFIES_STATE"))
     {
         config.flags &= ~kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
@@ -606,18 +592,24 @@ struct UnityRenderingExtCustomBlitParamsMinimal
     unsigned int commandFlags;
 };
 
-static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, void *data)
+static bool iRecordUnityVulkanCamera(
+    UnityVulkanRenderContext *context,
+    VkCommandBuffer unityCommandBuffer,
+    uint64_t currentFrameNumber,
+    uint64_t safeFrameNumber)
 {
     const auto renderStart = std::chrono::steady_clock::now();
-    UnityVulkanRenderContext *context = static_cast<UnityVulkanRenderContext *>(data);
-    if (!context || !context->renderer)
+    if (!context || !context->renderer || !unityCommandBuffer)
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan queue render skipped: missing context for event=%d", event_id);
-        return;
+        iLog().Printf(LT_ERROR, L"Unity Vulkan command recording skipped: missing context or command buffer");
+        return false;
     }
 
     piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(context->renderer);
-    if (!vulkanRenderer->BeginExternalImageFramePreserveColor(
+    if (!vulkanRenderer->BeginExternalImageCommandBufferFramePreserveColor(
+            unityCommandBuffer,
+            currentFrameNumber,
+            safeFrameNumber,
             reinterpret_cast<void *>(static_cast<uintptr_t>(context->colorImage)),
             context->colorFormat,
             context->colorSamples,
@@ -628,26 +620,11 @@ static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, vo
             context->height,
             true))
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan queue render skipped: failed to begin external image frame for camera=%d", context->cameraID);
-        return;
-    }
-
-    const float diagnosticMagenta[4] = { 1.0f, 0.0f, 1.0f, 1.0f };
-    vulkanRenderer->Clear(diagnosticMagenta, nullptr, nullptr, nullptr, false);
-    static bool diagnosticClearLogged = false;
-    if (!diagnosticClearLogged)
-    {
-        diagnosticClearLogged = true;
-        uint8_t readback[4] = {};
-        const bool readbackSucceeded = vulkanRenderer->DebugReadbackExternalFrameColor(readback);
         iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_NATIVE_CLEAR_20260730] submitted magenta clear readback=%d rgba=%u,%u,%u,%u",
-            readbackSucceeded ? 1 : 0,
-            static_cast<unsigned int>(readback[0]),
-            static_cast<unsigned int>(readback[1]),
-            static_cast<unsigned int>(readback[2]),
-            static_cast<unsigned int>(readback[3]));
+            LT_ERROR,
+            L"Unity Vulkan command recording skipped: failed to begin borrowed command buffer frame for camera=%d",
+            context->cameraID);
+        return false;
     }
 
     const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
@@ -697,6 +674,7 @@ static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, vo
         renderPerfTotalMilliseconds = 0.0;
         renderPerfMaxMilliseconds = 0.0;
     }
+    return rendered;
 }
 
 static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *renderer, UnityRenderBuffer colorOverride = nullptr)
@@ -708,7 +686,7 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
 
     const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
     UnityRenderBuffer colorTarget = colorOverride ? colorOverride : target.color;
-    if ((!colorTarget && !target.colorTexture) || !target.depth || target.width <= 0 || target.height <= 0)
+    if (!colorTarget || !target.depth || target.width <= 0 || target.height <= 0)
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: missing color/depth render buffers for camera=%d", cameraID);
         return true;
@@ -724,23 +702,14 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     gImmUnityPlugin.UnityAPI.mVulkan->EnsureOutsideRenderPass();
 
     UnityVulkanImage colorImage = {};
-    const bool accessedColor = target.colorTexture
-        ? gImmUnityPlugin.UnityAPI.mVulkan->AccessTexture(
-            target.colorTexture,
-            UnityVulkanWholeImage,
-            kColorAttachmentLayout,
-            kColorAttachmentStage,
-            kColorAttachmentAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &colorImage)
-        : gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-            colorTarget,
-            UnityVulkanWholeImage,
-            kColorAttachmentLayout,
-            kColorAttachmentStage,
-            kColorAttachmentAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &colorImage);
+    const bool accessedColor = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+        colorTarget,
+        UnityVulkanWholeImage,
+        kColorAttachmentLayout,
+        kColorAttachmentStage,
+        kColorAttachmentAccess,
+        kUnityVulkanResourceAccess_PipelineBarrier,
+        &colorImage);
     if (!accessedColor)
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: failed to access color render buffer for camera=%d", cameraID);
@@ -768,7 +737,7 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
             L"[IMM_UNITY_VK_RT_20260610] camera=%d colorRB=%p colorTexture=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
             cameraID,
             colorTarget,
-            target.colorTexture,
+            nullptr,
             target.depth,
             static_cast<unsigned long long>(colorImage.image),
             static_cast<unsigned int>(colorImage.format),
@@ -804,101 +773,71 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     context.width = width;
     context.height = height;
 
+    UnityVulkanRecordingState recordingState = {};
+    if (!gImmUnityPlugin.UnityAPI.mVulkan->CommandRecordingState(
+            &recordingState,
+            kUnityVulkanGraphicsQueueAccess_DontCare) ||
+        !recordingState.commandBuffer)
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"Unity Vulkan render skipped: Unity did not provide a command buffer for camera=%d",
+            cameraID);
+        return true;
+    }
+
     static int preparedTargetReportCount = 0;
     if (preparedTargetReportCount < 8)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_TARGET_20260730] camera=%d event=%d colorImage=0x%llx depthImage=0x%llx viewport=%dx%d",
+            L"[IMM_UNITY_VK_PRESENT_TARGET_20260730] camera=%d event=%d colorImage=0x%llx depthImage=0x%llx commandBuffer=%p viewport=%dx%d",
             cameraID,
             event_id,
             static_cast<unsigned long long>(context.colorImage),
             static_cast<unsigned long long>(context.depthImage),
+            recordingState.commandBuffer,
             context.width,
             context.height);
         ++preparedTargetReportCount;
     }
-    gImmUnityPlugin.UnityAPI.mVulkan->AccessQueue(
-        iUnityVulkanQueueRenderCallback,
-        event_id,
-        &context,
-        true);
-    return true;
-}
 
-static bool iRenderPreparedUnityVulkanCameraQueue(int cameraID, int event_id, piRenderer *renderer)
-{
-    UnityVulkanRenderContext &context = sUnityVulkanRenderContext[cameraID];
-    if (!renderer || context.renderer != renderer || context.colorImage == 0 || context.width <= 0 || context.height <= 0)
-    {
-        return false;
-    }
-    context.eventID = event_id & ~kUnityVulkanQueueEventFlag;
-    static int queueReportCount = 0;
-    if (queueReportCount < 8)
+    const bool rendered = iRecordUnityVulkanCamera(
+        &context,
+        recordingState.commandBuffer,
+        recordingState.currentFrameNumber,
+        recordingState.safeFrameNumber);
+    static int commandBufferReportCount = 0;
+    if (commandBufferReportCount < 8)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_QUEUE_20260730] camera=%d event=%d colorImage=0x%llx viewport=%dx%d",
+            L"[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730] camera=%d event=%d commandBuffer=%p currentFrame=%llu safeFrame=%llu rendered=%d",
             cameraID,
             event_id,
-            static_cast<unsigned long long>(context.colorImage),
-            context.width,
-            context.height);
-        ++queueReportCount;
-    }
-    iUnityVulkanQueueRenderCallback(context.eventID, &context);
-    return true;
-}
-
-static bool iFinalizePreparedUnityVulkanCamera(int cameraID)
-{
-    if (!gImmUnityPlugin.UnityAPI.mVulkan ||
-        gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan)
-    {
-        return false;
-    }
-
-    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
-    UnityRenderBuffer colorTarget = target.color;
-    if ((!colorTarget && !target.colorTexture) || target.width <= 0 || target.height <= 0)
-    {
-        iLog().Printf(
-            LT_ERROR,
-            L"Unity Vulkan presentation finalize skipped: missing color render buffer for camera=%d",
-            cameraID);
-        return true;
+            recordingState.commandBuffer,
+            static_cast<unsigned long long>(recordingState.currentFrameNumber),
+            static_cast<unsigned long long>(recordingState.safeFrameNumber),
+            rendered ? 1 : 0);
+        ++commandBufferReportCount;
     }
 
     constexpr VkImageLayout kShaderReadLayout = 5; // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
     constexpr VkPipelineStageFlags kFragmentShaderStage = 0x00000080; // VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
     constexpr VkAccessFlags kShaderReadAccess = 0x00000020; // VK_ACCESS_SHADER_READ_BIT
-
-    gImmUnityPlugin.UnityAPI.mVulkan->EnsureOutsideRenderPass();
-
-    UnityVulkanImage colorImage = {};
-    const bool accessedColor = target.colorTexture
-        ? gImmUnityPlugin.UnityAPI.mVulkan->AccessTexture(
-            target.colorTexture,
-            UnityVulkanWholeImage,
-            kShaderReadLayout,
-            kFragmentShaderStage,
-            kShaderReadAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &colorImage)
-        : gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+    UnityVulkanImage sampledColorImage = {};
+    if (!gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
             colorTarget,
             UnityVulkanWholeImage,
             kShaderReadLayout,
             kFragmentShaderStage,
             kShaderReadAccess,
             kUnityVulkanResourceAccess_PipelineBarrier,
-            &colorImage);
-    if (!accessedColor)
+            &sampledColorImage))
     {
         iLog().Printf(
             LT_ERROR,
-            L"Unity Vulkan presentation finalize failed to transition color target for camera=%d",
+            L"Unity Vulkan render failed to return color attachment for sampling camera=%d",
             cameraID);
         return true;
     }
@@ -908,10 +847,10 @@ static bool iFinalizePreparedUnityVulkanCamera(int cameraID)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u",
+            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u sameEvent=1",
             cameraID,
-            static_cast<unsigned long long>(colorImage.image),
-            static_cast<unsigned int>(colorImage.layout));
+            static_cast<unsigned long long>(sampledColorImage.image),
+            static_cast<unsigned int>(sampledColorImage.layout));
         ++finalizeReportCount;
     }
     return true;
@@ -1192,16 +1131,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         if ((event_id & kUnityVulkanPrepareEventFlag) != 0)
         {
             iPrepareUnityVulkanCamera(unityVulkanCameraID);
-            return;
-        }
-        if ((event_id & kUnityVulkanQueueEventFlag) != 0)
-        {
-            iRenderPreparedUnityVulkanCameraQueue(unityVulkanCameraID, event_id, renderer);
-            return;
-        }
-        if ((event_id & kUnityVulkanFinalizeEventFlag) != 0)
-        {
-            iFinalizePreparedUnityVulkanCamera(unityVulkanCameraID);
             return;
         }
         if (iEnvFlagEnabled("IMM_UNITY_VK_SKIP_HOST_RENDER"))

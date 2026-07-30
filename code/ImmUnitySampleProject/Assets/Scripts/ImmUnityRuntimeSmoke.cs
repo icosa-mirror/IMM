@@ -171,11 +171,28 @@ namespace ImmPlayer
                     QuitIfRequested(2);
                     yield break;
                 }
+#if IMM_UNITY_ANDROID_VULKAN_CI
+                ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
+                RenderTexture vulkanPresentationTarget = playerManager != null
+                    ? playerManager.GetAndroidVulkanPresentationTargetForValidation(renderCaptureCamera)
+                    : null;
+                if (vulkanPresentationTarget == null)
+                {
+                    Debug.LogError($"{Prefix}missing Unity Android Vulkan presentation texture for direct render capture");
+                    QuitIfRequested(2);
+                    yield break;
+                }
+                Debug.Log(
+                    $"{Prefix}render source=unity-vulkan-presentation-texture " +
+                    $"size={vulkanPresentationTarget.width}x{vulkanPresentationTarget.height}");
+                Texture2D renderCapture = CaptureRenderTexture(vulkanPresentationTarget);
+#else
                 Texture2D renderCapture = _diagnosticCameraTargetTexture != null
                     ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
                     : (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan
                         ? CaptureScreenTexture()
                         : CaptureCameraTexture(renderCaptureCamera));
+#endif
                 WriteCapture(renderCapture, _renderCapturePath, "render candidate");
             }
 
