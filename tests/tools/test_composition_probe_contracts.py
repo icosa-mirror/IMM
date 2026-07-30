@@ -101,6 +101,7 @@ def main() -> int:
             "--test-type robo",
             'required-marker "Unity Android Vulkan renderer initialized from host device"',
             'required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"',
+            'required-marker "[IMM_UNITY_VK_PRESENT_FINALIZE_20260730]"',
             'required-marker "[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730]"',
             'required-marker "[IMM_UNITY_VK_PRESENT_BLIT_20260730]"',
             'required-marker "colorTexture=0x"',
