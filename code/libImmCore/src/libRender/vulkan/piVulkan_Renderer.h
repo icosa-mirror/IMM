@@ -16,7 +16,6 @@ struct piVulkanExternalDevice
     void *physicalDevice;
     void *device;
     void *graphicsQueue;
-    void *getInstanceProcAddr;
     uint32_t graphicsQueueFamilyIndex;
 };
 
@@ -42,8 +41,9 @@ public:
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height, bool clearExternalDepth = false);
     bool BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, bool hostDepthReverseZ);
-    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height);
+    bool BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, bool hostDepthReverseZ, uint32_t subpass, int width, int height);
     bool DebugClearHostRenderPassColor(float red, float green, float blue, float alpha);
+    bool DebugReadbackExternalFrameColor(uint8_t rgba[4]);
     void EndExternalImageFrame(void);
 
     void StartPerformanceMeasure(void) override;

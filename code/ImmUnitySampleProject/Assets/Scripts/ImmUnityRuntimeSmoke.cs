@@ -105,7 +105,16 @@ namespace ImmPlayer
                 QuitIfRequested(6);
                 yield break;
             }
-            if (Screen.width != CaptureWidth || Screen.height != CaptureHeight)
+            bool resizeDisplayForCapture = true;
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            // Keep Android's native swapchain extent. Resizing the display after
+            // Vulkan initialization invalidates the presentation surface used by
+            // the native render callback. CaptureScreenTexture resamples the
+            // resulting framebuffer to the fixed validation dimensions.
+            resizeDisplayForCapture = false;
+            Debug.Log($"[IMM_UNITY_ANDROID_VK_NATIVE_SURFACE_20260730] capture source={Screen.width}x{Screen.height}");
+#endif
+            if (resizeDisplayForCapture && (Screen.width != CaptureWidth || Screen.height != CaptureHeight))
             {
                 Debug.Log($"{Prefix}setting capture resolution {CaptureWidth}x{CaptureHeight} from {Screen.width}x{Screen.height}");
                 Screen.SetResolution(CaptureWidth, CaptureHeight, false);
@@ -589,8 +598,7 @@ namespace ImmPlayer
             }
             cam.cullingMask = 0;
 
-            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cube.name = "IMM Runtime Overlay Fixture Cube";
+            GameObject cube = CreateSmokeQuad("IMM Runtime Overlay Fixture Cube");
             cube.layer = overlayLayer;
             cube.transform.position = cam.ViewportToWorldPoint(new Vector3(0.95f, 0.45f, 4.0f));
             cube.transform.rotation = Quaternion.identity;
@@ -675,8 +683,7 @@ namespace ImmPlayer
 
         private static GameObject CreateProbe(string name, Color color, Vector3 position, Quaternion rotation, Vector3 scale, int layer)
         {
-            GameObject probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            probe.name = name;
+            GameObject probe = CreateSmokeQuad(name);
             probe.layer = layer;
             probe.transform.SetPositionAndRotation(position, rotation);
             probe.transform.localScale = scale;
@@ -705,6 +712,37 @@ namespace ImmPlayer
                 material.SetColor("_Color", color);
             renderer.sharedMaterial = material;
             Debug.Log($"{Prefix}scene composition probe material {name} shader={shader.name}");
+            return probe;
+        }
+
+        private static GameObject CreateSmokeQuad(string name)
+        {
+            var probe = new GameObject(name);
+            var meshFilter = probe.AddComponent<MeshFilter>();
+            probe.AddComponent<MeshRenderer>();
+
+            var mesh = new Mesh
+            {
+                name = $"{name} Mesh",
+                vertices = new[]
+                {
+                    new Vector3(-0.5f, -0.5f, 0.0f),
+                    new Vector3(-0.5f, 0.5f, 0.0f),
+                    new Vector3(0.5f, 0.5f, 0.0f),
+                    new Vector3(0.5f, -0.5f, 0.0f)
+                },
+                triangles = new[] { 0, 1, 2, 0, 2, 3 },
+                uv = new[]
+                {
+                    new Vector2(0.0f, 0.0f),
+                    new Vector2(0.0f, 1.0f),
+                    new Vector2(1.0f, 1.0f),
+                    new Vector2(1.0f, 0.0f)
+                }
+            };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            meshFilter.sharedMesh = mesh;
             return probe;
         }
 

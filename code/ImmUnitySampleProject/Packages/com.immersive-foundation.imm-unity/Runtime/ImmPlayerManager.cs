@@ -11,6 +11,29 @@ using UnityEngine.Rendering;
 
 namespace ImmPlayer
 {
+    internal sealed class VulkanPresentationCamera : MonoBehaviour
+    {
+        internal RenderTexture PresentationSource { get; set; }
+        internal IntPtr RenderEventFunction { get; set; }
+        internal int RenderEventId { get; set; }
+        internal Mesh PresentationMesh { get; set; }
+        internal Material PresentationMaterial { get; set; }
+
+        private void OnPreRender()
+        {
+            if (RenderEventFunction != IntPtr.Zero)
+                GL.IssuePluginEvent(RenderEventFunction, RenderEventId);
+        }
+
+        private void OnDestroy()
+        {
+            if (PresentationMaterial != null)
+                Destroy(PresentationMaterial);
+            if (PresentationMesh != null)
+                Destroy(PresentationMesh);
+        }
+    }
+
     internal enum ImmProjectionDestination
     {
         Backbuffer,
@@ -137,10 +160,11 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
         private readonly Dictionary<Camera, ImmProjectionDestination> _lastProjectionDestinationLogged = new Dictionary<Camera, ImmProjectionDestination>();
         private readonly HashSet<Camera> _loggedVulkanRenderTargetSource = new HashSet<Camera>();
-        private readonly HashSet<Camera> _loggedVulkanPresentationQueue = new HashSet<Camera>();
         private readonly HashSet<Camera> _loggedVulkanPrepareWarning = new HashSet<Camera>();
         private readonly HashSet<int> _configuredVulkanRenderEvents = new HashSet<int>();
         private readonly Dictionary<Camera, RenderTexture> _vulkanPresentationTargets = new Dictionary<Camera, RenderTexture>();
+        private readonly Dictionary<Camera, VulkanPresentationCamera> _vulkanPresentationCameras =
+            new Dictionary<Camera, VulkanPresentationCamera>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
@@ -149,6 +173,7 @@ namespace ImmPlayer
         private Coroutine _vulkanSampleEventCoroutine = null;
         private int _appleMetalEventLogCount = 0;
         private int _appleMetalQueueLogCount = 0;
+        private int _androidVulkanPreCullCount = 0;
         private static Mesh _vulkanOverlayFixtureMesh;
         private static Material _vulkanOverlayFixtureMaterial;
 
@@ -183,9 +208,9 @@ namespace ImmPlayer
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
 #if UNITY_ANDROID
-            // Accessing a Unity Vulkan texture from a persistent plugin
-            // event can prevent that event from being replayed. Explicitly
-            // issue the native render callback every frame on Android Vulkan.
+            // Queue a fresh event from the presentation camera every frame.
+            // Persistent Vulkan plugin events in an attached camera command
+            // buffer stop replaying on some Android Unity players.
             forceCameraCallback |= IsVulkanRuntime();
 #endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
@@ -604,9 +629,8 @@ namespace ImmPlayer
         private class PerCameraInfo
         {
             public readonly CommandBuffer CommandBuffer = new CommandBuffer();
-            public readonly CommandBuffer PresentationCommandBuffer = new CommandBuffer();
-            public bool PresentationCommandBufferAttached;
             public int CameraId = -1;
+            public bool VulkanCommandBufferPopulated;
             public readonly float[] WorldToHead = new float[16];
             public readonly float[] HeadProj = new float[16];
             public readonly float[] WorldToLeft = new float[16];
@@ -689,6 +713,9 @@ namespace ImmPlayer
             if (cam == null)
                 return false;
 
+            if (cam.GetComponent<VulkanPresentationCamera>() != null)
+                return false;
+
             if (renderCamera != null && cam != renderCamera)
                 return false;
 
@@ -753,19 +780,25 @@ namespace ImmPlayer
                     foreach (CameraEvent cameraEvent in events)
                     {
                         kvp.Key.RemoveCommandBuffer(cameraEvent, kvp.Value.CommandBuffer);
-                        kvp.Key.RemoveCommandBuffer(cameraEvent, kvp.Value.PresentationCommandBuffer);
                     }
                 }
             }
             _cameras.Clear();
             _configuredVulkanRenderEvents.Clear();
-            _loggedVulkanPresentationQueue.Clear();
-            foreach (RenderTexture target in _vulkanPresentationTargets.Values)
+            foreach (KeyValuePair<Camera, VulkanPresentationCamera> entry in _vulkanPresentationCameras)
             {
-                if (target == null)
+                if (entry.Value != null)
+                    Destroy(entry.Value.gameObject);
+            }
+            _vulkanPresentationCameras.Clear();
+            foreach (KeyValuePair<Camera, RenderTexture> entry in _vulkanPresentationTargets)
+            {
+                if (entry.Key != null && entry.Key.targetTexture == entry.Value)
+                    entry.Key.targetTexture = null;
+                if (entry.Value == null)
                     continue;
-                target.Release();
-                Destroy(target);
+                entry.Value.Release();
+                Destroy(entry.Value);
             }
             _vulkanPresentationTargets.Clear();
         }
@@ -773,21 +806,38 @@ namespace ImmPlayer
         private RenderTexture GetOrCreateVulkanPresentationTarget(Camera cam)
         {
 #if UNITY_ANDROID
-            if (!IsVulkanRuntime() || cam == null || cam.stereoEnabled || cam.targetTexture != null)
+            if (!IsVulkanRuntime() || cam == null || cam.stereoEnabled)
                 return null;
 
-            int width = Math.Max(1, cam.pixelWidth);
-            int height = Math.Max(1, cam.pixelHeight);
-            if (_vulkanPresentationTargets.TryGetValue(cam, out RenderTexture existing) &&
-                existing != null && existing.width == width && existing.height == height)
+            int width = Math.Max(1, Screen.width);
+            int height = Math.Max(1, Screen.height);
+            if (_vulkanPresentationTargets.TryGetValue(cam, out RenderTexture existing))
             {
-                return existing;
-            }
+                if (existing != null && existing.width == width && existing.height == height)
+                {
+                    if (cam.targetTexture != existing)
+                        cam.targetTexture = existing;
+                    return existing;
+                }
 
-            if (existing != null)
+                if (cam.targetTexture == existing)
+                    cam.targetTexture = null;
+                if (existing != null)
+                {
+                    existing.Release();
+                    Destroy(existing);
+                }
+                _vulkanPresentationTargets.Remove(cam);
+                if (_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera oldPresenter))
+                {
+                    if (oldPresenter != null)
+                        Destroy(oldPresenter.gameObject);
+                    _vulkanPresentationCameras.Remove(cam);
+                }
+            }
+            else if (cam.targetTexture != null)
             {
-                existing.Release();
-                Destroy(existing);
+                return null;
             }
 
             var target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
@@ -798,10 +848,75 @@ namespace ImmPlayer
                 autoGenerateMips = false
             };
             target.Create();
+            cam.targetTexture = target;
             _vulkanPresentationTargets[cam] = target;
+
+            var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
+            presenterObject.transform.SetParent(transform, false);
+            Camera presenterCamera = presenterObject.AddComponent<Camera>();
+            presenterCamera.depth = cam.depth + 1000.0f;
+            presenterCamera.clearFlags = CameraClearFlags.SolidColor;
+            presenterCamera.backgroundColor = Color.black;
+            presenterCamera.cullingMask = 1 << 31;
+            presenterCamera.allowHDR = false;
+            presenterCamera.allowMSAA = false;
+            presenterCamera.useOcclusionCulling = false;
+            presenterCamera.orthographic = true;
+            presenterCamera.orthographicSize = 1.0f;
+            presenterCamera.nearClipPlane = 0.01f;
+            presenterCamera.farClipPlane = 10.0f;
+            presenterCamera.targetDisplay = cam.targetDisplay;
+            presenterCamera.rect = cam.rect;
+            VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
+            presenter.PresentationSource = target;
+
+            var quadObject = new GameObject("IMM Vulkan Presentation Quad");
+            quadObject.layer = 31;
+            quadObject.transform.SetParent(presenterObject.transform, false);
+            quadObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
+            var mesh = new Mesh { name = "IMM Vulkan Presentation Mesh" };
+            float aspect = (float)width / height;
+            mesh.vertices = new[]
+            {
+                new Vector3(-aspect, -1.0f, 0.0f),
+                new Vector3(aspect, -1.0f, 0.0f),
+                new Vector3(aspect, 1.0f, 0.0f),
+                new Vector3(-aspect, 1.0f, 0.0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.0f, 0.0f),
+                new Vector2(1.0f, 0.0f),
+                new Vector2(1.0f, 1.0f),
+                new Vector2(0.0f, 1.0f)
+            };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            mesh.RecalculateBounds();
+            quadObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresentation");
+            if (presentationShader == null)
+            {
+                Debug.LogError("[IMM_UNITY_VK_PRESENT_SHADER_20260730] bundled presentation shader is unavailable");
+                Destroy(presenterObject);
+                target.Release();
+                Destroy(target);
+                cam.targetTexture = null;
+                _vulkanPresentationTargets.Remove(cam);
+                return null;
+            }
+            Material material = new Material(presentationShader)
+            {
+                name = "IMM Vulkan Presentation Material",
+                mainTexture = target
+            };
+            quadObject.AddComponent<MeshRenderer>().sharedMaterial = material;
+            presenter.PresentationMesh = mesh;
+            presenter.PresentationMaterial = material;
+            _vulkanPresentationCameras[cam] = presenter;
+
             Debug.Log(
-                $"[IMM_UNITY_VK_PRESENT_TARGET_20260730] camera={cam.name} " +
-                $"size={width}x{height} depth=24 samples=1");
+                $"[IMM_UNITY_VK_PRESENT_20260730] camera={cam.name} size={width}x{height} " +
+                $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth}");
             return target;
 #else
             return null;
@@ -815,7 +930,41 @@ namespace ImmPlayer
             if (!ShouldRenderCamera(cam))
                 return;
 
+            GetOrCreateVulkanPresentationTarget(cam);
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
+#if UNITY_ANDROID
+            if (IsVulkanRuntime() &&
+                _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
+            {
+                int presentationEventId = info.CameraId << 8;
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                    _configuredVulkanRenderEvents.Add(presentationEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(presentationEventId);
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_PRESENT_EVENT_20260730] eventId={presentationEventId} " +
+                        $"camera={info.CameraId} configured={configured}");
+                }
+                presenter.RenderEventFunction = _renderEventFunc;
+                presenter.RenderEventId = presentationEventId;
+            }
+#endif
+#if UNITY_ANDROID
+            if (IsVulkanRuntime())
+            {
+                int preCullCount = ++_androidVulkanPreCullCount;
+                if (preCullCount <= 4 || (preCullCount & (preCullCount - 1)) == 0)
+                {
+                    CameraEvent renderEvent = GetVulkanCommandBufferEvent();
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_PRECULL_20260730] count={preCullCount} frame={Time.frameCount} " +
+                        $"cam={cam.name} enabled={cam.enabled} active={cam.gameObject.activeInHierarchy} " +
+                        $"target={(cam.targetTexture != null ? $"{cam.targetTexture.width}x{cam.targetTexture.height}" : "display")} " +
+                        $"attached={cam.GetCommandBuffers(renderEvent).Length} ready={IsReadyForDocumentLoad} " +
+                        $"renderable={HasRenderableDocument()}");
+                }
+            }
+#endif
 
             if (!IsReadyForDocumentLoad)
             {
@@ -863,32 +1012,9 @@ namespace ImmPlayer
                 cam.stereoEnabled ? info.WorldToRight : null,
                 cam.stereoEnabled ? info.RightProj : null);
             ImmNativePlugin.SetCameraViewport(info.CameraId, cam.pixelWidth, cam.pixelHeight);
-            RenderTexture vulkanPresentationTarget = GetOrCreateVulkanPresentationTarget(cam);
-            if (_useCameraCallbackRendering && vulkanPresentationTarget != null)
-            {
-                if (!info.PresentationCommandBufferAttached)
-                {
-                    info.PresentationCommandBuffer.name = "Present IMM Vulkan Content";
-                    cam.AddCommandBuffer(CameraEvent.AfterEverything, info.PresentationCommandBuffer);
-                    info.PresentationCommandBufferAttached = true;
-                }
-                info.PresentationCommandBuffer.Clear();
-                info.PresentationCommandBuffer.Blit(
-                    vulkanPresentationTarget,
-                    new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget));
-                AppendVulkanOverlayFixtureDraw(info.PresentationCommandBuffer, cam);
-                if (_loggedVulkanPresentationQueue.Add(cam))
-                {
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_PRESENT_QUEUE_20260730] camera={cam.name} " +
-                        $"event={CameraEvent.AfterEverything} latencyFrames=1");
-                }
-            }
             if (IsVulkanRuntime())
             {
-                RenderTexture vulkanTargetTexture = vulkanPresentationTarget != null
-                    ? vulkanPresentationTarget
-                    : (cam.targetTexture != null ? cam.targetTexture : cam.activeTexture);
+                RenderTexture vulkanTargetTexture = cam.targetTexture != null ? cam.targetTexture : cam.activeTexture;
                 RenderBuffer colorBuffer = vulkanTargetTexture != null ? vulkanTargetTexture.colorBuffer : Display.main.colorBuffer;
                 RenderBuffer depthBuffer = vulkanTargetTexture != null ? vulkanTargetTexture.depthBuffer : Display.main.depthBuffer;
                 int vulkanSampleCount = vulkanTargetTexture != null
@@ -896,8 +1022,8 @@ namespace ImmPlayer
                     : (cam.allowMSAA ? Math.Max(1, QualitySettings.antiAliasing) : 1);
                 IntPtr colorRenderBuffer = colorBuffer.GetNativeRenderBufferPtr();
                 IntPtr depthRenderBuffer = depthBuffer.GetNativeRenderBufferPtr();
-                IntPtr colorTexture = vulkanPresentationTarget != null
-                    ? vulkanPresentationTarget.GetNativeTexturePtr()
+                IntPtr colorTexture = vulkanTargetTexture != null
+                    ? vulkanTargetTexture.GetNativeTexturePtr()
                     : IntPtr.Zero;
                 if (!_loggedVulkanRenderTargetSource.Contains(cam))
                 {
@@ -948,15 +1074,30 @@ namespace ImmPlayer
             }
 
             int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
-            info.CommandBuffer.Clear();
             if (IsVulkanRuntime())
             {
+                bool populateCommandBuffer = true;
+#if UNITY_ANDROID
+                // Unity does not reliably replay a Vulkan command buffer that
+                // is cleared and repopulated while it remains attached to a
+                // camera. The event payload is stable for a mono camera, so
+                // record it once and update matrices/resource metadata through
+                // the native API before each replay.
+                populateCommandBuffer = cam.stereoEnabled || !info.VulkanCommandBufferPopulated;
+#endif
+                if (!populateCommandBuffer)
+                    return;
+
+                info.CommandBuffer.Clear();
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(eventId))
                 {
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
                 bool useCustomBlit = IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT") && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
+#if UNITY_ANDROID
+                useCustomBlit = !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
+#endif
                 bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
@@ -983,14 +1124,15 @@ namespace ImmPlayer
                 {
                     info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
                 }
-                if (vulkanPresentationTarget != null)
-                {
-                    info.CommandBuffer.Blit(vulkanPresentationTarget, cameraTarget);
-                }
                 AppendVulkanOverlayFixtureDraw(info.CommandBuffer, cam);
+#if UNITY_ANDROID
+                if (!cam.stereoEnabled)
+                    info.VulkanCommandBufferPopulated = true;
+#endif
             }
             else
             {
+                info.CommandBuffer.Clear();
                 info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
                 if (IsAppleMetalRuntime() && _appleMetalQueueLogCount < 16)
                 {
@@ -1074,6 +1216,10 @@ namespace ImmPlayer
                 return;
             if (!HasRenderableDocument())
                 return;
+#if UNITY_ANDROID
+            if (IsVulkanRuntime() && _vulkanPresentationTargets.ContainsKey(cam))
+                return;
+#endif
 
             if (!_cameras.TryGetValue(cam, out PerCameraInfo info))
                 return;

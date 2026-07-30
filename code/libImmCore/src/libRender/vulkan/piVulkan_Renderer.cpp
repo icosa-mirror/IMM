@@ -4148,6 +4148,7 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
 {
     const bool hostRenderPass = state && state->hostRenderPassFrameActive;
     if (!state || !shader || !target || !vertexArray || !vertexArray->vertexBuffer[0] || !vertexArray->indexBuffer ||
+        vertexArray->indexBuffer->buffer == VK_NULL_BUFFER ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
         state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET)
@@ -5829,12 +5830,7 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
     const piVulkanExternalDevice *externalDevice = static_cast<const piVulkanExternalDevice *>(device);
     if (externalDevice && externalDevice->instance && externalDevice->physicalDevice && externalDevice->device && externalDevice->graphicsQueue)
     {
-        if (externalDevice->getInstanceProcAddr)
-        {
-            mState->vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(externalDevice->getInstanceProcAddr);
-            iReport(mReporter, "[IMM_VK_HOST_RESOLVER_20260730] Vulkan renderer using host-provided instance procedure resolver");
-        }
-        else if (!iLoadVulkanEntryPoints(mState, mReporter))
+        if (!iLoadVulkanEntryPoints(mState, mReporter))
         {
             Deinitialize();
             return false;
@@ -6878,7 +6874,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
     }
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height)
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, bool hostDepthReverseZ, uint32_t subpass, int width, int height)
 {
     EndExternalImageFrame();
     if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
@@ -6911,9 +6907,8 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameRenderTarget = target;
-    const bool useHostDepthReverseZ = std::getenv("IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z") != nullptr;
     mState->externalFrameUsesHostDepth = useHostDepth;
-    mState->externalFrameHostDepthReverseZ = useHostDepth && useHostDepthReverseZ;
+    mState->externalFrameHostDepthReverseZ = useHostDepth && hostDepthReverseZ;
     mState->externalFramePreservesHostColor = true;
     mState->hostRenderPassFrameActive = true;
     mState->hostTransientUniformOffset = 0;
@@ -6952,6 +6947,21 @@ bool piRendererVulkan::DebugClearHostRenderPassColor(float red, float green, flo
     rect.layerCount = 1;
 
     mState->vkCmdClearAttachments(mState->commandBuffer, 1, &attachment, 1, &rect);
+    return true;
+}
+
+bool piRendererVulkan::DebugReadbackExternalFrameColor(uint8_t rgba[4])
+{
+    if (!mState || !rgba || !mState->externalFrameColorTexture ||
+        !mState->externalFrameColorTexture->data)
+    {
+        return false;
+    }
+    if (!iReadBackTextureImage(mState, mState->externalFrameColorTexture, mReporter))
+    {
+        return false;
+    }
+    std::memcpy(rgba, mState->externalFrameColorTexture->data, 4);
     return true;
 }
 
