@@ -90,6 +90,9 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void SetVulkanCameraRenderBuffers(int cameraID, IntPtr colorRenderBuffer, IntPtr depthRenderBuffer, int width, int height, int samples);
 
+        [DllImport(DllName)]
+        public static extern void SetVulkanCameraTexture(int cameraID, IntPtr colorTexture, IntPtr depthRenderBuffer, int width, int height, int samples);
+
         #endregion
 
         #region Document Loading and Unloading

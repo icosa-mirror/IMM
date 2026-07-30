@@ -85,6 +85,7 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -207,6 +208,7 @@ struct ImmUnityPlugin
             struct
             {
                 UnityRenderBuffer color = nullptr;
+                void *colorTexture = nullptr;
                 UnityRenderBuffer depth = nullptr;
                 int width = 0;
                 int height = 0;
@@ -429,9 +431,6 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Android renders through Unity-owned images outside Unity's render pass so
-    // the plugin can query the real VkImage formats instead of assuming a
-    // platform-specific swapchain format.
     config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
@@ -592,6 +591,7 @@ struct UnityRenderingExtCustomBlitParamsMinimal
 
 static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, void *data)
 {
+    const auto renderStart = std::chrono::steady_clock::now();
     UnityVulkanRenderContext *context = static_cast<UnityVulkanRenderContext *>(data);
     if (!context || !context->renderer)
     {
@@ -604,16 +604,19 @@ static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, vo
             reinterpret_cast<void *>(static_cast<uintptr_t>(context->colorImage)),
             context->colorFormat,
             context->colorSamples,
-            reinterpret_cast<void *>(static_cast<uintptr_t>(context->depthImage)),
-            context->depthFormat,
-            context->depthSamples,
+            nullptr,
+            0,
+            1,
             context->width,
             context->height,
-            true))
+            false))
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan queue render skipped: failed to begin external image frame for camera=%d", context->cameraID);
         return;
     }
+
+    const float transparentBlack[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    vulkanRenderer->Clear(transparentBlack, nullptr, nullptr, nullptr, true);
 
     const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
         0.0f, 0.0f, static_cast<float>(context->width), static_cast<float>(context->height), 0.0f, 1.0f, true
@@ -623,17 +626,45 @@ static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, vo
     vulkanRenderer->EndExternalImageFrame();
 
     const Player::PerformanceInfo &perf = iPlayer().GetPerformanceInfoForFrame();
-    iLog().Printf(
-        LT_MESSAGE,
-        L"Unity Vulkan render: camera=%d viewport=%dx%d rendered=%d drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture360DrawCalls=%d",
-        context->cameraID,
-        context->width,
-        context->height,
-        rendered ? 1 : 0,
-        perf.numDrawCalls,
-        perf.numPaintDrawCalls,
-        perf.numPictureDrawCalls,
-        perf.numPicture360DrawCalls);
+    static uint64_t renderReportCount = 0;
+    static uint64_t renderPerfFrames = 0;
+    static double renderPerfTotalMilliseconds = 0.0;
+    static double renderPerfMaxMilliseconds = 0.0;
+    const double renderMilliseconds =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - renderStart).count();
+    ++renderPerfFrames;
+    renderPerfTotalMilliseconds += renderMilliseconds;
+    if (renderMilliseconds > renderPerfMaxMilliseconds)
+        renderPerfMaxMilliseconds = renderMilliseconds;
+    if (renderReportCount < 8)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"Unity Vulkan render: camera=%d viewport=%dx%d rendered=%d drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture360DrawCalls=%d",
+            context->cameraID,
+            context->width,
+            context->height,
+            rendered ? 1 : 0,
+            perf.numDrawCalls,
+            perf.numPaintDrawCalls,
+            perf.numPictureDrawCalls,
+            perf.numPicture360DrawCalls);
+        ++renderReportCount;
+    }
+    if (renderPerfFrames == 60)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_EXTERNAL_PERF_20260730] frames=%llu averageMilliseconds=%.3f maxMilliseconds=%.3f viewport=%dx%d",
+            static_cast<unsigned long long>(renderPerfFrames),
+            renderPerfTotalMilliseconds / static_cast<double>(renderPerfFrames),
+            renderPerfMaxMilliseconds,
+            context->width,
+            context->height);
+        renderPerfFrames = 0;
+        renderPerfTotalMilliseconds = 0.0;
+        renderPerfMaxMilliseconds = 0.0;
+    }
 }
 
 static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *renderer, UnityRenderBuffer colorOverride = nullptr)
@@ -645,9 +676,9 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
 
     const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
     UnityRenderBuffer colorTarget = colorOverride ? colorOverride : target.color;
-    if (!colorTarget || !target.depth || target.width <= 0 || target.height <= 0)
+    if ((!colorTarget && !target.colorTexture) || target.width <= 0 || target.height <= 0)
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: missing color/depth render buffers for camera=%d", cameraID);
+        iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: missing color render buffer for camera=%d", cameraID);
         return true;
     }
 
@@ -661,40 +692,55 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     gImmUnityPlugin.UnityAPI.mVulkan->EnsureOutsideRenderPass();
 
     UnityVulkanImage colorImage = {};
-    if (!gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-            colorTarget,
-            UnityVulkanWholeImage,
-            kColorAttachmentLayout,
-            kColorAttachmentStage,
-            kColorAttachmentAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &colorImage))
+    const bool accessedColor = target.colorTexture
+        ? gImmUnityPlugin.UnityAPI.mVulkan->AccessTexture(
+              target.colorTexture,
+              UnityVulkanWholeImage,
+              kColorAttachmentLayout,
+              kColorAttachmentStage,
+              kColorAttachmentAccess,
+              kUnityVulkanResourceAccess_PipelineBarrier,
+              &colorImage)
+        : gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+              colorTarget,
+              UnityVulkanWholeImage,
+              kColorAttachmentLayout,
+              kColorAttachmentStage,
+              kColorAttachmentAccess,
+              kUnityVulkanResourceAccess_PipelineBarrier,
+              &colorImage);
+    if (!accessedColor)
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: failed to access color render buffer for camera=%d", cameraID);
         return true;
     }
 
     UnityVulkanImage depthImage = {};
-    if (!gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-            target.depth,
-            UnityVulkanWholeImage,
-            kDepthAttachmentLayout,
-            kDepthAttachmentStages,
-            kDepthAttachmentAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &depthImage))
+    if (target.depth &&
+        !gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+                target.depth,
+                UnityVulkanWholeImage,
+                kDepthAttachmentLayout,
+                kDepthAttachmentStages,
+                kDepthAttachmentAccess,
+                kUnityVulkanResourceAccess_PipelineBarrier,
+                &depthImage))
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: failed to access depth render buffer for camera=%d", cameraID);
-        return true;
+        iLog().Printf(
+            LT_WARNING,
+            L"[IMM_UNITY_VK_OWNED_DEPTH_20260730] camera=%d failed to access Unity depth; using renderer-owned depth",
+            cameraID);
+        depthImage = {};
     }
 
     if (sUnityVulkanRenderTargetDiagnosticCount < 24)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_RT_20260610] camera=%d colorRB=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
+            L"[IMM_UNITY_VK_RT_20260610] camera=%d colorRB=%p colorTexture=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
             cameraID,
             colorTarget,
+            target.colorTexture,
             target.depth,
             static_cast<unsigned long long>(colorImage.image),
             static_cast<unsigned int>(colorImage.format),
@@ -1424,12 +1470,33 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraRender
 #if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     IMM_UNITY_NATIVE_LOCK();
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].color = static_cast<UnityRenderBuffer>(colorRenderBuffer);
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].colorTexture = nullptr;
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].depth = static_cast<UnityRenderBuffer>(depthRenderBuffer);
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].width = width;
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].height = height;
     gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].samples = samples > 0 ? samples : 1;
 #else
     (void)colorRenderBuffer;
+    (void)depthRenderBuffer;
+    (void)width;
+    (void)height;
+    (void)samples;
+#endif
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraTexture(int cameraID, void *colorTexture, void *depthRenderBuffer, int width, int height, int samples)
+{
+    if (cameraID < 0 || cameraID > 255) return;
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+    IMM_UNITY_NATIVE_LOCK();
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].color = nullptr;
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].colorTexture = colorTexture;
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].depth = static_cast<UnityRenderBuffer>(depthRenderBuffer);
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].width = width;
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].height = height;
+    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].samples = samples > 0 ? samples : 1;
+#else
+    (void)colorTexture;
     (void)depthRenderBuffer;
     (void)width;
     (void)height;
@@ -1470,6 +1537,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.physicalDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.physicalDevice;
         unityVulkanDevice.device = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
         unityVulkanDevice.graphicsQueue = gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue;
+        unityVulkanDevice.getInstanceProcAddr = reinterpret_cast<void *>(gImmUnityPlugin.UnityAPI.mVulkanInstance.getInstanceProcAddr);
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;

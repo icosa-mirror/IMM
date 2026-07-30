@@ -4154,7 +4154,6 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     {
         return false;
     }
-
     const uint64_t timeout = 5000000000ull;
     VkResult result = VK_SUCCESS;
     if (!hostRenderPass)
@@ -5830,7 +5829,12 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
     const piVulkanExternalDevice *externalDevice = static_cast<const piVulkanExternalDevice *>(device);
     if (externalDevice && externalDevice->instance && externalDevice->physicalDevice && externalDevice->device && externalDevice->graphicsQueue)
     {
-        if (!iLoadVulkanEntryPoints(mState, mReporter))
+        if (externalDevice->getInstanceProcAddr)
+        {
+            mState->vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(externalDevice->getInstanceProcAddr);
+            iReport(mReporter, "[IMM_VK_HOST_RESOLVER_20260730] Vulkan renderer using host-provided instance procedure resolver");
+        }
+        else if (!iLoadVulkanEntryPoints(mState, mReporter))
         {
             Deinitialize();
             return false;

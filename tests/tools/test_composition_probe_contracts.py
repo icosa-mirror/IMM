@@ -37,7 +37,7 @@ def main() -> int:
             "IMM_UNITY_ANDROID_VULKAN_CI",
             "unity-android-vulkan.png",
             'expected = "Vulkan";',
-            "enableDiagnosticCameraTarget = true;",
+            "? CaptureScreenTexture()",
             "frameCount = 90;",
             "[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729]",
             "FindObjectOfType<ImmFeatureExamples>()",
@@ -100,7 +100,12 @@ def main() -> int:
             "Run Unity Android Vulkan smoke in Firebase Test Lab",
             "--test-type robo",
             'required-marker "Unity Android Vulkan renderer initialized from host device"',
+            'required-marker "[IMM_UNITY_VK_PRESENT_TARGET_20260730]"',
+            'required-marker "[IMM_UNITY_VK_PRESENT_QUEUE_20260730]"',
+            'required-marker "colorTexture=0x"',
+            'required-marker "Vulkan renderer began external image frame preserving host color without host depth"',
             'required-marker "Unity Vulkan render:"',
+            'required-marker "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]"',
             'required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"',
             "--required-capture-name unity-android-vulkan.png",
         ],
@@ -145,7 +150,9 @@ def main() -> int:
             "config.rendererApi = piRenderer::API::Vulkan;",
             "config.projectionMatrixAlreadyGpuAdjusted = true;",
             "config.reverseDepthBuffer = true;",
-            "iRenderUnityVulkanCamera(unityVulkanCameraID",
+            "SetVulkanCameraTexture",
+            "AccessTexture(",
+            "[IMM_UNITY_VK_EXTERNAL_PERF_20260730]",
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
             "mConfig.reverseDepthBuffer",
@@ -173,6 +180,10 @@ def main() -> int:
     if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in unity_smoke:
         errors.append(
             "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
+        )
+    if "enableDiagnosticCameraTarget = true;" in unity_smoke:
+        errors.append(
+            "Unity Android Vulkan smoke must exercise the production display target"
         )
     if unity_smoke.find("FreezeCompositionPlaybackIfRequested();") > unity_smoke.find(
         'WriteCapture(renderCapture, _renderCapturePath, "render candidate");'

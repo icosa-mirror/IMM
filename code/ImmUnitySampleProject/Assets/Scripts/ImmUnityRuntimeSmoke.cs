@@ -121,9 +121,6 @@ namespace ImmPlayer
             }
             bool enableDiagnosticCameraTarget =
                 IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv));
-#if IMM_UNITY_ANDROID_VULKAN_CI
-            enableDiagnosticCameraTarget = true;
-#endif
             if (enableDiagnosticCameraTarget)
             {
                 ConfigureDiagnosticCameraTargetTexture();
@@ -167,7 +164,9 @@ namespace ImmPlayer
                 }
                 Texture2D renderCapture = _diagnosticCameraTargetTexture != null
                     ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
-                    : CaptureCameraTexture(renderCaptureCamera);
+                    : (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan
+                        ? CaptureScreenTexture()
+                        : CaptureCameraTexture(renderCaptureCamera));
                 WriteCapture(renderCapture, _renderCapturePath, "render candidate");
             }
 
