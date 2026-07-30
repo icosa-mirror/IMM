@@ -143,10 +143,13 @@ def main() -> int:
             "Unity Android Vulkan interface initialized:",
             "Unity Android Vulkan renderer initialized from host device",
             "config.rendererApi = piRenderer::API::Vulkan;",
+            "config.projectionMatrixAlreadyGpuAdjusted = true;",
+            "config.reverseDepthBuffer = true;",
             "iRenderUnityVulkanCamera(unityVulkanCameraID",
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
             "mConfig.reverseDepthBuffer",
+            "mConfig.projectionMatrixAlreadyGpuAdjusted",
             "DepthBuffer::Linear10",
             "SetUnityProjectionAdjusted(true)",
         ],

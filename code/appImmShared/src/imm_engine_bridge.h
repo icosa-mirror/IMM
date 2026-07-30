@@ -18,6 +18,7 @@ namespace ImmShared
             ImmCore::piRenderer::API rendererApi = ImmCore::piRenderer::API::GL;
             void *graphicsDevice = nullptr;
             bool metalUnityProjectionAdjusted = false;
+            bool projectionMatrixAlreadyGpuAdjusted = false;
             bool reverseDepthBuffer = false;
             bool initializeRendererOnInit = true;
             int initializeWindow = 0;

@@ -360,9 +360,19 @@ namespace ImmPlayer
         private static Texture2D CaptureRenderTexture(RenderTexture renderTexture)
         {
             RenderTexture previousActive = RenderTexture.active;
+            RenderTexture stagingTexture = RenderTexture.GetTemporary(
+                CaptureWidth,
+                CaptureHeight,
+                0,
+                RenderTextureFormat.ARGB32,
+                RenderTextureReadWrite.Default);
             try
             {
-                RenderTexture.active = renderTexture;
+                // Native Vulkan rendering writes directly into the camera
+                // target. A Unity-owned blit establishes the resource
+                // transition and submission dependency before CPU readback.
+                Graphics.Blit(renderTexture, stagingTexture);
+                RenderTexture.active = stagingTexture;
                 var tex = new Texture2D(CaptureWidth, CaptureHeight, TextureFormat.RGB24, false);
                 tex.ReadPixels(new Rect(0, 0, CaptureWidth, CaptureHeight), 0, 0, false);
                 tex.Apply(false, false);
@@ -371,6 +381,7 @@ namespace ImmPlayer
             finally
             {
                 RenderTexture.active = previousActive;
+                RenderTexture.ReleaseTemporary(stagingTexture);
             }
         }
 

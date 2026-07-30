@@ -594,10 +594,7 @@ namespace ImmShared
             ? DepthBuffer::Linear10
             : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-        const bool vulkanProjectionAlreadyGpuAdjusted =
-            mConfig.rendererApi == piRenderer::API::Vulkan &&
-            std::getenv("IMM_UNITY_VK_PROJECTION_ALREADY_GPU") != nullptr;
-        conf.projectionMatrix = (usesZeroToOneDepth && !vulkanProjectionAlreadyGpuAdjusted)
+        conf.projectionMatrix = (usesZeroToOneDepth && !mConfig.projectionMatrixAlreadyGpuAdjusted)
             ? ClipSpaceDepth::FromZeroToOne
             : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;

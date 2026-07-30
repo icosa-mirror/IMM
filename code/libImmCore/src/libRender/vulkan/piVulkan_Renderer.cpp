@@ -6982,7 +6982,7 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
         return false;
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, false, true, false))
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, false, true, false, false))
     {
         mState->vkDestroyImageView(mState->device, imageView, nullptr);
         return false;
@@ -6998,15 +6998,15 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true, false);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true, false, false);
 }
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height, bool clearExternalDepth)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, clearExternalDepth, clearExternalDepth);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, clearExternalDepth, clearExternalDepth, false);
 }
 
-bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height)
+bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, bool hostDepthReverseZ)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || width <= 0 || height <= 0 || vkFormat == 0 || !mState->vkCreateImageView)
@@ -7059,7 +7059,7 @@ bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_
         }
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false, false))
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false, false, hostDepthReverseZ))
     {
         if (depthImageView != VK_NULL_IMAGE_VIEW)
         {
@@ -7073,7 +7073,7 @@ bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_
     return true;
 }
 
-bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor, bool clearExternalDepth)
+bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor, bool clearExternalDepth, bool hostDepthReverseZ)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0)
@@ -7168,7 +7168,7 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     mState->externalFrameDepthTexture = depthTexture;
     mState->externalFrameRenderTarget = renderTarget;
     mState->externalFrameUsesHostDepth = hasExternalDepth && !clearExternalDepth;
-    mState->externalFrameHostDepthReverseZ = false;
+    mState->externalFrameHostDepthReverseZ = mState->externalFrameUsesHostDepth && hostDepthReverseZ;
     mState->externalFramePreservesHostColor = !clearColor;
     iReport(mReporter, hasExternalDepth ? (clearExternalDepth ? "Vulkan renderer began external image frame with owned external depth" : "Vulkan renderer began external image frame with host depth") : "Vulkan renderer began external image frame");
     return true;
