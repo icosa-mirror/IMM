@@ -983,6 +983,36 @@ namespace ImmPlayer
         }
 
 #if IMM_UNITY_ANDROID_VULKAN_CI
+        public bool BeginAndroidVulkanSurfaceProbeForValidation(Camera cam)
+        {
+            if (cam == null ||
+                !_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter) ||
+                presenter == null)
+            {
+                Debug.LogError("[IMM_UNITY_VK_SURFACE_PROBE_20260731] missing presentation camera");
+                return false;
+            }
+
+            Camera presenterCamera = presenter.GetComponent<Camera>();
+            if (presenterCamera == null)
+            {
+                Debug.LogError("[IMM_UNITY_VK_SURFACE_PROBE_20260731] missing Camera component");
+                return false;
+            }
+
+            // This deliberately removes every native-texture and shader-sampling
+            // dependency. A normal Unity camera clear must reach the Android
+            // surface if Unity's Vulkan swapchain presentation is healthy.
+            presenter.enabled = false;
+            presenterCamera.clearFlags = CameraClearFlags.SolidColor;
+            presenterCamera.backgroundColor = Color.magenta;
+            presenterCamera.cullingMask = 0;
+            Debug.Log(
+                $"[IMM_UNITY_VK_SURFACE_PROBE_20260731] active=True " +
+                $"camera={presenterCamera.name} color=FF00FF sourceSampling=False");
+            return true;
+        }
+
         public RenderTexture GetAndroidVulkanPresentationTargetForValidation(Camera cam)
         {
             if (cam == null)

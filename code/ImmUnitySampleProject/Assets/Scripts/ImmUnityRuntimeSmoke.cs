@@ -352,7 +352,24 @@ namespace ImmPlayer
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             ReleaseDiagnosticCameraTargetTexture();
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            ImmPlayerManager validationPlayerManager = FindObjectOfType<ImmPlayerManager>();
+            if (validationPlayerManager == null ||
+                !validationPlayerManager.BeginAndroidVulkanSurfaceProbeForValidation(captureCamera))
+            {
+                Debug.LogError($"{Prefix}Android Vulkan direct surface probe setup failed");
+                Application.Quit(7);
+                yield break;
+            }
+
+            // Firebase's Robo test takes its externally observed screenshot at
+            // the end of the wait action. Keep the activity foreground so that
+            // screenshot and the video see this direct Unity camera clear.
+            Debug.Log("[IMM_UNITY_VK_SURFACE_PROBE_HOLD_20260731] activity remains foreground for Firebase capture");
+            yield break;
+#else
             QuitIfRequested(0);
+#endif
         }
 
         private static void WriteCapture(Texture2D texture, string capturePath, string label)

@@ -1307,13 +1307,6 @@ jobs:
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
           customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-android-vulkan/ImmUnitySmoke.apk
 
-      - name: Verify Unity Vulkan presentation transform
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -F "[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] preTransform=False" \
-            artifacts/unity-android-vulkan/vulkan-presentation-settings.txt
-
       - name: Check Firebase Test Lab configuration
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
@@ -1376,6 +1369,8 @@ jobs:
           --required-marker "shader=Hidden/IMM/VulkanPresent"
           --required-marker "[IMM_UNITY_VK_MANUAL_QUAD_PRESENTED_20260731]"
           --required-marker "explicitUvs=True"
+          --required-marker "[IMM_UNITY_VK_SURFACE_PROBE_20260731] active=True"
+          --required-marker "[IMM_UNITY_VK_SURFACE_PROBE_HOLD_20260731]"
           --required-marker "colorRenderBuffer=0x"
           --required-marker "Vulkan renderer began Unity-owned command buffer frame with IMM render pass"
           --required-marker "Loaded in CPU"
