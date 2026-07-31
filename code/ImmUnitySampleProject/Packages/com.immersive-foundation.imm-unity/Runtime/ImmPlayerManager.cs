@@ -1239,16 +1239,16 @@ namespace ImmPlayer
                 presenter != null &&
                 presenter.PresentationTarget != null)
             {
-                int eventId = info.CameraId << 8;
+                int orderedPresentationEventId = info.CameraId << 8;
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
-                    _configuredVulkanRenderEvents.Add(eventId))
+                    _configuredVulkanRenderEvents.Add(orderedPresentationEventId))
                 {
-                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(orderedPresentationEventId);
                     Debug.Log(
-                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={eventId} " +
+                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={orderedPresentationEventId} " +
                         $"camera={info.CameraId} configured={configured}");
                 }
-                GL.IssuePluginEvent(_renderEventFunc, eventId);
+                GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
                 Graphics.Blit(sourceTarget, presenter.PresentationTarget);
                 if (_androidVulkanPostRenderPresentationCount < 8)
                 {

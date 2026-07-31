@@ -139,7 +139,7 @@ def main() -> int:
             "[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731]",
             "mode=post-render-blit-overlay",
             "submission=plugin-event-then-graphics-blit",
-            "IssuePluginEvent(_renderEventFunc, eventId)",
+            "IssuePluginEvent(_renderEventFunc, orderedPresentationEventId)",
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",
