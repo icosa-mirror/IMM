@@ -3897,10 +3897,21 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
+    if (useHostDebugFragment && state->hostIndexedControlVertexModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(
+            state,
+            reinterpret_cast<const uint8_t *>(kHostIndexedStripControlVS),
+            static_cast<int>(sizeof(kHostIndexedStripControlVS)),
+            &state->hostIndexedControlVertexModule,
+            reporter))
+    {
+        iError(reporter, "[IMM_UNITY_VK_BOUNDED_INDEX_FETCH_20260731] failed to create bounded index-fetch vertex module");
+        return false;
+    }
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = shader->vertexModule;
+    stages[0].module = useHostDebugFragment ? state->hostIndexedControlVertexModule : shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -3912,8 +3923,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    inputAssembly.primitiveRestartEnable = 1;
+    inputAssembly.topology = useHostDebugFragment ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    inputAssembly.primitiveRestartEnable = useHostDebugFragment ? 0u : 1u;
 
     VkPipelineViewportStateCreateInfo viewport = {};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -4053,7 +4064,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_REAL_VERTEX_MINIMAL_STATE_20260731] created real-vertex minimal-state control pipeline"
+                ? "[IMM_UNITY_VK_BOUNDED_INDEX_FETCH_20260731] created bounded index-fetch control pipeline"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
@@ -4134,7 +4145,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
+        state->vkCmdDrawIndexed(state->commandBuffer, 3, 1, baseIndex, 0, 0);
     }
     else
 #endif
