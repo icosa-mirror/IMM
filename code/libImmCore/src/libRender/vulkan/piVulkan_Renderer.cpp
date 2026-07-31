@@ -1239,6 +1239,12 @@ struct piVulkanBorrowedUpload
     uint64_t frameNumber = 0;
 };
 
+struct piVulkanBorrowedPipeline
+{
+    VkPipeline pipeline = VK_NULL_PIPELINE;
+    uint64_t frameNumber = 0;
+};
+
 struct piVertexArrayS
 {
     piBuffer vertexBuffer[2] = { nullptr, nullptr };
@@ -1379,6 +1385,7 @@ struct piVulkanState
     uint32_t borrowedStaticPaintSetCursor = 0;
     uint32_t borrowedPictureSetCursor = 0;
     std::vector<piVulkanBorrowedUpload> borrowedUploads;
+    std::vector<piVulkanBorrowedPipeline> borrowedPipelines;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -3732,6 +3739,34 @@ static VkCullModeFlags iToVulkanCullMode(piRenderer::CullMode mode)
     }
 }
 
+static void iRetireGraphicsPipeline(piVulkanState *state, VkPipeline pipeline)
+{
+    if (!state || pipeline == VK_NULL_PIPELINE || !state->vkDestroyPipeline)
+    {
+        return;
+    }
+    if (state->borrowedFrameResourcesActive)
+    {
+        const piVulkanBorrowedPipeline borrowedPipeline = {
+            pipeline,
+            state->borrowedCurrentFrameNumber
+        };
+        state->borrowedPipelines.push_back(borrowedPipeline);
+        static uint32_t retireReportCount = 0;
+        if (retireReportCount < 16)
+        {
+            std::fprintf(
+                stderr,
+                "[IMM_UNITY_VK_DEFER_PIPELINE_20260731] pipeline=0x%llx frame=%llu\n",
+                static_cast<unsigned long long>(pipeline),
+                static_cast<unsigned long long>(state->borrowedCurrentFrameNumber));
+            ++retireReportCount;
+        }
+        return;
+    }
+    state->vkDestroyPipeline(state->device, pipeline, nullptr);
+}
+
 static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, piRenderer::piReporter *reporter)
 {
     if (!state || !shader || !target || state->device == VK_NULL_DEVICE)
@@ -3802,7 +3837,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     }
     if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
     {
-        state->vkDestroyPipeline(state->device, shader->pipeline, nullptr);
+        iRetireGraphicsPipeline(state, shader->pipeline);
         shader->pipeline = VK_NULL_PIPELINE;
         shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
     }
@@ -4112,7 +4147,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     }
     if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
     {
-        state->vkDestroyPipeline(state->device, shader->pipeline, nullptr);
+        iRetireGraphicsPipeline(state, shader->pipeline);
         shader->pipeline = VK_NULL_PIPELINE;
         shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
     }
@@ -5633,6 +5668,30 @@ static void iCollectBorrowedUploads(piVulkanState *state, uint64_t safeFrameNumb
     }
 }
 
+static void iCollectBorrowedPipelines(piVulkanState *state, uint64_t safeFrameNumber)
+{
+    if (!state)
+    {
+        return;
+    }
+    auto pipeline = state->borrowedPipelines.begin();
+    while (pipeline != state->borrowedPipelines.end())
+    {
+        if (pipeline->frameNumber <= safeFrameNumber)
+        {
+            if (pipeline->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+            {
+                state->vkDestroyPipeline(state->device, pipeline->pipeline, nullptr);
+            }
+            pipeline = state->borrowedPipelines.erase(pipeline);
+        }
+        else
+        {
+            ++pipeline;
+        }
+    }
+}
+
 static bool iCreateBorrowedUploadBuffer(
     piVulkanState *state,
     const void *data,
@@ -6263,6 +6322,14 @@ void piRendererVulkan::Deinitialize(void)
             }
         }
         mState->borrowedUploads.clear();
+        for (const piVulkanBorrowedPipeline &pipeline : mState->borrowedPipelines)
+        {
+            if (pipeline.pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+            {
+                mState->vkDestroyPipeline(mState->device, pipeline.pipeline, nullptr);
+            }
+        }
+        mState->borrowedPipelines.clear();
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
             mState->vkDestroyBuffer(mState->device, mState->stagingBuffer, nullptr);
@@ -7169,6 +7236,8 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
         return false;
     }
 
+    iCollectBorrowedPipelines(mState, safeFrameNumber);
+
     uint32_t frameSlot = kBorrowedFrameSlotCount;
     bool continuingFrame = false;
     for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
@@ -7259,6 +7328,7 @@ bool piRendererVulkan::BeginUnityCommandBufferUploadFrame(void *commandBuffer, u
     }
 
     iCollectBorrowedUploads(mState, safeFrameNumber);
+    iCollectBorrowedPipelines(mState, safeFrameNumber);
 
     uint32_t frameSlot = kBorrowedFrameSlotCount;
     bool continuingFrame = false;
@@ -7481,6 +7551,8 @@ bool piRendererVulkan::BeginExternalImageCommandBufferFramePreserveColor(void *c
     {
         return false;
     }
+
+    iCollectBorrowedPipelines(mState, safeFrameNumber);
 
     uint32_t frameSlot = kBorrowedFrameSlotCount;
     bool continuingFrame = false;

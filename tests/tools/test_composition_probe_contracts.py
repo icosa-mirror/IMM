@@ -173,6 +173,12 @@ def main() -> int:
             "DepthBuffer::Linear10",
             "SetUnityProjectionAdjusted(true)",
         ],
+        ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp": [
+            "struct piVulkanBorrowedPipeline",
+            "iRetireGraphicsPipeline(",
+            "iCollectBorrowedPipelines(",
+            "[IMM_UNITY_VK_DEFER_PIPELINE_20260731]",
+        ],
         ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm": [
             "if (mState->unityProjectionAdjusted)",
             'withString:@"out.position.z = 0.0;"',
