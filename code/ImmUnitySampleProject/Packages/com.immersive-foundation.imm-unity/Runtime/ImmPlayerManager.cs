@@ -14,30 +14,42 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RenderTexture PresentationTarget { get; set; }
-        internal Camera PresentationCamera { get; set; }
-        internal CommandBuffer PresentationCommandBuffer { get; set; }
+        internal Camera SourceCamera { get; set; }
         private int _finalBlitLogCount;
 
-        private void OnPostRender()
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            if (PresentationTarget == null || _finalBlitLogCount >= 8)
+            if (PresentationTarget == null)
+            {
+                Graphics.Blit(source, destination);
                 return;
+            }
 
+            RenderTexture previousSourceTarget = SourceCamera != null ? SourceCamera.targetTexture : null;
+            if (SourceCamera != null)
+                SourceCamera.targetTexture = null;
+            try
+            {
+                Graphics.Blit(PresentationTarget, destination);
+            }
+            finally
+            {
+                if (SourceCamera != null)
+                    SourceCamera.targetTexture = previousSourceTarget;
+            }
+
+            if (_finalBlitLogCount >= 8)
+                return;
             ++_finalBlitLogCount;
             Debug.Log(
-                $"[IMM_UNITY_VK_CAMERA_TARGET_PRESENTED_20260731] " +
-                $"source={PresentationTarget.width}x{PresentationTarget.height} destination=CameraTarget");
+                $"[IMM_UNITY_VK_TRUE_BACKBUFFER_BLIT_20260731] " +
+                $"source={PresentationTarget.width}x{PresentationTarget.height} " +
+                $"destination={(destination == null ? "backbuffer" : $"{destination.width}x{destination.height}")} " +
+                $"mainTargetClearedDuringBlit={SourceCamera != null}");
         }
 
         private void OnDestroy()
         {
-            if (PresentationCamera != null && PresentationCommandBuffer != null)
-                PresentationCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, PresentationCommandBuffer);
-            if (PresentationCommandBuffer != null)
-            {
-                PresentationCommandBuffer.Release();
-                PresentationCommandBuffer = null;
-            }
             if (PresentationTarget == null)
                 return;
             PresentationTarget.Release();
@@ -915,27 +927,18 @@ namespace ImmPlayer
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-            var finalBlitCommandBuffer = new CommandBuffer
-            {
-                name = "Present IMM Vulkan Frame To Camera Target"
-            };
-            finalBlitCommandBuffer.Blit(
-                presentationTarget,
-                new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget));
-            presenterCamera.AddCommandBuffer(CameraEvent.AfterEverything, finalBlitCommandBuffer);
-            presenter.PresentationCamera = presenterCamera;
-            presenter.PresentationCommandBuffer = finalBlitCommandBuffer;
+            presenter.SourceCamera = cam;
             presenter.PresentationTarget = presentationTarget;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"event={CameraEvent.AfterEverything} mode=camera-target-command-buffer " +
+                $"mode=main-target-cleared-on-render-image " +
                 $"ordering=present-before-native");
             Debug.Log(
-                $"[IMM_UNITY_VK_CAMERA_TARGET_COMMAND_20260731] camera={presenterCamera.name} " +
-                $"source={presentationTarget.width}x{presentationTarget.height} destination=CameraTarget");
+                $"[IMM_UNITY_VK_TRUE_BACKBUFFER_SETUP_20260731] camera={presenterCamera.name} " +
+                $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name}");
             return target;
 #else
             return null;
