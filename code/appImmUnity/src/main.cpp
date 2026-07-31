@@ -585,6 +585,7 @@ struct UnityVulkanRenderContext
 static UnityVulkanRenderContext sUnityVulkanRenderContext[256];
 static int sUnityVulkanRenderTargetDiagnosticCount = 0;
 static std::atomic<bool> sUnityVulkanHostDrawBisectionEnabled(false);
+static std::atomic<uint32_t> sUnityVulkanHostDrawBisectionInvocation(0);
 static int sUnityVulkanCustomBlitDiagnosticCount = 0;
 
 struct UnityRenderingExtCustomBlitParamsMinimal
@@ -962,8 +963,25 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
     const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
-    const bool rendered = (beginEndOnly || debugClearOnly) ? false : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
+    const bool drawBisectionEnabled = sUnityVulkanHostDrawBisectionEnabled.load();
+    const uint32_t drawBisectionInvocation = drawBisectionEnabled
+        ? sUnityVulkanHostDrawBisectionInvocation.fetch_add(1) + 1
+        : 0;
+    const bool noBridgeControl = drawBisectionEnabled && drawBisectionInvocation == 2;
+    const bool rendered = (beginEndOnly || debugClearOnly || noBridgeControl)
+        ? false
+        : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
     vulkanRenderer->EndExternalImageFrame();
+
+    if (drawBisectionEnabled && drawBisectionInvocation <= 8)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_DRAW_BISECT_20260731] invocation=%u phase=%ls rendered=%d",
+            drawBisectionInvocation,
+            noBridgeControl ? L"no-bridge-control" : L"bridge",
+            rendered ? 1 : 0);
+    }
 
     const Player::PerformanceInfo &perf = iPlayer().GetPerformanceInfoForFrame();
     iLog().Printf(
@@ -1508,6 +1526,14 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanHostDrawBise
 {
 #if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
     sUnityVulkanHostDrawBisectionEnabled.store(enabled != 0);
+    if (enabled == 0)
+    {
+        sUnityVulkanHostDrawBisectionInvocation.store(0);
+    }
+    iLog().Printf(
+        LT_MESSAGE,
+        L"[IMM_UNITY_VK_DRAW_BISECT_20260731] native-request enabled=%d",
+        enabled != 0 ? 1 : 0);
 #else
     (void)enabled;
 #endif

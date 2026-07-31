@@ -7200,7 +7200,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
             mState->hostDrawBisectionAttempted,
             mState->hostDrawBisectionAdmitted,
             static_cast<unsigned long long>(mState->borrowedCurrentFrameNumber));
-        iDebugLog(message);
+        iReport(mReporter, message);
         if (mState->hostDrawBisectionStage < 3)
         {
             ++mState->hostDrawBisectionStage;
@@ -7356,7 +7356,7 @@ void piRendererVulkan::SetHostDrawBisectionEnabled(bool enabled)
     if (enabled && !mState->hostDrawBisectionEnabled)
     {
         mState->hostDrawBisectionStage = 0;
-        iDebugLog("[IMM_UNITY_VK_DRAW_BISECT_20260731] enabled stages=0,1,8,unlimited");
+        iReport(mReporter, "[IMM_UNITY_VK_DRAW_BISECT_20260731] enabled stages=0,1,8,unlimited");
     }
     mState->hostDrawBisectionEnabled = enabled;
 }
