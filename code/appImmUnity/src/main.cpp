@@ -828,35 +828,15 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
         ++commandBufferReportCount;
     }
 
-    constexpr VkImageLayout kShaderReadLayout = 5; // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    constexpr VkPipelineStageFlags kFragmentShaderStage = 0x00000080; // VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-    constexpr VkAccessFlags kShaderReadAccess = 0x00000020; // VK_ACCESS_SHADER_READ_BIT
-    UnityVulkanImage sampledColorImage = {};
-    if (!gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-            colorTarget,
-            UnityVulkanWholeImage,
-            kShaderReadLayout,
-            kFragmentShaderStage,
-            kShaderReadAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
-            &sampledColorImage))
-    {
-        iLog().Printf(
-            LT_ERROR,
-            L"Unity Vulkan render failed to return color attachment for sampling camera=%d",
-            cameraID);
-        return true;
-    }
-
     static int finalizeReportCount = 0;
     if (finalizeReportCount < 8)
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u sameEvent=1",
+            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u transition=unity-consumer",
             cameraID,
-            static_cast<unsigned long long>(sampledColorImage.image),
-            static_cast<unsigned int>(sampledColorImage.layout));
+            static_cast<unsigned long long>(colorImage.image),
+            static_cast<unsigned int>(kColorAttachmentLayout));
         ++finalizeReportCount;
     }
     return true;
