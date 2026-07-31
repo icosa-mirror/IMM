@@ -14,29 +14,30 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RenderTexture PresentationTarget { get; set; }
+        internal Camera PresentationCamera { get; set; }
+        internal CommandBuffer PresentationCommandBuffer { get; set; }
         private int _finalBlitLogCount;
 
-        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        private void OnPostRender()
         {
-            if (PresentationTarget == null)
-            {
-                Graphics.Blit(source, destination);
+            if (PresentationTarget == null || _finalBlitLogCount >= 8)
                 return;
-            }
 
-            Graphics.Blit(PresentationTarget, destination);
-            if (_finalBlitLogCount < 8)
-            {
-                ++_finalBlitLogCount;
-                Debug.Log(
-                    $"[IMM_UNITY_VK_CAMERA_FINAL_BLIT_20260731] " +
-                    $"source={PresentationTarget.width}x{PresentationTarget.height} " +
-                    $"destination={(destination == null ? "backbuffer" : $"{destination.width}x{destination.height}")}");
-            }
+            ++_finalBlitLogCount;
+            Debug.Log(
+                $"[IMM_UNITY_VK_CAMERA_TARGET_PRESENTED_20260731] " +
+                $"source={PresentationTarget.width}x{PresentationTarget.height} destination=CameraTarget");
         }
 
         private void OnDestroy()
         {
+            if (PresentationCamera != null && PresentationCommandBuffer != null)
+                PresentationCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, PresentationCommandBuffer);
+            if (PresentationCommandBuffer != null)
+            {
+                PresentationCommandBuffer.Release();
+                PresentationCommandBuffer = null;
+            }
             if (PresentationTarget == null)
                 return;
             PresentationTarget.Release();
@@ -911,13 +912,26 @@ namespace ImmPlayer
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
+            var finalBlitCommandBuffer = new CommandBuffer
+            {
+                name = "Present IMM Vulkan Frame To Camera Target"
+            };
+            finalBlitCommandBuffer.Blit(
+                presentationTarget,
+                new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget));
+            presenterCamera.AddCommandBuffer(CameraEvent.AfterEverything, finalBlitCommandBuffer);
+            presenter.PresentationCamera = presenterCamera;
+            presenter.PresentationCommandBuffer = finalBlitCommandBuffer;
             presenter.PresentationTarget = presentationTarget;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=camera-on-render-image");
+                $"event={CameraEvent.AfterEverything} mode=camera-target-command-buffer");
+            Debug.Log(
+                $"[IMM_UNITY_VK_CAMERA_TARGET_COMMAND_20260731] camera={presenterCamera.name} " +
+                $"source={presentationTarget.width}x{presentationTarget.height} destination=CameraTarget");
             return target;
 #else
             return null;
