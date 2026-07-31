@@ -701,10 +701,10 @@ namespace ImmPlayer
 
 #if UNITY_ANDROID
             // The terminal event can run after Unity has discarded or restarted
-            // the camera depth attachment. Record after the skybox instead, while
-            // the camera color and depth contents are still the composition
-            // targets that the native host render pass must preserve.
-            return CameraEvent.AfterSkybox;
+            // the camera depth attachment, while AfterSkybox is not replayed for
+            // the sample's solid-color camera. Record after opaque geometry so
+            // the event always runs with the populated composition depth target.
+            return CameraEvent.AfterForwardOpaque;
 #else
             return CameraEvent.AfterSkybox;
 #endif
