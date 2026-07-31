@@ -1098,18 +1098,6 @@ namespace ImmPlayer
                     return;
 
                 info.CommandBuffer.Clear();
-#if UNITY_ANDROID
-                int prepareEventId = eventId | VulkanPrepareEventFlag;
-                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
-                    _configuredVulkanRenderEvents.Add(prepareEventId))
-                {
-                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(prepareEventId);
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_UPLOAD_EVENT_20260730] eventId={prepareEventId} " +
-                        $"camera={info.CameraId} configured={configured}");
-                }
-                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, prepareEventId);
-#endif
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(eventId))
                 {
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);

@@ -432,11 +432,9 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
     // Android's source camera targets an explicit presentation RenderTexture.
-    // Record inside Unity's active pass so Unity owns the framebuffer, image
-    // views, attachment layouts, and the final presentation blit.
-    config.renderPassPrecondition = prepareEvent
-        ? kUnityVulkanRenderPass_EnsureOutside
-        : kUnityVulkanRenderPass_EnsureInside;
+    // Access its RenderBuffers and record a private render pass into Unity's
+    // command buffer. Unity then transitions and presents the color image.
+    config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
 #endif
@@ -734,7 +732,7 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_RT_20260610] camera=%d colorRB=%p colorTexture=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
+            L"[IMM_UNITY_VK_DIRECT_RT_20260731] camera=%d colorRB=%p colorTexture=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
             cameraID,
             colorTarget,
             nullptr,
@@ -1176,12 +1174,16 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             return;
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
+#if defined(__ANDROID__) || defined(ANDROID)
+        iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+#else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
             return;
         }
         iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
+#endif
         return;
     }
 #endif
