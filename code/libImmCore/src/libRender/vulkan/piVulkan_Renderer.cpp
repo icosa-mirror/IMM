@@ -4142,7 +4142,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        state->vkCmdDraw(state->commandBuffer, num, numInstances, 0, baseInstance);
+        state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
     }
     else
 #endif
