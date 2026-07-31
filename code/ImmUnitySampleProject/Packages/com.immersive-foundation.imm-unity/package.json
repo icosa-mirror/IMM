@@ -5,7 +5,8 @@
   "description": "IMM playback and runtime paint-animation authoring engine for Unity.",
   "unity": "2021.3",
   "dependencies": {
-    "com.immersive-foundation.imm-stroke-reader": "0.1.0"
+    "com.immersive-foundation.imm-stroke-reader": "0.1.0",
+    "com.unity.ugui": "1.0.0"
   },
   "author": {
     "name": "Immersive Foundation"

@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 [assembly: InternalsVisibleTo("ImmUnity.Runtime.Tests")]
 
@@ -13,16 +14,7 @@ namespace ImmPlayer
 {
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
-        internal Mesh PresentationMesh { get; set; }
-        internal Material PresentationMaterial { get; set; }
-
-        private void OnDestroy()
-        {
-            if (PresentationMaterial != null)
-                Destroy(PresentationMaterial);
-            if (PresentationMesh != null)
-                Destroy(PresentationMesh);
-        }
+        internal RawImage PresentationImage { get; set; }
     }
 
     internal enum ImmProjectionDestination
@@ -851,70 +843,30 @@ namespace ImmPlayer
 
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
-            Camera presenterCamera = presenterObject.AddComponent<Camera>();
-            presenterCamera.depth = cam.depth + 1000.0f;
-            presenterCamera.clearFlags = CameraClearFlags.SolidColor;
-            presenterCamera.backgroundColor = Color.black;
-            presenterCamera.cullingMask = 1 << 31;
-            presenterCamera.allowHDR = false;
-            presenterCamera.allowMSAA = false;
-            presenterCamera.useOcclusionCulling = false;
-            presenterCamera.orthographic = true;
-            presenterCamera.orthographicSize = 1.0f;
-            presenterCamera.nearClipPlane = 0.01f;
-            presenterCamera.farClipPlane = 10.0f;
-            presenterCamera.targetDisplay = cam.targetDisplay;
-            presenterCamera.rect = cam.rect;
+            Canvas presenterCanvas = presenterObject.AddComponent<Canvas>();
+            presenterCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            presenterCanvas.pixelPerfect = false;
+            presenterCanvas.sortingOrder = short.MaxValue;
+            presenterCanvas.targetDisplay = cam.targetDisplay;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
 
-            var quadObject = new GameObject("IMM Vulkan Presentation Quad");
-            quadObject.layer = 31;
-            quadObject.transform.SetParent(presenterObject.transform, false);
-            quadObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
-            var mesh = new Mesh { name = "IMM Vulkan Presentation Mesh" };
-            float aspect = (float)width / height;
-            mesh.vertices = new[]
-            {
-                new Vector3(-aspect, -1.0f, 0.0f),
-                new Vector3(aspect, -1.0f, 0.0f),
-                new Vector3(aspect, 1.0f, 0.0f),
-                new Vector3(-aspect, 1.0f, 0.0f)
-            };
-            mesh.uv = new[]
-            {
-                new Vector2(0.0f, 0.0f),
-                new Vector2(1.0f, 0.0f),
-                new Vector2(1.0f, 1.0f),
-                new Vector2(0.0f, 1.0f)
-            };
-            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-            mesh.RecalculateBounds();
-            quadObject.AddComponent<MeshFilter>().sharedMesh = mesh;
-
-            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresentation");
-            if (presentationShader == null)
-            {
-                Debug.LogError("[IMM_UNITY_VK_PRESENT_SHADER_20260731] bundled presentation shader is unavailable");
-                Destroy(presenterObject);
-                target.Release();
-                Destroy(target);
-                cam.targetTexture = null;
-                _vulkanPresentationTargets.Remove(cam);
-                return null;
-            }
-            Material material = new Material(presentationShader)
-            {
-                name = "IMM Vulkan Presentation Material",
-                mainTexture = target
-            };
-            quadObject.AddComponent<MeshRenderer>().sharedMaterial = material;
-            presenter.PresentationMesh = mesh;
-            presenter.PresentationMaterial = material;
+            var imageObject = new GameObject("IMM Vulkan Presentation Image", typeof(RectTransform));
+            imageObject.transform.SetParent(presenterObject.transform, false);
+            RectTransform imageRect = imageObject.GetComponent<RectTransform>();
+            imageRect.anchorMin = Vector2.zero;
+            imageRect.anchorMax = Vector2.one;
+            imageRect.offsetMin = Vector2.zero;
+            imageRect.offsetMax = Vector2.zero;
+            RawImage image = imageObject.AddComponent<RawImage>();
+            image.texture = target;
+            image.color = Color.white;
+            image.raycastTarget = false;
+            presenter.PresentationImage = image;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
-                $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} mode=screen-quad");
+                $"mainDepth={cam.depth} sortingOrder={presenterCanvas.sortingOrder} mode=screen-space-overlay");
             return target;
 #else
             return null;
