@@ -901,7 +901,10 @@ namespace ImmPlayer
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
             Camera presenterCamera = presenterObject.AddComponent<Camera>();
-            presenterCamera.depth = cam.depth + 1000.0f;
+            // Present the completed prior frame before the main camera records
+            // this frame's native Vulkan commands. The main camera renders only
+            // to its explicit source RT, so it cannot overwrite the backbuffer.
+            presenterCamera.depth = cam.depth - 1000.0f;
             presenterCamera.clearFlags = CameraClearFlags.SolidColor;
             presenterCamera.backgroundColor = Color.black;
             presenterCamera.cullingMask = 0;
@@ -928,7 +931,8 @@ namespace ImmPlayer
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"event={CameraEvent.AfterEverything} mode=camera-target-command-buffer");
+                $"event={CameraEvent.AfterEverything} mode=camera-target-command-buffer " +
+                $"ordering=present-before-native");
             Debug.Log(
                 $"[IMM_UNITY_VK_CAMERA_TARGET_COMMAND_20260731] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} destination=CameraTarget");
