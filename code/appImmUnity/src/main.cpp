@@ -431,13 +431,9 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // The production Android path renders into an explicit Unity RenderTexture.
-    // Resource access and the plugin-owned render pass both require Unity's
-    // current pass to be closed. The active-pass path remains diagnostic only.
-    config.renderPassPrecondition =
-        !prepareEvent && iEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS")
-            ? kUnityVulkanRenderPass_EnsureInside
-            : kUnityVulkanRenderPass_EnsureOutside;
+    config.renderPassPrecondition = prepareEvent
+        ? kUnityVulkanRenderPass_EnsureOutside
+        : kUnityVulkanRenderPass_EnsureInside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
 #endif
@@ -892,7 +888,11 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
 #endif
     const uint32_t colorSamples = static_cast<uint32_t>(target.samples > 0 ? target.samples : 1);
 #if defined(__ANDROID__) || defined(ANDROID)
-    const bool assumeHostDepth = target.depth != nullptr;
+    // The managed Android host path explicitly binds CameraTarget with Unity's
+    // depth target before this EnsureInside event. Display render-buffer
+    // pointers are opaque placeholders on Android and are not evidence of
+    // whether the active render pass contains depth.
+    const bool assumeHostDepth = true;
 #else
     const bool assumeHostDepth = iEnvFlagEnabled("IMM_UNITY_VK_ASSUME_HOST_DEPTH");
 #endif
@@ -1163,14 +1163,12 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
 #if defined(__ANDROID__) || defined(ANDROID)
-        if (!iEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS"))
+        if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+            return;
         }
-        else
-        {
-            iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
-        }
+        iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
 #else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {

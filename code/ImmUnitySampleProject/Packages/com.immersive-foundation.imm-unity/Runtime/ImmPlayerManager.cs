@@ -212,14 +212,6 @@ namespace ImmPlayer
         {
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
-#if UNITY_ANDROID
-            // Queue the Vulkan event and its presentation blit together from
-            // OnPostRender. A persistent Camera command buffer is compiled
-            // before the native event updates Unity's Vulkan resource state,
-            // allowing a following blit to sample the pre-render contents.
-            if (IsVulkanRuntime())
-                forceCameraCallback = true;
-#endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
             if (IsVulkanRuntime())
@@ -244,9 +236,6 @@ namespace ImmPlayer
                 Camera.onPreCull += OnCameraPreCull;
             }
             bool subscribePostRender = _useCameraCallbackRendering;
-#if UNITY_ANDROID
-            subscribePostRender |= IsVulkanRuntime();
-#endif
             if (subscribePostRender)
             {
                 Camera.onPostRender += OnCameraPostRender;
@@ -264,9 +253,6 @@ namespace ImmPlayer
                 Camera.onPreCull -= OnCameraPreCull;
             }
             bool unsubscribePostRender = _useCameraCallbackRendering;
-#if UNITY_ANDROID
-            unsubscribePostRender |= IsVulkanRuntime();
-#endif
             if (unsubscribePostRender)
             {
                 Camera.onPostRender -= OnCameraPostRender;
@@ -1062,10 +1048,7 @@ namespace ImmPlayer
             if (!ShouldRenderCamera(cam))
                 return;
 
-#if UNITY_ANDROID
-            if (IsVulkanRuntime() && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS"))
-                GetOrCreateVulkanPresentationTarget(cam);
-#else
+#if !UNITY_ANDROID
             GetOrCreateVulkanPresentationTarget(cam);
 #endif
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
@@ -1213,7 +1196,7 @@ namespace ImmPlayer
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
 #if UNITY_ANDROID
-                bool useHostRenderPass = IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS");
+                bool useHostRenderPass = !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE");
                 if (useHostRenderPass)
                 {
                     int prepareEventId = (info.CameraId << 8) | VulkanPrepareEventFlag;
@@ -1240,7 +1223,11 @@ namespace ImmPlayer
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {
-                    if (IsEnvFlagEnabled("IMM_UNITY_VK_BIND_CAMERA_DEPTH_TARGET"))
+                    bool bindCameraDepthTarget = IsEnvFlagEnabled("IMM_UNITY_VK_BIND_CAMERA_DEPTH_TARGET");
+#if UNITY_ANDROID
+                    bindCameraDepthTarget |= useHostRenderPass;
+#endif
+                    if (bindCameraDepthTarget)
                     {
                         info.CommandBuffer.SetRenderTarget(cameraTarget, new RenderTargetIdentifier(BuiltinRenderTextureType.Depth));
                     }
