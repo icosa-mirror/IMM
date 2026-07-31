@@ -903,7 +903,11 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const bool hostRenderPassHasDepth = iEnvFlagEnabled("IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH") || assumeHostDepth;
     const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth;
 #if defined(__ANDROID__) || defined(ANDROID)
-    const bool useHostDepth = hasDepthAttachment;
+    // Unity exposes the active render pass, but not the Android depth image's
+    // format or contents through CommandRecordingState. Keep the attachment
+    // bound for render-pass compatibility while this control run verifies that
+    // treating its opaque contents as reverse-Z is what rejects every IMM draw.
+    const bool useHostDepth = false;
 #else
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
 #endif
@@ -928,6 +932,15 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
             recordingState.subPassIndex);
         ++sUnityVulkanRenderTargetDiagnosticCount;
     }
+#if defined(__ANDROID__) || defined(ANDROID)
+    if (sUnityVulkanRenderTargetDiagnosticCount == 1)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_NO_HOST_DEPTH_CONTROL_20260731] hasDepthAttachment=%d useHostDepth=0",
+            hasDepthAttachment ? 1 : 0);
+    }
+#endif
 
     piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
     vulkanRenderer->SetHostDrawBisectionEnabled(sUnityVulkanHostDrawBisectionEnabled.load());
