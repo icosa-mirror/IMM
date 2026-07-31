@@ -128,6 +128,7 @@ def main() -> int:
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Plugins/Android/AndroidManifest.xml": [
             "com.immersivefoundation.imm.ImmUnityPlayerActivity",
+            'android:exported="true"',
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Plugins/Android/ImmUnityPlayerActivity.java": [
             "updateUnityCommandLineArguments",
