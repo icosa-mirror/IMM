@@ -34,13 +34,13 @@ namespace ImmPlayer
             // Graphics.Blit(source, null) falls back to Camera.main.targetTexture.
             // That is this same source texture for the offscreen Vulkan camera,
             // producing an undefined self-blit which collapses to source pixel
-            // (0,0) on Android. Detach it while Unity resolves the destination.
+            // (0,0) on Android. Leave it detached until the source camera's next
+            // OnPreCull, because Unity resolves the queued blit after this method
+            // returns. GetOrCreateVulkanPresentationTarget reattaches it there.
             RenderTexture savedTarget = _sourceCamera != null ? _sourceCamera.targetTexture : null;
             if (_sourceCamera != null && savedTarget == _presentationSource)
                 _sourceCamera.targetTexture = null;
             Graphics.Blit(_presentationSource, destination);
-            if (_sourceCamera != null && savedTarget == _presentationSource)
-                _sourceCamera.targetTexture = savedTarget;
 
             if (!_loggedPresentationBlit)
             {
