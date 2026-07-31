@@ -15,25 +15,44 @@ namespace ImmPlayer
     {
         internal RenderTexture PresentationTarget { get; set; }
         internal Camera SourceCamera { get; set; }
+        internal Material PresentationMaterial { get; set; }
         private int _finalBlitLogCount;
 
-        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        private void OnPostRender()
         {
-            if (PresentationTarget == null)
-            {
-                Graphics.Blit(source, destination);
+            if (PresentationTarget == null || PresentationMaterial == null)
                 return;
-            }
 
             RenderTexture previousSourceTarget = SourceCamera != null ? SourceCamera.targetTexture : null;
+            RenderTexture previousActiveTarget = RenderTexture.active;
+            bool previousSrgbWrite = GL.sRGBWrite;
             if (SourceCamera != null)
                 SourceCamera.targetTexture = null;
             try
             {
-                Graphics.Blit(PresentationTarget, destination);
+                Graphics.SetRenderTarget((RenderTexture)null);
+                GL.sRGBWrite = QualitySettings.activeColorSpace == ColorSpace.Linear;
+                PresentationMaterial.SetTexture("_MainTex", PresentationTarget);
+                GL.PushMatrix();
+                GL.LoadOrtho();
+                PresentationMaterial.SetPass(0);
+                GL.Begin(GL.QUADS);
+                GL.Color(Color.white);
+                GL.TexCoord2(0.0f, 0.0f);
+                GL.Vertex3(0.0f, 0.0f, 0.0f);
+                GL.TexCoord2(1.0f, 0.0f);
+                GL.Vertex3(1.0f, 0.0f, 0.0f);
+                GL.TexCoord2(1.0f, 1.0f);
+                GL.Vertex3(1.0f, 1.0f, 0.0f);
+                GL.TexCoord2(0.0f, 1.0f);
+                GL.Vertex3(0.0f, 1.0f, 0.0f);
+                GL.End();
+                GL.PopMatrix();
             }
             finally
             {
+                GL.sRGBWrite = previousSrgbWrite;
+                RenderTexture.active = previousActiveTarget;
                 if (SourceCamera != null)
                     SourceCamera.targetTexture = previousSourceTarget;
             }
@@ -42,14 +61,18 @@ namespace ImmPlayer
                 return;
             ++_finalBlitLogCount;
             Debug.Log(
-                $"[IMM_UNITY_VK_TRUE_BACKBUFFER_BLIT_20260731] " +
+                $"[IMM_UNITY_VK_MANUAL_QUAD_PRESENTED_20260731] " +
                 $"source={PresentationTarget.width}x{PresentationTarget.height} " +
-                $"destination={(destination == null ? "backbuffer" : $"{destination.width}x{destination.height}")} " +
-                $"mainTargetClearedDuringBlit={SourceCamera != null}");
+                $"destination=backbuffer explicitUvs=True mainTargetCleared={SourceCamera != null}");
         }
 
         private void OnDestroy()
         {
+            if (PresentationMaterial != null)
+            {
+                Destroy(PresentationMaterial);
+                PresentationMaterial = null;
+            }
             if (PresentationTarget == null)
                 return;
             PresentationTarget.Release();
@@ -927,6 +950,19 @@ namespace ImmPlayer
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
+            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresent");
+            if (presentationShader == null)
+            {
+                Debug.LogError("[IMM_UNITY_VK_MANUAL_QUAD_SETUP_20260731] missing Resources/ImmVulkanPresent shader");
+            }
+            else
+            {
+                presenter.PresentationMaterial = new Material(presentationShader)
+                {
+                    name = "IMM Vulkan Presentation Material",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
             presenter.SourceCamera = cam;
             presenter.PresentationTarget = presentationTarget;
             _vulkanPresentationCameras[cam] = presenter;
@@ -934,11 +970,12 @@ namespace ImmPlayer
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=main-target-cleared-on-render-image " +
+                $"mode=manual-textured-quad " +
                 $"ordering=present-before-native");
             Debug.Log(
-                $"[IMM_UNITY_VK_TRUE_BACKBUFFER_SETUP_20260731] camera={presenterCamera.name} " +
-                $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name}");
+                $"[IMM_UNITY_VK_MANUAL_QUAD_SETUP_20260731] camera={presenterCamera.name} " +
+                $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
+                $"shader={(presentationShader != null ? presentationShader.name : "missing")}");
             return target;
 #else
             return null;
