@@ -6140,18 +6140,16 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
 #endif
 
     const piVulkanExternalDevice *externalDevice = static_cast<const piVulkanExternalDevice *>(device);
-    if (externalDevice && externalDevice->instance && externalDevice->physicalDevice && externalDevice->device && externalDevice->graphicsQueue)
+    if (externalDevice && externalDevice->instance && externalDevice->physicalDevice &&
+        externalDevice->device && externalDevice->graphicsQueue && externalDevice->getInstanceProcAddr)
     {
-        if (!iLoadVulkanEntryPoints(mState, mReporter))
-        {
-            Deinitialize();
-            return false;
-        }
         mState->instance = static_cast<VkInstance>(externalDevice->instance);
         mState->physicalDevice = static_cast<VkPhysicalDevice>(externalDevice->physicalDevice);
         mState->device = static_cast<VkDevice>(externalDevice->device);
         mState->graphicsQueue = static_cast<VkQueue>(externalDevice->graphicsQueue);
         mState->graphicsQueueFamilyIndex = externalDevice->graphicsQueueFamilyIndex;
+        mState->vkGetInstanceProcAddr =
+            reinterpret_cast<PFN_vkGetInstanceProcAddr>(externalDevice->getInstanceProcAddr);
         if (!iLoadVulkanInstanceEntryPoints(mState, mReporter) ||
             !iLoadVulkanSwapchainEntryPoints(mState, mReporter) ||
             !iCreateVulkanFrameResources(mState, mReporter))

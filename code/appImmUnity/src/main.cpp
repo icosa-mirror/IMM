@@ -1664,6 +1664,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.physicalDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.physicalDevice;
         unityVulkanDevice.device = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
         unityVulkanDevice.graphicsQueue = gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue;
+        unityVulkanDevice.getInstanceProcAddr = reinterpret_cast<void *>(
+            gImmUnityPlugin.UnityAPI.mVulkanInstance.getInstanceProcAddr);
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;

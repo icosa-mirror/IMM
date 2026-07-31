@@ -161,6 +161,7 @@ def main() -> int:
             "config.projectionMatrixAlreadyGpuAdjusted = true;",
             "config.reverseDepthBuffer = true;",
             "CommandRecordingState(",
+            "mVulkanInstance.getInstanceProcAddr",
             "BeginUnityCommandBufferUploadFrame(",
             "BeginHostRenderPassFrame(",
             "[IMM_UNITY_VK_UPLOAD_CB_20260730]",
@@ -175,6 +176,7 @@ def main() -> int:
         ],
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp": [
             "struct piVulkanBorrowedPipeline",
+            "externalDevice->getInstanceProcAddr",
             "iRetireGraphicsPipeline(",
             "iCollectBorrowedPipelines(",
             "[IMM_UNITY_VK_DEFER_PIPELINE_20260731]",

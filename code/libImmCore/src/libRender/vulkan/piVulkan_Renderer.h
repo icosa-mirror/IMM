@@ -16,6 +16,7 @@ struct piVulkanExternalDevice
     void *physicalDevice;
     void *device;
     void *graphicsQueue;
+    void *getInstanceProcAddr;
     uint32_t graphicsQueueFamilyIndex;
 };
 
