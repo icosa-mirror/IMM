@@ -8867,7 +8867,12 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     {
         mState->pendingPresentTexture = target;
     }
-    if (hasStaticPaintGpuPath)
+    // On the Unity Android Vulkan host path, audit the first GPU draw against
+    // the renderer's CPU mirrors before returning. This does not replace or
+    // modify the recorded Vulkan draw; it tells us whether the exact indexed
+    // geometry and matrices should cover the host viewport.
+    const bool gpuProjectionAudit = hasStaticPaintGpuPath && !mState->cpuPaintDiagnosticReported;
+    if (hasStaticPaintGpuPath && !gpuProjectionAudit)
     {
         return;
     }
@@ -8968,7 +8973,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         const float width = 1.0f + 6.0f * ((float)(widthBits & 0x7fffu) / 32767.0f);
         if (hasPrevious)
         {
-            iDrawCpuLine(target, previous[0], previous[1], sx, sy, width, r, g, b, a);
+            if (!gpuProjectionAudit && target->data)
+            {
+                iDrawCpuLine(target, previous[0], previous[1], sx, sy, width, r, g, b, a);
+            }
             if (a > 0.0f)
             {
                 ++visibleSegments;
@@ -8981,7 +8989,9 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     if (!mState->cpuPaintDiagnosticReported)
     {
         uint32_t targetNonBlack = 0;
-        const size_t pixelCount = (size_t)target->info.mXres * (size_t)target->info.mYres;
+        const size_t pixelCount = target->data
+            ? (size_t)target->info.mXres * (size_t)target->info.mYres
+            : 0u;
         for (size_t i = 0; i < pixelCount; ++i)
         {
             const uint8_t *src = target->data + i * 4u;
@@ -8994,7 +9004,8 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         char message[512];
         std::snprintf(message,
                       sizeof(message),
-                      "IMM_VK_CPU: paint draw num=%u projected=%u inside=%u segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
+                      "[IMM_UNITY_VK_CPU_PROJECTION_AUDIT_20260731] gpu=%d num=%u projected=%u inside=%u segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
+                      gpuProjectionAudit ? 1 : 0,
                       num,
                       projected,
                       insidePoints,
