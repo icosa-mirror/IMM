@@ -700,7 +700,11 @@ namespace ImmPlayer
                 return CameraEvent.BeforeForwardOpaque;
 
 #if UNITY_ANDROID
-            return CameraEvent.AfterEverything;
+            // The terminal event can run after Unity has discarded or restarted
+            // the camera depth attachment. Record after the skybox instead, while
+            // the camera color and depth contents are still the composition
+            // targets that the native host render pass must preserve.
+            return CameraEvent.AfterSkybox;
 #else
             return CameraEvent.AfterSkybox;
 #endif
