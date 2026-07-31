@@ -444,7 +444,12 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
         config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
     }
     config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
-    config.flags = kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
+    // Match Unity's supported direct-recording sample: Unity must submit the
+    // preceding frame before plugin-owned buffers, descriptors, or pipelines
+    // are recycled using safeFrameNumber.
+    config.flags =
+        kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission |
+        kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
     if (iEnvFlagEnabled("IMM_UNITY_VK_NO_MODIFIES_STATE"))
     {
         config.flags &= ~kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
