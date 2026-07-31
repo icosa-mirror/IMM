@@ -99,6 +99,7 @@ def main() -> int:
             "Build Unity Android Vulkan smoke player",
             "Verify Unity Vulkan staging presentation",
             "[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] lateAcquireNextImage=True",
+            "vulkan-presentation-settings.txt",
             "Run Unity Android Vulkan smoke in Firebase Test Lab",
             "--test-type robo",
             'required-marker "Unity Android Vulkan renderer initialized from host device"',
@@ -133,6 +134,7 @@ def main() -> int:
             "AndroidArchitecture.ARM64",
             "PlayerSettings.vulkanEnableLateAcquireNextImage = true;",
             "[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731]",
+            "File.WriteAllText(",
             'new[] { "IMM_UNITY_ANDROID_VULKAN_CI" }',
         ],
         ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [

@@ -1312,7 +1312,7 @@ jobs:
         run: |
           set -euo pipefail
           grep -F "[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] lateAcquireNextImage=True" \
-            artifacts/unity-android-vulkan/unity-editor.log
+            artifacts/unity-android-vulkan/vulkan-presentation-settings.txt
 
       - name: Check Firebase Test Lab configuration
         env:

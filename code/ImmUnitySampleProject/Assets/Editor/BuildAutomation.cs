@@ -107,6 +107,10 @@ namespace ImmPlayer.Editor
                 UnityEngine.Debug.Log(
                     $"[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] " +
                     $"lateAcquireNextImage={PlayerSettings.vulkanEnableLateAcquireNextImage}");
+                File.WriteAllText(
+                    Path.Combine(Path.GetDirectoryName(outputPath), "vulkan-presentation-settings.txt"),
+                    $"[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] " +
+                    $"lateAcquireNextImage={PlayerSettings.vulkanEnableLateAcquireNextImage}{Environment.NewLine}");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
