@@ -13,43 +13,15 @@ namespace ImmPlayer
 {
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
-        private RenderTexture _presentationSource;
-        private Camera _sourceCamera;
-        private bool _loggedPresentationBlit;
+        internal Mesh PresentationMesh { get; set; }
+        internal Material PresentationMaterial { get; set; }
 
-        internal void Configure(Camera sourceCamera, RenderTexture presentationSource)
+        private void OnDestroy()
         {
-            _sourceCamera = sourceCamera;
-            _presentationSource = presentationSource;
-        }
-
-        private void OnRenderImage(RenderTexture source, RenderTexture destination)
-        {
-            if (_presentationSource == null)
-            {
-                Graphics.Blit(source, destination);
-                return;
-            }
-
-            // Graphics.Blit(source, null) falls back to Camera.main.targetTexture.
-            // That is this same source texture for the offscreen Vulkan camera,
-            // producing an undefined self-blit which collapses to source pixel
-            // (0,0) on Android. Leave it detached until the source camera's next
-            // OnPreCull, because Unity resolves the queued blit after this method
-            // returns. GetOrCreateVulkanPresentationTarget reattaches it there.
-            RenderTexture savedTarget = _sourceCamera != null ? _sourceCamera.targetTexture : null;
-            if (_sourceCamera != null && savedTarget == _presentationSource)
-                _sourceCamera.targetTexture = null;
-            Graphics.Blit(_presentationSource, destination);
-
-            if (!_loggedPresentationBlit)
-            {
-                _loggedPresentationBlit = true;
-                Debug.Log(
-                    $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] source={_presentationSource.width}x{_presentationSource.height} " +
-                    $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")} " +
-                    "mainTargetDetached=1");
-            }
+            if (PresentationMaterial != null)
+                Destroy(PresentationMaterial);
+            if (PresentationMesh != null)
+                Destroy(PresentationMesh);
         }
     }
 
@@ -894,12 +866,55 @@ namespace ImmPlayer
             presenterCamera.targetDisplay = cam.targetDisplay;
             presenterCamera.rect = cam.rect;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-            presenter.Configure(cam, target);
+
+            var quadObject = new GameObject("IMM Vulkan Presentation Quad");
+            quadObject.layer = 31;
+            quadObject.transform.SetParent(presenterObject.transform, false);
+            quadObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
+            var mesh = new Mesh { name = "IMM Vulkan Presentation Mesh" };
+            float aspect = (float)width / height;
+            mesh.vertices = new[]
+            {
+                new Vector3(-aspect, -1.0f, 0.0f),
+                new Vector3(aspect, -1.0f, 0.0f),
+                new Vector3(aspect, 1.0f, 0.0f),
+                new Vector3(-aspect, 1.0f, 0.0f)
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.0f, 0.0f),
+                new Vector2(1.0f, 0.0f),
+                new Vector2(1.0f, 1.0f),
+                new Vector2(0.0f, 1.0f)
+            };
+            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            mesh.RecalculateBounds();
+            quadObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+
+            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresentation");
+            if (presentationShader == null)
+            {
+                Debug.LogError("[IMM_UNITY_VK_PRESENT_SHADER_20260731] bundled presentation shader is unavailable");
+                Destroy(presenterObject);
+                target.Release();
+                Destroy(target);
+                cam.targetTexture = null;
+                _vulkanPresentationTargets.Remove(cam);
+                return null;
+            }
+            Material material = new Material(presentationShader)
+            {
+                name = "IMM Vulkan Presentation Material",
+                mainTexture = target
+            };
+            quadObject.AddComponent<MeshRenderer>().sharedMaterial = material;
+            presenter.PresentationMesh = mesh;
+            presenter.PresentationMaterial = material;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
-                $"[IMM_UNITY_VK_PRESENT_TERMINAL_20260731] camera={cam.name} size={width}x{height} " +
-                $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth}");
+                $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
+                $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} mode=screen-quad");
             return target;
 #else
             return null;
