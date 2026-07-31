@@ -15,15 +15,14 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RawImage PresentationImage { get; set; }
-        internal RenderTexture AlternateTarget { get; set; }
-        internal int LastSwapFrame { get; set; } = -1;
+        internal RenderTexture PresentationTarget { get; set; }
 
         private void OnDestroy()
         {
-            if (AlternateTarget == null)
+            if (PresentationTarget == null)
                 return;
-            AlternateTarget.Release();
-            Destroy(AlternateTarget);
+            PresentationTarget.Release();
+            Destroy(PresentationTarget);
         }
     }
 
@@ -159,7 +158,6 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, VulkanPresentationCamera> _vulkanPresentationCameras =
             new Dictionary<Camera, VulkanPresentationCamera>();
         private int _androidVulkanPostRenderPresentationCount;
-        private int _androidVulkanPresentationSwapCount;
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
@@ -233,7 +231,11 @@ namespace ImmPlayer
             {
                 Camera.onPreCull += OnCameraPreCull;
             }
-            if (_useCameraCallbackRendering)
+            bool subscribePostRender = _useCameraCallbackRendering;
+#if UNITY_ANDROID
+            subscribePostRender |= IsVulkanRuntime();
+#endif
+            if (subscribePostRender)
             {
                 Camera.onPostRender += OnCameraPostRender;
             }
@@ -249,7 +251,11 @@ namespace ImmPlayer
             {
                 Camera.onPreCull -= OnCameraPreCull;
             }
-            if (_useCameraCallbackRendering)
+            bool unsubscribePostRender = _useCameraCallbackRendering;
+#if UNITY_ANDROID
+            unsubscribePostRender |= IsVulkanRuntime();
+#endif
+            if (unsubscribePostRender)
             {
                 Camera.onPostRender -= OnCameraPostRender;
             }
@@ -819,29 +825,10 @@ namespace ImmPlayer
                     existing.height == height &&
                     _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera existingPresenter) &&
                     existingPresenter != null &&
-                    existingPresenter.AlternateTarget != null &&
-                    existingPresenter.AlternateTarget.width == width &&
-                    existingPresenter.AlternateTarget.height == height)
+                    existingPresenter.PresentationTarget != null &&
+                    existingPresenter.PresentationTarget.width == width &&
+                    existingPresenter.PresentationTarget.height == height)
                 {
-                    if (existingPresenter.LastSwapFrame != Time.frameCount)
-                    {
-                        RenderTexture completedTarget = existing;
-                        RenderTexture nextTarget = existingPresenter.AlternateTarget;
-                        existingPresenter.PresentationImage.texture = completedTarget;
-                        existingPresenter.AlternateTarget = completedTarget;
-                        existingPresenter.LastSwapFrame = Time.frameCount;
-                        _vulkanPresentationTargets[cam] = nextTarget;
-                        cam.targetTexture = nextTarget;
-                        if (_androidVulkanPresentationSwapCount < 8)
-                        {
-                            ++_androidVulkanPresentationSwapCount;
-                            Debug.Log(
-                                $"[IMM_UNITY_VK_PRESENT_SWAP_20260731] frame={Time.frameCount} camera={cam.name} " +
-                                $"write={nextTarget.name} display={completedTarget.name}");
-                        }
-                        return nextTarget;
-                    }
-
                     if (cam.targetTexture != existing)
                         cam.targetTexture = existing;
                     return existing;
@@ -877,14 +864,14 @@ namespace ImmPlayer
             target.Create();
             cam.targetTexture = target;
             _vulkanPresentationTargets[cam] = target;
-            var alternateTarget = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+            var presentationTarget = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
             {
                 antiAliasing = 1,
-                name = $"IMM Vulkan Presentation Target B ({cam.name})",
+                name = $"IMM Vulkan Unity Presentation Target ({cam.name})",
                 useMipMap = false,
                 autoGenerateMips = false
             };
-            alternateTarget.Create();
+            presentationTarget.Create();
 
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
@@ -914,18 +901,17 @@ namespace ImmPlayer
             imageRect.offsetMin = Vector2.zero;
             imageRect.offsetMax = Vector2.zero;
             RawImage image = imageObject.AddComponent<RawImage>();
-            image.texture = alternateTarget;
+            image.texture = presentationTarget;
             image.color = Color.white;
             image.raycastTarget = false;
             presenter.PresentationImage = image;
-            presenter.AlternateTarget = alternateTarget;
-            presenter.LastSwapFrame = Time.frameCount;
+            presenter.PresentationTarget = presentationTarget;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"sortingOrder={presenterCanvas.sortingOrder} mode=double-buffered-overlay");
+                $"sortingOrder={presenterCanvas.sortingOrder} mode=post-render-blit-overlay");
             return target;
 #else
             return null;
@@ -937,13 +923,6 @@ namespace ImmPlayer
         {
             if (cam == null)
                 return null;
-            if (_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter) &&
-                presenter != null &&
-                presenter.PresentationImage != null &&
-                presenter.PresentationImage.texture is RenderTexture presentedTarget)
-            {
-                return presentedTarget;
-            }
             _vulkanPresentationTargets.TryGetValue(cam, out RenderTexture target);
             return target;
         }
@@ -1242,7 +1221,7 @@ namespace ImmPlayer
 
         private void OnCameraPostRender(Camera cam)
         {
-            if (!_useCameraCallbackRendering || !_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
+            if (!_isInitialized || _renderEventFunc == IntPtr.Zero || cam == null)
                 return;
             if (!ShouldRenderCamera(cam))
                 return;
@@ -1253,18 +1232,26 @@ namespace ImmPlayer
                 return;
 #if UNITY_ANDROID
             if (IsVulkanRuntime() &&
-                _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter))
+                _vulkanPresentationTargets.TryGetValue(cam, out RenderTexture sourceTarget) &&
+                sourceTarget != null &&
+                _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter) &&
+                presenter != null &&
+                presenter.PresentationTarget != null)
             {
+                Graphics.Blit(sourceTarget, presenter.PresentationTarget);
                 if (_androidVulkanPostRenderPresentationCount < 8)
                 {
                     ++_androidVulkanPostRenderPresentationCount;
                     Debug.Log(
                         $"[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730] camera={info.CameraId} " +
-                        $"submission=presenterCommandBuffer");
+                        $"submission=graphics-blit source={sourceTarget.width}x{sourceTarget.height} " +
+                        $"destination={presenter.PresentationTarget.width}x{presenter.PresentationTarget.height}");
                 }
                 return;
             }
 #endif
+            if (!_useCameraCallbackRendering)
+                return;
 
             if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_SAMPLE_WAIT_FOR_END_OF_FRAME"))
                 return;
