@@ -1360,6 +1360,8 @@ jobs:
           --required-marker "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]"
           --required-marker "commandBuffer=True cameraCallback=False"
           --required-marker "[IMM_UNITY_VK_EVENT_20260612]"
+          --required-marker "[IMM_UNITY_VK_UPLOAD_EVENT_20260730]"
+          --required-marker "[IMM_UNITY_VK_UPLOAD_CB_20260730]"
           --required-marker "[IMM_UNITY_VK_HOST_RT_20260612]"
           --required-marker "[IMM_UNITY_VK_PRESENT_BLIT_20260730]"
           --required-marker "colorRenderBuffer=0x"

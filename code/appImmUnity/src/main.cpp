@@ -445,9 +445,7 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
         config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
     }
     config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
-    config.flags = prepareEvent
-        ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission | kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
-        : kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
+    config.flags = kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
     if (iEnvFlagEnabled("IMM_UNITY_VK_NO_MODIFIES_STATE"))
     {
         config.flags &= ~kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
@@ -1000,8 +998,48 @@ static bool iPrepareUnityVulkanCamera(int cameraID)
     {
         return false;
     }
+
+    UnityVulkanRecordingState recordingState = {};
+    if (!gImmUnityPlugin.UnityAPI.mVulkan->CommandRecordingState(
+            &recordingState,
+            kUnityVulkanGraphicsQueueAccess_DontCare) ||
+        !recordingState.commandBuffer)
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"Unity Vulkan prepare skipped: Unity did not provide an upload command buffer for camera=%d",
+            cameraID);
+        return false;
+    }
+
+    piRenderer *renderer = gImmUnityPlugin.mBridge.GetRenderer();
+    if (!renderer || renderer->GetAPI() != piRenderer::API::Vulkan)
+    {
+        return false;
+    }
+    piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
+    if (!vulkanRenderer->BeginUnityCommandBufferUploadFrame(
+            recordingState.commandBuffer,
+            recordingState.currentFrameNumber,
+            recordingState.safeFrameNumber))
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"Unity Vulkan prepare skipped: failed to begin Unity upload command buffer for camera=%d",
+            cameraID);
+        return false;
+    }
+
     const bool prepared = gImmUnityPlugin.mBridge.PrepareCamera(cameraID);
-    iLog().Printf(LT_MESSAGE, L"Unity Vulkan prepare: camera=%d prepared=%d", cameraID, prepared ? 1 : 0);
+    vulkanRenderer->EndExternalImageFrame();
+    iLog().Printf(
+        LT_MESSAGE,
+        L"[IMM_UNITY_VK_UPLOAD_CB_20260730] camera=%d prepared=%d cmd=%p currentFrame=%llu safeFrame=%llu",
+        cameraID,
+        prepared ? 1 : 0,
+        recordingState.commandBuffer,
+        recordingState.currentFrameNumber,
+        recordingState.safeFrameNumber);
     return true;
 }
 

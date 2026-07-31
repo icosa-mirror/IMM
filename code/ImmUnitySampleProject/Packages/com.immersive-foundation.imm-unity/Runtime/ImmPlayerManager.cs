@@ -180,6 +180,7 @@ namespace ImmPlayer
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
+        private const int VulkanPrepareEventFlag = 0x80;
         private bool _useCommandBufferRendering = false;
         private bool _useCameraCallbackRendering = false;
         private Coroutine _vulkanSampleEventCoroutine = null;
@@ -1064,6 +1065,7 @@ namespace ImmPlayer
                     cam.pixelWidth,
                     cam.pixelHeight,
                     vulkanSampleCount);
+#if !UNITY_ANDROID
                 int prepared = IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_PREPARE")
                     ? 0
                     : ImmNativePlugin.PrepareCamera(info.CameraId);
@@ -1071,6 +1073,7 @@ namespace ImmPlayer
                 {
                     Debug.LogWarning($"[IMM_UNITY_VK_PREPARE_20260612] cam={cam.name} cameraId={info.CameraId} prepared=0");
                 }
+#endif
             }
 
             if (_useCameraCallbackRendering)
@@ -1095,6 +1098,18 @@ namespace ImmPlayer
                     return;
 
                 info.CommandBuffer.Clear();
+#if UNITY_ANDROID
+                int prepareEventId = eventId | VulkanPrepareEventFlag;
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                    _configuredVulkanRenderEvents.Add(prepareEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(prepareEventId);
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_UPLOAD_EVENT_20260730] eventId={prepareEventId} " +
+                        $"camera={info.CameraId} configured={configured}");
+                }
+                info.CommandBuffer.IssuePluginEvent(_renderEventFunc, prepareEventId);
+#endif
                 if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(eventId))
                 {
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);

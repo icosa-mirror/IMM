@@ -133,6 +133,8 @@ def main() -> int:
             "SetVulkanCameraRenderBuffers",
             "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
             "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]",
+            "VulkanPrepareEventFlag",
+            "[IMM_UNITY_VK_UPLOAD_EVENT_20260730]",
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",
@@ -159,7 +161,9 @@ def main() -> int:
             "config.projectionMatrixAlreadyGpuAdjusted = true;",
             "config.reverseDepthBuffer = true;",
             "CommandRecordingState(",
+            "BeginUnityCommandBufferUploadFrame(",
             "BeginHostRenderPassFrame(",
+            "[IMM_UNITY_VK_UPLOAD_CB_20260730]",
             "[IMM_UNITY_VK_HOST_RT_20260612]",
             "Unity Vulkan host render:",
         ],

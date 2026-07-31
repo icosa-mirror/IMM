@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #if defined(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
@@ -1231,6 +1232,13 @@ struct piBufferS
     VkBufferUsageFlags usage = 0;
 };
 
+struct piVulkanBorrowedUpload
+{
+    VkBuffer buffer = VK_NULL_BUFFER;
+    VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
+    uint64_t frameNumber = 0;
+};
+
 struct piVertexArrayS
 {
     piBuffer vertexBuffer[2] = { nullptr, nullptr };
@@ -1367,8 +1375,10 @@ struct piVulkanState
         ~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull
     };
     uint32_t borrowedFrameSlot = 0;
+    uint64_t borrowedCurrentFrameNumber = 0;
     uint32_t borrowedStaticPaintSetCursor = 0;
     uint32_t borrowedPictureSetCursor = 0;
+    std::vector<piVulkanBorrowedUpload> borrowedUploads;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -5595,43 +5605,177 @@ static bool iUploadTextureToStaging(piVulkanState *state, piTexture texture, piR
     return true;
 }
 
+static void iCollectBorrowedUploads(piVulkanState *state, uint64_t safeFrameNumber)
+{
+    if (!state)
+    {
+        return;
+    }
+    auto upload = state->borrowedUploads.begin();
+    while (upload != state->borrowedUploads.end())
+    {
+        if (upload->frameNumber <= safeFrameNumber)
+        {
+            if (upload->buffer != VK_NULL_BUFFER && state->vkDestroyBuffer)
+            {
+                state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
+            }
+            if (upload->memory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
+            {
+                state->vkFreeMemory(state->device, upload->memory, nullptr);
+            }
+            upload = state->borrowedUploads.erase(upload);
+        }
+        else
+        {
+            ++upload;
+        }
+    }
+}
+
+static bool iCreateBorrowedUploadBuffer(
+    piVulkanState *state,
+    const void *data,
+    VkDeviceSize size,
+    piVulkanBorrowedUpload *upload,
+    piRenderer::piReporter *reporter)
+{
+    if (!state || !data || size == 0 || !upload)
+    {
+        return false;
+    }
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkResult result = state->vkCreateBuffer(state->device, &bufferInfo, nullptr, &upload->buffer);
+    if (result != VK_SUCCESS || upload->buffer == VK_NULL_BUFFER)
+    {
+        iError(reporter, "Vulkan renderer failed to create borrowed upload buffer");
+        return false;
+    }
+
+    VkMemoryRequirements requirements = {};
+    state->vkGetBufferMemoryRequirements(state->device, upload->buffer, &requirements);
+    uint32_t memoryTypeIndex = 0;
+    if (!iFindMemoryType(
+            state,
+            requirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &memoryTypeIndex))
+    {
+        iError(reporter, "Vulkan renderer failed to find borrowed upload memory");
+        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
+        upload->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = requirements.size;
+    allocateInfo.memoryTypeIndex = memoryTypeIndex;
+    result = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, &upload->memory);
+    if (result != VK_SUCCESS || upload->memory == VK_NULL_DEVICE_MEMORY)
+    {
+        iError(reporter, "Vulkan renderer failed to allocate borrowed upload memory");
+        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
+        upload->buffer = VK_NULL_BUFFER;
+        return false;
+    }
+
+    result = state->vkBindBufferMemory(state->device, upload->buffer, upload->memory, 0);
+    if (result != VK_SUCCESS)
+    {
+        iError(reporter, "Vulkan renderer failed to bind borrowed upload memory");
+        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
+        state->vkFreeMemory(state->device, upload->memory, nullptr);
+        upload->buffer = VK_NULL_BUFFER;
+        upload->memory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+
+    void *mapped = nullptr;
+    result = state->vkMapMemory(state->device, upload->memory, 0, size, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
+    {
+        iError(reporter, "Vulkan renderer failed to map borrowed upload memory");
+        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
+        state->vkFreeMemory(state->device, upload->memory, nullptr);
+        upload->buffer = VK_NULL_BUFFER;
+        upload->memory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+    std::memcpy(mapped, data, static_cast<size_t>(size));
+    state->vkUnmapMemory(state->device, upload->memory);
+    upload->frameNumber = state->borrowedCurrentFrameNumber;
+    return true;
+}
+
 static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
 {
+    const bool borrowedCommandBuffer = state && state->externalCommandBufferFrameActive;
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
-        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE)
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
+        (!borrowedCommandBuffer && state->frameFence == VK_NULL_FENCE))
     {
         return true;
     }
-    if (!iEnsureStagingBuffer(state, (VkDeviceSize)texture->dataSize, reporter))
+
+    piVulkanBorrowedUpload borrowedUpload = {};
+    VkBuffer uploadBuffer = state->stagingBuffer;
+    VkResult result = VK_SUCCESS;
+    if (borrowedCommandBuffer)
     {
-        return false;
+        if (!iCreateBorrowedUploadBuffer(
+                state,
+                texture->data,
+                static_cast<VkDeviceSize>(texture->dataSize),
+                &borrowedUpload,
+                reporter))
+        {
+            return false;
+        }
+        uploadBuffer = borrowedUpload.buffer;
     }
-    void *mapped = nullptr;
-    VkResult result = state->vkMapMemory(state->device, state->stagingMemory, 0, (VkDeviceSize)texture->dataSize, 0, &mapped);
-    if (result != VK_SUCCESS || !mapped)
+    else
     {
-        iError(reporter, "Vulkan renderer failed to map texture staging memory");
-        return false;
+        if (!iEnsureStagingBuffer(state, static_cast<VkDeviceSize>(texture->dataSize), reporter))
+        {
+            return false;
+        }
+        uploadBuffer = state->stagingBuffer;
+        void *mapped = nullptr;
+        result = state->vkMapMemory(state->device, state->stagingMemory, 0, static_cast<VkDeviceSize>(texture->dataSize), 0, &mapped);
+        if (result != VK_SUCCESS || !mapped)
+        {
+            iError(reporter, "Vulkan renderer failed to map texture staging memory");
+            return false;
+        }
+        std::memcpy(mapped, texture->data, texture->dataSize);
+        state->vkUnmapMemory(state->device, state->stagingMemory);
     }
-    std::memcpy(mapped, texture->data, texture->dataSize);
-    state->vkUnmapMemory(state->device, state->stagingMemory);
 
     const uint64_t timeout = 5000000000ull;
-    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-    if (result != VK_SUCCESS)
+    if (!borrowedCommandBuffer)
     {
-        return false;
-    }
-    state->vkResetFences(state->device, 1, &state->frameFence);
-    state->vkResetCommandBuffer(state->commandBuffer, 0);
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
 
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-    if (result != VK_SUCCESS)
-    {
-        return false;
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
     }
 
     VkImageSubresourceRange range = {};
@@ -5677,7 +5821,7 @@ static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piR
     copyRegion.imageExtent.height = (uint32_t)texture->info.mYres;
     copyRegion.imageExtent.depth = 1;
     state->vkCmdCopyBufferToImage(state->commandBuffer,
-                                  state->stagingBuffer,
+                                  uploadBuffer,
                                   texture->image,
                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                   1,
@@ -5703,6 +5847,13 @@ static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piR
                                 nullptr,
                                 1,
                                 &toShader);
+
+    if (borrowedCommandBuffer)
+    {
+        state->borrowedUploads.push_back(borrowedUpload);
+        texture->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        return true;
+    }
 
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
@@ -6100,6 +6251,18 @@ void piRendererVulkan::Deinitialize(void)
             mState->hostTransientUniformOffset = 0;
             mState->hostTransientUniformLimit = 0;
         }
+        for (const piVulkanBorrowedUpload &upload : mState->borrowedUploads)
+        {
+            if (upload.buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+            {
+                mState->vkDestroyBuffer(mState->device, upload.buffer, nullptr);
+            }
+            if (upload.memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+            {
+                mState->vkFreeMemory(mState->device, upload.memory, nullptr);
+            }
+        }
+        mState->borrowedUploads.clear();
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
             mState->vkDestroyBuffer(mState->device, mState->stagingBuffer, nullptr);
@@ -7066,6 +7229,7 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
     mState->borrowedFrameResourcesActive = true;
     mState->hostRenderPassFrameActive = true;
     mState->borrowedFrameSlot = frameSlot;
+    mState->borrowedCurrentFrameNumber = currentFrameNumber;
     if (!continuingFrame)
     {
         mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
@@ -7082,6 +7246,64 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
     {
         mState->hostRenderPassFrameReported = true;
         iReport(mReporter, useHostDepth ? "Vulkan renderer began host render pass frame with host depth" : "Vulkan renderer began host render pass frame");
+    }
+    return true;
+}
+
+bool piRendererVulkan::BeginUnityCommandBufferUploadFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber)
+{
+    EndExternalImageFrame();
+    if (!mState || commandBuffer == nullptr)
+    {
+        return false;
+    }
+
+    iCollectBorrowedUploads(mState, safeFrameNumber);
+
+    uint32_t frameSlot = kBorrowedFrameSlotCount;
+    bool continuingFrame = false;
+    for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
+    {
+        if (mState->borrowedFrameNumbers[i] == currentFrameNumber)
+        {
+            frameSlot = i;
+            continuingFrame = true;
+            break;
+        }
+    }
+    if (!continuingFrame)
+    {
+        for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
+        {
+            const uint64_t slotFrame = mState->borrowedFrameNumbers[i];
+            if (slotFrame == ~0ull || slotFrame <= safeFrameNumber)
+            {
+                frameSlot = i;
+                break;
+            }
+        }
+    }
+    if (frameSlot >= kBorrowedFrameSlotCount)
+    {
+        iError(mReporter, "Vulkan renderer has no safe Unity upload frame slot");
+        return false;
+    }
+
+    mState->hostPreviousCommandBuffer = mState->commandBuffer;
+    mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
+    mState->externalCommandBufferFrameActive = true;
+    mState->borrowedFrameResourcesActive = true;
+    mState->borrowedFrameSlot = frameSlot;
+    mState->borrowedCurrentFrameNumber = currentFrameNumber;
+    if (!continuingFrame)
+    {
+        mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
+        mState->borrowedStaticPaintSetCursor = 0;
+        mState->borrowedPictureSetCursor = 0;
+        mState->hostTransientUniformOffset =
+            static_cast<VkDeviceSize>(frameSlot) * kBorrowedUniformBytesPerFrame;
+        mState->hostTransientUniformLimit =
+            mState->hostTransientUniformOffset + kBorrowedUniformBytesPerFrame;
     }
     return true;
 }
@@ -7370,6 +7592,7 @@ bool piRendererVulkan::BeginExternalImageCommandBufferFramePreserveColor(void *c
     mState->externalCommandBufferFrameActive = true;
     mState->borrowedFrameResourcesActive = true;
     mState->borrowedFrameSlot = frameSlot;
+    mState->borrowedCurrentFrameNumber = currentFrameNumber;
     if (!continuingFrame)
     {
         mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
