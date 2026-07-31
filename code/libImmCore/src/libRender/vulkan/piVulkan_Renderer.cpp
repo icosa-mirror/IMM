@@ -3849,7 +3849,16 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     viewport.scissorCount = 1;
 
     piRasterState rasterState = state->currentRasterState;
-    const VkCullModeFlags cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
+    VkCullModeFlags cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
+#if defined(__ANDROID__) || defined(ANDROID)
+    if (state->hostRenderPassFrameActive)
+    {
+        // Unity owns the dynamic viewport in this path. Remove face orientation
+        // from the diagnostic while retaining the real indexed geometry,
+        // descriptors, transforms, and static-paint vertex shader.
+        cullMode = VK_CULL_MODE_NONE;
+    }
+#endif
     const VkFrontFace frontFace = rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
     const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
     const bool wireframe = rasterState && rasterState->wireframe;
@@ -3968,7 +3977,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] created static paint pipeline with constant fragment"
+                ? "[IMM_UNITY_VK_CULL_CONTROL_20260731] created static paint pipeline with constant fragment and culling disabled"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
