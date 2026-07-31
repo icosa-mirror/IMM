@@ -1550,6 +1550,8 @@ struct piVulkanState
     VkShaderModule hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule hostCenterDiagnosticVertexModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule hostDescriptorDiagnosticFragmentModule = VK_NULL_SHADER_MODULE;
     piBuffer hostDebugIndexBuffer = nullptr;
     piBuffer hostDebugIndexSource = nullptr;
     uint32_t hostDebugIndexSourceBase = 0;
@@ -1559,6 +1561,10 @@ struct piVulkanState
     VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
     uint32_t hostDebugTriangleSubpass = 0;
     VkSampleCountFlagBits hostDebugTriangleSampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VkPipeline hostDescriptorDiagnosticPipeline = VK_NULL_PIPELINE;
+    VkRenderPass hostDescriptorDiagnosticRenderPass = VK_NULL_RENDER_PASS;
+    uint32_t hostDescriptorDiagnosticSubpass = 0;
+    VkSampleCountFlagBits hostDescriptorDiagnosticSampleCount = VK_SAMPLE_COUNT_1_BIT;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -3083,11 +3089,11 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     bindings[5].binding = 8;
     bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bindings[5].descriptorCount = 1;
-    bindings[5].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[5].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     bindings[6].binding = 9;
     bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[6].descriptorCount = 1;
-    bindings[6].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[6].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
     setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -3557,6 +3563,8 @@ static const uint32_t kSrgbPresentFS[] = {
     0x00010038u
 };
 
+#include "piVulkan_HostDiagnosticShaders.inc"
+
 // Constant cyan fragment shader for isolating Unity host-render-pass raster
 // integration. It intentionally has no descriptors, inputs, or uniforms.
 static const uint32_t kHostDebugTriangleFS[] = {
@@ -3900,6 +3908,131 @@ static void iRetireGraphicsPipeline(piVulkanState *state, VkPipeline pipeline)
     state->vkDestroyPipeline(state->device, pipeline, nullptr);
 }
 
+static bool iDrawHostDescriptorDiagnostic(piVulkanState *state, piRTarget target, piRenderer::piReporter *reporter)
+{
+    if (!state || !target || !state->hostRenderPassFrameActive ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
+        state->staticPaintPipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
+        state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET)
+    {
+        return false;
+    }
+    if (state->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(state,
+                             reinterpret_cast<const uint8_t *>(kSrgbPresentVS),
+                             static_cast<int>(sizeof(kSrgbPresentVS)),
+                             &state->hostDebugTriangleVertexModule,
+                             reporter))
+    {
+        return false;
+    }
+    if (state->hostDescriptorDiagnosticFragmentModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(state,
+                             reinterpret_cast<const uint8_t *>(kHostDescriptorDiagnosticFS),
+                             static_cast<int>(sizeof(kHostDescriptorDiagnosticFS)),
+                             &state->hostDescriptorDiagnosticFragmentModule,
+                             reporter))
+    {
+        return false;
+    }
+
+    const VkSampleCountFlagBits sampleCount = target->color[0]
+                                                  ? target->color[0]->sampleCount
+                                                  : VK_SAMPLE_COUNT_1_BIT;
+    if (state->hostDescriptorDiagnosticPipeline == VK_NULL_PIPELINE ||
+        state->hostDescriptorDiagnosticRenderPass != target->renderPass ||
+        state->hostDescriptorDiagnosticSubpass != target->subpass ||
+        state->hostDescriptorDiagnosticSampleCount != sampleCount)
+    {
+        if (state->hostDescriptorDiagnosticPipeline != VK_NULL_PIPELINE)
+        {
+            iRetireGraphicsPipeline(state, state->hostDescriptorDiagnosticPipeline);
+            state->hostDescriptorDiagnosticPipeline = VK_NULL_PIPELINE;
+        }
+        VkPipelineShaderStageCreateInfo stages[2] = {};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = state->hostDebugTriangleVertexModule;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = state->hostDescriptorDiagnosticFragmentModule;
+        stages[1].pName = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput = {};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        VkPipelineViewportStateCreateInfo viewport = {};
+        viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewport.viewportCount = 1;
+        viewport.scissorCount = 1;
+        VkPipelineRasterizationStateCreateInfo rasterization = {};
+        rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterization.cullMode = VK_CULL_MODE_NONE;
+        rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterization.lineWidth = 1.0f;
+        VkPipelineMultisampleStateCreateInfo multisample = {};
+        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisample.rasterizationSamples = sampleCount;
+        VkPipelineColorBlendAttachmentState blendAttachment = {};
+        blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo colorBlend = {};
+        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlend.attachmentCount = 1;
+        colorBlend.pAttachments = &blendAttachment;
+        VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates = dynamicStates;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = stages;
+        pipelineInfo.pVertexInputState = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewport;
+        pipelineInfo.pRasterizationState = &rasterization;
+        pipelineInfo.pMultisampleState = &multisample;
+        pipelineInfo.pColorBlendState = &colorBlend;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = state->staticPaintPipelineLayout;
+        pipelineInfo.renderPass = target->renderPass;
+        pipelineInfo.subpass = target->subpass;
+        const VkResult result = state->vkCreateGraphicsPipelines(
+            state->device,
+            VK_NULL_PIPELINE_CACHE,
+            1,
+            &pipelineInfo,
+            nullptr,
+            &state->hostDescriptorDiagnosticPipeline);
+        if (result != VK_SUCCESS || state->hostDescriptorDiagnosticPipeline == VK_NULL_PIPELINE)
+        {
+            iError(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] failed to create pipeline");
+            return false;
+        }
+        state->hostDescriptorDiagnosticRenderPass = target->renderPass;
+        state->hostDescriptorDiagnosticSubpass = target->subpass;
+        state->hostDescriptorDiagnosticSampleCount = sampleCount;
+        iReport(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] created four-bar descriptor pipeline");
+    }
+    state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->hostDescriptorDiagnosticPipeline);
+    state->vkCmdBindDescriptorSets(state->commandBuffer,
+                                   VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                   state->staticPaintPipelineLayout,
+                                   0,
+                                   1,
+                                   &state->staticPaintDescriptorSet,
+                                   0,
+                                   nullptr);
+    state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
+    return true;
+}
+
 static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, piRenderer::piReporter *reporter)
 {
     if (!state || !shader || !target || state->device == VK_NULL_DEVICE)
@@ -3928,10 +4061,21 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
+    if (useHostDebugFragment && state->hostCenterDiagnosticVertexModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(
+            state,
+            reinterpret_cast<const uint8_t *>(kHostCenterDiagnosticVS),
+            static_cast<int>(sizeof(kHostCenterDiagnosticVS)),
+            &state->hostCenterDiagnosticVertexModule,
+            reporter))
+    {
+        iError(reporter, "[IMM_UNITY_VK_GPU_CENTER_DIAG_20260731] failed to create center vertex module");
+        return false;
+    }
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = shader->vertexModule;
+    stages[0].module = useHostDebugFragment ? state->hostCenterDiagnosticVertexModule : shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -4084,7 +4228,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] created real-vertex cloned-index control pipeline"
+                ? "[IMM_UNITY_VK_GPU_CENTER_DIAG_20260731] created simplified center-geometry pipeline"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
@@ -4250,6 +4394,11 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
             clonedWrites[i].pBufferInfo = &clonedInfos[i];
         }
         state->vkUpdateDescriptorSets(state->device, 4, clonedWrites, 0, nullptr);
+        if (!iDrawHostDescriptorDiagnostic(state, target, reporter))
+        {
+            iError(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] failed to record descriptor bars");
+            return false;
+        }
         state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, indexType);
     }
     else
@@ -6557,6 +6706,11 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroyPipeline(mState->device, mState->hostDebugTrianglePipeline, nullptr);
             mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
         }
+        if (mState->hostDescriptorDiagnosticPipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+        {
+            mState->vkDestroyPipeline(mState->device, mState->hostDescriptorDiagnosticPipeline, nullptr);
+            mState->hostDescriptorDiagnosticPipeline = VK_NULL_PIPELINE;
+        }
         if (mState->hostDebugTrianglePipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
         {
             mState->vkDestroyPipelineLayout(mState->device, mState->hostDebugTrianglePipelineLayout, nullptr);
@@ -6576,6 +6730,16 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleFragmentModule, nullptr);
             mState->hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->hostCenterDiagnosticVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->hostCenterDiagnosticVertexModule, nullptr);
+            mState->hostCenterDiagnosticVertexModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->hostDescriptorDiagnosticFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->hostDescriptorDiagnosticFragmentModule, nullptr);
+            mState->hostDescriptorDiagnosticFragmentModule = VK_NULL_SHADER_MODULE;
         }
         if (mState->hostDebugIndexBuffer)
         {
