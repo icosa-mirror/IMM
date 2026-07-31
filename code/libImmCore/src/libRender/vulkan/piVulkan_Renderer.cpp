@@ -3897,22 +3897,22 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
-    if (useHostDebugFragment && state->hostIndexedControlVertexModule == VK_NULL_SHADER_MODULE &&
+    if (useHostDebugFragment && state->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
         !iCreateShaderModule(
             state,
-            reinterpret_cast<const uint8_t *>(kHostIndexedStripControlVS),
-            static_cast<int>(sizeof(kHostIndexedStripControlVS)),
-            &state->hostIndexedControlVertexModule,
+            reinterpret_cast<const uint8_t *>(kSrgbPresentVS),
+            static_cast<int>(sizeof(kSrgbPresentVS)),
+            &state->hostDebugTriangleVertexModule,
             reporter))
     {
-        iError(reporter, "[IMM_UNITY_VK_INDEXED_STRIP_CONTROL_20260731] failed to create indexed strip control vertex module");
+        iError(reporter, "[IMM_UNITY_VK_MINIMAL_STATIC_PIPELINE_20260731] failed to create minimal vertex module");
         return false;
     }
 
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = useHostDebugFragment ? state->hostIndexedControlVertexModule : shader->vertexModule;
+    stages[0].module = useHostDebugFragment ? state->hostDebugTriangleVertexModule : shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -3924,8 +3924,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    inputAssembly.primitiveRestartEnable = 1;
+    inputAssembly.topology = useHostDebugFragment ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    inputAssembly.primitiveRestartEnable = useHostDebugFragment ? 0u : 1u;
 
     VkPipelineViewportStateCreateInfo viewport = {};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -3943,10 +3943,12 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         cullMode = VK_CULL_MODE_NONE;
     }
 #endif
-    const VkFrontFace frontFace = rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    const VkFrontFace frontFace = useHostDebugFragment
+                                      ? VK_FRONT_FACE_COUNTER_CLOCKWISE
+                                      : (rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE);
     const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
-    const bool wireframe = rasterState && rasterState->wireframe;
-    const bool depthClamp = rasterState && rasterState->depthClamp;
+    const bool wireframe = !useHostDebugFragment && rasterState && rasterState->wireframe;
+    const bool depthClamp = !useHostDebugFragment && rasterState && rasterState->depthClamp;
     const bool mayUseDepth = target->hasDepth &&
                              (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
     const bool depthTest = mayUseDepth && state->depthTestEnabled && state->currentDepthState && state->currentDepthState->depthEnable;
@@ -3954,10 +3956,12 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
                                         state->externalFrameHostDepthReverseZ &&
                                         target == state->externalFrameRenderTarget;
     const bool depthWrite = depthTest && state->depthWriteEnabled;
-    const VkCompareOp depthCompareOp = useHostReverseZCompare || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    const VkCompareOp depthCompareOp = useHostDebugFragment
+                                           ? VK_COMPARE_OP_ALWAYS
+                                           : (useHostReverseZCompare || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL);
     piBlendState blendState = state->currentBlendState;
-    const bool alphaToCoverage = blendState && blendState->alphaToCoverage;
-    const bool blendEnabled = blendState && blendState->enabled0;
+    const bool alphaToCoverage = !useHostDebugFragment && blendState && blendState->alphaToCoverage;
+    const bool blendEnabled = !useHostDebugFragment && blendState && blendState->enabled0;
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
         shader->pipelineCullMode == cullMode &&
@@ -4061,7 +4065,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_NONINDEXED_CONTROL_20260731] created descriptor-free nonindexed control pipeline"
+                ? "[IMM_UNITY_VK_MINIMAL_STATIC_PIPELINE_20260731] created minimal-state static control pipeline"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
