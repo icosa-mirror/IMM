@@ -71,12 +71,17 @@ namespace ImmPlayer
             }
 #if IMM_UNITY_ANDROID_VULKAN_CI
             smoke._renderCapturePath = Path.Combine(Application.persistentDataPath, "imm-ci", "unity-android-vulkan-render.png");
+            smoke._presentationCapturePath = Path.Combine(
+                Application.persistentDataPath,
+                "imm-ci",
+                "unity-android-vulkan-presented.png");
             Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
 #endif
         }
 
         private string _capturePath;
         private string _renderCapturePath;
+        private string _presentationCapturePath;
         private bool _compositionProbeEnabled;
         private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
@@ -199,6 +204,19 @@ namespace ImmPlayer
                         : CaptureCameraTexture(renderCaptureCamera));
 #endif
                 WriteCapture(renderCapture, _renderCapturePath, "render candidate");
+#if IMM_UNITY_ANDROID_VULKAN_CI
+                RenderTexture unityPresentationTarget = playerManager != null
+                    ? playerManager.GetAndroidVulkanUnityPresentationTargetForValidation(renderCaptureCamera)
+                    : null;
+                if (unityPresentationTarget != null && !string.IsNullOrEmpty(_presentationCapturePath))
+                {
+                    Texture2D presentationCapture = CaptureRenderTexture(unityPresentationTarget);
+                    WriteCapture(
+                        presentationCapture,
+                        _presentationCapturePath,
+                        "Unity presentation target");
+                }
+#endif
             }
 
             if (_compositionProbeEnabled)

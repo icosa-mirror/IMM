@@ -157,6 +157,7 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, RenderTexture> _vulkanPresentationTargets = new Dictionary<Camera, RenderTexture>();
         private readonly Dictionary<Camera, VulkanPresentationCamera> _vulkanPresentationCameras =
             new Dictionary<Camera, VulkanPresentationCamera>();
+        private readonly HashSet<Camera> _vulkanPresentationPending = new HashSet<Camera>();
         private int _androidVulkanPostRenderPresentationCount;
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
@@ -277,6 +278,9 @@ namespace ImmPlayer
                 IssueNativeUnloadDrainEvent();
                 CompleteFinishedNativeUnloads();
                 ReleaseCompletedMemoryBuffers();
+#if UNITY_ANDROID
+                PresentCompletedAndroidVulkanFrames();
+#endif
                 if (IsVulkanRuntime() &&
                     _renderEventFunc != IntPtr.Zero &&
                     !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_HOST_RENDER") &&
@@ -799,6 +803,7 @@ namespace ImmPlayer
                     Destroy(entry.Value.gameObject);
             }
             _vulkanPresentationCameras.Clear();
+            _vulkanPresentationPending.Clear();
             foreach (KeyValuePair<Camera, RenderTexture> entry in _vulkanPresentationTargets)
             {
                 if (entry.Key != null && entry.Key.targetTexture == entry.Value)
@@ -926,6 +931,49 @@ namespace ImmPlayer
                 return null;
             _vulkanPresentationTargets.TryGetValue(cam, out RenderTexture target);
             return target;
+        }
+
+        public RenderTexture GetAndroidVulkanUnityPresentationTargetForValidation(Camera cam)
+        {
+            if (cam == null ||
+                !_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter) ||
+                presenter == null)
+            {
+                return null;
+            }
+            return presenter.PresentationTarget;
+        }
+#endif
+
+#if UNITY_ANDROID
+        private void PresentCompletedAndroidVulkanFrames()
+        {
+            if (!IsVulkanRuntime() || _vulkanPresentationPending.Count == 0)
+                return;
+
+            foreach (Camera cam in _vulkanPresentationPending)
+            {
+                if (cam == null ||
+                    !_vulkanPresentationTargets.TryGetValue(cam, out RenderTexture sourceTarget) ||
+                    sourceTarget == null ||
+                    !_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter) ||
+                    presenter == null ||
+                    presenter.PresentationTarget == null)
+                {
+                    continue;
+                }
+
+                Graphics.Blit(sourceTarget, presenter.PresentationTarget);
+                if (_androidVulkanPostRenderPresentationCount < 8)
+                {
+                    ++_androidVulkanPostRenderPresentationCount;
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_STABLE_CROSS_FRAME_20260731] camera={cam.name} " +
+                        $"submission=completed-source-to-unity-target source={sourceTarget.width}x{sourceTarget.height} " +
+                        $"destination={presenter.PresentationTarget.width}x{presenter.PresentationTarget.height}");
+                }
+            }
+            _vulkanPresentationPending.Clear();
         }
 #endif
 
@@ -1249,15 +1297,7 @@ namespace ImmPlayer
                         $"camera={info.CameraId} configured={configured}");
                 }
                 GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
-                Graphics.Blit(sourceTarget, presenter.PresentationTarget);
-                if (_androidVulkanPostRenderPresentationCount < 8)
-                {
-                    ++_androidVulkanPostRenderPresentationCount;
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] camera={info.CameraId} " +
-                        $"submission=plugin-event-then-graphics-blit source={sourceTarget.width}x{sourceTarget.height} " +
-                        $"destination={presenter.PresentationTarget.width}x{presenter.PresentationTarget.height}");
-                }
+                _vulkanPresentationPending.Add(cam);
                 return;
             }
 #endif
