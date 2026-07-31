@@ -3898,15 +3898,15 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
-    if (useHostDebugFragment && state->hostIndexedControlVertexModule == VK_NULL_SHADER_MODULE &&
+    if (useHostDebugFragment && state->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
         !iCreateShaderModule(
             state,
-            reinterpret_cast<const uint8_t *>(kHostIndexedStripControlVS),
-            static_cast<int>(sizeof(kHostIndexedStripControlVS)),
-            &state->hostIndexedControlVertexModule,
+            reinterpret_cast<const uint8_t *>(kSrgbPresentVS),
+            static_cast<int>(sizeof(kSrgbPresentVS)),
+            &state->hostDebugTriangleVertexModule,
             reporter))
     {
-        iError(reporter, "[IMM_UNITY_VK_BOUNDED_INDEX_FETCH_20260731] failed to create bounded index-fetch vertex module");
+        iError(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] failed to create proven vertex module");
         return false;
     }
     if (useHostDebugFragment && state->hostDebugIndexBuffer == nullptr)
@@ -3936,7 +3936,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = useHostDebugFragment ? state->hostIndexedControlVertexModule : shader->vertexModule;
+    stages[0].module = useHostDebugFragment ? state->hostDebugTriangleVertexModule : shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
