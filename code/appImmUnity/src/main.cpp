@@ -976,11 +976,7 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
     const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
-#if defined(__ANDROID__) || defined(ANDROID)
-    const bool debugTriangleOnly = true;
-#else
     const bool debugTriangleOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_TRIANGLE_ONLY");
-#endif
     const bool drawBisectionEnabled = sUnityVulkanHostDrawBisectionEnabled.load();
     const uint32_t drawBisectionInvocation = drawBisectionEnabled
         ? sUnityVulkanHostDrawBisectionInvocation.fetch_add(1) + 1

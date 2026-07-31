@@ -3809,6 +3809,22 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         return true;
     }
 
+    bool useHostDebugFragment = false;
+#if defined(__ANDROID__) || defined(ANDROID)
+    useHostDebugFragment = state->hostRenderPassFrameActive;
+#endif
+    if (useHostDebugFragment && state->hostDebugTriangleFragmentModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(
+            state,
+            reinterpret_cast<const uint8_t *>(kHostDebugTriangleFS),
+            static_cast<int>(sizeof(kHostDebugTriangleFS)),
+            &state->hostDebugTriangleFragmentModule,
+            reporter))
+    {
+        iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
+        return false;
+    }
+
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -3816,7 +3832,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stages[1].module = shader->fragmentModule;
+    stages[1].module = useHostDebugFragment ? state->hostDebugTriangleFragmentModule : shader->fragmentModule;
     stages[1].pName = "main";
 
     VkPipelineVertexInputStateCreateInfo vertexInput = {};
@@ -3949,7 +3965,11 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     shader->pipelineBlendEnabled = blendEnabled;
     if (!state->graphicsPipelineReported)
     {
-        iReport(reporter, "Vulkan renderer created static paint graphics pipeline");
+        iReport(
+            reporter,
+            useHostDebugFragment
+                ? "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] created static paint pipeline with constant fragment"
+                : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
     return true;
