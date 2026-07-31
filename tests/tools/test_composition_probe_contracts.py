@@ -102,6 +102,7 @@ def main() -> int:
             'required-marker "Unity Android Vulkan renderer initialized from host device"',
             'required-marker "commandBuffer=True cameraCallback=False"',
             'required-marker "[IMM_UNITY_VK_PREPARE_EVENT_20260731]"',
+            'required-marker "[IMM_UNITY_VK_VALIDATION_ARGS_20260731]"',
             'required-marker "[IMM_UNITY_VK_HOST_RT_20260612]"',
             'required-marker "colorRenderBuffer=0x"',
             'required-marker "Vulkan renderer began host render pass frame with host depth"',
@@ -124,6 +125,15 @@ def main() -> int:
             "GraphicsDeviceType.Vulkan",
             "AndroidArchitecture.ARM64",
             'new[] { "IMM_UNITY_ANDROID_VULKAN_CI" }',
+        ],
+        ROOT / "code/ImmUnitySampleProject/Assets/Plugins/Android/AndroidManifest.xml": [
+            "com.immersivefoundation.imm.ImmUnityPlayerActivity",
+        ],
+        ROOT / "code/ImmUnitySampleProject/Assets/Plugins/Android/ImmUnityPlayerActivity.java": [
+            "updateUnityCommandLineArguments",
+            "ApplicationInfo.FLAG_DEBUGGABLE",
+            'ValidationArgument = "-force-vulkan-layers"',
+            "[IMM_UNITY_VK_VALIDATION_ARGS_20260731]",
         ],
         ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [
             "#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_ANDROID",

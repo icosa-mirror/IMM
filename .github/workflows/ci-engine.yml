@@ -1354,6 +1354,7 @@ jobs:
           --timeout 5m
           --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files
           --required-marker "[IMM_UNITY_SMOKE] Android Vulkan CI smoke installed"
+          --required-marker "[IMM_UNITY_VK_VALIDATION_ARGS_20260731]"
           --required-marker "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan"
           --required-marker "Unity Android Vulkan interface initialized"
           --required-marker "Unity Android Vulkan renderer initialized from host device"

@@ -16,7 +16,7 @@
 
     <application>
         <activity
-            android:name="com.unity3d.player.UnityPlayerActivity"
+            android:name="com.immersivefoundation.imm.ImmUnityPlayerActivity"
             tools:node="merge">
             <intent-filter tools:node="merge">
                 <action android:name="android.intent.action.MAIN" />
