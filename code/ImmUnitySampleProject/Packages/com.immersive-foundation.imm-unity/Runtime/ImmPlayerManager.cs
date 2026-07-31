@@ -13,39 +13,43 @@ namespace ImmPlayer
 {
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
-        private Camera _camera;
-        private CommandBuffer _presentationCommands;
+        private RenderTexture _presentationSource;
+        private Camera _sourceCamera;
+        private bool _loggedPresentationBlit;
 
-        internal void Configure(RenderTexture presentationSource)
+        internal void Configure(Camera sourceCamera, RenderTexture presentationSource)
         {
-            ReleasePresentationCommands();
-            if (presentationSource == null)
-                return;
-
-            _camera = GetComponent<Camera>();
-            _presentationCommands = new CommandBuffer { name = "IMM Vulkan Presentation" };
-            _presentationCommands.Blit(
-                new RenderTargetIdentifier(presentationSource),
-                BuiltinRenderTextureType.CameraTarget);
-            _camera.AddCommandBuffer(CameraEvent.AfterEverything, _presentationCommands);
-            Debug.Log(
-                $"[IMM_UNITY_VK_PRESENT_COMMANDS_20260731] source={presentationSource.width}x{presentationSource.height} " +
-                $"event={CameraEvent.AfterEverything} destination=CameraTarget");
+            _sourceCamera = sourceCamera;
+            _presentationSource = presentationSource;
         }
 
-        private void OnDestroy()
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            ReleasePresentationCommands();
-        }
-
-        private void ReleasePresentationCommands()
-        {
-            if (_presentationCommands == null)
+            if (_presentationSource == null)
+            {
+                Graphics.Blit(source, destination);
                 return;
-            if (_camera != null)
-                _camera.RemoveCommandBuffer(CameraEvent.AfterEverything, _presentationCommands);
-            _presentationCommands.Release();
-            _presentationCommands = null;
+            }
+
+            // Graphics.Blit(source, null) falls back to Camera.main.targetTexture.
+            // That is this same source texture for the offscreen Vulkan camera,
+            // producing an undefined self-blit which collapses to source pixel
+            // (0,0) on Android. Detach it while Unity resolves the destination.
+            RenderTexture savedTarget = _sourceCamera != null ? _sourceCamera.targetTexture : null;
+            if (_sourceCamera != null && savedTarget == _presentationSource)
+                _sourceCamera.targetTexture = null;
+            Graphics.Blit(_presentationSource, destination);
+            if (_sourceCamera != null && savedTarget == _presentationSource)
+                _sourceCamera.targetTexture = savedTarget;
+
+            if (!_loggedPresentationBlit)
+            {
+                _loggedPresentationBlit = true;
+                Debug.Log(
+                    $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] source={_presentationSource.width}x{_presentationSource.height} " +
+                    $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")} " +
+                    "mainTargetDetached=1");
+            }
         }
     }
 
@@ -890,7 +894,7 @@ namespace ImmPlayer
             presenterCamera.targetDisplay = cam.targetDisplay;
             presenterCamera.rect = cam.rect;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-            presenter.Configure(target);
+            presenter.Configure(cam, target);
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
@@ -920,7 +924,7 @@ namespace ImmPlayer
                 return;
 
 #if UNITY_ANDROID
-            if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+            if (IsVulkanRuntime() && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS"))
                 GetOrCreateVulkanPresentationTarget(cam);
 #else
             GetOrCreateVulkanPresentationTarget(cam);
@@ -1070,7 +1074,7 @@ namespace ImmPlayer
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
 #if UNITY_ANDROID
-                bool useHostRenderPass = !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE");
+                bool useHostRenderPass = IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS");
                 if (useHostRenderPass)
                 {
                     int prepareEventId = (info.CameraId << 8) | VulkanPrepareEventFlag;
@@ -1091,7 +1095,7 @@ namespace ImmPlayer
 #endif
                 bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
 #if UNITY_ANDROID
-                if (IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+                if (!useHostRenderPass)
                     bindCameraTarget = false;
 #endif
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);

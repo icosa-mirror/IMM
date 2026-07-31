@@ -431,11 +431,13 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Uploads must be outside Unity's render pass. Draw events record directly
-    // into the active camera pass so no sampled presentation handoff is needed.
-    config.renderPassPrecondition = prepareEvent
-        ? kUnityVulkanRenderPass_EnsureOutside
-        : kUnityVulkanRenderPass_EnsureInside;
+    // The production Android path renders into an explicit Unity RenderTexture.
+    // Resource access and the plugin-owned render pass both require Unity's
+    // current pass to be closed. The active-pass path remains diagnostic only.
+    config.renderPassPrecondition =
+        !prepareEvent && iEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS")
+            ? kUnityVulkanRenderPass_EnsureInside
+            : kUnityVulkanRenderPass_EnsureOutside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
 #endif
@@ -1181,7 +1183,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
 #if defined(__ANDROID__) || defined(ANDROID)
-        if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+        if (!iEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER_PASS"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
         }
