@@ -976,15 +976,37 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
     const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
+#if defined(__ANDROID__) || defined(ANDROID)
+    const bool debugTriangleOnly = true;
+#else
+    const bool debugTriangleOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_TRIANGLE_ONLY");
+#endif
     const bool drawBisectionEnabled = sUnityVulkanHostDrawBisectionEnabled.load();
     const uint32_t drawBisectionInvocation = drawBisectionEnabled
         ? sUnityVulkanHostDrawBisectionInvocation.fetch_add(1) + 1
         : 0;
     const bool noBridgeControl = drawBisectionEnabled && drawBisectionInvocation == 2;
-    const bool rendered = (beginEndOnly || debugClearOnly || noBridgeControl)
-        ? false
-        : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
+    const bool rendered = debugTriangleOnly
+        ? vulkanRenderer->DebugDrawHostRenderPassTriangle()
+        : ((beginEndOnly || debugClearOnly || noBridgeControl)
+            ? false
+            : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false));
     vulkanRenderer->EndExternalImageFrame();
+
+    static int triangleControlReportCount = 0;
+    if (debugTriangleOnly && triangleControlReportCount < 8)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] camera=%d rendered=%d cmd=%p renderPass=0x%llx subpass=%d samples=%u",
+            cameraID,
+            rendered ? 1 : 0,
+            recordingState.commandBuffer,
+            static_cast<unsigned long long>(recordingState.renderPass),
+            recordingState.subPassIndex,
+            static_cast<unsigned int>(colorSamples));
+        ++triangleControlReportCount;
+    }
 
     if (drawBisectionEnabled && drawBisectionInvocation <= 8)
     {

@@ -1546,6 +1546,13 @@ struct piVulkanState
     VkShaderModule presentFragmentModule = VK_NULL_SHADER_MODULE;
     VkPipeline presentPipeline = VK_NULL_PIPELINE;
     VkSampler presentSampler = VK_NULL_SAMPLER;
+    VkPipelineLayout hostDebugTrianglePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+    VkShaderModule hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
+    VkPipeline hostDebugTrianglePipeline = VK_NULL_PIPELINE;
+    VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
+    uint32_t hostDebugTriangleSubpass = 0;
+    VkSampleCountFlagBits hostDebugTriangleSampleCount = VK_SAMPLE_COUNT_1_BIT;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -3516,6 +3523,22 @@ static const uint32_t kSrgbPresentFS[] = {
     0x00050051u, 0x00000006u, 0x00000043u, 0x00000058u, 0x00000002u, 0x00070050u, 0x00000039u, 0x00000044u,
     0x00000041u, 0x00000042u, 0x00000043u, 0x00000029u, 0x0003003eu, 0x0000003du, 0x00000044u, 0x000100fdu,
     0x00010038u
+};
+
+// Constant cyan fragment shader for isolating Unity host-render-pass raster
+// integration. It intentionally has no descriptors, inputs, or uniforms.
+static const uint32_t kHostDebugTriangleFS[] = {
+    0x07230203u, 0x00010000u, 0x0008000bu, 0x0000000du, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+    0x0006000fu, 0x00000004u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00000009u, 0x00030010u, 0x00000004u,
+    0x00000007u, 0x00030003u, 0x00000002u, 0x000001c2u, 0x00040005u, 0x00000004u, 0x6e69616du, 0x00000000u,
+    0x00050005u, 0x00000009u, 0x4374756fu, 0x726f6c6fu, 0x00000000u, 0x00040047u, 0x00000009u, 0x0000001eu,
+    0x00000000u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u, 0x00000006u,
+    0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00040020u, 0x00000008u, 0x00000003u,
+    0x00000007u, 0x0004003bu, 0x00000008u, 0x00000009u, 0x00000003u, 0x0004002bu, 0x00000006u, 0x0000000au,
+    0x00000000u, 0x0004002bu, 0x00000006u, 0x0000000bu, 0x3f800000u, 0x0007002cu, 0x00000007u, 0x0000000cu,
+    0x0000000au, 0x0000000bu, 0x0000000bu, 0x0000000bu, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u,
+    0x00000003u, 0x000200f8u, 0x00000005u, 0x0003003eu, 0x00000009u, 0x0000000cu, 0x000100fdu, 0x00010038u,
 };
 
 static bool iEnsureSrgbPresentResources(piVulkanState *state, piRenderer::piReporter *reporter)
@@ -6289,6 +6312,26 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroyPipeline(mState->device, mState->presentPipeline, nullptr);
             mState->presentPipeline = VK_NULL_PIPELINE;
         }
+        if (mState->hostDebugTrianglePipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+        {
+            mState->vkDestroyPipeline(mState->device, mState->hostDebugTrianglePipeline, nullptr);
+            mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
+        }
+        if (mState->hostDebugTrianglePipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
+        {
+            mState->vkDestroyPipelineLayout(mState->device, mState->hostDebugTrianglePipelineLayout, nullptr);
+            mState->hostDebugTrianglePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        }
+        if (mState->hostDebugTriangleVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleVertexModule, nullptr);
+            mState->hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->hostDebugTriangleFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleFragmentModule, nullptr);
+            mState->hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
+        }
         if (mState->presentPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
         {
             mState->vkDestroyPipelineLayout(mState->device, mState->presentPipelineLayout, nullptr);
@@ -7476,6 +7519,131 @@ bool piRendererVulkan::DebugClearHostRenderPassColor(float red, float green, flo
     rect.layerCount = 1;
 
     mState->vkCmdClearAttachments(mState->commandBuffer, 1, &attachment, 1, &rect);
+    return true;
+}
+
+bool piRendererVulkan::DebugDrawHostRenderPassTriangle(void)
+{
+    if (!mState || !mState->hostRenderPassFrameActive || mState->commandBuffer == VK_NULL_COMMAND_BUFFER ||
+        !mState->externalFrameRenderTarget || !mState->vkCreatePipelineLayout || !mState->vkCreateGraphicsPipelines ||
+        !mState->vkCmdBindPipeline || !mState->vkCmdDraw)
+    {
+        return false;
+    }
+
+    if (mState->hostDebugTrianglePipelineLayout == VK_NULL_PIPELINE_LAYOUT)
+    {
+        VkPipelineLayoutCreateInfo layoutInfo = {};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        if (mState->vkCreatePipelineLayout(mState->device, &layoutInfo, nullptr, &mState->hostDebugTrianglePipelineLayout) != VK_SUCCESS ||
+            mState->hostDebugTrianglePipelineLayout == VK_NULL_PIPELINE_LAYOUT)
+        {
+            iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create pipeline layout");
+            return false;
+        }
+    }
+    if (mState->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(mState, reinterpret_cast<const uint8_t *>(kSrgbPresentVS), static_cast<int>(sizeof(kSrgbPresentVS)), &mState->hostDebugTriangleVertexModule, mReporter))
+    {
+        iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create vertex module");
+        return false;
+    }
+    if (mState->hostDebugTriangleFragmentModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(mState, reinterpret_cast<const uint8_t *>(kHostDebugTriangleFS), static_cast<int>(sizeof(kHostDebugTriangleFS)), &mState->hostDebugTriangleFragmentModule, mReporter))
+    {
+        iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create fragment module");
+        return false;
+    }
+
+    const piRTarget target = mState->externalFrameRenderTarget;
+    const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+    if (mState->hostDebugTrianglePipeline == VK_NULL_PIPELINE ||
+        mState->hostDebugTriangleRenderPass != target->renderPass ||
+        mState->hostDebugTriangleSubpass != target->subpass ||
+        mState->hostDebugTriangleSampleCount != sampleCount)
+    {
+        if (mState->hostDebugTrianglePipeline != VK_NULL_PIPELINE)
+        {
+            iRetireGraphicsPipeline(mState, mState->hostDebugTrianglePipeline);
+            mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
+        }
+
+        VkPipelineShaderStageCreateInfo stages[2] = {};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = mState->hostDebugTriangleVertexModule;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = mState->hostDebugTriangleFragmentModule;
+        stages[1].pName = "main";
+
+        VkPipelineVertexInputStateCreateInfo vertexInput = {};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        VkPipelineViewportStateCreateInfo viewport = {};
+        viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewport.viewportCount = 1;
+        viewport.scissorCount = 1;
+        VkPipelineRasterizationStateCreateInfo rasterization = {};
+        rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterization.cullMode = VK_CULL_MODE_NONE;
+        rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterization.lineWidth = 1.0f;
+        VkPipelineMultisampleStateCreateInfo multisample = {};
+        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisample.rasterizationSamples = sampleCount;
+        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = 0;
+        depthStencil.depthWriteEnable = 0;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+        VkPipelineColorBlendAttachmentState blendAttachment = {};
+        blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        VkPipelineColorBlendStateCreateInfo colorBlend = {};
+        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlend.attachmentCount = 1;
+        colorBlend.pAttachments = &blendAttachment;
+        const VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates = dynamicStates;
+
+        VkGraphicsPipelineCreateInfo pipelineInfo = {};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = stages;
+        pipelineInfo.pVertexInputState = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewport;
+        pipelineInfo.pRasterizationState = &rasterization;
+        pipelineInfo.pMultisampleState = &multisample;
+        pipelineInfo.pDepthStencilState = target->hasDepth ? &depthStencil : nullptr;
+        pipelineInfo.pColorBlendState = &colorBlend;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = mState->hostDebugTrianglePipelineLayout;
+        pipelineInfo.renderPass = target->renderPass;
+        pipelineInfo.subpass = target->subpass;
+        const VkResult result = mState->vkCreateGraphicsPipelines(
+            mState->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &mState->hostDebugTrianglePipeline);
+        if (result != VK_SUCCESS || mState->hostDebugTrianglePipeline == VK_NULL_PIPELINE)
+        {
+            iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create graphics pipeline");
+            mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
+            return false;
+        }
+        mState->hostDebugTriangleRenderPass = target->renderPass;
+        mState->hostDebugTriangleSubpass = target->subpass;
+        mState->hostDebugTriangleSampleCount = sampleCount;
+        iReport(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] created graphics pipeline");
+    }
+
+    mState->vkCmdBindPipeline(mState->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mState->hostDebugTrianglePipeline);
+    mState->vkCmdDraw(mState->commandBuffer, 3, 1, 0, 0);
     return true;
 }
 
