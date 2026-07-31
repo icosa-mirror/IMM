@@ -843,6 +843,17 @@ namespace ImmPlayer
 
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
+            Camera presenterCamera = presenterObject.AddComponent<Camera>();
+            presenterCamera.depth = cam.depth + 1000.0f;
+            presenterCamera.clearFlags = CameraClearFlags.SolidColor;
+            presenterCamera.backgroundColor = Color.black;
+            presenterCamera.cullingMask = 0;
+            presenterCamera.allowHDR = false;
+            presenterCamera.allowMSAA = false;
+            presenterCamera.useOcclusionCulling = false;
+            presenterCamera.targetDisplay = cam.targetDisplay;
+            presenterCamera.rect = cam.rect;
+            presenterCamera.targetTexture = null;
             Canvas presenterCanvas = presenterObject.AddComponent<Canvas>();
             presenterCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
             presenterCanvas.pixelPerfect = false;
@@ -866,7 +877,8 @@ namespace ImmPlayer
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
-                $"mainDepth={cam.depth} sortingOrder={presenterCanvas.sortingOrder} mode=screen-space-overlay");
+                $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
+                $"sortingOrder={presenterCanvas.sortingOrder} mode=screen-space-overlay-backbuffer-camera");
             return target;
 #else
             return null;
