@@ -4145,7 +4145,63 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        state->vkCmdDrawIndexed(state->commandBuffer, 3, 1, baseIndex, 0, 0);
+        uint32_t diagnosticFirstIndex = baseIndex;
+        uint32_t diagnosticValues[3] = {};
+        bool foundDiagnosticTriangle = false;
+        const uint32_t indexStride = indexType == VK_INDEX_TYPE_UINT32 ? 4u : 2u;
+        const uint32_t availableIndices = vertexArray->indexBuffer->size / indexStride;
+        const uint32_t endIndex = std::min(baseIndex + num, availableIndices);
+        for (uint32_t candidate = baseIndex; candidate + 2u < endIndex; ++candidate)
+        {
+            uint32_t values[3] = {};
+            for (uint32_t j = 0; j < 3u; ++j)
+            {
+                const uint8_t *src = vertexArray->indexBuffer->data + (candidate + j) * indexStride;
+                if (indexType == VK_INDEX_TYPE_UINT32)
+                {
+                    std::memcpy(&values[j], src, sizeof(uint32_t));
+                }
+                else
+                {
+                    uint16_t value = 0;
+                    std::memcpy(&value, src, sizeof(uint16_t));
+                    values[j] = value;
+                }
+            }
+            const uint32_t restart = indexType == VK_INDEX_TYPE_UINT32 ? 0xffffffffu : 0xffffu;
+            if (values[0] == restart || values[1] == restart || values[2] == restart)
+            {
+                continue;
+            }
+            const uint32_t c0 = (values[0] + values[0] / 7u) % 3u;
+            const uint32_t c1 = (values[1] + values[1] / 7u) % 3u;
+            const uint32_t c2 = (values[2] + values[2] / 7u) % 3u;
+            if (c0 != c1 && c0 != c2 && c1 != c2)
+            {
+                diagnosticFirstIndex = candidate;
+                diagnosticValues[0] = values[0];
+                diagnosticValues[1] = values[1];
+                diagnosticValues[2] = values[2];
+                foundDiagnosticTriangle = true;
+                break;
+            }
+        }
+        static bool diagnosticIndexSelectionReported = false;
+        if (!diagnosticIndexSelectionReported)
+        {
+            std::fprintf(
+                stderr,
+                "[IMM_UNITY_VK_NONDEGENERATE_INDEX_FETCH_20260731] found=%d first=%u values=%u,%u,%u base=%u count=%u\n",
+                foundDiagnosticTriangle ? 1 : 0,
+                diagnosticFirstIndex,
+                diagnosticValues[0],
+                diagnosticValues[1],
+                diagnosticValues[2],
+                baseIndex,
+                num);
+            diagnosticIndexSelectionReported = true;
+        }
+        state->vkCmdDrawIndexed(state->commandBuffer, 3, 1, diagnosticFirstIndex, 0, 0);
     }
     else
 #endif
