@@ -135,7 +135,8 @@ def main() -> int:
             "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
             "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]",
             "[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731]",
-            "mode=screen-space-overlay-backbuffer-camera",
+            "[IMM_UNITY_VK_PRESENT_SWAP_20260731]",
+            "mode=double-buffered-overlay",
             "IssuePluginEvent(_renderEventFunc, eventId)",
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [

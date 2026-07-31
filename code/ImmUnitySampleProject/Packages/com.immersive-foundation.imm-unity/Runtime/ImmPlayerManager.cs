@@ -15,6 +15,16 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RawImage PresentationImage { get; set; }
+        internal RenderTexture AlternateTarget { get; set; }
+        internal int LastSwapFrame { get; set; } = -1;
+
+        private void OnDestroy()
+        {
+            if (AlternateTarget == null)
+                return;
+            AlternateTarget.Release();
+            Destroy(AlternateTarget);
+        }
     }
 
     internal enum ImmProjectionDestination
@@ -149,6 +159,7 @@ namespace ImmPlayer
         private readonly Dictionary<Camera, VulkanPresentationCamera> _vulkanPresentationCameras =
             new Dictionary<Camera, VulkanPresentationCamera>();
         private int _androidVulkanPostRenderPresentationCount;
+        private int _androidVulkanPresentationSwapCount;
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
         private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
@@ -803,8 +814,34 @@ namespace ImmPlayer
             int height = Math.Max(1, Screen.height);
             if (_vulkanPresentationTargets.TryGetValue(cam, out RenderTexture existing))
             {
-                if (existing != null && existing.width == width && existing.height == height)
+                if (existing != null &&
+                    existing.width == width &&
+                    existing.height == height &&
+                    _vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera existingPresenter) &&
+                    existingPresenter != null &&
+                    existingPresenter.AlternateTarget != null &&
+                    existingPresenter.AlternateTarget.width == width &&
+                    existingPresenter.AlternateTarget.height == height)
                 {
+                    if (existingPresenter.LastSwapFrame != Time.frameCount)
+                    {
+                        RenderTexture completedTarget = existing;
+                        RenderTexture nextTarget = existingPresenter.AlternateTarget;
+                        existingPresenter.PresentationImage.texture = completedTarget;
+                        existingPresenter.AlternateTarget = completedTarget;
+                        existingPresenter.LastSwapFrame = Time.frameCount;
+                        _vulkanPresentationTargets[cam] = nextTarget;
+                        cam.targetTexture = nextTarget;
+                        if (_androidVulkanPresentationSwapCount < 8)
+                        {
+                            ++_androidVulkanPresentationSwapCount;
+                            Debug.Log(
+                                $"[IMM_UNITY_VK_PRESENT_SWAP_20260731] frame={Time.frameCount} camera={cam.name} " +
+                                $"write={nextTarget.name} display={completedTarget.name}");
+                        }
+                        return nextTarget;
+                    }
+
                     if (cam.targetTexture != existing)
                         cam.targetTexture = existing;
                     return existing;
@@ -840,6 +877,14 @@ namespace ImmPlayer
             target.Create();
             cam.targetTexture = target;
             _vulkanPresentationTargets[cam] = target;
+            var alternateTarget = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+            {
+                antiAliasing = 1,
+                name = $"IMM Vulkan Presentation Target B ({cam.name})",
+                useMipMap = false,
+                autoGenerateMips = false
+            };
+            alternateTarget.Create();
 
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
@@ -869,16 +914,18 @@ namespace ImmPlayer
             imageRect.offsetMin = Vector2.zero;
             imageRect.offsetMax = Vector2.zero;
             RawImage image = imageObject.AddComponent<RawImage>();
-            image.texture = target;
+            image.texture = alternateTarget;
             image.color = Color.white;
             image.raycastTarget = false;
             presenter.PresentationImage = image;
+            presenter.AlternateTarget = alternateTarget;
+            presenter.LastSwapFrame = Time.frameCount;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"sortingOrder={presenterCanvas.sortingOrder} mode=screen-space-overlay-backbuffer-camera");
+                $"sortingOrder={presenterCanvas.sortingOrder} mode=double-buffered-overlay");
             return target;
 #else
             return null;
@@ -890,6 +937,13 @@ namespace ImmPlayer
         {
             if (cam == null)
                 return null;
+            if (_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera presenter) &&
+                presenter != null &&
+                presenter.PresentationImage != null &&
+                presenter.PresentationImage.texture is RenderTexture presentedTarget)
+            {
+                return presentedTarget;
+            }
             _vulkanPresentationTargets.TryGetValue(cam, out RenderTexture target);
             return target;
         }
