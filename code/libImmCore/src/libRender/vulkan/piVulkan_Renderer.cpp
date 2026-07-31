@@ -1548,6 +1548,7 @@ struct piVulkanState
     VkSampler presentSampler = VK_NULL_SAMPLER;
     VkPipelineLayout hostDebugTrianglePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     VkShaderModule hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
     VkPipeline hostDebugTrianglePipeline = VK_NULL_PIPELINE;
     VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
@@ -3541,6 +3542,41 @@ static const uint32_t kHostDebugTriangleFS[] = {
     0x00000003u, 0x000200f8u, 0x00000005u, 0x0003003eu, 0x00000009u, 0x0000000cu, 0x000100fdu, 0x00010038u,
 };
 
+// Descriptor-free vertex shader for proving that the real IMM index buffer is
+// consumed by Unity's live command buffer. It maps each fetched index modulo
+// three onto a fixed triangle, preserving indexed submission and restart data.
+static const uint32_t kHostIndexedControlVS[] = {
+    0x07230203u, 0x00010000u, 0x000d000bu, 0x0000002au, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
+    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
+    0x0007000fu, 0x00000000u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x0000000du, 0x0000001bu, 0x00030047u,
+    0x0000000bu, 0x00000002u, 0x00050048u, 0x0000000bu, 0x00000000u, 0x0000000bu, 0x00000000u, 0x00050048u,
+    0x0000000bu, 0x00000001u, 0x0000000bu, 0x00000001u, 0x00050048u, 0x0000000bu, 0x00000002u, 0x0000000bu,
+    0x00000003u, 0x00050048u, 0x0000000bu, 0x00000003u, 0x0000000bu, 0x00000004u, 0x00040047u, 0x0000001bu,
+    0x0000000bu, 0x0000002au, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u,
+    0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00040015u, 0x00000008u,
+    0x00000020u, 0x00000000u, 0x0004002bu, 0x00000008u, 0x00000009u, 0x00000001u, 0x0004001cu, 0x0000000au,
+    0x00000006u, 0x00000009u, 0x0006001eu, 0x0000000bu, 0x00000007u, 0x00000006u, 0x0000000au, 0x0000000au,
+    0x00040020u, 0x0000000cu, 0x00000003u, 0x0000000bu, 0x0004003bu, 0x0000000cu, 0x0000000du, 0x00000003u,
+    0x00040015u, 0x0000000eu, 0x00000020u, 0x00000001u, 0x0004002bu, 0x0000000eu, 0x0000000fu, 0x00000000u,
+    0x00040017u, 0x00000010u, 0x00000006u, 0x00000002u, 0x0004002bu, 0x00000008u, 0x00000011u, 0x00000003u,
+    0x0004001cu, 0x00000012u, 0x00000010u, 0x00000011u, 0x0004002bu, 0x00000006u, 0x00000013u, 0xbf400000u,
+    0x0005002cu, 0x00000010u, 0x00000014u, 0x00000013u, 0x00000013u, 0x0004002bu, 0x00000006u, 0x00000015u,
+    0x3f400000u, 0x0005002cu, 0x00000010u, 0x00000016u, 0x00000015u, 0x00000013u, 0x0004002bu, 0x00000006u,
+    0x00000017u, 0x00000000u, 0x0005002cu, 0x00000010u, 0x00000018u, 0x00000017u, 0x00000015u, 0x0006002cu,
+    0x00000012u, 0x00000019u, 0x00000014u, 0x00000016u, 0x00000018u, 0x00040020u, 0x0000001au, 0x00000001u,
+    0x0000000eu, 0x0004003bu, 0x0000001au, 0x0000001bu, 0x00000001u, 0x00040020u, 0x0000001fu, 0x00000007u,
+    0x00000012u, 0x00040020u, 0x00000021u, 0x00000007u, 0x00000010u, 0x0004002bu, 0x00000006u, 0x00000024u,
+    0x3f800000u, 0x00040020u, 0x00000028u, 0x00000003u, 0x00000007u, 0x00050036u, 0x00000002u, 0x00000004u,
+    0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u, 0x0004003bu, 0x0000001fu, 0x00000020u, 0x00000007u,
+    0x0004003du, 0x0000000eu, 0x0000001cu, 0x0000001bu, 0x0004007cu, 0x00000008u, 0x0000001du, 0x0000001cu,
+    0x00050089u, 0x00000008u, 0x0000001eu, 0x0000001du, 0x00000011u, 0x0003003eu, 0x00000020u, 0x00000019u,
+    0x00050041u, 0x00000021u, 0x00000022u, 0x00000020u, 0x0000001eu, 0x0004003du, 0x00000010u, 0x00000023u,
+    0x00000022u, 0x00050051u, 0x00000006u, 0x00000025u, 0x00000023u, 0x00000000u, 0x00050051u, 0x00000006u,
+    0x00000026u, 0x00000023u, 0x00000001u, 0x00070050u, 0x00000007u, 0x00000027u, 0x00000025u, 0x00000026u,
+    0x00000017u, 0x00000024u, 0x00050041u, 0x00000028u, 0x00000029u, 0x0000000du, 0x0000000fu, 0x0003003eu,
+    0x00000029u, 0x00000027u, 0x000100fdu, 0x00010038u,
+};
+
 static bool iEnsureSrgbPresentResources(piVulkanState *state, piRenderer::piReporter *reporter)
 {
     if (!state || state->device == VK_NULL_DEVICE)
@@ -3824,11 +3860,22 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
+    if (useHostDebugFragment && state->hostIndexedControlVertexModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(
+            state,
+            reinterpret_cast<const uint8_t *>(kHostIndexedControlVS),
+            static_cast<int>(sizeof(kHostIndexedControlVS)),
+            &state->hostIndexedControlVertexModule,
+            reporter))
+    {
+        iError(reporter, "[IMM_UNITY_VK_INDEXED_CONTROL_20260731] failed to create indexed control vertex module");
+        return false;
+    }
 
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = shader->vertexModule;
+    stages[0].module = useHostDebugFragment ? state->hostIndexedControlVertexModule : shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -3977,7 +4024,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_CULL_CONTROL_20260731] created static paint pipeline with constant fragment and culling disabled"
+                ? "[IMM_UNITY_VK_INDEXED_CONTROL_20260731] created descriptor-free indexed pipeline"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
@@ -6355,6 +6402,11 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleVertexModule, nullptr);
             mState->hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->hostIndexedControlVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->hostIndexedControlVertexModule, nullptr);
+            mState->hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
         }
         if (mState->hostDebugTriangleFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
         {
