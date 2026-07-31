@@ -431,10 +431,11 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Android's source camera targets an explicit presentation RenderTexture.
-    // Access its RenderBuffers and record a private render pass into Unity's
-    // command buffer. Unity then transitions and presents the color image.
-    config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
+    // Uploads must be outside Unity's render pass. Draw events record directly
+    // into the active camera pass so no sampled presentation handoff is needed.
+    config.renderPassPrecondition = prepareEvent
+        ? kUnityVulkanRenderPass_EnsureOutside
+        : kUnityVulkanRenderPass_EnsureInside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
 #endif
@@ -1175,7 +1176,14 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
 #if defined(__ANDROID__) || defined(ANDROID)
-        iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+        if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+        {
+            iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+        }
+        else
+        {
+            iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
+        }
 #else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {

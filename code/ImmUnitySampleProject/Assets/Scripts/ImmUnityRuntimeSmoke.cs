@@ -176,16 +176,21 @@ namespace ImmPlayer
                 RenderTexture vulkanPresentationTarget = playerManager != null
                     ? playerManager.GetAndroidVulkanPresentationTargetForValidation(renderCaptureCamera)
                     : null;
-                if (vulkanPresentationTarget == null)
+                Texture2D renderCapture;
+                if (vulkanPresentationTarget != null)
                 {
-                    Debug.LogError($"{Prefix}missing Unity Android Vulkan presentation texture for direct render capture");
-                    QuitIfRequested(2);
-                    yield break;
+                    Debug.Log(
+                        $"{Prefix}render source=unity-vulkan-presentation-texture " +
+                        $"size={vulkanPresentationTarget.width}x{vulkanPresentationTarget.height}");
+                    renderCapture = CaptureRenderTexture(vulkanPresentationTarget);
                 }
-                Debug.Log(
-                    $"{Prefix}render source=unity-vulkan-presentation-texture " +
-                    $"size={vulkanPresentationTarget.width}x{vulkanPresentationTarget.height}");
-                Texture2D renderCapture = CaptureRenderTexture(vulkanPresentationTarget);
+                else
+                {
+                    Debug.Log(
+                        $"{Prefix}render source=unity-vulkan-active-render-pass " +
+                        $"size={Screen.width}x{Screen.height}");
+                    renderCapture = CaptureScreenTexture();
+                }
 #else
                 Texture2D renderCapture = _diagnosticCameraTargetTexture != null
                     ? CaptureRenderTexture(_diagnosticCameraTargetTexture)

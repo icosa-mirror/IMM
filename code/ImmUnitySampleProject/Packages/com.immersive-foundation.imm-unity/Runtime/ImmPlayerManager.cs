@@ -919,7 +919,12 @@ namespace ImmPlayer
             if (!ShouldRenderCamera(cam))
                 return;
 
+#if UNITY_ANDROID
+            if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+                GetOrCreateVulkanPresentationTarget(cam);
+#else
             GetOrCreateVulkanPresentationTarget(cam);
+#endif
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
 #if UNITY_ANDROID
             if (IsVulkanRuntime() &&
@@ -1064,16 +1069,30 @@ namespace ImmPlayer
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
+#if UNITY_ANDROID
+                bool useHostRenderPass = !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE");
+                if (useHostRenderPass)
+                {
+                    int prepareEventId = (info.CameraId << 8) | VulkanPrepareEventFlag;
+                    if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                        _configuredVulkanRenderEvents.Add(prepareEventId))
+                    {
+                        int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(prepareEventId);
+                        Debug.Log(
+                            $"[IMM_UNITY_VK_PREPARE_EVENT_20260731] eventId={prepareEventId} " +
+                            $"camera={info.CameraId} configured={configured}");
+                    }
+                    info.CommandBuffer.IssuePluginEvent(_renderEventFunc, prepareEventId);
+                }
+#endif
                 bool useCustomBlit = IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT") && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
 #if UNITY_ANDROID
                 useCustomBlit = false;
 #endif
                 bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
 #if UNITY_ANDROID
-                // The explicit RenderBuffers are accessed by the native
-                // callback. Pre-binding CameraTarget would cause Unity to
-                // resume a camera render pass after the EnsureOutside event.
-                bindCameraTarget = false;
+                if (IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+                    bindCameraTarget = false;
 #endif
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
