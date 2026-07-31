@@ -132,7 +132,7 @@ def main() -> int:
             "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
             "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]",
             "bool useHostRenderPass = !IsEnvFlagEnabled(\"IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE\")",
-            "bindCameraDepthTarget |= useHostRenderPass",
+            "ConfigureEvent(EnsureInside) restores the camera's tracked",
             "info.CommandBuffer.IssuePluginEvent(_renderEventFunc, prepareEventId)",
             "info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId)",
         ],

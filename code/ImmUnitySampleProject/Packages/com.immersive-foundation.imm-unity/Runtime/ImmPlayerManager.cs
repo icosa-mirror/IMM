@@ -1217,16 +1217,16 @@ namespace ImmPlayer
 #endif
                 bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
 #if UNITY_ANDROID
-                if (!useHostRenderPass)
-                    bindCameraTarget = false;
+                // ConfigureEvent(EnsureInside) restores the camera's tracked
+                // framebuffer and depth attachment. Rebinding CameraTarget or
+                // Builtin.Depth here creates a different Android render pass
+                // that Unity later cannot end safely on Mali.
+                bindCameraTarget = false;
 #endif
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {
                     bool bindCameraDepthTarget = IsEnvFlagEnabled("IMM_UNITY_VK_BIND_CAMERA_DEPTH_TARGET");
-#if UNITY_ANDROID
-                    bindCameraDepthTarget |= useHostRenderPass;
-#endif
                     if (bindCameraDepthTarget)
                     {
                         info.CommandBuffer.SetRenderTarget(cameraTarget, new RenderTargetIdentifier(BuiltinRenderTextureType.Depth));
