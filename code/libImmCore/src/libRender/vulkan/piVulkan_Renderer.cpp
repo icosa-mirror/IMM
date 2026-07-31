@@ -4061,7 +4061,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_INDEXED_STRIP_CONTROL_20260731] created descriptor-free indexed strip pipeline"
+                ? "[IMM_UNITY_VK_NONINDEXED_CONTROL_20260731] created descriptor-free nonindexed control pipeline"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
@@ -4139,7 +4139,16 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->staticPaintDescriptorSet, 0, nullptr);
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
     state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
-    state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
+#if defined(__ANDROID__) || defined(ANDROID)
+    if (hostRenderPass)
+    {
+        state->vkCmdDraw(state->commandBuffer, num, numInstances, 0, baseInstance);
+    }
+    else
+#endif
+    {
+        state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
+    }
     if (hostRenderPass)
     {
         return true;
