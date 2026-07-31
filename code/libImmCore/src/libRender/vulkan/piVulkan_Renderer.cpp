@@ -1550,6 +1550,7 @@ struct piVulkanState
     VkShaderModule hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
+    piBuffer hostDebugIndexBuffer = nullptr;
     VkPipeline hostDebugTrianglePipeline = VK_NULL_PIPELINE;
     VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
     uint32_t hostDebugTriangleSubpass = 0;
@@ -3908,6 +3909,30 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_BOUNDED_INDEX_FETCH_20260731] failed to create bounded index-fetch vertex module");
         return false;
     }
+    if (useHostDebugFragment && state->hostDebugIndexBuffer == nullptr)
+    {
+        const uint16_t indices[3] = { 0u, 1u, 2u };
+        piBuffer buffer = new piBufferS();
+        buffer->size = sizeof(indices);
+        buffer->use = piRenderer::BufferUse::Index;
+        buffer->data = static_cast<uint8_t *>(std::malloc(buffer->size));
+        if (!buffer->data)
+        {
+            delete buffer;
+            iError(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] failed to allocate CPU index data");
+            return false;
+        }
+        std::memcpy(buffer->data, indices, sizeof(indices));
+        if (!iCreateBufferObject(state, buffer, buffer->data, reporter))
+        {
+            std::free(buffer->data);
+            delete buffer;
+            iError(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] failed to create Vulkan index buffer");
+            return false;
+        }
+        state->hostDebugIndexBuffer = buffer;
+        iReport(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] created index buffer values=0,1,2");
+    }
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -4141,67 +4166,20 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->staticPaintDescriptorSet, 0, nullptr);
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
-    state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        uint32_t diagnosticFirstIndex = baseIndex;
-        uint32_t diagnosticValues[3] = {};
-        bool foundDiagnosticTriangle = false;
-        const uint32_t indexStride = indexType == VK_INDEX_TYPE_UINT32 ? 4u : 2u;
-        const uint32_t availableIndices = vertexArray->indexBuffer->size / indexStride;
-        const uint32_t endIndex = std::min(baseIndex + num, availableIndices);
-        for (uint32_t candidate = baseIndex; candidate + 2u < endIndex; ++candidate)
-        {
-            uint32_t values[3] = {};
-            for (uint32_t j = 0; j < 3u; ++j)
-            {
-                const uint8_t *src = vertexArray->indexBuffer->data + (candidate + j) * indexStride;
-                if (indexType == VK_INDEX_TYPE_UINT32)
-                {
-                    std::memcpy(&values[j], src, sizeof(uint32_t));
-                }
-                else
-                {
-                    uint16_t value = 0;
-                    std::memcpy(&value, src, sizeof(uint16_t));
-                    values[j] = value;
-                }
-            }
-            const uint32_t restart = indexType == VK_INDEX_TYPE_UINT32 ? 0xffffffffu : 0xffffu;
-            if (values[0] == restart || values[1] == restart || values[2] == restart)
-            {
-                continue;
-            }
-            const uint32_t c0 = (values[0] + values[0] / 7u) % 3u;
-            const uint32_t c1 = (values[1] + values[1] / 7u) % 3u;
-            const uint32_t c2 = (values[2] + values[2] / 7u) % 3u;
-            if (c0 != c1 && c0 != c2 && c1 != c2)
-            {
-                diagnosticFirstIndex = candidate;
-                diagnosticValues[0] = values[0];
-                diagnosticValues[1] = values[1];
-                diagnosticValues[2] = values[2];
-                foundDiagnosticTriangle = true;
-                break;
-            }
-        }
-        static bool diagnosticIndexSelectionReported = false;
-        if (!diagnosticIndexSelectionReported)
-        {
-            std::fprintf(
-                stderr,
-                "[IMM_UNITY_VK_NONDEGENERATE_INDEX_FETCH_20260731] found=%d first=%u values=%u,%u,%u base=%u count=%u\n",
-                foundDiagnosticTriangle ? 1 : 0,
-                diagnosticFirstIndex,
-                diagnosticValues[0],
-                diagnosticValues[1],
-                diagnosticValues[2],
-                baseIndex,
-                num);
-            diagnosticIndexSelectionReported = true;
-        }
-        state->vkCmdDrawIndexed(state->commandBuffer, 3, 1, diagnosticFirstIndex, 0, 0);
+        state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT16);
+    }
+    else
+#endif
+    {
+        state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
+    }
+#if defined(__ANDROID__) || defined(ANDROID)
+    if (hostRenderPass)
+    {
+        state->vkCmdDrawIndexed(state->commandBuffer, 3, 1, 0, 0, 0);
     }
     else
 #endif
@@ -6517,6 +6495,20 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleFragmentModule, nullptr);
             mState->hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->hostDebugIndexBuffer)
+        {
+            if (mState->hostDebugIndexBuffer->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+            {
+                mState->vkDestroyBuffer(mState->device, mState->hostDebugIndexBuffer->buffer, nullptr);
+            }
+            if (mState->hostDebugIndexBuffer->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+            {
+                mState->vkFreeMemory(mState->device, mState->hostDebugIndexBuffer->memory, nullptr);
+            }
+            std::free(mState->hostDebugIndexBuffer->data);
+            delete mState->hostDebugIndexBuffer;
+            mState->hostDebugIndexBuffer = nullptr;
         }
         if (mState->presentPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
         {
