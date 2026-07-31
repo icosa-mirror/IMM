@@ -6,7 +6,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.UI;
 
 [assembly: InternalsVisibleTo("ImmUnity.Runtime.Tests")]
 
@@ -14,8 +13,27 @@ namespace ImmPlayer
 {
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
-        internal RawImage PresentationImage { get; set; }
         internal RenderTexture PresentationTarget { get; set; }
+        private int _finalBlitLogCount;
+
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        {
+            if (PresentationTarget == null)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            Graphics.Blit(PresentationTarget, destination);
+            if (_finalBlitLogCount < 8)
+            {
+                ++_finalBlitLogCount;
+                Debug.Log(
+                    $"[IMM_UNITY_VK_CAMERA_FINAL_BLIT_20260731] " +
+                    $"source={PresentationTarget.width}x{PresentationTarget.height} " +
+                    $"destination={(destination == null ? "backbuffer" : $"{destination.width}x{destination.height}")}");
+            }
+        }
 
         private void OnDestroy()
         {
@@ -892,32 +910,14 @@ namespace ImmPlayer
             presenterCamera.targetDisplay = cam.targetDisplay;
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
-            Canvas presenterCanvas = presenterObject.AddComponent<Canvas>();
-            presenterCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            presenterCanvas.pixelPerfect = false;
-            presenterCanvas.sortingOrder = short.MaxValue;
-            presenterCanvas.targetDisplay = cam.targetDisplay;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-
-            var imageObject = new GameObject("IMM Vulkan Presentation Image", typeof(RectTransform));
-            imageObject.transform.SetParent(presenterObject.transform, false);
-            RectTransform imageRect = imageObject.GetComponent<RectTransform>();
-            imageRect.anchorMin = Vector2.zero;
-            imageRect.anchorMax = Vector2.one;
-            imageRect.offsetMin = Vector2.zero;
-            imageRect.offsetMax = Vector2.zero;
-            RawImage image = imageObject.AddComponent<RawImage>();
-            image.texture = presentationTarget;
-            image.color = Color.white;
-            image.raycastTarget = false;
-            presenter.PresentationImage = image;
             presenter.PresentationTarget = presentationTarget;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"sortingOrder={presenterCanvas.sortingOrder} mode=post-render-blit-overlay");
+                $"mode=camera-on-render-image");
             return target;
 #else
             return null;
