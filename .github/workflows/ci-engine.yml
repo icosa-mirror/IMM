@@ -1307,6 +1307,13 @@ jobs:
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
           customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-android-vulkan/ImmUnitySmoke.apk
 
+      - name: Verify Unity Vulkan staging presentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] lateAcquireNextImage=True" \
+            artifacts/unity-android-vulkan/unity-editor.log
+
       - name: Check Firebase Test Lab configuration
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}

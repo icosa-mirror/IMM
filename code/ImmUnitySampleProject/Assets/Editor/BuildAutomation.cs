@@ -96,12 +96,17 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
+            bool previousLateAcquireNextImage = PlayerSettings.vulkanEnableLateAcquireNextImage;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                PlayerSettings.vulkanEnableLateAcquireNextImage = true;
+                UnityEngine.Debug.Log(
+                    $"[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] " +
+                    $"lateAcquireNextImage={PlayerSettings.vulkanEnableLateAcquireNextImage}");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
@@ -117,6 +122,7 @@ namespace ImmPlayer.Editor
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
+                PlayerSettings.vulkanEnableLateAcquireNextImage = previousLateAcquireNextImage;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
