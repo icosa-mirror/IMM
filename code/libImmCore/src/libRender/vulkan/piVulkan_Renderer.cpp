@@ -1372,7 +1372,7 @@ struct piVulkanState
     bool hostRenderPassFrameReported = false;
     bool hostDrawBisectionEnabled = false;
     uint32_t hostDrawBisectionStage = 0;
-    uint32_t hostDrawBisectionLimit = 0;
+    uint32_t hostDrawBisectionMask = 0;
     uint32_t hostDrawBisectionAttempted = 0;
     uint32_t hostDrawBisectionAdmitted = 0;
     VkBuffer hostTransientUniformBuffer = VK_NULL_BUFFER;
@@ -7194,9 +7194,9 @@ void piRendererVulkan::EndExternalImageFrame(void)
         std::snprintf(
             message,
             sizeof(message),
-            "[IMM_UNITY_VK_DRAW_BISECT_20260731] stage=%u limit=%u attempted=%u admitted=%u frame=%llu",
+            "[IMM_UNITY_VK_DRAW_BISECT_20260731] stage=%u mask=%u attempted=%u admitted=%u frame=%llu",
             mState->hostDrawBisectionStage,
-            mState->hostDrawBisectionLimit,
+            mState->hostDrawBisectionMask,
             mState->hostDrawBisectionAttempted,
             mState->hostDrawBisectionAdmitted,
             static_cast<unsigned long long>(mState->borrowedCurrentFrameNumber));
@@ -7324,8 +7324,10 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
     mState->hostDrawBisectionAdmitted = 0;
     if (mState->hostDrawBisectionEnabled)
     {
-        static constexpr uint32_t kStageLimits[] = { 0u, 1u, 8u, ~0u };
-        mState->hostDrawBisectionLimit = kStageLimits[mState->hostDrawBisectionStage];
+        // Bit 0 admits indexed paint/picture draws; bit 1 admits the
+        // independent picture-quad path used by DrawUnitQuad_XY.
+        static constexpr uint32_t kStageMasks[] = { 0u, 1u, 2u, 3u };
+        mState->hostDrawBisectionMask = kStageMasks[mState->hostDrawBisectionStage];
     }
     if (!continuingFrame)
     {
@@ -7356,7 +7358,7 @@ void piRendererVulkan::SetHostDrawBisectionEnabled(bool enabled)
     if (enabled && !mState->hostDrawBisectionEnabled)
     {
         mState->hostDrawBisectionStage = 0;
-        iReport(mReporter, "[IMM_UNITY_VK_DRAW_BISECT_20260731] enabled stages=0,1,8,unlimited");
+        iReport(mReporter, "[IMM_UNITY_VK_DRAW_BISECT_20260731] enabled stages=none,indexed-only,unit-quad-only,all");
     }
     mState->hostDrawBisectionEnabled = enabled;
 }
@@ -8481,7 +8483,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     if (mState->hostRenderPassFrameActive && mState->hostDrawBisectionEnabled)
     {
         ++mState->hostDrawBisectionAttempted;
-        if (mState->hostDrawBisectionAdmitted >= mState->hostDrawBisectionLimit)
+        if ((mState->hostDrawBisectionMask & 1u) == 0)
         {
             return;
         }
@@ -8823,6 +8825,15 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
     }
     if (mState->currentShader && mState->currentShader->isPicture2D)
     {
+        if (mState->hostRenderPassFrameActive && mState->hostDrawBisectionEnabled)
+        {
+            ++mState->hostDrawBisectionAttempted;
+            if ((mState->hostDrawBisectionMask & 2u) == 0)
+            {
+                return;
+            }
+            ++mState->hostDrawBisectionAdmitted;
+        }
         if (!mState->currentRenderTarget || !mState->currentRenderTarget->color[0])
         {
             return;
