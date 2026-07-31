@@ -14,57 +14,8 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RenderTexture PresentationTarget { get; set; }
-        internal Camera SourceCamera { get; set; }
         internal Material PresentationMaterial { get; set; }
-        private int _finalBlitLogCount;
-
-        private void OnPostRender()
-        {
-            if (PresentationTarget == null || PresentationMaterial == null)
-                return;
-
-            RenderTexture previousSourceTarget = SourceCamera != null ? SourceCamera.targetTexture : null;
-            RenderTexture previousActiveTarget = RenderTexture.active;
-            bool previousSrgbWrite = GL.sRGBWrite;
-            if (SourceCamera != null)
-                SourceCamera.targetTexture = null;
-            try
-            {
-                Graphics.SetRenderTarget((RenderTexture)null);
-                GL.sRGBWrite = QualitySettings.activeColorSpace == ColorSpace.Linear;
-                PresentationMaterial.SetTexture("_MainTex", PresentationTarget);
-                GL.PushMatrix();
-                GL.LoadOrtho();
-                PresentationMaterial.SetPass(0);
-                GL.Begin(GL.QUADS);
-                GL.Color(Color.white);
-                GL.TexCoord2(0.0f, 0.0f);
-                GL.Vertex3(0.0f, 0.0f, 0.0f);
-                GL.TexCoord2(1.0f, 0.0f);
-                GL.Vertex3(1.0f, 0.0f, 0.0f);
-                GL.TexCoord2(1.0f, 1.0f);
-                GL.Vertex3(1.0f, 1.0f, 0.0f);
-                GL.TexCoord2(0.0f, 1.0f);
-                GL.Vertex3(0.0f, 1.0f, 0.0f);
-                GL.End();
-                GL.PopMatrix();
-            }
-            finally
-            {
-                GL.sRGBWrite = previousSrgbWrite;
-                RenderTexture.active = previousActiveTarget;
-                if (SourceCamera != null)
-                    SourceCamera.targetTexture = previousSourceTarget;
-            }
-
-            if (_finalBlitLogCount >= 8)
-                return;
-            ++_finalBlitLogCount;
-            Debug.Log(
-                $"[IMM_UNITY_VK_MANUAL_QUAD_PRESENTED_20260731] " +
-                $"source={PresentationTarget.width}x{PresentationTarget.height} " +
-                $"destination=backbuffer explicitUvs=True mainTargetCleared={SourceCamera != null}");
-        }
+        internal Mesh PresentationMesh { get; set; }
 
         private void OnDestroy()
         {
@@ -72,6 +23,11 @@ namespace ImmPlayer
             {
                 Destroy(PresentationMaterial);
                 PresentationMaterial = null;
+            }
+            if (PresentationMesh != null)
+            {
+                Destroy(PresentationMesh);
+                PresentationMesh = null;
             }
             if (PresentationTarget == null)
                 return;
@@ -936,13 +892,19 @@ namespace ImmPlayer
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
             Camera presenterCamera = presenterObject.AddComponent<Camera>();
-            // Present the completed prior frame before the main camera records
-            // this frame's native Vulkan commands. The main camera renders only
-            // to its explicit source RT, so it cannot overwrite the backbuffer.
-            presenterCamera.depth = cam.depth - 1000.0f;
+            // The final camera owns the backbuffer. It runs after the native
+            // camera, which renders only to its explicit source RT, and draws a
+            // normal Unity mesh instead of mutating the active render target in
+            // an OnPostRender callback.
+            presenterCamera.depth = cam.depth + 1000.0f;
             presenterCamera.clearFlags = CameraClearFlags.SolidColor;
             presenterCamera.backgroundColor = Color.black;
-            presenterCamera.cullingMask = 0;
+            presenterCamera.orthographic = true;
+            presenterCamera.orthographicSize = 1.0f;
+            presenterCamera.nearClipPlane = 0.01f;
+            presenterCamera.farClipPlane = 10.0f;
+            presenterCamera.aspect = width / (float)height;
+            presenterCamera.cullingMask = 1 << 31;
             presenterCamera.allowHDR = false;
             presenterCamera.allowMSAA = false;
             presenterCamera.useOcclusionCulling = false;
@@ -953,7 +915,7 @@ namespace ImmPlayer
             Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresent");
             if (presentationShader == null)
             {
-                Debug.LogError("[IMM_UNITY_VK_MANUAL_QUAD_SETUP_20260731] missing Resources/ImmVulkanPresent shader");
+                Debug.LogError("[IMM_UNITY_VK_MESH_PRESENTER_SETUP_20260731] missing Resources/ImmVulkanPresent shader");
             }
             else
             {
@@ -963,19 +925,47 @@ namespace ImmPlayer
                     hideFlags = HideFlags.HideAndDontSave
                 };
             }
-            presenter.SourceCamera = cam;
             presenter.PresentationTarget = presentationTarget;
+            if (presenter.PresentationMaterial != null)
+            {
+                presenter.PresentationMaterial.SetTexture("_MainTex", presentationTarget);
+                GameObject quadObject = new GameObject("IMM Vulkan Presentation Quad");
+                quadObject.layer = 31;
+                quadObject.transform.SetParent(presenterObject.transform, false);
+                quadObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
+                var mesh = new Mesh { name = "IMM Vulkan Presentation Quad Mesh" };
+                float aspect = width / (float)height;
+                mesh.vertices = new[]
+                {
+                    new Vector3(-aspect, -1.0f, 0.0f),
+                    new Vector3(aspect, -1.0f, 0.0f),
+                    new Vector3(aspect, 1.0f, 0.0f),
+                    new Vector3(-aspect, 1.0f, 0.0f)
+                };
+                mesh.uv = new[]
+                {
+                    new Vector2(0.0f, 0.0f),
+                    new Vector2(1.0f, 0.0f),
+                    new Vector2(1.0f, 1.0f),
+                    new Vector2(0.0f, 1.0f)
+                };
+                mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+                mesh.RecalculateBounds();
+                quadObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+                quadObject.AddComponent<MeshRenderer>().sharedMaterial = presenter.PresentationMaterial;
+                presenter.PresentationMesh = mesh;
+            }
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=manual-textured-quad " +
-                $"ordering=present-before-native");
+                $"mode=final-camera-textured-mesh " +
+                $"ordering=native-before-present");
             Debug.Log(
-                $"[IMM_UNITY_VK_MANUAL_QUAD_SETUP_20260731] camera={presenterCamera.name} " +
+                $"[IMM_UNITY_VK_MESH_PRESENTER_SETUP_20260731] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
-                $"shader={(presentationShader != null ? presentationShader.name : "missing")}");
+                $"shader={(presentationShader != null ? presentationShader.name : "missing")} layer=31");
             return target;
 #else
             return null;
