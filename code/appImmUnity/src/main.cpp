@@ -1005,6 +1005,11 @@ static bool iPrepareUnityVulkanCamera(int cameraID)
     {
         return false;
     }
+    if (cameraID < 0 || cameraID >= ImmShared::ImmEngineBridge::kMaxCameras)
+    {
+        iLog().Printf(LT_ERROR, L"Unity Vulkan prepare skipped: invalid camera=%d", cameraID);
+        return false;
+    }
 
     UnityVulkanRecordingState recordingState = {};
     if (!gImmUnityPlugin.UnityAPI.mVulkan->CommandRecordingState(
@@ -1038,12 +1043,40 @@ static bool iPrepareUnityVulkanCamera(int cameraID)
     }
 
     const bool prepared = gImmUnityPlugin.mBridge.PrepareCamera(cameraID);
+    bool resourcesPrepared = false;
+    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
+    if (prepared && target.width > 0 && target.height > 0)
+    {
+        // GlobalRender prepares the player frame but the layer renderers perform
+        // lazy texture uploads during their first DisplayRender traversal. Run
+        // that traversal while Unity has explicitly placed this event outside
+        // its render pass. With no IMM render target bound the draw submission
+        // paths are inert, while texture barriers/copies are recorded into the
+        // borrowed Unity upload command buffer.
+        const ImmShared::ImmEngineBridge::ViewportInfo uploadViewport = {
+            0.0f,
+            0.0f,
+            static_cast<float>(target.width),
+            static_cast<float>(target.height),
+            0.0f,
+            1.0f,
+            true
+        };
+        resourcesPrepared = gImmUnityPlugin.mBridge.RenderPreparedCamera(
+            cameraID,
+            uploadViewport,
+            0,
+            false);
+    }
     vulkanRenderer->EndExternalImageFrame();
     iLog().Printf(
         LT_MESSAGE,
-        L"[IMM_UNITY_VK_UPLOAD_CB_20260730] camera=%d prepared=%d cmd=%p currentFrame=%llu safeFrame=%llu",
+        L"[IMM_UNITY_VK_PREWARM_20260731] camera=%d prepared=%d resourcesPrepared=%d target=%dx%d cmd=%p currentFrame=%llu safeFrame=%llu",
         cameraID,
         prepared ? 1 : 0,
+        resourcesPrepared ? 1 : 0,
+        target.width,
+        target.height,
         recordingState.commandBuffer,
         recordingState.currentFrameNumber,
         recordingState.safeFrameNumber);

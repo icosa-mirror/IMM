@@ -1370,6 +1370,7 @@ struct piVulkanState
     bool borrowedFrameResourcesActive = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
+    bool hostTextureUploadRejectedReported = false;
     bool hostDrawBisectionEnabled = false;
     uint32_t hostDrawBisectionStage = 0;
     uint32_t hostDrawBisectionMask = 0;
@@ -5779,6 +5780,15 @@ static bool iCreateBorrowedUploadBuffer(
 
 static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
 {
+    if (state && state->hostRenderPassFrameActive)
+    {
+        if (!state->hostTextureUploadRejectedReported)
+        {
+            iError(reporter, "[IMM_UNITY_VK_PREWARM_20260731] rejected lazy texture upload inside Unity host render pass");
+            state->hostTextureUploadRejectedReported = true;
+        }
+        return false;
+    }
     const bool borrowedCommandBuffer = state && state->externalCommandBufferFrameActive;
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
         state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
