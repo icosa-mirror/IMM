@@ -3977,6 +3977,11 @@ static bool iDrawHostDescriptorDiagnostic(piVulkanState *state, piRTarget target
         VkPipelineMultisampleStateCreateInfo multisample = {};
         multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisample.rasterizationSamples = sampleCount;
+        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = 0;
+        depthStencil.depthWriteEnable = 0;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
         VkPipelineColorBlendAttachmentState blendAttachment = {};
         blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -3998,6 +4003,7 @@ static bool iDrawHostDescriptorDiagnostic(piVulkanState *state, piRTarget target
         pipelineInfo.pViewportState = &viewport;
         pipelineInfo.pRasterizationState = &rasterization;
         pipelineInfo.pMultisampleState = &multisample;
+        pipelineInfo.pDepthStencilState = target->hasDepth ? &depthStencil : nullptr;
         pipelineInfo.pColorBlendState = &colorBlend;
         pipelineInfo.pDynamicState = &dynamicState;
         pipelineInfo.layout = state->staticPaintPipelineLayout;
@@ -4394,6 +4400,11 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
             clonedWrites[i].pBufferInfo = &clonedInfos[i];
         }
         state->vkUpdateDescriptorSets(state->device, 4, clonedWrites, 0, nullptr);
+        if (!iDrawHostDescriptorDiagnostic(state, target, reporter))
+        {
+            iError(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] failed to record descriptor bars");
+            return false;
+        }
         state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, indexType);
     }
     else
