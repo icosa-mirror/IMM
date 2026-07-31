@@ -1554,6 +1554,7 @@ struct piVulkanState
     piBuffer hostDebugIndexSource = nullptr;
     uint32_t hostDebugIndexSourceBase = 0;
     uint32_t hostDebugIndexCount = 0;
+    piBuffer hostDebugResourceBuffers[4] = { nullptr, nullptr, nullptr, nullptr };
     VkPipeline hostDebugTrianglePipeline = VK_NULL_PIPELINE;
     VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
     uint32_t hostDebugTriangleSubpass = 0;
@@ -2784,6 +2785,32 @@ static bool iCreateBufferObject(piVulkanState *state, piBuffer buffer, const voi
         state->bufferReported = true;
     }
     return true;
+}
+
+static piBuffer iCloneHostDebugBuffer(piVulkanState *state, piBuffer source, piRenderer::piReporter *reporter)
+{
+    if (!state || !source || !source->data || source->size == 0u)
+    {
+        return nullptr;
+    }
+    piBuffer clone = new piBufferS();
+    clone->size = source->size;
+    clone->type = source->type;
+    clone->use = source->use;
+    clone->data = static_cast<uint8_t *>(std::malloc(clone->size));
+    if (!clone->data)
+    {
+        delete clone;
+        return nullptr;
+    }
+    std::memcpy(clone->data, source->data, clone->size);
+    if (!iCreateBufferObject(state, clone, clone->data, reporter))
+    {
+        std::free(clone->data);
+        delete clone;
+        return nullptr;
+    }
+    return clone;
 }
 
 static bool iEnsureHostTransientUniformBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter)
@@ -4184,6 +4211,45 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
         {
             return true;
         }
+        if (state->hostDebugResourceBuffers[0] == nullptr)
+        {
+            piBuffer sources[4] = {
+                state->constantBuffers[3],
+                state->constantBuffers[4],
+                state->shaderBuffers[8],
+                state->constantBuffers[9]
+            };
+            for (uint32_t i = 0; i < 4u; ++i)
+            {
+                state->hostDebugResourceBuffers[i] = iCloneHostDebugBuffer(state, sources[i], reporter);
+                if (!state->hostDebugResourceBuffers[i])
+                {
+                    iError(reporter, "[IMM_UNITY_VK_CLONED_RESOURCES_20260731] failed to clone production shader resource");
+                    return false;
+                }
+            }
+            iReport(reporter, "[IMM_UNITY_VK_CLONED_RESOURCES_20260731] cloned layer, display, vertex, and chunk buffers");
+        }
+        VkDescriptorBufferInfo clonedInfos[4] = {};
+        VkWriteDescriptorSet clonedWrites[4] = {};
+        const uint32_t clonedBindings[4] = { 3u, 4u, 8u, 9u };
+        const VkDescriptorType clonedTypes[4] = {
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+        };
+        for (uint32_t i = 0; i < 4u; ++i)
+        {
+            clonedInfos[i] = iDescriptorBufferInfo(state->hostDebugResourceBuffers[i]);
+            clonedWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            clonedWrites[i].dstSet = state->staticPaintDescriptorSet;
+            clonedWrites[i].dstBinding = clonedBindings[i];
+            clonedWrites[i].descriptorCount = 1;
+            clonedWrites[i].descriptorType = clonedTypes[i];
+            clonedWrites[i].pBufferInfo = &clonedInfos[i];
+        }
+        state->vkUpdateDescriptorSets(state->device, 4, clonedWrites, 0, nullptr);
         state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, indexType);
     }
     else
@@ -6524,6 +6590,24 @@ void piRendererVulkan::Deinitialize(void)
             std::free(mState->hostDebugIndexBuffer->data);
             delete mState->hostDebugIndexBuffer;
             mState->hostDebugIndexBuffer = nullptr;
+        }
+        for (piBuffer &buffer : mState->hostDebugResourceBuffers)
+        {
+            if (!buffer)
+            {
+                continue;
+            }
+            if (buffer->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+            {
+                mState->vkDestroyBuffer(mState->device, buffer->buffer, nullptr);
+            }
+            if (buffer->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+            {
+                mState->vkFreeMemory(mState->device, buffer->memory, nullptr);
+            }
+            std::free(buffer->data);
+            delete buffer;
+            buffer = nullptr;
         }
         if (mState->presentPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
         {
@@ -9063,10 +9147,14 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     uint32_t lastBid = 0;
     bool hasLastBid = false;
     uint32_t projected = 0;
+    uint32_t insideClipVolume = 0;
+    uint32_t positiveW = 0;
     float minX = 1000000.0f;
     float minY = 1000000.0f;
     float maxX = -1000000.0f;
     float maxY = -1000000.0f;
+    float minNdcZ = 1000000.0f;
+    float maxNdcZ = -1000000.0f;
     float maxA = 0.0f;
     uint32_t visibleSegments = 0;
     uint32_t insidePoints = 0;
@@ -9124,6 +9212,19 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         }
         const float ndcX = clip[0] / clip[3];
         const float ndcY = clip[1] / clip[3];
+        const float ndcZ = clip[2] / clip[3];
+        if (clip[3] > 0.0f)
+        {
+            ++positiveW;
+            if (clip[0] >= -clip[3] && clip[0] <= clip[3] &&
+                clip[1] >= -clip[3] && clip[1] <= clip[3] &&
+                clip[2] >= 0.0f && clip[2] <= clip[3])
+            {
+                ++insideClipVolume;
+            }
+        }
+        if (ndcZ < minNdcZ) minNdcZ = ndcZ;
+        if (ndcZ > maxNdcZ) maxNdcZ = ndcZ;
         const float sx = (ndcX * 0.5f + 0.5f) * (float)target->info.mXres;
         const float sy = (1.0f - (ndcY * 0.5f + 0.5f)) * (float)target->info.mYres;
         if (sx < minX) minX = sx;
@@ -9177,11 +9278,15 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         char message[512];
         std::snprintf(message,
                       sizeof(message),
-                      "[IMM_UNITY_VK_CPU_PROJECTION_AUDIT_20260731] gpu=%d num=%u projected=%u inside=%u segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
+                      "[IMM_UNITY_VK_CPU_CLIP_AUDIT_20260731] gpu=%d num=%u projected=%u xyInside=%u clipInside=%u positiveW=%u ndcZ=(%.5f,%.5f) segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
                       gpuProjectionAudit ? 1 : 0,
                       num,
                       projected,
                       insidePoints,
+                      insideClipVolume,
+                      positiveW,
+                      minNdcZ,
+                      maxNdcZ,
                       visibleSegments,
                       targetNonBlack,
                       brushType,
