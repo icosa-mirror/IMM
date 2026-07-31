@@ -3994,8 +3994,11 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     scissor.extent.width = target->width;
     scissor.extent.height = target->height;
 
-    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
-    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    if (!hostRenderPass)
+    {
+        state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+        state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    }
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->staticPaintDescriptorSet, 0, nullptr);
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
@@ -4340,8 +4343,11 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     scissor.offset.y = 0;
     scissor.extent.width = target->width;
     scissor.extent.height = target->height;
-    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
-    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    if (!hostRenderPass)
+    {
+        state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+        state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    }
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->pictureDescriptorSet, 0, nullptr);
     VkDeviceSize vertexOffset = 0;
@@ -4449,8 +4455,11 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
     scissor.offset.y = 0;
     scissor.extent.width = target->width;
     scissor.extent.height = target->height;
-    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
-    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    if (!hostRenderPass)
+    {
+        state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+        state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+    }
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
     state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->pictureDescriptorSet, 0, nullptr);
     state->vkCmdDraw(state->commandBuffer, 6, numInstances, 0, 0);

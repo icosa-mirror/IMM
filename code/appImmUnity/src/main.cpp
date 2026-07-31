@@ -950,15 +950,11 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
         return true;
     }
 
-    const bool ciHostClearControl = sUnityVulkanHostDrawBisectionEnabled.load();
-    const bool debugClearHost = ciHostClearControl ||
-        iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR") ||
-        iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
-    bool debugClearSucceeded = false;
+    const bool debugClearHost = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR") || iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
     if (debugClearHost)
     {
-        debugClearSucceeded = vulkanRenderer->DebugClearHostRenderPassColor(1.0f, 0.0f, 1.0f, 1.0f);
-        iLog().Printf(LT_MESSAGE, L"[IMM_UNITY_VK_HOST_CLEAR_20260612] camera=%d cleared=%d", cameraID, debugClearSucceeded ? 1 : 0);
+        const bool cleared = vulkanRenderer->DebugClearHostRenderPassColor(1.0f, 0.0f, 1.0f, 1.0f);
+        iLog().Printf(LT_MESSAGE, L"[IMM_UNITY_VK_HOST_CLEAR_20260612] camera=%d cleared=%d", cameraID, cleared ? 1 : 0);
     }
 
     const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
@@ -966,7 +962,7 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     };
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
-    const bool debugClearOnly = ciHostClearControl || iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
+    const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
     const bool drawBisectionEnabled = sUnityVulkanHostDrawBisectionEnabled.load();
     const uint32_t drawBisectionInvocation = drawBisectionEnabled
         ? sUnityVulkanHostDrawBisectionInvocation.fetch_add(1) + 1
@@ -976,15 +972,6 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
         ? false
         : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
     vulkanRenderer->EndExternalImageFrame();
-
-    if (ciHostClearControl && drawBisectionInvocation <= 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_HOST_CLEAR_CONTROL_20260731] invocation=%u cleared=%d bridgeSkipped=1",
-            drawBisectionInvocation,
-            debugClearSucceeded ? 1 : 0);
-    }
 
     if (drawBisectionEnabled && drawBisectionInvocation <= 8)
     {
