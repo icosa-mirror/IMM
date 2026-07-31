@@ -1671,10 +1671,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;
-        // ImmPlayerManager passes GL.GetGPUProjectionMatrix output. Vulkan
-        // receives Unity's zero-to-one, reversed-Z matrix and must not apply
-        // the bridge's OpenGL-to-zero-to-one conversion a second time.
-        config.projectionMatrixAlreadyGpuAdjusted = true;
+        // ImmPlayerManager passes Vulkan's zero-to-one, reversed-Z
+        // GL.GetGPUProjectionMatrix output.
         config.reverseDepthBuffer = true;
         config.initializeRendererOnInit = true;
         config.initializeFullscreen = false;

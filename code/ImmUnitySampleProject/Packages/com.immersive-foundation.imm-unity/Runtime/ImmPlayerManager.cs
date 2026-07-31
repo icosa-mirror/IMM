@@ -13,35 +13,39 @@ namespace ImmPlayer
 {
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
-        internal RenderTexture PresentationSource { get; set; }
-        internal Mesh PresentationMesh { get; set; }
-        internal Material PresentationMaterial { get; set; }
-        private bool _loggedPresentationBlit;
+        private Camera _camera;
+        private CommandBuffer _presentationCommands;
 
-        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        internal void Configure(RenderTexture presentationSource)
         {
-            if (PresentationSource == null)
-            {
-                Graphics.Blit(source, destination);
+            ReleasePresentationCommands();
+            if (presentationSource == null)
                 return;
-            }
 
-            Graphics.Blit(PresentationSource, destination);
-            if (!_loggedPresentationBlit)
-            {
-                _loggedPresentationBlit = true;
-                Debug.Log(
-                    $"[IMM_UNITY_VK_PRESENT_BLIT_20260730] source={PresentationSource.width}x{PresentationSource.height} " +
-                    $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")}");
-            }
+            _camera = GetComponent<Camera>();
+            _presentationCommands = new CommandBuffer { name = "IMM Vulkan Presentation" };
+            _presentationCommands.Blit(
+                new RenderTargetIdentifier(presentationSource),
+                BuiltinRenderTextureType.CameraTarget);
+            _camera.AddCommandBuffer(CameraEvent.AfterEverything, _presentationCommands);
+            Debug.Log(
+                $"[IMM_UNITY_VK_PRESENT_COMMANDS_20260731] source={presentationSource.width}x{presentationSource.height} " +
+                $"event={CameraEvent.AfterEverything} destination=CameraTarget");
         }
 
         private void OnDestroy()
         {
-            if (PresentationMaterial != null)
-                Destroy(PresentationMaterial);
-            if (PresentationMesh != null)
-                Destroy(PresentationMesh);
+            ReleasePresentationCommands();
+        }
+
+        private void ReleasePresentationCommands()
+        {
+            if (_presentationCommands == null)
+                return;
+            if (_camera != null)
+                _camera.RemoveCommandBuffer(CameraEvent.AfterEverything, _presentationCommands);
+            _presentationCommands.Release();
+            _presentationCommands = null;
         }
     }
 
@@ -886,50 +890,7 @@ namespace ImmPlayer
             presenterCamera.targetDisplay = cam.targetDisplay;
             presenterCamera.rect = cam.rect;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-            presenter.PresentationSource = target;
-
-            var quadObject = new GameObject("IMM Vulkan Presentation Quad");
-            quadObject.layer = 31;
-            quadObject.transform.SetParent(presenterObject.transform, false);
-            quadObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
-            var mesh = new Mesh { name = "IMM Vulkan Presentation Mesh" };
-            float aspect = (float)width / height;
-            mesh.vertices = new[]
-            {
-                new Vector3(-aspect, -1.0f, 0.0f),
-                new Vector3(aspect, -1.0f, 0.0f),
-                new Vector3(aspect, 1.0f, 0.0f),
-                new Vector3(-aspect, 1.0f, 0.0f)
-            };
-            mesh.uv = new[]
-            {
-                new Vector2(0.0f, 0.0f),
-                new Vector2(1.0f, 0.0f),
-                new Vector2(1.0f, 1.0f),
-                new Vector2(0.0f, 1.0f)
-            };
-            mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-            mesh.RecalculateBounds();
-            quadObject.AddComponent<MeshFilter>().sharedMesh = mesh;
-            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresentation");
-            if (presentationShader == null)
-            {
-                Debug.LogError("[IMM_UNITY_VK_PRESENT_SHADER_20260730] bundled presentation shader is unavailable");
-                Destroy(presenterObject);
-                target.Release();
-                Destroy(target);
-                cam.targetTexture = null;
-                _vulkanPresentationTargets.Remove(cam);
-                return null;
-            }
-            Material material = new Material(presentationShader)
-            {
-                name = "IMM Vulkan Presentation Material",
-                mainTexture = target
-            };
-            quadObject.AddComponent<MeshRenderer>().sharedMaterial = material;
-            presenter.PresentationMesh = mesh;
-            presenter.PresentationMaterial = material;
+            presenter.Configure(target);
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(

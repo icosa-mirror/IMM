@@ -594,7 +594,11 @@ namespace ImmShared
             ? DepthBuffer::Linear10
             : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-        conf.projectionMatrix = (usesZeroToOneDepth && !mConfig.projectionMatrixAlreadyGpuAdjusted)
+        // Unity passes GL.GetGPUProjectionMatrix output to this bridge. D3D,
+        // Metal, and Vulkan therefore all supply zero-to-one projection
+        // matrices; classifying Vulkan's already-adjusted matrix as OpenGL
+        // caused a second depth conversion and incorrect frustum tests.
+        conf.projectionMatrix = usesZeroToOneDepth
             ? ClipSpaceDepth::FromZeroToOne
             : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
