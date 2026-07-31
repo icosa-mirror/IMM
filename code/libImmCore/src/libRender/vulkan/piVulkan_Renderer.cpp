@@ -7409,6 +7409,16 @@ bool piRendererVulkan::BeginUnityCommandBufferUploadFrame(void *commandBuffer, u
     mState->borrowedFrameResourcesActive = true;
     mState->borrowedFrameSlot = frameSlot;
     mState->borrowedCurrentFrameNumber = currentFrameNumber;
+    // RenderPreparedCamera updates per-draw constants while Unity's render pass
+    // is active. Allocate and map the backing ring here, while the prepare event
+    // is explicitly outside the render pass, so the inside-pass callback only
+    // writes existing mapped memory and records graphics commands.
+    if (!iEnsureHostTransientUniformBuffer(mState, kBorrowedUniformTotalBytes, mReporter))
+    {
+        iError(mReporter, "[IMM_UNITY_VK_DRAW_BISECT_20260731] failed to preallocate host transient uniforms outside render pass");
+        EndExternalImageFrame();
+        return false;
+    }
     if (!continuingFrame)
     {
         mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
