@@ -202,11 +202,12 @@ namespace ImmPlayer
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
 #if UNITY_ANDROID
-            // The Vulkan source camera targets an explicit RenderTexture. Its
-            // attached command buffer records IMM inside Unity's live render
-            // pass so Unity owns attachment state and synchronization.
+            // Queue the Vulkan event and its presentation blit together from
+            // OnPostRender. A persistent Camera command buffer is compiled
+            // before the native event updates Unity's Vulkan resource state,
+            // allowing a following blit to sample the pre-render contents.
             if (IsVulkanRuntime())
-                forceCameraCallback = false;
+                forceCameraCallback = true;
 #endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
@@ -1238,13 +1239,23 @@ namespace ImmPlayer
                 presenter != null &&
                 presenter.PresentationTarget != null)
             {
+                int eventId = info.CameraId << 8;
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                    _configuredVulkanRenderEvents.Add(eventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={eventId} " +
+                        $"camera={info.CameraId} configured={configured}");
+                }
+                GL.IssuePluginEvent(_renderEventFunc, eventId);
                 Graphics.Blit(sourceTarget, presenter.PresentationTarget);
                 if (_androidVulkanPostRenderPresentationCount < 8)
                 {
                     ++_androidVulkanPostRenderPresentationCount;
                     Debug.Log(
-                        $"[IMM_UNITY_VK_POST_RENDER_PRESENT_20260730] camera={info.CameraId} " +
-                        $"submission=graphics-blit source={sourceTarget.width}x{sourceTarget.height} " +
+                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] camera={info.CameraId} " +
+                        $"submission=plugin-event-then-graphics-blit source={sourceTarget.width}x{sourceTarget.height} " +
                         $"destination={presenter.PresentationTarget.width}x{presenter.PresentationTarget.height}");
                 }
                 return;
