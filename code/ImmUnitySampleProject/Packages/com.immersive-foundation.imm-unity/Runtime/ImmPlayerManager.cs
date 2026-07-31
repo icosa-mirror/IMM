@@ -178,7 +178,6 @@ namespace ImmPlayer
         private readonly HashSet<Camera> _loggedVulkanPrepareWarning = new HashSet<Camera>();
         private readonly HashSet<int> _configuredVulkanRenderEvents = new HashSet<int>();
         private readonly Dictionary<Camera, RenderTexture> _vulkanPresentationTargets = new Dictionary<Camera, RenderTexture>();
-        private readonly Dictionary<Camera, RenderTexture> _vulkanPresentationCopies = new Dictionary<Camera, RenderTexture>();
         private readonly Dictionary<Camera, VulkanPresentationCamera> _vulkanPresentationCameras =
             new Dictionary<Camera, VulkanPresentationCamera>();
         private int _androidVulkanPostRenderPresentationCount;
@@ -715,7 +714,7 @@ namespace ImmPlayer
                 return CameraEvent.BeforeForwardOpaque;
 
 #if UNITY_ANDROID
-            return CameraEvent.AfterForwardOpaque;
+            return CameraEvent.AfterEverything;
 #else
             return CameraEvent.AfterSkybox;
 #endif
@@ -814,14 +813,6 @@ namespace ImmPlayer
                     Destroy(entry.Value.gameObject);
             }
             _vulkanPresentationCameras.Clear();
-            foreach (RenderTexture copy in _vulkanPresentationCopies.Values)
-            {
-                if (copy == null)
-                    continue;
-                copy.Release();
-                Destroy(copy);
-            }
-            _vulkanPresentationCopies.Clear();
             foreach (KeyValuePair<Camera, RenderTexture> entry in _vulkanPresentationTargets)
             {
                 if (entry.Key != null && entry.Key.targetTexture == entry.Value)
@@ -859,15 +850,6 @@ namespace ImmPlayer
                     Destroy(existing);
                 }
                 _vulkanPresentationTargets.Remove(cam);
-                if (_vulkanPresentationCopies.TryGetValue(cam, out RenderTexture oldCopy))
-                {
-                    if (oldCopy != null)
-                    {
-                        oldCopy.Release();
-                        Destroy(oldCopy);
-                    }
-                    _vulkanPresentationCopies.Remove(cam);
-                }
                 if (_vulkanPresentationCameras.TryGetValue(cam, out VulkanPresentationCamera oldPresenter))
                 {
                     if (oldPresenter != null)
@@ -891,16 +873,6 @@ namespace ImmPlayer
             cam.targetTexture = target;
             _vulkanPresentationTargets[cam] = target;
 
-            var presentationCopy = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
-            {
-                antiAliasing = 1,
-                name = $"IMM Vulkan Unity Presentation Copy ({cam.name})",
-                useMipMap = false,
-                autoGenerateMips = false
-            };
-            presentationCopy.Create();
-            _vulkanPresentationCopies[cam] = presentationCopy;
-
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
             Camera presenterCamera = presenterObject.AddComponent<Camera>();
@@ -918,11 +890,11 @@ namespace ImmPlayer
             presenterCamera.targetDisplay = cam.targetDisplay;
             presenterCamera.rect = cam.rect;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-            presenter.Configure(presentationCopy);
+            presenter.Configure(target);
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
-                $"[IMM_UNITY_VK_PRESENT_COPY_20260731] camera={cam.name} size={width}x{height} " +
+                $"[IMM_UNITY_VK_PRESENT_TERMINAL_20260731] camera={cam.name} size={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth}");
             return target;
 #else
@@ -1097,6 +1069,12 @@ namespace ImmPlayer
                 useCustomBlit = false;
 #endif
                 bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
+#if UNITY_ANDROID
+                // The explicit RenderBuffers are accessed by the native
+                // callback. Pre-binding CameraTarget would cause Unity to
+                // resume a camera render pass after the EnsureOutside event.
+                bindCameraTarget = false;
+#endif
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {
@@ -1122,17 +1100,6 @@ namespace ImmPlayer
                 {
                     info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
                 }
-#if UNITY_ANDROID
-                if (!cam.stereoEnabled &&
-                    _vulkanPresentationTargets.TryGetValue(cam, out RenderTexture nativeTarget) &&
-                    _vulkanPresentationCopies.TryGetValue(cam, out RenderTexture unityCopy))
-                {
-                    info.CommandBuffer.Blit(nativeTarget, unityCopy);
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_SAME_STREAM_COPY_20260731] camera={info.CameraId} " +
-                        $"source={nativeTarget.width}x{nativeTarget.height} destination={unityCopy.width}x{unityCopy.height}");
-                }
-#endif
                 AppendVulkanOverlayFixtureDraw(info.CommandBuffer, cam);
 #if UNITY_ANDROID
                 if (!cam.stereoEnabled)
