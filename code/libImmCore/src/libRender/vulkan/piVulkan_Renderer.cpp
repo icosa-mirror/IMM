@@ -1551,6 +1551,9 @@ struct piVulkanState
     VkShaderModule hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
     VkShaderModule hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
     piBuffer hostDebugIndexBuffer = nullptr;
+    piBuffer hostDebugIndexSource = nullptr;
+    uint32_t hostDebugIndexSourceBase = 0;
+    uint32_t hostDebugIndexCount = 0;
     VkPipeline hostDebugTrianglePipeline = VK_NULL_PIPELINE;
     VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
     uint32_t hostDebugTriangleSubpass = 0;
@@ -3898,45 +3901,10 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
-    if (useHostDebugFragment && state->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(
-            state,
-            reinterpret_cast<const uint8_t *>(kSrgbPresentVS),
-            static_cast<int>(sizeof(kSrgbPresentVS)),
-            &state->hostDebugTriangleVertexModule,
-            reporter))
-    {
-        iError(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] failed to create proven vertex module");
-        return false;
-    }
-    if (useHostDebugFragment && state->hostDebugIndexBuffer == nullptr)
-    {
-        const uint16_t indices[3] = { 0u, 1u, 2u };
-        piBuffer buffer = new piBufferS();
-        buffer->size = sizeof(indices);
-        buffer->use = piRenderer::BufferUse::Index;
-        buffer->data = static_cast<uint8_t *>(std::malloc(buffer->size));
-        if (!buffer->data)
-        {
-            delete buffer;
-            iError(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] failed to allocate CPU index data");
-            return false;
-        }
-        std::memcpy(buffer->data, indices, sizeof(indices));
-        if (!iCreateBufferObject(state, buffer, buffer->data, reporter))
-        {
-            std::free(buffer->data);
-            delete buffer;
-            iError(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] failed to create Vulkan index buffer");
-            return false;
-        }
-        state->hostDebugIndexBuffer = buffer;
-        iReport(reporter, "[IMM_UNITY_VK_KNOWN_INDEX_BUFFER_20260731] created index buffer values=0,1,2");
-    }
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = useHostDebugFragment ? state->hostDebugTriangleVertexModule : shader->vertexModule;
+    stages[0].module = shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -3948,8 +3916,8 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = useHostDebugFragment ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    inputAssembly.primitiveRestartEnable = useHostDebugFragment ? 0u : 1u;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    inputAssembly.primitiveRestartEnable = 1;
 
     VkPipelineViewportStateCreateInfo viewport = {};
     viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -4089,7 +4057,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iReport(
             reporter,
             useHostDebugFragment
-                ? "[IMM_UNITY_VK_BOUNDED_INDEX_FETCH_20260731] created bounded index-fetch control pipeline"
+                ? "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] created real-vertex cloned-index control pipeline"
                 : "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
@@ -4169,7 +4137,54 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, VK_INDEX_TYPE_UINT16);
+        if (state->hostDebugIndexBuffer == nullptr)
+        {
+            const uint32_t indexStride = indexType == VK_INDEX_TYPE_UINT32 ? 4u : 2u;
+            const uint32_t availableIndices = vertexArray->indexBuffer->size / indexStride;
+            const uint32_t copyCount = baseIndex < availableIndices ? std::min(num, availableIndices - baseIndex) : 0u;
+            if (copyCount == 0u)
+            {
+                iError(reporter, "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] source index range is empty");
+                return false;
+            }
+            piBuffer buffer = new piBufferS();
+            buffer->size = copyCount * indexStride;
+            buffer->use = piRenderer::BufferUse::Index;
+            buffer->data = static_cast<uint8_t *>(std::malloc(buffer->size));
+            if (!buffer->data)
+            {
+                delete buffer;
+                iError(reporter, "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] failed to allocate CPU index clone");
+                return false;
+            }
+            std::memcpy(buffer->data, vertexArray->indexBuffer->data + baseIndex * indexStride, buffer->size);
+            if (!iCreateBufferObject(state, buffer, buffer->data, reporter))
+            {
+                std::free(buffer->data);
+                delete buffer;
+                iError(reporter, "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] failed to create Vulkan index clone");
+                return false;
+            }
+            state->hostDebugIndexBuffer = buffer;
+            state->hostDebugIndexSource = vertexArray->indexBuffer;
+            state->hostDebugIndexSourceBase = baseIndex;
+            state->hostDebugIndexCount = copyCount;
+            char message[256];
+            std::snprintf(
+                message,
+                sizeof(message),
+                "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] created bytes=%u count=%u base=%u type=%s",
+                buffer->size,
+                copyCount,
+                baseIndex,
+                indexType == VK_INDEX_TYPE_UINT32 ? "uint32" : "uint16");
+            iReport(reporter, message);
+        }
+        if (state->hostDebugIndexSource != vertexArray->indexBuffer || state->hostDebugIndexSourceBase != baseIndex)
+        {
+            return true;
+        }
+        state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, indexType);
     }
     else
 #endif
@@ -4179,7 +4194,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        state->vkCmdDrawIndexed(state->commandBuffer, 3, 1, 0, 0, 0);
+        state->vkCmdDrawIndexed(state->commandBuffer, state->hostDebugIndexCount, 1, 0, 0, 0);
     }
     else
 #endif
