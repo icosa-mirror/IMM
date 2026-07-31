@@ -103,6 +103,8 @@ namespace ImmPlayer
             _compositionProbeEnabled = true;
             _overlayProbeEnabled = false;
             _xrProbeEnabled = false;
+            ImmNativePlugin.SetVulkanHostDrawBisectionEnabled(1);
+            Debug.Log("[IMM_UNITY_VK_DRAW_BISECT_20260731] requested=True stages=0,1,8,unlimited");
             Debug.Log($"[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729] warmupFrames={frameCount}");
 #endif
             if (!ValidateExpectedGraphicsApi())

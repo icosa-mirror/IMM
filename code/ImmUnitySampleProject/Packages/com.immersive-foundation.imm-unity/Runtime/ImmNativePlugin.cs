@@ -28,6 +28,9 @@ namespace ImmPlayer
         public static extern int ConfigureVulkanRenderEvent(int eventId);
 
         [DllImport(DllName)]
+        public static extern void SetVulkanHostDrawBisectionEnabled(int enabled);
+
+        [DllImport(DllName)]
         public static extern void Debug();
 
         [DllImport(DllName)]

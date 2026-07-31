@@ -1370,6 +1370,11 @@ struct piVulkanState
     bool borrowedFrameResourcesActive = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
+    bool hostDrawBisectionEnabled = false;
+    uint32_t hostDrawBisectionStage = 0;
+    uint32_t hostDrawBisectionLimit = 0;
+    uint32_t hostDrawBisectionAttempted = 0;
+    uint32_t hostDrawBisectionAdmitted = 0;
     VkBuffer hostTransientUniformBuffer = VK_NULL_BUFFER;
     VkDeviceMemory hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
     uint8_t *hostTransientUniformMapped = nullptr;
@@ -7183,6 +7188,24 @@ void piRendererVulkan::EndExternalImageFrame(void)
 
     const bool wasHostRenderPassFrame = mState->hostRenderPassFrameActive;
     const bool wasExternalCommandBufferFrame = mState->externalCommandBufferFrameActive;
+    if (wasHostRenderPassFrame && mState->hostDrawBisectionEnabled && mState->hostDrawBisectionAttempted > 0)
+    {
+        char message[256];
+        std::snprintf(
+            message,
+            sizeof(message),
+            "[IMM_UNITY_VK_DRAW_BISECT_20260731] stage=%u limit=%u attempted=%u admitted=%u frame=%llu",
+            mState->hostDrawBisectionStage,
+            mState->hostDrawBisectionLimit,
+            mState->hostDrawBisectionAttempted,
+            mState->hostDrawBisectionAdmitted,
+            static_cast<unsigned long long>(mState->borrowedCurrentFrameNumber));
+        iDebugLog(message);
+        if (mState->hostDrawBisectionStage < 3)
+        {
+            ++mState->hostDrawBisectionStage;
+        }
+    }
     if (mState->externalFrameColorTexture &&
         !mState->externalFramePreservesHostColor &&
         !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))
@@ -7297,6 +7320,13 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
     mState->hostRenderPassFrameActive = true;
     mState->borrowedFrameSlot = frameSlot;
     mState->borrowedCurrentFrameNumber = currentFrameNumber;
+    mState->hostDrawBisectionAttempted = 0;
+    mState->hostDrawBisectionAdmitted = 0;
+    if (mState->hostDrawBisectionEnabled)
+    {
+        static constexpr uint32_t kStageLimits[] = { 0u, 1u, 8u, ~0u };
+        mState->hostDrawBisectionLimit = kStageLimits[mState->hostDrawBisectionStage];
+    }
     if (!continuingFrame)
     {
         mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
@@ -7315,6 +7345,20 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
         iReport(mReporter, useHostDepth ? "Vulkan renderer began host render pass frame with host depth" : "Vulkan renderer began host render pass frame");
     }
     return true;
+}
+
+void piRendererVulkan::SetHostDrawBisectionEnabled(bool enabled)
+{
+    if (!mState)
+    {
+        return;
+    }
+    if (enabled && !mState->hostDrawBisectionEnabled)
+    {
+        mState->hostDrawBisectionStage = 0;
+        iDebugLog("[IMM_UNITY_VK_DRAW_BISECT_20260731] enabled stages=0,1,8,unlimited");
+    }
+    mState->hostDrawBisectionEnabled = enabled;
 }
 
 bool piRendererVulkan::BeginUnityCommandBufferUploadFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber)
@@ -8433,6 +8477,15 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     if (!mState)
     {
         return;
+    }
+    if (mState->hostRenderPassFrameActive && mState->hostDrawBisectionEnabled)
+    {
+        ++mState->hostDrawBisectionAttempted;
+        if (mState->hostDrawBisectionAdmitted >= mState->hostDrawBisectionLimit)
+        {
+            return;
+        }
+        ++mState->hostDrawBisectionAdmitted;
     }
     if (pt == PrimitiveType::Triangle && mState->currentShader && mState->currentShader->isPicture &&
         mState->currentRenderTarget && mState->currentRenderTarget->color[0] &&

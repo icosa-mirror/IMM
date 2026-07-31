@@ -45,6 +45,7 @@ public:
     bool BeginExternalImageCommandBufferFramePreserveColor(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber, void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, bool hostDepthReverseZ);
     bool BeginUnityCommandBufferUploadFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber);
     bool BeginHostRenderPassFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, bool hostDepthReverseZ, uint32_t subpass, int width, int height);
+    void SetHostDrawBisectionEnabled(bool enabled);
     bool DebugClearHostRenderPassColor(float red, float green, float blue, float alpha);
     bool DebugReadbackExternalFrameColor(uint8_t rgba[4]);
     void EndExternalImageFrame(void);

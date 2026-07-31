@@ -86,6 +86,7 @@
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
 #include <chrono>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -583,6 +584,7 @@ struct UnityVulkanRenderContext
 
 static UnityVulkanRenderContext sUnityVulkanRenderContext[256];
 static int sUnityVulkanRenderTargetDiagnosticCount = 0;
+static std::atomic<bool> sUnityVulkanHostDrawBisectionEnabled(false);
 static int sUnityVulkanCustomBlitDiagnosticCount = 0;
 
 struct UnityRenderingExtCustomBlitParamsMinimal
@@ -927,6 +929,7 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     }
 
     piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
+    vulkanRenderer->SetHostDrawBisectionEnabled(sUnityVulkanHostDrawBisectionEnabled.load());
     if (!vulkanRenderer->BeginHostRenderPassFrame(
             recordingState.commandBuffer,
             recordingState.currentFrameNumber,
@@ -1498,6 +1501,15 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ConfigureVulkanRenderE
 #else
     (void)eventID;
     return 0;
+#endif
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanHostDrawBisectionEnabled(int enabled)
+{
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+    sUnityVulkanHostDrawBisectionEnabled.store(enabled != 0);
+#else
+    (void)enabled;
 #endif
 }
 
