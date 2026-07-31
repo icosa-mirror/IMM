@@ -96,12 +96,18 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
+            bool previousPreTransform = PlayerSettings.vulkanEnablePreTransform;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                PlayerSettings.vulkanEnablePreTransform = false;
+                File.WriteAllText(
+                    Path.Combine(Path.GetDirectoryName(outputPath), "vulkan-presentation-settings.txt"),
+                    $"[IMM_AUTOBUILD_ANDROID_VK_PRESENT_20260731] " +
+                    $"preTransform={PlayerSettings.vulkanEnablePreTransform}{Environment.NewLine}");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
@@ -117,6 +123,7 @@ namespace ImmPlayer.Editor
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
+                PlayerSettings.vulkanEnablePreTransform = previousPreTransform;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
