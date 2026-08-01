@@ -3564,6 +3564,7 @@ static const uint32_t kSrgbPresentFS[] = {
 };
 
 #include "piVulkan_HostDiagnosticShaders.inc"
+#include "piVulkan_HostCenterDiagnosticShader.inc"
 
 // Constant cyan fragment shader for isolating Unity host-render-pass raster
 // integration. It intentionally has no descriptors, inputs, or uniforms.
@@ -4067,10 +4068,21 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
         return false;
     }
+    if (useHostDebugFragment && state->hostCenterDiagnosticVertexModule == VK_NULL_SHADER_MODULE &&
+        !iCreateShaderModule(
+            state,
+            reinterpret_cast<const uint8_t *>(kHostCenterDiagnosticRowMajorVS),
+            static_cast<int>(sizeof(kHostCenterDiagnosticRowMajorVS)),
+            &state->hostCenterDiagnosticVertexModule,
+            reporter))
+    {
+        iError(reporter, "[IMM_UNITY_VK_CENTER_VIEWPORT_DIAG_20260801] failed to create center vertex module");
+        return false;
+    }
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = shader->vertexModule;
+    stages[0].module = useHostDebugFragment ? state->hostCenterDiagnosticVertexModule : shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
