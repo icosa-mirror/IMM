@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 [assembly: InternalsVisibleTo("ImmUnity.Runtime.Tests")]
 
@@ -14,40 +15,10 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RenderTexture PresentationTarget { get; set; }
-        internal Material PresentationMaterial { get; set; }
-        internal Mesh PresentationMesh { get; set; }
-        private int _presentationLogCount;
-
-        private void OnRenderImage(RenderTexture source, RenderTexture destination)
-        {
-            if (PresentationTarget == null || PresentationMaterial == null)
-            {
-                Graphics.Blit(source, destination);
-                return;
-            }
-
-            Graphics.Blit(PresentationTarget, destination, PresentationMaterial);
-            if (_presentationLogCount >= 8)
-                return;
-
-            ++_presentationLogCount;
-            Debug.Log(
-                $"[IMM_UNITY_VK_FINAL_BLIT_20260801] source={PresentationTarget.width}x{PresentationTarget.height} " +
-                $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")}");
-        }
+        internal RawImage PresentationImage { get; set; }
 
         private void OnDestroy()
         {
-            if (PresentationMaterial != null)
-            {
-                Destroy(PresentationMaterial);
-                PresentationMaterial = null;
-            }
-            if (PresentationMesh != null)
-            {
-                Destroy(PresentationMesh);
-                PresentationMesh = null;
-            }
             if (PresentationTarget == null)
                 return;
             PresentationTarget.Release();
@@ -934,60 +905,35 @@ namespace ImmPlayer
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
-            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresent");
-            if (presentationShader == null)
-            {
-                Debug.LogError("[IMM_UNITY_VK_MESH_PRESENTER_SETUP_20260731] missing Resources/ImmVulkanPresent shader");
-            }
-            else
-            {
-                presenter.PresentationMaterial = new Material(presentationShader)
-                {
-                    name = "IMM Vulkan Presentation Material",
-                    hideFlags = HideFlags.HideAndDontSave
-                };
-            }
             presenter.PresentationTarget = presentationTarget;
-            if (presenter.PresentationMaterial != null)
-            {
-                presenter.PresentationMaterial.SetTexture("_MainTex", presentationTarget);
-                GameObject quadObject = new GameObject("IMM Vulkan Presentation Quad");
-                quadObject.layer = 31;
-                quadObject.transform.SetParent(presenterObject.transform, false);
-                quadObject.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
-                var mesh = new Mesh { name = "IMM Vulkan Presentation Quad Mesh" };
-                float aspect = width / (float)height;
-                mesh.vertices = new[]
-                {
-                    new Vector3(-aspect, -1.0f, 0.0f),
-                    new Vector3(aspect, -1.0f, 0.0f),
-                    new Vector3(aspect, 1.0f, 0.0f),
-                    new Vector3(-aspect, 1.0f, 0.0f)
-                };
-                mesh.uv = new[]
-                {
-                    new Vector2(0.0f, 0.0f),
-                    new Vector2(1.0f, 0.0f),
-                    new Vector2(1.0f, 1.0f),
-                    new Vector2(0.0f, 1.0f)
-                };
-                mesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-                mesh.RecalculateBounds();
-                quadObject.AddComponent<MeshFilter>().sharedMesh = mesh;
-                quadObject.AddComponent<MeshRenderer>().sharedMaterial = presenter.PresentationMaterial;
-                presenter.PresentationMesh = mesh;
-            }
+            Canvas presentationCanvas = presenterObject.AddComponent<Canvas>();
+            presentationCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            presentationCanvas.sortingOrder = short.MaxValue;
+            GameObject imageObject = new GameObject(
+                "IMM Vulkan Presentation Image",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(RawImage));
+            imageObject.transform.SetParent(presenterObject.transform, false);
+            RectTransform imageRect = imageObject.GetComponent<RectTransform>();
+            imageRect.anchorMin = Vector2.zero;
+            imageRect.anchorMax = Vector2.one;
+            imageRect.offsetMin = Vector2.zero;
+            imageRect.offsetMax = Vector2.zero;
+            presenter.PresentationImage = imageObject.GetComponent<RawImage>();
+            presenter.PresentationImage.texture = presentationTarget;
+            presenter.PresentationImage.raycastTarget = false;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=final-camera-textured-mesh " +
+                $"mode=screen-space-overlay " +
                 $"ordering=native-before-present");
             Debug.Log(
                 $"[IMM_UNITY_VK_MESH_PRESENTER_SETUP_20260731] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
-                $"shader={(presentationShader != null ? presentationShader.name : "missing")} layer=31");
+                $"mode=screen-space-overlay sortingOrder={presentationCanvas.sortingOrder}");
             return target;
 #else
             return null;
