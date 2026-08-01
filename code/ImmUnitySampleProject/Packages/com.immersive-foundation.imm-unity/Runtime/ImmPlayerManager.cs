@@ -16,6 +16,8 @@ namespace ImmPlayer
         internal RenderTexture PresentationTarget { get; set; }
         internal Camera PresentationCamera { get; set; }
         internal CommandBuffer PresentationCommandBuffer { get; set; }
+        internal Material PresentationMaterial { get; set; }
+        internal Mesh PresentationMesh { get; set; }
 
         private void OnDestroy()
         {
@@ -29,6 +31,16 @@ namespace ImmPlayer
             {
                 PresentationCommandBuffer.Release();
                 PresentationCommandBuffer = null;
+            }
+            if (PresentationMaterial != null)
+            {
+                Destroy(PresentationMaterial);
+                PresentationMaterial = null;
+            }
+            if (PresentationMesh != null)
+            {
+                Destroy(PresentationMesh);
+                PresentationMesh = null;
             }
             if (PresentationTarget == null)
                 return;
@@ -918,13 +930,51 @@ namespace ImmPlayer
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
             presenter.PresentationTarget = presentationTarget;
             presenter.PresentationCamera = presenterCamera;
+            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresent");
+            if (presentationShader == null)
+            {
+                Debug.LogError(
+                    "[IMM_UNITY_VK_EXPLICIT_VIEWPORT_PRESENTER_20260801] missing Resources/ImmVulkanPresent shader");
+                return target;
+            }
+            presenter.PresentationMaterial = new Material(presentationShader)
+            {
+                name = "IMM Vulkan Presentation Material",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            presenter.PresentationMaterial.SetTexture("_MainTex", presentationTarget);
+            presenter.PresentationMesh = new Mesh
+            {
+                name = "IMM Vulkan Clip-Space Presentation Quad",
+                vertices = new[]
+                {
+                    new Vector3(-1.0f, -1.0f, 0.0f),
+                    new Vector3(1.0f, -1.0f, 0.0f),
+                    new Vector3(1.0f, 1.0f, 0.0f),
+                    new Vector3(-1.0f, 1.0f, 0.0f)
+                },
+                uv = new[]
+                {
+                    new Vector2(0.0f, 0.0f),
+                    new Vector2(1.0f, 0.0f),
+                    new Vector2(1.0f, 1.0f),
+                    new Vector2(0.0f, 1.0f)
+                },
+                triangles = new[] { 0, 2, 1, 0, 3, 2 }
+            };
+            presenter.PresentationMesh.RecalculateBounds();
             presenter.PresentationCommandBuffer = new CommandBuffer
             {
-                name = "IMM Vulkan Final CameraTarget Blit"
+                name = "IMM Vulkan Explicit Viewport Presentation"
             };
-            presenter.PresentationCommandBuffer.Blit(
-                presentationTarget,
-                BuiltinRenderTextureType.CameraTarget);
+            presenter.PresentationCommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            presenter.PresentationCommandBuffer.SetViewport(new Rect(0.0f, 0.0f, width, height));
+            presenter.PresentationCommandBuffer.DrawMesh(
+                presenter.PresentationMesh,
+                Matrix4x4.identity,
+                presenter.PresentationMaterial,
+                0,
+                0);
             presenterCamera.AddCommandBuffer(
                 CameraEvent.AfterEverything,
                 presenter.PresentationCommandBuffer);
@@ -933,13 +983,14 @@ namespace ImmPlayer
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=camera-target-command-buffer " +
+                $"mode=explicit-camera-target-viewport " +
                 $"ordering=native-before-present");
             Debug.Log(
-                $"[IMM_UNITY_VK_CAMERA_TARGET_PRESENTER_20260801] camera={presenterCamera.name} " +
+                $"[IMM_UNITY_VK_EXPLICIT_VIEWPORT_PRESENTER_20260801] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
                 $"event={CameraEvent.AfterEverything} destination={BuiltinRenderTextureType.CameraTarget} " +
-                $"screen={Screen.width}x{Screen.height} presenterPixels={presenterCamera.pixelWidth}x{presenterCamera.pixelHeight}");
+                $"viewport={width}x{height} screen={Screen.width}x{Screen.height} " +
+                $"presenterPixels={presenterCamera.pixelWidth}x{presenterCamera.pixelHeight} shader={presentationShader.name}");
             return target;
 #else
             return null;

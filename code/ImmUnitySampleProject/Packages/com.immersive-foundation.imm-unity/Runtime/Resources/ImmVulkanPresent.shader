@@ -38,7 +38,11 @@ Shader "Hidden/IMM/VulkanPresent"
             v2f vert(appdata input)
             {
                 v2f output;
-                output.vertex = UnityObjectToClipPos(input.vertex);
+                // Presentation geometry is already expressed in clip space.
+                // Avoid camera matrices here: this pass exists specifically to
+                // draw through Unity's active Android Vulkan CameraTarget while
+                // overriding the target wrapper's erroneous 1x1 viewport.
+                output.vertex = float4(input.vertex.xy, 0.0, 1.0);
                 output.uv = input.uv;
                 return output;
             }
