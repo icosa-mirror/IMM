@@ -3565,6 +3565,7 @@ static const uint32_t kSrgbPresentFS[] = {
 
 #include "piVulkan_HostDiagnosticShaders.inc"
 #include "piVulkan_HostCenterDiagnosticShader.inc"
+#include "piVulkan_HostVertexDescriptorDiagnosticShader.inc"
 
 // Constant cyan fragment shader for isolating Unity host-render-pass raster
 // integration. It intentionally has no descriptors, inputs, or uniforms.
@@ -4071,12 +4072,12 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     if (useHostDebugFragment && state->hostCenterDiagnosticVertexModule == VK_NULL_SHADER_MODULE &&
         !iCreateShaderModule(
             state,
-            reinterpret_cast<const uint8_t *>(kHostCenterDiagnosticRowMajorVS),
-            static_cast<int>(sizeof(kHostCenterDiagnosticRowMajorVS)),
+            reinterpret_cast<const uint8_t *>(kHostVertexDescriptorDiagnosticVS),
+            static_cast<int>(sizeof(kHostVertexDescriptorDiagnosticVS)),
             &state->hostCenterDiagnosticVertexModule,
             reporter))
     {
-        iError(reporter, "[IMM_UNITY_VK_CENTER_VIEWPORT_DIAG_20260801] failed to create center vertex module");
+        iError(reporter, "[IMM_UNITY_VK_VERTEX_DESCRIPTOR_DIAG_20260801] failed to create vertex descriptor module");
         return false;
     }
     VkPipelineShaderStageCreateInfo stages[2] = {};
@@ -4414,24 +4415,12 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        constexpr uint32_t packedVertexSize = 28u;
-        const uint32_t brushVertexCount = state->hostDebugResourceBuffers[2]->size / packedVertexSize;
-        const uint32_t expandedVertexCount = brushVertexCount * 7u;
-        const uint32_t diagnosticVertexCount = std::min(state->hostDebugIndexCount, expandedVertexCount);
-        state->vkCmdDraw(state->commandBuffer, diagnosticVertexCount, 1, 0, 0);
-        static bool reportedNonIndexedHostDraw = false;
-        if (!reportedNonIndexedHostDraw)
+        state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
+        static bool reportedVertexDescriptorHostDraw = false;
+        if (!reportedVertexDescriptorHostDraw)
         {
-            reportedNonIndexedHostDraw = true;
-            char message[256];
-            std::snprintf(
-                message,
-                sizeof(message),
-                "[IMM_UNITY_VK_NONINDEXED_CENTER_20260801] vertices=%u brushVertices=%u sourceIndices=%u",
-                diagnosticVertexCount,
-                brushVertexCount,
-                state->hostDebugIndexCount);
-            iReport(reporter, message);
+            reportedVertexDescriptorHostDraw = true;
+            iReport(reporter, "[IMM_UNITY_VK_VERTEX_DESCRIPTOR_DIAG_20260801] submitted fullscreen vertex-stage descriptor check");
         }
     }
     else
