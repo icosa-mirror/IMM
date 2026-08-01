@@ -16,6 +16,25 @@ namespace ImmPlayer
         internal RenderTexture PresentationTarget { get; set; }
         internal Material PresentationMaterial { get; set; }
         internal Mesh PresentationMesh { get; set; }
+        private int _presentationLogCount;
+
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        {
+            if (PresentationTarget == null || PresentationMaterial == null)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            Graphics.Blit(PresentationTarget, destination, PresentationMaterial);
+            if (_presentationLogCount >= 8)
+                return;
+
+            ++_presentationLogCount;
+            Debug.Log(
+                $"[IMM_UNITY_VK_FINAL_BLIT_20260801] source={PresentationTarget.width}x{PresentationTarget.height} " +
+                $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")}");
+        }
 
         private void OnDestroy()
         {
@@ -1357,6 +1376,16 @@ namespace ImmPlayer
                 presenter != null &&
                 presenter.PresentationTarget != null)
             {
+                int orderedPresentationEventId = info.CameraId << 8;
+                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                    _configuredVulkanRenderEvents.Add(orderedPresentationEventId))
+                {
+                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(orderedPresentationEventId);
+                    Debug.Log(
+                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={orderedPresentationEventId} " +
+                        $"camera={info.CameraId} configured={configured}");
+                }
+                GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
                 _vulkanPresentationPending.Add(cam);
                 return;
             }

@@ -183,7 +183,7 @@ def main() -> int:
             "BeginExternalImageCommandBufferFramePreserveColor(",
             "[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730]",
             "[IMM_UNITY_VK_DIRECT_RT_20260731]",
-            "transition=explicit-shader-read",
+            "transition=unity-consumer",
             "Unity Vulkan render:",
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
