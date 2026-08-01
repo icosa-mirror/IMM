@@ -17,6 +17,7 @@ permissions:
 
 env:
   UNITY_VERSION: "2022.3.62f2"
+  UNITY_ANDROID_VULKAN_VERSION: "6000.3.18f1"
   FTL_UNITY_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_UNITY_DEVICE || 'model=akita,version=34,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
   FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
@@ -1273,9 +1274,9 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-android-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-android-vulkan-${{ env.UNITY_VERSION }}-
+            UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_unity_android_packagecache
@@ -1284,9 +1285,9 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library/PackageCache
-          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityPackageCache-${{ env.UNITY_VERSION }}-
+            UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
 
       - name: Preflight Unity Android Vulkan runner
         run: python tests/tools/preflight_runner.py --profile unity --output artifacts/unity-android-vulkan/preflight.json
@@ -1301,7 +1302,7 @@ jobs:
           UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
         with:
           projectPath: code/ImmUnitySampleProject
-          unityVersion: ${{ env.UNITY_VERSION }}
+          unityVersion: ${{ env.UNITY_ANDROID_VULKAN_VERSION }}
           targetPlatform: Android
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
@@ -1442,7 +1443,7 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library/PackageCache
-          key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityPackageCache-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Save Unity Android Library cache
         if: always() && steps.cache_unity_android_library.outputs.cache-hit != 'true'
@@ -1452,7 +1453,7 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-android-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity Android Vulkan artifacts
         if: always()
