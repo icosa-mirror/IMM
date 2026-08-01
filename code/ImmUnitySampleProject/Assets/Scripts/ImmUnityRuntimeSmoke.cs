@@ -169,7 +169,16 @@ namespace ImmPlayer
             if (!string.IsNullOrEmpty(_renderCapturePath))
             {
                 yield return new WaitForEndOfFrame();
+#if IMM_UNITY_ANDROID_VULKAN_CI
+                ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
+                Camera renderCaptureCamera = playerManager != null
+                    ? playerManager.GetAndroidVulkanSourceCameraForValidation()
+                    : null;
+                if (renderCaptureCamera == null)
+                    renderCaptureCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
+#else
                 Camera renderCaptureCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
+#endif
                 if (renderCaptureCamera == null)
                 {
                     Debug.LogError($"{Prefix}missing render candidate capture camera");
@@ -177,7 +186,6 @@ namespace ImmPlayer
                     yield break;
                 }
 #if IMM_UNITY_ANDROID_VULKAN_CI
-                ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
                 RenderTexture vulkanPresentationTarget = playerManager != null
                     ? playerManager.GetAndroidVulkanPresentationTargetForValidation(renderCaptureCamera)
                     : null;
@@ -687,7 +695,16 @@ namespace ImmPlayer
 
         private bool CreateCompositionProbes()
         {
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
+            Camera cam = playerManager != null
+                ? playerManager.GetAndroidVulkanSourceCameraForValidation()
+                : null;
+            if (cam == null)
+                cam = Camera.main;
+#else
             Camera cam = _overlayProbeEnabled ? FindOverlayCompositionCamera() : Camera.main;
+#endif
             if (cam == null)
                 return false;
 
