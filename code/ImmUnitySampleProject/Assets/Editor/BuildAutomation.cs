@@ -96,16 +96,16 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
-            bool previousVulkanEnablePreTransform = PlayerSettings.vulkanEnablePreTransform;
+            bool previousVulkanEnableLateAcquireNextImage = PlayerSettings.vulkanEnableLateAcquireNextImage;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-                PlayerSettings.vulkanEnablePreTransform = false;
+                PlayerSettings.vulkanEnableLateAcquireNextImage = true;
                 UnityEngine.Debug.Log(
-                    "[IMM_AUTOBUILD_ANDROID_VK_SURFACE_20260801] vulkanEnablePreTransform=False");
+                    "[IMM_AUTOBUILD_ANDROID_VK_SURFACE_20260801] vulkanEnableLateAcquireNextImage=True");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
@@ -121,7 +121,7 @@ namespace ImmPlayer.Editor
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
-                PlayerSettings.vulkanEnablePreTransform = previousVulkanEnablePreTransform;
+                PlayerSettings.vulkanEnableLateAcquireNextImage = previousVulkanEnableLateAcquireNextImage;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
