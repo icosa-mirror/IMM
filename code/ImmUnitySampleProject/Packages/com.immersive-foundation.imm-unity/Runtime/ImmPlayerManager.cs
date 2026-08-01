@@ -6,7 +6,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.UI;
 
 [assembly: InternalsVisibleTo("ImmUnity.Runtime.Tests")]
 
@@ -15,10 +14,34 @@ namespace ImmPlayer
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
         internal RenderTexture PresentationTarget { get; set; }
-        internal RawImage PresentationImage { get; set; }
+        internal Material PresentationMaterial { get; set; }
+        private int _presentationLogCount;
+
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        {
+            if (PresentationTarget == null || PresentationMaterial == null)
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            Graphics.Blit(PresentationTarget, destination, PresentationMaterial);
+            if (_presentationLogCount >= 8)
+                return;
+
+            ++_presentationLogCount;
+            Debug.Log(
+                $"[IMM_UNITY_VK_DETACHED_FINAL_BLIT_20260801] source={PresentationTarget.width}x{PresentationTarget.height} " +
+                $"destination={(destination != null ? $"{destination.width}x{destination.height}" : "backbuffer")}");
+        }
 
         private void OnDestroy()
         {
+            if (PresentationMaterial != null)
+            {
+                Destroy(PresentationMaterial);
+                PresentationMaterial = null;
+            }
             if (PresentationTarget == null)
                 return;
             PresentationTarget.Release();
@@ -906,34 +929,31 @@ namespace ImmPlayer
             presenterCamera.targetTexture = null;
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
             presenter.PresentationTarget = presentationTarget;
-            Canvas presentationCanvas = presenterObject.AddComponent<Canvas>();
-            presentationCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            presentationCanvas.sortingOrder = short.MaxValue;
-            GameObject imageObject = new GameObject(
-                "IMM Vulkan Presentation Image",
-                typeof(RectTransform),
-                typeof(CanvasRenderer),
-                typeof(RawImage));
-            imageObject.transform.SetParent(presenterObject.transform, false);
-            RectTransform imageRect = imageObject.GetComponent<RectTransform>();
-            imageRect.anchorMin = Vector2.zero;
-            imageRect.anchorMax = Vector2.one;
-            imageRect.offsetMin = Vector2.zero;
-            imageRect.offsetMax = Vector2.zero;
-            presenter.PresentationImage = imageObject.GetComponent<RawImage>();
-            presenter.PresentationImage.texture = presentationTarget;
-            presenter.PresentationImage.raycastTarget = false;
+            Shader presentationShader = Resources.Load<Shader>("ImmVulkanPresent");
+            if (presentationShader == null)
+            {
+                Debug.LogError(
+                    "[IMM_UNITY_VK_DETACHED_PRESENTER_SETUP_20260801] missing Resources/ImmVulkanPresent shader");
+            }
+            else
+            {
+                presenter.PresentationMaterial = new Material(presentationShader)
+                {
+                    name = "IMM Vulkan Presentation Material",
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=screen-space-overlay " +
+                $"mode=detached-final-camera-blit " +
                 $"ordering=native-before-present");
             Debug.Log(
-                $"[IMM_UNITY_VK_MESH_PRESENTER_SETUP_20260731] camera={presenterCamera.name} " +
+                $"[IMM_UNITY_VK_DETACHED_PRESENTER_SETUP_20260801] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
-                $"mode=screen-space-overlay sortingOrder={presentationCanvas.sortingOrder}");
+                $"shader={(presentationShader != null ? presentationShader.name : "missing")}");
             return target;
 #else
             return null;
@@ -1346,6 +1366,14 @@ namespace ImmPlayer
                 }
                 GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
                 _vulkanPresentationPending.Add(cam);
+                // Keep the source RT bound only while the content camera is
+                // rendering. Graphics.Blit treats a null destination as the
+                // main camera's target texture when one remains assigned, so
+                // leaving this attached redirects the final presenter away
+                // from Android's backbuffer. OnCameraPreCull reattaches it at
+                // the start of the next content-camera render.
+                if (cam.targetTexture == sourceTarget)
+                    cam.targetTexture = null;
                 return;
             }
 #endif
