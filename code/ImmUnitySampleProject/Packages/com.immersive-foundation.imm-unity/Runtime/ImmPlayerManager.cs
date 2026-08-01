@@ -219,13 +219,6 @@ namespace ImmPlayer
         {
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
-#if UNITY_ANDROID
-            // Record into the explicit camera RenderTexture only after Unity
-            // has finished the camera. Earlier camera events are followed by
-            // Unity work that overwrites the native Vulkan result.
-            if (IsVulkanRuntime())
-                forceCameraCallback = true;
-#endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
             if (IsVulkanRuntime())
@@ -1369,16 +1362,19 @@ namespace ImmPlayer
                 presenter != null &&
                 presenter.PresentationTarget != null)
             {
-                int orderedPresentationEventId = info.CameraId << 8;
-                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
-                    _configuredVulkanRenderEvents.Add(orderedPresentationEventId))
+                if (_useCameraCallbackRendering)
                 {
-                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(orderedPresentationEventId);
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={orderedPresentationEventId} " +
-                        $"camera={info.CameraId} configured={configured}");
+                    int orderedPresentationEventId = info.CameraId << 8;
+                    if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
+                        _configuredVulkanRenderEvents.Add(orderedPresentationEventId))
+                    {
+                        int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(orderedPresentationEventId);
+                        Debug.Log(
+                            $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={orderedPresentationEventId} " +
+                            $"camera={info.CameraId} configured={configured}");
+                    }
+                    GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
                 }
-                GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
                 _vulkanPresentationPending.Add(cam);
                 return;
             }
