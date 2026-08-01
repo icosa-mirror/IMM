@@ -17,9 +17,13 @@ namespace ImmPlayer
         internal Camera PresentationCamera { get; set; }
         internal CommandBuffer PresentationCommandBuffer { get; set; }
         internal Material PresentationMaterial { get; set; }
+        internal Camera SourceCamera { get; set; }
+        internal int SourceCullingMask { get; set; }
 
         private void OnDestroy()
         {
+            if (SourceCamera != null)
+                SourceCamera.cullingMask = SourceCullingMask;
             if (PresentationCamera != null && PresentationCommandBuffer != null)
             {
                 PresentationCamera.RemoveCommandBuffer(
@@ -892,6 +896,9 @@ namespace ImmPlayer
             };
             presentationTarget.Create();
 
+            int sourceCullingMask = cam.cullingMask;
+            cam.cullingMask &= ~(1 << 31);
+
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
             Camera presenterCamera = presenterObject.AddComponent<Camera>();
@@ -923,6 +930,7 @@ namespace ImmPlayer
                 presentationTarget.Release();
                 Destroy(presentationTarget);
                 Destroy(presenterObject);
+                cam.cullingMask = sourceCullingMask;
                 return target;
             }
 
@@ -948,6 +956,8 @@ namespace ImmPlayer
             presenter.PresentationTarget = presentationTarget;
             presenter.PresentationCamera = presenterCamera;
             presenter.PresentationMaterial = presentationMaterial;
+            presenter.SourceCamera = cam;
+            presenter.SourceCullingMask = sourceCullingMask;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
@@ -1206,7 +1216,7 @@ namespace ImmPlayer
                 // Android Vulkan display render buffers are not portable plugin
                 // render targets. Render into the explicit camera RenderTexture
                 // by default; Unity owns its final presentation to the display.
-                bool useHostRenderPass = IsEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_RENDER_PASS");
+                bool useHostRenderPass = true;
                 if (useHostRenderPass)
                 {
                     int prepareEventId = (info.CameraId << 8) | VulkanPrepareEventFlag;

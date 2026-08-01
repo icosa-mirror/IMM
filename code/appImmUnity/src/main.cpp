@@ -432,8 +432,7 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    const bool useHostRenderPass = iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_RENDER_PASS");
-    config.renderPassPrecondition = (prepareEvent || !useHostRenderPass)
+    config.renderPassPrecondition = prepareEvent
         ? kUnityVulkanRenderPass_EnsureOutside
         : kUnityVulkanRenderPass_EnsureInside;
 #else
@@ -904,11 +903,10 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const bool hostRenderPassHasDepth = iEnvFlagEnabled("IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH") || assumeHostDepth;
     const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Unity exposes the active render pass, but not the Android depth image's
-    // format or contents through CommandRecordingState. Keep the attachment
-    // bound for render-pass compatibility while this control run verifies that
-    // treating its opaque contents as reverse-Z is what rejects every IMM draw.
-    const bool useHostDepth = false;
+    // The active camera render pass owns a live reverse-Z depth attachment.
+    // Render inside that pass so IMM and subsequent Unity geometry share the
+    // same depth values without reopening an Android depth image.
+    const bool useHostDepth = hasDepthAttachment;
 #else
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
 #endif
@@ -938,8 +936,9 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_NO_HOST_DEPTH_CONTROL_20260731] hasDepthAttachment=%d useHostDepth=0",
-            hasDepthAttachment ? 1 : 0);
+            L"[IMM_UNITY_ANDROID_VK_HOST_DEPTH_20260801] hasDepthAttachment=%d useHostDepth=%d",
+            hasDepthAttachment ? 1 : 0,
+            useHostDepth ? 1 : 0);
     }
 #endif
 
@@ -1249,11 +1248,6 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
 #if defined(__ANDROID__) || defined(ANDROID)
-        if (!iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_RENDER_PASS"))
-        {
-            iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
-            return;
-        }
         iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
 #else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
