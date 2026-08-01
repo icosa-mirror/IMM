@@ -231,6 +231,13 @@ namespace ImmPlayer
         {
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
+#if UNITY_ANDROID
+            // Record into the explicit camera RenderTexture only after Unity
+            // has finished the camera. Earlier camera events are followed by
+            // Unity work that overwrites the native Vulkan result.
+            if (IsVulkanRuntime())
+                forceCameraCallback = true;
+#endif
             _useCommandBufferRendering = builtInPipeline && !forceCameraCallback;
             _useCameraCallbackRendering = builtInPipeline && forceCameraCallback;
             if (IsVulkanRuntime())
@@ -255,6 +262,9 @@ namespace ImmPlayer
                 Camera.onPreCull += OnCameraPreCull;
             }
             bool subscribePostRender = _useCameraCallbackRendering;
+#if UNITY_ANDROID
+            subscribePostRender |= IsVulkanRuntime();
+#endif
             if (subscribePostRender)
             {
                 Camera.onPostRender += OnCameraPostRender;
@@ -272,6 +282,9 @@ namespace ImmPlayer
                 Camera.onPreCull -= OnCameraPreCull;
             }
             bool unsubscribePostRender = _useCameraCallbackRendering;
+#if UNITY_ANDROID
+            unsubscribePostRender |= IsVulkanRuntime();
+#endif
             if (unsubscribePostRender)
             {
                 Camera.onPostRender -= OnCameraPostRender;
