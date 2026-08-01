@@ -4414,7 +4414,25 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 #if defined(__ANDROID__) || defined(ANDROID)
     if (hostRenderPass)
     {
-        state->vkCmdDrawIndexed(state->commandBuffer, state->hostDebugIndexCount, 1, 0, 0, 0);
+        constexpr uint32_t packedVertexSize = 28u;
+        const uint32_t brushVertexCount = state->hostDebugResourceBuffers[2]->size / packedVertexSize;
+        const uint32_t expandedVertexCount = brushVertexCount * 7u;
+        const uint32_t diagnosticVertexCount = std::min(state->hostDebugIndexCount, expandedVertexCount);
+        state->vkCmdDraw(state->commandBuffer, diagnosticVertexCount, 1, 0, 0);
+        static bool reportedNonIndexedHostDraw = false;
+        if (!reportedNonIndexedHostDraw)
+        {
+            reportedNonIndexedHostDraw = true;
+            char message[256];
+            std::snprintf(
+                message,
+                sizeof(message),
+                "[IMM_UNITY_VK_NONINDEXED_CENTER_20260801] vertices=%u brushVertices=%u sourceIndices=%u",
+                diagnosticVertexCount,
+                brushVertexCount,
+                state->hostDebugIndexCount);
+            iReport(reporter, message);
+        }
     }
     else
 #endif
