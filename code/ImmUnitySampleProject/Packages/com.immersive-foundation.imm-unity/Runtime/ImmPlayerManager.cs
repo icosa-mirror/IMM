@@ -918,6 +918,7 @@ namespace ImmPlayer
             presenterCamera.allowHDR = false;
             presenterCamera.allowMSAA = false;
             presenterCamera.useOcclusionCulling = false;
+            presenterCamera.forceIntoRenderTexture = true;
             presenterCamera.targetDisplay = cam.targetDisplay;
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
@@ -965,6 +966,7 @@ namespace ImmPlayer
                 $"[IMM_UNITY_VK_QUAD_PRESENTER_20260801] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
                 $"shader={presentationShader.name} layer={presentationQuad.layer} " +
+                $"forceIntoRenderTexture={presenterCamera.forceIntoRenderTexture} " +
                 $"screen={Screen.width}x{Screen.height} presenterPixels={presenterCamera.pixelWidth}x{presenterCamera.pixelHeight}");
             return target;
 #else
