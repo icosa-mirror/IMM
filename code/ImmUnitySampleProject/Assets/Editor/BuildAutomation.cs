@@ -96,32 +96,30 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
-            bool previousVulkanEnableLateAcquireNextImage = PlayerSettings.vulkanEnableLateAcquireNextImage;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-                PlayerSettings.vulkanEnableLateAcquireNextImage = true;
-                UnityEngine.Debug.Log(
-                    "[IMM_AUTOBUILD_ANDROID_VK_SURFACE_20260801] vulkanEnableLateAcquireNextImage=True");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
                 }
 
+                string[] androidVulkanDefines = new[] { "IMM_UNITY_ANDROID_VULKAN_CI" }
+                    .Concat(new[] { "IMM_UNITY_ANDROID_VULKAN_SURFACE_CONTROL" })
+                    .ToArray();
                 BuildPlayer(
                     BuildTarget.Android,
                     outputPath,
                     BuildOptions.Development,
                     "Android Vulkan non-XR smoke player",
-                    new[] { "IMM_UNITY_ANDROID_VULKAN_CI" });
+                    androidVulkanDefines);
             }
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
-                PlayerSettings.vulkanEnableLateAcquireNextImage = previousVulkanEnableLateAcquireNextImage;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;

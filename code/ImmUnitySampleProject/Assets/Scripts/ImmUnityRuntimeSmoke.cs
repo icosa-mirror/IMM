@@ -110,6 +110,10 @@ namespace ImmPlayer
                 QuitIfRequested(6);
                 yield break;
             }
+#if IMM_UNITY_ANDROID_VULKAN_SURFACE_CONTROL
+            yield return RunAndroidVulkanSurfaceControl();
+            yield break;
+#endif
             bool resizeDisplayForCapture = true;
 #if IMM_UNITY_ANDROID_VULKAN_CI
             // Keep Android's native swapchain extent. Resizing the display after
@@ -362,6 +366,44 @@ namespace ImmPlayer
             QuitIfRequested(0);
 #endif
         }
+
+#if IMM_UNITY_ANDROID_VULKAN_SURFACE_CONTROL
+        private IEnumerator RunAndroidVulkanSurfaceControl()
+        {
+            Camera controlCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
+            if (controlCamera == null)
+            {
+                var cameraObject = new GameObject("IMM Unity Vulkan Surface Control Camera");
+                controlCamera = cameraObject.AddComponent<Camera>();
+            }
+
+            foreach (Camera camera in FindObjectsOfType<Camera>())
+            {
+                if (camera != controlCamera)
+                    camera.enabled = false;
+            }
+            controlCamera.enabled = true;
+            controlCamera.targetTexture = null;
+            controlCamera.depth = 1000.0f;
+            controlCamera.clearFlags = CameraClearFlags.SolidColor;
+            controlCamera.backgroundColor = Color.magenta;
+            controlCamera.cullingMask = 0;
+            controlCamera.allowHDR = false;
+            controlCamera.allowMSAA = false;
+            Debug.Log(
+                $"[IMM_UNITY_VK_SURFACE_CONTROL_20260801] active=True color=FF00FF " +
+                $"screen={Screen.width}x{Screen.height} camera={controlCamera.name}");
+
+            for (int frame = 0; frame < 30; ++frame)
+                yield return null;
+            yield return new WaitForEndOfFrame();
+
+            if (!string.IsNullOrEmpty(_renderCapturePath))
+                WriteCapture(CaptureScreenTexture(), _renderCapturePath, "surface control render");
+            WriteCapture(CaptureScreenTexture(), _capturePath, "surface control composition");
+            Debug.Log("[IMM_UNITY_VK_SURFACE_CONTROL_20260801] captureComplete=True hold=True");
+        }
+#endif
 
         private static void WriteCapture(Texture2D texture, string capturePath, string label)
         {
