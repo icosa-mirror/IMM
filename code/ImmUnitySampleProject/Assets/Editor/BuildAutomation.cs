@@ -96,12 +96,16 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
+            bool previousVulkanEnablePreTransform = PlayerSettings.vulkanEnablePreTransform;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                PlayerSettings.vulkanEnablePreTransform = false;
+                UnityEngine.Debug.Log(
+                    "[IMM_AUTOBUILD_ANDROID_VK_SURFACE_20260801] vulkanEnablePreTransform=False");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
@@ -117,6 +121,7 @@ namespace ImmPlayer.Editor
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
+                PlayerSettings.vulkanEnablePreTransform = previousVulkanEnablePreTransform;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
