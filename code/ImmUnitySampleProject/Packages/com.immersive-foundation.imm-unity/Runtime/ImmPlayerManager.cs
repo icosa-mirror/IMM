@@ -1052,9 +1052,7 @@ namespace ImmPlayer
             if (!ShouldRenderCamera(cam))
                 return;
 
-#if !UNITY_ANDROID
             GetOrCreateVulkanPresentationTarget(cam);
-#endif
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
 #if UNITY_ANDROID
             if (IsVulkanRuntime() &&
@@ -1200,7 +1198,10 @@ namespace ImmPlayer
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
 #if UNITY_ANDROID
-                bool useHostRenderPass = !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE");
+                // Android Vulkan display render buffers are not portable plugin
+                // render targets. Render into the explicit camera RenderTexture
+                // by default; Unity owns its final presentation to the display.
+                bool useHostRenderPass = IsEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_RENDER_PASS");
                 if (useHostRenderPass)
                 {
                     int prepareEventId = (info.CameraId << 8) | VulkanPrepareEventFlag;
@@ -1356,16 +1357,6 @@ namespace ImmPlayer
                 presenter != null &&
                 presenter.PresentationTarget != null)
             {
-                int orderedPresentationEventId = info.CameraId << 8;
-                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") &&
-                    _configuredVulkanRenderEvents.Add(orderedPresentationEventId))
-                {
-                    int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(orderedPresentationEventId);
-                    Debug.Log(
-                        $"[IMM_UNITY_VK_ORDERED_POST_RENDER_20260731] eventId={orderedPresentationEventId} " +
-                        $"camera={info.CameraId} configured={configured}");
-                }
-                GL.IssuePluginEvent(_renderEventFunc, orderedPresentationEventId);
                 _vulkanPresentationPending.Add(cam);
                 return;
             }

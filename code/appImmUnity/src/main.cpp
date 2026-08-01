@@ -432,7 +432,8 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    config.renderPassPrecondition = prepareEvent
+    const bool useHostRenderPass = iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_RENDER_PASS");
+    config.renderPassPrecondition = (prepareEvent || !useHostRenderPass)
         ? kUnityVulkanRenderPass_EnsureOutside
         : kUnityVulkanRenderPass_EnsureInside;
 #else
@@ -812,6 +813,27 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
         recordingState.commandBuffer,
         recordingState.currentFrameNumber,
         recordingState.safeFrameNumber);
+
+    constexpr VkImageLayout kShaderReadLayout = 5; // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    constexpr VkPipelineStageFlags kFragmentShaderStage = 0x00000080; // VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+    constexpr VkAccessFlags kShaderReadAccess = 0x00000020; // VK_ACCESS_SHADER_READ_BIT
+    UnityVulkanImage sampledColorImage = {};
+    const bool finalizedForSampling = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+        colorTarget,
+        UnityVulkanWholeImage,
+        kShaderReadLayout,
+        kFragmentShaderStage,
+        kShaderReadAccess,
+        kUnityVulkanResourceAccess_PipelineBarrier,
+        &sampledColorImage);
+    if (!finalizedForSampling)
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"[IMM_UNITY_VK_SAMPLE_TRANSITION_20260801] failed camera=%d colorRB=%p",
+            cameraID,
+            colorTarget);
+    }
     static int commandBufferReportCount = 0;
     if (commandBufferReportCount < 8)
     {
@@ -832,10 +854,11 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u transition=unity-consumer",
+            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u transition=explicit-shader-read success=%d",
             cameraID,
             static_cast<unsigned long long>(colorImage.image),
-            static_cast<unsigned int>(kColorAttachmentLayout));
+            static_cast<unsigned int>(kShaderReadLayout),
+            finalizedForSampling ? 1 : 0);
         ++finalizeReportCount;
     }
     return true;
@@ -1248,7 +1271,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
 #if defined(__ANDROID__) || defined(ANDROID)
-        if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
+        if (!iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_RENDER_PASS"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
             return;
