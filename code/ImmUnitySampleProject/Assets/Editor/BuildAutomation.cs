@@ -96,16 +96,12 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
-            bool previousOptimizedFramePacing = PlayerSettings.Android.optimizedFramePacing;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-                PlayerSettings.Android.optimizedFramePacing = false;
-                UnityEngine.Debug.Log(
-                    "[IMM_AUTOBUILD_ANDROID_VK_SWAPPY_20260801] optimizedFramePacing=False");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
@@ -121,7 +117,6 @@ namespace ImmPlayer.Editor
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
-                PlayerSettings.Android.optimizedFramePacing = previousOptimizedFramePacing;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
