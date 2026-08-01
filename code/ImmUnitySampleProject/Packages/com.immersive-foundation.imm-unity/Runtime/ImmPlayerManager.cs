@@ -206,20 +206,11 @@ namespace ImmPlayer
 
         private void Start()
         {
-#if IMM_UNITY_ANDROID_VULKAN_SURFACE_CONTROL
-            Debug.Log("[IMM_UNITY_VK_SURFACE_CONTROL_20260801] nativeManagerInitialized=False");
-            return;
-#else
             Initialize();
-#endif
         }
 
         private void OnEnable()
         {
-#if IMM_UNITY_ANDROID_VULKAN_SURFACE_CONTROL
-            Debug.Log("[IMM_UNITY_VK_SURFACE_CONTROL_20260801] cameraCallbacksInstalled=False");
-            return;
-#endif
             bool builtInPipeline = GraphicsSettings.currentRenderPipeline == null;
             bool forceCameraCallback = IsEnvFlagEnabled("IMM_UNITY_FORCE_CAMERA_CALLBACK");
 #if UNITY_ANDROID
