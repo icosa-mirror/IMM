@@ -4077,7 +4077,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
             &state->hostCenterDiagnosticVertexModule,
             reporter))
     {
-        iError(reporter, "[IMM_UNITY_VK_TRANSFORM_ZW_DIAG_20260801] failed to create transform Z/W module");
+        iError(reporter, "[IMM_UNITY_VK_TRANSFORM_XY_DIAG_20260801] failed to create transform X/Y module");
         return false;
     }
     VkPipelineShaderStageCreateInfo stages[2] = {};
@@ -4420,7 +4420,7 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
         if (!reportedVertexDescriptorHostDraw)
         {
             reportedVertexDescriptorHostDraw = true;
-            iReport(reporter, "[IMM_UNITY_VK_TRANSFORM_ZW_DIAG_20260801] submitted fullscreen XY with production transform Z/W");
+            iReport(reporter, "[IMM_UNITY_VK_TRANSFORM_XY_DIAG_20260801] submitted large triangle around production transform X/Y");
         }
     }
     else
