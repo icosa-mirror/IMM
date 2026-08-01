@@ -4400,11 +4400,6 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
             clonedWrites[i].pBufferInfo = &clonedInfos[i];
         }
         state->vkUpdateDescriptorSets(state->device, 4, clonedWrites, 0, nullptr);
-        if (!iDrawHostDescriptorDiagnostic(state, target, reporter))
-        {
-            iError(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] failed to record descriptor bars");
-            return false;
-        }
         state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, indexType);
     }
     else
