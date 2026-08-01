@@ -169,16 +169,7 @@ namespace ImmPlayer
             if (!string.IsNullOrEmpty(_renderCapturePath))
             {
                 yield return new WaitForEndOfFrame();
-#if IMM_UNITY_ANDROID_VULKAN_CI
-                ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
-                Camera renderCaptureCamera = playerManager != null
-                    ? playerManager.GetAndroidVulkanSourceCameraForValidation()
-                    : null;
-                if (renderCaptureCamera == null)
-                    renderCaptureCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
-#else
                 Camera renderCaptureCamera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
-#endif
                 if (renderCaptureCamera == null)
                 {
                     Debug.LogError($"{Prefix}missing render candidate capture camera");
@@ -186,6 +177,7 @@ namespace ImmPlayer
                     yield break;
                 }
 #if IMM_UNITY_ANDROID_VULKAN_CI
+                ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
                 RenderTexture vulkanPresentationTarget = playerManager != null
                     ? playerManager.GetAndroidVulkanPresentationTargetForValidation(renderCaptureCamera)
                     : null;
@@ -253,6 +245,26 @@ namespace ImmPlayer
                 yield break;
             }
 
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            ImmPlayerManager compositionPlayerManager = FindObjectOfType<ImmPlayerManager>();
+            RenderTexture androidVulkanCompositionTarget = compositionPlayerManager != null
+                ? compositionPlayerManager.GetAndroidVulkanUnityPresentationTargetForValidation(captureCamera)
+                : null;
+            Texture2D tex;
+            if (androidVulkanCompositionTarget != null)
+            {
+                Debug.Log(
+                    $"[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801] " +
+                    $"source={androidVulkanCompositionTarget.width}x{androidVulkanCompositionTarget.height}");
+                tex = CaptureRenderTexture(androidVulkanCompositionTarget);
+            }
+            else
+            {
+                Debug.LogWarning(
+                    "[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801] source=missing fallback=screen");
+                tex = CaptureScreenTexture();
+            }
+#else
             bool usePresentedFrameCapture = !IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv)) &&
                 (_overlayProbeEnabled ||
                 (_compositionProbeEnabled && SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan));
@@ -261,6 +273,7 @@ namespace ImmPlayer
                 : (_overlayProbeEnabled && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Vulkan
                     ? CaptureOrderedCameraStackTexture(captureCamera)
                     : (usePresentedFrameCapture ? CaptureScreenTexture() : CaptureCameraTexture(captureCamera)));
+#endif
 
             int width = tex.width;
             int height = tex.height;
@@ -695,16 +708,7 @@ namespace ImmPlayer
 
         private bool CreateCompositionProbes()
         {
-#if IMM_UNITY_ANDROID_VULKAN_CI
-            ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
-            Camera cam = playerManager != null
-                ? playerManager.GetAndroidVulkanSourceCameraForValidation()
-                : null;
-            if (cam == null)
-                cam = Camera.main;
-#else
             Camera cam = _overlayProbeEnabled ? FindOverlayCompositionCamera() : Camera.main;
-#endif
             if (cam == null)
                 return false;
 

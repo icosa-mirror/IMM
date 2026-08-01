@@ -17,16 +17,9 @@ namespace ImmPlayer
         internal Camera PresentationCamera { get; set; }
         internal CommandBuffer PresentationCommandBuffer { get; set; }
         internal Material PresentationMaterial { get; set; }
-        internal Camera SourceCamera { get; set; }
-        internal string SourceCameraTag { get; set; }
-        internal bool ReassignedMainCameraTag { get; set; }
 
         private void OnDestroy()
         {
-            if (ReassignedMainCameraTag && SourceCamera != null)
-            {
-                SourceCamera.tag = SourceCameraTag;
-            }
             if (PresentationCamera != null && PresentationCommandBuffer != null)
             {
                 PresentationCamera.RemoveCommandBuffer(
@@ -907,7 +900,7 @@ namespace ImmPlayer
             presentationTarget.Create();
 
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
-            presenterObject.transform.SetParent(cam.transform, false);
+            presenterObject.transform.SetParent(transform, false);
             Camera presenterCamera = presenterObject.AddComponent<Camera>();
             // The final camera owns the backbuffer. It runs after the native
             // camera, which renders only to its explicit source RT, and draws a
@@ -958,21 +951,10 @@ namespace ImmPlayer
             };
             presentationQuad.GetComponent<MeshRenderer>().sharedMaterial = presentationMaterial;
 
-            bool reassignMainCameraTag = cam.CompareTag("MainCamera");
-            string sourceCameraTag = cam.tag;
-            if (reassignMainCameraTag)
-            {
-                cam.tag = "Untagged";
-                presenterObject.tag = "MainCamera";
-            }
-
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
             presenter.PresentationTarget = presentationTarget;
             presenter.PresentationCamera = presenterCamera;
             presenter.PresentationMaterial = presentationMaterial;
-            presenter.SourceCamera = cam;
-            presenter.SourceCameraTag = sourceCameraTag;
-            presenter.ReassignedMainCameraTag = reassignMainCameraTag;
             _vulkanPresentationCameras[cam] = presenter;
 
             Debug.Log(
@@ -985,7 +967,6 @@ namespace ImmPlayer
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
                 $"shader={presentationShader.name} layer={presentationQuad.layer} " +
                 $"forceIntoRenderTexture={presenterCamera.forceIntoRenderTexture} " +
-                $"mainCameraTagReassigned={reassignMainCameraTag} " +
                 $"screen={Screen.width}x{Screen.height} presenterPixels={presenterCamera.pixelWidth}x{presenterCamera.pixelHeight}");
             return target;
 #else
@@ -994,18 +975,6 @@ namespace ImmPlayer
         }
 
 #if IMM_UNITY_ANDROID_VULKAN_CI
-        public Camera GetAndroidVulkanSourceCameraForValidation()
-        {
-            if (renderCamera != null && _vulkanPresentationTargets.ContainsKey(renderCamera))
-                return renderCamera;
-            foreach (KeyValuePair<Camera, RenderTexture> entry in _vulkanPresentationTargets)
-            {
-                if (entry.Key != null && entry.Value != null)
-                    return entry.Key;
-            }
-            return null;
-        }
-
         public bool BeginAndroidVulkanSurfaceProbeForValidation(Camera cam)
         {
             if (cam == null ||
