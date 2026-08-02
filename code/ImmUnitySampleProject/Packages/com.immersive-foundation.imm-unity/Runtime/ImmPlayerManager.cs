@@ -1163,10 +1163,13 @@ namespace ImmPlayer
 
         public RenderTexture GetAndroidVulkanUnityPresentationTargetForValidation(Camera cam)
         {
-            // The fork composites directly into Unity's camera target. There is no
-            // second texture containing both IMM and Unity geometry, so callers
-            // must capture the presented frame for composition diagnostics.
-            return null;
+            if (!_flatAndroidVulkanSharedDepthComposition)
+                return null;
+
+            // Shared-depth validation draws the Unity probes into the same explicit
+            // color/depth target that receives the native IMM render. Unity then
+            // presents this composed target through the normal Android camera path.
+            return GetAndroidVulkanPresentationTargetForValidation(cam);
         }
 
         private bool ShouldRenderCamera(Camera cam)

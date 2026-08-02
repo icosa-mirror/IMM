@@ -171,6 +171,9 @@ def main() -> int:
             "private void OnRenderImage(RenderTexture source, RenderTexture destination)",
             "Material composite = GetVulkanCompositeMaterial();",
             "Graphics.Blit(eyeTarget, destination, composite);",
+            "SetFlatAndroidVulkanSharedDepthCompositionForValidation",
+            "if (!_flatAndroidVulkanSharedDepthComposition)",
+            "return GetAndroidVulkanPresentationTargetForValidation(cam);",
             "SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan",
             "ImmNativePlugin.SetVulkanDedicatedQueueAllowed(allowDedicatedVulkanQueue ? 1 : 0)",
             "[IMM_UNITY_VK_ONRENDERIMAGE_20260802]",
@@ -280,6 +283,27 @@ def main() -> int:
     ):
         errors.append(
             "Unity composition playback must be frozen before its render candidate is captured"
+        )
+
+    unity_manager = (
+        ROOT
+        / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs"
+    ).read_text(encoding="utf-8")
+    shared_target_method = unity_manager.find(
+        "public RenderTexture GetAndroidVulkanUnityPresentationTargetForValidation(Camera cam)"
+    )
+    shared_target_return = unity_manager.find(
+        "return GetAndroidVulkanPresentationTargetForValidation(cam);",
+        shared_target_method,
+    )
+    next_method = unity_manager.find("\n        private ", shared_target_method)
+    if (
+        shared_target_method < 0
+        or shared_target_return < 0
+        or (next_method >= 0 and shared_target_return > next_method)
+    ):
+        errors.append(
+            "Unity Android Vulkan shared-depth validation must expose its composed offscreen target"
         )
 
     windows_godot_smoke = (
