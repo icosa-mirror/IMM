@@ -98,6 +98,7 @@ def main() -> int:
             "model=akita,version=34",
             "Build Unity Android Vulkan smoke player",
             "Restore cached Unity Android Vulkan shell APK",
+            "steps.cache_unity_android_vulkan_shell.outputs.cache-primary-key",
             "Inject same-commit plugin into Unity Android Vulkan shell APK",
             "repack_android_native_library.py",
             'work_dir="${RUNNER_TEMP}/unity-android-vulkan-repack"',

@@ -1327,7 +1327,9 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
-          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+          # Reuse the pre-build key. Unity mutates project files during a build,
+          # so recomputing hashFiles here would save under an unrestorable key.
+          key: ${{ steps.cache_unity_android_vulkan_shell.outputs.cache-primary-key }}
 
       - name: Inject same-commit plugin into Unity Android Vulkan shell APK
         shell: bash
