@@ -20,7 +20,6 @@ def main() -> int:
         ROOT / "tests/tools/prepare_unity_ci_project.py": [
             '"com.unity.test-framework": "1.1.33"',
             '"com.unity.xr.management": "4.5.4"',
-            '"com.unity.xr.openxr": "1.14.3"',
             "strip_android_xr_manifest(output)",
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs": [
@@ -231,6 +230,12 @@ def main() -> int:
         missing = require_tokens(path, tokens)
         for token in missing:
             errors.append(f"{path.relative_to(ROOT)} missing token: {token}")
+
+    unity_ci_preparer = (
+        ROOT / "tests/tools/prepare_unity_ci_project.py"
+    ).read_text(encoding="utf-8")
+    if '"com.unity.xr.openxr"' in unity_ci_preparer:
+        errors.append("Clean non-XR Unity CI project must not install the OpenXR package")
 
     unity_native = (
         ROOT / "code/appImmUnity/src/main.cpp"
