@@ -717,11 +717,10 @@ namespace ImmPlayer
                 return CameraEvent.BeforeForwardOpaque;
 
 #if UNITY_ANDROID
-            // The terminal event can run after Unity has discarded or restarted
-            // the camera depth attachment, while AfterSkybox is not replayed for
-            // the sample's solid-color camera. Record after opaque geometry so
-            // the event always runs with the populated composition depth target.
-            return CameraEvent.AfterForwardOpaque;
+            // IMM writes the explicit RenderTexture's color and depth first.
+            // Unity then draws its opaque geometry against that same depth
+            // image, so Unity owns the cross-engine depth comparison.
+            return CameraEvent.BeforeForwardOpaque;
 #else
             return CameraEvent.AfterSkybox;
 #endif
@@ -1216,7 +1215,7 @@ namespace ImmPlayer
                 // Android Vulkan display render buffers are not portable plugin
                 // render targets. Render into the explicit camera RenderTexture
                 // by default; Unity owns its final presentation to the display.
-                bool useHostRenderPass = true;
+                bool useHostRenderPass = false;
                 if (useHostRenderPass)
                 {
                     int prepareEventId = (info.CameraId << 8) | VulkanPrepareEventFlag;

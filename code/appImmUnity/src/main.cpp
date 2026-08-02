@@ -432,9 +432,10 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    config.renderPassPrecondition = prepareEvent
-        ? kUnityVulkanRenderPass_EnsureOutside
-        : kUnityVulkanRenderPass_EnsureInside;
+    // Android renders IMM into the explicit camera RenderTexture before Unity
+    // opaque geometry. Both preparation and IMM's own render pass must start
+    // outside Unity's render pass.
+    config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
 #endif
@@ -1255,7 +1256,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         }
         const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
 #if defined(__ANDROID__) || defined(ANDROID)
-        iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
+        iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
 #else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {
@@ -1768,14 +1769,9 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;
-        // Android Unity's explicit RenderTexture camera pass uses the
-        // traditional less/clear-to-one convention exposed to native plugin
-        // events. Windows Unity Vulkan retains reversed Z.
-#if defined(__ANDROID__) || defined(ANDROID)
-        config.reverseDepthBuffer = false;
-#else
+        // GL.GetGPUProjectionMatrix supplies Unity's reversed-Z Vulkan
+        // projection for both Android and Windows.
         config.reverseDepthBuffer = true;
-#endif
         config.initializeRendererOnInit = true;
         config.initializeFullscreen = false;
     }
