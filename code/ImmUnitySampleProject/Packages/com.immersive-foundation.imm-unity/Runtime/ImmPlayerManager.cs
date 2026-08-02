@@ -1490,7 +1490,7 @@ namespace ImmPlayer
                 // races the render-thread event between its prepare and its eye render
                 // (no native lock on Android) - the player's global head state can be
                 // overwritten mid-eye, splitting the two eyes' views.
-                if (!useOffscreenTargets)
+                if (!useOffscreenTargets || _flatAndroidVulkanSharedDepthComposition)
                 {
                     int prepared = IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_PREPARE")
                         ? 0
@@ -1520,7 +1520,10 @@ namespace ImmPlayer
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
-                bool useCustomBlit = (useHostComposition || IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT")) &&
+                bool useSharedDepthHostRecording =
+                    _flatAndroidVulkanSharedDepthComposition && UsesFlatAndroidVulkanPresenter(cam);
+                bool useCustomBlit = (useHostComposition || useSharedDepthHostRecording ||
+                    IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT")) &&
                     !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
                 bool bindCameraTarget = !useHostComposition && !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
@@ -1537,12 +1540,42 @@ namespace ImmPlayer
                 }
                 if (useCustomBlit && _renderEventAndDataFunc != IntPtr.Zero)
                 {
+                    RenderTargetIdentifier customBlitTarget = cameraTarget;
+                    if (useSharedDepthHostRecording)
+                    {
+                        RenderTexture sharedTarget = info.VulkanEyeTargets[eyeIndex & 1];
+                        if (sharedTarget != null && sharedTarget.depth > 0)
+                        {
+                            customBlitTarget = new RenderTargetIdentifier(sharedTarget);
+                            info.CommandBuffer.SetRenderTarget(customBlitTarget);
+                            info.CommandBuffer.ClearRenderTarget(true, true, Color.clear, 0.0f);
+                        }
+                        else
+                        {
+                            Debug.LogError(
+                                $"[IMM_UNITY_ANDROID_VK_SHARED_RECORDING_20260802] " +
+                                $"missing target camera={cam.name} eye={eyeIndex}");
+                        }
+                    }
                     if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(VulkanCustomBlitEventId))
                     {
                         int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(VulkanCustomBlitEventId);
                         Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={VulkanCustomBlitEventId} configured={configured}");
                     }
-                    info.CommandBuffer.IssuePluginCustomBlit(_renderEventAndDataFunc, (uint)eventId, cameraTarget, cameraTarget, 0, 0);
+                    info.CommandBuffer.IssuePluginCustomBlit(
+                        _renderEventAndDataFunc,
+                        (uint)eventId,
+                        customBlitTarget,
+                        customBlitTarget,
+                        0,
+                        0);
+                    if (useSharedDepthHostRecording && _vulkanCompositeLogCount < 8)
+                    {
+                        ++_vulkanCompositeLogCount;
+                        Debug.Log(
+                            $"[IMM_UNITY_ANDROID_VK_SHARED_RECORDING_20260802] " +
+                            $"frame={Time.frameCount} camera={cam.name} eye={eyeIndex} target=offscreen");
+                    }
                 }
                 else
                 {
