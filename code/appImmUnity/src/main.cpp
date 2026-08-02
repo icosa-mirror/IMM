@@ -903,12 +903,18 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const bool hostRenderPassHasDepth = iEnvFlagEnabled("IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH") || assumeHostDepth;
     const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // The active camera render pass owns a live reverse-Z depth attachment.
+    // The active camera render pass owns a live depth attachment.
     // Render inside that pass so IMM and subsequent Unity geometry share the
     // same depth values without reopening an Android depth image.
     const bool useHostDepth = hasDepthAttachment;
 #else
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
+#endif
+    const bool hostDepthReverseZ =
+#if defined(__ANDROID__) || defined(ANDROID)
+        false;
+#else
+        useHostDepth;
 #endif
     if (sUnityVulkanRenderTargetDiagnosticCount < 24)
     {
@@ -936,9 +942,10 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_ANDROID_VK_HOST_DEPTH_20260801] hasDepthAttachment=%d useHostDepth=%d",
+            L"[IMM_UNITY_ANDROID_VK_HOST_DEPTH_20260801] hasDepthAttachment=%d useHostDepth=%d reverseZ=%d",
             hasDepthAttachment ? 1 : 0,
-            useHostDepth ? 1 : 0);
+            useHostDepth ? 1 : 0,
+            hostDepthReverseZ ? 1 : 0);
     }
 #endif
 
@@ -954,7 +961,7 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
             colorSamples,
             hasDepthAttachment,
             useHostDepth,
-            useHostDepth,
+            hostDepthReverseZ,
             recordingState.subPassIndex >= 0 ? static_cast<uint32_t>(recordingState.subPassIndex) : 0u,
             width,
             height))
@@ -1761,9 +1768,14 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;
-        // ImmPlayerManager passes Vulkan's zero-to-one, reversed-Z
-        // GL.GetGPUProjectionMatrix output.
+        // Android Unity's explicit RenderTexture camera pass uses the
+        // traditional less/clear-to-one convention exposed to native plugin
+        // events. Windows Unity Vulkan retains reversed Z.
+#if defined(__ANDROID__) || defined(ANDROID)
+        config.reverseDepthBuffer = false;
+#else
         config.reverseDepthBuffer = true;
+#endif
         config.initializeRendererOnInit = true;
         config.initializeFullscreen = false;
     }
