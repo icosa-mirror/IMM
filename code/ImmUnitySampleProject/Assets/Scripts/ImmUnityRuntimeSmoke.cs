@@ -223,6 +223,19 @@ namespace ImmPlayer
 
             if (_compositionProbeEnabled)
             {
+#if IMM_UNITY_ANDROID_VULKAN_CI
+                if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan)
+                {
+                    ImmPlayerManager compositionManager = FindObjectOfType<ImmPlayerManager>();
+                    if (compositionManager != null)
+                    {
+                        compositionManager.SetFlatAndroidVulkanHostCompositionForValidation(true);
+                        // Let the camera rebuild its command buffer for the host-pass
+                        // phase before adding the explicitly ordered probe draws.
+                        yield return null;
+                    }
+                }
+#endif
                 if (_overlayProbeEnabled)
                 {
                     ConfigureRuntimeOverlayFixtureIfRequested();

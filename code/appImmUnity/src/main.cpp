@@ -478,15 +478,27 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // On Quest, any non-passive event config (EnsureInside/ModifiesCommandBuffersState)
-    // makes Unity run XRDisplaySubsystem AfterRendering -> FinalizeFrameForExternalPresent
-    // when dispatching the event marker - mid-frame - which double-signals Unity's frame
-    // semaphore and breaks compositor pacing (validation-layer confirmed). IMM renders on
-    // its own queue and only observes resources, so a pure passive marker is correct.
-    (void)prepareEvent;
-    config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
-    config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
-    config.flags = 0;
+    if (eventID == kUnityVulkanCustomBlitEventID)
+    {
+        // Flat Android composition records directly into Unity's active camera
+        // pass. This event never runs on the XR offscreen path, whose passive
+        // marker contract must remain unchanged for Quest frame pacing.
+        config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureInside;
+        config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
+        config.flags = kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
+    }
+    else
+    {
+        // On Quest, any non-passive event config (EnsureInside/ModifiesCommandBuffersState)
+        // makes Unity run XRDisplaySubsystem AfterRendering -> FinalizeFrameForExternalPresent
+        // when dispatching the event marker - mid-frame - which double-signals Unity's frame
+        // semaphore and breaks compositor pacing (validation-layer confirmed). IMM renders on
+        // its own queue and only observes resources, so a pure passive marker is correct.
+        (void)prepareEvent;
+        config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
+        config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
+        config.flags = 0;
+    }
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
     if (!prepareEvent && iEnvFlagEnabled("IMM_UNITY_VK_DONTCARE_RENDERPASS"))
@@ -921,7 +933,13 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
 
     const int width = target.width;
     const int height = target.height;
-    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 44u); // Default VK_FORMAT_B8G8R8A8_UNORM; Unity's render pass defines pipeline compatibility.
+#if defined(__ANDROID__) || defined(ANDROID)
+    // Unity's Android camera pass reports VK_FORMAT_R8G8B8A8_SRGB (43).
+    // Graphics pipelines recorded into the host pass must use its exact format.
+    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 43u);
+#else
+    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 44u);
+#endif
     const uint32_t colorSamples = static_cast<uint32_t>(target.samples > 0 ? target.samples : 1);
     const bool assumeHostDepth = iEnvFlagEnabled("IMM_UNITY_VK_ASSUME_HOST_DEPTH");
     // Unity's host render pass (camera target / XR eye buffer) has a depth attachment in practice
@@ -931,7 +949,13 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     // depth-less pass is ignored - so default to declaring depth.
     const bool hostRenderPassHasDepth = !iEnvFlagEnabled("IMM_UNITY_VK_NO_HOST_DEPTH_ATTACHMENT");
     const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth || assumeHostDepth;
+#if defined(__ANDROID__) || defined(ANDROID)
+    // Unity Vulkan uses reversed Z and the custom-blit composition callback is
+    // inside the camera pass with its depth attachment bound.
+    const bool useHostDepth = hasDepthAttachment;
+#else
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
+#endif
     if (sUnityVulkanRenderTargetDiagnosticCount < 24 || hostRenderPassChanged)
     {
         iLog().Printf(

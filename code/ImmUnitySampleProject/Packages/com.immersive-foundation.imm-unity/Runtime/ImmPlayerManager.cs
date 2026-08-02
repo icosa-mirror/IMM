@@ -156,6 +156,7 @@ namespace ImmPlayer
         private bool _useCameraCallbackRendering = false;
         private Coroutine _vulkanSampleEventCoroutine = null;
         private int _appleMetalEventLogCount = 0;
+        private bool _flatAndroidVulkanHostComposition;
         private static Mesh _vulkanOverlayFixtureMesh;
         private static Material _vulkanOverlayFixtureMaterial;
 
@@ -1053,13 +1054,31 @@ namespace ImmPlayer
                 : CameraEvent.AfterForwardOpaque;
         }
 
-        private static bool UsesFlatAndroidVulkanPresenter(Camera cam)
+        private static bool IsFlatAndroidVulkanCamera(Camera cam)
         {
             return Application.platform == RuntimePlatform.Android &&
                    IsVulkanRuntime() &&
                    cam != null &&
                    !cam.stereoEnabled &&
                    !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET");
+        }
+
+        private bool UsesFlatAndroidVulkanHostComposition(Camera cam)
+        {
+            return _flatAndroidVulkanHostComposition && IsFlatAndroidVulkanCamera(cam);
+        }
+
+        private bool UsesFlatAndroidVulkanPresenter(Camera cam)
+        {
+            return IsFlatAndroidVulkanCamera(cam) && !UsesFlatAndroidVulkanHostComposition(cam);
+        }
+
+        public void SetFlatAndroidVulkanHostCompositionForValidation(bool enabled)
+        {
+            _flatAndroidVulkanHostComposition = enabled;
+            Debug.Log(
+                $"[IMM_UNITY_ANDROID_VK_HOST_COMPOSITION_20260802] enabled={(enabled ? 1 : 0)} " +
+                $"frame={Time.frameCount}");
         }
 
         private void EnsureFlatAndroidVulkanPresenter(Camera cam)
@@ -1369,7 +1388,10 @@ namespace ImmPlayer
                 int vulkanEye = 0;
                 if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled && cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right)
                     vulkanEye = 1;
-                bool useOffscreenTargets = Application.platform == RuntimePlatform.Android && !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET");
+                bool useHostComposition = UsesFlatAndroidVulkanHostComposition(cam);
+                bool useOffscreenTargets = Application.platform == RuntimePlatform.Android &&
+                    !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET") &&
+                    !useHostComposition;
 
                 if (useOffscreenTargets)
                 {
@@ -1474,8 +1496,9 @@ namespace ImmPlayer
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
-                bool useCustomBlit = IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT") && !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
-                bool bindCameraTarget = !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
+                bool useCustomBlit = (useHostComposition || IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT")) &&
+                    !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
+                bool bindCameraTarget = !useHostComposition && !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {

@@ -9213,7 +9213,11 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
     mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameRenderTarget = target;
+#if defined(__ANDROID__) || defined(ANDROID)
+    const bool useHostDepthReverseZ = useHostDepth;
+#else
     const bool useHostDepthReverseZ = iRendererFlagEnabled("IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z");
+#endif
     mState->externalFrameUsesHostDepth = useHostDepth;
     mState->externalFrameHostDepthReverseZ = useHostDepth && useHostDepthReverseZ;
     mState->externalFramePreservesHostColor = true;
