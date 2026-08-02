@@ -668,6 +668,7 @@ namespace ImmPlayer
         }
 
         private Material _vulkanCompositeMaterial;
+        private int _vulkanCompositeLogCount;
 
         // Returns the WRITE buffer for this frame (handed to the native renderer)
         // and updates VulkanEyeTargets[eye] to the READ buffer Unity samples
@@ -1460,8 +1461,15 @@ namespace ImmPlayer
                             // (fence-completed on IMM's own queue before the callback returns);
                             // composite it into the eye buffer inside Unity's own pass.
                             info.CommandBuffer.Blit(eyeTarget, cameraTarget, composite);
-                            if (_preCullCount <= 12)
-                                Debug.Log($"[IMM_UNITY_VK_BLIT] n={_preCullCount} eye={eyeIndex} blitEye={blitEye} rt={eyeTarget.GetInstanceID()} colorPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
+                            if (_vulkanCompositeLogCount < 8)
+                            {
+                                ++_vulkanCompositeLogCount;
+                                Debug.Log(
+                                    $"[IMM_UNITY_VK_COMPOSITE_20260802] frame={Time.frameCount} eye={eyeIndex} " +
+                                    $"blitEye={blitEye} rt={eyeTarget.GetInstanceID()} " +
+                                    $"shader={composite.shader.name} supported={composite.shader.isSupported} " +
+                                    $"colorPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
+                            }
                         }
                     }
                 }

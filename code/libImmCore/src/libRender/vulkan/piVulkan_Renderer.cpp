@@ -7946,7 +7946,7 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
         }
         else
         {
-            iReport(mReporter, "[IMM_UNITY_VK_QUEUE_20260802] mode=host reason=dedicated-queue-not-authorized");
+            iReport(mReporter, "[IMM_UNITY_VK_QUEUE_20260802] mode=host reason=dedicated-queue-not-authorized layoutOwner=unity");
         }
 #endif
         mState->initialized = true;
@@ -9054,6 +9054,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
     if (mState->batchRecording)
     {
         mState->batchAppendShaderReadTransition =
+            mState->ownsDedicatedQueue &&
             iBatchedTransitionEnabled(mState) &&
             !mState->externalFramePreservesHostColor &&
             mState->externalFrameColorTexture != nullptr;
@@ -9064,7 +9065,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
         // reads become sound without any CPU stall.
         VkSemaphore bridgeSemaphore = VK_NULL_SEMAPHORE;
         const int flushSlot = mState->batchCurrentSlot;
-        if (flushSlot >= 0 && iCompositeBridgeEnabled(mState))
+        if (mState->ownsDedicatedQueue && flushSlot >= 0 && iCompositeBridgeEnabled(mState))
             bridgeSemaphore = mState->batchRingBridgeSemaphores[flushSlot];
         const bool flushed = iFlushBatch(mState, mReporter, "end-of-eye", bridgeSemaphore);
         if (flushed && bridgeSemaphore != VK_NULL_SEMAPHORE)
@@ -9120,6 +9121,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
         iReport(mReporter, message);
     }
     if (mState->externalFrameColorTexture &&
+        mState->ownsDedicatedQueue &&
         !mState->externalFramePreservesHostColor &&
         mState->externalFrameColorTexture->imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
         !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))
