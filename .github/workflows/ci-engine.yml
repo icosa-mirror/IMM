@@ -1434,6 +1434,16 @@ jobs:
           model_id="${model_id%%,*}"
           gcloud firebase test android models describe "$model_id"
 
+      - name: Install physical-device video validator dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes ffmpeg
+          fi
+          ffmpeg -version
+
       - name: Run Unity Android Vulkan smoke in Firebase Test Lab
         timeout-minutes: 30
         shell: bash
