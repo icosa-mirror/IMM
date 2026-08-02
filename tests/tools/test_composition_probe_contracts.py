@@ -40,6 +40,8 @@ def main() -> int:
             "? CaptureScreenTexture()",
             "frameCount = 90;",
             "[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729]",
+            "[IMM_UNITY_ANDROID_VK_ORDERED_DEPTH_PROBES_20260802]",
+            "ordering=imm-then-unity-probes",
             "FindObjectOfType<ImmFeatureExamples>()",
             "FreezeCompositionPlaybackIfRequested();",
         ],
