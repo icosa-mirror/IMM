@@ -214,6 +214,7 @@ def main() -> int:
             "iRetireGraphicsPipeline(",
             "iCollectBorrowedPipelines(",
             "[IMM_UNITY_VK_DEFER_PIPELINE_20260731]",
+            "[IMM_UNITY_ANDROID_VK_FORCE_NEAR_DEPTH_20260802]",
         ],
         ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm": [
             "if (mState->unityProjectionAdjusted)",

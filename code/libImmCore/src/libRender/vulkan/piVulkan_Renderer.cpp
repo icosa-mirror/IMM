@@ -4299,6 +4299,24 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     viewport.height = -(float)target->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
+#if defined(__ANDROID__) || defined(ANDROID)
+    // Diagnostic control for Unity Android Vulkan composition. Collapse only
+    // IMM geometry draws to reversed-Z near; picture draws use their separate
+    // submission path and retain their normal far-backdrop depth. If Unity's
+    // explicitly ordered probes are then rejected, the shared attachment and
+    // native depth writes are sound and the defect is projected depth values.
+    if (state->externalFrameUsesHostDepth && target == state->externalFrameRenderTarget)
+    {
+        viewport.minDepth = 1.0f;
+        viewport.maxDepth = 1.0f;
+        static bool reportedForcedNearDepth = false;
+        if (!reportedForcedNearDepth)
+        {
+            reportedForcedNearDepth = true;
+            iReport(reporter, "[IMM_UNITY_ANDROID_VK_FORCE_NEAR_DEPTH_20260802] static geometry viewport depth=1");
+        }
+    }
+#endif
     VkRect2D scissor = {};
     scissor.offset.x = 0;
     scissor.offset.y = 0;
