@@ -1249,6 +1249,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up JDK for APK re-signing
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Download same-commit Android Unity native plugin
         uses: actions/download-artifact@v4
         with:
@@ -1266,6 +1272,13 @@ jobs:
           fi
           destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
           cp "$plugin" "$destination"
+
+      - name: Restore cached Unity Android Vulkan shell APK
+        id: cache_unity_android_vulkan_shell
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
 
       - name: Restore Unity Android Library cache
         id: cache_unity_android_library
@@ -1294,6 +1307,7 @@ jobs:
 
       - name: Build Unity Android Vulkan smoke player
         id: unity_android_vulkan_build
+        if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true'
         timeout-minutes: 30
         uses: game-ci/unity-builder@v4
         env:
@@ -1306,7 +1320,56 @@ jobs:
           targetPlatform: Android
           versioning: None
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidVulkanSmokePlayer
-          customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-android-vulkan/ImmUnitySmoke.apk
+          customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-editor.log -immSmokePlayerPath /github/workspace/.ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+
+      - name: Save Unity Android Vulkan shell APK cache
+        if: steps.cache_unity_android_vulkan_shell.outputs.cache-hit != 'true' && steps.unity_android_vulkan_build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk
+          key: UnityAndroidVulkanShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+
+      - name: Inject same-commit plugin into Unity Android Vulkan shell APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_apk=".ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk"
+          plugin="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          work_dir=".ci-cache/unity-android-vulkan-repack"
+          unsigned_apk="$work_dir/ImmUnitySmoke-unsigned.apk"
+          aligned_apk="$work_dir/ImmUnitySmoke-aligned.apk"
+          output_apk="artifacts/unity-android-vulkan/ImmUnitySmoke.apk"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          if [ -z "$build_tools" ] || [ ! -x "$build_tools/zipalign" ] || [ ! -x "$build_tools/apksigner" ]; then
+            echo "Android SDK zipalign/apksigner tools were not found"
+            exit 1
+          fi
+          mkdir -p "$work_dir" "$(dirname "$output_apk")"
+          python tests/tools/repack_android_native_library.py \
+            --input-apk "$shell_apk" \
+            --library "$plugin" \
+            --entry lib/arm64-v8a/libImmUnityPlugin.so \
+            --output-apk "$unsigned_apk"
+          "$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" "$aligned_apk"
+          if [ ! -f "$work_dir/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$work_dir/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -noprompt
+          fi
+          "$build_tools/apksigner" sign \
+            --ks "$work_dir/debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$output_apk" \
+            "$aligned_apk"
+          "$build_tools/apksigner" verify --verbose "$output_apk"
 
       - name: Check Firebase Test Lab configuration
         env:
