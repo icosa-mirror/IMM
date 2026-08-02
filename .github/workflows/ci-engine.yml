@@ -1335,7 +1335,9 @@ jobs:
           set -euo pipefail
           shell_apk=".ci-cache/unity-android-vulkan-shell/ImmUnitySmoke.apk"
           plugin="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
-          work_dir=".ci-cache/unity-android-vulkan-repack"
+          # game-ci's Docker container can leave .ci-cache root-owned. Keep all
+          # mutable repack/signing files in GitHub's runner-owned temp directory.
+          work_dir="${RUNNER_TEMP}/unity-android-vulkan-repack"
           unsigned_apk="$work_dir/ImmUnitySmoke-unsigned.apk"
           aligned_apk="$work_dir/ImmUnitySmoke-aligned.apk"
           output_apk="artifacts/unity-android-vulkan/ImmUnitySmoke.apk"

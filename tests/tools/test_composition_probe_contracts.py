@@ -100,6 +100,7 @@ def main() -> int:
             "Restore cached Unity Android Vulkan shell APK",
             "Inject same-commit plugin into Unity Android Vulkan shell APK",
             "repack_android_native_library.py",
+            'work_dir="${RUNNER_TEMP}/unity-android-vulkan-repack"',
             'zipalign" -P 16',
             'apksigner" verify',
             "Run Unity Android Vulkan smoke in Firebase Test Lab",
