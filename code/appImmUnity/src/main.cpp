@@ -85,8 +85,6 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
-#include <chrono>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -101,11 +99,18 @@
 #include <string>
 #endif
 #include "IUnityGraphics.h"
+// Unity<->IMM Vulkan overlay integration is available on Windows (desktop) and
+// Android (Quest). The Unity Vulkan interface header is self-contained (defines
+// its own Vk* typedefs) and the Vulkan renderer is already built into the arm64
+// library, so the same glue compiles for both.
+#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#define IMM_UNITY_VULKAN 1
+#endif
 #if defined(WINDOWS)
 #include "IUnityGraphicsD3D11.h"
 #include "IUnityGraphicsD3D12.h"
 #endif
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
 #include "IUnityGraphicsVulkanMinimal.h"
 #include "libImmCore/src/libRender/vulkan/piVulkan_Renderer.h"
 #endif
@@ -124,6 +129,9 @@ using namespace ImmPlayer;
 #define _stdcall
 #include <android/log.h>
 #include <GLES3/gl3.h>
+#include <sys/system_properties.h>
+#include <cstdio>
+#include <cstdlib>
 #endif
 
 #if defined(WINDOWS)
@@ -203,18 +211,20 @@ struct ImmUnityPlugin
 			IUnityGraphics   * mGraphics = nullptr;
 			void             * mDevice = nullptr;
 	        UnityGfxRenderer mRenderer = kUnityGfxRendererNull;
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
             IUnityGraphicsVulkan *mVulkan = nullptr;
             UnityVulkanInstance mVulkanInstance = {};
+            // Indexed [camera][eye] - on Quest each eye renders to its own offscreen
+            // RenderTexture that Unity later composites; desktop keeps one target and
+            // the legacy setter fills both eye slots identically.
             struct
             {
                 UnityRenderBuffer color = nullptr;
-                void *colorTexture = nullptr;
                 UnityRenderBuffer depth = nullptr;
                 int width = 0;
                 int height = 0;
                 int samples = 1;
-            } mVulkanCameraTarget[256];
+            } mVulkanCameraTarget[256][2];
 #endif
 #if defined(__APPLE__)
 	        IUnityGraphicsMetalV2 *mMetalV2 = nullptr;
@@ -264,19 +274,18 @@ static struct {
 	int colorSpace = 0;
 	int antialiasing = 8;
 } sAndroidDeferredInit;
+static bool sAllowDedicatedVulkanQueue = false;
 
 // Called on render thread to complete initialization
 static bool AndroidCompleteInit() {
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "AndroidCompleteInit - completing deferred init on render thread");
-
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Initializing GLES renderer...");
+	const bool isVulkan = (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan);
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "AndroidCompleteInit - completing deferred init on render thread (api=%s)", isVulkan ? "Vulkan" : "GLES");
 	if (!gImmUnityPlugin.mBridge.CompleteGraphicsInitialization())
 	{
-		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to initialize GLES renderer in deferred init");
+		__android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Failed to initialize %s renderer in deferred init", isVulkan ? "Vulkan" : "GLES");
 		return false;
 	}
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "GLES renderer initialized in deferred init");
-	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "ImmPlayer initialized in deferred init - SUCCESS");
+	__android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "%s renderer initialized in deferred init - SUCCESS", isVulkan ? "Vulkan" : "GLES");
 
 	sAndroidDeferredInit.isInitialized = true;
 	sAndroidDeferredInit.needsInit = false;
@@ -284,7 +293,7 @@ static bool AndroidCompleteInit() {
 }
 #endif
 
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
 static constexpr int kUnityVulkanPrepareEventFlag = 0x80;
 static constexpr int kUnityVulkanCustomBlitEventID = 6;
 static void iConfigureUnityVulkanEvent(int eventID, bool logEvent);
@@ -335,32 +344,26 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 		{
 			gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 		}
-        else if (apiType == kUnityGfxRendererVulkan)
-        {
-            gImmUnityPlugin.UnityAPI.mVulkan = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsVulkan>();
-            if (gImmUnityPlugin.UnityAPI.mVulkan)
-            {
-                gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
-                for (int cameraID = 0; cameraID < 256; ++cameraID)
-                {
-                    iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
-                    iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
-                    iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
-                }
-                iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
-            }
-            gImmUnityPlugin.UnityAPI.mDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
-            __android_log_print(
-                ANDROID_LOG_INFO,
-                "ImmUnityPlugin",
-                "Unity Android Vulkan interface initialized: interface=%p instance=%p physicalDevice=%p device=%p queue=%p family=%u",
-                gImmUnityPlugin.UnityAPI.mVulkan,
-                gImmUnityPlugin.UnityAPI.mVulkanInstance.instance,
-                gImmUnityPlugin.UnityAPI.mVulkanInstance.physicalDevice,
-                gImmUnityPlugin.UnityAPI.mVulkanInstance.device,
-                gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue,
-                gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex);
-        }
+		else if (apiType == kUnityGfxRendererVulkan)
+		{
+			// Quest runs Vulkan. Grab Unity's Vulkan interface + instance and
+			// configure the plugin render events, exactly as the desktop path
+			// does. The actual IMM Vulkan renderer is created later on the
+			// render thread (AndroidCompleteInit) using this external device.
+			gImmUnityPlugin.UnityAPI.mVulkan = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsVulkan>();
+			if (gImmUnityPlugin.UnityAPI.mVulkan)
+			{
+				gImmUnityPlugin.UnityAPI.mVulkanInstance = gImmUnityPlugin.UnityAPI.mVulkan->Instance();
+				for (int cameraID = 0; cameraID < 256; ++cameraID)
+				{
+					iConfigureUnityVulkanEvent((cameraID << 8) | 0, false);
+					iConfigureUnityVulkanEvent((cameraID << 8) | 1, false);
+					iConfigureUnityVulkanEvent((cameraID << 8) | kUnityVulkanPrepareEventFlag, false);
+				}
+				iConfigureUnityVulkanEvent(kUnityVulkanCustomBlitEventID, false);
+			}
+			gImmUnityPlugin.UnityAPI.mDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
+		}
 #else
 		if (apiType == kUnityGfxRendererOpenGLCore)
 		{
@@ -384,14 +387,6 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 	        {
 	            gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 	        }
-            std::fprintf(
-                stderr,
-                "IMM_UNITY_METAL_DEVICE_INIT renderer=%d v1=%d v2=%d device=%p\n",
-                static_cast<int>(apiType),
-                gImmUnityPlugin.UnityAPI.mMetal ? 1 : 0,
-                gImmUnityPlugin.UnityAPI.mMetalV2 ? 1 : 0,
-                gImmUnityPlugin.UnityAPI.mDevice);
-            std::fflush(stderr);
 		}
 #endif
 	}
@@ -404,15 +399,66 @@ static int sRenderEventCount = 0;
 static int sUnityMetalRenderReportCount = 0;
 static int sUnityMetalRenderBoundaryReportCount = 0;
 
+#if defined(__ANDROID__) || defined(ANDROID)
+// Environment variables never reach an Android app process, so every env-gated
+// debug/behavior toggle would be silently dead on Quest. Mirror each flag to an
+// adb-settable system property: `adb shell setprop debug.imm.<NAME> 1`.
+static const char *iAndroidPropertyValue(const char *name, char *buffer, size_t bufferSize)
+{
+    char propName[96];
+    std::snprintf(propName, sizeof(propName), "debug.imm.%s", name);
+    char propValue[PROP_VALUE_MAX] = {};
+    if (__system_property_get(propName, propValue) <= 0 || propValue[0] == '\0')
+    {
+        return nullptr;
+    }
+    std::snprintf(buffer, bufferSize, "%s", propValue);
+    return buffer;
+}
+#endif
+
+static const char *iRuntimeFlagValue(const char *name, char *buffer, size_t bufferSize)
+{
+    (void)buffer;
+    (void)bufferSize;
+    const char *value = std::getenv(name);
+    if (value != nullptr && value[0] != '\0')
+    {
+        return value;
+    }
+#if defined(__ANDROID__) || defined(ANDROID)
+    return iAndroidPropertyValue(name, buffer, bufferSize);
+#else
+    return nullptr;
+#endif
+}
+
+// The C# side parses the device flag file (imm_debug_flags.txt) and pushes
+// every entry here at boot. setenv makes the flags visible to EVERY
+// raw-getenv toggle across the player/renderer libs - on Android the
+// process env is otherwise empty and those toggles are silently dead.
+extern "C" void UNITY_INTERFACE_EXPORT SetRuntimeFlag(const char *name, const char *value)
+{
+    if (name == nullptr || name[0] == '\0')
+        return;
+#if defined(_WIN32)
+    _putenv_s(name, value != nullptr ? value : "");
+#else
+    setenv(name, value != nullptr ? value : "", 1);
+#endif
+}
+
 static bool iEnvFlagEnabled(const char *name)
 {
-    const char *value = std::getenv(name);
+    char buffer[96];
+    const char *value = iRuntimeFlagValue(name, buffer, sizeof(buffer));
     return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
 }
 
 static uint32_t iEnvUIntOrDefault(const char *name, uint32_t fallback)
 {
-    const char *value = std::getenv(name);
+    char buffer[96];
+    const char *value = iRuntimeFlagValue(name, buffer, sizeof(buffer));
     if (value == nullptr || value[0] == '\0')
     {
         return fallback;
@@ -426,30 +472,31 @@ static uint32_t iEnvUIntOrDefault(const char *name, uint32_t fallback)
     return static_cast<uint32_t>(parsed);
 }
 
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
 static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
 {
     UnityVulkanPluginEventConfig config = {};
     const bool prepareEvent = (eventID & kUnityVulkanPrepareEventFlag) != 0;
 #if defined(__ANDROID__) || defined(ANDROID)
-    // Android renders IMM into the explicit camera RenderTexture before Unity
-    // opaque geometry. Both preparation and IMM's own render pass must start
-    // outside Unity's render pass.
-    config.renderPassPrecondition = kUnityVulkanRenderPass_EnsureOutside;
+    // On Quest, any non-passive event config (EnsureInside/ModifiesCommandBuffersState)
+    // makes Unity run XRDisplaySubsystem AfterRendering -> FinalizeFrameForExternalPresent
+    // when dispatching the event marker - mid-frame - which double-signals Unity's frame
+    // semaphore and breaks compositor pacing (validation-layer confirmed). IMM renders on
+    // its own queue and only observes resources, so a pure passive marker is correct.
+    (void)prepareEvent;
+    config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
+    config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
+    config.flags = 0;
 #else
     config.renderPassPrecondition = prepareEvent ? kUnityVulkanRenderPass_EnsureOutside : kUnityVulkanRenderPass_EnsureInside;
-#endif
     if (!prepareEvent && iEnvFlagEnabled("IMM_UNITY_VK_DONTCARE_RENDERPASS"))
     {
         config.renderPassPrecondition = kUnityVulkanRenderPass_DontCare;
     }
     config.graphicsQueueAccess = kUnityVulkanGraphicsQueueAccess_DontCare;
-    // Match Unity's supported direct-recording sample: Unity must submit the
-    // preceding frame before plugin-owned buffers, descriptors, or pipelines
-    // are recycled using safeFrameNumber.
-    config.flags =
-        kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission |
-        kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
+    config.flags = prepareEvent
+        ? (kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission | kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState)
+        : kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
     if (iEnvFlagEnabled("IMM_UNITY_VK_NO_MODIFIES_STATE"))
     {
         config.flags &= ~kUnityVulkanEventConfigFlag_ModifiesCommandBuffersState;
@@ -458,6 +505,7 @@ static UnityVulkanPluginEventConfig iMakeUnityVulkanEventConfig(int eventID)
     {
         config.flags |= kUnityVulkanEventConfigFlag_EnsurePreviousFrameSubmission;
     }
+#endif
     return config;
 }
 
@@ -567,7 +615,7 @@ static bool IsReasonableBound3(const bound3& b)
 
 static void UNITY_INTERFACE_API iOnRenderEvent(int event_id);
 
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
 struct UnityVulkanRenderContext
 {
     piRenderer *renderer = nullptr;
@@ -585,8 +633,6 @@ struct UnityVulkanRenderContext
 
 static UnityVulkanRenderContext sUnityVulkanRenderContext[256];
 static int sUnityVulkanRenderTargetDiagnosticCount = 0;
-static std::atomic<bool> sUnityVulkanHostDrawBisectionEnabled(false);
-static std::atomic<uint32_t> sUnityVulkanHostDrawBisectionInvocation(0);
 static int sUnityVulkanCustomBlitDiagnosticCount = 0;
 
 struct UnityRenderingExtCustomBlitParamsMinimal
@@ -598,89 +644,99 @@ struct UnityRenderingExtCustomBlitParamsMinimal
     unsigned int commandFlags;
 };
 
-static bool iRecordUnityVulkanCamera(
-    UnityVulkanRenderContext *context,
-    VkCommandBuffer unityCommandBuffer,
-    uint64_t currentFrameNumber,
-    uint64_t safeFrameNumber)
+static int sUnityVulkanFrameSerial = 0;
+
+static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, void *data)
 {
-    const auto renderStart = std::chrono::steady_clock::now();
-    if (!context || !context->renderer || !unityCommandBuffer)
+    UnityVulkanRenderContext *context = static_cast<UnityVulkanRenderContext *>(data);
+    if (!context || !context->renderer)
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan command recording skipped: missing context or command buffer");
-        return false;
+        iLog().Printf(LT_ERROR, L"Unity Vulkan queue render skipped: missing context for event=%d", event_id);
+        return;
+    }
+    // A "frame begin" without its matching "Unity Vulkan render:" completion line
+    // pinpoints a hang inside this callback (no-timeout vkQueueSubmit etc.).
+    // Sampled like the per-eye [render] lines: full-rate begin logging alone was
+    // ~140 logcat lines/s (ship hygiene; a hang still shows as serial silence).
+    const int frameSerial = ++sUnityVulkanFrameSerial;
+    if (frameSerial <= 20 || (frameSerial % 60) == 0)
+        iLog().Printf(LT_MESSAGE, L"Unity Vulkan frame begin: serial=%d event=%d", frameSerial, event_id);
+    if ((frameSerial % 720) == 1)
+    {
+        // Head-pose tracer: world2Head follows the (possibly static) camera transform;
+        // XR head TRACKING flows through the per-eye stereo matrices. If world2LeftEye
+        // stays constant while the user looks around - or stereoType is not 1 - the
+        // C#->bridge feed lost tracking; if it changes, the renderer consumes it wrong.
+        const ImmShared::ImmEngineBridge::CameraState *cs = gImmUnityPlugin.mBridge.GetCameraState(context->cameraID);
+        if (cs)
+        {
+            const float *l = (const float *)&cs->world2LeftEye;
+            const float *r = (const float *)&cs->world2RightEye;
+            iLog().Printf(LT_MESSAGE, L"VK cam pose: serial=%d stereo=%d w2L=[%.3f %.3f %.3f %.3f] w2R=[%.3f %.3f %.3f %.3f]",
+                          frameSerial, cs->stereoType, l[0], l[1], l[2], l[3], r[0], r[1], r[2], r[3]);
+        }
     }
 
     piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(context->renderer);
-    if (!vulkanRenderer->BeginExternalImageCommandBufferFramePreserveColor(
-            unityCommandBuffer,
-            currentFrameNumber,
-            safeFrameNumber,
-            reinterpret_cast<void *>(static_cast<uintptr_t>(context->colorImage)),
-            context->colorFormat,
-            context->colorSamples,
-            reinterpret_cast<void *>(static_cast<uintptr_t>(context->depthImage)),
-            context->depthFormat,
-            context->depthSamples,
-            context->width,
-            context->height,
-            true))
+    // Offscreen-RT mode (Quest): IMM owns the whole target - clear and fully
+    // re-render it; EndExternalImageFrame leaves it SHADER_READ for Unity's
+    // composite pass to sample. A depth image here is the HOST (Unity XR)
+    // depth handed through for occlusion (IMM_UNITY_VK_HOST_DEPTH): the
+    // renderer decides attach-at-1x vs PRIME-at-4x; color semantics stay
+    // offscreen-clear either way (the old PreserveColor routing here rendered
+    // without clearing - trails - and is retired for eye frames).
+    const bool frameBegun = vulkanRenderer->BeginExternalImageFrame(
+        reinterpret_cast<void *>(static_cast<uintptr_t>(context->colorImage)),
+        context->colorFormat,
+        context->width,
+        context->height,
+        1,
+        reinterpret_cast<void *>(static_cast<uintptr_t>(context->depthImage)),
+        context->depthImage != 0 ? context->depthFormat : 0);
+    if (!frameBegun)
     {
-        iLog().Printf(
-            LT_ERROR,
-            L"Unity Vulkan command recording skipped: failed to begin borrowed command buffer frame for camera=%d",
-            context->cameraID);
-        return false;
+        iLog().Printf(LT_ERROR, L"Unity Vulkan queue render skipped: failed to begin external image frame for camera=%d", context->cameraID);
+        return;
     }
 
     const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
         0.0f, 0.0f, static_cast<float>(context->width), static_cast<float>(context->height), 0.0f, 1.0f, true
     };
     const int eyeID = context->eventID & 1;
+    // Per-eye logging is ~180 logcat lines/s at full rate (3 lines x 60 eyes):
+    // it wraps the ring buffer and costs real time on the render thread. Keep
+    // the first frames for boot diagnostics, then sample every 60th eye-frame
+    // (fps can still be derived from the sampled cadence: 60 eyes/interval).
+    static uint32_t sRenderLogCounter = 0;
+    // Sample period must be ODD: eyes alternate, so an even period (was 60)
+    // always lands on the SAME eye - every render line ever logged was eye 0
+    // and per-eye asymmetries (a backdrop present in one eye only) were
+    // invisible. 61 alternates.
+    const bool logThisEye = sRenderLogCounter < 20 || (sRenderLogCounter % 61u) == 0u;
+    ++sRenderLogCounter;
+    if (logThisEye)
+        iLog().Printf(LT_MESSAGE, L"Unity Vulkan frame stage: serial=%d target begun", frameSerial);
     const bool rendered = gImmUnityPlugin.mBridge.RenderCamera(context->cameraID, viewport, eyeID, true);
+    if (logThisEye)
+        iLog().Printf(LT_MESSAGE, L"Unity Vulkan frame stage: serial=%d camera rendered", frameSerial);
     vulkanRenderer->EndExternalImageFrame();
 
     const Player::PerformanceInfo &perf = iPlayer().GetPerformanceInfoForFrame();
-    static uint64_t renderReportCount = 0;
-    static uint64_t renderPerfFrames = 0;
-    static double renderPerfTotalMilliseconds = 0.0;
-    static double renderPerfMaxMilliseconds = 0.0;
-    const double renderMilliseconds =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - renderStart).count();
-    ++renderPerfFrames;
-    renderPerfTotalMilliseconds += renderMilliseconds;
-    if (renderMilliseconds > renderPerfMaxMilliseconds)
-        renderPerfMaxMilliseconds = renderMilliseconds;
-    if (renderReportCount < 8)
-    {
+    if (logThisEye)
         iLog().Printf(
             LT_MESSAGE,
-            L"Unity Vulkan render: camera=%d viewport=%dx%d rendered=%d drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture360DrawCalls=%d",
+            L"Unity Vulkan render: camera=%d eye=%d viewport=%dx%d rendered=%d drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d picture360DrawCalls=%d culled=%d trisCulled=%d",
             context->cameraID,
+            eyeID,
             context->width,
             context->height,
             rendered ? 1 : 0,
             perf.numDrawCalls,
             perf.numPaintDrawCalls,
             perf.numPictureDrawCalls,
-            perf.numPicture360DrawCalls);
-        ++renderReportCount;
-    }
-    if (renderPerfFrames == 60)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_EXTERNAL_PERF_20260730] frames=%llu averageMilliseconds=%.3f maxMilliseconds=%.3f viewport=%dx%d",
-            static_cast<unsigned long long>(renderPerfFrames),
-            renderPerfTotalMilliseconds / static_cast<double>(renderPerfFrames),
-            renderPerfMaxMilliseconds,
-            context->width,
-            context->height);
-        renderPerfFrames = 0;
-        renderPerfTotalMilliseconds = 0.0;
-        renderPerfMaxMilliseconds = 0.0;
-    }
-    return rendered;
+            perf.numPicture360DrawCalls,
+            perf.numDrawCallsCulled,
+            perf.numTrianglesCulled);
 }
 
 static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *renderer, UnityRenderBuffer colorOverride = nullptr)
@@ -690,11 +746,14 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
         return false;
     }
 
-    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
+    const int eyeIndex = event_id & 1;
+    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID][eyeIndex];
     UnityRenderBuffer colorTarget = colorOverride ? colorOverride : target.color;
-    if (!colorTarget || !target.depth || target.width <= 0 || target.height <= 0)
+    // Depth is optional: the Quest offscreen-RT path is color-only (IMM clears and
+    // fully re-renders the target each frame).
+    if (!colorTarget || target.width <= 0 || target.height <= 0)
     {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: missing color/depth render buffers for camera=%d", cameraID);
+        iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: missing color render buffer for camera=%d eye=%d", cameraID, eyeIndex);
         return true;
     }
 
@@ -705,31 +764,43 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     constexpr VkAccessFlags kColorAttachmentAccess = 0x00000100 | 0x00000080; // COLOR_ATTACHMENT_WRITE/READ
     constexpr VkAccessFlags kDepthAttachmentAccess = 0x00000400 | 0x00000200; // DEPTH_STENCIL_ATTACHMENT_WRITE/READ
 
-    gImmUnityPlugin.UnityAPI.mVulkan->EnsureOutsideRenderPass();
+    // With a dedicated IMM queue the event is configured as a pure passive marker
+    // (flags=0): we must not modify Unity's command-buffer state - no render pass
+    // splitting, no barrier recording. Observe the images and do all transitions in
+    // IMM's own command buffer instead.
+    piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
+    const bool passiveAccess = vulkanRenderer->UsesDedicatedQueue();
+    const UnityVulkanResourceAccessMode accessMode = passiveAccess
+        ? kUnityVulkanResourceAccess_ObserveOnly
+        : kUnityVulkanResourceAccess_PipelineBarrier;
+    if (!passiveAccess)
+    {
+        gImmUnityPlugin.UnityAPI.mVulkan->EnsureOutsideRenderPass();
+    }
 
     UnityVulkanImage colorImage = {};
-    const bool accessedColor = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-        colorTarget,
-        UnityVulkanWholeImage,
-        kColorAttachmentLayout,
-        kColorAttachmentStage,
-        kColorAttachmentAccess,
-        kUnityVulkanResourceAccess_PipelineBarrier,
-        &colorImage);
-    if (!accessedColor)
+    if (!gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+            colorTarget,
+            UnityVulkanWholeImage,
+            kColorAttachmentLayout,
+            kColorAttachmentStage,
+            kColorAttachmentAccess,
+            accessMode,
+            &colorImage))
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: failed to access color render buffer for camera=%d", cameraID);
         return true;
     }
 
     UnityVulkanImage depthImage = {};
-    if (!gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+    if (target.depth != nullptr &&
+        !gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
             target.depth,
             UnityVulkanWholeImage,
             kDepthAttachmentLayout,
             kDepthAttachmentStages,
             kDepthAttachmentAccess,
-            kUnityVulkanResourceAccess_PipelineBarrier,
+            accessMode,
             &depthImage))
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan render skipped: failed to access depth render buffer for camera=%d", cameraID);
@@ -740,10 +811,9 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     {
         iLog().Printf(
             LT_MESSAGE,
-            L"[IMM_UNITY_VK_DIRECT_RT_20260731] camera=%d colorRB=%p colorTexture=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
+            L"[IMM_UNITY_VK_RT_20260610] camera=%d colorRB=%p depthRB=%p colorImage=0x%llx colorFormat=%u colorLayout=%u colorUsage=0x%x colorSamples=%u colorExtent=%ux%ux%u depthImage=0x%llx depthFormat=%u depthLayout=%u depthUsage=0x%x depthSamples=%u depthExtent=%ux%ux%u",
             cameraID,
             colorTarget,
-            nullptr,
             target.depth,
             static_cast<unsigned long long>(colorImage.image),
             static_cast<unsigned int>(colorImage.format),
@@ -766,6 +836,12 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
 
     const int width = colorImage.extent.width > 0 ? static_cast<int>(colorImage.extent.width) : target.width;
     const int height = colorImage.extent.height > 0 ? static_cast<int>(colorImage.extent.height) : target.height;
+    if (sUnityVulkanFrameSerial < 12)
+    {
+        iLog().Printf(LT_MESSAGE, L"VK eye target: event=%d eye=%d colorRB=%p image=0x%llx extent=%dx%d",
+                      event_id, eyeIndex, colorTarget,
+                      static_cast<unsigned long long>(colorImage.image), width, height);
+    }
     UnityVulkanRenderContext &context = sUnityVulkanRenderContext[cameraID];
     context.renderer = renderer;
     context.cameraID = cameraID;
@@ -779,111 +855,16 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     context.width = width;
     context.height = height;
 
-    UnityVulkanRecordingState recordingState = {};
-    if (!gImmUnityPlugin.UnityAPI.mVulkan->CommandRecordingState(
-            &recordingState,
-            kUnityVulkanGraphicsQueueAccess_DontCare) ||
-        !recordingState.commandBuffer)
+    if (passiveAccess)
     {
-        iLog().Printf(
-            LT_ERROR,
-            L"Unity Vulkan render skipped: Unity did not provide a command buffer for camera=%d",
-            cameraID);
+        // IMM submits on its own device queue, so no Unity queue access is needed.
+        // Requesting queue access here would make Unity finalize the XR frame for
+        // external present mid-frame (double-signals its frame semaphore, breaks
+        // compositor pacing -> black view on Quest).
+        iUnityVulkanQueueRenderCallback(event_id, &context);
         return true;
     }
-
-    static int preparedTargetReportCount = 0;
-    if (preparedTargetReportCount < 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_TARGET_20260730] camera=%d event=%d colorImage=0x%llx depthImage=0x%llx commandBuffer=%p viewport=%dx%d",
-            cameraID,
-            event_id,
-            static_cast<unsigned long long>(context.colorImage),
-            static_cast<unsigned long long>(context.depthImage),
-            recordingState.commandBuffer,
-            context.width,
-            context.height);
-        ++preparedTargetReportCount;
-    }
-
-    const bool rendered = iRecordUnityVulkanCamera(
-        &context,
-        recordingState.commandBuffer,
-        recordingState.currentFrameNumber,
-        recordingState.safeFrameNumber);
-
-    // Access* is Unity's resource-state and synchronization contract. The
-    // accesses above make Unity's earlier attachment work visible to IMM.
-    // Repeat them after IMM has ended its render pass so Unity records the
-    // reverse dependency and sees IMM's color/depth writes before it resumes
-    // the camera's opaque pass. CommandRecordingState must not be reused after
-    // these calls because resource access may invalidate it.
-    UnityVulkanImage finalizedColorImage = {};
-    const bool finalizedColor = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-        colorTarget,
-        UnityVulkanWholeImage,
-        kColorAttachmentLayout,
-        kColorAttachmentStage,
-        kColorAttachmentAccess,
-        kUnityVulkanResourceAccess_PipelineBarrier,
-        &finalizedColorImage);
-    UnityVulkanImage finalizedDepthImage = {};
-    const bool finalizedDepth = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
-        target.depth,
-        UnityVulkanWholeImage,
-        kDepthAttachmentLayout,
-        kDepthAttachmentStages,
-        kDepthAttachmentAccess,
-        kUnityVulkanResourceAccess_PipelineBarrier,
-        &finalizedDepthImage);
-    if (!finalizedColor || !finalizedDepth)
-    {
-        iLog().Printf(
-            LT_ERROR,
-            L"[IMM_UNITY_VK_POST_ACCESS_20260802] camera=%d color=%d depth=%d rendered=%d",
-            cameraID,
-            finalizedColor ? 1 : 0,
-            finalizedDepth ? 1 : 0,
-            rendered ? 1 : 0);
-        return true;
-    }
-    static int commandBufferReportCount = 0;
-    if (commandBufferReportCount < 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730] camera=%d event=%d commandBuffer=%p currentFrame=%llu safeFrame=%llu rendered=%d",
-            cameraID,
-            event_id,
-            recordingState.commandBuffer,
-            static_cast<unsigned long long>(recordingState.currentFrameNumber),
-            static_cast<unsigned long long>(recordingState.safeFrameNumber),
-            rendered ? 1 : 0);
-        ++commandBufferReportCount;
-    }
-
-    static int finalizeReportCount = 0;
-    if (finalizeReportCount < 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_PRESENT_FINALIZE_20260730] camera=%d colorImage=0x%llx layout=%u transition=unity-consumer",
-            cameraID,
-            static_cast<unsigned long long>(colorImage.image),
-            static_cast<unsigned int>(kColorAttachmentLayout));
-        ++finalizeReportCount;
-    }
-    static int postAccessReportCount = 0;
-    if (postAccessReportCount < 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_POST_ACCESS_20260802] camera=%d color=1 depth=1 ordering=imm-to-unity",
-            cameraID);
-        ++postAccessReportCount;
-    }
+    gImmUnityPlugin.UnityAPI.mVulkan->AccessQueue(iUnityVulkanQueueRenderCallback, event_id, &context, true);
     return true;
 }
 
@@ -893,13 +874,20 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     {
         return false;
     }
-    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
+    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID][event_id & 1];
     if (target.width <= 0 || target.height <= 0)
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan host render skipped: missing render target for camera=%d", cameraID);
         return true;
     }
 
+    // The recording state can report the last-known renderPass/framebuffer handles while the
+    // command buffer is actually between passes (seen on Quest when the XR eye pass takes over:
+    // recording a draw there null-derefs inside the Adreno driver). Force the pass active first.
+    if (!iEnvFlagEnabled("IMM_UNITY_VK_NO_ENSURE_INSIDE"))
+    {
+        gImmUnityPlugin.UnityAPI.mVulkan->EnsureInsideRenderPass();
+    }
     UnityVulkanRecordingState recordingState = {};
     const bool hasRecordingState = gImmUnityPlugin.UnityAPI.mVulkan->CommandRecordingState(&recordingState, kUnityVulkanGraphicsQueueAccess_DontCare);
     if (!hasRecordingState || !recordingState.commandBuffer || recordingState.renderPass == 0 || recordingState.framebuffer == 0)
@@ -907,6 +895,9 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
         iLog().Printf(LT_ERROR, L"Unity Vulkan host render skipped: missing recording state for camera=%d hasRecordingState=%d", cameraID, hasRecordingState ? 1 : 0);
         return true;
     }
+    static unsigned long long sLastHostRenderPassHandle = 0;
+    const bool hostRenderPassChanged = static_cast<unsigned long long>(recordingState.renderPass) != sLastHostRenderPassHandle;
+    sLastHostRenderPassHandle = static_cast<unsigned long long>(recordingState.renderPass);
     if (iEnvFlagEnabled("IMM_UNITY_VK_QUERY_STATE_ONLY"))
     {
         if (!iEnvFlagEnabled("IMM_UNITY_VK_QUERY_STATE_NO_LOG"))
@@ -930,39 +921,18 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
 
     const int width = target.width;
     const int height = target.height;
-#if defined(__ANDROID__) || defined(ANDROID)
-    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 43u); // Explicit Android RenderTexture reports VK_FORMAT_B8G8R8A8_UNORM.
-#else
-    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 44u);
-#endif
+    const uint32_t colorFormat = iEnvUIntOrDefault("IMM_UNITY_VK_HOST_COLOR_FORMAT", 44u); // Default VK_FORMAT_B8G8R8A8_UNORM; Unity's render pass defines pipeline compatibility.
     const uint32_t colorSamples = static_cast<uint32_t>(target.samples > 0 ? target.samples : 1);
-#if defined(__ANDROID__) || defined(ANDROID)
-    // The managed Android host path explicitly binds CameraTarget with Unity's
-    // depth target before this EnsureInside event. Display render-buffer
-    // pointers are opaque placeholders on Android and are not evidence of
-    // whether the active render pass contains depth.
-    const bool assumeHostDepth = true;
-#else
     const bool assumeHostDepth = iEnvFlagEnabled("IMM_UNITY_VK_ASSUME_HOST_DEPTH");
-#endif
-    // Display render-buffer pointers can be null while Unity's active Vulkan render pass still owns depth.
-    const bool hostRenderPassHasDepth = iEnvFlagEnabled("IMM_UNITY_VK_HOST_RENDER_PASS_HAS_DEPTH") || assumeHostDepth;
-    const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth;
-#if defined(__ANDROID__) || defined(ANDROID)
-    // The active camera render pass owns a live depth attachment.
-    // Render inside that pass so IMM and subsequent Unity geometry share the
-    // same depth values without reopening an Android depth image.
-    const bool useHostDepth = hasDepthAttachment;
-#else
+    // Unity's host render pass (camera target / XR eye buffer) has a depth attachment in practice
+    // even when the C# side couldn't obtain a depth RenderBuffer pointer (Quest reports none via
+    // the Display.main fallback). A pipeline without pDepthStencilState against a depth-bearing
+    // render pass is a spec violation, while an extra (disabled) depth-stencil state on a
+    // depth-less pass is ignored - so default to declaring depth.
+    const bool hostRenderPassHasDepth = !iEnvFlagEnabled("IMM_UNITY_VK_NO_HOST_DEPTH_ATTACHMENT");
+    const bool hasDepthAttachment = target.depth != nullptr || hostRenderPassHasDepth || assumeHostDepth;
     const bool useHostDepth = hasDepthAttachment && iEnvFlagEnabled("IMM_UNITY_VK_USE_HOST_DEPTH");
-#endif
-    const bool hostDepthReverseZ =
-#if defined(__ANDROID__) || defined(ANDROID)
-        false;
-#else
-        useHostDepth;
-#endif
-    if (sUnityVulkanRenderTargetDiagnosticCount < 24)
+    if (sUnityVulkanRenderTargetDiagnosticCount < 24 || hostRenderPassChanged)
     {
         iLog().Printf(
             LT_MESSAGE,
@@ -983,31 +953,16 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
             recordingState.subPassIndex);
         ++sUnityVulkanRenderTargetDiagnosticCount;
     }
-#if defined(__ANDROID__) || defined(ANDROID)
-    if (sUnityVulkanRenderTargetDiagnosticCount == 1)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_ANDROID_VK_HOST_DEPTH_20260801] hasDepthAttachment=%d useHostDepth=%d reverseZ=%d",
-            hasDepthAttachment ? 1 : 0,
-            useHostDepth ? 1 : 0,
-            hostDepthReverseZ ? 1 : 0);
-    }
-#endif
 
     piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
-    vulkanRenderer->SetHostDrawBisectionEnabled(sUnityVulkanHostDrawBisectionEnabled.load());
     if (!vulkanRenderer->BeginHostRenderPassFrame(
             recordingState.commandBuffer,
-            recordingState.currentFrameNumber,
-            recordingState.safeFrameNumber,
             reinterpret_cast<void *>(static_cast<uintptr_t>(recordingState.renderPass)),
             reinterpret_cast<void *>(static_cast<uintptr_t>(recordingState.framebuffer)),
             colorFormat,
             colorSamples,
             hasDepthAttachment,
             useHostDepth,
-            hostDepthReverseZ,
             recordingState.subPassIndex >= 0 ? static_cast<uint32_t>(recordingState.subPassIndex) : 0u,
             width,
             height))
@@ -1029,43 +984,8 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
     const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
-    const bool debugTriangleOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_TRIANGLE_ONLY");
-    const bool drawBisectionEnabled = sUnityVulkanHostDrawBisectionEnabled.load();
-    const uint32_t drawBisectionInvocation = drawBisectionEnabled
-        ? sUnityVulkanHostDrawBisectionInvocation.fetch_add(1) + 1
-        : 0;
-    const bool noBridgeControl = drawBisectionEnabled && drawBisectionInvocation == 2;
-    const bool rendered = debugTriangleOnly
-        ? vulkanRenderer->DebugDrawHostRenderPassTriangle()
-        : ((beginEndOnly || debugClearOnly || noBridgeControl)
-            ? false
-            : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false));
+    const bool rendered = (beginEndOnly || debugClearOnly) ? false : gImmUnityPlugin.mBridge.RenderPreparedCamera(cameraID, viewport, eyeID, false);
     vulkanRenderer->EndExternalImageFrame();
-
-    static int triangleControlReportCount = 0;
-    if (debugTriangleOnly && triangleControlReportCount < 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] camera=%d rendered=%d cmd=%p renderPass=0x%llx subpass=%d samples=%u",
-            cameraID,
-            rendered ? 1 : 0,
-            recordingState.commandBuffer,
-            static_cast<unsigned long long>(recordingState.renderPass),
-            recordingState.subPassIndex,
-            static_cast<unsigned int>(colorSamples));
-        ++triangleControlReportCount;
-    }
-
-    if (drawBisectionEnabled && drawBisectionInvocation <= 8)
-    {
-        iLog().Printf(
-            LT_MESSAGE,
-            L"[IMM_UNITY_VK_DRAW_BISECT_20260731] invocation=%u phase=%ls rendered=%d",
-            drawBisectionInvocation,
-            noBridgeControl ? L"no-bridge-control" : L"bridge",
-            rendered ? 1 : 0);
-    }
 
     const Player::PerformanceInfo &perf = iPlayer().GetPerformanceInfoForFrame();
     iLog().Printf(
@@ -1089,81 +1009,8 @@ static bool iPrepareUnityVulkanCamera(int cameraID)
     {
         return false;
     }
-    if (cameraID < 0 || cameraID >= ImmShared::ImmEngineBridge::kMaxCameras)
-    {
-        iLog().Printf(LT_ERROR, L"Unity Vulkan prepare skipped: invalid camera=%d", cameraID);
-        return false;
-    }
-
-    UnityVulkanRecordingState recordingState = {};
-    if (!gImmUnityPlugin.UnityAPI.mVulkan->CommandRecordingState(
-            &recordingState,
-            kUnityVulkanGraphicsQueueAccess_DontCare) ||
-        !recordingState.commandBuffer)
-    {
-        iLog().Printf(
-            LT_ERROR,
-            L"Unity Vulkan prepare skipped: Unity did not provide an upload command buffer for camera=%d",
-            cameraID);
-        return false;
-    }
-
-    piRenderer *renderer = gImmUnityPlugin.mBridge.GetRenderer();
-    if (!renderer || renderer->GetAPI() != piRenderer::API::Vulkan)
-    {
-        return false;
-    }
-    piRendererVulkan *vulkanRenderer = static_cast<piRendererVulkan *>(renderer);
-    if (!vulkanRenderer->BeginUnityCommandBufferUploadFrame(
-            recordingState.commandBuffer,
-            recordingState.currentFrameNumber,
-            recordingState.safeFrameNumber))
-    {
-        iLog().Printf(
-            LT_ERROR,
-            L"Unity Vulkan prepare skipped: failed to begin Unity upload command buffer for camera=%d",
-            cameraID);
-        return false;
-    }
-
     const bool prepared = gImmUnityPlugin.mBridge.PrepareCamera(cameraID);
-    bool resourcesPrepared = false;
-    const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
-    if (prepared && target.width > 0 && target.height > 0)
-    {
-        // GlobalRender prepares the player frame but the layer renderers perform
-        // lazy texture uploads during their first DisplayRender traversal. Run
-        // that traversal while Unity has explicitly placed this event outside
-        // its render pass. With no IMM render target bound the draw submission
-        // paths are inert, while texture barriers/copies are recorded into the
-        // borrowed Unity upload command buffer.
-        const ImmShared::ImmEngineBridge::ViewportInfo uploadViewport = {
-            0.0f,
-            0.0f,
-            static_cast<float>(target.width),
-            static_cast<float>(target.height),
-            0.0f,
-            1.0f,
-            true
-        };
-        resourcesPrepared = gImmUnityPlugin.mBridge.RenderPreparedCamera(
-            cameraID,
-            uploadViewport,
-            0,
-            false);
-    }
-    vulkanRenderer->EndExternalImageFrame();
-    iLog().Printf(
-        LT_MESSAGE,
-        L"[IMM_UNITY_VK_PREWARM_20260731] camera=%d prepared=%d resourcesPrepared=%d target=%dx%d cmd=%p currentFrame=%llu safeFrame=%llu",
-        cameraID,
-        prepared ? 1 : 0,
-        resourcesPrepared ? 1 : 0,
-        target.width,
-        target.height,
-        recordingState.commandBuffer,
-        recordingState.currentFrameNumber,
-        recordingState.safeFrameNumber);
+    iLog().Printf(LT_MESSAGE, L"Unity Vulkan prepare: camera=%d prepared=%d", cameraID, prepared ? 1 : 0);
     return true;
 }
 
@@ -1222,7 +1069,7 @@ static void UNITY_INTERFACE_API iOnRenderEventAndData(int event_id, void *data)
         }
         if (cameraID >= 0 && cameraID < 256)
         {
-            const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID];
+            const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID][vulkanEventId & 1];
             UnityRenderBuffer colorTarget = params->destination ? params->destination : target.color;
             if (hasRecordingState)
             {
@@ -1282,7 +1129,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 		return;
 	}
 
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
     if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
     {
         if ((event_id & kUnityVulkanPrepareEventFlag) != 0)
@@ -1299,17 +1146,26 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             }
             return;
         }
-        const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID];
+        const auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[unityVulkanCameraID][event_id & 1];
 #if defined(__ANDROID__) || defined(ANDROID)
-        iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+        // On Quest the host-render-pass path is fundamentally broken: Unity's recording
+        // state reports a command buffer that is NOT in the recording state when this
+        // event executes (validation-layer confirmed), so recording draws into it is
+        // illegal. Default to the external-image path; IMM_UNITY_VK_FORCE_HOST_RENDER
+        // opts back in for experiments.
+        if (!iEnvFlagEnabled("IMM_UNITY_VK_FORCE_HOST_RENDER"))
+        {
+            iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
+            return;
+        }
 #else
         if (iEnvFlagEnabled("IMM_UNITY_VK_FORCE_EXTERNAL_IMAGE"))
         {
             iRenderUnityVulkanCamera(unityVulkanCameraID, event_id, renderer, target.color);
             return;
         }
-        iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
 #endif
+        iRenderUnityVulkanCameraInHostRenderPass(unityVulkanCameraID, event_id, renderer, target.color);
         return;
     }
 #endif
@@ -1321,10 +1177,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
     void *unityMetalRenderPassDescriptor = nullptr;
     bool unityMetalFrameBegun = false;
     const bool useUnityMetalOffscreen = isUnityMetal && iEnvFlagEnabled("IMM_UNITY_METAL_OFFSCREEN");
-    // ImmEngineBridge owns both the global and camera render phases. Begin the
-    // external frame before entering the bridge so all GPU work is encoded in
-    // Unity's active command buffer.
-    const bool deferUnityMetalFrameBegin = false;
+    const bool deferUnityMetalFrameBegin = isUnityMetal && !iEnvFlagEnabled("IMM_UNITY_METAL_BEGIN_BEFORE_GLOBAL");
     const bool useUnityMetalPluginCommandBuffer = isUnityMetal && gImmUnityPlugin.UnityAPI.mMetalV2 && iEnvFlagEnabled("IMM_UNITY_METAL_USE_PLUGIN_COMMAND_BUFFER");
     const bool useUnityMetalOwnedEncoder = isUnityMetal && !useUnityMetalPluginCommandBuffer && iEnvFlagEnabled("IMM_UNITY_METAL_USE_OWNED_ENCODER");
     if (isUnityMetal)
@@ -1521,6 +1374,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
         true
 	    };
     const int eyeID = event_id & 1;
+
     const bool rendered = gImmUnityPlugin.mBridge.RenderCamera(cameraID, viewport, eyeID, true);
 
 #if defined(__APPLE__)
@@ -1586,14 +1440,6 @@ extern "C" void	UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginLoad(IUnit
 {
 	gImmUnityPlugin.UnityAPI.mUnityInterfaces = unityInterfaces;
 	gImmUnityPlugin.UnityAPI.mGraphics = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphics>();
-#if defined(__APPLE__)
-    std::fprintf(
-        stderr,
-        "IMM_UNITY_METAL_PLUGIN_LOAD interfaces=%p graphics=%p\n",
-        static_cast<void *>(unityInterfaces),
-        static_cast<void *>(gImmUnityPlugin.UnityAPI.mGraphics));
-    std::fflush(stderr);
-#endif
 	gImmUnityPlugin.UnityAPI.mGraphics->RegisterDeviceEventCallback(iOnGraphicsDeviceEvent);
 
 	// Run OnGraphicsDeviceEvent(initialize) manually on plugin load
@@ -1612,7 +1458,7 @@ extern "C" UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRen
 
 extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventAndDataFunc()
 {
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(WINDOWS)
     return iOnRenderEventAndData;
 #else
     return nullptr;
@@ -1621,7 +1467,7 @@ extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ConfigureVulkanRenderEvent(int eventID)
 {
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(IMM_UNITY_VULKAN)
     if (!gImmUnityPlugin.UnityAPI.mVulkan || gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan)
     {
         return 0;
@@ -1631,23 +1477,6 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ConfigureVulkanRenderE
 #else
     (void)eventID;
     return 0;
-#endif
-}
-
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanHostDrawBisectionEnabled(int enabled)
-{
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
-    sUnityVulkanHostDrawBisectionEnabled.store(enabled != 0);
-    if (enabled == 0)
-    {
-        sUnityVulkanHostDrawBisectionInvocation.store(0);
-    }
-    iLog().Printf(
-        LT_MESSAGE,
-        L"[IMM_UNITY_VK_DRAW_BISECT_20260731] native-request enabled=%d",
-        enabled != 0 ? 1 : 0);
-#else
-    (void)enabled;
 #endif
 }
 
@@ -1666,11 +1495,23 @@ extern "C" void UNITY_INTERFACE_EXPORT Debug()
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API IsReadyForDocumentLoad()
 {
 #if defined(__ANDROID__) || defined(ANDROID)
-    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
-        return gImmUnityPlugin.mBridge.IsInitialized() ? 1 : 0;
     return (gImmUnityPlugin.mBridge.IsInitialized() && sAndroidDeferredInit.isInitialized) ? 1 : 0;
 #else
     return gImmUnityPlugin.mBridge.IsInitialized() ? 1 : 0;
+#endif
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanDedicatedQueueAllowed(int allowed)
+{
+#if defined(__ANDROID__) || defined(ANDROID)
+    sAllowDedicatedVulkanQueue = allowed != 0;
+    __android_log_print(
+        ANDROID_LOG_INFO,
+        "ImmUnityPlugin",
+        "[IMM_UNITY_VK_QUEUE_20260802] dedicatedQueueAllowed=%d",
+        sAllowDedicatedVulkanQueue ? 1 : 0);
+#else
+    (void)allowed;
 #endif
 }
 
@@ -1736,17 +1577,17 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetCameraViewport(int
 #endif
 }
 
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraRenderBuffers(int cameraID, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples)
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraEyeRenderBuffers(int cameraID, int eye, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples)
 {
-    if (cameraID < 0 || cameraID > 255) return;
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+    if (cameraID < 0 || cameraID > 255 || eye < 0 || eye > 1) return;
+#if defined(IMM_UNITY_VULKAN)
     IMM_UNITY_NATIVE_LOCK();
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].color = static_cast<UnityRenderBuffer>(colorRenderBuffer);
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].colorTexture = nullptr;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].depth = static_cast<UnityRenderBuffer>(depthRenderBuffer);
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].width = width;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].height = height;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].samples = samples > 0 ? samples : 1;
+    auto &target = gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID][eye];
+    target.color = static_cast<UnityRenderBuffer>(colorRenderBuffer);
+    target.depth = static_cast<UnityRenderBuffer>(depthRenderBuffer);
+    target.width = width;
+    target.height = height;
+    target.samples = samples > 0 ? samples : 1;
 #else
     (void)colorRenderBuffer;
     (void)depthRenderBuffer;
@@ -1756,24 +1597,10 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraRender
 #endif
 }
 
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraTexture(int cameraID, void *colorTexture, void *depthRenderBuffer, int width, int height, int samples)
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraRenderBuffers(int cameraID, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples)
 {
-    if (cameraID < 0 || cameraID > 255) return;
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
-    IMM_UNITY_NATIVE_LOCK();
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].color = nullptr;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].colorTexture = colorTexture;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].depth = static_cast<UnityRenderBuffer>(depthRenderBuffer);
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].width = width;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].height = height;
-    gImmUnityPlugin.UnityAPI.mVulkanCameraTarget[cameraID].samples = samples > 0 ? samples : 1;
-#else
-    (void)colorTexture;
-    (void)depthRenderBuffer;
-    (void)width;
-    (void)height;
-    (void)samples;
-#endif
+    SetVulkanCameraEyeRenderBuffers(cameraID, 0, colorRenderBuffer, depthRenderBuffer, width, height, samples);
+    SetVulkanCameraEyeRenderBuffers(cameraID, 1, colorRenderBuffer, depthRenderBuffer, width, height, samples);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, // 0=linear 1=gamma
@@ -1787,7 +1614,33 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolferName;
 
-#if defined(WINDOWS) || defined(__ANDROID__) || defined(ANDROID)
+#if defined(__ANDROID__) || defined(ANDROID)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan &&
+        gImmUnityPlugin.UnityAPI.mVulkan != nullptr &&
+        gImmUnityPlugin.UnityAPI.mVulkanInstance.device != nullptr &&
+        gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue != nullptr)
+    {
+        // Quest Vulkan: hand IMM Unity's Vulkan device so it renders into the
+        // same device/queue as an external device (mirrors the desktop path).
+        // Renderer creation stays deferred to the render thread (Android).
+        static piVulkanExternalDevice unityVulkanDevice = {};
+        unityVulkanDevice.instance = gImmUnityPlugin.UnityAPI.mVulkanInstance.instance;
+        unityVulkanDevice.physicalDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.physicalDevice;
+        unityVulkanDevice.device = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
+        unityVulkanDevice.graphicsQueue = gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue;
+        unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
+        unityVulkanDevice.allowDedicatedQueue = sAllowDedicatedVulkanQueue;
+        config.rendererApi = piRenderer::API::Vulkan;
+        config.graphicsDevice = &unityVulkanDevice;
+        __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Configuring IMM for Unity Vulkan external device (Quest)");
+    }
+    else
+    {
+        config.rendererApi = piRenderer::API::GLES;
+    }
+    config.initializeRendererOnInit = false;
+    config.initializeDisplay = 1;
+#elif defined(WINDOWS)
     if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
     {
         if (!gImmUnityPlugin.UnityAPI.mVulkan ||
@@ -1796,12 +1649,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
             !gImmUnityPlugin.UnityAPI.mVulkanInstance.device ||
             !gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue)
         {
-#if defined(__ANDROID__) || defined(ANDROID)
-            __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "Unity Vulkan interface is unavailable in ImmUnityPlugin");
-#else
             std::fprintf(stderr, "Unity Vulkan interface is unavailable in ImmUnityPlugin.\n");
             std::fflush(stderr);
-#endif
             return -1;
         }
         static piVulkanExternalDevice unityVulkanDevice = {};
@@ -1809,29 +1658,19 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.physicalDevice = gImmUnityPlugin.UnityAPI.mVulkanInstance.physicalDevice;
         unityVulkanDevice.device = gImmUnityPlugin.UnityAPI.mVulkanInstance.device;
         unityVulkanDevice.graphicsQueue = gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue;
-        unityVulkanDevice.getInstanceProcAddr = reinterpret_cast<void *>(
-            gImmUnityPlugin.UnityAPI.mVulkanInstance.getInstanceProcAddr);
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
+        unityVulkanDevice.allowDedicatedQueue = false;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;
-        // GL.GetGPUProjectionMatrix supplies Unity's reversed-Z Vulkan
-        // projection for both Android and Windows.
-        config.reverseDepthBuffer = true;
         config.initializeRendererOnInit = true;
         config.initializeFullscreen = false;
     }
     else
     {
-#if defined(__ANDROID__) || defined(ANDROID)
-        config.rendererApi = piRenderer::API::GLES;
-        config.initializeRendererOnInit = false;
-        config.initializeDisplay = 1;
-#else
         config.rendererApi = (gImmUnityPlugin.UnityAPI.mDevice == nullptr) ? piRenderer::API::GL : piRenderer::API::DX;
         config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
         config.initializeRendererOnInit = true;
         config.initializeFullscreen = true;
-#endif
     }
 #else
     UnityGfxRenderer gfx = gImmUnityPlugin.UnityAPI.mGraphics->GetRenderer();
@@ -1845,8 +1684,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         }
         config.rendererApi = piRenderer::API::Metal;
         config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
-        config.metalUnityProjectionAdjusted = true;
-        config.reverseDepthBuffer = true;
+        config.metalExternalShaderAdjust = true;
     }
     else if (gfx == kUnityGfxRendererOpenGLCore)
     {
@@ -1865,20 +1703,11 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         return -1;
 
 #if defined(__ANDROID__) || defined(ANDROID)
-    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererVulkan)
-    {
-        sAndroidDeferredInit.needsInit = false;
-        sAndroidDeferredInit.isInitialized = true;
-        __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Unity Android Vulkan renderer initialized from host device");
-    }
-    else
-    {
-        sAndroidDeferredInit.colorSpace = colorSpace;
-        sAndroidDeferredInit.antialiasing = antialiasing;
-        sAndroidDeferredInit.needsInit = true;
-        sAndroidDeferredInit.isInitialized = false;
-        __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - GLES renderer init deferred to render thread");
-    }
+    sAndroidDeferredInit.colorSpace = colorSpace;
+    sAndroidDeferredInit.antialiasing = antialiasing;
+    sAndroidDeferredInit.needsInit = true;
+    sAndroidDeferredInit.isInitialized = false;
+    __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Init complete - renderer init deferred to render thread");
 #endif
     return 0;
 }
@@ -1901,7 +1730,7 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromFile(char *fileName)
     // plugin event. Loading before that event leaves Player partially
     // initialized and crashes in Player::Load; report a load failure instead
     // so managed code can wait for the render-thread readiness signal.
-    if (gImmUnityPlugin.UnityAPI.mRenderer != kUnityGfxRendererVulkan && !sAndroidDeferredInit.isInitialized)
+    if (!sAndroidDeferredInit.isInitialized)
     {
         __android_log_print(ANDROID_LOG_ERROR, "ImmUnityPlugin", "LoadFromFile blocked until Android deferred renderer init completes");
         iLog().Printf(LT_ERROR, L"LoadFromFile blocked until Android deferred renderer init completes");
@@ -1957,7 +1786,6 @@ extern "C" int UNITY_INTERFACE_EXPORT LoadFromMemory(char *fileName, int size, v
         static_cast<const uint8_t*>(data),
         static_cast<uint64_t>(size),
         pistr2ws(fileName));
-
 }
 
 extern "C" bool UNITY_INTERFACE_EXPORT IsDocumentActive(int id)
@@ -2313,7 +2141,20 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaInfo(int docId, int spawnarea
     Document::SpawnAreaInfo spawnAreaInfo;
     if (!iPlayer().GetSpawnAreaInfo(spawnAreaInfo, docId, spawnareaId))
         return false;
-    serializedSpawnArea.mName = piws2str(spawnAreaInfo.mName);
+    // The C# marshaller copies the string during the call; hand it a static
+    // buffer instead of a malloc'd one (piws2str allocates - the old direct
+    // assignment leaked a buffer per call).
+    {
+        static char sSpawnAreaNameUtf8[256];
+        sSpawnAreaNameUtf8[0] = '\0';
+        char* nameUtf8 = piws2str(spawnAreaInfo.mName);
+        if (nameUtf8 != nullptr)
+        {
+            std::snprintf(sSpawnAreaNameUtf8, sizeof(sSpawnAreaNameUtf8), "%s", nameUtf8);
+            std::free(nameUtf8);
+        }
+        serializedSpawnArea.mName = sSpawnAreaNameUtf8;
+    }
     serializedSpawnArea.mVersion = spawnAreaInfo.mVersion;
     serializedSpawnArea.mType = spawnAreaInfo.mIsFloorLevel ? SerializedSpawnArea::Type::FloorLevel : SerializedSpawnArea::Type::EyeLevel;
     serializedSpawnArea.mAnimated = spawnAreaInfo.mAnimated;
@@ -2374,6 +2215,59 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaInfo(int docId, int spawnarea
         serializedSpawnArea.screenshot.height = pScreenshot->GetYRes();
         serializedSpawnArea.screenshot.pData = pScreenshot->GetData(0);
     }
+    return true;
+}
+
+// Timeline-driven spawn-area change signal. Quill MakeDefault keyframes on
+// spawn-area layers set it as playback (or a skip's SetStateAt) crosses them;
+// the host consumes it to re-anchor the rig on the authored viewpoint - the
+// same contract appImmViewer's GlobalWork loop uses (viewer.cpp).
+extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaNeedsUpdate(int docId)
+{
+    return iPlayer().GetSpawnAreaNeedsUpdate(docId);
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT SetSpawnAreaNeedsUpdate(int docId, bool state)
+{
+    iPlayer().SetSpawnAreaNeedsUpdate(docId, state);
+}
+
+// Pose-only spawn-area query, safe to poll every frame: no name conversion
+// (GetSpawnAreaInfo allocates for it), no screenshot lookup - just the live
+// evaluated spawn-area-to-world transform, which animated viewpoint layers
+// (transform keyframes on the spawn area or its parents) move continuously.
+struct SerializedSpawnAreaPose
+{
+    float posx, posy, posz;       // position
+    float rotx, roty, rotz, rotw; // rotation (quaternion)
+    float sca;                    // uniform scale
+    int32_t animated;             // layer (or a parent) has >1 transform key
+    int32_t isFloorLevel;         // TrackingLevel::Floor
+    int32_t locomotion;           // volume allow-translation mask: X<<2 | Y<<1 | Z
+};
+
+extern "C" bool UNITY_INTERFACE_EXPORT GetSpawnAreaPose(int docId, int spawnareaId, SerializedSpawnAreaPose* pose)
+{
+    if (pose == nullptr || spawnareaId < 0) // Player checks the upper bound only
+        return false;
+    Document::SpawnAreaInfo spawnAreaInfo;
+    if (!iPlayer().GetSpawnAreaInfo(spawnAreaInfo, docId, spawnareaId))
+        return false;
+    const trans3d mat = spawnAreaInfo.mSpawnAreaToWorld;
+    pose->posx = (float)mat.mTranslation.x;
+    pose->posy = (float)mat.mTranslation.y;
+    pose->posz = (float)mat.mTranslation.z;
+    pose->rotx = (float)mat.mRotation.x;
+    pose->roty = (float)mat.mRotation.y;
+    pose->rotz = (float)mat.mRotation.z;
+    pose->rotw = (float)mat.mRotation.w;
+    pose->sca  = (float)mat.mScale;
+    pose->animated = spawnAreaInfo.mAnimated ? 1 : 0;
+    pose->isFloorLevel = spawnAreaInfo.mIsFloorLevel ? 1 : 0;
+    pose->locomotion =
+        (((spawnAreaInfo.mVolume.mAllowTranslationX ? 1 : 0) << 2) |
+         ((spawnAreaInfo.mVolume.mAllowTranslationY ? 1 : 0) << 1) |
+         ((spawnAreaInfo.mVolume.mAllowTranslationZ ? 1 : 0) << 0));
     return true;
 }
 
@@ -2593,38 +2487,6 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateDr
     return handle;
 }
 
-extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_LayerAddAnimationKey(
-    void* layerHandle,
-    int property,
-    int64_t timeTicks,
-    int interpolation,
-    int boolValue,
-    uint32_t intValue,
-    float floatValue,
-    double doubleValue,
-    const ImmExporterTransformC* transformValue)
-{
-    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
-    if (layer == nullptr || timeTicks < 0 ||
-        property < 0 || property >= static_cast<int>(ImmExporter::Layer::AnimProperty::MAX) ||
-        interpolation < 0 || interpolation >= static_cast<int>(ImmExporter::Layer::InterpolationType::MAX))
-    {
-        return false;
-    }
-
-    ImmExporter::Layer::AnimValue value;
-    value.mBool = boolValue != 0;
-    value.mInt = intValue;
-    value.mFloat = floatValue;
-    value.mDouble = doubleValue;
-    value.mTransform = ImmExporterMakeTransform(transformValue);
-    return layer->AddKey(
-        ImmCore::piTick(timeTicks),
-        static_cast<ImmExporter::Layer::AnimProperty>(property),
-        value,
-        static_cast<ImmExporter::Layer::InterpolationType>(interpolation));
-}
-
 extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_DestroyDrawing(void* drawingHandle)
 {
     ImmExporterDrawingHandle* handle = reinterpret_cast<ImmExporterDrawingHandle*>(drawingHandle);
@@ -2753,20 +2615,6 @@ extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_PaintAddF
         return;
 
     paint->AddFrame(drawingIndex);
-}
-
-extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_PaintSetMaxRepeatCount(
-    void* paintLayerHandle,
-    uint32_t maxRepeatCount)
-{
-    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(paintLayerHandle);
-    if (layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::Paint)
-        return false;
-    ImmExporter::LayerPaint* paint = reinterpret_cast<ImmExporter::LayerPaint*>(layer->GetImplementation());
-    if (paint == nullptr)
-        return false;
-    paint->SetMaxRepeatCount(maxRepeatCount);
-    return true;
 }
 
 extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ExportToFile(

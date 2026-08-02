@@ -3,13 +3,14 @@
 // See THIRD_PARTY_LICENSES.txt
 //
 #include "piVulkan_Renderer.h"
+#include "piVulkan_PrimeDepthShaders.h"
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <vector>
+#include <mutex>
 
 #if defined(WINDOWS)
 #define WIN32_LEAN_AND_MEAN
@@ -17,9 +18,31 @@
 #elif defined(ANDROID)
 #include <android/native_window.h>
 #include <dlfcn.h>
+#include <sys/system_properties.h>
 #endif
 
 namespace ImmCore {
+
+// Env vars never reach an Android app process; mirror each env-gated toggle to an
+// adb-settable system property: `adb shell setprop debug.imm.<NAME> 1`.
+static bool iRendererFlagEnabled(const char *name)
+{
+    const char *value = std::getenv(name);
+    if (value != nullptr && value[0] != '\0')
+    {
+        return std::strcmp(value, "0") != 0;
+    }
+#if defined(ANDROID)
+    char propName[96];
+    std::snprintf(propName, sizeof(propName), "debug.imm.%s", name);
+    char propValue[PROP_VALUE_MAX] = {};
+    if (__system_property_get(propName, propValue) > 0 && propValue[0] != '\0')
+    {
+        return std::strcmp(propValue, "0") != 0;
+    }
+#endif
+    return false;
+}
 
 typedef uint32_t VkFlags;
 typedef uint32_t VkBool32;
@@ -112,6 +135,7 @@ typedef uint32_t VkAccessFlags;
 typedef uint32_t VkImageLayout;
 typedef uint32_t VkImageAspectFlags;
 typedef uint32_t VkDependencyFlags;
+typedef uint32_t VkDescriptorPoolResetFlags;
 typedef uint32_t VkFenceCreateFlags;
 typedef uint32_t VkBufferUsageFlags;
 typedef uint32_t VkMemoryPropertyFlags;
@@ -176,7 +200,7 @@ static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO = 39
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO = 40;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO = 42;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO = 43;
-static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 44;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 45;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000;
 static constexpr VkStructureType VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000;
@@ -225,6 +249,7 @@ static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT = 0x00000200;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT = 0x00000400;
 static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT = 0x00002000;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_ALL_COMMANDS_BIT = 0x00010000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_WRITE_BIT = 0x00001000;
 static constexpr VkAccessFlags VK_ACCESS_TRANSFER_READ_BIT = 0x00000800;
 static constexpr VkAccessFlags VK_ACCESS_SHADER_READ_BIT = 0x00000020;
@@ -251,6 +276,16 @@ static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_2_BIT = 0x00000002;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_4_BIT = 0x00000004;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_8_BIT = 0x00000008;
 static constexpr VkSampleCountFlagBits VK_SAMPLE_COUNT_16_BIT = 0x00000010;
+static constexpr VkImageUsageFlags VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT = 0x00000040;
+static constexpr VkMemoryPropertyFlags VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT = 0x00000010;
+// VK_EXT_fragment_density_map (enabled on Unity's device via boot.config
+// xr-vulkan-extension-fragment-density-map-enabled=1)
+static constexpr VkImageUsageFlags VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT = 0x00000200;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT = 1000218000;
+static constexpr VkStructureType VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT = 1000218001;
+static constexpr VkAccessFlags VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT = 0x01000000;
+static constexpr VkPipelineStageFlags VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT = 0x00800000;
+static constexpr VkFormat VK_FORMAT_R8G8_UNORM = 16;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D = 1;
 static constexpr VkImageViewType VK_IMAGE_VIEW_TYPE_2D_ARRAY = 5;
 static constexpr VkComponentSwizzle VK_COMPONENT_SWIZZLE_IDENTITY = 0;
@@ -570,6 +605,13 @@ struct VkRenderPassCreateInfo
     const VkSubpassDescription *pSubpasses;
     uint32_t dependencyCount;
     const void *pDependencies;
+};
+
+struct VkRenderPassFragmentDensityMapCreateInfoEXT
+{
+    VkStructureType sType;
+    const void *pNext;
+    VkAttachmentReference fragmentDensityMapAttachment;
 };
 
 struct VkFramebufferCreateInfo
@@ -1146,6 +1188,7 @@ typedef void (*PFN_vkDestroyDescriptorSetLayout)(VkDevice device, VkDescriptorSe
 typedef VkResult (*PFN_vkCreateDescriptorPool)(VkDevice device, const VkDescriptorPoolCreateInfo *createInfo, const void *allocator, VkDescriptorPool *descriptorPool);
 typedef void (*PFN_vkDestroyDescriptorPool)(VkDevice device, VkDescriptorPool descriptorPool, const void *allocator);
 typedef VkResult (*PFN_vkAllocateDescriptorSets)(VkDevice device, const VkDescriptorSetAllocateInfo *allocateInfo, VkDescriptorSet *descriptorSets);
+typedef VkResult (*PFN_vkResetDescriptorPool)(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags);
 typedef void (*PFN_vkUpdateDescriptorSets)(VkDevice device, uint32_t descriptorWriteCount, const VkWriteDescriptorSet *descriptorWrites, uint32_t descriptorCopyCount, const void *descriptorCopies);
 typedef VkResult (*PFN_vkCreatePipelineLayout)(VkDevice device, const VkPipelineLayoutCreateInfo *createInfo, const void *allocator, VkPipelineLayout *pipelineLayout);
 typedef void (*PFN_vkDestroyPipelineLayout)(VkDevice device, VkPipelineLayout pipelineLayout, const void *allocator);
@@ -1171,6 +1214,28 @@ typedef VkResult (*PFN_vkCreateWin32SurfaceKHR)(VkInstance instance, const VkWin
 #elif defined(ANDROID)
 typedef VkResult (*PFN_vkCreateAndroidSurfaceKHR)(VkInstance instance, const VkAndroidSurfaceCreateInfoKHR *createInfo, const void *allocator, VkSurfaceKHR *surface);
 #endif
+
+// One fully-specialized graphics pipeline for a shader, keyed by the render-state
+// combination it was built for. The player switches raster state (cull/front-face)
+// per chunk (4 variants) so a single cached pipeline slot thrashed - destroy+recreate
+// EVERY draw (~2ms each x37 = the old ~85ms/eye). Caching each variant makes the
+// per-draw cost a lookup.
+struct piShaderPipelineVariant
+{
+    VkPipeline pipeline = VK_NULL_PIPELINE;
+    VkRenderPass renderPass = VK_NULL_RENDER_PASS;
+    VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
+    VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    bool wireframe = false;
+    bool depthClamp = false;
+    bool depthTest = false;
+    bool depthWrite = false;
+    VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    bool alphaToCoverage = false;
+    bool blendEnabled = false;
+    uint32_t hostDepthBackdropMode = 0; // picture pipelines only (spec constant); 0 for paint
+};
 
 struct piShaderS
 {
@@ -1198,6 +1263,10 @@ struct piShaderS
     uint32_t pipelineHostDepthBackdropMode = 0;
     bool isPicture = false;
     bool isPicture2D = false;
+    static const int kPipelineVariantCacheSize = 16;
+    piShaderPipelineVariant pipelineVariants[kPipelineVariantCacheSize];
+    int pipelineVariantCount = 0;
+    uint32_t pipelineVariantNext = 0;                              // round-robin evict cursor when the cache is full
 };
 
 struct piTextureS
@@ -1217,6 +1286,11 @@ struct piTextureS
     VkSampler sampler = VK_NULL_SAMPLER;
     VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    // Ring stamp of the last batch submission that recorded a reference to this
+    // texture (attachment at batch open, or sampled via a descriptor write).
+    // 0 = never referenced: utility helpers can mutate it without draining any
+    // in-flight batch slot (the streaming-upload hot path).
+    uint64_t lastBatchUseStamp = 0;
 };
 
 struct piBufferS
@@ -1230,19 +1304,6 @@ struct piBufferS
     VkDeviceSize descriptorOffset = 0;
     VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
     VkBufferUsageFlags usage = 0;
-};
-
-struct piVulkanBorrowedUpload
-{
-    VkBuffer buffer = VK_NULL_BUFFER;
-    VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
-    uint64_t frameNumber = 0;
-};
-
-struct piVulkanBorrowedPipeline
-{
-    VkPipeline pipeline = VK_NULL_PIPELINE;
-    uint64_t frameNumber = 0;
 };
 
 struct piVertexArrayS
@@ -1260,6 +1321,10 @@ struct piRTargetS
     piTexture color[4] = { nullptr, nullptr, nullptr, nullptr };
     piTexture depth = nullptr;
     VkRenderPass renderPass = VK_NULL_RENDER_PASS;
+    // CLEAR-variant of renderPass (loadOp=CLEAR, initialLayout=UNDEFINED) for
+    // in-pass eye-frame clears. Load/store ops and layouts do not affect render
+    // pass compatibility, so it shares this target's framebuffer and pipelines.
+    VkRenderPass clearRenderPass = VK_NULL_RENDER_PASS;
     VkFramebuffer framebuffer = VK_NULL_FRAMEBUFFER;
     uint32_t subpass = 0;
     uint32_t width = 0;
@@ -1267,6 +1332,23 @@ struct piRTargetS
     uint32_t colorAttachmentCount = 0;
     bool hasDepth = false;
     bool ownsRenderPassObjects = true;
+    // MSAA (native-viewer quality contract): draws rasterize at renderSampleCount
+    // into transient tile-memory attachments below and resolve in-pass into the
+    // wrapped 1x color image. 1_BIT = classic single-sampled target.
+    VkSampleCountFlagBits renderSampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VkImage msaaColorImage = 0;
+    VkDeviceMemory msaaColorMemory = VK_NULL_DEVICE_MEMORY;
+    VkImageView msaaColorView = VK_NULL_IMAGE_VIEW;
+    VkImage msaaDepthImage = 0;
+    VkDeviceMemory msaaDepthMemory = VK_NULL_DEVICE_MEMORY;
+    VkImageView msaaDepthView = VK_NULL_IMAGE_VIEW;
+    // Native FFR (VK_EXT_fragment_density_map): a small R8G8 density image -
+    // full density center falling off toward the periphery (FFR-2-equivalent,
+    // the native-viewer contract) - attached to the eye pass. Uploaded once at
+    // target creation, read by the tiler every pass.
+    VkImage fdmImage = 0;
+    VkDeviceMemory fdmMemory = VK_NULL_DEVICE_MEMORY;
+    VkImageView fdmView = VK_NULL_IMAGE_VIEW;
 };
 
 struct piSamplerS
@@ -1320,17 +1402,6 @@ enum class piVulkanUnsupportedFeature : int
     Count
 };
 
-static constexpr uint32_t kBorrowedFrameSlotCount = 8;
-static constexpr uint32_t kBorrowedStaticPaintSetsPerFrame = 128;
-static constexpr uint32_t kBorrowedPictureSetsPerFrame = 16;
-static constexpr uint32_t kBorrowedStaticPaintSetCount =
-    kBorrowedFrameSlotCount * kBorrowedStaticPaintSetsPerFrame;
-static constexpr uint32_t kBorrowedPictureSetCount =
-    kBorrowedFrameSlotCount * kBorrowedPictureSetsPerFrame;
-static constexpr VkDeviceSize kBorrowedUniformBytesPerFrame = 1ull * 1024ull * 1024ull;
-static constexpr VkDeviceSize kBorrowedUniformTotalBytes =
-    kBorrowedFrameSlotCount * kBorrowedUniformBytesPerFrame;
-
 struct piVulkanState
 {
     VkInstance instance = VK_NULL_INSTANCE;
@@ -1353,6 +1424,99 @@ struct piVulkanState
     VkSemaphore imageAvailableSemaphore = VK_NULL_SEMAPHORE;
     VkSemaphore renderFinishedSemaphore = VK_NULL_SEMAPHORE;
     VkFence frameFence = VK_NULL_FENCE;
+    // Resource separation: the single commandBuffer+frameFence pair used to be
+    // contended by every helper, the batch, and present, coordinated only by
+    // implicit timing conventions (source of the serialize-everything perf
+    // floor, the left-eye uniform race under the pipelined submit, and the
+    // streaming-upload mid-batch corruption). Utility work (uploads, clears,
+    // readbacks, transitions) and batched eye-frames now own their resources.
+    VkCommandBuffer utilityCommandBuffer = VK_NULL_COMMAND_BUFFER;
+    VkFence utilityFence = VK_NULL_FENCE;
+    static const int kBatchRingSize = 3;
+    VkCommandBuffer batchRingCommandBuffers[kBatchRingSize] = {};
+    VkFence batchRingFences[kBatchRingSize] = {};
+    bool batchRingFencePending[kBatchRingSize] = {};
+    int batchRingIndex = 0;
+    int batchCurrentSlot = -1;                  // ring slot of the OPEN batch (-1 = legacy shared buffer)
+    bool batchRingReady = false;
+    VkCommandBuffer batchPreviousCommandBuffer2 = VK_NULL_COMMAND_BUFFER; // commandBuffer to restore after a ring batch closes
+    int eagerBatchOpenResolved = -1;            // -1 unknown, 0 off, 1 on
+    int batchTraceResolved = -1;                // IMM_UNITY_VK_BATCH_TRACE: log batch lifecycle (first 200 events)
+    uint32_t batchTraceCount = 0;
+    bool transientExhaustReported = false;
+    // Deferred destruction: chapter transitions free the outgoing chapter's
+    // resources while pipelined eye slots may still reference them. Waiting at
+    // destroy time stalled the render thread every streaming frame (visible
+    // stutter); instead Vk handles queue here and are destroyed once the ring
+    // has advanced past every slot that could reference them.
+    struct DeferredVkDestroy
+    {
+        uint64_t ringStamp;
+        VkSampler sampler;
+        VkImageView imageView;
+        VkImage image;
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+    };
+    static const int kMaxDeferredDestroys = 512;
+    DeferredVkDestroy deferredDestroys[kMaxDeferredDestroys] = {};
+    int deferredDestroyCount = 0;
+    uint64_t batchRingStampCounter = 0;         // ++ per ring-slot acquisition
+    // Acquisition stamp per ring slot. Together with piTextureS::lastBatchUseStamp
+    // this lets utility helpers wait only the slots that can actually reference
+    // the texture they mutate: a slot (re)acquired after the texture's last use
+    // provably does not reference it (re-acquisition waited out the older
+    // submission). Kill-switch IMM_UNITY_VK_NO_UTILITY_DRAIN_SKIP restores the
+    // unconditional drain-everything behavior.
+    uint64_t batchRingSlotStamp[kBatchRingSize] = {};
+    int utilityDrainSkipResolved = -1;          // -1 unknown, 0 off (full drains), 1 on
+    bool utilityDrainSkipReported = false;
+    uint32_t utilityDrainWaitCount = 0;         // utility scopes that waited >=1 pending slot
+    uint32_t utilityDrainSkipCount = 0;         // utility scopes that skipped every pending slot
+    // Composite bridge: IMM eye work submits on a dedicated second queue while
+    // Unity's composite blit samples the eye RT on Unity's own queue - only CPU
+    // timing kept those ordered. The end-of-eye submit now signals the slot's
+    // semaphore, and a wait-only submission queued on the HOST queue (from the
+    // render thread, ahead of Unity's frame submit) joins the queues: the blit
+    // provably executes after the eye render, with no CPU stall. This is what
+    // makes single-buffered (same-frame) eye RT reads sound - the 1-frame-stale
+    // triple-buffer composite was the world-locked-to-head artifact.
+    // Kill: IMM_UNITY_VK_NO_COMPOSITE_BRIDGE.
+    VkQueue hostQueue = VK_NULL_QUEUE;          // Unity's own graphics queue (pre dedicated-queue override)
+    VkSemaphore batchRingBridgeSemaphores[kBatchRingSize] = {};
+    int compositeBridgeResolved = -1;           // -1 unknown, 0 off, 1 on
+    bool compositeBridgeReported = false;
+    bool compositeBridgeFailed = false;         // a failed bridge submit may leave a semaphore signaled; never signal again
+    int msaaResolved = -1;                      // IMM_UNITY_VK_NO_MSAA: -1 unknown, 0 off, 1 on
+    bool nextRenderTargetWantsMsaa = false;     // set by the external eye Begin around CreateRenderTarget
+    bool msaaReported = false;
+    int ffrResolved = -1;                       // IMM_UNITY_VK_NO_FFR: -1 unknown, 0 off, 1 on
+    bool ffrReported = false;
+    bool ffrFailed = false;                     // one FDM creation failure disables FFR for the session
+    // Host-depth PRIME: host (Unity XR) depth cannot join the 4x pass as an
+    // attachment, so the eye batch opens with a fullscreen depth-only draw that
+    // samples the host 1x depth into the transient 4x depth. Strokes then
+    // depth-test against Unity geometry with MSAA/FFR intact. The host image's
+    // layout is sandwiched (ATTACHMENT->SHADER_READ before the pass, restored
+    // after the eye's flush) inside the batch command buffer, so Unity's own
+    // layout tracking never observes a change. v1 samples the host depth as
+    // written by Unity's PREVIOUS frame (cross-queue, timing-ordered like the
+    // pre-bridge composite was) - a frame of staleness in occlusion priming.
+    // Kill: IMM_UNITY_VK_NO_DEPTH_PRIME (falls back to 1x host-depth attach).
+    int depthPrimeResolved = -1;                // -1 unknown, 0 off, 1 on
+    bool depthPrimeReported = false;
+    bool depthPrimeFailed = false;              // pipeline creation failure disables prime for the session
+    VkShaderModule primeDepthVertexModule = VK_NULL_SHADER_MODULE;
+    VkShaderModule primeDepthFragmentModule = VK_NULL_SHADER_MODULE;
+    VkSampler primeDepthSampler = VK_NULL_SAMPLER;
+    VkDescriptorSetLayout primeDepthSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+    VkPipelineLayout primeDepthPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+    VkDescriptorPool primeDepthDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+    VkDescriptorSet primeDepthSets[kBatchRingSize] = {};
+    VkPipeline primeDepthPipeline = VK_NULL_PIPELINE;
+    VkRenderPass primeDepthPipelineRenderPass = VK_NULL_RENDER_PASS;
+    piTexture externalFramePrimeDepthTexture = nullptr;   // host depth wrapper, SAMPLED by the prime draw (never attached)
+    VkImage batchPrimeDepthRestoreImage = 0;              // host depth image whose layout the flush must restore
     VkBuffer stagingBuffer = VK_NULL_BUFFER;
     VkDeviceMemory stagingMemory = VK_NULL_DEVICE_MEMORY;
     VkDeviceSize stagingSize = 0;
@@ -1360,38 +1524,98 @@ struct piVulkanState
     piTexture externalFrameColorTexture = nullptr;
     piTexture externalFrameDepthTexture = nullptr;
     piRTarget externalFrameRenderTarget = nullptr;
-    piTexture borrowedExternalColorTexture = nullptr;
-    piTexture borrowedExternalDepthTexture = nullptr;
-    piRTarget borrowedExternalRenderTarget = nullptr;
     bool externalFrameUsesHostDepth = false;
     bool externalFrameHostDepthReverseZ = false;
     bool externalFramePreservesHostColor = false;
-    bool externalCommandBufferFrameActive = false;
-    bool borrowedFrameResourcesActive = false;
+    // Persistent wrappers for external images (Unity's offscreen eye RTs are
+    // stable VkImages): view/renderpass/framebuffer/depth survive across
+    // frames instead of being destroyed+recreated every eye-frame.
+    struct ExternalImageCacheEntry
+    {
+        VkImage image = 0;
+        uint32_t vkFormat = 0;
+        int width = 0;
+        int height = 0;
+        int arrayLayers = 0;
+        piTexture colorTexture = nullptr;
+        piTexture depthTexture = nullptr;
+        piTexture primeDepthTexture = nullptr;  // host depth wrapper for the prime draw (sampled, not attached)
+        piRTarget renderTarget = nullptr;
+        uint64_t lastUseSerial = 0;
+    };
+    // 2 eyes x 3 buffers (triple-buffered eye RTs) + slack; too small a cache
+    // would evict/recreate wrappers every frame.
+    static const int kExternalImageCacheSize = 8;
+    ExternalImageCacheEntry externalImageCache[kExternalImageCacheSize];
+    uint64_t externalImageCacheSerial = 0;
+    bool externalFrameFromCache = false;
     bool hostRenderPassFrameActive = false;
     bool hostRenderPassFrameReported = false;
-    bool hostTextureUploadRejectedReported = false;
-    bool hostDrawBisectionEnabled = false;
-    uint32_t hostDrawBisectionStage = 0;
-    uint32_t hostDrawBisectionMask = 0;
-    uint32_t hostDrawBisectionAttempted = 0;
-    uint32_t hostDrawBisectionAdmitted = 0;
     VkBuffer hostTransientUniformBuffer = VK_NULL_BUFFER;
     VkDeviceMemory hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
     uint8_t *hostTransientUniformMapped = nullptr;
     VkDeviceSize hostTransientUniformSize = 0;
     VkDeviceSize hostTransientUniformOffset = 0;
-    VkDeviceSize hostTransientUniformLimit = 0;
-    uint64_t borrowedFrameNumbers[kBorrowedFrameSlotCount] =
-    {
-        ~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull, ~0ull
-    };
-    uint32_t borrowedFrameSlot = 0;
-    uint64_t borrowedCurrentFrameNumber = 0;
-    uint32_t borrowedStaticPaintSetCursor = 0;
-    uint32_t borrowedPictureSetCursor = 0;
-    std::vector<piVulkanBorrowedUpload> borrowedUploads;
-    std::vector<piVulkanBorrowedPipeline> borrowedPipelines;
+    VkDeviceSize hostTransientUniformLimit = 0;  // 0 = whole buffer; ring batches cap at their slot's partition
+    // Eye-frame command-buffer batching (roadmap #2): the external-image /
+    // own-swapchain paths otherwise record+submit+fence-wait PER draw (~40
+    // submits/eye -> ~9fps). Batching keeps one command buffer + render pass
+    // open for the whole eye, records every draw into it (each with its own
+    // pooled descriptor set so the shared-uniform overwrite that the per-draw
+    // fence-wait used to serialize is captured per draw), then submits once.
+    // Disable with IMM_UNITY_VK_NO_BATCH_EYE_FRAME.
+    int batchEnabledResolved = -1;                                  // -1 unknown, 0 off, 1 on
+    bool batchRecording = false;                                    // command buffer + render pass currently open
+    piRTarget batchTarget = nullptr;                                // target the open batch renders into
+    // The plain-pool fields are the CURRENT pools (what reset/alloc sites use);
+    // with the batch ring active they point at the open slot's entry in the
+    // arrays below. Per-slot pools are REQUIRED under the pipelined submit:
+    // resetting a shared pool at batch-open destroys descriptor sets the
+    // previous slot's in-flight GPU work still references (instant UB/crash).
+    // The transient uniform buffer is partitioned per slot for the same reason.
+    VkDescriptorPool batchPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+    VkDescriptorPool batchPictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+    VkDescriptorPool batchPaintDescriptorPools[3] = {};
+    VkDescriptorPool batchPictureDescriptorPools[3] = {};
+    uint32_t batchDrawCount = 0;                                    // draws recorded into the current batch
+    bool batchReported = false;
+    bool batchOverflowReported = false;
+    uint64_t batchOpenNs = 0;                                       // timestamp at batch open, for record-vs-wait perf probe
+    uint64_t batchDescNs = 0;                                       // accumulated per-draw descriptor alloc+update time this eye
+    uint64_t batchDrawNs = 0;                                       // accumulated time INSIDE draw-record calls this eye; record minus this = inter-draw gap (player/Unity-side per-draw overhead)
+    uint64_t batchUploadNs = 0;                                     // accumulated UpdateBuffer time while this eye's batch records (the gap's suspected dominant slice)
+    uint64_t batchUploadBytes = 0;                                  // bytes moved by those UpdateBuffer calls
+    uint64_t batchLockNs = 0;                                       // accumulated submitMutex acquisition wait in the draw paths (streaming-thread helpers hold it across fenced bodies)
+    uint64_t batchApiNs = 0;                                        // accumulated wall time inside DrawPrimitiveIndexed (public entry->exit); gap minus this = time in the PLAYER's own loop
+    uint32_t perfProbeCount = 0;
+    // In-pass clears: fold the external eye-frame's color+depth clears into the
+    // batch render pass (LOAD_OP_CLEAR variant) instead of two standalone fenced
+    // submits per eye in BeginExternalImageFrame. On a tiler the render pass
+    // clears tile memory directly (no external traffic), and each removed
+    // submit+vkWaitForFences saves a full CPU-blocking GPU round-trip on Unity's
+    // render thread. Disable with IMM_UNITY_VK_NO_INPASS_CLEAR.
+    int inPassClearResolved = -1;                                   // -1 unknown, 0 off, 1 on
+    bool externalFramePendingInPassClear = false;                   // clears deferred to the batch's first render-pass begin
+    bool inPassClearReported = false;
+    // Batched end-of-eye transition: record the color->SHADER_READ_ONLY barrier
+    // into the batch command buffer itself (after vkCmdEndRenderPass) so it
+    // rides the batch's single fenced submit, replacing the standalone
+    // iTransitionColorTextureToShaderRead submit+wait round-trip in
+    // EndExternalImageFrame. Disable with IMM_UNITY_VK_NO_BATCHED_TRANSITION.
+    int batchedTransitionResolved = -1;                             // -1 unknown, 0 off, 1 on
+    bool batchAppendShaderReadTransition = false;                   // set by EndExternalImageFrame for its (end-of-eye) flush only
+    bool batchedTransitionReported = false;
+    // Reverse-Z on the external eye path (Unity Vulkan projections are always
+    // reversed-Z): GREATER compare + 0.0 depth clear. See iExternalReverseZEnabled.
+    int externalReverseZResolved = -1;                              // -1 unknown, 0 off, 1 on
+    bool externalReverseZReported = false;
+    // Pipelined submit: the external eye batch's end-of-eye vkWaitForFences is
+    // skipped; the pending fence is waited by the NEXT user of the shared
+    // command buffer (every helper pre-waits before reset). Safe because the
+    // host double-buffers the eye RTs, so Unity only samples last frame's
+    // completed buffer. Disable with IMM_UNITY_VK_NO_PIPELINED_SUBMIT.
+    int pipelinedSubmitResolved = -1;                               // -1 unknown, 0 off, 1 on
+    bool pipelinedSubmitReported = false;
     uint32_t presentFrameIndex = 0;
     bool realPresentReported = false;
     bool texturePresentReported = false;
@@ -1484,6 +1708,7 @@ struct piVulkanState
     PFN_vkCreateDescriptorPool vkCreateDescriptorPool = nullptr;
     PFN_vkDestroyDescriptorPool vkDestroyDescriptorPool = nullptr;
     PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets = nullptr;
+    PFN_vkResetDescriptorPool vkResetDescriptorPool = nullptr;
     PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets = nullptr;
     PFN_vkCreatePipelineLayout vkCreatePipelineLayout = nullptr;
     PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout = nullptr;
@@ -1531,12 +1756,10 @@ struct piVulkanState
     VkDescriptorSetLayout staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
     VkDescriptorPool staticPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
     VkDescriptorSet staticPaintDescriptorSet = VK_NULL_DESCRIPTOR_SET;
-    VkDescriptorSet staticPaintDescriptorSets[kBorrowedStaticPaintSetCount] = {};
     VkPipelineLayout staticPaintPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     VkDescriptorSetLayout pictureDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
     VkDescriptorPool pictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
     VkDescriptorSet pictureDescriptorSet = VK_NULL_DESCRIPTOR_SET;
-    VkDescriptorSet pictureDescriptorSets[kBorrowedPictureSetCount] = {};
     VkPipelineLayout picturePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
     VkDescriptorSetLayout presentDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
     VkDescriptorPool presentDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
@@ -1546,25 +1769,6 @@ struct piVulkanState
     VkShaderModule presentFragmentModule = VK_NULL_SHADER_MODULE;
     VkPipeline presentPipeline = VK_NULL_PIPELINE;
     VkSampler presentSampler = VK_NULL_SAMPLER;
-    VkPipelineLayout hostDebugTrianglePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
-    VkShaderModule hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
-    VkShaderModule hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
-    VkShaderModule hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
-    VkShaderModule hostCenterDiagnosticVertexModule = VK_NULL_SHADER_MODULE;
-    VkShaderModule hostDescriptorDiagnosticFragmentModule = VK_NULL_SHADER_MODULE;
-    piBuffer hostDebugIndexBuffer = nullptr;
-    piBuffer hostDebugIndexSource = nullptr;
-    uint32_t hostDebugIndexSourceBase = 0;
-    uint32_t hostDebugIndexCount = 0;
-    piBuffer hostDebugResourceBuffers[4] = { nullptr, nullptr, nullptr, nullptr };
-    VkPipeline hostDebugTrianglePipeline = VK_NULL_PIPELINE;
-    VkRenderPass hostDebugTriangleRenderPass = VK_NULL_RENDER_PASS;
-    uint32_t hostDebugTriangleSubpass = 0;
-    VkSampleCountFlagBits hostDebugTriangleSampleCount = VK_SAMPLE_COUNT_1_BIT;
-    VkPipeline hostDescriptorDiagnosticPipeline = VK_NULL_PIPELINE;
-    VkRenderPass hostDescriptorDiagnosticRenderPass = VK_NULL_RENDER_PASS;
-    uint32_t hostDescriptorDiagnosticSubpass = 0;
-    VkSampleCountFlagBits hostDescriptorDiagnosticSampleCount = VK_SAMPLE_COUNT_1_BIT;
     piQuery perfQueries[2] = { nullptr, nullptr };
     int currentPerformanceQuery = 0;
     bool unsupportedReported[(int)piVulkanUnsupportedFeature::Count] = {};
@@ -1575,8 +1779,20 @@ struct piVulkanState
     bool pictureLayoutReported = false;
     bool pictureDescriptorReported = false;
     bool picturePipelineReported = false;
+    bool pictureNoVertexArrayReported = false;
+    bool pictureBadVertexArrayReported = false;
+    bool picturePipelineCreateReported = false;
     bool pictureDrawReported = false;
+    bool hostPictureDrawReported = false;
     bool pictureDrawFailureReported = false;
+    uint32_t pictureTraceCounter = 0; // sampled compose-trace (per-draw logging is real CPU)
+    bool ownsDedicatedQueue = false;
+    int paintProbeLogCount = 0;
+    int handleProbeLogCount = 0;
+    // Serializes every record->submit->wait sequence: they share commandBuffer,
+    // frameFence, and the queue, and can run from both the app and render threads
+    // (vkQueueSubmit is externally synchronized). Recursive because some helpers nest.
+    std::recursive_mutex submitMutex;
     bool presentLayoutReported = false;
     bool presentDescriptorReported = false;
     bool presentPipelineReported = false;
@@ -1660,7 +1876,8 @@ static void iReport(piRenderer::piReporter *reporter, const char *message)
 
 static void iDebugLog(const char *message)
 {
-    const char *path = std::getenv("IMM_VULKAN_DEBUG_LOG_PATH");
+    // Launch-time constant; getenv per draw showed in the render-thread profile.
+    static const char *path = std::getenv("IMM_VULKAN_DEBUG_LOG_PATH");
     if (!path || !message)
     {
         return;
@@ -2130,6 +2347,7 @@ static bool iLoadVulkanSwapchainEntryPoints(piVulkanState *state, piRenderer::pi
     state->vkCreateDescriptorPool = (PFN_vkCreateDescriptorPool)state->vkGetDeviceProcAddr(state->device, "vkCreateDescriptorPool");
     state->vkDestroyDescriptorPool = (PFN_vkDestroyDescriptorPool)state->vkGetDeviceProcAddr(state->device, "vkDestroyDescriptorPool");
     state->vkAllocateDescriptorSets = (PFN_vkAllocateDescriptorSets)state->vkGetDeviceProcAddr(state->device, "vkAllocateDescriptorSets");
+    state->vkResetDescriptorPool = (PFN_vkResetDescriptorPool)state->vkGetDeviceProcAddr(state->device, "vkResetDescriptorPool");
     state->vkUpdateDescriptorSets = (PFN_vkUpdateDescriptorSets)state->vkGetDeviceProcAddr(state->device, "vkUpdateDescriptorSets");
     state->vkCreatePipelineLayout = (PFN_vkCreatePipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkCreatePipelineLayout");
     state->vkDestroyPipelineLayout = (PFN_vkDestroyPipelineLayout)state->vkGetDeviceProcAddr(state->device, "vkDestroyPipelineLayout");
@@ -2562,6 +2780,34 @@ static bool iCreateVulkanFrameResources(piVulkanState *state, piRenderer::piRepo
         iError(reporter, "Vulkan renderer failed to create frame fence");
         return false;
     }
+    // Resource separation: dedicated utility command buffer + fence, and a ring
+    // of batch command buffers each with its own fence. Failure is non-fatal -
+    // batchRingReady stays false and the legacy shared-buffer paths apply.
+    {
+        VkCommandBufferAllocateInfo sepAlloc = {};
+        sepAlloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        sepAlloc.commandPool = state->commandPool;
+        sepAlloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        sepAlloc.commandBufferCount = 1;
+        bool sepOk = state->vkAllocateCommandBuffers(state->device, &sepAlloc, &state->utilityCommandBuffer) == VK_SUCCESS &&
+                     state->utilityCommandBuffer != VK_NULL_COMMAND_BUFFER &&
+                     state->vkCreateFence(state->device, &fenceInfo, nullptr, &state->utilityFence) == VK_SUCCESS &&
+                     state->utilityFence != VK_NULL_FENCE;
+        VkSemaphoreCreateInfo bridgeSemaphoreInfo = {};
+        bridgeSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        for (int i = 0; sepOk && i < piVulkanState::kBatchRingSize; ++i)
+        {
+            sepOk = state->vkAllocateCommandBuffers(state->device, &sepAlloc, &state->batchRingCommandBuffers[i]) == VK_SUCCESS &&
+                    state->batchRingCommandBuffers[i] != VK_NULL_COMMAND_BUFFER &&
+                    state->vkCreateFence(state->device, &fenceInfo, nullptr, &state->batchRingFences[i]) == VK_SUCCESS &&
+                    state->batchRingFences[i] != VK_NULL_FENCE &&
+                    state->vkCreateSemaphore(state->device, &bridgeSemaphoreInfo, nullptr, &state->batchRingBridgeSemaphores[i]) == VK_SUCCESS &&
+                    state->batchRingBridgeSemaphores[i] != VK_NULL_SEMAPHORE;
+        }
+        state->batchRingReady = sepOk;
+        iReport(reporter, sepOk ? "Vulkan renderer resource separation ACTIVE: utility cmdbuf + batch ring(3)"
+                                : "Vulkan renderer resource separation UNAVAILABLE: legacy shared command buffer in use");
+    }
     iReport(reporter, "Vulkan renderer created frame resources");
     return true;
 }
@@ -2793,32 +3039,6 @@ static bool iCreateBufferObject(piVulkanState *state, piBuffer buffer, const voi
     return true;
 }
 
-static piBuffer iCloneHostDebugBuffer(piVulkanState *state, piBuffer source, piRenderer::piReporter *reporter)
-{
-    if (!state || !source || !source->data || source->size == 0u)
-    {
-        return nullptr;
-    }
-    piBuffer clone = new piBufferS();
-    clone->size = source->size;
-    clone->type = source->type;
-    clone->use = source->use;
-    clone->data = static_cast<uint8_t *>(std::malloc(clone->size));
-    if (!clone->data)
-    {
-        delete clone;
-        return nullptr;
-    }
-    std::memcpy(clone->data, source->data, clone->size);
-    if (!iCreateBufferObject(state, clone, clone->data, reporter))
-    {
-        std::free(clone->data);
-        delete clone;
-        return nullptr;
-    }
-    return clone;
-}
-
 static bool iEnsureHostTransientUniformBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter)
 {
     if (!state || state->device == VK_NULL_DEVICE)
@@ -2917,24 +3137,38 @@ static VkDeviceSize iAlignVkDeviceSize(VkDeviceSize value, VkDeviceSize alignmen
 static bool iAllocateHostTransientUniformSlice(piVulkanState *state, piBuffer buffer, const void *data, unsigned int len, piRenderer::piReporter *reporter)
 {
     static const VkDeviceSize kAlignment = 256;
+    // 24MB / 3 ring slots = 8MB per eye-frame. Large streamed chapters exceeded
+    // the previous 8MB/3 partition, and the exhaustion fallback writes shared
+    // persistent storage - reopening the uniform race precisely in big scenes.
+    static const VkDeviceSize kHostTransientUniformSize = 24ull * 1024ull * 1024ull;
     if (!state || !buffer || !data || len == 0)
     {
         return false;
     }
-    if (!iEnsureHostTransientUniformBuffer(state, kBorrowedUniformTotalBytes, reporter))
+    if (!iEnsureHostTransientUniformBuffer(state, kHostTransientUniformSize, reporter))
     {
         return false;
     }
     VkDeviceSize offset = iAlignVkDeviceSize(state->hostTransientUniformOffset, kAlignment);
-    const VkDeviceSize limit = state->hostTransientUniformLimit != 0
-        ? state->hostTransientUniformLimit
-        : state->hostTransientUniformSize;
-    if (offset + buffer->size > limit)
+    const VkDeviceSize capacity = state->hostTransientUniformLimit != 0 ? state->hostTransientUniformLimit
+                                                                        : state->hostTransientUniformSize;
+    if (offset + buffer->size > capacity)
     {
-        iError(reporter, "Vulkan renderer host transient uniform buffer exhausted");
+        // Once per session: the caller falls back to the shared persistent
+        // buffer, which reopens the cross-eye uniform race - if this fires,
+        // grow kHostTransientUniformSize.
+        if (!state->transientExhaustReported)
+        {
+            state->transientExhaustReported = true;
+            iError(reporter, "Vulkan renderer transient uniform partition EXHAUSTED - falling back to shared storage (uniform race window!)");
+        }
         return false;
     }
-    std::memset(state->hostTransientUniformMapped + offset, 0, buffer->size);
+    // Zero only the padding tail (the copy overwrites the rest): these are
+    // write-combined bytes, and per-draw callers pass small payloads into
+    // buffers created much larger (mChunkData is 128x its 8-byte payload).
+    if (len < buffer->size)
+        std::memset(state->hostTransientUniformMapped + offset + len, 0, buffer->size - len);
     std::memcpy(state->hostTransientUniformMapped + offset, data, len);
     buffer->descriptorBuffer = state->hostTransientUniformBuffer;
     buffer->descriptorOffset = offset;
@@ -3089,11 +3323,11 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     bindings[5].binding = 8;
     bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     bindings[5].descriptorCount = 1;
-    bindings[5].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[5].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     bindings[6].binding = 9;
     bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[6].descriptorCount = 1;
-    bindings[6].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[6].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
     setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -3132,15 +3366,15 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
 
     VkDescriptorPoolSize poolSizes[3] = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = 5 * kBorrowedStaticPaintSetCount;
+    poolSizes[0].descriptorCount = 5;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = kBorrowedStaticPaintSetCount;
+    poolSizes[1].descriptorCount = 1;
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[2].descriptorCount = kBorrowedStaticPaintSetCount;
+    poolSizes[2].descriptorCount = 1;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.maxSets = kBorrowedStaticPaintSetCount;
+    poolInfo.maxSets = 1;
     poolInfo.poolSizeCount = 3;
     poolInfo.pPoolSizes = poolSizes;
     result = state->vkCreateDescriptorPool(state->device, &poolInfo, nullptr, &state->staticPaintDescriptorPool);
@@ -3158,18 +3392,9 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
     VkDescriptorSetAllocateInfo allocateInfo = {};
     allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocateInfo.descriptorPool = state->staticPaintDescriptorPool;
-    VkDescriptorSetLayout staticPaintLayouts[kBorrowedStaticPaintSetCount] = {};
-    for (uint32_t i = 0; i < kBorrowedStaticPaintSetCount; ++i)
-    {
-        staticPaintLayouts[i] = state->staticPaintDescriptorSetLayout;
-    }
-    allocateInfo.descriptorSetCount = kBorrowedStaticPaintSetCount;
-    allocateInfo.pSetLayouts = staticPaintLayouts;
-    result = state->vkAllocateDescriptorSets(
-        state->device,
-        &allocateInfo,
-        state->staticPaintDescriptorSets);
-    state->staticPaintDescriptorSet = state->staticPaintDescriptorSets[0];
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &state->staticPaintDescriptorSetLayout;
+    result = state->vkAllocateDescriptorSets(state->device, &allocateInfo, &state->staticPaintDescriptorSet);
     if (result != VK_SUCCESS || state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET)
     {
         iError(reporter, "Vulkan renderer failed to allocate static paint descriptor set");
@@ -3185,12 +3410,52 @@ static bool iEnsureStaticPaintPipelineLayout(piVulkanState *state, piRenderer::p
         state->staticPaintDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
         return false;
     }
+
+    // Eye-frame batching pool: a fresh descriptor set is allocated per draw and
+    // the pool is reset per batch-open, so every recorded draw keeps its own
+    // snapshot of the per-chunk/per-layer uniforms + per-brush vertex buffer.
+    // Failure is non-fatal: the draw path falls back to the per-draw-submit path.
+    if (state->batchPaintDescriptorPool == VK_NULL_DESCRIPTOR_POOL)
+    {
+        const uint32_t kBatchSets = 1024;
+        VkDescriptorPoolSize batchPoolSizes[3] = {};
+        batchPoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        batchPoolSizes[0].descriptorCount = 5 * kBatchSets;
+        batchPoolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        batchPoolSizes[1].descriptorCount = 1 * kBatchSets;
+        batchPoolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        batchPoolSizes[2].descriptorCount = 1 * kBatchSets;
+        VkDescriptorPoolCreateInfo batchPoolInfo = {};
+        batchPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        batchPoolInfo.maxSets = kBatchSets;
+        batchPoolInfo.poolSizeCount = 3;
+        batchPoolInfo.pPoolSizes = batchPoolSizes;
+        if (state->batchRingReady)
+        {
+            // One pool per ring slot so a batch-open only ever resets a pool
+            // whose sets the GPU is guaranteed done with (that slot's fence).
+            for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+            {
+                if (state->batchPaintDescriptorPools[i] == VK_NULL_DESCRIPTOR_POOL &&
+                    state->vkCreateDescriptorPool(state->device, &batchPoolInfo, nullptr, &state->batchPaintDescriptorPools[i]) != VK_SUCCESS)
+                {
+                    state->batchPaintDescriptorPools[i] = VK_NULL_DESCRIPTOR_POOL;
+                }
+            }
+            const int slot = state->batchCurrentSlot >= 0 ? state->batchCurrentSlot : 0;
+            state->batchPaintDescriptorPool = state->batchPaintDescriptorPools[slot];
+        }
+        else if (state->vkCreateDescriptorPool(state->device, &batchPoolInfo, nullptr, &state->batchPaintDescriptorPool) != VK_SUCCESS)
+        {
+            state->batchPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        }
+    }
     return true;
 }
 
-static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::piReporter *reporter)
+static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, VkDescriptorSet set, piRenderer::piReporter *reporter)
 {
-    if (!state || state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
+    if (!state || set == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
     {
         return true;
     }
@@ -3211,22 +3476,6 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     {
         return false;
     }
-    if (state->borrowedFrameResourcesActive)
-    {
-        if (state->borrowedStaticPaintSetCursor >= kBorrowedStaticPaintSetsPerFrame)
-        {
-            iError(reporter, "Vulkan renderer exhausted borrowed static paint descriptor sets");
-            return false;
-        }
-        const uint32_t descriptorIndex =
-            state->borrowedFrameSlot * kBorrowedStaticPaintSetsPerFrame +
-            state->borrowedStaticPaintSetCursor++;
-        state->staticPaintDescriptorSet = state->staticPaintDescriptorSets[descriptorIndex];
-    }
-    else
-    {
-        state->staticPaintDescriptorSet = state->staticPaintDescriptorSets[0];
-    }
 
     VkDescriptorBufferInfo bufferInfos[6] = {};
     bufferInfos[0] = iDescriptorBufferInfo(frameBuffer);
@@ -3240,46 +3489,47 @@ static bool iUpdateStaticPaintDescriptorSet(piVulkanState *state, piRenderer::pi
     imageInfo.sampler = blueNoise->sampler;
     imageInfo.imageView = blueNoise->imageView;
     imageInfo.imageLayout = blueNoise->imageLayout;
+    blueNoise->lastBatchUseStamp = state->batchRingStampCounter;
 
     VkWriteDescriptorSet writes[7] = {};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = state->staticPaintDescriptorSet;
+    writes[0].dstSet = set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[0].pBufferInfo = &bufferInfos[0];
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = state->staticPaintDescriptorSet;
+    writes[1].dstSet = set;
     writes[1].dstBinding = 3;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[1].pBufferInfo = &bufferInfos[1];
     writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[2].dstSet = state->staticPaintDescriptorSet;
+    writes[2].dstSet = set;
     writes[2].dstBinding = 4;
     writes[2].descriptorCount = 1;
     writes[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[2].pBufferInfo = &bufferInfos[2];
     writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[3].dstSet = state->staticPaintDescriptorSet;
+    writes[3].dstSet = set;
     writes[3].dstBinding = 5;
     writes[3].descriptorCount = 1;
     writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[3].pBufferInfo = &bufferInfos[3];
     writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[4].dstSet = state->staticPaintDescriptorSet;
+    writes[4].dstSet = set;
     writes[4].dstBinding = 7;
     writes[4].descriptorCount = 1;
     writes[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[4].pImageInfo = &imageInfo;
     writes[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[5].dstSet = state->staticPaintDescriptorSet;
+    writes[5].dstSet = set;
     writes[5].dstBinding = 8;
     writes[5].descriptorCount = 1;
     writes[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     writes[5].pBufferInfo = &bufferInfos[4];
     writes[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[6].dstSet = state->staticPaintDescriptorSet;
+    writes[6].dstSet = set;
     writes[6].dstBinding = 9;
     writes[6].descriptorCount = 1;
     writes[6].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -3310,7 +3560,7 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
         return true;
     }
 
-    VkDescriptorSetLayoutBinding bindings[4] = {};
+    VkDescriptorSetLayoutBinding bindings[6] = {};
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[0].descriptorCount = 1;
@@ -3327,10 +3577,29 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
     bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[3].descriptorCount = 1;
     bindings[3].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    // Binding 9: the picture renderer's small constants (unSize = aspect
+    // ratio) - the 2D quad VS places the quad in the world with it.
+    bindings[4].binding = 9;
+    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[4].descriptorCount = 1;
+    bindings[4].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    // Binding 7: blue noise. NOT optional, despite never having been declared
+    // here. Every picture fragment shader reads it - shader_pi2D_fs and
+    // shader_pip360Equirect_fs both call alpha2coverage(), which texelFetches
+    // mTexBlueNoise at binding 7 and uses the result to dither alpha before
+    // writing gl_SampleMask. Reading an undeclared descriptor is undefined, and
+    // whatever came back was driving the COVERAGE: a bad value collapses the
+    // mask to zero, so the picture writes no samples at all and disappears
+    // completely rather than looking wrong. The paint layout has always
+    // declared it (see the paint layout, binding 7) - this was the asymmetry.
+    bindings[5].binding = 7;
+    bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[5].descriptorCount = 1;
+    bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
     setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setLayoutInfo.bindingCount = 4;
+    setLayoutInfo.bindingCount = 6;
     setLayoutInfo.pBindings = bindings;
     VkResult result = state->vkCreateDescriptorSetLayout(state->device, &setLayoutInfo, nullptr, &state->pictureDescriptorSetLayout);
     if (result != VK_SUCCESS || state->pictureDescriptorSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
@@ -3355,14 +3624,19 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
     }
 
     VkDescriptorPoolSize poolSizes[2] = {};
+    // Two combined image samplers (the picture itself at 0, blue noise at 7)
+    // and four uniform buffers (3, 4, 5, 9). The uniform count was 3 while the
+    // layout already declared four - undersized pools are allowed to fail
+    // allocation with VK_ERROR_OUT_OF_POOL_MEMORY, so it was luck that it did
+    // not.
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[0].descriptorCount = kBorrowedPictureSetCount;
+    poolSizes[0].descriptorCount = 2;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[1].descriptorCount = 3 * kBorrowedPictureSetCount;
+    poolSizes[1].descriptorCount = 4;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.maxSets = kBorrowedPictureSetCount;
+    poolInfo.maxSets = 1;
     poolInfo.poolSizeCount = 2;
     poolInfo.pPoolSizes = poolSizes;
     result = state->vkCreateDescriptorPool(state->device, &poolInfo, nullptr, &state->pictureDescriptorPool);
@@ -3380,18 +3654,9 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
     VkDescriptorSetAllocateInfo allocateInfo = {};
     allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocateInfo.descriptorPool = state->pictureDescriptorPool;
-    VkDescriptorSetLayout pictureLayouts[kBorrowedPictureSetCount] = {};
-    for (uint32_t i = 0; i < kBorrowedPictureSetCount; ++i)
-    {
-        pictureLayouts[i] = state->pictureDescriptorSetLayout;
-    }
-    allocateInfo.descriptorSetCount = kBorrowedPictureSetCount;
-    allocateInfo.pSetLayouts = pictureLayouts;
-    result = state->vkAllocateDescriptorSets(
-        state->device,
-        &allocateInfo,
-        state->pictureDescriptorSets);
-    state->pictureDescriptorSet = state->pictureDescriptorSets[0];
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &state->pictureDescriptorSetLayout;
+    result = state->vkAllocateDescriptorSets(state->device, &allocateInfo, &state->pictureDescriptorSet);
     if (result != VK_SUCCESS || state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET)
     {
         iError(reporter, "Vulkan renderer failed to allocate picture descriptor set");
@@ -3409,79 +3674,138 @@ static bool iEnsurePicturePipelineLayout(piVulkanState *state, piRenderer::piRep
         iReport(reporter, "Vulkan renderer created picture descriptor and pipeline layouts");
         state->pictureLayoutReported = true;
     }
+
+    // Eye-frame batching pool for pictures (see the paint equivalent). One 360
+    // backdrop is typical, but 2D picture layers each rewrite unit 9, so version
+    // per draw here too. Non-fatal on failure.
+    if (state->batchPictureDescriptorPool == VK_NULL_DESCRIPTOR_POOL)
+    {
+        const uint32_t kBatchSets = 256;
+        VkDescriptorPoolSize batchPoolSizes[2] = {};
+        batchPoolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        batchPoolSizes[0].descriptorCount = 1 * kBatchSets;
+        batchPoolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        batchPoolSizes[1].descriptorCount = 3 * kBatchSets;
+        VkDescriptorPoolCreateInfo batchPoolInfo = {};
+        batchPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        batchPoolInfo.maxSets = kBatchSets;
+        batchPoolInfo.poolSizeCount = 2;
+        batchPoolInfo.pPoolSizes = batchPoolSizes;
+        if (state->batchRingReady)
+        {
+            // Per ring slot, mirroring the paint pools (see note there).
+            for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+            {
+                if (state->batchPictureDescriptorPools[i] == VK_NULL_DESCRIPTOR_POOL &&
+                    state->vkCreateDescriptorPool(state->device, &batchPoolInfo, nullptr, &state->batchPictureDescriptorPools[i]) != VK_SUCCESS)
+                {
+                    state->batchPictureDescriptorPools[i] = VK_NULL_DESCRIPTOR_POOL;
+                }
+            }
+            const int slot = state->batchCurrentSlot >= 0 ? state->batchCurrentSlot : 0;
+            state->batchPictureDescriptorPool = state->batchPictureDescriptorPools[slot];
+        }
+        else if (state->vkCreateDescriptorPool(state->device, &batchPoolInfo, nullptr, &state->batchPictureDescriptorPool) != VK_SUCCESS)
+        {
+            state->batchPictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        }
+    }
     return true;
 }
 
-static bool iUpdatePictureDescriptorSet(piVulkanState *state, piRenderer::piReporter *reporter)
+static bool iUpdatePictureDescriptorSet(piVulkanState *state, VkDescriptorSet set, piRenderer::piReporter *reporter)
 {
-    if (!state || state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
+    if (!state || set == VK_NULL_DESCRIPTOR_SET || !state->vkUpdateDescriptorSets)
     {
         return true;
     }
     piTexture picture = state->textures[0];
+    piTexture blueNoise = state->textures[7];
     piBuffer layerBuffer = state->constantBuffers[3];
     piBuffer displayBuffer = state->constantBuffers[4];
     piBuffer passBuffer = state->constantBuffers[5];
     if (!picture || picture->imageView == VK_NULL_IMAGE_VIEW || picture->sampler == VK_NULL_SAMPLER ||
+        !blueNoise || blueNoise->imageView == VK_NULL_IMAGE_VIEW || blueNoise->sampler == VK_NULL_SAMPLER ||
         !layerBuffer || layerBuffer->buffer == VK_NULL_BUFFER ||
         !displayBuffer || displayBuffer->buffer == VK_NULL_BUFFER ||
         !passBuffer || passBuffer->buffer == VK_NULL_BUFFER)
     {
         return false;
     }
-    if (state->borrowedFrameResourcesActive)
-    {
-        if (state->borrowedPictureSetCursor >= kBorrowedPictureSetsPerFrame)
-        {
-            iError(reporter, "Vulkan renderer exhausted borrowed picture descriptor sets");
-            return false;
-        }
-        const uint32_t descriptorIndex =
-            state->borrowedFrameSlot * kBorrowedPictureSetsPerFrame +
-            state->borrowedPictureSetCursor++;
-        state->pictureDescriptorSet = state->pictureDescriptorSets[descriptorIndex];
-    }
-    else
-    {
-        state->pictureDescriptorSet = state->pictureDescriptorSets[0];
-    }
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.sampler = picture->sampler;
     imageInfo.imageView = picture->imageView;
     imageInfo.imageLayout = picture->imageLayout;
+    picture->lastBatchUseStamp = state->batchRingStampCounter;
 
-    VkDescriptorBufferInfo bufferInfos[3] = {};
+    // The picture shaders dither alpha against this before writing the sample
+    // mask; leaving it unbound left the coverage depending on undefined memory.
+    VkDescriptorImageInfo blueNoiseInfo = {};
+    blueNoiseInfo.sampler = blueNoise->sampler;
+    blueNoiseInfo.imageView = blueNoise->imageView;
+    blueNoiseInfo.imageLayout = blueNoise->imageLayout;
+    blueNoise->lastBatchUseStamp = state->batchRingStampCounter;
+
+    VkDescriptorBufferInfo bufferInfos[4] = {};
     bufferInfos[0] = iDescriptorBufferInfo(layerBuffer);
     bufferInfos[1] = iDescriptorBufferInfo(displayBuffer);
     bufferInfos[2] = iDescriptorBufferInfo(passBuffer);
 
-    VkWriteDescriptorSet writes[4] = {};
+    VkWriteDescriptorSet writes[6] = {};
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = state->pictureDescriptorSet;
+    writes[0].dstSet = set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[0].pImageInfo = &imageInfo;
+    writes[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[5].dstSet = set;
+    writes[5].dstBinding = 7;
+    writes[5].descriptorCount = 1;
+    writes[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[5].pImageInfo = &blueNoiseInfo;
     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = state->pictureDescriptorSet;
+    writes[1].dstSet = set;
     writes[1].dstBinding = 3;
     writes[1].descriptorCount = 1;
     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[1].pBufferInfo = &bufferInfos[0];
     writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[2].dstSet = state->pictureDescriptorSet;
+    writes[2].dstSet = set;
     writes[2].dstBinding = 4;
     writes[2].descriptorCount = 1;
     writes[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[2].pBufferInfo = &bufferInfos[1];
     writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[3].dstSet = state->pictureDescriptorSet;
+    writes[3].dstSet = set;
     writes[3].dstBinding = 5;
     writes[3].descriptorCount = 1;
     writes[3].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     writes[3].pBufferInfo = &bufferInfos[2];
-    state->vkUpdateDescriptorSets(state->device, 4, writes, 0, nullptr);
+    // Binding 9 (picture constants / unSize): the player attaches its small
+    // constants buffer at slot 9 before picture rendering; the 2D VS reads the
+    // quad aspect from it. Optional - the 360 shaders never reference it.
+    uint32_t writeCount = 4;
+    piBuffer sizeBuffer = state->constantBuffers[9];
+    if (sizeBuffer && sizeBuffer->buffer != VK_NULL_BUFFER)
+    {
+        bufferInfos[3] = iDescriptorBufferInfo(sizeBuffer);
+        writes[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[4].dstSet = set;
+        writes[4].dstBinding = 9;
+        writes[4].descriptorCount = 1;
+        writes[4].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        writes[4].pBufferInfo = &bufferInfos[3];
+        writeCount = 5;
+    }
+    else
+    {
+        // Keep the blue-noise write contiguous when binding 9 is absent.
+        writes[4] = writes[5];
+    }
+    writeCount += 1;   // binding 7 is always written
+    state->vkUpdateDescriptorSets(state->device, writeCount, writes, 0, nullptr);
 
     if (!state->pictureDescriptorReported)
     {
@@ -3561,98 +3885,6 @@ static const uint32_t kSrgbPresentFS[] = {
     0x00050051u, 0x00000006u, 0x00000043u, 0x00000058u, 0x00000002u, 0x00070050u, 0x00000039u, 0x00000044u,
     0x00000041u, 0x00000042u, 0x00000043u, 0x00000029u, 0x0003003eu, 0x0000003du, 0x00000044u, 0x000100fdu,
     0x00010038u
-};
-
-#include "piVulkan_HostDiagnosticShaders.inc"
-#include "piVulkan_HostCenterDiagnosticShader.inc"
-#include "piVulkan_HostVertexDescriptorDiagnosticShader.inc"
-
-// Constant cyan fragment shader for isolating Unity host-render-pass raster
-// integration. It intentionally has no descriptors, inputs, or uniforms.
-static const uint32_t kHostDebugTriangleFS[] = {
-    0x07230203u, 0x00010000u, 0x0008000bu, 0x0000000du, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
-    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
-    0x0006000fu, 0x00000004u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x00000009u, 0x00030010u, 0x00000004u,
-    0x00000007u, 0x00030003u, 0x00000002u, 0x000001c2u, 0x00040005u, 0x00000004u, 0x6e69616du, 0x00000000u,
-    0x00050005u, 0x00000009u, 0x4374756fu, 0x726f6c6fu, 0x00000000u, 0x00040047u, 0x00000009u, 0x0000001eu,
-    0x00000000u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u, 0x00000006u,
-    0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00040020u, 0x00000008u, 0x00000003u,
-    0x00000007u, 0x0004003bu, 0x00000008u, 0x00000009u, 0x00000003u, 0x0004002bu, 0x00000006u, 0x0000000au,
-    0x00000000u, 0x0004002bu, 0x00000006u, 0x0000000bu, 0x3f800000u, 0x0007002cu, 0x00000007u, 0x0000000cu,
-    0x0000000au, 0x0000000bu, 0x0000000bu, 0x0000000bu, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u,
-    0x00000003u, 0x000200f8u, 0x00000005u, 0x0003003eu, 0x00000009u, 0x0000000cu, 0x000100fdu, 0x00010038u,
-};
-
-// Descriptor-free vertex shader for proving that the real IMM index buffer is
-// consumed by Unity's live command buffer. It maps each fetched index modulo
-// three onto a fixed triangle, preserving indexed submission and restart data.
-static const uint32_t kHostIndexedControlVS[] = {
-    0x07230203u, 0x00010000u, 0x000d000bu, 0x0000002au, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
-    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
-    0x0007000fu, 0x00000000u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x0000000du, 0x0000001bu, 0x00030047u,
-    0x0000000bu, 0x00000002u, 0x00050048u, 0x0000000bu, 0x00000000u, 0x0000000bu, 0x00000000u, 0x00050048u,
-    0x0000000bu, 0x00000001u, 0x0000000bu, 0x00000001u, 0x00050048u, 0x0000000bu, 0x00000002u, 0x0000000bu,
-    0x00000003u, 0x00050048u, 0x0000000bu, 0x00000003u, 0x0000000bu, 0x00000004u, 0x00040047u, 0x0000001bu,
-    0x0000000bu, 0x0000002au, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00030016u,
-    0x00000006u, 0x00000020u, 0x00040017u, 0x00000007u, 0x00000006u, 0x00000004u, 0x00040015u, 0x00000008u,
-    0x00000020u, 0x00000000u, 0x0004002bu, 0x00000008u, 0x00000009u, 0x00000001u, 0x0004001cu, 0x0000000au,
-    0x00000006u, 0x00000009u, 0x0006001eu, 0x0000000bu, 0x00000007u, 0x00000006u, 0x0000000au, 0x0000000au,
-    0x00040020u, 0x0000000cu, 0x00000003u, 0x0000000bu, 0x0004003bu, 0x0000000cu, 0x0000000du, 0x00000003u,
-    0x00040015u, 0x0000000eu, 0x00000020u, 0x00000001u, 0x0004002bu, 0x0000000eu, 0x0000000fu, 0x00000000u,
-    0x00040017u, 0x00000010u, 0x00000006u, 0x00000002u, 0x0004002bu, 0x00000008u, 0x00000011u, 0x00000003u,
-    0x0004001cu, 0x00000012u, 0x00000010u, 0x00000011u, 0x0004002bu, 0x00000006u, 0x00000013u, 0xbf400000u,
-    0x0005002cu, 0x00000010u, 0x00000014u, 0x00000013u, 0x00000013u, 0x0004002bu, 0x00000006u, 0x00000015u,
-    0x3f400000u, 0x0005002cu, 0x00000010u, 0x00000016u, 0x00000015u, 0x00000013u, 0x0004002bu, 0x00000006u,
-    0x00000017u, 0x00000000u, 0x0005002cu, 0x00000010u, 0x00000018u, 0x00000017u, 0x00000015u, 0x0006002cu,
-    0x00000012u, 0x00000019u, 0x00000014u, 0x00000016u, 0x00000018u, 0x00040020u, 0x0000001au, 0x00000001u,
-    0x0000000eu, 0x0004003bu, 0x0000001au, 0x0000001bu, 0x00000001u, 0x00040020u, 0x0000001fu, 0x00000007u,
-    0x00000012u, 0x00040020u, 0x00000021u, 0x00000007u, 0x00000010u, 0x0004002bu, 0x00000006u, 0x00000024u,
-    0x3f800000u, 0x00040020u, 0x00000028u, 0x00000003u, 0x00000007u, 0x00050036u, 0x00000002u, 0x00000004u,
-    0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u, 0x0004003bu, 0x0000001fu, 0x00000020u, 0x00000007u,
-    0x0004003du, 0x0000000eu, 0x0000001cu, 0x0000001bu, 0x0004007cu, 0x00000008u, 0x0000001du, 0x0000001cu,
-    0x00050089u, 0x00000008u, 0x0000001eu, 0x0000001du, 0x00000011u, 0x0003003eu, 0x00000020u, 0x00000019u,
-    0x00050041u, 0x00000021u, 0x00000022u, 0x00000020u, 0x0000001eu, 0x0004003du, 0x00000010u, 0x00000023u,
-    0x00000022u, 0x00050051u, 0x00000006u, 0x00000025u, 0x00000023u, 0x00000000u, 0x00050051u, 0x00000006u,
-    0x00000026u, 0x00000023u, 0x00000001u, 0x00070050u, 0x00000007u, 0x00000027u, 0x00000025u, 0x00000026u,
-    0x00000017u, 0x00000024u, 0x00050041u, 0x00000028u, 0x00000029u, 0x0000000du, 0x0000000fu, 0x0003003eu,
-    0x00000029u, 0x00000027u, 0x000100fdu, 0x00010038u,
-};
-
-// Brush-2 index strips alternate vertices from adjacent seven-vertex rings.
-// Fold both the ring and within-ring index into the fixed triangle corner so
-// consecutive fetched indices cannot collapse to repeated corners.
-static const uint32_t kHostIndexedStripControlVS[] = {
-    0x07230203u, 0x00010000u, 0x000d000bu, 0x00000033u, 0x00000000u, 0x00020011u, 0x00000001u, 0x0006000bu,
-    0x00000001u, 0x4c534c47u, 0x6474732eu, 0x3035342eu, 0x00000000u, 0x0003000eu, 0x00000000u, 0x00000001u,
-    0x0007000fu, 0x00000000u, 0x00000004u, 0x6e69616du, 0x00000000u, 0x0000000bu, 0x0000001cu, 0x00040047u,
-    0x0000000bu, 0x0000000bu, 0x0000002au, 0x00030047u, 0x0000001au, 0x00000002u, 0x00050048u, 0x0000001au,
-    0x00000000u, 0x0000000bu, 0x00000000u, 0x00050048u, 0x0000001au, 0x00000001u, 0x0000000bu, 0x00000001u,
-    0x00050048u, 0x0000001au, 0x00000002u, 0x0000000bu, 0x00000003u, 0x00050048u, 0x0000001au, 0x00000003u,
-    0x0000000bu, 0x00000004u, 0x00020013u, 0x00000002u, 0x00030021u, 0x00000003u, 0x00000002u, 0x00040015u,
-    0x00000006u, 0x00000020u, 0x00000000u, 0x00040015u, 0x00000009u, 0x00000020u, 0x00000001u, 0x00040020u,
-    0x0000000au, 0x00000001u, 0x00000009u, 0x0004003bu, 0x0000000au, 0x0000000bu, 0x00000001u, 0x0004002bu,
-    0x00000006u, 0x00000011u, 0x00000007u, 0x0004002bu, 0x00000006u, 0x00000014u, 0x00000003u, 0x00030016u,
-    0x00000016u, 0x00000020u, 0x00040017u, 0x00000017u, 0x00000016u, 0x00000004u, 0x0004002bu, 0x00000006u,
-    0x00000018u, 0x00000001u, 0x0004001cu, 0x00000019u, 0x00000016u, 0x00000018u, 0x0006001eu, 0x0000001au,
-    0x00000017u, 0x00000016u, 0x00000019u, 0x00000019u, 0x00040020u, 0x0000001bu, 0x00000003u, 0x0000001au,
-    0x0004003bu, 0x0000001bu, 0x0000001cu, 0x00000003u, 0x0004002bu, 0x00000009u, 0x0000001du, 0x00000000u,
-    0x00040017u, 0x0000001eu, 0x00000016u, 0x00000002u, 0x0004001cu, 0x0000001fu, 0x0000001eu, 0x00000014u,
-    0x0004002bu, 0x00000016u, 0x00000020u, 0xbf400000u, 0x0005002cu, 0x0000001eu, 0x00000021u, 0x00000020u,
-    0x00000020u, 0x0004002bu, 0x00000016u, 0x00000022u, 0x3f400000u, 0x0005002cu, 0x0000001eu, 0x00000023u,
-    0x00000022u, 0x00000020u, 0x0004002bu, 0x00000016u, 0x00000024u, 0x00000000u, 0x0005002cu, 0x0000001eu,
-    0x00000025u, 0x00000024u, 0x00000022u, 0x0006002cu, 0x0000001fu, 0x00000026u, 0x00000021u, 0x00000023u,
-    0x00000025u, 0x00040020u, 0x00000028u, 0x00000007u, 0x0000001fu, 0x00040020u, 0x0000002au, 0x00000007u,
-    0x0000001eu, 0x0004002bu, 0x00000016u, 0x0000002du, 0x3f800000u, 0x00040020u, 0x00000031u, 0x00000003u,
-    0x00000017u, 0x00050036u, 0x00000002u, 0x00000004u, 0x00000000u, 0x00000003u, 0x000200f8u, 0x00000005u,
-    0x0004003bu, 0x00000028u, 0x00000029u, 0x00000007u, 0x0004003du, 0x00000009u, 0x0000000cu, 0x0000000bu,
-    0x0004007cu, 0x00000006u, 0x0000000du, 0x0000000cu, 0x00050086u, 0x00000006u, 0x00000012u, 0x0000000du,
-    0x00000011u, 0x00050080u, 0x00000006u, 0x00000013u, 0x0000000du, 0x00000012u, 0x00050089u, 0x00000006u,
-    0x00000015u, 0x00000013u, 0x00000014u, 0x0003003eu, 0x00000029u, 0x00000026u, 0x00050041u, 0x0000002au,
-    0x0000002bu, 0x00000029u, 0x00000015u, 0x0004003du, 0x0000001eu, 0x0000002cu, 0x0000002bu, 0x00050051u,
-    0x00000016u, 0x0000002eu, 0x0000002cu, 0x00000000u, 0x00050051u, 0x00000016u, 0x0000002fu, 0x0000002cu,
-    0x00000001u, 0x00070050u, 0x00000017u, 0x00000030u, 0x0000002eu, 0x0000002fu, 0x00000024u, 0x0000002du,
-    0x00050041u, 0x00000031u, 0x00000032u, 0x0000001cu, 0x0000001du, 0x0003003eu, 0x00000032u, 0x00000030u,
-    0x000100fdu, 0x00010038u,
 };
 
 static bool iEnsureSrgbPresentResources(piVulkanState *state, piRenderer::piReporter *reporter)
@@ -3758,6 +3990,7 @@ static bool iUpdateSrgbPresentDescriptorSet(piVulkanState *state, piTexture sour
     imageInfo.sampler = state->presentSampler;
     imageInfo.imageView = source->imageView;
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    source->lastBatchUseStamp = state->batchRingStampCounter;
 
     VkWriteDescriptorSet write = {};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -3882,164 +4115,8 @@ static VkCullModeFlags iToVulkanCullMode(piRenderer::CullMode mode)
     }
 }
 
-static void iRetireGraphicsPipeline(piVulkanState *state, VkPipeline pipeline)
-{
-    if (!state || pipeline == VK_NULL_PIPELINE || !state->vkDestroyPipeline)
-    {
-        return;
-    }
-    if (state->borrowedFrameResourcesActive)
-    {
-        const piVulkanBorrowedPipeline borrowedPipeline = {
-            pipeline,
-            state->borrowedCurrentFrameNumber
-        };
-        state->borrowedPipelines.push_back(borrowedPipeline);
-        static uint32_t retireReportCount = 0;
-        if (retireReportCount < 16)
-        {
-            std::fprintf(
-                stderr,
-                "[IMM_UNITY_VK_DEFER_PIPELINE_20260731] pipeline=0x%llx frame=%llu\n",
-                static_cast<unsigned long long>(pipeline),
-                static_cast<unsigned long long>(state->borrowedCurrentFrameNumber));
-            ++retireReportCount;
-        }
-        return;
-    }
-    state->vkDestroyPipeline(state->device, pipeline, nullptr);
-}
-
-static bool iDrawHostDescriptorDiagnostic(piVulkanState *state, piRTarget target, piRenderer::piReporter *reporter)
-{
-    if (!state || !target || !state->hostRenderPassFrameActive ||
-        state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
-        state->staticPaintPipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
-        state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET)
-    {
-        return false;
-    }
-    if (state->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(state,
-                             reinterpret_cast<const uint8_t *>(kSrgbPresentVS),
-                             static_cast<int>(sizeof(kSrgbPresentVS)),
-                             &state->hostDebugTriangleVertexModule,
-                             reporter))
-    {
-        return false;
-    }
-    if (state->hostDescriptorDiagnosticFragmentModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(state,
-                             reinterpret_cast<const uint8_t *>(kHostDescriptorDiagnosticFS),
-                             static_cast<int>(sizeof(kHostDescriptorDiagnosticFS)),
-                             &state->hostDescriptorDiagnosticFragmentModule,
-                             reporter))
-    {
-        return false;
-    }
-
-    const VkSampleCountFlagBits sampleCount = target->color[0]
-                                                  ? target->color[0]->sampleCount
-                                                  : VK_SAMPLE_COUNT_1_BIT;
-    if (state->hostDescriptorDiagnosticPipeline == VK_NULL_PIPELINE ||
-        state->hostDescriptorDiagnosticRenderPass != target->renderPass ||
-        state->hostDescriptorDiagnosticSubpass != target->subpass ||
-        state->hostDescriptorDiagnosticSampleCount != sampleCount)
-    {
-        if (state->hostDescriptorDiagnosticPipeline != VK_NULL_PIPELINE)
-        {
-            iRetireGraphicsPipeline(state, state->hostDescriptorDiagnosticPipeline);
-            state->hostDescriptorDiagnosticPipeline = VK_NULL_PIPELINE;
-        }
-        VkPipelineShaderStageCreateInfo stages[2] = {};
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module = state->hostDebugTriangleVertexModule;
-        stages[0].pName = "main";
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = state->hostDescriptorDiagnosticFragmentModule;
-        stages[1].pName = "main";
-
-        VkPipelineVertexInputStateCreateInfo vertexInput = {};
-        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        VkPipelineViewportStateCreateInfo viewport = {};
-        viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewport.viewportCount = 1;
-        viewport.scissorCount = 1;
-        VkPipelineRasterizationStateCreateInfo rasterization = {};
-        rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterization.cullMode = VK_CULL_MODE_NONE;
-        rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterization.lineWidth = 1.0f;
-        VkPipelineMultisampleStateCreateInfo multisample = {};
-        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisample.rasterizationSamples = sampleCount;
-        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = 0;
-        depthStencil.depthWriteEnable = 0;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
-        VkPipelineColorBlendAttachmentState blendAttachment = {};
-        blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        VkPipelineColorBlendStateCreateInfo colorBlend = {};
-        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlend.attachmentCount = 1;
-        colorBlend.pAttachments = &blendAttachment;
-        VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-        VkPipelineDynamicStateCreateInfo dynamicState = {};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = 2;
-        dynamicState.pDynamicStates = dynamicStates;
-        VkGraphicsPipelineCreateInfo pipelineInfo = {};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = stages;
-        pipelineInfo.pVertexInputState = &vertexInput;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewport;
-        pipelineInfo.pRasterizationState = &rasterization;
-        pipelineInfo.pMultisampleState = &multisample;
-        pipelineInfo.pDepthStencilState = target->hasDepth ? &depthStencil : nullptr;
-        pipelineInfo.pColorBlendState = &colorBlend;
-        pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = state->staticPaintPipelineLayout;
-        pipelineInfo.renderPass = target->renderPass;
-        pipelineInfo.subpass = target->subpass;
-        const VkResult result = state->vkCreateGraphicsPipelines(
-            state->device,
-            VK_NULL_PIPELINE_CACHE,
-            1,
-            &pipelineInfo,
-            nullptr,
-            &state->hostDescriptorDiagnosticPipeline);
-        if (result != VK_SUCCESS || state->hostDescriptorDiagnosticPipeline == VK_NULL_PIPELINE)
-        {
-            iError(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] failed to create pipeline");
-            return false;
-        }
-        state->hostDescriptorDiagnosticRenderPass = target->renderPass;
-        state->hostDescriptorDiagnosticSubpass = target->subpass;
-        state->hostDescriptorDiagnosticSampleCount = sampleCount;
-        iReport(reporter, "[IMM_UNITY_VK_GPU_DESCRIPTOR_DIAG_20260731] created four-bar descriptor pipeline");
-    }
-    state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->hostDescriptorDiagnosticPipeline);
-    state->vkCmdBindDescriptorSets(state->commandBuffer,
-                                   VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                   state->staticPaintPipelineLayout,
-                                   0,
-                                   1,
-                                   &state->staticPaintDescriptorSet,
-                                   0,
-                                   nullptr);
-    state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
-    return true;
-}
+static bool iExternalReverseZEnabled(piVulkanState *state);
+static bool iExternalReverseZActiveForTarget(piVulkanState *state, piRTarget target);
 
 static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, piRenderer::piReporter *reporter)
 {
@@ -4051,43 +4128,30 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
         shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT || target->renderPass == VK_NULL_RENDER_PASS ||
         !state->vkCreateGraphicsPipelines)
     {
+        if (state->paintProbeLogCount < 40)
+        {
+            ++state->paintProbeLogCount;
+            char message[192];
+            std::snprintf(message, sizeof(message),
+                          "paint pipeline ensure SKIP: vs=%d fs=%d layout=%d rp=%d fn=%d",
+                          shader->vertexModule != VK_NULL_SHADER_MODULE ? 1 : 0,
+                          shader->fragmentModule != VK_NULL_SHADER_MODULE ? 1 : 0,
+                          shader->pipelineLayout != VK_NULL_PIPELINE_LAYOUT ? 1 : 0,
+                          target->renderPass != VK_NULL_RENDER_PASS ? 1 : 0,
+                          state->vkCreateGraphicsPipelines ? 1 : 0);
+            iReport(reporter, message);
+        }
         return true;
     }
 
-    bool useHostDebugFragment = false;
-#if defined(__ANDROID__) || defined(ANDROID)
-    useHostDebugFragment = state->hostRenderPassFrameActive;
-#endif
-    if (useHostDebugFragment && state->hostDebugTriangleFragmentModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(
-            state,
-            reinterpret_cast<const uint8_t *>(kHostDebugTriangleFS),
-            static_cast<int>(sizeof(kHostDebugTriangleFS)),
-            &state->hostDebugTriangleFragmentModule,
-            reporter))
-    {
-        iError(reporter, "[IMM_UNITY_VK_STATIC_VERTEX_CONTROL_20260731] failed to create constant fragment module");
-        return false;
-    }
-    if (useHostDebugFragment && state->hostCenterDiagnosticVertexModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(
-            state,
-            reinterpret_cast<const uint8_t *>(kHostVertexDescriptorDiagnosticVS),
-            static_cast<int>(sizeof(kHostVertexDescriptorDiagnosticVS)),
-            &state->hostCenterDiagnosticVertexModule,
-            reporter))
-    {
-        iError(reporter, "[IMM_UNITY_VK_TRANSFORM_XY_DIAG_20260801] failed to create transform X/Y module");
-        return false;
-    }
     VkPipelineShaderStageCreateInfo stages[2] = {};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-    stages[0].module = useHostDebugFragment ? state->hostCenterDiagnosticVertexModule : shader->vertexModule;
+    stages[0].module = shader->vertexModule;
     stages[0].pName = "main";
     stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    stages[1].module = useHostDebugFragment ? state->hostDebugTriangleFragmentModule : shader->fragmentModule;
+    stages[1].module = shader->fragmentModule;
     stages[1].pName = "main";
 
     VkPipelineVertexInputStateCreateInfo vertexInput = {};
@@ -4104,35 +4168,30 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     viewport.scissorCount = 1;
 
     piRasterState rasterState = state->currentRasterState;
-    VkCullModeFlags cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
-#if defined(__ANDROID__) || defined(ANDROID)
-    if (state->hostRenderPassFrameActive)
-    {
-        // Unity owns the dynamic viewport in this path. Remove face orientation
-        // from the diagnostic while retaining the real indexed geometry,
-        // descriptors, transforms, and static-paint vertex shader.
-        cullMode = VK_CULL_MODE_NONE;
-    }
-#endif
-    const VkFrontFace frontFace = useHostDebugFragment
-                                      ? VK_FRONT_FACE_COUNTER_CLOCKWISE
-                                      : (rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE);
-    const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
-    const bool wireframe = !useHostDebugFragment && rasterState && rasterState->wireframe;
-    const bool depthClamp = !useHostDebugFragment && rasterState && rasterState->depthClamp;
+    const VkCullModeFlags cullMode = rasterState ? iToVulkanCullMode(rasterState->cullMode) : VK_CULL_MODE_NONE;
+    const VkFrontFace frontFace = rasterState && rasterState->frontIsCounterClockWise ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE;
+    const VkSampleCountFlagBits sampleCount = target->renderSampleCount != VK_SAMPLE_COUNT_1_BIT
+                                                  ? target->renderSampleCount
+                                                  : (target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT);
+    const bool wireframe = rasterState && rasterState->wireframe;
+    const bool depthClamp = rasterState && rasterState->depthClamp;
     const bool mayUseDepth = target->hasDepth &&
                              (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
     const bool depthTest = mayUseDepth && state->depthTestEnabled && state->currentDepthState && state->currentDepthState->depthEnable;
     const bool useHostReverseZCompare = state->externalFrameUsesHostDepth &&
                                         state->externalFrameHostDepthReverseZ &&
                                         target == state->externalFrameRenderTarget;
+    const bool useExternalReverseZ = iExternalReverseZActiveForTarget(state, target);
+    if (useExternalReverseZ && !state->externalReverseZReported)
+    {
+        state->externalReverseZReported = true;
+        iReport(reporter, "Vulkan renderer external reverse-Z ACTIVE: depth compare GREATER, clear 0.0");
+    }
     const bool depthWrite = depthTest && state->depthWriteEnabled;
-    const VkCompareOp depthCompareOp = useHostDebugFragment
-                                           ? VK_COMPARE_OP_ALWAYS
-                                           : (useHostReverseZCompare || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL);
+    const VkCompareOp depthCompareOp = useHostReverseZCompare || useExternalReverseZ || (state->currentDepthState && !state->currentDepthState->lessEqual) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
     piBlendState blendState = state->currentBlendState;
-    const bool alphaToCoverage = !useHostDebugFragment && blendState && blendState->alphaToCoverage;
-    const bool blendEnabled = !useHostDebugFragment && blendState && blendState->enabled0;
+    const bool alphaToCoverage = blendState && blendState->alphaToCoverage;
+    const bool blendEnabled = blendState && blendState->enabled0;
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
         shader->pipelineCullMode == cullMode &&
@@ -4148,11 +4207,32 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     {
         return true;
     }
-    if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+    // Not the currently-bound variant: look it up in this shader's variant cache
+    // (built once per raster/blend/depth/renderPass combo) instead of destroying
+    // and rebuilding. This is the fix for the per-draw pipeline thrash.
+    for (int vi = 0; vi < shader->pipelineVariantCount; ++vi)
     {
-        iRetireGraphicsPipeline(state, shader->pipeline);
-        shader->pipeline = VK_NULL_PIPELINE;
-        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+        const piShaderPipelineVariant &v = shader->pipelineVariants[vi];
+        if (v.pipeline != VK_NULL_PIPELINE &&
+            v.renderPass == target->renderPass && v.cullMode == cullMode && v.frontFace == frontFace &&
+            v.sampleCount == sampleCount && v.wireframe == wireframe && v.depthClamp == depthClamp &&
+            v.depthTest == depthTest && v.depthWrite == depthWrite && v.depthCompareOp == depthCompareOp &&
+            v.alphaToCoverage == alphaToCoverage && v.blendEnabled == blendEnabled)
+        {
+            shader->pipeline = v.pipeline;
+            shader->pipelineRenderPass = v.renderPass;
+            shader->pipelineCullMode = v.cullMode;
+            shader->pipelineFrontFace = v.frontFace;
+            shader->pipelineSampleCount = v.sampleCount;
+            shader->pipelineWireframe = v.wireframe;
+            shader->pipelineDepthClamp = v.depthClamp;
+            shader->pipelineDepthTest = v.depthTest;
+            shader->pipelineDepthWrite = v.depthWrite;
+            shader->pipelineDepthCompareOp = v.depthCompareOp;
+            shader->pipelineAlphaToCoverage = v.alphaToCoverage;
+            shader->pipelineBlendEnabled = v.blendEnabled;
+            return true;
+        }
     }
 
     VkPipelineRasterizationStateCreateInfo rasterization = {};
@@ -4231,54 +4311,998 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
     shader->pipelineDepthCompareOp = depthCompareOp;
     shader->pipelineAlphaToCoverage = alphaToCoverage;
     shader->pipelineBlendEnabled = blendEnabled;
+    // Register this newly-built pipeline in the shader's variant cache so the next
+    // draw with the same state reuses it (round-robin evict if the cache ever fills).
+    {
+        int slot;
+        if (shader->pipelineVariantCount < piShaderS::kPipelineVariantCacheSize)
+            slot = shader->pipelineVariantCount++;
+        else
+        {
+            slot = (int)(shader->pipelineVariantNext++ % (uint32_t)piShaderS::kPipelineVariantCacheSize);
+            VkPipeline old = shader->pipelineVariants[slot].pipeline;
+            if (old != VK_NULL_PIPELINE && old != shader->pipeline && state->vkDestroyPipeline)
+                state->vkDestroyPipeline(state->device, old, nullptr);
+        }
+        piShaderPipelineVariant &v = shader->pipelineVariants[slot];
+        v.pipeline = shader->pipeline;
+        v.renderPass = target->renderPass;
+        v.cullMode = cullMode;
+        v.frontFace = frontFace;
+        v.sampleCount = sampleCount;
+        v.wireframe = wireframe;
+        v.depthClamp = depthClamp;
+        v.depthTest = depthTest;
+        v.depthWrite = depthWrite;
+        v.depthCompareOp = depthCompareOp;
+        v.alphaToCoverage = alphaToCoverage;
+        v.blendEnabled = blendEnabled;
+    }
+    if (state->handleProbeLogCount < 60)
+    {
+        ++state->handleProbeLogCount;
+        char message[224];
+        std::snprintf(message, sizeof(message),
+                      "paint pipeline CREATE: pipe=%llx rp=%llx dt=%d dw=%d cmp=%d blend=%d a2c=%d",
+                      (unsigned long long)(uintptr_t)shader->pipeline,
+                      (unsigned long long)(uintptr_t)target->renderPass,
+                      depthTest ? 1 : 0, depthWrite ? 1 : 0, (int)depthCompareOp,
+                      blendEnabled ? 1 : 0, alphaToCoverage ? 1 : 0);
+        iReport(reporter, message);
+    }
     if (!state->graphicsPipelineReported)
     {
-        iReport(
-            reporter,
-            useHostDebugFragment
-                ? "[IMM_UNITY_VK_GPU_CENTER_DIAG_20260731] created simplified center-geometry pipeline"
-                : "Vulkan renderer created static paint graphics pipeline");
+        iReport(reporter, "Vulkan renderer created static paint graphics pipeline");
         state->graphicsPipelineReported = true;
     }
     return true;
 }
 
+static bool iBatchEnabled(piVulkanState *state)
+{
+    if (!state)
+        return false;
+    if (state->batchEnabledResolved < 0)
+        state->batchEnabledResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_BATCH_EYE_FRAME") ? 0 : 1;
+    return state->batchEnabledResolved != 0;
+}
+
+// In-pass eye-frame clears (see piVulkanState declaration). Only meaningful when
+// batching is on: the clear rides the batch's render-pass begin.
+static bool iInPassClearEnabled(piVulkanState *state)
+{
+    if (!state)
+        return false;
+    if (state->inPassClearResolved < 0)
+        state->inPassClearResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_INPASS_CLEAR") ? 0 : 1;
+    return state->inPassClearResolved != 0;
+}
+
+// Batched end-of-eye shader-read transition (see piVulkanState declaration).
+static bool iBatchedTransitionEnabled(piVulkanState *state)
+{
+    if (!state)
+        return false;
+    if (state->batchedTransitionResolved < 0)
+        state->batchedTransitionResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_BATCHED_TRANSITION") ? 0 : 1;
+    return state->batchedTransitionResolved != 0;
+}
+
+// External-frame reverse-Z: Unity's Vulkan GPU projections are ALWAYS
+// reversed-Z (near maps to 1, far to 0 - confirmed on-device via the
+// [IMMDBG_NEAR] probe: gpu m22=0.0003, m23=0.30009). The offscreen eye path
+// therefore needs depth compare GREATER_OR_EQUAL and a 0.0 depth clear;
+// LESS + clear-1.0 makes far fragments beat near ones (inverted occlusion).
+// The host-depth path already handles this via IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z.
+// Disable with IMM_UNITY_VK_NO_EXTERNAL_REVERSE_Z.
+static bool iExternalReverseZEnabled(piVulkanState *state)
+{
+    if (!state)
+        return false;
+    if (state->externalReverseZResolved < 0)
+        state->externalReverseZResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_EXTERNAL_REVERSE_Z") ? 0 : 1;
+    return state->externalReverseZResolved != 0;
+}
+
+// True when draws into `target` are the external offscreen eye frame fed by
+// Unity's reversed-Z projections (host-depth path excluded - it has its own flag).
+static bool iExternalReverseZActiveForTarget(piVulkanState *state, piRTarget target)
+{
+    return state && !state->hostRenderPassFrameActive &&
+           state->externalFrameRenderTarget != nullptr && target == state->externalFrameRenderTarget &&
+           !state->externalFrameUsesHostDepth && iExternalReverseZEnabled(state);
+}
+
+// Pipelined external-eye submit (see piVulkanState declaration).
+static bool iPipelinedSubmitEnabled(piVulkanState *state)
+{
+    if (!state)
+        return false;
+    if (state->pipelinedSubmitResolved < 0)
+        state->pipelinedSubmitResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_PIPELINED_SUBMIT") ? 0 : 1;
+    return state->pipelinedSubmitResolved != 0;
+}
+
+// Composite bridge (see piVulkanState declaration). Requires a genuinely
+// distinct host queue (same queue = submission order already covers the blit)
+// and the pipelined submit (fence-serialized flushes are CPU-ordered anyway,
+// and their post-submit failure paths would break signal/wait 1:1 pairing).
+static bool iCompositeBridgeEnabled(piVulkanState *state)
+{
+    if (!state || !state->batchRingReady || state->compositeBridgeFailed)
+        return false;
+    if (state->hostQueue == VK_NULL_QUEUE || state->hostQueue == state->graphicsQueue)
+        return false;
+    if (state->batchRingBridgeSemaphores[0] == VK_NULL_SEMAPHORE)
+        return false;
+    if (!iPipelinedSubmitEnabled(state))
+        return false;
+    if (state->compositeBridgeResolved < 0)
+        state->compositeBridgeResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_BRIDGE") ? 0 : 1;
+    return state->compositeBridgeResolved != 0;
+}
+
+// MSAA 4x for the external eye frame (native-viewer quality contract): draws
+// rasterize at 4x into transient tile-memory attachments and resolve in-pass
+// into Unity's 1x eye image; stroke alpha-to-coverage comes from the player's
+// blend state (a no-op at 1x, active at 4x). Kill: IMM_UNITY_VK_NO_MSAA.
+static bool iMsaaEnabled(piVulkanState *state)
+{
+    if (!state)
+        return false;
+    if (state->msaaResolved < 0)
+        state->msaaResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_MSAA") ? 0 : 1;
+    return state->msaaResolved != 0;
+}
+
+// Native FFR on our eye passes (VK_EXT_fragment_density_map; the extension is
+// enabled on Unity's device via boot.config). FFR-2-equivalent radial density,
+// per the native-viewer contract. Kill: IMM_UNITY_VK_NO_FFR.
+static bool iFfrEnabled(piVulkanState *state)
+{
+    if (!state || state->ffrFailed)
+        return false;
+    if (state->ffrResolved < 0)
+        state->ffrResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_FFR") ? 0 : 1;
+    return state->ffrResolved != 0;
+}
+
+// Eager batch open at BeginExternalImageFrame: isolates each eye's uniform
+// uploads into the transient ring (they otherwise hit shared persistent
+// storage the previous eye's in-flight draws are reading - the left-eye
+// "renders from a different position" race). REQUIRES resource separation:
+// with the legacy shared command buffer, mid-eye upload helpers would reset
+// the open batch (the streaming-document feedback corruption).
+static bool iEagerBatchOpenEnabled(piVulkanState *state)
+{
+    if (!state || !state->batchRingReady)
+        return false;
+    if (state->eagerBatchOpenResolved < 0)
+        state->eagerBatchOpenResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_EAGER_BATCH_OPEN") ? 0 : 1;
+    return state->eagerBatchOpenResolved != 0;
+}
+
+// Batch lifecycle trace (debug.imm.IMM_UNITY_VK_BATCH_TRACE): every open (slot +
+// CLEAR/LOAD variant), every flush (with its trigger), every target-switch that
+// kills a recording batch. Capped so it cannot wrap logcat.
+static void iBatchTrace(piVulkanState *state, piRenderer::piReporter *reporter, const char *message)
+{
+    if (!state)
+        return;
+    if (state->batchTraceResolved < 0)
+        state->batchTraceResolved = iRendererFlagEnabled("IMM_UNITY_VK_BATCH_TRACE") ? 1 : 0;
+    if (state->batchTraceResolved == 0 || state->batchTraceCount >= 200)
+        return;
+    ++state->batchTraceCount;
+    iReport(reporter, message);
+}
+
+// Wait out every in-flight (pipelined) batch slot. Utility helpers that mutate
+// or read GPU resources call this so they keep the old shared-fence semantics:
+// no upload/clear/readback ever races the eyes' executing draws.
+static void iWaitAllBatchFences(piVulkanState *state)
+{
+    if (!state || !state->batchRingReady)
+        return;
+    const uint64_t timeout = 5000000000ull;
+    for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+    {
+        if (state->batchRingFencePending[i])
+        {
+            state->vkWaitForFences(state->device, 1, &state->batchRingFences[i], 1, timeout);
+            state->batchRingFencePending[i] = false;
+        }
+    }
+}
+
+// Wait only the pending pipelined slots that can reference a resource whose last
+// batch-recorded use happened at `stamp` (slot acquisition stamps are monotonic;
+// a slot acquired after that use provably does not reference the resource).
+// stamp==0 = never batch-referenced, i.e. a freshly created resource -> nothing
+// to wait. This is the streaming-upload hot path: draining the whole pipeline on
+// every chunk upload was the look-around stutter. ~0ull = unknown -> full drain.
+static void iWaitBatchFencesForStamp(piVulkanState *state, uint64_t stamp)
+{
+    if (!state || !state->batchRingReady)
+        return;
+    if (state->utilityDrainSkipResolved < 0)
+        state->utilityDrainSkipResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_UTILITY_DRAIN_SKIP") ? 0 : 1;
+    if (state->utilityDrainSkipResolved == 0)
+        stamp = ~0ull;
+    const uint64_t timeout = 5000000000ull;
+    bool waited = false;
+    bool skipped = false;
+    for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+    {
+        if (!state->batchRingFencePending[i])
+            continue;
+        if (state->batchRingSlotStamp[i] > stamp)
+        {
+            skipped = true;
+            continue;
+        }
+        state->vkWaitForFences(state->device, 1, &state->batchRingFences[i], 1, timeout);
+        state->batchRingFencePending[i] = false;
+        waited = true;
+    }
+    if (waited)
+        ++state->utilityDrainWaitCount;
+    else if (skipped)
+        ++state->utilityDrainSkipCount;
+}
+
+static void iDestroyDeferredEntry(piVulkanState *state, const piVulkanState::DeferredVkDestroy &e)
+{
+    if (e.sampler != VK_NULL_SAMPLER && state->vkDestroySampler)
+        state->vkDestroySampler(state->device, e.sampler, nullptr);
+    if (e.imageView != VK_NULL_IMAGE_VIEW && state->vkDestroyImageView)
+        state->vkDestroyImageView(state->device, e.imageView, nullptr);
+    if (e.image != 0 && state->vkDestroyImage)
+        state->vkDestroyImage(state->device, e.image, nullptr);
+    if (e.buffer != VK_NULL_BUFFER && state->vkDestroyBuffer)
+        state->vkDestroyBuffer(state->device, e.buffer, nullptr);
+    if (e.memory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
+        state->vkFreeMemory(state->device, e.memory, nullptr);
+}
+
+// Destroy queued resources whose potential GPU references have provably
+// retired: once the ring has advanced kBatchRingSize acquisitions past the
+// enqueue stamp, every slot that was pending at enqueue time has been waited.
+static void iProcessDeferredDestroys(piVulkanState *state, bool force)
+{
+    if (!state || state->deferredDestroyCount == 0)
+        return;
+    int w = 0;
+    for (int i = 0; i < state->deferredDestroyCount; ++i)
+    {
+        const piVulkanState::DeferredVkDestroy &e = state->deferredDestroys[i];
+        if (force || state->batchRingStampCounter - e.ringStamp >= (uint64_t)piVulkanState::kBatchRingSize)
+            iDestroyDeferredEntry(state, e);
+        else
+            state->deferredDestroys[w++] = e;
+    }
+    state->deferredDestroyCount = w;
+}
+
+static void iEnqueueDeferredDestroy(piVulkanState *state, VkSampler sampler, VkImageView imageView, VkImage image, VkBuffer buffer, VkDeviceMemory memory)
+{
+    if (state->deferredDestroyCount >= piVulkanState::kMaxDeferredDestroys)
+    {
+        // Queue full (rare mass destruction): drain safely with one stall.
+        iWaitAllBatchFences(state);
+        iProcessDeferredDestroys(state, true);
+    }
+    piVulkanState::DeferredVkDestroy &e = state->deferredDestroys[state->deferredDestroyCount++];
+    e.ringStamp = state->batchRingStampCounter;
+    e.sampler = sampler;
+    e.imageView = imageView;
+    e.image = image;
+    e.buffer = buffer;
+    e.memory = memory;
+}
+
+// Scoped swap onto the dedicated utility command buffer + fence. The fenced
+// helper bodies keep referring to state->commandBuffer / state->frameFence;
+// inside this scope those point at the utility pair, so a helper can run at
+// ANY time - including while a batch ring slot is recording - without
+// resetting the batch's command buffer. Restores on scope exit (nest-safe:
+// each level restores what it saw). Falls back to a no-op when resource
+// separation is unavailable (legacy behavior preserved).
+// `resourceLastUseStamp` = lastBatchUseStamp of the texture the helper mutates:
+// only the slots that can reference it are waited (fresh resource -> none).
+// Omit it (readback, unknown targets) for the full legacy drain.
+struct iUtilityScope
+{
+    piVulkanState *state;
+    VkCommandBuffer savedCommandBuffer;
+    VkFence savedFrameFence;
+    bool swapped;
+
+    explicit iUtilityScope(piVulkanState *s, uint64_t resourceLastUseStamp = ~0ull)
+        : state(s), savedCommandBuffer(VK_NULL_COMMAND_BUFFER), savedFrameFence(VK_NULL_FENCE), swapped(false)
+    {
+        if (!state || !state->batchRingReady || state->utilityCommandBuffer == VK_NULL_COMMAND_BUFFER)
+            return;
+        iWaitBatchFencesForStamp(state, resourceLastUseStamp);
+        savedCommandBuffer = state->commandBuffer;
+        savedFrameFence = state->frameFence;
+        state->commandBuffer = state->utilityCommandBuffer;
+        state->frameFence = state->utilityFence;
+        swapped = true;
+    }
+
+    ~iUtilityScope()
+    {
+        if (swapped)
+        {
+            state->commandBuffer = savedCommandBuffer;
+            state->frameFence = savedFrameFence;
+        }
+    }
+};
+
+// True when a draw into `target` should be recorded into one shared, batched
+// command buffer (external-image eye frame or the viewer's own-swapchain frame)
+// and submitted once at the eye boundary, rather than doing its own submit+fence.
+// The host-render-pass path (Unity owns the command buffer) and the kill-switch
+// both fall through to the legacy per-draw path.
+static bool iBatchActiveForTarget(piVulkanState *state, piRTarget target)
+{
+    return state && iBatchEnabled(state) && !state->hostRenderPassFrameActive &&
+           target && target->renderPass != VK_NULL_RENDER_PASS &&
+           target->framebuffer != VK_NULL_FRAMEBUFFER &&
+           state->commandBuffer != VK_NULL_COMMAND_BUFFER && state->frameFence != VK_NULL_FENCE &&
+           state->vkCmdBeginRenderPass && state->vkCmdEndRenderPass;
+}
+
+// Close the open batch: end the render pass + command buffer, submit ONCE, wait
+// once. Leaves the color attachment in COLOR_ATTACHMENT_OPTIMAL (its render-pass
+// final layout) so the caller's transition/present logic runs unchanged.
+static bool iFlushBatch(piVulkanState *state, piRenderer::piReporter *reporter, const char *traceReason = "end-of-eye", VkSemaphore signalSemaphore = VK_NULL_SEMAPHORE)
+{
+    if (!state || !state->batchRecording)
+        return true;
+    std::unique_lock<std::recursive_mutex> submitLock(state->submitMutex);
+    {
+        char traceMsg[128];
+        std::snprintf(traceMsg, sizeof(traceMsg), "BATCHTRACE flush slot=%d draws=%u reason=%s",
+                      state->batchCurrentSlot, state->batchDrawCount, traceReason);
+        iBatchTrace(state, reporter, traceMsg);
+    }
+    state->batchRecording = false;
+    piRTarget target = state->batchTarget;
+    state->batchTarget = nullptr;
+    const uint64_t timeout = 5000000000ull;
+    // Perf probe: time spent RECORDING (draws + per-draw descriptor alloc/update,
+    // all CPU) vs the GPU submit+wait, to localize the ~97ms/eye cost.
+    const uint64_t recordDoneNs = iNowNanoseconds();
+    const uint64_t recordNs = state->batchOpenNs ? (recordDoneNs - state->batchOpenNs) : 0;
+    state->vkCmdEndRenderPass(state->commandBuffer);
+    // End-of-eye flush (flag set only by EndExternalImageFrame): ride the
+    // color->shader-read transition on this already-fenced submit instead of a
+    // standalone submit+wait round-trip. Same barrier
+    // iTransitionColorTextureToShaderRead records; oldLayout is the render
+    // pass's finalLayout (COLOR_ATTACHMENT_OPTIMAL) by definition here.
+    const bool appendTransition = state->batchAppendShaderReadTransition &&
+                                  target && target->color[0] && target->color[0]->image != 0 &&
+                                  state->vkCmdPipelineBarrier != nullptr;
+    state->batchAppendShaderReadTransition = false;
+    if (appendTransition)
+    {
+        VkImageSubresourceRange range = {};
+        range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        range.baseMipLevel = 0;
+        range.levelCount = 1;
+        range.baseArrayLayer = 0;
+        range.layerCount = 1;
+        VkImageMemoryBarrier toShader = {};
+        toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toShader.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        toShader.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        toShader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.image = target->color[0]->image;
+        toShader.subresourceRange = range;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                    0, 0, nullptr, 0, nullptr, 1, &toShader);
+        if (!state->batchedTransitionReported)
+        {
+            state->batchedTransitionReported = true;
+            iReport(reporter, "Vulkan renderer batched transition ACTIVE: shader-read barrier rides the eye submit");
+        }
+    }
+    // Host-depth prime layout restore: hand the host depth image back in the
+    // layout Unity's own tracking expects, inside the same submission that
+    // sampled it (Unity never observes the sandwich).
+    if (state->batchPrimeDepthRestoreImage != 0)
+    {
+        VkImageMemoryBarrier restoreDepth = {};
+        restoreDepth.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        restoreDepth.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        restoreDepth.dstAccessMask = 0;
+        restoreDepth.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        restoreDepth.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        restoreDepth.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        restoreDepth.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        restoreDepth.image = state->batchPrimeDepthRestoreImage;
+        restoreDepth.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        restoreDepth.subresourceRange.baseMipLevel = 0;
+        restoreDepth.subresourceRange.levelCount = 1;
+        restoreDepth.subresourceRange.baseArrayLayer = 0;
+        restoreDepth.subresourceRange.layerCount = 1;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                                    0, 0, nullptr, 0, nullptr, 1, &restoreDepth);
+        state->batchPrimeDepthRestoreImage = 0;
+    }
+    VkResult result = state->vkEndCommandBuffer(state->commandBuffer);
+    if (result != VK_SUCCESS)
+        return false;
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &state->commandBuffer;
+    // Composite-bridge signal (semaphore signals also cover all earlier
+    // submission-order work on this queue, so mid-eye pool-exhausted flushes
+    // are covered by the end-of-eye signal).
+    if (signalSemaphore != VK_NULL_SEMAPHORE)
+    {
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &signalSemaphore;
+    }
+    const uint64_t submitStartNs = iNowNanoseconds();
+    const int ringSlot = state->batchCurrentSlot;
+    const VkFence batchFence = ringSlot >= 0 ? state->batchRingFences[ringSlot] : state->frameFence;
+    result = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, batchFence);
+    if (ringSlot >= 0)
+    {
+        // Ring batch closed: hand state->commandBuffer back to whatever owned
+        // it before this batch opened (legacy/utility work records there).
+        state->commandBuffer = state->batchPreviousCommandBuffer2;
+        state->batchPreviousCommandBuffer2 = VK_NULL_COMMAND_BUFFER;
+        state->batchCurrentSlot = -1;
+    }
+    if (result != VK_SUCCESS)
+        return false;
+    // Pipelined: leave the slot's fence pending; it is waited when the ring
+    // wraps back to the slot (two eyes later) or by iWaitAllBatchFences before
+    // any mutating utility work.
+    const bool skipWait = iPipelinedSubmitEnabled(state) &&
+                          state->externalFrameRenderTarget != nullptr &&
+                          target == state->externalFrameRenderTarget;
+    if (!skipWait)
+    {
+        result = state->vkWaitForFences(state->device, 1, &batchFence, 1, timeout);
+        if (result != VK_SUCCESS)
+            return false;
+        if (ringSlot >= 0)
+            state->batchRingFencePending[ringSlot] = false;
+    }
+    else
+    {
+        if (ringSlot >= 0)
+            state->batchRingFencePending[ringSlot] = true;
+        if (!state->pipelinedSubmitReported)
+        {
+            state->pipelinedSubmitReported = true;
+            iReport(reporter, "Vulkan renderer pipelined submit ACTIVE: end-of-eye fence wait deferred to slot reuse");
+        }
+    }
+    const uint64_t waitNs = iNowNanoseconds() - submitStartNs;
+    if (target && target->color[0])
+        target->color[0]->imageLayout = appendTransition ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                                         : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (!state->batchReported)
+    {
+        state->batchReported = true;
+        char message[128];
+        std::snprintf(message, sizeof(message), "Vulkan renderer batched eye-frame: %u draws in one submit", state->batchDrawCount);
+        iReport(reporter, message);
+    }
+    if (state->utilityDrainSkipResolved == 1 && !state->utilityDrainSkipReported)
+    {
+        state->utilityDrainSkipReported = true;
+        iReport(reporter, "Vulkan renderer utility drain skip ACTIVE: helpers wait only referencing slots, fresh resources wait none");
+    }
+    if ((++state->perfProbeCount % 30u) == 0u)
+    {
+        // gap = record wall time spent OUTSIDE the draw-record calls: the player /
+        // Unity per-draw dispatch + uniform uploads between draws. drawRec vs gap
+        // decides which side of the plugin boundary the heavy-scene CPU cost is on.
+        const double gapMs = (double)(recordNs > state->batchDrawNs ? recordNs - state->batchDrawNs : 0) / 1.0e6;
+        char m[288];
+        std::snprintf(m, sizeof(m), "IMM_PERF eye: record(cpu)=%.2fms [drawRec=%.2fms descAlloc=%.2fms gap=%.2fms upl=%.2fms/%lluKB lock=%.2fms api=%.2fms] flushSubmitWait(gpu)=%.2fms draws=%u utilWait=%u utilSkip=%u",
+                      (double)recordNs / 1.0e6, (double)state->batchDrawNs / 1.0e6, (double)state->batchDescNs / 1.0e6, gapMs,
+                      (double)state->batchUploadNs / 1.0e6, (unsigned long long)(state->batchUploadBytes / 1024ull),
+                      (double)state->batchLockNs / 1.0e6, (double)state->batchApiNs / 1.0e6,
+                      (double)waitNs / 1.0e6, state->batchDrawCount,
+                      state->utilityDrainWaitCount, state->utilityDrainSkipCount);
+        iReport(reporter, m);
+    }
+    return true;
+}
+
+// Host-depth prime (see piVulkanState declaration). Kill: IMM_UNITY_VK_NO_DEPTH_PRIME.
+static bool iDepthPrimeEnabled(piVulkanState *state)
+{
+    if (!state || state->depthPrimeFailed)
+        return false;
+    if (state->depthPrimeResolved < 0)
+        state->depthPrimeResolved = iRendererFlagEnabled("IMM_UNITY_VK_NO_DEPTH_PRIME") ? 0 : 1;
+    return state->depthPrimeResolved != 0;
+}
+
+// Fullscreen depth-only pipeline for the host-depth prime draw: no vertex
+// input, dynamic viewport/scissor, depth ALWAYS+write, color writes masked
+// off, multisample count taken from the target's pass. Modules/sampler/
+// layouts/sets are created once; the pipeline recreates when the target's
+// render pass changes. Any failure disables priming for the session.
+static bool iEnsurePrimeDepthPipeline(piVulkanState *state, piRTarget target, piRenderer::piReporter *reporter)
+{
+    if (!state || !target || state->depthPrimeFailed ||
+        state->device == VK_NULL_DEVICE || !state->vkCreateGraphicsPipelines ||
+        target->renderPass == VK_NULL_RENDER_PASS)
+        return false;
+    if (state->primeDepthPipeline != VK_NULL_PIPELINE &&
+        state->primeDepthPipelineRenderPass == target->renderPass)
+        return true;
+
+    bool ok = true;
+    if (state->primeDepthVertexModule == VK_NULL_SHADER_MODULE)
+        ok = iCreateShaderModule(state, reinterpret_cast<const uint8_t *>(kPrimeDepthVS), (int)sizeof(kPrimeDepthVS), &state->primeDepthVertexModule, reporter);
+    if (ok && state->primeDepthFragmentModule == VK_NULL_SHADER_MODULE)
+        ok = iCreateShaderModule(state, reinterpret_cast<const uint8_t *>(kPrimeDepthFS), (int)sizeof(kPrimeDepthFS), &state->primeDepthFragmentModule, reporter);
+    if (ok && state->primeDepthSampler == VK_NULL_SAMPLER)
+        ok = iCreateSamplerObject(state, piRenderer::TextureFilter::NONE, piRenderer::TextureWrap::CLAMP, 1.0f, &state->primeDepthSampler, reporter);
+    if (ok && state->primeDepthSetLayout == VK_NULL_DESCRIPTOR_SET_LAYOUT)
+    {
+        VkDescriptorSetLayoutBinding binding = {};
+        binding.binding = 0;
+        binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        binding.descriptorCount = 1;
+        binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &binding;
+        ok = state->vkCreateDescriptorSetLayout(state->device, &layoutInfo, nullptr, &state->primeDepthSetLayout) == VK_SUCCESS &&
+             state->primeDepthSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT;
+    }
+    if (ok && state->primeDepthPipelineLayout == VK_NULL_PIPELINE_LAYOUT)
+    {
+        VkPipelineLayoutCreateInfo layoutInfo = {};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts = &state->primeDepthSetLayout;
+        ok = state->vkCreatePipelineLayout(state->device, &layoutInfo, nullptr, &state->primeDepthPipelineLayout) == VK_SUCCESS &&
+             state->primeDepthPipelineLayout != VK_NULL_PIPELINE_LAYOUT;
+    }
+    if (ok && state->primeDepthDescriptorPool == VK_NULL_DESCRIPTOR_POOL)
+    {
+        VkDescriptorPoolSize poolSize = {};
+        poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSize.descriptorCount = (uint32_t)piVulkanState::kBatchRingSize;
+        VkDescriptorPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.maxSets = (uint32_t)piVulkanState::kBatchRingSize;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        ok = state->vkCreateDescriptorPool(state->device, &poolInfo, nullptr, &state->primeDepthDescriptorPool) == VK_SUCCESS &&
+             state->primeDepthDescriptorPool != VK_NULL_DESCRIPTOR_POOL;
+        for (int i = 0; ok && i < piVulkanState::kBatchRingSize; ++i)
+        {
+            VkDescriptorSetAllocateInfo allocateInfo = {};
+            allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocateInfo.descriptorPool = state->primeDepthDescriptorPool;
+            allocateInfo.descriptorSetCount = 1;
+            allocateInfo.pSetLayouts = &state->primeDepthSetLayout;
+            ok = state->vkAllocateDescriptorSets(state->device, &allocateInfo, &state->primeDepthSets[i]) == VK_SUCCESS &&
+                 state->primeDepthSets[i] != VK_NULL_DESCRIPTOR_SET;
+        }
+    }
+    if (ok)
+    {
+        if (state->primeDepthPipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+        {
+            state->vkDestroyPipeline(state->device, state->primeDepthPipeline, nullptr);
+            state->primeDepthPipeline = VK_NULL_PIPELINE;
+        }
+        VkPipelineShaderStageCreateInfo stages[2] = {};
+        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+        stages[0].module = state->primeDepthVertexModule;
+        stages[0].pName = "main";
+        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        stages[1].module = state->primeDepthFragmentModule;
+        stages[1].pName = "main";
+        VkPipelineVertexInputStateCreateInfo vertexInput = {};
+        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        VkPipelineViewportStateCreateInfo viewport = {};
+        viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewport.viewportCount = 1;
+        viewport.scissorCount = 1;
+        VkPipelineRasterizationStateCreateInfo rasterization = {};
+        rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterization.cullMode = VK_CULL_MODE_NONE;
+        rasterization.lineWidth = 1.0f;
+        VkPipelineMultisampleStateCreateInfo multisample = {};
+        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisample.rasterizationSamples = target->renderSampleCount != VK_SAMPLE_COUNT_1_BIT ? target->renderSampleCount : VK_SAMPLE_COUNT_1_BIT;
+        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = 1;
+        depthStencil.depthWriteEnable = 1;
+        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+        VkPipelineColorBlendAttachmentState blendAttachment = {};
+        blendAttachment.colorWriteMask = 0;
+        VkPipelineColorBlendStateCreateInfo colorBlend = {};
+        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlend.attachmentCount = 1;
+        colorBlend.pAttachments = &blendAttachment;
+        VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        VkPipelineDynamicStateCreateInfo dynamicState = {};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = 2;
+        dynamicState.pDynamicStates = dynamicStates;
+        VkGraphicsPipelineCreateInfo pipelineInfo = {};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = 2;
+        pipelineInfo.pStages = stages;
+        pipelineInfo.pVertexInputState = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewport;
+        pipelineInfo.pRasterizationState = &rasterization;
+        pipelineInfo.pMultisampleState = &multisample;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlend;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = state->primeDepthPipelineLayout;
+        pipelineInfo.renderPass = target->renderPass;
+        pipelineInfo.subpass = target->subpass;
+        ok = state->vkCreateGraphicsPipelines(state->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &state->primeDepthPipeline) == VK_SUCCESS &&
+             state->primeDepthPipeline != VK_NULL_PIPELINE;
+        if (ok)
+            state->primeDepthPipelineRenderPass = target->renderPass;
+    }
+    if (!ok)
+    {
+        state->depthPrimeFailed = true;
+        iError(reporter, "Vulkan renderer host-depth prime pipeline FAILED; priming disabled for session");
+        return false;
+    }
+    return true;
+}
+
+// Open a batch on `target` if one is not already open on it (flushing first if a
+// batch is open on a different target). Resets the transient-uniform ring and the
+// per-draw descriptor pools so this eye's draws get fresh slices/sets. The render
+// pass uses LOAD (the clears already ran in Begin), so draws accumulate as before.
+static bool iEnsureBatchOpen(piVulkanState *state, piRTarget target, piRenderer::piReporter *reporter)
+{
+    if (!state || !target)
+        return false;
+    if (state->batchRecording && state->batchTarget == target)
+        return true;
+    if (state->batchRecording && !iFlushBatch(state, reporter, "reopen-other-target"))
+        return false;
+    std::unique_lock<std::recursive_mutex> submitLock(state->submitMutex);
+    const uint64_t timeout = 5000000000ull;
+    VkResult result;
+    if (state->batchRingReady)
+    {
+        // Ring acquisition: this batch records into its OWN command buffer and
+        // is fenced by its OWN fence, so utility helpers and other eyes never
+        // touch it. Only the slot being reused is waited on (usually long
+        // signaled - two slots have come and gone since it was submitted).
+        state->batchRingIndex = (state->batchRingIndex + 1) % piVulkanState::kBatchRingSize;
+        const int slot = state->batchRingIndex;
+        if (state->batchRingFencePending[slot])
+        {
+            result = state->vkWaitForFences(state->device, 1, &state->batchRingFences[slot], 1, timeout);
+            if (result != VK_SUCCESS)
+                return false;
+            state->batchRingFencePending[slot] = false;
+        }
+        state->vkResetFences(state->device, 1, &state->batchRingFences[slot]);
+        state->vkResetCommandBuffer(state->batchRingCommandBuffers[slot], 0);
+        ++state->batchRingStampCounter;
+        state->batchRingSlotStamp[slot] = state->batchRingStampCounter;
+        iProcessDeferredDestroys(state, false);
+        state->batchPreviousCommandBuffer2 = state->commandBuffer;
+        state->commandBuffer = state->batchRingCommandBuffers[slot];
+        state->batchCurrentSlot = slot;
+        // This slot's own descriptor pools (created lazily by the pipeline
+        // ensure functions) - resetting them below cannot touch sets the
+        // in-flight slots' GPU work references.
+        if (state->batchPaintDescriptorPools[slot] != VK_NULL_DESCRIPTOR_POOL)
+            state->batchPaintDescriptorPool = state->batchPaintDescriptorPools[slot];
+        if (state->batchPictureDescriptorPools[slot] != VK_NULL_DESCRIPTOR_POOL)
+            state->batchPictureDescriptorPool = state->batchPictureDescriptorPools[slot];
+    }
+    else
+    {
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+            return false;
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
+        state->batchCurrentSlot = -1;
+    }
+    // Transient-uniform partition: each ring slot writes only its third of the
+    // buffer, so this eye's uploads never overwrite bytes an in-flight slot's
+    // draws are reading. Legacy path uses the whole buffer (limit 0).
+    if (state->batchCurrentSlot >= 0 && state->hostTransientUniformSize > 0)
+    {
+        const VkDeviceSize part = state->hostTransientUniformSize / (VkDeviceSize)piVulkanState::kBatchRingSize;
+        state->hostTransientUniformOffset = part * (VkDeviceSize)state->batchCurrentSlot;
+        state->hostTransientUniformLimit = part * (VkDeviceSize)(state->batchCurrentSlot + 1);
+    }
+    else
+    {
+        state->hostTransientUniformOffset = 0;
+        state->hostTransientUniformLimit = 0;
+    }
+    if (state->batchPaintDescriptorPool != VK_NULL_DESCRIPTOR_POOL && state->vkResetDescriptorPool)
+        state->vkResetDescriptorPool(state->device, state->batchPaintDescriptorPool, 0);
+    if (state->batchPictureDescriptorPool != VK_NULL_DESCRIPTOR_POOL && state->vkResetDescriptorPool)
+        state->vkResetDescriptorPool(state->device, state->batchPictureDescriptorPool, 0);
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+        return false;
+    // First batch open of an eye with a pending in-pass clear uses the CLEAR
+    // render-pass variant (tile memory is initialized directly; no barrier
+    // needed thanks to initialLayout=UNDEFINED). Mid-eye reopens (descriptor
+    // pool exhaustion flush) find the flag consumed and take the LOAD pass,
+    // preserving already-drawn content.
+    const bool inPassClear = state->externalFramePendingInPassClear &&
+                             target == state->externalFrameRenderTarget &&
+                             target->clearRenderPass != VK_NULL_RENDER_PASS;
+    // MSAA targets have CLEAR ops on every pass variant (single-pass-per-eye
+    // contract), so clear values are required even on reopens. A mid-eye
+    // reopen re-clears under MSAA - the pool-exhaustion flush must never fire
+    // there (BATCHTRACE evidences it if it ever does).
+    const bool passNeedsClearValues = inPassClear || target->renderSampleCount != VK_SAMPLE_COUNT_1_BIT;
+    VkClearValue batchClearValues[5] = {};
+    VkRenderPassBeginInfo renderPassBegin = {};
+    renderPassBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBegin.renderPass = inPassClear ? target->clearRenderPass : target->renderPass;
+    renderPassBegin.framebuffer = target->framebuffer;
+    renderPassBegin.renderArea.offset.x = 0;
+    renderPassBegin.renderArea.offset.y = 0;
+    renderPassBegin.renderArea.extent.width = target->width;
+    renderPassBegin.renderArea.extent.height = target->height;
+    if (passNeedsClearValues)
+    {
+        // Colors: transparent black (zero-init). Depth: far plane - 0.0 under
+        // reverse-Z (Unity Vulkan projections), 1.0 under standard Z.
+        if (target->hasDepth)
+            batchClearValues[target->colorAttachmentCount].depthStencil[0] =
+                iExternalReverseZActiveForTarget(state, target) ? 0.0f : 1.0f;
+        renderPassBegin.clearValueCount = target->colorAttachmentCount + (target->hasDepth ? 1u : 0u);
+        renderPassBegin.pClearValues = batchClearValues;
+        state->externalFramePendingInPassClear = false;
+        // The pass leaves attachments in the same ATTACHMENT_OPTIMAL layouts the
+        // legacy clears did; keep the CPU-side tracking consistent.
+        if (target->color[0])
+            target->color[0]->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        if (target->depth)
+            target->depth->imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        if (!state->inPassClearReported)
+        {
+            state->inPassClearReported = true;
+            iReport(reporter, "Vulkan renderer in-pass clear ACTIVE: eye clears folded into batch render pass");
+        }
+    }
+    {
+        char traceMsg[128];
+        std::snprintf(traceMsg, sizeof(traceMsg), "BATCHTRACE open slot=%d pass=%s pendingWasConsumed=%d",
+                      state->batchCurrentSlot, inPassClear ? "CLEAR" : "LOAD", inPassClear ? 1 : 0);
+        iBatchTrace(state, reporter, traceMsg);
+    }
+    // Host-depth prime: sandwich the host depth image into a sampleable layout
+    // for this eye (restored by the flush), then - once the pass is open - lay
+    // Unity's depth across the transient multisampled depth with a fullscreen
+    // depth-only draw, before any player draw records.
+    const bool primeThisOpen = inPassClear && state->batchCurrentSlot >= 0 &&
+                               state->externalFramePrimeDepthTexture != nullptr &&
+                               state->externalFramePrimeDepthTexture->image != 0 &&
+                               iDepthPrimeEnabled(state) &&
+                               iEnsurePrimeDepthPipeline(state, target, reporter);
+    if (primeThisOpen)
+    {
+        VkImageMemoryBarrier toSample = {};
+        toSample.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toSample.srcAccessMask = 0;
+        toSample.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        toSample.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        toSample.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        toSample.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toSample.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toSample.image = state->externalFramePrimeDepthTexture->image;
+        toSample.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        toSample.subresourceRange.baseMipLevel = 0;
+        toSample.subresourceRange.levelCount = 1;
+        toSample.subresourceRange.baseArrayLayer = 0;
+        toSample.subresourceRange.layerCount = 1;
+        state->vkCmdPipelineBarrier(state->commandBuffer,
+                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                    0, 0, nullptr, 0, nullptr, 1, &toSample);
+        state->batchPrimeDepthRestoreImage = state->externalFramePrimeDepthTexture->image;
+    }
+    state->vkCmdBeginRenderPass(state->commandBuffer, &renderPassBegin, VK_SUBPASS_CONTENTS_INLINE);
+    if (primeThisOpen)
+    {
+        const int slot = state->batchCurrentSlot;
+        VkDescriptorImageInfo imageInfo = {};
+        imageInfo.sampler = state->primeDepthSampler;
+        imageInfo.imageView = state->externalFramePrimeDepthTexture->imageView;
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkWriteDescriptorSet write = {};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = state->primeDepthSets[slot];
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo = &imageInfo;
+        state->vkUpdateDescriptorSets(state->device, 1, &write, 0, nullptr);
+        VkViewport primeViewport = {};
+        primeViewport.width = (float)target->width;
+        primeViewport.height = (float)target->height;
+        primeViewport.maxDepth = 1.0f;
+        VkRect2D primeScissor = {};
+        primeScissor.extent.width = target->width;
+        primeScissor.extent.height = target->height;
+        state->vkCmdSetViewport(state->commandBuffer, 0, 1, &primeViewport);
+        state->vkCmdSetScissor(state->commandBuffer, 0, 1, &primeScissor);
+        state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->primeDepthPipeline);
+        state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->primeDepthPipelineLayout, 0, 1, &state->primeDepthSets[slot], 0, nullptr);
+        state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
+        if (!state->depthPrimeReported)
+        {
+            state->depthPrimeReported = true;
+            iReport(reporter, "Vulkan renderer host-depth prime ACTIVE: Unity depth laid into the eye pass");
+        }
+    }
+    state->batchRecording = true;
+    state->batchTarget = target;
+    state->batchDrawCount = 0;
+    state->batchDescNs = 0;
+    state->batchDrawNs = 0;
+    state->batchUploadNs = 0;
+    state->batchUploadBytes = 0;
+    state->batchLockNs = 0;
+    state->batchApiNs = 0;
+    state->batchOpenNs = iNowNanoseconds();
+    // Attachment references: a utility helper touching these images must wait
+    // out this slot's submission (and only it).
+    for (uint32_t i = 0; i < target->colorAttachmentCount; ++i)
+        if (target->color[i])
+            target->color[i]->lastBatchUseStamp = state->batchRingStampCounter;
+    if (target->depth)
+        target->depth->lastBatchUseStamp = state->batchRingStampCounter;
+    return true;
+}
+
+// Allocate one descriptor set from a batch pool. Returns VK_NULL on exhaustion,
+// which the caller handles by flushing (resets the pool) and reopening.
+static VkDescriptorSet iAllocateBatchDescriptorSet(piVulkanState *state, VkDescriptorPool pool, VkDescriptorSetLayout layout)
+{
+    if (!state || pool == VK_NULL_DESCRIPTOR_POOL || layout == VK_NULL_DESCRIPTOR_SET_LAYOUT || !state->vkAllocateDescriptorSets)
+        return VK_NULL_DESCRIPTOR_SET;
+    VkDescriptorSetAllocateInfo allocateInfo = {};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = pool;
+    allocateInfo.descriptorSetCount = 1;
+    allocateInfo.pSetLayouts = &layout;
+    VkDescriptorSet set = VK_NULL_DESCRIPTOR_SET;
+    if (state->vkAllocateDescriptorSets(state->device, &allocateInfo, &set) != VK_SUCCESS)
+        return VK_NULL_DESCRIPTOR_SET;
+    return set;
+}
+
 static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTarget target, piVertexArray vertexArray, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex, piRenderer::piReporter *reporter)
 {
+    const uint64_t lockStartNs = iNowNanoseconds();
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    if (state)
+        state->batchLockNs += iNowNanoseconds() - lockStartNs;
     const bool hostRenderPass = state && state->hostRenderPassFrameActive;
-    const bool borrowedCommandBuffer = state && state->externalCommandBufferFrameActive;
     if (!state || !shader || !target || !vertexArray || state->device == VK_NULL_DEVICE ||
-        state->commandBuffer == VK_NULL_COMMAND_BUFFER || (!hostRenderPass && !borrowedCommandBuffer && state->frameFence == VK_NULL_FENCE) ||
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || (!hostRenderPass && state->frameFence == VK_NULL_FENCE) ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         state->staticPaintDescriptorSet == VK_NULL_DESCRIPTOR_SET ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
         !vertexArray->indexBuffer || vertexArray->indexBuffer->buffer == VK_NULL_BUFFER)
     {
+        // These silent skips still count as "draw calls" player-side; log the first
+        // several with reasons so per-eye asymmetries are visible.
+        if (state && state->paintProbeLogCount < 40)
+        {
+            ++state->paintProbeLogCount;
+            char message[256];
+            std::snprintf(message, sizeof(message),
+                          "paint draw SKIP: shader=%d target=%d va=%d pipe=%d layout=%d desc=%d rp=%d fb=%d ib=%d ibbuf=%d",
+                          shader ? 1 : 0,
+                          target ? 1 : 0,
+                          vertexArray ? 1 : 0,
+                          (shader && shader->pipeline != VK_NULL_PIPELINE) ? 1 : 0,
+                          (shader && shader->pipelineLayout != VK_NULL_PIPELINE_LAYOUT) ? 1 : 0,
+                          state->staticPaintDescriptorSet != VK_NULL_DESCRIPTOR_SET ? 1 : 0,
+                          (target && target->renderPass != VK_NULL_RENDER_PASS) ? 1 : 0,
+                          (target && target->framebuffer != VK_NULL_FRAMEBUFFER) ? 1 : 0,
+                          (vertexArray && vertexArray->indexBuffer) ? 1 : 0,
+                          (vertexArray && vertexArray->indexBuffer && vertexArray->indexBuffer->buffer != VK_NULL_BUFFER) ? 1 : 0);
+            iReport(reporter, message);
+        }
         return true;
     }
-
-    const uint64_t timeout = 5000000000ull;
-    VkResult result = VK_SUCCESS;
-    if (!hostRenderPass)
+    if (state->paintProbeLogCount < 40)
     {
-        if (!borrowedCommandBuffer)
-        {
-            result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-            if (result != VK_SUCCESS)
-            {
-                return false;
-            }
-            state->vkResetFences(state->device, 1, &state->frameFence);
-            state->vkResetCommandBuffer(state->commandBuffer, 0);
+        ++state->paintProbeLogCount;
+        char message[256];
+        std::snprintf(message, sizeof(message),
+                      "paint draw OK: num=%u host=%d rp=%llx fb=%llx pipe=%llx pipeRP=%llx",
+                      num, hostRenderPass ? 1 : 0,
+                      (unsigned long long)(uintptr_t)target->renderPass,
+                      (unsigned long long)(uintptr_t)target->framebuffer,
+                      (unsigned long long)(uintptr_t)shader->pipeline,
+                      (unsigned long long)(uintptr_t)shader->pipelineRenderPass);
+        iReport(reporter, message);
+    }
 
-            VkCommandBufferBeginInfo beginInfo = {};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-            if (result != VK_SUCCESS)
-            {
+    const bool batchActive = iBatchActiveForTarget(state, target);
+    VkDescriptorSet paintSet = state->staticPaintDescriptorSet;
+    const uint64_t timeout = 5000000000ull;
+    const uint64_t drawRecStartNs = iNowNanoseconds();
+    VkResult result = VK_SUCCESS;
+    if (batchActive)
+    {
+        if (!iEnsureBatchOpen(state, target, reporter))
+            return false;
+        // Fresh per-draw descriptor set: the shared paint set gets re-pointed at
+        // this chunk/layer's ring slice + this brush's vertex buffer, and all
+        // batched draws execute at a single submit, so each needs its own set.
+        const uint64_t descStartNs = iNowNanoseconds();
+        paintSet = iAllocateBatchDescriptorSet(state, state->batchPaintDescriptorPool, state->staticPaintDescriptorSetLayout);
+        if (paintSet == VK_NULL_DESCRIPTOR_SET)
+        {
+            if (!iFlushBatch(state, reporter, "pool-exhausted") || !iEnsureBatchOpen(state, target, reporter))
                 return false;
-            }
+            paintSet = iAllocateBatchDescriptorSet(state, state->batchPaintDescriptorPool, state->staticPaintDescriptorSetLayout);
+        }
+        if (paintSet == VK_NULL_DESCRIPTOR_SET || !iUpdateStaticPaintDescriptorSet(state, paintSet, reporter))
+            return false;
+        state->batchDescNs += iNowNanoseconds() - descStartNs;
+    }
+    else if (!hostRenderPass)
+    {
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
         }
 
         VkRenderPassBeginInfo renderPassBegin = {};
@@ -4299,24 +5323,6 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
     viewport.height = -(float)target->height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-#if defined(__ANDROID__) || defined(ANDROID)
-    // Diagnostic control for Unity Android Vulkan composition. Collapse only
-    // IMM geometry draws to reversed-Z near; picture draws use their separate
-    // submission path and retain their normal far-backdrop depth. If Unity's
-    // explicitly ordered probes are then rejected, the shared attachment and
-    // native depth writes are sound and the defect is projected depth values.
-    if (state->externalFrameUsesHostDepth && target == state->externalFrameRenderTarget)
-    {
-        viewport.minDepth = 1.0f;
-        viewport.maxDepth = 1.0f;
-        static bool reportedForcedNearDepth = false;
-        if (!reportedForcedNearDepth)
-        {
-            reportedForcedNearDepth = true;
-            iReport(reporter, "[IMM_UNITY_ANDROID_VK_FORCE_NEAR_DEPTH_20260802] static geometry viewport depth=1");
-        }
-    }
-#endif
     VkRect2D scissor = {};
     scissor.offset.x = 0;
     scissor.offset.y = 0;
@@ -4325,137 +5331,29 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 
     state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
     state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
-    static bool reportedExplicitHostViewport = false;
-    if (hostRenderPass && !reportedExplicitHostViewport)
-    {
-        reportedExplicitHostViewport = true;
-        iReport(reporter, "[IMM_UNITY_VK_EXPLICIT_VIEWPORT_20260801] set host viewport and scissor to the Unity render-target extent");
-    }
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
-    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->staticPaintDescriptorSet, 0, nullptr);
+    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &paintSet, 0, nullptr);
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
-#if defined(__ANDROID__) || defined(ANDROID)
-    if (hostRenderPass)
+    state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
+    state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
+    if (hostRenderPass || batchActive)
     {
-        if (state->hostDebugIndexBuffer == nullptr)
+        if (batchActive)
         {
-            const uint32_t indexStride = indexType == VK_INDEX_TYPE_UINT32 ? 4u : 2u;
-            const uint32_t availableIndices = vertexArray->indexBuffer->size / indexStride;
-            const uint32_t copyCount = baseIndex < availableIndices ? std::min(num, availableIndices - baseIndex) : 0u;
-            if (copyCount == 0u)
+            ++state->batchDrawCount;
+            state->batchDrawNs += iNowNanoseconds() - drawRecStartNs;
+            if (!state->drawSubmittedReported)
             {
-                iError(reporter, "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] source index range is empty");
-                return false;
+                // Recorded now, submitted once at eye-frame flush. Emitted here so
+                // the submit-evidence gate (viewer smoke) still sees paint activity.
+                iReport(reporter, "Vulkan renderer submitted static paint draw commands");
+                state->drawSubmittedReported = true;
             }
-            piBuffer buffer = new piBufferS();
-            buffer->size = copyCount * indexStride;
-            buffer->use = piRenderer::BufferUse::Index;
-            buffer->data = static_cast<uint8_t *>(std::malloc(buffer->size));
-            if (!buffer->data)
-            {
-                delete buffer;
-                iError(reporter, "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] failed to allocate CPU index clone");
-                return false;
-            }
-            std::memcpy(buffer->data, vertexArray->indexBuffer->data + baseIndex * indexStride, buffer->size);
-            if (!iCreateBufferObject(state, buffer, buffer->data, reporter))
-            {
-                std::free(buffer->data);
-                delete buffer;
-                iError(reporter, "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] failed to create Vulkan index clone");
-                return false;
-            }
-            state->hostDebugIndexBuffer = buffer;
-            state->hostDebugIndexSource = vertexArray->indexBuffer;
-            state->hostDebugIndexSourceBase = baseIndex;
-            state->hostDebugIndexCount = copyCount;
-            char message[256];
-            std::snprintf(
-                message,
-                sizeof(message),
-                "[IMM_UNITY_VK_CLONED_INDEX_BUFFER_20260731] created bytes=%u count=%u base=%u type=%s",
-                buffer->size,
-                copyCount,
-                baseIndex,
-                indexType == VK_INDEX_TYPE_UINT32 ? "uint32" : "uint16");
-            iReport(reporter, message);
         }
-        if (state->hostDebugIndexSource != vertexArray->indexBuffer || state->hostDebugIndexSourceBase != baseIndex)
-        {
-            return true;
-        }
-        if (state->hostDebugResourceBuffers[0] == nullptr)
-        {
-            piBuffer sources[4] = {
-                state->constantBuffers[3],
-                state->constantBuffers[4],
-                state->shaderBuffers[8],
-                state->constantBuffers[9]
-            };
-            for (uint32_t i = 0; i < 4u; ++i)
-            {
-                state->hostDebugResourceBuffers[i] = iCloneHostDebugBuffer(state, sources[i], reporter);
-                if (!state->hostDebugResourceBuffers[i])
-                {
-                    iError(reporter, "[IMM_UNITY_VK_CLONED_RESOURCES_20260731] failed to clone production shader resource");
-                    return false;
-                }
-            }
-            iReport(reporter, "[IMM_UNITY_VK_CLONED_RESOURCES_20260731] cloned layer, display, vertex, and chunk buffers");
-        }
-        VkDescriptorBufferInfo clonedInfos[4] = {};
-        VkWriteDescriptorSet clonedWrites[4] = {};
-        const uint32_t clonedBindings[4] = { 3u, 4u, 8u, 9u };
-        const VkDescriptorType clonedTypes[4] = {
-            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
-        };
-        for (uint32_t i = 0; i < 4u; ++i)
-        {
-            clonedInfos[i] = iDescriptorBufferInfo(state->hostDebugResourceBuffers[i]);
-            clonedWrites[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            clonedWrites[i].dstSet = state->staticPaintDescriptorSet;
-            clonedWrites[i].dstBinding = clonedBindings[i];
-            clonedWrites[i].descriptorCount = 1;
-            clonedWrites[i].descriptorType = clonedTypes[i];
-            clonedWrites[i].pBufferInfo = &clonedInfos[i];
-        }
-        state->vkUpdateDescriptorSets(state->device, 4, clonedWrites, 0, nullptr);
-        state->vkCmdBindIndexBuffer(state->commandBuffer, state->hostDebugIndexBuffer->buffer, 0, indexType);
-    }
-    else
-#endif
-    {
-        state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
-    }
-#if defined(__ANDROID__) || defined(ANDROID)
-    if (hostRenderPass)
-    {
-        state->vkCmdDraw(state->commandBuffer, 3, 1, 0, 0);
-        static bool reportedVertexDescriptorHostDraw = false;
-        if (!reportedVertexDescriptorHostDraw)
-        {
-            reportedVertexDescriptorHostDraw = true;
-            iReport(reporter, "[IMM_UNITY_VK_TRANSFORM_XY_DIAG_20260801] submitted large triangle around production transform X/Y");
-        }
-    }
-    else
-#endif
-    {
-        state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, (int32_t)baseVertex, baseInstance);
-    }
-    if (hostRenderPass)
-    {
         return true;
     }
 
     state->vkCmdEndRenderPass(state->commandBuffer);
-    if (borrowedCommandBuffer)
-    {
-        return true;
-    }
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
@@ -4490,6 +5388,8 @@ static bool iSubmitStaticPaintDraw(piVulkanState *state, piShader shader, piRTar
 
 static bool iTransitionColorTextureToShaderRead(piVulkanState *state, piTexture texture)
 {
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    iUtilityScope utilityScope(state, texture ? texture->lastBatchUseStamp : ~0ull);
     if (!state || !texture || texture->image == 0 ||
         state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE ||
         !state->vkCmdPipelineBarrier)
@@ -4576,17 +5476,40 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     const bool usesVertexArray = !shader->isPicture2D;
     if (usesVertexArray && !vertexArray)
     {
+        // Only the 360 path can reach this: its VS reads in_position/in_normal
+        // from the dome mesh, while the 2D VS builds its quad from
+        // gl_VertexIndex and needs no vertex buffer at all. Returning false
+        // here means no pipeline is built and the draw is dropped - after the
+        // player has already counted it in picture360DrawCalls, which is why
+        // the counter reads 1 while the screen shows nothing.
+        if (!state->pictureNoVertexArrayReported)
+        {
+            state->pictureNoVertexArrayReported = true;
+            iError(reporter, "[IMM_VKPIC] 360 picture pipeline SKIPPED: no vertex array bound - the dome draw is dropped silently");
+        }
         return false;
     }
     const bool useHostDepthTarget = state->externalFrameUsesHostDepth &&
                                     target == state->externalFrameRenderTarget;
     const bool hostDepthBackdrop = useHostDepthTarget && !shader->isPicture2D;
     const uint32_t hostDepthBackdropMode = hostDepthBackdrop ? (state->externalFrameHostDepthReverseZ ? 1u : 2u) : 0u;
-    const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
+    const VkSampleCountFlagBits sampleCount = target->renderSampleCount != VK_SAMPLE_COUNT_1_BIT
+                                                  ? target->renderSampleCount
+                                                  : (target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT);
     const bool mayUseDepth = target->hasDepth &&
                              (!state->hostRenderPassFrameActive || state->externalFrameUsesHostDepth);
-    const bool depthTest = mayUseDepth && state->depthTestEnabled && state->currentDepthState && state->currentDepthState->depthEnable;
-    const VkCompareOp depthCompareOp = useHostDepthTarget && state->externalFrameHostDepthReverseZ ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
+    // IMM_UNITY_VK_PIC2D_NO_DEPTH: drop the depth test for 2D pictures only.
+    // Diagnostic for the coplanar-floor class: a 2D picture lying in the plane
+    // of painted ground loses the reverse-Z compare everywhere and vanishes
+    // with every counter reporting success - draw recorded, fragments raised,
+    // each one rejected. With this set the quad paints over its screen region
+    // regardless of depth, so one render-target dump answers "was it depth?".
+    // 2D only: a 360 sphere with depth off would smear over the whole world.
+    static const bool sPic2DNoDepth = iRendererFlagEnabled("IMM_UNITY_VK_PIC2D_NO_DEPTH");
+    const bool depthTest = (sPic2DNoDepth && shader->isPicture2D)
+                               ? false
+                               : (mayUseDepth && state->depthTestEnabled && state->currentDepthState && state->currentDepthState->depthEnable);
+    const VkCompareOp depthCompareOp = (useHostDepthTarget && state->externalFrameHostDepthReverseZ) || iExternalReverseZActiveForTarget(state, target) ? VK_COMPARE_OP_GREATER_OR_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
     if (shader->pipeline != VK_NULL_PIPELINE &&
         shader->pipelineRenderPass == target->renderPass &&
         shader->pipelineSampleCount == sampleCount &&
@@ -4596,20 +5519,60 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     {
         return true;
     }
-    if (shader->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+    // Variant cache (same fix as the paint path): the batched eye targets
+    // cycle SIX render passes (2 eyes x 3 ring slots), so the single cached
+    // pipeline slot missed every draw and vkCreateGraphicsPipelines ran per
+    // picture draw (~7 ms each on Adreno = the 23 fps skybox windows, both
+    // eyes, whenever a picture was on screen).
+    for (int vi = 0; vi < shader->pipelineVariantCount; ++vi)
     {
-        iRetireGraphicsPipeline(state, shader->pipeline);
-        shader->pipeline = VK_NULL_PIPELINE;
-        shader->pipelineRenderPass = VK_NULL_RENDER_PASS;
+        const piShaderPipelineVariant &v = shader->pipelineVariants[vi];
+        if (v.pipeline != VK_NULL_PIPELINE &&
+            v.renderPass == target->renderPass &&
+            v.sampleCount == sampleCount &&
+            v.depthTest == depthTest &&
+            v.depthCompareOp == depthCompareOp &&
+            v.hostDepthBackdropMode == hostDepthBackdropMode)
+        {
+            shader->pipeline = v.pipeline;
+            shader->pipelineRenderPass = v.renderPass;
+            shader->pipelineSampleCount = v.sampleCount;
+            shader->pipelineDepthTest = v.depthTest;
+            shader->pipelineDepthCompareOp = v.depthCompareOp;
+            shader->pipelineHostDepthBackdropMode = v.hostDepthBackdropMode;
+            return true;
+        }
     }
+    // Miss: build a new variant. The old pipeline (if any) belongs to a cache
+    // slot now - do NOT destroy it here; eviction and shader teardown own that.
+    shader->pipeline = VK_NULL_PIPELINE;
     if (shader->vertexModule == VK_NULL_SHADER_MODULE || shader->fragmentModule == VK_NULL_SHADER_MODULE ||
         shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT || target->renderPass == VK_NULL_RENDER_PASS ||
         !state->vkCreateGraphicsPipelines)
     {
+        if (!state->picturePipelineCreateReported)
+        {
+            state->picturePipelineCreateReported = true;
+            char msg[176];
+            snprintf(msg, sizeof(msg),
+                     "[IMM_VKPIC] picture pipeline SKIPPED: vs=%d fs=%d layout=%d renderPass=%d - draw dropped silently",
+                     shader->vertexModule != VK_NULL_SHADER_MODULE, shader->fragmentModule != VK_NULL_SHADER_MODULE,
+                     shader->pipelineLayout != VK_NULL_PIPELINE_LAYOUT, target->renderPass != VK_NULL_RENDER_PASS);
+            iError(reporter, msg);
+        }
         return false;
     }
     if (usesVertexArray && (vertexArray->attributeCount == 0 || vertexArray->stride[0] == 0))
     {
+        if (!state->pictureBadVertexArrayReported)
+        {
+            state->pictureBadVertexArrayReported = true;
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "[IMM_VKPIC] 360 picture pipeline SKIPPED: vertex array has attributeCount=%u stride=%u - the dome draw is dropped silently",
+                     (unsigned)vertexArray->attributeCount, (unsigned)vertexArray->stride[0]);
+            iError(reporter, msg);
+        }
         return false;
     }
 
@@ -4629,6 +5592,28 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     if (hostDepthBackdrop)
     {
         stages[0].pSpecializationInfo = &hostDepthBackdropSpecialization;
+    }
+
+    // IMM_UNITY_VK_PIC_DEBUG: force every picture fragment to solid magenta,
+    // bypassing the texture sample. Separates "the draw produces no fragments"
+    // from "the fragments sample to nothing" - the distinction no CPU-side
+    // counter can make, and the reason the invisible-picture defect survived
+    // five rounds of instrumentation that all honestly reported success.
+    // 1 = solid magenta, 2 = texture RGB forced opaque, 3 = sampled alpha as
+    // greyscale. 2 and 3 split "the sample returns nothing" from "the sample is
+    // fine but its alpha is zero" - with alpha blending, a zero alpha makes the
+    // picture invisible rather than black, which is what we are chasing.
+    static const uint32_t sPictureDebugValue = []() -> uint32_t {
+        const char *v = getenv("IMM_UNITY_VK_PIC_DEBUG");
+        if (!v || !v[0]) return 0u;
+        const int n = atoi(v);
+        return n > 0 ? (uint32_t)n : 0u;
+    }();
+    const VkSpecializationMapEntry pictureDebugEntry = { 0u, 0u, sizeof(uint32_t) };
+    const VkSpecializationInfo pictureDebugSpecialization = { 1u, &pictureDebugEntry, sizeof(uint32_t), &sPictureDebugValue };
+    if (sPictureDebugValue != 0u)
+    {
+        stages[1].pSpecializationInfo = &pictureDebugSpecialization;
     }
 
     VkVertexInputBindingDescription binding = {};
@@ -4686,7 +5671,14 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     VkPipelineDepthStencilStateCreateInfo depthStencil = {};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = depthTest ? 1 : 0;
-    depthStencil.depthWriteEnable = 0;
+    // Pictures must WRITE depth like they do on GLES, not just test it. With the
+    // write hardcoded off, a picture could never occlude ITSELF: a 360 sphere
+    // viewed from outside resolved by triangle order, so the back hemisphere
+    // (later in the dome mesh) overwrote the front and the prop read as a faint
+    // hollow ball showing its interior - confirmed in-headset by the facing
+    // debug (mode 5: dome red = back faces winning, green flickers where mesh
+    // order differs). Write follows test, same as the paint pipeline.
+    depthStencil.depthWriteEnable = depthTest ? 1 : 0;
     depthStencil.depthCompareOp = depthCompareOp;
 
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
@@ -4718,6 +5710,35 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
     shader->pipelineDepthTest = depthTest;
     shader->pipelineDepthCompareOp = depthCompareOp;
     shader->pipelineHostDepthBackdropMode = hostDepthBackdropMode;
+    // Register in the variant cache so the next draw on this render pass
+    // reuses it (round-robin evict if it ever fills - 6 passes x few modes
+    // fits comfortably in 16).
+    {
+        int slot;
+        if (shader->pipelineVariantCount < piShaderS::kPipelineVariantCacheSize)
+            slot = shader->pipelineVariantCount++;
+        else
+        {
+            slot = (int)(shader->pipelineVariantNext++ % (uint32_t)piShaderS::kPipelineVariantCacheSize);
+            VkPipeline old = shader->pipelineVariants[slot].pipeline;
+            if (old != VK_NULL_PIPELINE && old != shader->pipeline && state->vkDestroyPipeline)
+                state->vkDestroyPipeline(state->device, old, nullptr);
+        }
+        piShaderPipelineVariant &v = shader->pipelineVariants[slot];
+        v.pipeline = shader->pipeline;
+        v.renderPass = target->renderPass;
+        v.cullMode = VK_CULL_MODE_NONE;
+        v.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        v.sampleCount = sampleCount;
+        v.wireframe = false;
+        v.depthClamp = false;
+        v.depthTest = depthTest;
+        v.depthWrite = false;
+        v.depthCompareOp = depthCompareOp;
+        v.alphaToCoverage = false;
+        v.blendEnabled = true;
+        v.hostDepthBackdropMode = hostDepthBackdropMode;
+    }
     if (!state->picturePipelineReported)
     {
         iReport(reporter, "Vulkan renderer created picture graphics pipeline");
@@ -4728,38 +5749,73 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
 
 static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget target, const piVertexArray vertexArray, uint32_t num, uint32_t numInstances, uint32_t baseIndex, piRenderer::piReporter *reporter)
 {
+    const uint64_t lockStartNs = iNowNanoseconds();
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    if (state)
+        state->batchLockNs += iNowNanoseconds() - lockStartNs;
     const bool hostRenderPass = state && state->hostRenderPassFrameActive;
-    const bool borrowedCommandBuffer = state && state->externalCommandBufferFrameActive;
     if (!state || !shader || !target || !vertexArray || !vertexArray->vertexBuffer[0] || !vertexArray->indexBuffer ||
-        vertexArray->indexBuffer->buffer == VK_NULL_BUFFER ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
         state->pictureDescriptorSet == VK_NULL_DESCRIPTOR_SET)
     {
         return false;
     }
-    const uint64_t timeout = 5000000000ull;
-    VkResult result = VK_SUCCESS;
-    if (!hostRenderPass)
+    // A piBuffer can exist with no VkBuffer behind it (iCreateBufferObject early-outs succeed
+    // without one). Binding a null VkBuffer records fine and null-derefs inside the driver at
+    // vkCmdDrawIndexed, so refuse the draw instead (paint path already guards this).
+    if (vertexArray->vertexBuffer[0]->buffer == VK_NULL_BUFFER || vertexArray->indexBuffer->buffer == VK_NULL_BUFFER)
     {
-        if (!borrowedCommandBuffer)
+        if (!state->pictureDrawFailureReported)
         {
-            result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-            if (result != VK_SUCCESS)
-            {
-                return false;
-            }
-            state->vkResetFences(state->device, 1, &state->frameFence);
-            state->vkResetCommandBuffer(state->commandBuffer, 0);
+            state->pictureDrawFailureReported = true;
+            char message[192];
+            std::snprintf(message,
+                          sizeof(message),
+                          "Vulkan picture draw skipped: null buffer backing vb=0x%llx ib=0x%llx",
+                          (unsigned long long)vertexArray->vertexBuffer[0]->buffer,
+                          (unsigned long long)vertexArray->indexBuffer->buffer);
+            iError(reporter, message);
+        }
+        return false;
+    }
 
-            VkCommandBufferBeginInfo beginInfo = {};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-            if (result != VK_SUCCESS)
-            {
+    const bool batchActive = iBatchActiveForTarget(state, target);
+    VkDescriptorSet pictureSet = state->pictureDescriptorSet;
+    const uint64_t timeout = 5000000000ull;
+    const uint64_t drawRecStartNs = iNowNanoseconds();
+    VkResult result = VK_SUCCESS;
+    if (batchActive)
+    {
+        if (!iEnsureBatchOpen(state, target, reporter))
+            return false;
+        pictureSet = iAllocateBatchDescriptorSet(state, state->batchPictureDescriptorPool, state->pictureDescriptorSetLayout);
+        if (pictureSet == VK_NULL_DESCRIPTOR_SET)
+        {
+            if (!iFlushBatch(state, reporter, "pool-exhausted") || !iEnsureBatchOpen(state, target, reporter))
                 return false;
-            }
+            pictureSet = iAllocateBatchDescriptorSet(state, state->batchPictureDescriptorPool, state->pictureDescriptorSetLayout);
+        }
+        if (pictureSet == VK_NULL_DESCRIPTOR_SET || !iUpdatePictureDescriptorSet(state, pictureSet, reporter))
+            return false;
+    }
+    else if (!hostRenderPass)
+    {
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
+
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
         }
 
         VkRenderPassBeginInfo renderPassBegin = {};
@@ -4785,28 +5841,60 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
     scissor.offset.y = 0;
     scissor.extent.width = target->width;
     scissor.extent.height = target->height;
-    if (!hostRenderPass)
+    if (hostRenderPass && !state->hostPictureDrawReported)
     {
-        state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
-        state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
+        state->hostPictureDrawReported = true;
+        char message[384];
+        std::snprintf(message,
+                      sizeof(message),
+                      "Vulkan host picture draw: cmd=%p pipeline=0x%llx renderPass=0x%llx framebuffer=0x%llx subpass=%u extent=%ux%u vb=0x%llx ib=0x%llx descSet=0x%llx num=%u instances=%u baseIndex=%u",
+                      (void *)state->commandBuffer,
+                      (unsigned long long)shader->pipeline,
+                      (unsigned long long)target->renderPass,
+                      (unsigned long long)target->framebuffer,
+                      target->subpass,
+                      target->width,
+                      target->height,
+                      (unsigned long long)vertexArray->vertexBuffer[0]->buffer,
+                      (unsigned long long)vertexArray->indexBuffer->buffer,
+                      (unsigned long long)state->pictureDescriptorSet,
+                      num,
+                      numInstances,
+                      baseIndex);
+        iReport(reporter, message);
     }
+    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
-    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->pictureDescriptorSet, 0, nullptr);
+    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &pictureSet, 0, nullptr);
     VkDeviceSize vertexOffset = 0;
     state->vkCmdBindVertexBuffers(state->commandBuffer, 0, 1, &vertexArray->vertexBuffer[0]->buffer, &vertexOffset);
     const VkIndexType indexType = vertexArray->indexFormat == piRenderer::IndexArrayFormat::UINT_32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
     state->vkCmdBindIndexBuffer(state->commandBuffer, vertexArray->indexBuffer->buffer, 0, indexType);
-    state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, 0, 0);
-    if (hostRenderPass)
+    // Experiment knob: record every bind but skip the draw itself, to isolate
+    // draw-time driver crashes from bad bind state.
+    if (hostRenderPass && iRendererFlagEnabled("IMM_UNITY_VK_HOST_BIND_ONLY"))
     {
+        return true;
+    }
+    state->vkCmdDrawIndexed(state->commandBuffer, num, numInstances, baseIndex, 0, 0);
+    if (hostRenderPass || batchActive)
+    {
+        if (batchActive)
+        {
+            ++state->batchDrawCount;
+            state->batchDrawNs += iNowNanoseconds() - drawRecStartNs;
+            if (!state->pictureDrawReported)
+            {
+                // Recorded now, submitted once at eye-frame flush (see paint note).
+                iReport(reporter, "Vulkan renderer submitted picture draw commands");
+                state->pictureDrawReported = true;
+            }
+        }
         return true;
     }
 
     state->vkCmdEndRenderPass(state->commandBuffer);
-    if (borrowedCommandBuffer)
-    {
-        return true;
-    }
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
@@ -4840,8 +5928,8 @@ static bool iSubmitPictureDraw(piVulkanState *state, piShader shader, piRTarget 
 
 static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTarget target, uint32_t numInstances, piRenderer::piReporter *reporter)
 {
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
     const bool hostRenderPass = state && state->hostRenderPassFrameActive;
-    const bool borrowedCommandBuffer = state && state->externalCommandBufferFrameActive;
     if (!state || !shader || !target || !state->vkCmdDraw ||
         shader->pipeline == VK_NULL_PIPELINE || shader->pipelineLayout == VK_NULL_PIPELINE_LAYOUT ||
         target->renderPass == VK_NULL_RENDER_PASS || target->framebuffer == VK_NULL_FRAMEBUFFER ||
@@ -4850,28 +5938,51 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
         return false;
     }
 
+    const bool batchActive = iBatchActiveForTarget(state, target);
+    VkDescriptorSet pictureSet = state->pictureDescriptorSet;
     const uint64_t timeout = 5000000000ull;
     VkResult result = VK_SUCCESS;
-    if (!hostRenderPass)
+    if (batchActive)
     {
-        if (!borrowedCommandBuffer)
+        // Batched: the quad records into the open eye pass like every other
+        // picture draw. The legacy own-pass reopen below is FATAL on the MSAA
+        // eye target: its always-CLEAR pass demands clear values (driver
+        // null-derefs on pClearValues=NULL - QuantumRace's 360 backdrop found
+        // this) and a re-begin would wipe the already-recorded eye anyway.
+        if (!iEnsureBatchOpen(state, target, reporter))
+            return false;
+        pictureSet = iAllocateBatchDescriptorSet(state, state->batchPictureDescriptorPool, state->pictureDescriptorSetLayout);
+        if (pictureSet == VK_NULL_DESCRIPTOR_SET)
         {
-            result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-            if (result != VK_SUCCESS)
-            {
+            if (!iFlushBatch(state, reporter, "pool-exhausted") || !iEnsureBatchOpen(state, target, reporter))
                 return false;
-            }
-            state->vkResetFences(state->device, 1, &state->frameFence);
-            state->vkResetCommandBuffer(state->commandBuffer, 0);
+            pictureSet = iAllocateBatchDescriptorSet(state, state->batchPictureDescriptorPool, state->pictureDescriptorSetLayout);
+        }
+        if (pictureSet == VK_NULL_DESCRIPTOR_SET || !iUpdatePictureDescriptorSet(state, pictureSet, reporter))
+            return false;
+    }
+    else if (!hostRenderPass)
+    {
+        // Legacy own-submit path (no batch open on this target).
+        if (state->batchRecording)
+        {
+            iFlushBatch(state, reporter);
+        }
+        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+        if (result != VK_SUCCESS)
+        {
+            return false;
+        }
+        state->vkResetFences(state->device, 1, &state->frameFence);
+        state->vkResetCommandBuffer(state->commandBuffer, 0);
 
-            VkCommandBufferBeginInfo beginInfo = {};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-            if (result != VK_SUCCESS)
-            {
-                return false;
-            }
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+        if (result != VK_SUCCESS)
+        {
+            return false;
         }
 
         VkRenderPassBeginInfo renderPassBegin = {};
@@ -4897,24 +6008,26 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
     scissor.offset.y = 0;
     scissor.extent.width = target->width;
     scissor.extent.height = target->height;
-    if (!hostRenderPass)
-    {
-        state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
-        state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
-    }
+    state->vkCmdSetViewport(state->commandBuffer, 0, 1, &viewport);
+    state->vkCmdSetScissor(state->commandBuffer, 0, 1, &scissor);
     state->vkCmdBindPipeline(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline);
-    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &state->pictureDescriptorSet, 0, nullptr);
+    state->vkCmdBindDescriptorSets(state->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipelineLayout, 0, 1, &pictureSet, 0, nullptr);
     state->vkCmdDraw(state->commandBuffer, 6, numInstances, 0, 0);
-    if (hostRenderPass)
+    if (hostRenderPass || batchActive)
     {
+        if (batchActive)
+        {
+            ++state->batchDrawCount;
+            if (!state->pictureDrawReported)
+            {
+                iReport(reporter, "Vulkan renderer submitted picture draw commands");
+                state->pictureDrawReported = true;
+            }
+        }
         return true;
     }
 
     state->vkCmdEndRenderPass(state->commandBuffer);
-    if (borrowedCommandBuffer)
-    {
-        return true;
-    }
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
     {
@@ -4948,6 +6061,8 @@ static bool iSubmitPictureQuadDraw(piVulkanState *state, piShader shader, piRTar
 
 static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
 {
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    iUtilityScope utilityScope(state);
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
         texture->info.mFormat != piRenderer::Format::C3_11_11_10_FLOAT ||
         state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE || !state->vkCmdCopyImageToBuffer)
@@ -5258,6 +6373,8 @@ static bool iReadBackTextureImage(piVulkanState *state, piTexture texture, piRen
 
 static bool iClearColorTextureImage(piVulkanState *state, piTexture texture, const float *color, piRenderer::piReporter *reporter)
 {
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    iUtilityScope utilityScope(state, texture ? texture->lastBatchUseStamp : ~0ull);
     if (!state || !texture || texture->image == 0 || texture->info.mFormat == piRenderer::Format::D1_32_FLOAT ||
         texture->info.mFormat == piRenderer::Format::D1_16_UNORM || texture->info.mFormat == piRenderer::Format::DS_24_8_UINT ||
         texture->info.mFormat == piRenderer::Format::DS_32_8_UINT || state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
@@ -5370,8 +6487,10 @@ static bool iClearColorTextureImage(piVulkanState *state, piTexture texture, con
     return true;
 }
 
-static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
+static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter, float clearDepthValue = 1.0f)
 {
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    iUtilityScope utilityScope(state, texture ? texture->lastBatchUseStamp : ~0ull);
     if (!state || !texture || texture->image == 0 ||
         (texture->info.mFormat != piRenderer::Format::D1_32_FLOAT &&
          texture->info.mFormat != piRenderer::Format::D1_16_UNORM &&
@@ -5437,7 +6556,7 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
                                 &toTransfer);
 
     VkClearDepthStencilValue clearDepth = {};
-    clearDepth.depth = 1.0f;
+    clearDepth.depth = clearDepthValue;
     clearDepth.stencil = 0;
     state->vkCmdClearDepthStencilImage(state->commandBuffer, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearDepth, 1, &range);
 
@@ -5488,6 +6607,8 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
 
 static bool iUploadCpuColorToGpuColorAttachment(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
 {
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    iUtilityScope utilityScope(state, texture ? texture->lastBatchUseStamp : ~0ull);
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
         state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE)
     {
@@ -5834,6 +6955,152 @@ static bool iCreateTextureImage(piVulkanState *state, piTexture texture, int bin
     return true;
 }
 
+static bool iEnsureStagingBuffer(piVulkanState *state, VkDeviceSize size, piRenderer::piReporter *reporter);
+
+// Create + fill + upload the fragment-density image for an eye target: full
+// density inside the central radius easing to ~0.4 at the corners
+// (FFR-2-equivalent). 32px granularity per density texel (safe on Adreno).
+// One-shot fenced upload on the utility pair; the image then lives in
+// FRAGMENT_DENSITY_MAP_OPTIMAL_EXT for the tiler to read every pass.
+static bool iCreateFragmentDensityMap(piVulkanState *state, piRTarget target, uint32_t eyeWidth, uint32_t eyeHeight, piRenderer::piReporter *reporter)
+{
+    if (!state || !target || !state->vkCmdCopyBufferToImage || !state->vkCmdPipelineBarrier)
+        return false;
+    const uint32_t kTexel = 32;
+    const uint32_t fdmW = (eyeWidth + kTexel - 1) / kTexel;
+    const uint32_t fdmH = (eyeHeight + kTexel - 1) / kTexel;
+    if (fdmW == 0 || fdmH == 0)
+        return false;
+    if (!iCreateDeviceLocalImage(state, fdmW, fdmH, VK_FORMAT_R8G8_UNORM, VK_SAMPLE_COUNT_1_BIT,
+                                 VK_IMAGE_USAGE_FRAGMENT_DENSITY_MAP_BIT_EXT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                 &target->fdmImage, &target->fdmMemory, reporter))
+        return false;
+    VkImageViewCreateInfo viewInfo = {};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.image = target->fdmImage;
+    viewInfo.format = VK_FORMAT_R8G8_UNORM;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+    if (state->vkCreateImageView(state->device, &viewInfo, nullptr, &target->fdmView) != VK_SUCCESS ||
+        target->fdmView == VK_NULL_IMAGE_VIEW)
+    {
+        state->vkDestroyImage(state->device, target->fdmImage, nullptr);
+        state->vkFreeMemory(state->device, target->fdmMemory, nullptr);
+        target->fdmImage = 0;
+        target->fdmMemory = VK_NULL_DEVICE_MEMORY;
+        target->fdmView = VK_NULL_IMAGE_VIEW;
+        return false;
+    }
+
+    std::unique_lock<std::recursive_mutex> submitLock(state->submitMutex);
+    iUtilityScope utilityScope(state, 0 /* freshly created - nothing in flight references it */);
+    const VkDeviceSize dataSize = (VkDeviceSize)fdmW * (VkDeviceSize)fdmH * 2ull;
+    bool ok = state->commandBuffer != VK_NULL_COMMAND_BUFFER && state->frameFence != VK_NULL_FENCE &&
+              iEnsureStagingBuffer(state, dataSize, reporter);
+    void *mapped = nullptr;
+    if (ok)
+        ok = state->vkMapMemory(state->device, state->stagingMemory, 0, dataSize, 0, &mapped) == VK_SUCCESS && mapped;
+    if (ok)
+    {
+        uint8_t *texels = (uint8_t *)mapped;
+        for (uint32_t y = 0; y < fdmH; ++y)
+        {
+            for (uint32_t x = 0; x < fdmW; ++x)
+            {
+                const float dx = ((float)x + 0.5f) / (float)fdmW - 0.5f;
+                const float dy = ((float)y + 0.5f) / (float)fdmH - 0.5f;
+                const float d = 2.0f * std::sqrt(dx * dx + dy * dy);
+                float density = d <= 0.55f ? 1.0f : 1.0f - (d - 0.55f) * 0.9f;
+                if (density < 0.4f) density = 0.4f;
+                const uint8_t v = (uint8_t)(density * 255.0f + 0.5f);
+                texels[(y * fdmW + x) * 2 + 0] = v;
+                texels[(y * fdmW + x) * 2 + 1] = v;
+            }
+        }
+        state->vkUnmapMemory(state->device, state->stagingMemory);
+        const uint64_t timeout = 5000000000ull;
+        ok = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout) == VK_SUCCESS;
+        if (ok)
+        {
+            state->vkResetFences(state->device, 1, &state->frameFence);
+            state->vkResetCommandBuffer(state->commandBuffer, 0);
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+            ok = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo) == VK_SUCCESS;
+        }
+        if (ok)
+        {
+            VkImageSubresourceRange range = {};
+            range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            range.baseMipLevel = 0;
+            range.levelCount = 1;
+            range.baseArrayLayer = 0;
+            range.layerCount = 1;
+            VkImageMemoryBarrier toTransfer = {};
+            toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            toTransfer.srcAccessMask = 0;
+            toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            toTransfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransfer.image = target->fdmImage;
+            toTransfer.subresourceRange = range;
+            state->vkCmdPipelineBarrier(state->commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                        0, 0, nullptr, 0, nullptr, 1, &toTransfer);
+            VkBufferImageCopy region = {};
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageExtent.width = fdmW;
+            region.imageExtent.height = fdmH;
+            region.imageExtent.depth = 1;
+            state->vkCmdCopyBufferToImage(state->commandBuffer, state->stagingBuffer, target->fdmImage,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            VkImageMemoryBarrier toFdm = {};
+            toFdm.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            toFdm.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            toFdm.dstAccessMask = VK_ACCESS_FRAGMENT_DENSITY_MAP_READ_BIT_EXT;
+            toFdm.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            toFdm.newLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+            toFdm.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toFdm.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toFdm.image = target->fdmImage;
+            toFdm.subresourceRange = range;
+            state->vkCmdPipelineBarrier(state->commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_DENSITY_PROCESS_BIT_EXT,
+                                        0, 0, nullptr, 0, nullptr, 1, &toFdm);
+            ok = state->vkEndCommandBuffer(state->commandBuffer) == VK_SUCCESS;
+        }
+        if (ok)
+        {
+            VkSubmitInfo submitInfo = {};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &state->commandBuffer;
+            const uint64_t timeout = 5000000000ull;
+            ok = state->vkQueueSubmit(state->graphicsQueue, 1, &submitInfo, state->frameFence) == VK_SUCCESS &&
+                 state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout) == VK_SUCCESS;
+        }
+    }
+    if (!ok)
+    {
+        state->vkDestroyImageView(state->device, target->fdmView, nullptr);
+        state->vkDestroyImage(state->device, target->fdmImage, nullptr);
+        state->vkFreeMemory(state->device, target->fdmMemory, nullptr);
+        target->fdmView = VK_NULL_IMAGE_VIEW;
+        target->fdmImage = 0;
+        target->fdmMemory = VK_NULL_DEVICE_MEMORY;
+        return false;
+    }
+    return true;
+}
+
 static bool iCreateRenderTargetObjects(piVulkanState *state, piRTarget target, piRenderer::piReporter *reporter)
 {
     if (!state || !target || state->device == VK_NULL_DEVICE)
@@ -5948,14 +7215,169 @@ static bool iCreateRenderTargetObjects(piVulkanState *state, piRTarget target, p
         return false;
     }
 
+    // MSAA 4x branch (external eye frame): rebuild the attachment set as
+    // [0] = transient 4x color, [1] = transient 4x depth, [2] = resolve into
+    // the wrapped 1x image. loadOp=CLEAR + storeOp=DONT_CARE keeps the 4x data
+    // in tile memory (the in-pass resolve is the only main-memory write), and
+    // initialLayout=UNDEFINED on every attachment makes the pass legal from any
+    // prior layout with no barrier - same trick as the CLEAR variant. Any
+    // creation failure falls back non-fatally to the classic 1x target.
+    VkAttachmentReference resolveReference = {};
+    VkRenderPassFragmentDensityMapCreateInfoEXT fdmChain = {};
+    bool msaaActive = false;
+    bool ffrActive = false;
+    if (state->nextRenderTargetWantsMsaa && iMsaaEnabled(state) &&
+        target->colorAttachmentCount == 1 && target->hasDepth &&
+        sampleCount == VK_SAMPLE_COUNT_1_BIT && target->color[0] && target->depth)
+    {
+        const VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_4_BIT;
+        bool msaaOk = iCreateDeviceLocalImage(state, width, height, target->color[0]->vkFormat, msaaSamples,
+                                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                                              &target->msaaColorImage, &target->msaaColorMemory, reporter) &&
+                      iCreateDeviceLocalImage(state, width, height, target->depth->vkFormat, msaaSamples,
+                                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+                                              &target->msaaDepthImage, &target->msaaDepthMemory, reporter);
+        if (msaaOk && state->vkCreateImageView)
+        {
+            VkImageViewCreateInfo msaaViewInfo = {};
+            msaaViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            msaaViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            msaaViewInfo.subresourceRange.baseMipLevel = 0;
+            msaaViewInfo.subresourceRange.levelCount = 1;
+            msaaViewInfo.subresourceRange.baseArrayLayer = 0;
+            msaaViewInfo.subresourceRange.layerCount = 1;
+            msaaViewInfo.image = target->msaaColorImage;
+            msaaViewInfo.format = target->color[0]->vkFormat;
+            msaaViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            msaaOk = state->vkCreateImageView(state->device, &msaaViewInfo, nullptr, &target->msaaColorView) == VK_SUCCESS &&
+                     target->msaaColorView != VK_NULL_IMAGE_VIEW;
+            if (msaaOk)
+            {
+                msaaViewInfo.image = target->msaaDepthImage;
+                msaaViewInfo.format = target->depth->vkFormat;
+                msaaViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+                msaaOk = state->vkCreateImageView(state->device, &msaaViewInfo, nullptr, &target->msaaDepthView) == VK_SUCCESS &&
+                         target->msaaDepthView != VK_NULL_IMAGE_VIEW;
+            }
+        }
+        else
+        {
+            msaaOk = false;
+        }
+        if (msaaOk)
+        {
+            attachments[0] = {};
+            attachments[0].format = target->color[0]->vkFormat;
+            attachments[0].samples = msaaSamples;
+            attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            attachments[1] = {};
+            attachments[1].format = target->depth->vkFormat;
+            attachments[1].samples = msaaSamples;
+            attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            attachments[2] = {};
+            attachments[2].format = target->color[0]->vkFormat;
+            attachments[2].samples = VK_SAMPLE_COUNT_1_BIT;
+            attachments[2].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachments[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachments[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attachments[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attachments[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachments[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorReferences[0].attachment = 0;
+            colorReferences[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            depthReference.attachment = 1;
+            depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            resolveReference.attachment = 2;
+            resolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            attachmentViews[0] = target->msaaColorView;
+            attachmentViews[1] = target->msaaDepthView;
+            attachmentViews[2] = target->color[0]->imageView;
+            attachmentCount = 3;
+            target->renderSampleCount = msaaSamples;
+            msaaActive = true;
+            if (!state->msaaReported)
+            {
+                state->msaaReported = true;
+                iReport(reporter, "Vulkan renderer MSAA 4x ACTIVE: transient attachments, in-pass resolve, player A2C honored");
+            }
+            // Native FFR rides the same pass: density attachment + pNext chain.
+            // Failure is non-fatal (full-density pass, FFR disabled for session).
+            if (iFfrEnabled(state))
+            {
+                if (iCreateFragmentDensityMap(state, target, width, height, reporter))
+                {
+                    attachments[3] = {};
+                    attachments[3].format = VK_FORMAT_R8G8_UNORM;
+                    attachments[3].samples = VK_SAMPLE_COUNT_1_BIT;
+                    attachments[3].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+                    attachments[3].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                    attachments[3].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+                    attachments[3].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                    attachments[3].initialLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+                    attachments[3].finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+                    attachmentViews[3] = target->fdmView;
+                    attachmentCount = 4;
+                    fdmChain.sType = VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT;
+                    fdmChain.fragmentDensityMapAttachment.attachment = 3;
+                    fdmChain.fragmentDensityMapAttachment.layout = VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT;
+                    ffrActive = true;
+                    if (!state->ffrReported)
+                    {
+                        state->ffrReported = true;
+                        iReport(reporter, "Vulkan renderer native FFR ACTIVE: fragment density map on eye passes");
+                    }
+                }
+                else
+                {
+                    state->ffrFailed = true;
+                    iReport(reporter, "Vulkan renderer FFR unavailable; eye passes run full density");
+                }
+            }
+        }
+        else
+        {
+            if (target->msaaColorView != VK_NULL_IMAGE_VIEW && state->vkDestroyImageView)
+                state->vkDestroyImageView(state->device, target->msaaColorView, nullptr);
+            if (target->msaaDepthView != VK_NULL_IMAGE_VIEW && state->vkDestroyImageView)
+                state->vkDestroyImageView(state->device, target->msaaDepthView, nullptr);
+            if (target->msaaColorImage != 0 && state->vkDestroyImage)
+                state->vkDestroyImage(state->device, target->msaaColorImage, nullptr);
+            if (target->msaaDepthImage != 0 && state->vkDestroyImage)
+                state->vkDestroyImage(state->device, target->msaaDepthImage, nullptr);
+            if (target->msaaColorMemory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
+                state->vkFreeMemory(state->device, target->msaaColorMemory, nullptr);
+            if (target->msaaDepthMemory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
+                state->vkFreeMemory(state->device, target->msaaDepthMemory, nullptr);
+            target->msaaColorView = VK_NULL_IMAGE_VIEW;
+            target->msaaDepthView = VK_NULL_IMAGE_VIEW;
+            target->msaaColorImage = 0;
+            target->msaaDepthImage = 0;
+            target->msaaColorMemory = VK_NULL_DEVICE_MEMORY;
+            target->msaaDepthMemory = VK_NULL_DEVICE_MEMORY;
+            iReport(reporter, "Vulkan renderer MSAA unavailable; falling back to single-sampled eye target");
+        }
+    }
+
     VkSubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = target->colorAttachmentCount;
     subpass.pColorAttachments = target->colorAttachmentCount > 0 ? colorReferences : nullptr;
     subpass.pDepthStencilAttachment = target->hasDepth ? &depthReference : nullptr;
+    subpass.pResolveAttachments = msaaActive ? &resolveReference : nullptr;
 
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.pNext = ffrActive ? &fdmChain : nullptr;
     renderPassInfo.attachmentCount = attachmentCount;
     renderPassInfo.pAttachments = attachments;
     renderPassInfo.subpassCount = 1;
@@ -5982,6 +7404,33 @@ static bool iCreateRenderTargetObjects(piVulkanState *state, piRTarget target, p
         state->vkDestroyRenderPass(state->device, target->renderPass, nullptr);
         target->renderPass = VK_NULL_RENDER_PASS;
         return false;
+    }
+
+    // CLEAR-variant render pass for in-pass eye-frame clears: same attachments,
+    // but loadOp=CLEAR with initialLayout=UNDEFINED (contents are discarded, so
+    // the pass is legal from ANY prior layout - including first-frame UNDEFINED
+    // and post-composite SHADER_READ_ONLY - with no barrier). Compatibility with
+    // the framebuffer and cached pipelines is preserved (ops/layouts are ignored
+    // by render-pass compatibility). Failure is non-fatal: VK_NULL falls back to
+    // the legacy standalone clear submits.
+    {
+        // MSAA passes are already CLEAR/UNDEFINED on the rasterized attachments
+        // (and the resolve target must stay DONT_CARE) - create the second
+        // handle unmutated so both variants are the same single-pass contract.
+        if (!msaaActive)
+        {
+            for (uint32_t i = 0; i < attachmentCount; ++i)
+            {
+                attachments[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                attachments[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            }
+        }
+        VkResult clearResult = state->vkCreateRenderPass(state->device, &renderPassInfo, nullptr, &target->clearRenderPass);
+        if (clearResult != VK_SUCCESS)
+        {
+            target->clearRenderPass = VK_NULL_RENDER_PASS;
+            iReport(reporter, "Vulkan renderer could not create CLEAR render pass variant; using legacy clear submits");
+        }
     }
 
     target->width = width;
@@ -6097,210 +7546,64 @@ static bool iUploadTextureToStaging(piVulkanState *state, piTexture texture, piR
     return true;
 }
 
-static void iCollectBorrowedUploads(piVulkanState *state, uint64_t safeFrameNumber)
-{
-    if (!state)
-    {
-        return;
-    }
-    auto upload = state->borrowedUploads.begin();
-    while (upload != state->borrowedUploads.end())
-    {
-        if (upload->frameNumber <= safeFrameNumber)
-        {
-            if (upload->buffer != VK_NULL_BUFFER && state->vkDestroyBuffer)
-            {
-                state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
-            }
-            if (upload->memory != VK_NULL_DEVICE_MEMORY && state->vkFreeMemory)
-            {
-                state->vkFreeMemory(state->device, upload->memory, nullptr);
-            }
-            upload = state->borrowedUploads.erase(upload);
-        }
-        else
-        {
-            ++upload;
-        }
-    }
-}
-
-static void iCollectBorrowedPipelines(piVulkanState *state, uint64_t safeFrameNumber)
-{
-    if (!state)
-    {
-        return;
-    }
-    auto pipeline = state->borrowedPipelines.begin();
-    while (pipeline != state->borrowedPipelines.end())
-    {
-        if (pipeline->frameNumber <= safeFrameNumber)
-        {
-            if (pipeline->pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
-            {
-                state->vkDestroyPipeline(state->device, pipeline->pipeline, nullptr);
-            }
-            pipeline = state->borrowedPipelines.erase(pipeline);
-        }
-        else
-        {
-            ++pipeline;
-        }
-    }
-}
-
-static bool iCreateBorrowedUploadBuffer(
-    piVulkanState *state,
-    const void *data,
-    VkDeviceSize size,
-    piVulkanBorrowedUpload *upload,
-    piRenderer::piReporter *reporter)
-{
-    if (!state || !data || size == 0 || !upload)
-    {
-        return false;
-    }
-
-    VkBufferCreateInfo bufferInfo = {};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    VkResult result = state->vkCreateBuffer(state->device, &bufferInfo, nullptr, &upload->buffer);
-    if (result != VK_SUCCESS || upload->buffer == VK_NULL_BUFFER)
-    {
-        iError(reporter, "Vulkan renderer failed to create borrowed upload buffer");
-        return false;
-    }
-
-    VkMemoryRequirements requirements = {};
-    state->vkGetBufferMemoryRequirements(state->device, upload->buffer, &requirements);
-    uint32_t memoryTypeIndex = 0;
-    if (!iFindMemoryType(
-            state,
-            requirements.memoryTypeBits,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            &memoryTypeIndex))
-    {
-        iError(reporter, "Vulkan renderer failed to find borrowed upload memory");
-        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
-        upload->buffer = VK_NULL_BUFFER;
-        return false;
-    }
-
-    VkMemoryAllocateInfo allocateInfo = {};
-    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocateInfo.allocationSize = requirements.size;
-    allocateInfo.memoryTypeIndex = memoryTypeIndex;
-    result = state->vkAllocateMemory(state->device, &allocateInfo, nullptr, &upload->memory);
-    if (result != VK_SUCCESS || upload->memory == VK_NULL_DEVICE_MEMORY)
-    {
-        iError(reporter, "Vulkan renderer failed to allocate borrowed upload memory");
-        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
-        upload->buffer = VK_NULL_BUFFER;
-        return false;
-    }
-
-    result = state->vkBindBufferMemory(state->device, upload->buffer, upload->memory, 0);
-    if (result != VK_SUCCESS)
-    {
-        iError(reporter, "Vulkan renderer failed to bind borrowed upload memory");
-        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
-        state->vkFreeMemory(state->device, upload->memory, nullptr);
-        upload->buffer = VK_NULL_BUFFER;
-        upload->memory = VK_NULL_DEVICE_MEMORY;
-        return false;
-    }
-
-    void *mapped = nullptr;
-    result = state->vkMapMemory(state->device, upload->memory, 0, size, 0, &mapped);
-    if (result != VK_SUCCESS || !mapped)
-    {
-        iError(reporter, "Vulkan renderer failed to map borrowed upload memory");
-        state->vkDestroyBuffer(state->device, upload->buffer, nullptr);
-        state->vkFreeMemory(state->device, upload->memory, nullptr);
-        upload->buffer = VK_NULL_BUFFER;
-        upload->memory = VK_NULL_DEVICE_MEMORY;
-        return false;
-    }
-    std::memcpy(mapped, data, static_cast<size_t>(size));
-    state->vkUnmapMemory(state->device, upload->memory);
-    upload->frameNumber = state->borrowedCurrentFrameNumber;
-    return true;
-}
-
 static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piRenderer::piReporter *reporter)
 {
-    if (state && state->hostRenderPassFrameActive)
-    {
-        if (!state->hostTextureUploadRejectedReported)
-        {
-            iError(reporter, "[IMM_UNITY_VK_PREWARM_20260731] rejected lazy texture upload inside Unity host render pass");
-            state->hostTextureUploadRejectedReported = true;
-        }
-        return false;
-    }
-    const bool borrowedCommandBuffer = state && state->externalCommandBufferFrameActive;
+    std::unique_lock<std::recursive_mutex> submitLock = state ? std::unique_lock<std::recursive_mutex>(state->submitMutex) : std::unique_lock<std::recursive_mutex>();
+    iUtilityScope utilityScope(state, texture ? texture->lastBatchUseStamp : ~0ull);
     if (!state || !texture || !texture->data || texture->dataSize == 0 || texture->image == 0 ||
-        state->commandBuffer == VK_NULL_COMMAND_BUFFER ||
-        (!borrowedCommandBuffer && state->frameFence == VK_NULL_FENCE))
+        state->commandBuffer == VK_NULL_COMMAND_BUFFER || state->frameFence == VK_NULL_FENCE)
     {
+        // "Nothing to upload" and "there is an image but its pixels never
+        // arrived" both landed here and both returned success. Separate them:
+        // an image with a size but no data is a real failure, and it produces a
+        // texture that samples as fully transparent rather than as anything
+        // visibly wrong.
+        if (texture && texture->image != 0 && texture->dataSize > 0 && !texture->data)
+        {
+            char msg[160];
+            snprintf(msg, sizeof(msg),
+                     "[IMM_VKTEX] image %dx%d exists but has NO host data - upload skipped, it will sample as transparent",
+                     texture->info.mXres, texture->info.mYres);
+            iError(reporter, msg);
+            return false;
+        }
         return true;
     }
-
-    piVulkanBorrowedUpload borrowedUpload = {};
-    VkBuffer uploadBuffer = state->stagingBuffer;
-    VkResult result = VK_SUCCESS;
-    if (borrowedCommandBuffer)
+    if (!iEnsureStagingBuffer(state, (VkDeviceSize)texture->dataSize, reporter))
     {
-        if (!iCreateBorrowedUploadBuffer(
-                state,
-                texture->data,
-                static_cast<VkDeviceSize>(texture->dataSize),
-                &borrowedUpload,
-                reporter))
-        {
-            return false;
-        }
-        uploadBuffer = borrowedUpload.buffer;
+        char msg[160];
+        snprintf(msg, sizeof(msg),
+                 "[IMM_VKTEX] staging buffer FAILED for %dx%d (%.1f MB) - pixels never reach the GPU",
+                 texture->info.mXres, texture->info.mYres, (double)texture->dataSize / (1024.0*1024.0));
+        iError(reporter, msg);
+        return false;
     }
-    else
+    void *mapped = nullptr;
+    VkResult result = state->vkMapMemory(state->device, state->stagingMemory, 0, (VkDeviceSize)texture->dataSize, 0, &mapped);
+    if (result != VK_SUCCESS || !mapped)
     {
-        if (!iEnsureStagingBuffer(state, static_cast<VkDeviceSize>(texture->dataSize), reporter))
-        {
-            return false;
-        }
-        uploadBuffer = state->stagingBuffer;
-        void *mapped = nullptr;
-        result = state->vkMapMemory(state->device, state->stagingMemory, 0, static_cast<VkDeviceSize>(texture->dataSize), 0, &mapped);
-        if (result != VK_SUCCESS || !mapped)
-        {
-            iError(reporter, "Vulkan renderer failed to map texture staging memory");
-            return false;
-        }
-        std::memcpy(mapped, texture->data, texture->dataSize);
-        state->vkUnmapMemory(state->device, state->stagingMemory);
+        iError(reporter, "Vulkan renderer failed to map texture staging memory");
+        return false;
     }
+    std::memcpy(mapped, texture->data, texture->dataSize);
+    state->vkUnmapMemory(state->device, state->stagingMemory);
 
     const uint64_t timeout = 5000000000ull;
-    if (!borrowedCommandBuffer)
+    result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
+    if (result != VK_SUCCESS)
     {
-        result = state->vkWaitForFences(state->device, 1, &state->frameFence, 1, timeout);
-        if (result != VK_SUCCESS)
-        {
-            return false;
-        }
-        state->vkResetFences(state->device, 1, &state->frameFence);
-        state->vkResetCommandBuffer(state->commandBuffer, 0);
+        return false;
+    }
+    state->vkResetFences(state->device, 1, &state->frameFence);
+    state->vkResetCommandBuffer(state->commandBuffer, 0);
 
-        VkCommandBufferBeginInfo beginInfo = {};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
-        if (result != VK_SUCCESS)
-        {
-            return false;
-        }
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    result = state->vkBeginCommandBuffer(state->commandBuffer, &beginInfo);
+    if (result != VK_SUCCESS)
+    {
+        return false;
     }
 
     VkImageSubresourceRange range = {};
@@ -6346,7 +7649,7 @@ static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piR
     copyRegion.imageExtent.height = (uint32_t)texture->info.mYres;
     copyRegion.imageExtent.depth = 1;
     state->vkCmdCopyBufferToImage(state->commandBuffer,
-                                  uploadBuffer,
+                                  state->stagingBuffer,
                                   texture->image,
                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                   1,
@@ -6372,13 +7675,6 @@ static bool iUploadTextureImageData(piVulkanState *state, piTexture texture, piR
                                 nullptr,
                                 1,
                                 &toShader);
-
-    if (borrowedCommandBuffer)
-    {
-        state->borrowedUploads.push_back(borrowedUpload);
-        texture->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        return true;
-    }
 
     result = state->vkEndCommandBuffer(state->commandBuffer);
     if (result != VK_SUCCESS)
@@ -6606,16 +7902,19 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
 #endif
 
     const piVulkanExternalDevice *externalDevice = static_cast<const piVulkanExternalDevice *>(device);
-    if (externalDevice && externalDevice->instance && externalDevice->physicalDevice &&
-        externalDevice->device && externalDevice->graphicsQueue && externalDevice->getInstanceProcAddr)
+    if (externalDevice && externalDevice->instance && externalDevice->physicalDevice && externalDevice->device && externalDevice->graphicsQueue)
     {
+        if (!iLoadVulkanEntryPoints(mState, mReporter))
+        {
+            Deinitialize();
+            return false;
+        }
         mState->instance = static_cast<VkInstance>(externalDevice->instance);
         mState->physicalDevice = static_cast<VkPhysicalDevice>(externalDevice->physicalDevice);
         mState->device = static_cast<VkDevice>(externalDevice->device);
         mState->graphicsQueue = static_cast<VkQueue>(externalDevice->graphicsQueue);
+        mState->hostQueue = mState->graphicsQueue;
         mState->graphicsQueueFamilyIndex = externalDevice->graphicsQueueFamilyIndex;
-        mState->vkGetInstanceProcAddr =
-            reinterpret_cast<PFN_vkGetInstanceProcAddr>(externalDevice->getInstanceProcAddr);
         if (!iLoadVulkanInstanceEntryPoints(mState, mReporter) ||
             !iLoadVulkanSwapchainEntryPoints(mState, mReporter) ||
             !iCreateVulkanFrameResources(mState, mReporter))
@@ -6623,6 +7922,33 @@ bool piRendererVulkan::Initialize(int id, const void **hwnd, int num, bool disab
             Deinitialize();
             return false;
         }
+#if defined(ANDROID)
+        // Unity's XR Vulkan frame must never see foreign work on its queue: requesting
+        // queue access mid-frame makes Unity run FinalizeFrameForExternalPresent and
+        // breaks compositor pacing (black view on Quest). The build requests a second
+        // graphics queue via boot.config (xr-request-additional-vulkan-graphics-queue=1);
+        // submit all IMM work there. Kill-switch: IMM_UNITY_VK_NO_SECOND_QUEUE.
+        if (externalDevice->allowDedicatedQueue &&
+            !iRendererFlagEnabled("IMM_UNITY_VK_NO_SECOND_QUEUE"))
+        {
+            VkQueue dedicatedQueue = VK_NULL_QUEUE;
+            mState->vkGetDeviceQueue(mState->device, mState->graphicsQueueFamilyIndex, 1, &dedicatedQueue);
+            if (dedicatedQueue != VK_NULL_QUEUE && dedicatedQueue != mState->graphicsQueue)
+            {
+                mState->graphicsQueue = dedicatedQueue;
+                mState->ownsDedicatedQueue = true;
+                iReport(mReporter, "[IMM_UNITY_VK_QUEUE_20260802] mode=dedicated queueIndex=1");
+            }
+            else
+            {
+                iReport(mReporter, "[IMM_UNITY_VK_QUEUE_20260802] mode=host reason=queue-index-1-unavailable");
+            }
+        }
+        else
+        {
+            iReport(mReporter, "[IMM_UNITY_VK_QUEUE_20260802] mode=host reason=dedicated-queue-not-authorized");
+        }
+#endif
         mState->initialized = true;
         iReport(mReporter, "Vulkan renderer initialized with external device");
         return true;
@@ -6652,20 +7978,19 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDeviceWaitIdle(mState->device);
         }
-        if (mState->borrowedExternalRenderTarget)
+        for (int i = 0; i < piVulkanState::kExternalImageCacheSize; ++i)
         {
-            DestroyRenderTarget(mState->borrowedExternalRenderTarget);
-            mState->borrowedExternalRenderTarget = nullptr;
-        }
-        if (mState->borrowedExternalDepthTexture)
-        {
-            DestroyTexture(mState->borrowedExternalDepthTexture);
-            mState->borrowedExternalDepthTexture = nullptr;
-        }
-        if (mState->borrowedExternalColorTexture)
-        {
-            DestroyTexture(mState->borrowedExternalColorTexture);
-            mState->borrowedExternalColorTexture = nullptr;
+            piVulkanState::ExternalImageCacheEntry &entry = mState->externalImageCache[i];
+            if (entry.renderTarget == nullptr)
+            {
+                continue;
+            }
+            DestroyRenderTarget(entry.renderTarget);
+            DestroyTexture(entry.depthTexture);
+            DestroyTexture(entry.colorTexture);
+            if (entry.primeDepthTexture)
+                DestroyTexture(entry.primeDepthTexture);
+            entry = piVulkanState::ExternalImageCacheEntry();
         }
         if (mState->imageAvailableSemaphore != VK_NULL_SEMAPHORE && mState->vkDestroySemaphore)
         {
@@ -6682,6 +8007,29 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroyFence(mState->device, mState->frameFence, nullptr);
             mState->frameFence = VK_NULL_FENCE;
         }
+        // Drain the deferred-destroy queue before tearing down fences/pools.
+        iWaitAllBatchFences(mState);
+        iProcessDeferredDestroys(mState, true);
+        if (mState->utilityFence != VK_NULL_FENCE && mState->vkDestroyFence)
+        {
+            mState->vkDestroyFence(mState->device, mState->utilityFence, nullptr);
+            mState->utilityFence = VK_NULL_FENCE;
+        }
+        for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+        {
+            if (mState->batchRingFences[i] != VK_NULL_FENCE && mState->vkDestroyFence)
+            {
+                mState->vkDestroyFence(mState->device, mState->batchRingFences[i], nullptr);
+                mState->batchRingFences[i] = VK_NULL_FENCE;
+            }
+            if (mState->batchRingBridgeSemaphores[i] != VK_NULL_SEMAPHORE && mState->vkDestroySemaphore)
+            {
+                mState->vkDestroySemaphore(mState->device, mState->batchRingBridgeSemaphores[i], nullptr);
+                mState->batchRingBridgeSemaphores[i] = VK_NULL_SEMAPHORE;
+            }
+        }
+        // Command buffers are freed with the pool below.
+        mState->batchRingReady = false;
         if (mState->commandPool != VK_NULL_COMMAND_POOL && mState->vkDestroyCommandPool)
         {
             mState->vkDestroyCommandPool(mState->device, mState->commandPool, nullptr);
@@ -6716,6 +8064,38 @@ void piRendererVulkan::Deinitialize(void)
             mState->presentDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
             mState->presentDescriptorSet = VK_NULL_DESCRIPTOR_SET;
         }
+        if (mState->batchPaintDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+        {
+            mState->vkDestroyDescriptorPool(mState->device, mState->batchPaintDescriptorPool, nullptr);
+            for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+                if (mState->batchPaintDescriptorPools[i] == mState->batchPaintDescriptorPool)
+                    mState->batchPaintDescriptorPools[i] = VK_NULL_DESCRIPTOR_POOL;
+            mState->batchPaintDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        }
+        if (mState->batchPictureDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+        {
+            mState->vkDestroyDescriptorPool(mState->device, mState->batchPictureDescriptorPool, nullptr);
+            for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+                if (mState->batchPictureDescriptorPools[i] == mState->batchPictureDescriptorPool)
+                    mState->batchPictureDescriptorPools[i] = VK_NULL_DESCRIPTOR_POOL;
+            mState->batchPictureDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        }
+        for (int i = 0; i < piVulkanState::kBatchRingSize; ++i)
+        {
+            // The plain fields above alias one slot's pool - skip already-freed.
+            if (mState->batchPaintDescriptorPools[i] != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+            {
+                if (mState->batchPaintDescriptorPools[i] != mState->batchPaintDescriptorPool)
+                    mState->vkDestroyDescriptorPool(mState->device, mState->batchPaintDescriptorPools[i], nullptr);
+                mState->batchPaintDescriptorPools[i] = VK_NULL_DESCRIPTOR_POOL;
+            }
+            if (mState->batchPictureDescriptorPools[i] != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+            {
+                if (mState->batchPictureDescriptorPools[i] != mState->batchPictureDescriptorPool)
+                    mState->vkDestroyDescriptorPool(mState->device, mState->batchPictureDescriptorPools[i], nullptr);
+                mState->batchPictureDescriptorPools[i] = VK_NULL_DESCRIPTOR_POOL;
+            }
+        }
         if (mState->staticPaintDescriptorSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
         {
             mState->vkDestroyDescriptorSetLayout(mState->device, mState->staticPaintDescriptorSetLayout, nullptr);
@@ -6731,78 +8111,6 @@ void piRendererVulkan::Deinitialize(void)
             mState->vkDestroyPipeline(mState->device, mState->presentPipeline, nullptr);
             mState->presentPipeline = VK_NULL_PIPELINE;
         }
-        if (mState->hostDebugTrianglePipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
-        {
-            mState->vkDestroyPipeline(mState->device, mState->hostDebugTrianglePipeline, nullptr);
-            mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
-        }
-        if (mState->hostDescriptorDiagnosticPipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
-        {
-            mState->vkDestroyPipeline(mState->device, mState->hostDescriptorDiagnosticPipeline, nullptr);
-            mState->hostDescriptorDiagnosticPipeline = VK_NULL_PIPELINE;
-        }
-        if (mState->hostDebugTrianglePipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
-        {
-            mState->vkDestroyPipelineLayout(mState->device, mState->hostDebugTrianglePipelineLayout, nullptr);
-            mState->hostDebugTrianglePipelineLayout = VK_NULL_PIPELINE_LAYOUT;
-        }
-        if (mState->hostDebugTriangleVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
-        {
-            mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleVertexModule, nullptr);
-            mState->hostDebugTriangleVertexModule = VK_NULL_SHADER_MODULE;
-        }
-        if (mState->hostIndexedControlVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
-        {
-            mState->vkDestroyShaderModule(mState->device, mState->hostIndexedControlVertexModule, nullptr);
-            mState->hostIndexedControlVertexModule = VK_NULL_SHADER_MODULE;
-        }
-        if (mState->hostDebugTriangleFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
-        {
-            mState->vkDestroyShaderModule(mState->device, mState->hostDebugTriangleFragmentModule, nullptr);
-            mState->hostDebugTriangleFragmentModule = VK_NULL_SHADER_MODULE;
-        }
-        if (mState->hostCenterDiagnosticVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
-        {
-            mState->vkDestroyShaderModule(mState->device, mState->hostCenterDiagnosticVertexModule, nullptr);
-            mState->hostCenterDiagnosticVertexModule = VK_NULL_SHADER_MODULE;
-        }
-        if (mState->hostDescriptorDiagnosticFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
-        {
-            mState->vkDestroyShaderModule(mState->device, mState->hostDescriptorDiagnosticFragmentModule, nullptr);
-            mState->hostDescriptorDiagnosticFragmentModule = VK_NULL_SHADER_MODULE;
-        }
-        if (mState->hostDebugIndexBuffer)
-        {
-            if (mState->hostDebugIndexBuffer->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
-            {
-                mState->vkDestroyBuffer(mState->device, mState->hostDebugIndexBuffer->buffer, nullptr);
-            }
-            if (mState->hostDebugIndexBuffer->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
-            {
-                mState->vkFreeMemory(mState->device, mState->hostDebugIndexBuffer->memory, nullptr);
-            }
-            std::free(mState->hostDebugIndexBuffer->data);
-            delete mState->hostDebugIndexBuffer;
-            mState->hostDebugIndexBuffer = nullptr;
-        }
-        for (piBuffer &buffer : mState->hostDebugResourceBuffers)
-        {
-            if (!buffer)
-            {
-                continue;
-            }
-            if (buffer->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
-            {
-                mState->vkDestroyBuffer(mState->device, buffer->buffer, nullptr);
-            }
-            if (buffer->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
-            {
-                mState->vkFreeMemory(mState->device, buffer->memory, nullptr);
-            }
-            std::free(buffer->data);
-            delete buffer;
-            buffer = nullptr;
-        }
         if (mState->presentPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
         {
             mState->vkDestroyPipelineLayout(mState->device, mState->presentPipelineLayout, nullptr);
@@ -6812,6 +8120,41 @@ void piRendererVulkan::Deinitialize(void)
         {
             mState->vkDestroyDescriptorSetLayout(mState->device, mState->presentDescriptorSetLayout, nullptr);
             mState->presentDescriptorSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        }
+        if (mState->primeDepthPipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+        {
+            mState->vkDestroyPipeline(mState->device, mState->primeDepthPipeline, nullptr);
+            mState->primeDepthPipeline = VK_NULL_PIPELINE;
+        }
+        if (mState->primeDepthPipelineLayout != VK_NULL_PIPELINE_LAYOUT && mState->vkDestroyPipelineLayout)
+        {
+            mState->vkDestroyPipelineLayout(mState->device, mState->primeDepthPipelineLayout, nullptr);
+            mState->primeDepthPipelineLayout = VK_NULL_PIPELINE_LAYOUT;
+        }
+        if (mState->primeDepthSetLayout != VK_NULL_DESCRIPTOR_SET_LAYOUT && mState->vkDestroyDescriptorSetLayout)
+        {
+            mState->vkDestroyDescriptorSetLayout(mState->device, mState->primeDepthSetLayout, nullptr);
+            mState->primeDepthSetLayout = VK_NULL_DESCRIPTOR_SET_LAYOUT;
+        }
+        if (mState->primeDepthDescriptorPool != VK_NULL_DESCRIPTOR_POOL && mState->vkDestroyDescriptorPool)
+        {
+            mState->vkDestroyDescriptorPool(mState->device, mState->primeDepthDescriptorPool, nullptr);
+            mState->primeDepthDescriptorPool = VK_NULL_DESCRIPTOR_POOL;
+        }
+        if (mState->primeDepthSampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
+        {
+            mState->vkDestroySampler(mState->device, mState->primeDepthSampler, nullptr);
+            mState->primeDepthSampler = VK_NULL_SAMPLER;
+        }
+        if (mState->primeDepthVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->primeDepthVertexModule, nullptr);
+            mState->primeDepthVertexModule = VK_NULL_SHADER_MODULE;
+        }
+        if (mState->primeDepthFragmentModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
+        {
+            mState->vkDestroyShaderModule(mState->device, mState->primeDepthFragmentModule, nullptr);
+            mState->primeDepthFragmentModule = VK_NULL_SHADER_MODULE;
         }
         if (mState->presentVertexModule != VK_NULL_SHADER_MODULE && mState->vkDestroyShaderModule)
         {
@@ -6844,28 +8187,7 @@ void piRendererVulkan::Deinitialize(void)
             mState->hostTransientUniformMemory = VK_NULL_DEVICE_MEMORY;
             mState->hostTransientUniformSize = 0;
             mState->hostTransientUniformOffset = 0;
-            mState->hostTransientUniformLimit = 0;
         }
-        for (const piVulkanBorrowedUpload &upload : mState->borrowedUploads)
-        {
-            if (upload.buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
-            {
-                mState->vkDestroyBuffer(mState->device, upload.buffer, nullptr);
-            }
-            if (upload.memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
-            {
-                mState->vkFreeMemory(mState->device, upload.memory, nullptr);
-            }
-        }
-        mState->borrowedUploads.clear();
-        for (const piVulkanBorrowedPipeline &pipeline : mState->borrowedPipelines)
-        {
-            if (pipeline.pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
-            {
-                mState->vkDestroyPipeline(mState->device, pipeline.pipeline, nullptr);
-            }
-        }
-        mState->borrowedPipelines.clear();
         if (mState->stagingBuffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
         {
             mState->vkDestroyBuffer(mState->device, mState->stagingBuffer, nullptr);
@@ -7104,6 +8426,12 @@ static void iDestroyPresentScratch(piVulkanState *state, VkImage image, VkImageV
 
 void piRendererVulkan::SwapBuffers(void)
 {
+    // The standalone-viewer / own-swapchain path records its frame into a batch
+    // (SetRenderTarget(nullptr) usually flushed it already; this is the backstop).
+    if (mState && mState->batchRecording)
+    {
+        iFlushBatch(mState, mReporter);
+    }
     if (!mState || mState->swapchain == VK_NULL_SWAPCHAIN_KHR || mState->commandBuffer == VK_NULL_COMMAND_BUFFER ||
         mState->imageAvailableSemaphore == VK_NULL_SEMAPHORE || mState->renderFinishedSemaphore == VK_NULL_SEMAPHORE ||
         mState->frameFence == VK_NULL_FENCE)
@@ -7719,28 +9047,81 @@ void piRendererVulkan::EndExternalImageFrame(void)
         return;
     }
 
-    const bool wasHostRenderPassFrame = mState->hostRenderPassFrameActive;
-    const bool wasExternalCommandBufferFrame = mState->externalCommandBufferFrameActive;
-    if (wasHostRenderPassFrame && mState->hostDrawBisectionEnabled && mState->hostDrawBisectionAttempted > 0)
+    // Flush the batched eye-frame (one submit for all draws). With batched
+    // transition enabled this flush also carries the color->shader-read
+    // barrier, making the standalone transition below unnecessary (its skip is
+    // keyed off the tracked SHADER_READ_ONLY layout).
+    if (mState->batchRecording)
     {
-        char message[256];
-        std::snprintf(
-            message,
-            sizeof(message),
-            "[IMM_UNITY_VK_DRAW_BISECT_20260731] stage=%u mask=%u attempted=%u admitted=%u frame=%llu",
-            mState->hostDrawBisectionStage,
-            mState->hostDrawBisectionMask,
-            mState->hostDrawBisectionAttempted,
-            mState->hostDrawBisectionAdmitted,
-            static_cast<unsigned long long>(mState->borrowedCurrentFrameNumber));
-        iReport(mReporter, message);
-        if (mState->hostDrawBisectionStage < 3)
+        mState->batchAppendShaderReadTransition =
+            iBatchedTransitionEnabled(mState) &&
+            !mState->externalFramePreservesHostColor &&
+            mState->externalFrameColorTexture != nullptr;
+        // Composite bridge: this eye's submit signals its slot semaphore, and a
+        // wait-only submission queued on Unity's own queue - ahead of Unity's
+        // frame submit in submission order - makes the composite blit execute
+        // after the eye render on the GPU. Same-frame (single-buffer) eye RT
+        // reads become sound without any CPU stall.
+        VkSemaphore bridgeSemaphore = VK_NULL_SEMAPHORE;
+        const int flushSlot = mState->batchCurrentSlot;
+        if (flushSlot >= 0 && iCompositeBridgeEnabled(mState))
+            bridgeSemaphore = mState->batchRingBridgeSemaphores[flushSlot];
+        const bool flushed = iFlushBatch(mState, mReporter, "end-of-eye", bridgeSemaphore);
+        if (flushed && bridgeSemaphore != VK_NULL_SEMAPHORE)
         {
-            ++mState->hostDrawBisectionStage;
+            VkPipelineStageFlags bridgeWaitStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            VkSubmitInfo bridge = {};
+            bridge.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            bridge.waitSemaphoreCount = 1;
+            bridge.pWaitSemaphores = &bridgeSemaphore;
+            bridge.pWaitDstStageMask = &bridgeWaitStage;
+            if (mState->vkQueueSubmit(mState->hostQueue, 1, &bridge, VK_NULL_FENCE) != VK_SUCCESS)
+            {
+                mState->compositeBridgeFailed = true;
+                iError(mReporter, "Vulkan renderer composite bridge submit FAILED; bridge disabled");
+            }
+            else if (!mState->compositeBridgeReported)
+            {
+                mState->compositeBridgeReported = true;
+                iReport(mReporter, "Vulkan renderer composite bridge ACTIVE: host-queue composite waits the eye-submit semaphore");
+            }
         }
+    }
+
+    if (mState->externalFramePendingInPassClear)
+    {
+        // No draw opened a batch this eye (typical around pause/resume/chapter
+        // transitions, where the player's renderable state can flip BETWEEN the
+        // two sequential eye events). Do NOT clear: the wrapper still holds the
+        // eye's last completed image in a sampleable layout, and showing one
+        // slightly stale frame is invisible, whereas clearing produced a
+        // single-eye BLACK FLASH (user-visible flicker on the left eye). Only
+        // clear if the image has never been rendered at all (undefined layout).
+        mState->externalFramePendingInPassClear = false;
+        piTexture colorTex = mState->externalFrameColorTexture;
+        if (colorTex && colorTex->imageLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        {
+            const float transparentBlack[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            iClearColorTextureImage(mState, colorTex, transparentBlack, mReporter);
+            if (mState->externalFrameDepthTexture && !mState->externalFrameUsesHostDepth)
+                iClearDepthTextureImage(mState, mState->externalFrameDepthTexture, mReporter,
+                                        iExternalReverseZEnabled(mState) ? 0.0f : 1.0f);
+        }
+    }
+
+    const bool wasHostRenderPassFrame = mState->hostRenderPassFrameActive;
+    if (mState->externalFrameColorTexture && mState->handleProbeLogCount < 60)
+    {
+        ++mState->handleProbeLogCount;
+        char message[160];
+        std::snprintf(message, sizeof(message), "ext end: img=%llx preservesHost=%d",
+                      (unsigned long long)(uintptr_t)mState->externalFrameColorTexture->image,
+                      mState->externalFramePreservesHostColor ? 1 : 0);
+        iReport(mReporter, message);
     }
     if (mState->externalFrameColorTexture &&
         !mState->externalFramePreservesHostColor &&
+        mState->externalFrameColorTexture->imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
         !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))
     {
         iError(mReporter, "Vulkan renderer failed to transition external image frame for host sampling");
@@ -7749,75 +9130,59 @@ void piRendererVulkan::EndExternalImageFrame(void)
     {
         SetRenderTarget(nullptr);
     }
-    if (mState->externalFrameRenderTarget && !wasExternalCommandBufferFrame)
+    if (mState->externalFrameFromCache)
+    {
+        // Wrappers live in the external-image cache; keep them (and their
+        // tracked image layouts) for the next Begin of the same image.
+        mState->externalFrameRenderTarget = nullptr;
+        mState->externalFrameDepthTexture = nullptr;
+        mState->externalFrameColorTexture = nullptr;
+        mState->externalFramePrimeDepthTexture = nullptr;
+        mState->externalFrameFromCache = false;
+    }
+    if (mState->externalFrameRenderTarget)
     {
         DestroyRenderTarget(mState->externalFrameRenderTarget);
+        mState->externalFrameRenderTarget = nullptr;
     }
-    if (mState->externalFrameDepthTexture && !wasExternalCommandBufferFrame)
+    if (mState->externalFrameDepthTexture)
     {
         DestroyTexture(mState->externalFrameDepthTexture);
+        mState->externalFrameDepthTexture = nullptr;
     }
-    if (mState->externalFrameColorTexture && !wasExternalCommandBufferFrame)
+    if (mState->externalFrameColorTexture)
     {
         DestroyTexture(mState->externalFrameColorTexture);
+        mState->externalFrameColorTexture = nullptr;
     }
-    mState->externalFrameRenderTarget = nullptr;
-    mState->externalFrameDepthTexture = nullptr;
-    mState->externalFrameColorTexture = nullptr;
+    if (mState->externalFramePrimeDepthTexture)
+    {
+        DestroyTexture(mState->externalFramePrimeDepthTexture);
+        mState->externalFramePrimeDepthTexture = nullptr;
+    }
     mState->externalFrameUsesHostDepth = false;
     mState->externalFrameHostDepthReverseZ = false;
     mState->externalFramePreservesHostColor = false;
-    mState->externalCommandBufferFrameActive = false;
-    mState->borrowedFrameResourcesActive = false;
     mState->hostRenderPassFrameActive = false;
-    if (wasHostRenderPassFrame || wasExternalCommandBufferFrame)
+    if (wasHostRenderPassFrame)
     {
         mState->commandBuffer = mState->hostPreviousCommandBuffer;
         mState->hostPreviousCommandBuffer = VK_NULL_COMMAND_BUFFER;
-        if (wasHostRenderPassFrame)
-        {
-            SetRenderTarget(mState->hostPreviousRenderTarget);
-            mState->hostPreviousRenderTarget = nullptr;
-        }
+        SetRenderTarget(mState->hostPreviousRenderTarget);
+        mState->hostPreviousRenderTarget = nullptr;
     }
 }
 
-bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, bool hostDepthReverseZ, uint32_t subpass, int width, int height)
+bool piRendererVulkan::UsesDedicatedQueue(void) const
+{
+    return mState != nullptr && mState->ownsDedicatedQueue;
+}
+
+bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *renderPass, void *framebuffer, uint32_t colorVkFormat, uint32_t colorVkSamples, bool hasDepthAttachment, bool useHostDepth, uint32_t subpass, int width, int height)
 {
     EndExternalImageFrame();
     if (!mState || commandBuffer == nullptr || renderPass == nullptr || framebuffer == nullptr || colorVkFormat == 0 || width <= 0 || height <= 0)
     {
-        return false;
-    }
-
-    iCollectBorrowedPipelines(mState, safeFrameNumber);
-
-    uint32_t frameSlot = kBorrowedFrameSlotCount;
-    bool continuingFrame = false;
-    for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
-    {
-        if (mState->borrowedFrameNumbers[i] == currentFrameNumber)
-        {
-            frameSlot = i;
-            continuingFrame = true;
-            break;
-        }
-    }
-    if (!continuingFrame)
-    {
-        for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
-        {
-            const uint64_t slotFrame = mState->borrowedFrameNumbers[i];
-            if (slotFrame == ~0ull || slotFrame <= safeFrameNumber)
-            {
-                frameSlot = i;
-                break;
-            }
-        }
-    }
-    if (frameSlot >= kBorrowedFrameSlotCount)
-    {
-        iError(mReporter, "Vulkan renderer has no safe Unity render-pass frame slot");
         return false;
     }
 
@@ -7846,121 +9211,18 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, uint64_t cu
     mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameRenderTarget = target;
+    const bool useHostDepthReverseZ = iRendererFlagEnabled("IMM_UNITY_VK_HOST_DEPTH_REVERSE_Z");
     mState->externalFrameUsesHostDepth = useHostDepth;
-    mState->externalFrameHostDepthReverseZ = useHostDepth && hostDepthReverseZ;
+    mState->externalFrameHostDepthReverseZ = useHostDepth && useHostDepthReverseZ;
     mState->externalFramePreservesHostColor = true;
-    mState->borrowedFrameResourcesActive = true;
     mState->hostRenderPassFrameActive = true;
-    mState->borrowedFrameSlot = frameSlot;
-    mState->borrowedCurrentFrameNumber = currentFrameNumber;
-    mState->hostDrawBisectionAttempted = 0;
-    mState->hostDrawBisectionAdmitted = 0;
-    if (mState->hostDrawBisectionEnabled)
-    {
-        // Bit 0 admits indexed paint/picture draws; bit 1 admits the
-        // independent picture-quad path used by DrawUnitQuad_XY.
-        static constexpr uint32_t kStageMasks[] = { 0u, 1u, 2u, 3u };
-        mState->hostDrawBisectionMask = kStageMasks[mState->hostDrawBisectionStage];
-    }
-    if (!continuingFrame)
-    {
-        mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
-        mState->borrowedStaticPaintSetCursor = 0;
-        mState->borrowedPictureSetCursor = 0;
-        mState->hostTransientUniformOffset =
-            static_cast<VkDeviceSize>(frameSlot) * kBorrowedUniformBytesPerFrame;
-        mState->hostTransientUniformLimit =
-            mState->hostTransientUniformOffset + kBorrowedUniformBytesPerFrame;
-    }
+    mState->hostTransientUniformOffset = 0;
     SetRenderTarget(target);
 
     if (!mState->hostRenderPassFrameReported)
     {
         mState->hostRenderPassFrameReported = true;
         iReport(mReporter, useHostDepth ? "Vulkan renderer began host render pass frame with host depth" : "Vulkan renderer began host render pass frame");
-    }
-    return true;
-}
-
-void piRendererVulkan::SetHostDrawBisectionEnabled(bool enabled)
-{
-    if (!mState)
-    {
-        return;
-    }
-    if (enabled && !mState->hostDrawBisectionEnabled)
-    {
-        mState->hostDrawBisectionStage = 0;
-        iReport(mReporter, "[IMM_UNITY_VK_DRAW_BISECT_20260731] enabled stages=none,indexed-only,unit-quad-only,all");
-    }
-    mState->hostDrawBisectionEnabled = enabled;
-}
-
-bool piRendererVulkan::BeginUnityCommandBufferUploadFrame(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber)
-{
-    EndExternalImageFrame();
-    if (!mState || commandBuffer == nullptr)
-    {
-        return false;
-    }
-
-    iCollectBorrowedUploads(mState, safeFrameNumber);
-    iCollectBorrowedPipelines(mState, safeFrameNumber);
-
-    uint32_t frameSlot = kBorrowedFrameSlotCount;
-    bool continuingFrame = false;
-    for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
-    {
-        if (mState->borrowedFrameNumbers[i] == currentFrameNumber)
-        {
-            frameSlot = i;
-            continuingFrame = true;
-            break;
-        }
-    }
-    if (!continuingFrame)
-    {
-        for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
-        {
-            const uint64_t slotFrame = mState->borrowedFrameNumbers[i];
-            if (slotFrame == ~0ull || slotFrame <= safeFrameNumber)
-            {
-                frameSlot = i;
-                break;
-            }
-        }
-    }
-    if (frameSlot >= kBorrowedFrameSlotCount)
-    {
-        iError(mReporter, "Vulkan renderer has no safe Unity upload frame slot");
-        return false;
-    }
-
-    mState->hostPreviousCommandBuffer = mState->commandBuffer;
-    mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
-    mState->externalCommandBufferFrameActive = true;
-    mState->borrowedFrameResourcesActive = true;
-    mState->borrowedFrameSlot = frameSlot;
-    mState->borrowedCurrentFrameNumber = currentFrameNumber;
-    // RenderPreparedCamera updates per-draw constants while Unity's render pass
-    // is active. Allocate and map the backing ring here, while the prepare event
-    // is explicitly outside the render pass, so the inside-pass callback only
-    // writes existing mapped memory and records graphics commands.
-    if (!iEnsureHostTransientUniformBuffer(mState, kBorrowedUniformTotalBytes, mReporter))
-    {
-        iError(mReporter, "[IMM_UNITY_VK_DRAW_BISECT_20260731] failed to preallocate host transient uniforms outside render pass");
-        EndExternalImageFrame();
-        return false;
-    }
-    if (!continuingFrame)
-    {
-        mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
-        mState->borrowedStaticPaintSetCursor = 0;
-        mState->borrowedPictureSetCursor = 0;
-        mState->hostTransientUniformOffset =
-            static_cast<VkDeviceSize>(frameSlot) * kBorrowedUniformBytesPerFrame;
-        mState->hostTransientUniformLimit =
-            mState->hostTransientUniformOffset + kBorrowedUniformBytesPerFrame;
     }
     return true;
 }
@@ -7993,152 +9255,78 @@ bool piRendererVulkan::DebugClearHostRenderPassColor(float red, float green, flo
     return true;
 }
 
-bool piRendererVulkan::DebugDrawHostRenderPassTriangle(void)
-{
-    if (!mState || !mState->hostRenderPassFrameActive || mState->commandBuffer == VK_NULL_COMMAND_BUFFER ||
-        !mState->externalFrameRenderTarget || !mState->vkCreatePipelineLayout || !mState->vkCreateGraphicsPipelines ||
-        !mState->vkCmdBindPipeline || !mState->vkCmdDraw)
-    {
-        return false;
-    }
-
-    if (mState->hostDebugTrianglePipelineLayout == VK_NULL_PIPELINE_LAYOUT)
-    {
-        VkPipelineLayoutCreateInfo layoutInfo = {};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        if (mState->vkCreatePipelineLayout(mState->device, &layoutInfo, nullptr, &mState->hostDebugTrianglePipelineLayout) != VK_SUCCESS ||
-            mState->hostDebugTrianglePipelineLayout == VK_NULL_PIPELINE_LAYOUT)
-        {
-            iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create pipeline layout");
-            return false;
-        }
-    }
-    if (mState->hostDebugTriangleVertexModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(mState, reinterpret_cast<const uint8_t *>(kSrgbPresentVS), static_cast<int>(sizeof(kSrgbPresentVS)), &mState->hostDebugTriangleVertexModule, mReporter))
-    {
-        iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create vertex module");
-        return false;
-    }
-    if (mState->hostDebugTriangleFragmentModule == VK_NULL_SHADER_MODULE &&
-        !iCreateShaderModule(mState, reinterpret_cast<const uint8_t *>(kHostDebugTriangleFS), static_cast<int>(sizeof(kHostDebugTriangleFS)), &mState->hostDebugTriangleFragmentModule, mReporter))
-    {
-        iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create fragment module");
-        return false;
-    }
-
-    const piRTarget target = mState->externalFrameRenderTarget;
-    const VkSampleCountFlagBits sampleCount = target->color[0] ? target->color[0]->sampleCount : VK_SAMPLE_COUNT_1_BIT;
-    if (mState->hostDebugTrianglePipeline == VK_NULL_PIPELINE ||
-        mState->hostDebugTriangleRenderPass != target->renderPass ||
-        mState->hostDebugTriangleSubpass != target->subpass ||
-        mState->hostDebugTriangleSampleCount != sampleCount)
-    {
-        if (mState->hostDebugTrianglePipeline != VK_NULL_PIPELINE)
-        {
-            iRetireGraphicsPipeline(mState, mState->hostDebugTrianglePipeline);
-            mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
-        }
-
-        VkPipelineShaderStageCreateInfo stages[2] = {};
-        stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        stages[0].module = mState->hostDebugTriangleVertexModule;
-        stages[0].pName = "main";
-        stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        stages[1].module = mState->hostDebugTriangleFragmentModule;
-        stages[1].pName = "main";
-
-        VkPipelineVertexInputStateCreateInfo vertexInput = {};
-        vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
-        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        VkPipelineViewportStateCreateInfo viewport = {};
-        viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        viewport.viewportCount = 1;
-        viewport.scissorCount = 1;
-        VkPipelineRasterizationStateCreateInfo rasterization = {};
-        rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-        rasterization.cullMode = VK_CULL_MODE_NONE;
-        rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        rasterization.lineWidth = 1.0f;
-        VkPipelineMultisampleStateCreateInfo multisample = {};
-        multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisample.rasterizationSamples = sampleCount;
-        VkPipelineDepthStencilStateCreateInfo depthStencil = {};
-        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        depthStencil.depthTestEnable = 0;
-        depthStencil.depthWriteEnable = 0;
-        depthStencil.depthCompareOp = VK_COMPARE_OP_ALWAYS;
-        VkPipelineColorBlendAttachmentState blendAttachment = {};
-        blendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        VkPipelineColorBlendStateCreateInfo colorBlend = {};
-        colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        colorBlend.attachmentCount = 1;
-        colorBlend.pAttachments = &blendAttachment;
-        const VkDynamicState dynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-        VkPipelineDynamicStateCreateInfo dynamicState = {};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = 2;
-        dynamicState.pDynamicStates = dynamicStates;
-
-        VkGraphicsPipelineCreateInfo pipelineInfo = {};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = stages;
-        pipelineInfo.pVertexInputState = &vertexInput;
-        pipelineInfo.pInputAssemblyState = &inputAssembly;
-        pipelineInfo.pViewportState = &viewport;
-        pipelineInfo.pRasterizationState = &rasterization;
-        pipelineInfo.pMultisampleState = &multisample;
-        pipelineInfo.pDepthStencilState = target->hasDepth ? &depthStencil : nullptr;
-        pipelineInfo.pColorBlendState = &colorBlend;
-        pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = mState->hostDebugTrianglePipelineLayout;
-        pipelineInfo.renderPass = target->renderPass;
-        pipelineInfo.subpass = target->subpass;
-        const VkResult result = mState->vkCreateGraphicsPipelines(
-            mState->device, VK_NULL_PIPELINE_CACHE, 1, &pipelineInfo, nullptr, &mState->hostDebugTrianglePipeline);
-        if (result != VK_SUCCESS || mState->hostDebugTrianglePipeline == VK_NULL_PIPELINE)
-        {
-            iError(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] failed to create graphics pipeline");
-            mState->hostDebugTrianglePipeline = VK_NULL_PIPELINE;
-            return false;
-        }
-        mState->hostDebugTriangleRenderPass = target->renderPass;
-        mState->hostDebugTriangleSubpass = target->subpass;
-        mState->hostDebugTriangleSampleCount = sampleCount;
-        iReport(mReporter, "[IMM_UNITY_VK_TRIANGLE_CONTROL_20260731] created graphics pipeline");
-    }
-
-    mState->vkCmdBindPipeline(mState->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mState->hostDebugTrianglePipeline);
-    mState->vkCmdDraw(mState->commandBuffer, 3, 1, 0, 0);
-    return true;
-}
-
-bool piRendererVulkan::DebugReadbackExternalFrameColor(uint8_t rgba[4])
-{
-    if (!mState || !rgba || !mState->externalFrameColorTexture ||
-        !mState->externalFrameColorTexture->data)
-    {
-        return false;
-    }
-    if (!iReadBackTextureImage(mState, mState->externalFrameColorTexture, mReporter))
-    {
-        return false;
-    }
-    std::memcpy(rgba, mState->externalFrameColorTexture->data, 4);
-    return true;
-}
-
-bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers)
+bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers,
+                                               void *hostDepthImage, uint32_t hostDepthVkFormat)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0 || !mState->vkCreateImageView)
     {
         return false;
+    }
+
+    const bool cacheEnabled = !iRendererFlagEnabled("IMM_UNITY_VK_NO_EXTERNAL_IMAGE_CACHE");
+    const VkImage vkImage = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
+    if (cacheEnabled)
+    {
+        for (int i = 0; i < piVulkanState::kExternalImageCacheSize; ++i)
+        {
+            piVulkanState::ExternalImageCacheEntry &entry = mState->externalImageCache[i];
+            if (entry.renderTarget == nullptr || entry.image != vkImage || entry.vkFormat != vkFormat ||
+                entry.width != width || entry.height != height || entry.arrayLayers != arrayLayers)
+            {
+                continue;
+            }
+            entry.lastUseSerial = ++mState->externalImageCacheSerial;
+            // With batching + in-pass clears, defer BOTH clears to the batch's
+            // render-pass begin (LOAD_OP_CLEAR variant): saves two standalone
+            // submit+fence GPU round-trips per eye on the hot path.
+            const bool deferClears = iBatchEnabled(mState) && iInPassClearEnabled(mState) &&
+                                     entry.renderTarget->clearRenderPass != VK_NULL_RENDER_PASS;
+            const float transparentBlack[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+            if (!SetRenderTarget(entry.renderTarget) ||
+                (!deferClears &&
+                 (!iClearColorTextureImage(mState, entry.colorTexture, transparentBlack, mReporter) ||
+                  !iClearDepthTextureImage(mState, entry.depthTexture, mReporter,
+                                           iExternalReverseZEnabled(mState) ? 0.0f : 1.0f))))
+            {
+                // Entry unusable - drop it and rebuild through the create path.
+                DestroyRenderTarget(entry.renderTarget);
+                DestroyTexture(entry.depthTexture);
+                DestroyTexture(entry.colorTexture);
+                entry = piVulkanState::ExternalImageCacheEntry();
+                break;
+            }
+            mState->externalFramePendingInPassClear = deferClears;
+            mState->externalFrameColorTexture = entry.colorTexture;
+            mState->externalFrameDepthTexture = entry.depthTexture;
+            mState->externalFramePrimeDepthTexture = entry.primeDepthTexture;
+            mState->externalFrameRenderTarget = entry.renderTarget;
+            mState->externalFrameUsesHostDepth = false;
+            mState->externalFrameHostDepthReverseZ = false;
+            mState->externalFramePreservesHostColor = false;
+            mState->externalFrameFromCache = true;
+            // Eager batch open - MUST come after the externalFrame* assignments
+            // above: the open's CLEAR-variant eligibility compares the target
+            // against externalFrameRenderTarget, and calling before the
+            // assignment made every eye open with the LOAD pass (clear silently
+            // skipped -> frame-over-frame trails, the "feedback" glitch; found
+            // via BATCHTRACE: every open was "pass=LOAD pendingWasConsumed=0").
+            // Isolates this eye's uniform uploads into the transient ring.
+            // Kill: IMM_UNITY_VK_NO_EAGER_BATCH_OPEN.
+            if (iEagerBatchOpenEnabled(mState) && iBatchActiveForTarget(mState, entry.renderTarget))
+                iEnsureBatchOpen(mState, entry.renderTarget, mReporter);
+            if (mState->handleProbeLogCount < 60)
+            {
+                ++mState->handleProbeLogCount;
+                char message[192];
+                std::snprintf(message, sizeof(message), "ext begin CACHED: img=%llx rp=%llx fb=%llx",
+                              (unsigned long long)(uintptr_t)entry.image,
+                              (unsigned long long)(uintptr_t)entry.renderTarget->renderPass,
+                              (unsigned long long)(uintptr_t)entry.renderTarget->framebuffer);
+                iReport(mReporter, message);
+            }
+            return true;
+        }
     }
 
     VkImageViewCreateInfo viewInfo = {};
@@ -8164,8 +9352,34 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
         return false;
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, false, true, false, false))
+    // Optional host (Unity XR) depth: create a depth-aspect view here so the
+    // eye frame keeps its offscreen clear-color semantics while WithView
+    // decides attach-at-1x vs PRIME-at-4x for the depth itself.
+    VkImageView hostDepthView = VK_NULL_IMAGE_VIEW;
+    if (hostDepthImage != nullptr && hostDepthVkFormat != 0)
     {
+        VkImageViewCreateInfo depthViewInfo = viewInfo;
+        depthViewInfo.image = static_cast<VkImage>(reinterpret_cast<uintptr_t>(hostDepthImage));
+        depthViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        depthViewInfo.format = static_cast<VkFormat>(hostDepthVkFormat);
+        depthViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        depthViewInfo.subresourceRange.layerCount = 1;
+        if (mState->vkCreateImageView(mState->device, &depthViewInfo, nullptr, &hostDepthView) != VK_SUCCESS)
+        {
+            hostDepthView = VK_NULL_IMAGE_VIEW;
+            iReport(mReporter, "Vulkan renderer host depth view creation failed; eye frame runs without host depth");
+        }
+    }
+
+    const bool passHostDepth = hostDepthView != VK_NULL_IMAGE_VIEW;
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(imageView), vkFormat, VK_SAMPLE_COUNT_1_BIT,
+                                         passHostDepth ? hostDepthImage : nullptr,
+                                         passHostDepth ? reinterpret_cast<void *>(hostDepthView) : nullptr,
+                                         passHostDepth ? hostDepthVkFormat : 0,
+                                         VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, passHostDepth, true, false))
+    {
+        if (hostDepthView != VK_NULL_IMAGE_VIEW)
+            mState->vkDestroyImageView(mState->device, hostDepthView, nullptr);
         mState->vkDestroyImageView(mState->device, imageView, nullptr);
         return false;
     }
@@ -8174,21 +9388,62 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
         mState->externalFrameColorTexture->ownsImageView = true;
     }
 
+    if (cacheEnabled && mState->externalFrameRenderTarget != nullptr)
+    {
+        int slot = 0;
+        uint64_t oldest = ~0ull;
+        for (int i = 0; i < piVulkanState::kExternalImageCacheSize; ++i)
+        {
+            if (mState->externalImageCache[i].renderTarget == nullptr)
+            {
+                slot = i;
+                break;
+            }
+            if (mState->externalImageCache[i].lastUseSerial < oldest)
+            {
+                oldest = mState->externalImageCache[i].lastUseSerial;
+                slot = i;
+            }
+        }
+        piVulkanState::ExternalImageCacheEntry &entry = mState->externalImageCache[slot];
+        if (entry.renderTarget != nullptr)
+        {
+            // Evictions only happen when a new image appears (e.g. an XR session
+            // restart replaced the RTs); the old image's work is long fenced.
+            DestroyRenderTarget(entry.renderTarget);
+            DestroyTexture(entry.depthTexture);
+            DestroyTexture(entry.colorTexture);
+            if (entry.primeDepthTexture)
+                DestroyTexture(entry.primeDepthTexture);
+        }
+        entry.image = vkImage;
+        entry.vkFormat = vkFormat;
+        entry.width = width;
+        entry.height = height;
+        entry.arrayLayers = arrayLayers;
+        entry.colorTexture = mState->externalFrameColorTexture;
+        entry.depthTexture = mState->externalFrameDepthTexture;
+        entry.primeDepthTexture = mState->externalFramePrimeDepthTexture;
+        entry.renderTarget = mState->externalFrameRenderTarget;
+        entry.lastUseSerial = ++mState->externalImageCacheSerial;
+        mState->externalFrameFromCache = true;
+    }
+
     iReport(mReporter, "Vulkan renderer began external image frame with owned image view");
     return true;
 }
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true, false, false);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, nullptr, nullptr, 0, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, true, false);
 }
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height, bool clearExternalDepth)
 {
-    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, clearExternalDepth, clearExternalDepth, false);
+    return BeginExternalImageFrameWithView(image, imageView, vkFormat, VK_SAMPLE_COUNT_1_BIT, depthImage, depthImageView, depthVkFormat, VK_SAMPLE_COUNT_1_BIT, width, height, 1, false, false, clearExternalDepth, clearExternalDepth);
 }
 
-bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, bool hostDepthReverseZ)
+bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || width <= 0 || height <= 0 || vkFormat == 0 || !mState->vkCreateImageView)
@@ -8241,7 +9496,7 @@ bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_
         }
     }
 
-    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false, false, hostDepthReverseZ))
+    if (!BeginExternalImageFrameWithView(image, reinterpret_cast<void *>(colorImageView), vkFormat, colorVkSamples, useHostDepth ? depthImage : nullptr, useHostDepth ? reinterpret_cast<void *>(depthImageView) : nullptr, useHostDepth ? depthVkFormat : 0, useHostDepth ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT, width, height, 1, true, useHostDepth, false, false))
     {
         if (depthImageView != VK_NULL_IMAGE_VIEW)
         {
@@ -8255,147 +9510,7 @@ bool piRendererVulkan::BeginExternalImageFramePreserveColor(void *image, uint32_
     return true;
 }
 
-bool piRendererVulkan::BeginExternalImageCommandBufferFramePreserveColor(void *commandBuffer, uint64_t currentFrameNumber, uint64_t safeFrameNumber, void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, bool hostDepthReverseZ)
-{
-    EndExternalImageFrame();
-    if (!mState || commandBuffer == nullptr || image == nullptr || depthImage == nullptr ||
-        vkFormat == 0 || depthVkFormat == 0 || width <= 0 || height <= 0)
-    {
-        return false;
-    }
-
-    iCollectBorrowedPipelines(mState, safeFrameNumber);
-
-    uint32_t frameSlot = kBorrowedFrameSlotCount;
-    bool continuingFrame = false;
-    for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
-    {
-        if (mState->borrowedFrameNumbers[i] == currentFrameNumber)
-        {
-            frameSlot = i;
-            continuingFrame = true;
-            break;
-        }
-    }
-    if (!continuingFrame)
-    {
-        for (uint32_t i = 0; i < kBorrowedFrameSlotCount; ++i)
-        {
-            const uint64_t slotFrame = mState->borrowedFrameNumbers[i];
-            if (slotFrame == ~0ull || slotFrame <= safeFrameNumber)
-            {
-                frameSlot = i;
-                break;
-            }
-        }
-    }
-    if (frameSlot >= kBorrowedFrameSlotCount)
-    {
-        iError(mReporter, "Vulkan renderer has no safe borrowed command-buffer frame slot");
-        return false;
-    }
-
-    const VkSampleCountFlagBits requestedColorSamples =
-        static_cast<VkSampleCountFlagBits>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT);
-    const VkSampleCountFlagBits requestedDepthSamples =
-        static_cast<VkSampleCountFlagBits>(depthVkSamples != 0 ? depthVkSamples : VK_SAMPLE_COUNT_1_BIT);
-    const bool cacheMatches =
-        mState->borrowedExternalColorTexture &&
-        mState->borrowedExternalDepthTexture &&
-        mState->borrowedExternalRenderTarget &&
-        mState->borrowedExternalColorTexture->externalHandle == reinterpret_cast<uint64_t>(image) &&
-        mState->borrowedExternalColorTexture->vkFormat == static_cast<VkFormat>(vkFormat) &&
-        mState->borrowedExternalColorTexture->sampleCount == requestedColorSamples &&
-        mState->borrowedExternalColorTexture->info.mXres == width &&
-        mState->borrowedExternalColorTexture->info.mYres == height &&
-        mState->borrowedExternalDepthTexture->externalHandle == reinterpret_cast<uint64_t>(depthImage) &&
-        mState->borrowedExternalDepthTexture->vkFormat == static_cast<VkFormat>(depthVkFormat) &&
-        mState->borrowedExternalDepthTexture->sampleCount == requestedDepthSamples &&
-        mState->borrowedExternalDepthTexture->info.mXres == width &&
-        mState->borrowedExternalDepthTexture->info.mYres == height;
-
-    if (!cacheMatches)
-    {
-        // Unity can recreate Android RenderTextures after a resolution change
-        // or app resume. The cached framebuffer and image views must outlive
-        // every Unity command buffer that references them.
-        if ((mState->borrowedExternalRenderTarget ||
-             mState->borrowedExternalDepthTexture ||
-             mState->borrowedExternalColorTexture) &&
-            mState->vkDeviceWaitIdle)
-        {
-            mState->vkDeviceWaitIdle(mState->device);
-        }
-        if (mState->borrowedExternalRenderTarget)
-        {
-            DestroyRenderTarget(mState->borrowedExternalRenderTarget);
-            mState->borrowedExternalRenderTarget = nullptr;
-        }
-        if (mState->borrowedExternalDepthTexture)
-        {
-            DestroyTexture(mState->borrowedExternalDepthTexture);
-            mState->borrowedExternalDepthTexture = nullptr;
-        }
-        if (mState->borrowedExternalColorTexture)
-        {
-            DestroyTexture(mState->borrowedExternalColorTexture);
-            mState->borrowedExternalColorTexture = nullptr;
-        }
-
-        if (!BeginExternalImageFramePreserveColor(
-                image,
-                vkFormat,
-                colorVkSamples,
-                depthImage,
-                depthVkFormat,
-                depthVkSamples,
-                width,
-                height,
-                hostDepthReverseZ))
-        {
-            return false;
-        }
-        mState->borrowedExternalColorTexture = mState->externalFrameColorTexture;
-        mState->borrowedExternalDepthTexture = mState->externalFrameDepthTexture;
-        mState->borrowedExternalRenderTarget = mState->externalFrameRenderTarget;
-    }
-    else
-    {
-        mState->externalFrameColorTexture = mState->borrowedExternalColorTexture;
-        mState->externalFrameDepthTexture = mState->borrowedExternalDepthTexture;
-        mState->externalFrameRenderTarget = mState->borrowedExternalRenderTarget;
-        mState->externalFrameUsesHostDepth = true;
-        mState->externalFrameHostDepthReverseZ = hostDepthReverseZ;
-        mState->externalFramePreservesHostColor = true;
-        SetRenderTarget(mState->externalFrameRenderTarget);
-    }
-
-    VkCommandBuffer previousCommandBuffer = mState->commandBuffer;
-    mState->hostPreviousCommandBuffer = previousCommandBuffer;
-    mState->commandBuffer = static_cast<VkCommandBuffer>(commandBuffer);
-    mState->externalCommandBufferFrameActive = true;
-    mState->borrowedFrameResourcesActive = true;
-    mState->borrowedFrameSlot = frameSlot;
-    mState->borrowedCurrentFrameNumber = currentFrameNumber;
-    if (!continuingFrame)
-    {
-        mState->borrowedFrameNumbers[frameSlot] = currentFrameNumber;
-        mState->borrowedStaticPaintSetCursor = 0;
-        mState->borrowedPictureSetCursor = 0;
-        mState->hostTransientUniformOffset =
-            static_cast<VkDeviceSize>(frameSlot) * kBorrowedUniformBytesPerFrame;
-        mState->hostTransientUniformLimit =
-            mState->hostTransientUniformOffset + kBorrowedUniformBytesPerFrame;
-    }
-    if (!mState->hostRenderPassFrameReported)
-    {
-        mState->hostRenderPassFrameReported = true;
-        iReport(mReporter, "Vulkan renderer began Unity-owned command buffer frame with IMM render pass");
-    }
-    return true;
-}
-
-bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor, bool clearExternalDepth, bool hostDepthReverseZ)
+bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageView, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, void *depthImageView, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height, int arrayLayers, bool ownsColorImageView, bool ownsDepthImageView, bool clearColor, bool clearExternalDepth)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || imageView == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0)
@@ -8415,7 +9530,10 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     colorTexture->ownsImageView = ownsColorImageView;
     colorTexture->vkFormat = static_cast<VkFormat>(vkFormat);
     colorTexture->imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    colorTexture->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    // A fresh wrapper's true layout is unknown; when the clear below discards
+    // contents anyway, declare UNDEFINED so its barrier is legal from any
+    // actual layout. Preserve paths keep the attachment layout the host set.
+    colorTexture->imageLayout = clearColor ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorTexture->sampleCount = static_cast<VkSampleCountFlagBits>(colorVkSamples != 0 ? colorVkSamples : VK_SAMPLE_COUNT_1_BIT);
     if (!colorTexture->data)
     {
@@ -8425,7 +9543,12 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     ++mState->liveTextures;
 
     const bool hasExternalDepth = depthImage != nullptr && depthImageView != nullptr && depthVkFormat != 0;
+    // PRIME mode keeps the MSAA contract: the host depth is SAMPLED by a
+    // fullscreen depth-only draw at batch open (laid into the transient 4x
+    // depth) instead of being attached at 1x.
+    const bool primeHostDepth = hasExternalDepth && iMsaaEnabled(mState) && iDepthPrimeEnabled(mState);
     piTexture depthTexture = nullptr;
+    piTexture primeDepthTexture = nullptr;
     if (hasExternalDepth)
     {
         piTextureS *externalDepthTexture = new piTextureS();
@@ -8449,23 +9572,34 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
             return false;
         }
         ++mState->liveTextures;
-        depthTexture = externalDepthTexture;
+        if (primeHostDepth)
+            primeDepthTexture = externalDepthTexture;
+        else
+            depthTexture = externalDepthTexture;
     }
-    else
+    if (depthTexture == nullptr)
     {
         const TextureInfo depthInfo = { TextureType::T2D, Format::D1_32_FLOAT, width, height, 1, static_cast<int>(colorTexture->sampleCount), 1, 0 };
         depthTexture = CreateTexture(L"imm_external_image_depth", &depthInfo, false, TextureFilter::NONE, TextureWrap::CLAMP, 1.0f, nullptr);
     }
     if (!depthTexture)
     {
+        if (primeDepthTexture) DestroyTexture(primeDepthTexture);
         DestroyTexture(colorTexture);
         return false;
     }
 
+    // External eye targets opt into the MSAA 4x contract (iCreateRenderTargetObjects
+    // falls back to 1x non-fatally if attachments cannot be built). Host depth as
+    // an ATTACHMENT is 1x and forces the pass single-sampled; PRIME mode samples
+    // it instead and keeps 4x.
+    mState->nextRenderTargetWantsMsaa = !hasExternalDepth || primeHostDepth;
     piRTarget renderTarget = CreateRenderTarget(colorTexture, nullptr, nullptr, nullptr, depthTexture);
+    mState->nextRenderTargetWantsMsaa = false;
     if (!renderTarget || !SetRenderTarget(renderTarget))
     {
         if (renderTarget) DestroyRenderTarget(renderTarget);
+        if (primeDepthTexture) DestroyTexture(primeDepthTexture);
         DestroyTexture(depthTexture);
         DestroyTexture(colorTexture);
         return false;
@@ -8474,13 +9608,17 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     if (clearColor && !iClearColorTextureImage(mState, colorTexture, transparentBlack, mReporter))
     {
         DestroyRenderTarget(renderTarget);
+        if (primeDepthTexture) DestroyTexture(primeDepthTexture);
         DestroyTexture(depthTexture);
         DestroyTexture(colorTexture);
         return false;
     }
-    if ((!hasExternalDepth || clearExternalDepth) && !iClearDepthTextureImage(mState, depthTexture, mReporter))
+    if ((!hasExternalDepth || clearExternalDepth || primeHostDepth) &&
+        !iClearDepthTextureImage(mState, depthTexture, mReporter,
+                                 iExternalReverseZEnabled(mState) ? 0.0f : 1.0f))
     {
         DestroyRenderTarget(renderTarget);
+        if (primeDepthTexture) DestroyTexture(primeDepthTexture);
         DestroyTexture(depthTexture);
         DestroyTexture(colorTexture);
         return false;
@@ -8488,10 +9626,27 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
 
     mState->externalFrameColorTexture = colorTexture;
     mState->externalFrameDepthTexture = depthTexture;
+    mState->externalFramePrimeDepthTexture = primeDepthTexture;
     mState->externalFrameRenderTarget = renderTarget;
-    mState->externalFrameUsesHostDepth = hasExternalDepth && !clearExternalDepth;
-    mState->externalFrameHostDepthReverseZ = mState->externalFrameUsesHostDepth && hostDepthReverseZ;
+    mState->externalFrameUsesHostDepth = hasExternalDepth && !primeHostDepth && !clearExternalDepth;
+    mState->externalFrameHostDepthReverseZ = false;
     mState->externalFramePreservesHostColor = !clearColor;
+    // Same eager batch-open as the cached path (see note there).
+    if (iEagerBatchOpenEnabled(mState) && iBatchActiveForTarget(mState, renderTarget))
+        iEnsureBatchOpen(mState, renderTarget, mReporter);
+    if (mState->handleProbeLogCount < 60)
+    {
+        ++mState->handleProbeLogCount;
+        char message[256];
+        std::snprintf(message, sizeof(message),
+                      "ext begin: img=%llx view=%llx rp=%llx fb=%llx depthImg=%llx",
+                      (unsigned long long)(uintptr_t)colorTexture->image,
+                      (unsigned long long)(uintptr_t)colorTexture->imageView,
+                      (unsigned long long)(uintptr_t)renderTarget->renderPass,
+                      (unsigned long long)(uintptr_t)renderTarget->framebuffer,
+                      (unsigned long long)(uintptr_t)depthTexture->image);
+        iReport(mReporter, message);
+    }
     iReport(mReporter, hasExternalDepth ? (clearExternalDepth ? "Vulkan renderer began external image frame with owned external depth" : "Vulkan renderer began external image frame with host depth") : "Vulkan renderer began external image frame");
     return true;
 }
@@ -8560,6 +9715,56 @@ void piRendererVulkan::DestroyRenderTarget(piRTarget obj)
             mState->vkDestroyRenderPass(mState->device, obj->renderPass, nullptr);
             obj->renderPass = VK_NULL_RENDER_PASS;
         }
+        if (obj->clearRenderPass != VK_NULL_RENDER_PASS && mState->vkDestroyRenderPass)
+        {
+            mState->vkDestroyRenderPass(mState->device, obj->clearRenderPass, nullptr);
+            obj->clearRenderPass = VK_NULL_RENDER_PASS;
+        }
+        if (obj->msaaColorView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        {
+            mState->vkDestroyImageView(mState->device, obj->msaaColorView, nullptr);
+            obj->msaaColorView = VK_NULL_IMAGE_VIEW;
+        }
+        if (obj->msaaDepthView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        {
+            mState->vkDestroyImageView(mState->device, obj->msaaDepthView, nullptr);
+            obj->msaaDepthView = VK_NULL_IMAGE_VIEW;
+        }
+        if (obj->msaaColorImage != 0 && mState->vkDestroyImage)
+        {
+            mState->vkDestroyImage(mState->device, obj->msaaColorImage, nullptr);
+            obj->msaaColorImage = 0;
+        }
+        if (obj->msaaDepthImage != 0 && mState->vkDestroyImage)
+        {
+            mState->vkDestroyImage(mState->device, obj->msaaDepthImage, nullptr);
+            obj->msaaDepthImage = 0;
+        }
+        if (obj->msaaColorMemory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, obj->msaaColorMemory, nullptr);
+            obj->msaaColorMemory = VK_NULL_DEVICE_MEMORY;
+        }
+        if (obj->msaaDepthMemory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, obj->msaaDepthMemory, nullptr);
+            obj->msaaDepthMemory = VK_NULL_DEVICE_MEMORY;
+        }
+        if (obj->fdmView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        {
+            mState->vkDestroyImageView(mState->device, obj->fdmView, nullptr);
+            obj->fdmView = VK_NULL_IMAGE_VIEW;
+        }
+        if (obj->fdmImage != 0 && mState->vkDestroyImage)
+        {
+            mState->vkDestroyImage(mState->device, obj->fdmImage, nullptr);
+            obj->fdmImage = 0;
+        }
+        if (obj->fdmMemory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        {
+            mState->vkFreeMemory(mState->device, obj->fdmMemory, nullptr);
+            obj->fdmMemory = VK_NULL_DEVICE_MEMORY;
+        }
     }
     if (mState && mState->liveRenderTargets > 0) --mState->liveRenderTargets;
     delete obj;
@@ -8567,6 +9772,13 @@ void piRendererVulkan::DestroyRenderTarget(piRTarget obj)
 
 bool piRendererVulkan::SetRenderTarget(piRTarget obj)
 {
+    // A batched eye-frame is bracketed by the render target it draws into, so a
+    // target switch (including ->nullptr at end-of-frame, e.g. the standalone
+    // viewer before SwapBuffers) flushes the open batch's single submit.
+    if (mState && mState->batchRecording && obj != mState->batchTarget)
+    {
+        iFlushBatch(mState, mReporter, obj == nullptr ? "target-switch-to-null" : "target-switch-to-other");
+    }
     if (mState) mState->currentRenderTarget = obj;
     return obj == nullptr || obj->framebuffer != VK_NULL_FRAMEBUFFER;
 }
@@ -8581,6 +9793,12 @@ void piRendererVulkan::Clear(const float *color0, const float *color1, const flo
     (void)color1;
     (void)color2;
     (void)color3;
+    // Clears submit their own command buffer outside a render pass; a batch that
+    // is somehow open must be flushed first (normally clears precede all draws).
+    if (mState && mState->batchRecording)
+    {
+        iFlushBatch(mState, mReporter);
+    }
     if (!mState || !mState->currentRenderTarget)
     {
         return;
@@ -8693,6 +9911,23 @@ piTexture piRendererVulkan::CreateTexture2(const wchar_t *key, const TextureInfo
             if (buffer) std::memcpy(texture->data, buffer, texture->dataSize);
             else std::memset(texture->data, 0, texture->dataSize);
         }
+        else if (buffer)
+        {
+            // A failed allocation here used to be completely silent: the guard
+            // skipped the copy, image creation still succeeded, CreateTexture
+            // returned a valid texture, and iUploadTextureImageData then bailed
+            // on !texture->data by returning TRUE. Net effect - a texture with
+            // no pixels that every layer of the stack reports as fine. Sampling
+            // it yields alpha 0, and the picture shaders drive gl_SampleMask
+            // from alpha, so the result is not a black image but nothing at all.
+            // An 8192x4096 RGBA picture asks for 134 MB here, on top of an
+            // equally large conversion buffer and staging buffer.
+            char msg[192];
+            snprintf(msg, sizeof(msg),
+                     "[IMM_VKTEX] malloc FAILED for texture data %dx%d (%.1f MB) - texture will have NO pixels and sample as fully transparent",
+                     info->mXres, info->mYres, (double)texture->dataSize / (1024.0*1024.0));
+            iError(mReporter, msg);
+        }
     }
     if (mState && !iCreateTextureImage(mState, texture, bindUsage, mReporter))
     {
@@ -8749,27 +9984,32 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
-        if (obj->sampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
-        {
-            mState->vkDestroySampler(mState->device, obj->sampler, nullptr);
-            obj->sampler = VK_NULL_SAMPLER;
-        }
         const bool ownsVulkanImage = obj->externalHandle == 0;
-        if ((ownsVulkanImage || obj->ownsImageView) && obj->imageView != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+        VkImageView viewToDestroy = (ownsVulkanImage || obj->ownsImageView) ? obj->imageView : VK_NULL_IMAGE_VIEW;
+        VkImage imageToDestroy = ownsVulkanImage ? obj->image : 0;
+        if (mState->batchRingReady)
         {
-            mState->vkDestroyImageView(mState->device, obj->imageView, nullptr);
-            obj->imageView = VK_NULL_IMAGE_VIEW;
+            // Defer: pipelined eye slots may still reference these handles
+            // (chapter-skip destruction race). Destroyed on ring retirement -
+            // no render-thread stall (the previous wait-here caused visible
+            // stutter during streaming-heavy scenes).
+            iEnqueueDeferredDestroy(mState, obj->sampler, viewToDestroy, imageToDestroy, VK_NULL_BUFFER, obj->memory);
         }
-        if (ownsVulkanImage && obj->image != 0 && mState->vkDestroyImage)
+        else
         {
-            mState->vkDestroyImage(mState->device, obj->image, nullptr);
-            obj->image = 0;
+            if (obj->sampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
+                mState->vkDestroySampler(mState->device, obj->sampler, nullptr);
+            if (viewToDestroy != VK_NULL_IMAGE_VIEW && mState->vkDestroyImageView)
+                mState->vkDestroyImageView(mState->device, viewToDestroy, nullptr);
+            if (imageToDestroy != 0 && mState->vkDestroyImage)
+                mState->vkDestroyImage(mState->device, imageToDestroy, nullptr);
+            if (obj->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+                mState->vkFreeMemory(mState->device, obj->memory, nullptr);
         }
-        if (obj->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
-        {
-            mState->vkFreeMemory(mState->device, obj->memory, nullptr);
-            obj->memory = VK_NULL_DEVICE_MEMORY;
-        }
+        obj->sampler = VK_NULL_SAMPLER;
+        obj->imageView = VK_NULL_IMAGE_VIEW;
+        obj->image = 0;
+        obj->memory = VK_NULL_DEVICE_MEMORY;
     }
     std::free(obj->data);
     if (mState && mState->liveTextures > 0) --mState->liveTextures;
@@ -8784,6 +10024,12 @@ void piRendererVulkan::GetTextureContent(piTexture me, void *data, const Format 
     if (!me || !data)
     {
         return;
+    }
+    // A GPU readback (RT dump / PPM capture) must see submitted work: flush any
+    // batch still recording so we never read a texture mid-batch.
+    if (mState && mState->batchRecording)
+    {
+        iFlushBatch(mState, mReporter);
     }
     if (me->image != 0 && mState && mState->gpuPaintDrawCount > 0 && !iReadBackTextureImage(mState, me, mReporter))
     {
@@ -8930,6 +10176,21 @@ void piRendererVulkan::DestroyShader(piShader obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
+        // Destroy all cached pipeline variants (paint AND picture - both use the
+        // variant cache now). obj->pipeline aliases one of them, so clear it after
+        // to avoid a double-free below.
+        for (int vi = 0; vi < obj->pipelineVariantCount; ++vi)
+        {
+            if (obj->pipelineVariants[vi].pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
+                mState->vkDestroyPipeline(mState->device, obj->pipelineVariants[vi].pipeline, nullptr);
+            obj->pipelineVariants[vi].pipeline = VK_NULL_PIPELINE;
+        }
+        if (obj->pipelineVariantCount > 0)
+        {
+            obj->pipeline = VK_NULL_PIPELINE;
+            obj->pipelineRenderPass = VK_NULL_RENDER_PASS;
+        }
+        obj->pipelineVariantCount = 0;
         if (obj->pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
         {
             mState->vkDestroyPipeline(mState->device, obj->pipeline, nullptr);
@@ -9007,16 +10268,20 @@ void piRendererVulkan::DestroyBuffer(piBuffer obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
-        if (obj->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+        if (mState->batchRingReady)
         {
-            mState->vkDestroyBuffer(mState->device, obj->buffer, nullptr);
-            obj->buffer = VK_NULL_BUFFER;
+            // Defer (see DestroyTexture): no stall, destroyed on ring retirement.
+            iEnqueueDeferredDestroy(mState, VK_NULL_SAMPLER, VK_NULL_IMAGE_VIEW, 0, obj->buffer, obj->memory);
         }
-        if (obj->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+        else
         {
-            mState->vkFreeMemory(mState->device, obj->memory, nullptr);
-            obj->memory = VK_NULL_DEVICE_MEMORY;
+            if (obj->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
+                mState->vkDestroyBuffer(mState->device, obj->buffer, nullptr);
+            if (obj->memory != VK_NULL_DEVICE_MEMORY && mState->vkFreeMemory)
+                mState->vkFreeMemory(mState->device, obj->memory, nullptr);
         }
+        obj->buffer = VK_NULL_BUFFER;
+        obj->memory = VK_NULL_DEVICE_MEMORY;
     }
     std::free(obj->data);
     if (mState && mState->liveBuffers > 0) --mState->liveBuffers;
@@ -9026,19 +10291,34 @@ void piRendererVulkan::UpdateBuffer(piBuffer obj, const void *data, int offset, 
 {
     (void)invalidate;
     if (!obj || !data || offset < 0 || len < 0 || (unsigned int)(offset + len) > obj->size) return;
+    // Gap attribution: total UpdateBuffer time/bytes while an eye batch records
+    // is the suspected dominant slice of IMM_PERF's `gap` (player-side per-draw
+    // cost, duplicated per eye). Telemetry only - benign if racy.
+    const bool countAsBatchUpload = mState && mState->batchRecording;
+    const uint64_t uploadStartNs = countAsBatchUpload ? iNowNanoseconds() : 0;
     std::memcpy(obj->data + offset, data, (size_t)len);
-    if (mState && (mState->hostRenderPassFrameActive || mState->externalCommandBufferFrameActive) && obj->use == BufferUse::Constant && offset == 0)
+    // While a batched eye-frame is open (or the host owns the command buffer),
+    // route constant-buffer writes into the per-frame transient ring so each
+    // per-chunk / per-layer update lands in its own GPU slice. Every batched
+    // draw records its own descriptor set pointing at that slice, so a single
+    // end-of-frame submit still sees each draw's own uniforms instead of the
+    // last write. (The first draw's pre-open uniforms stay in the buffer's own
+    // storage, which nothing overwrites once later writes divert to the ring.)
+    bool routedToTransientRing = false;
+    if (mState && (mState->hostRenderPassFrameActive || mState->batchRecording) && obj->use == BufferUse::Constant && offset == 0)
     {
-        if (iAllocateHostTransientUniformSlice(mState, obj, obj->data, obj->size, mReporter))
-        {
-            return;
-        }
+        routedToTransientRing = iAllocateHostTransientUniformSlice(mState, obj, obj->data, obj->size, mReporter);
     }
-    if (mState)
+    if (!routedToTransientRing && mState)
     {
         iUploadBufferData(mState, obj, data, (unsigned int)offset, (unsigned int)len, mReporter);
         obj->descriptorBuffer = obj->buffer;
         obj->descriptorOffset = 0;
+    }
+    if (countAsBatchUpload)
+    {
+        mState->batchUploadNs += iNowNanoseconds() - uploadStartNs;
+        mState->batchUploadBytes += (uint64_t)len;
     }
 }
 void piRendererVulkan::AttachPixelPackBuffer(piBuffer obj) { (void)obj; iUnsupported(mState, mReporter, piVulkanUnsupportedFeature::PixelPackBuffer, "Vulkan pixel pack buffers are not implemented yet"); }
@@ -9148,35 +10428,36 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     {
         return;
     }
-    if (mState->hostRenderPassFrameActive && mState->hostDrawBisectionEnabled)
-    {
-        ++mState->hostDrawBisectionAttempted;
-        if ((mState->hostDrawBisectionMask & 1u) == 0)
-        {
-            return;
-        }
-        ++mState->hostDrawBisectionAdmitted;
-    }
+    const uint64_t apiStartNs = iNowNanoseconds();
     if (pt == PrimitiveType::Triangle && mState->currentShader && mState->currentShader->isPicture &&
         mState->currentRenderTarget && mState->currentRenderTarget->color[0] &&
         mState->currentVertexArray && mState->currentVertexArray->indexBuffer && mState->textures[0])
     {
         piTexture target = mState->currentRenderTarget->color[0];
-        if (iUpdatePictureDescriptorSet(mState, mReporter) &&
+        if (iUpdatePictureDescriptorSet(mState, mState->pictureDescriptorSet, mReporter) &&
             iEnsurePictureGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, mReporter) &&
             iSubmitPictureDraw(mState, mState->currentShader, mState->currentRenderTarget, mState->currentVertexArray, num, numInstances, baseIndex, mReporter))
         {
-            char message[256];
-            std::snprintf(message,
-                          sizeof(message),
-                          "[IMM_VK_COMPOSE_TRACE_20260612] picture_gpu host=%d num=%u instances=%u target=%ux%u",
-                          mState->hostRenderPassFrameActive ? 1 : 0,
-                          num,
-                          numInstances,
-                          mState->currentRenderTarget->width,
-                          mState->currentRenderTarget->height);
-            iDebugLog(message);
+            // Sampled: this fires per picture draw per eye (144/s with a
+            // skybox on screen) and logging is real CPU inside the api bracket.
+            const uint32_t traceIndex = mState->pictureTraceCounter++;
+            if (traceIndex < 3 || (traceIndex % 300) == 0)
+            {
+                char message[256];
+                std::snprintf(message,
+                              sizeof(message),
+                              "[IMM_VK_COMPOSE_TRACE_20260612] picture_gpu host=%d num=%u instances=%u target=%ux%u n=%u",
+                              mState->hostRenderPassFrameActive ? 1 : 0,
+                              num,
+                              numInstances,
+                              mState->currentRenderTarget->width,
+                              mState->currentRenderTarget->height,
+                              traceIndex);
+                iDebugLog(message);
+            }
             mState->pendingPresentTexture = target;
+            if (mState->batchRecording)
+                mState->batchApiNs += iNowNanoseconds() - apiStartNs;
             return;
         }
         if (!mState->drawSubmitFailureReported)
@@ -9279,7 +10560,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     }
 
     piTexture target = mState->currentRenderTarget->color[0];
-    if (!iUpdateStaticPaintDescriptorSet(mState, mReporter) && !mState->descriptorSetFailureReported)
+    if (!iUpdateStaticPaintDescriptorSet(mState, mState->staticPaintDescriptorSet, mReporter) && !mState->descriptorSetFailureReported)
     {
         mState->descriptorSetFailureReported = true;
         iError(mReporter, "Vulkan renderer failed to update static paint descriptor set");
@@ -9318,13 +10599,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     {
         mState->pendingPresentTexture = target;
     }
-    // On the Unity Android Vulkan host path, audit the first GPU draw against
-    // the renderer's CPU mirrors before returning. This does not replace or
-    // modify the recorded Vulkan draw; it tells us whether the exact indexed
-    // geometry and matrices should cover the host viewport.
-    const bool gpuProjectionAudit = hasStaticPaintGpuPath && !mState->cpuPaintDiagnosticReported;
-    if (hasStaticPaintGpuPath && !gpuProjectionAudit)
+    if (hasStaticPaintGpuPath)
     {
+        if (mState->batchRecording)
+            mState->batchApiNs += iNowNanoseconds() - apiStartNs;
         return;
     }
 
@@ -9341,14 +10619,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     uint32_t lastBid = 0;
     bool hasLastBid = false;
     uint32_t projected = 0;
-    uint32_t insideClipVolume = 0;
-    uint32_t positiveW = 0;
     float minX = 1000000.0f;
     float minY = 1000000.0f;
     float maxX = -1000000.0f;
     float maxY = -1000000.0f;
-    float minNdcZ = 1000000.0f;
-    float maxNdcZ = -1000000.0f;
     float maxA = 0.0f;
     uint32_t visibleSegments = 0;
     uint32_t insidePoints = 0;
@@ -9406,19 +10680,6 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         }
         const float ndcX = clip[0] / clip[3];
         const float ndcY = clip[1] / clip[3];
-        const float ndcZ = clip[2] / clip[3];
-        if (clip[3] > 0.0f)
-        {
-            ++positiveW;
-            if (clip[0] >= -clip[3] && clip[0] <= clip[3] &&
-                clip[1] >= -clip[3] && clip[1] <= clip[3] &&
-                clip[2] >= 0.0f && clip[2] <= clip[3])
-            {
-                ++insideClipVolume;
-            }
-        }
-        if (ndcZ < minNdcZ) minNdcZ = ndcZ;
-        if (ndcZ > maxNdcZ) maxNdcZ = ndcZ;
         const float sx = (ndcX * 0.5f + 0.5f) * (float)target->info.mXres;
         const float sy = (1.0f - (ndcY * 0.5f + 0.5f)) * (float)target->info.mYres;
         if (sx < minX) minX = sx;
@@ -9441,10 +10702,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         const float width = 1.0f + 6.0f * ((float)(widthBits & 0x7fffu) / 32767.0f);
         if (hasPrevious)
         {
-            if (!gpuProjectionAudit && target->data)
-            {
-                iDrawCpuLine(target, previous[0], previous[1], sx, sy, width, r, g, b, a);
-            }
+            iDrawCpuLine(target, previous[0], previous[1], sx, sy, width, r, g, b, a);
             if (a > 0.0f)
             {
                 ++visibleSegments;
@@ -9457,9 +10715,7 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
     if (!mState->cpuPaintDiagnosticReported)
     {
         uint32_t targetNonBlack = 0;
-        const size_t pixelCount = target->data
-            ? (size_t)target->info.mXres * (size_t)target->info.mYres
-            : 0u;
+        const size_t pixelCount = (size_t)target->info.mXres * (size_t)target->info.mYres;
         for (size_t i = 0; i < pixelCount; ++i)
         {
             const uint8_t *src = target->data + i * 4u;
@@ -9472,15 +10728,10 @@ void piRendererVulkan::DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint
         char message[512];
         std::snprintf(message,
                       sizeof(message),
-                      "[IMM_UNITY_VK_CPU_CLIP_AUDIT_20260731] gpu=%d num=%u projected=%u xyInside=%u clipInside=%u positiveW=%u ndcZ=(%.5f,%.5f) segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
-                      gpuProjectionAudit ? 1 : 0,
+                      "IMM_VK_CPU: paint draw num=%u projected=%u inside=%u segments=%u nonblack=%u brush=%d maxColor=%u,%u,%u maxA=%.3f screen=(%.1f,%.1f)-(%.1f,%.1f) target=%dx%d",
                       num,
                       projected,
                       insidePoints,
-                      insideClipVolume,
-                      positiveW,
-                      minNdcZ,
-                      maxNdcZ,
                       visibleSegments,
                       targetNonBlack,
                       brushType,
@@ -9525,22 +10776,13 @@ void piRendererVulkan::DrawUnitQuad_XY(int numInstanced)
     }
     if (mState->currentShader && mState->currentShader->isPicture2D)
     {
-        if (mState->hostRenderPassFrameActive && mState->hostDrawBisectionEnabled)
-        {
-            ++mState->hostDrawBisectionAttempted;
-            if ((mState->hostDrawBisectionMask & 2u) == 0)
-            {
-                return;
-            }
-            ++mState->hostDrawBisectionAdmitted;
-        }
         if (!mState->currentRenderTarget || !mState->currentRenderTarget->color[0])
         {
             return;
         }
         piTexture target = mState->currentRenderTarget->color[0];
         const uint32_t instanceCount = numInstanced > 0 ? (uint32_t)numInstanced : 1u;
-        if (iUpdatePictureDescriptorSet(mState, mReporter) &&
+        if (iUpdatePictureDescriptorSet(mState, mState->pictureDescriptorSet, mReporter) &&
             iEnsurePictureGraphicsPipeline(mState, mState->currentShader, mState->currentRenderTarget, nullptr, mReporter) &&
             iSubmitPictureQuadDraw(mState, mState->currentShader, mState->currentRenderTarget, instanceCount, mReporter))
         {
