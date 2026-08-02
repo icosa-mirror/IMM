@@ -161,6 +161,8 @@ def main() -> int:
             "return CameraEvent.AfterEverything;",
             "SetVulkanCameraRenderBuffers",
             "return CameraEvent.AfterForwardOpaque;",
+            "GetVulkanCommandBufferEvent(Camera cam)",
+            "return cam != null && cam.stereoEnabled",
             "info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId)",
             "info.CommandBuffer.SetRenderTarget(cameraTarget);",
             "RenderTexture eyeTarget = info.VulkanEyeTargets[blitEye];",

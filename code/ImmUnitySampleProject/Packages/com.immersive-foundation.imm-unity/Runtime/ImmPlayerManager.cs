@@ -1006,7 +1006,7 @@ namespace ImmPlayer
             return display.GetRenderTextureForRenderPass(passIndex);
         }
 
-        private static CameraEvent GetVulkanCommandBufferEvent()
+        private static CameraEvent GetVulkanCommandBufferEvent(Camera cam)
         {
             string value = Environment.GetEnvironmentVariable("IMM_UNITY_VK_CAMERA_EVENT");
             if (string.Equals(value, "AfterImageEffectsOpaque", StringComparison.OrdinalIgnoreCase))
@@ -1024,9 +1024,13 @@ namespace ImmPlayer
 
             // Unity 6 XR on Quest stops executing AfterSkybox command buffers once the
             // XR eye render path takes over (~2 frames after FOCUSED) - PreCull kept
-            // issuing events but the marker never dispatched. AfterImageEffectsOpaque is
-            // the hook the GLES path has always used successfully on-device.
-            return CameraEvent.AfterImageEffectsOpaque;
+            // issuing events but the marker never dispatched. Keep the proven XR hook.
+            // A flat Android backbuffer is different: AfterImageEffectsOpaque can still
+            // reference an intermediate camera target which Unity has already resolved,
+            // so the blit is visible in explicit-RT captures but absent on the display.
+            return cam != null && cam.stereoEnabled
+                ? CameraEvent.AfterImageEffectsOpaque
+                : CameraEvent.AfterEverything;
         }
 
         public void SetRenderCamera(Camera camera)
@@ -1533,7 +1537,7 @@ namespace ImmPlayer
                 _cameras[cam] = info;
                 if (attachCommandBuffer)
                 {
-                    CameraEvent renderEvent = IsVulkanRuntime() ? GetVulkanCommandBufferEvent() : CameraEvent.AfterImageEffectsOpaque;
+                    CameraEvent renderEvent = IsVulkanRuntime() ? GetVulkanCommandBufferEvent(cam) : CameraEvent.AfterImageEffectsOpaque;
                     if (IsVulkanRuntime())
                     {
                         Debug.Log($"[IMM_UNITY_VK_EVENT_20260612] cam={cam.name} cameraId={info.CameraId} renderEvent={renderEvent}");
