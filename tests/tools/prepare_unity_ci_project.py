@@ -6,11 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
 MINIMAL_DEPENDENCIES = {
     "com.unity.ugui": "1.0.0",
+    "com.unity.xr.management": "4.5.4",
+    "com.unity.xr.openxr": "1.14.3",
     "com.unity.modules.animation": "1.0.0",
     "com.unity.modules.assetbundle": "1.0.0",
     "com.unity.modules.audio": "1.0.0",
@@ -40,6 +43,17 @@ EXCLUDED_ASSET_PATHS = [
     "Assets/Scripts/XrSceneBootstrap.cs",
     "Assets/Scripts/XrSceneBootstrap.cs.meta",
 ]
+
+
+ANDROID_NS = "http://schemas.android.com/apk/res/android"
+OCULUS_MANIFEST_NAMES = {
+    "android.hardware.vr.headtracking",
+    "oculus.software.handtracking",
+    "com.oculus.permission.HAND_TRACKING",
+    "com.oculus.supportedDevices",
+    "com.oculus.handtracking.version",
+    "com.oculus.handtracking.frequency",
+}
 
 
 def copytree(src: Path, dst: Path) -> None:
@@ -79,6 +93,35 @@ def write_minimal_manifest(project: Path) -> None:
     remove_path(packages / "packages-lock.json")
 
 
+def strip_android_xr_manifest(project: Path) -> None:
+    manifest = project / "Assets" / "Plugins" / "Android" / "AndroidManifest.xml"
+    if not manifest.is_file():
+        return
+
+    ET.register_namespace("android", ANDROID_NS)
+    ET.register_namespace("tools", "http://schemas.android.com/tools")
+    document = ET.parse(manifest)
+    root = document.getroot()
+    android_name = f"{{{ANDROID_NS}}}name"
+
+    for child in list(root):
+        if child.tag in {"uses-feature", "uses-permission"} and child.get(android_name) in OCULUS_MANIFEST_NAMES:
+            root.remove(child)
+
+    application = root.find("application")
+    if application is not None:
+        for activity in application.findall("activity"):
+            for metadata in list(activity.findall("meta-data")):
+                if metadata.get(android_name) in OCULUS_MANIFEST_NAMES:
+                    activity.remove(metadata)
+            for intent_filter in activity.findall("intent-filter"):
+                for category in list(intent_filter.findall("category")):
+                    if category.get(android_name) == "com.oculus.intent.category.VR":
+                        intent_filter.remove(category)
+
+    document.write(manifest, encoding="utf-8", xml_declaration=True)
+
+
 def prepare_project(source: Path, output: Path) -> None:
     if output.exists():
         shutil.rmtree(output)
@@ -86,6 +129,7 @@ def prepare_project(source: Path, output: Path) -> None:
     copytree(source, output)
     for rel in EXCLUDED_ASSET_PATHS:
         remove_path(output / rel)
+    strip_android_xr_manifest(output)
     write_minimal_manifest(output)
 
 
