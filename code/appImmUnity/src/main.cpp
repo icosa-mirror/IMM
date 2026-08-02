@@ -1177,7 +1177,10 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
     void *unityMetalRenderPassDescriptor = nullptr;
     bool unityMetalFrameBegun = false;
     const bool useUnityMetalOffscreen = isUnityMetal && iEnvFlagEnabled("IMM_UNITY_METAL_OFFSCREEN");
-    const bool deferUnityMetalFrameBegin = isUnityMetal && !iEnvFlagEnabled("IMM_UNITY_METAL_BEGIN_BEFORE_GLOBAL");
+    // The shared Android Vulkan fork accidentally made deferred frame begin the
+    // Metal default. IMM global and camera work must be recorded after the
+    // external Metal frame has begun, as in the last known-good Unity 6 run.
+    const bool deferUnityMetalFrameBegin = false;
     const bool useUnityMetalPluginCommandBuffer = isUnityMetal && gImmUnityPlugin.UnityAPI.mMetalV2 && iEnvFlagEnabled("IMM_UNITY_METAL_USE_PLUGIN_COMMAND_BUFFER");
     const bool useUnityMetalOwnedEncoder = isUnityMetal && !useUnityMetalPluginCommandBuffer && iEnvFlagEnabled("IMM_UNITY_METAL_USE_OWNED_ENCODER");
     if (isUnityMetal)
@@ -1310,7 +1313,7 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
             {
                 iLog().Printf(
                     LT_MESSAGE,
-                    deferUnityMetalFrameBegin ? L"Unity Metal render boundary: defer begin camera=%d viewport=%dx%d" : L"Unity Metal render boundary: begin camera=%d viewport=%dx%d",
+                    deferUnityMetalFrameBegin ? L"[IMM_UNITY_METAL_FRAME_ORDER_20260802] defer begin camera=%d viewport=%dx%d" : L"[IMM_UNITY_METAL_FRAME_ORDER_20260802] begin camera=%d viewport=%dx%d",
                     cameraID,
                     viewportWidth,
                     viewportHeight);
