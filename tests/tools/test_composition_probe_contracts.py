@@ -149,7 +149,7 @@ def main() -> int:
             "SetVulkanCameraRenderBuffers",
             "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
             "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]",
-            "return CameraEvent.BeforeForwardOpaque;",
+            "return CameraEvent.AfterForwardOpaque;",
             "bool useHostRenderPass = false;",
             "cam.cullingMask &= ~(1 << 31);",
             "ConfigureEvent(EnsureInside) restores the camera's tracked",

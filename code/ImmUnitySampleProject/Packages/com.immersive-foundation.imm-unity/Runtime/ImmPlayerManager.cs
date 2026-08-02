@@ -717,10 +717,13 @@ namespace ImmPlayer
                 return CameraEvent.BeforeForwardOpaque;
 
 #if UNITY_ANDROID
-            // IMM writes the explicit RenderTexture's color and depth first.
-            // Unity then draws its opaque geometry against that same depth
-            // image, so Unity owns the cross-engine depth comparison.
-            return CameraEvent.BeforeForwardOpaque;
+            // Let Unity clear and populate the explicit RenderTexture depth
+            // attachment before IMM opens its render pass. At
+            // BeforeForwardOpaque Unity may defer the camera clear until the
+            // following opaque render pass, which erases IMM's depth writes.
+            // Both renderers use Unity's reversed-Z Vulkan projection here, so
+            // IMM can consume the populated attachment directly.
+            return CameraEvent.AfterForwardOpaque;
 #else
             return CameraEvent.AfterSkybox;
 #endif
