@@ -1524,7 +1524,9 @@ namespace ImmPlayer
                 {
                     info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
                 }
-                if (Application.platform == RuntimePlatform.Android && !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET"))
+                if (Application.platform == RuntimePlatform.Android &&
+                    !useHostComposition &&
+                    !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET"))
                 {
                     // Probe: blit the LEFT RT into BOTH eyes. Right eye lights up -> the
                     // right RT was empty (native render side); still dark -> the right
