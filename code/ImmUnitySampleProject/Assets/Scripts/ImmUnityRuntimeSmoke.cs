@@ -761,15 +761,7 @@ namespace ImmPlayer
                 RecordCompositionFailure("ordered depth probes missing shared offscreen depth target");
                 return;
             }
-            var colorTarget = new RenderTargetIdentifier(compositionTarget.colorBuffer);
-            var depthTarget = new RenderTargetIdentifier(compositionTarget.depthBuffer);
-            _orderedDepthProbeCommandBuffer.SetRenderTarget(
-                colorTarget,
-                RenderBufferLoadAction.Load,
-                RenderBufferStoreAction.Store,
-                depthTarget,
-                RenderBufferLoadAction.Load,
-                RenderBufferStoreAction.Store);
+            _orderedDepthProbeCommandBuffer.SetRenderTarget(compositionTarget);
 
             GameObject[] probes = { _frontProbe, _rearOccludedProbe, _rearVisibleProbe };
             foreach (GameObject probe in probes)
