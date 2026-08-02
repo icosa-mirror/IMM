@@ -732,6 +732,50 @@ def validate_spatial_contract(contract: dict, spatial_metrics: dict | None) -> l
     return errors
 
 
+def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract_path: Path | None) -> dict:
+    contract = json.loads(contract_path.read_text(encoding="utf-8")) if contract_path else {}
+    validation = contract.get("validation", {}) if isinstance(contract, dict) else {}
+    allow_dimension_mismatch = bool(
+        isinstance(validation, dict) and validation.get("allow_reference_dimension_mismatch")
+    )
+    candidate = collect_metrics(candidate_path)
+    output = {"candidate": candidate}
+    errors: list[str] = []
+    spatial_metrics = None
+    if reference_path:
+        reference = collect_metrics(reference_path)
+        output["reference"] = reference
+        errors = compare_metrics(reference, candidate, allow_dimension_mismatch)
+    if contract_path:
+        output["contract"] = {
+            "path": contract_path.as_posix(),
+            "schema": contract.get("schema"),
+            "baseline": contract.get("baseline"),
+        }
+        expected_grid = validation.get("expected_spatial_luma_grid") if isinstance(validation, dict) else None
+        if isinstance(expected_grid, dict):
+            grid_width = int(expected_grid.get("width", 32))
+            grid_height = int(expected_grid.get("height", 18))
+            crop_aspect_ratio = expected_grid.get("center_crop_aspect_ratio")
+            spatial_metrics = (
+                collect_spatial_metrics(
+                    reference_path,
+                    candidate_path,
+                    grid_width,
+                    grid_height,
+                    float(crop_aspect_ratio) if crop_aspect_ratio is not None else None,
+                )
+                if reference_path
+                else None
+            )
+            output["spatial_luma_grid"] = spatial_metrics
+        errors.extend(validate_contract(contract, candidate))
+        errors.extend(validate_spatial_contract(contract, spatial_metrics))
+    output["passed"] = not errors
+    output["errors"] = errors
+    return output
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("candidate", type=Path)
@@ -740,42 +784,8 @@ def main() -> int:
     parser.add_argument("--json-output", type=Path, required=True)
     args = parser.parse_args()
 
-    contract = json.loads(args.contract.read_text(encoding="utf-8")) if args.contract else {}
-    validation = contract.get("validation", {}) if isinstance(contract, dict) else {}
-    allow_dimension_mismatch = bool(
-        isinstance(validation, dict) and validation.get("allow_reference_dimension_mismatch")
-    )
-    candidate = collect_metrics(args.candidate)
-    output = {"candidate": candidate}
-    errors: list[str] = []
-    spatial_metrics = None
-    if args.reference:
-        reference = collect_metrics(args.reference)
-        output["reference"] = reference
-        errors = compare_metrics(reference, candidate, allow_dimension_mismatch)
-    if args.contract:
-        output["contract"] = {"path": args.contract.as_posix(), "schema": contract.get("schema"), "baseline": contract.get("baseline")}
-        expected_grid = validation.get("expected_spatial_luma_grid") if isinstance(validation, dict) else None
-        if isinstance(expected_grid, dict):
-            grid_width = int(expected_grid.get("width", 32))
-            grid_height = int(expected_grid.get("height", 18))
-            crop_aspect_ratio = expected_grid.get("center_crop_aspect_ratio")
-            spatial_metrics = (
-                collect_spatial_metrics(
-                    args.reference,
-                    args.candidate,
-                    grid_width,
-                    grid_height,
-                    float(crop_aspect_ratio) if crop_aspect_ratio is not None else None,
-                )
-                if args.reference
-                else None
-            )
-            output["spatial_luma_grid"] = spatial_metrics
-        errors.extend(validate_contract(contract, candidate))
-        errors.extend(validate_spatial_contract(contract, spatial_metrics))
-    output["passed"] = not errors
-    output["errors"] = errors
+    output = evaluate_capture(args.candidate, args.reference, args.contract)
+    errors = output["errors"]
 
     args.json_output.parent.mkdir(parents=True, exist_ok=True)
     args.json_output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")

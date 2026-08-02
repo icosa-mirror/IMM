@@ -177,6 +177,7 @@ jobs:
           python tests/tools/test_verify_full_depth_evidence_report.py
           python tests/tools/test_preflight_runner.py
           python tests/tools/test_run_firebase_test_lab_android.py
+          python tests/tools/test_validate_render_video.py
           python tests/tools/test_verify_release_assets.py
           python tests/tools/test_verify_log_markers.py
           python tests/tools/test_verify_matrix_evidence.py

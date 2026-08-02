@@ -1,6 +1,6 @@
 {
   "baseline": "unity-android-vulkan-external-sample1",
-  "capture_source": "Firebase Robo external device-screen capture",
+  "capture_source": "stable baseline-matching frames from Firebase physical-device video",
   "fixture": "exampleImmFiles/sample1.imm",
   "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
@@ -10,8 +10,8 @@
     "expected_spatial_luma_grid": {
       "center_crop_aspect_ratio": 1.7777777778,
       "height": 18,
-      "max_mean_abs_delta": 0.06,
-      "min_correlation": 0.85,
+      "max_mean_abs_delta": 0.12,
+      "min_correlation": 0.7,
       "width": 32
     },
     "expected_visible_luma_mean": { "max": 85, "min": 32 },

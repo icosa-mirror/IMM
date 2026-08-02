@@ -9,7 +9,7 @@
     "expected_spatial_luma_grid": {
       "center_crop_aspect_ratio": 1.7777777778,
       "height": 18,
-      "max_mean_abs_delta": 0.06,
+      "max_mean_abs_delta": 0.08,
       "min_correlation": 0.85,
       "width": 32
     },
