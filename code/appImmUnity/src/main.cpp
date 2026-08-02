@@ -813,6 +813,42 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
         recordingState.commandBuffer,
         recordingState.currentFrameNumber,
         recordingState.safeFrameNumber);
+
+    // Access* is Unity's resource-state and synchronization contract. The
+    // accesses above make Unity's earlier attachment work visible to IMM.
+    // Repeat them after IMM has ended its render pass so Unity records the
+    // reverse dependency and sees IMM's color/depth writes before it resumes
+    // the camera's opaque pass. CommandRecordingState must not be reused after
+    // these calls because resource access may invalidate it.
+    UnityVulkanImage finalizedColorImage = {};
+    const bool finalizedColor = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+        colorTarget,
+        UnityVulkanWholeImage,
+        kColorAttachmentLayout,
+        kColorAttachmentStage,
+        kColorAttachmentAccess,
+        kUnityVulkanResourceAccess_PipelineBarrier,
+        &finalizedColorImage);
+    UnityVulkanImage finalizedDepthImage = {};
+    const bool finalizedDepth = gImmUnityPlugin.UnityAPI.mVulkan->AccessRenderBufferTexture(
+        target.depth,
+        UnityVulkanWholeImage,
+        kDepthAttachmentLayout,
+        kDepthAttachmentStages,
+        kDepthAttachmentAccess,
+        kUnityVulkanResourceAccess_PipelineBarrier,
+        &finalizedDepthImage);
+    if (!finalizedColor || !finalizedDepth)
+    {
+        iLog().Printf(
+            LT_ERROR,
+            L"[IMM_UNITY_VK_POST_ACCESS_20260802] camera=%d color=%d depth=%d rendered=%d",
+            cameraID,
+            finalizedColor ? 1 : 0,
+            finalizedDepth ? 1 : 0,
+            rendered ? 1 : 0);
+        return true;
+    }
     static int commandBufferReportCount = 0;
     if (commandBufferReportCount < 8)
     {
@@ -838,6 +874,15 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
             static_cast<unsigned long long>(colorImage.image),
             static_cast<unsigned int>(kColorAttachmentLayout));
         ++finalizeReportCount;
+    }
+    static int postAccessReportCount = 0;
+    if (postAccessReportCount < 8)
+    {
+        iLog().Printf(
+            LT_MESSAGE,
+            L"[IMM_UNITY_VK_POST_ACCESS_20260802] camera=%d color=1 depth=1 ordering=imm-to-unity",
+            cameraID);
+        ++postAccessReportCount;
     }
     return true;
 }

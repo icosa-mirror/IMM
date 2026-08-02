@@ -194,6 +194,8 @@ def main() -> int:
             "BeginExternalImageCommandBufferFramePreserveColor(",
             "[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730]",
             "[IMM_UNITY_VK_DIRECT_RT_20260731]",
+            "[IMM_UNITY_VK_POST_ACCESS_20260802]",
+            "ordering=imm-to-unity",
             "transition=unity-consumer",
             "Unity Vulkan render:",
         ],
