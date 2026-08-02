@@ -46,7 +46,8 @@ namespace ImmPlayer
                 return ImmProjectionDestination.XrDisplay;
             if (isEditor && cameraType == CameraType.Game)
                 return ImmProjectionDestination.EditorGameView;
-            if (graphicsDeviceType == GraphicsDeviceType.Vulkan && cameraType == CameraType.Game)
+            if (graphicsDeviceType == GraphicsDeviceType.Vulkan &&
+                cameraType == CameraType.Game)
                 return ImmProjectionDestination.VulkanHostAttachment;
             return ImmProjectionDestination.Backbuffer;
         }
@@ -123,10 +124,13 @@ namespace ImmPlayer
         private IntPtr _renderEventAndDataFunc = IntPtr.Zero;
         private readonly Dictionary<Camera, PerCameraInfo> _cameras = new Dictionary<Camera, PerCameraInfo>();
         private readonly Dictionary<Camera, float> _lastNearClipLogged = new Dictionary<Camera, float>();
+        private readonly Dictionary<Camera, ImmProjectionDestination> _lastProjectionDestinationLogged =
+            new Dictionary<Camera, ImmProjectionDestination>();
         private readonly HashSet<Camera> _loggedVulkanRenderTargetSource = new HashSet<Camera>();
         private readonly HashSet<Camera> _loggedVulkanPrepareWarning = new HashSet<Camera>();
         private readonly HashSet<int> _configuredVulkanRenderEvents = new HashSet<int>();
         private const string NearDiagPrefix = "[IMMDBG_NEAR_20260208A] ";
+        private const string ProjectionDestinationDiagPrefix = "[IMM_PROJECTION_TARGET_20260725] ";
         private const int VulkanCustomBlitEventId = 6;
         private static readonly List<UnityEngine.XR.XRDisplaySubsystem> _xrDisplaySubsystems = new List<UnityEngine.XR.XRDisplaySubsystem>();
         private bool _useCommandBufferRendering = false;
@@ -1066,59 +1070,37 @@ namespace ImmPlayer
             return true;
         }
 
-        private static bool UseRenderIntoTextureProjection(Camera cam)
+        private ImmProjectionDestination ResolveProjectionDestination(Camera cam)
         {
-            if (IsEnvFlagEnabled("IMM_UNITY_FORCE_BACKBUFFER_PROJECTION"))
-                return false;
-            if (IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"))
-                return true;
+            ImmProjectionDestination destination = ImmProjectionDestinationResolver.Resolve(
+                SystemInfo.graphicsDeviceType,
+                cam != null ? cam.cameraType : CameraType.Game,
+                cam != null && cam.stereoEnabled,
+                cam != null && cam.targetTexture != null,
+                Application.isEditor,
+                IsEnvFlagEnabled("IMM_UNITY_FORCE_BACKBUFFER_PROJECTION"),
+                IsEnvFlagEnabled("IMM_UNITY_FORCE_TEXTURE_PROJECTION"));
 
-            // D3D11 desktop Game cameras currently render upright with the
-            // backbuffer projection path. Keep the env overrides above for
-            // capture/projection A/B tests and keep XR separate from this path.
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 &&
-                cam != null &&
-                cam.cameraType == CameraType.Game &&
-                !cam.stereoEnabled)
+            if (cam != null &&
+                (!_lastProjectionDestinationLogged.TryGetValue(cam, out ImmProjectionDestination previous) ||
+                 previous != destination))
             {
-#if UNITY_6000_0_OR_NEWER
-                // Unity 6's built-in pipeline routes the Game camera through an intermediate texture
-                // (not the back buffer) when HDR, MSAA, a target texture, or post-processing is active.
-                // Then the GPU projection must use the render-into-texture convention or IMM composites
-                // Y-flipped / off-screen (black Game view). Unity 2022.3 always hit the back buffer.
-                if (cam.targetTexture != null || cam.allowHDR ||
-                    (cam.allowMSAA && QualitySettings.antiAliasing > 1))
-                    return true;
-#endif
-                return false;
+                _lastProjectionDestinationLogged[cam] = destination;
+                bool renderIntoTexture = ImmProjectionDestinationResolver.UsesRenderTextureProjection(destination);
+                Debug.Log(
+                    $"{ProjectionDestinationDiagPrefix}camera={cam.name} cameraType={cam.cameraType} " +
+                    $"backend={SystemInfo.graphicsDeviceType} stereo={cam.stereoEnabled} " +
+                    $"explicitTarget={cam.targetTexture != null} destination={destination} " +
+                    $"renderIntoTexture={renderIntoTexture}");
             }
 
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
-                cam != null &&
-                cam.cameraType == CameraType.Game &&
-                !cam.stereoEnabled)
-                return true;
+            return destination;
+        }
 
-            // Quest Vulkan offscreen-composite path (stereo XR camera): use the
-            // TEXTURE-convention GPU projection (Y-flipped). In-headset A/B
-            // 2026-07-26: with the backbuffer convention the pitch response was
-            // inverted (look up -> world goes down) regardless of the composite
-            // V-flip setting, and the 07-21 session independently noted forcing
-            // texture-projection "improved look-around/tracking". The projection
-            // is the flip owner that provably reaches the render; the composite
-            // stays unflipped (see GetVulkanCompositeMaterial). Override for A/B
-            // with IMM_UNITY_FORCE_BACKBUFFER_PROJECTION (checked above).
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan &&
-                Application.platform == RuntimePlatform.Android &&
-                cam != null &&
-                cam.stereoEnabled)
-                return true;
-
-            // Unity can mark Game cameras as stereo/XR-active even when we are
-            // validating the editor Game view. Do not use stereoEnabled as a
-            // proxy for render-into-texture projection. SceneView is the other
-            // built-in path that needs texture-style projection here.
-            return cam != null && cam.cameraType == CameraType.SceneView;
+        private bool UseRenderIntoTextureProjection(Camera cam)
+        {
+            return ImmProjectionDestinationResolver.UsesRenderTextureProjection(
+                ResolveProjectionDestination(cam));
         }
 
         private void CleanupCommandBuffers()
