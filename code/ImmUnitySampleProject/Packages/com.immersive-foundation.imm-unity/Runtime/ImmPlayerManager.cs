@@ -1555,12 +1555,6 @@ namespace ImmPlayer
             }
             else
             {
-#if UNITY_6000_0_OR_NEWER
-                // Unity 6's render graph doesn't guarantee the camera color target is bound when the
-                // plugin render event runs (Unity <=2022 left it bound implicitly). Bind it explicitly
-                // so the native IMM render draws into the camera target instead of nothing (black view).
-                info.CommandBuffer.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-#endif
                 info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
             }
         }
