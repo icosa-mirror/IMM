@@ -11,6 +11,25 @@ using UnityEngine.Rendering;
 
 namespace ImmPlayer
 {
+    [DisallowMultipleComponent]
+    internal sealed class ImmAndroidVulkanPresenter : MonoBehaviour
+    {
+        private ImmPlayerManager _owner;
+        private Camera _camera;
+
+        internal void Configure(ImmPlayerManager owner, Camera camera)
+        {
+            _owner = owner;
+            _camera = camera;
+        }
+
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        {
+            if (_owner == null || !_owner.enabled || !_owner.PresentFlatAndroidVulkanFrame(_camera, source, destination))
+                Graphics.Blit(source, destination);
+        }
+    }
+
     internal enum ImmProjectionDestination
     {
         Backbuffer,
@@ -670,6 +689,7 @@ namespace ImmPlayer
 
         private Material _vulkanCompositeMaterial;
         private int _vulkanCompositeLogCount;
+        private int _vulkanOnRenderImageLogCount;
 
         // Returns the WRITE buffer for this frame (handed to the native renderer)
         // and updates VulkanEyeTargets[eye] to the READ buffer Unity samples
@@ -1025,12 +1045,65 @@ namespace ImmPlayer
             // Unity 6 XR on Quest stops executing AfterSkybox command buffers once the
             // XR eye render path takes over (~2 frames after FOCUSED) - PreCull kept
             // issuing events but the marker never dispatched. Keep the proven XR hook.
-            // A flat Android backbuffer is different: AfterImageEffectsOpaque can still
-            // reference an intermediate camera target which Unity has already resolved,
-            // so the blit is visible in explicit-RT captures but absent on the display.
+            // Flat Android presentation is performed by OnRenderImage. Schedule the
+            // native offscreen render before image effects so it is complete before
+            // Unity hands the presenter its real final destination.
             return cam != null && cam.stereoEnabled
                 ? CameraEvent.AfterImageEffectsOpaque
-                : CameraEvent.AfterEverything;
+                : CameraEvent.AfterForwardOpaque;
+        }
+
+        private static bool UsesFlatAndroidVulkanPresenter(Camera cam)
+        {
+            return Application.platform == RuntimePlatform.Android &&
+                   IsVulkanRuntime() &&
+                   cam != null &&
+                   !cam.stereoEnabled &&
+                   !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET");
+        }
+
+        private void EnsureFlatAndroidVulkanPresenter(Camera cam)
+        {
+            if (!UsesFlatAndroidVulkanPresenter(cam))
+                return;
+
+            ImmAndroidVulkanPresenter presenter = cam.GetComponent<ImmAndroidVulkanPresenter>();
+            if (presenter == null)
+                presenter = cam.gameObject.AddComponent<ImmAndroidVulkanPresenter>();
+            presenter.Configure(this, cam);
+        }
+
+        internal bool PresentFlatAndroidVulkanFrame(
+            Camera cam,
+            RenderTexture source,
+            RenderTexture destination)
+        {
+            if (!UsesFlatAndroidVulkanPresenter(cam) ||
+                !_cameras.TryGetValue(cam, out PerCameraInfo info))
+                return false;
+
+            RenderTexture eyeTarget = info.VulkanEyeTargets[0];
+            Material composite = GetVulkanCompositeMaterial();
+            if (eyeTarget == null || composite == null)
+                return false;
+
+            // OnRenderImage is Unity's supported final-presentation hook in the
+            // built-in pipeline. Unity owns the destination (including Android's
+            // Vulkan swapchain/intermediate and pre-rotation), so no native code
+            // attempts to discover or retain the display image.
+            Graphics.Blit(source, destination);
+            Graphics.Blit(eyeTarget, destination, composite);
+            if (_vulkanOnRenderImageLogCount < 8)
+            {
+                ++_vulkanOnRenderImageLogCount;
+                Debug.Log(
+                    $"[IMM_UNITY_VK_ONRENDERIMAGE_20260802] frame={Time.frameCount} cam={cam.name} " +
+                    $"source={(source != null ? source.GetInstanceID() : 0)} " +
+                    $"destination={(destination != null ? destination.GetInstanceID() : 0)} " +
+                    $"imm={eyeTarget.GetInstanceID()} shader={composite.shader.name} " +
+                    $"supported={composite.shader.isSupported}");
+            }
+            return true;
         }
 
         public void SetRenderCamera(Camera camera)
@@ -1410,7 +1483,7 @@ namespace ImmPlayer
                     {
                         info.CommandBuffer.SetRenderTarget(cameraTarget, new RenderTargetIdentifier(BuiltinRenderTextureType.Depth));
                     }
-                    else
+                    else if (!UsesFlatAndroidVulkanPresenter(cam))
                     {
                         info.CommandBuffer.SetRenderTarget(cameraTarget);
                     }
@@ -1456,7 +1529,7 @@ namespace ImmPlayer
                         if (_preCullCount <= 12)
                             Debug.Log($"[IMM_UNITY_VK_QUADEYE] n={_preCullCount} eye={eyeIndex} quadEye={blitEye} viaCB=1");
                     }
-                    else
+                    else if (!UsesFlatAndroidVulkanPresenter(cam))
                     {
                         RenderTexture eyeTarget = info.VulkanEyeTargets[blitEye];
                         Material composite = GetVulkanCompositeMaterial();
@@ -1543,6 +1616,7 @@ namespace ImmPlayer
                         Debug.Log($"[IMM_UNITY_VK_EVENT_20260612] cam={cam.name} cameraId={info.CameraId} renderEvent={renderEvent}");
                     }
                     cam.AddCommandBuffer(renderEvent, info.CommandBuffer);
+                    EnsureFlatAndroidVulkanPresenter(cam);
                 }
             }
             return info;
