@@ -1260,6 +1260,7 @@ namespace ImmPlayer
                 return;
 
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
+            bool useHostComposition = UsesFlatAndroidVulkanHostComposition(cam);
 
             if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_NO_RENDER_EVENTS"))
             {
@@ -1388,7 +1389,6 @@ namespace ImmPlayer
                 int vulkanEye = 0;
                 if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled && cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right)
                     vulkanEye = 1;
-                bool useHostComposition = UsesFlatAndroidVulkanHostComposition(cam);
                 bool useOffscreenTargets = Application.platform == RuntimePlatform.Android &&
                     !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET") &&
                     !useHostComposition;
