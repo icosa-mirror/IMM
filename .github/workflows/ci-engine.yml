@@ -1437,11 +1437,13 @@ jobs:
           --required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presentation-texture"
           --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801]"
+          --required-marker "[IMM_UNITY_VK_ON_RENDER_IMAGE_PRESENT_20260802]"
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_HOLD_20260731]"
           --required-marker "[IMM_UNITY_SMOKE] render candidate capture="
           --required-marker "[IMM_UNITY_SMOKE] capture="
           --required-capture-name unity-android-vulkan-render.png
           --required-capture-name unity-android-vulkan.png
+          --external-screen-capture-name unity-android-vulkan-external.png
           --client-label "IMM Unity Android Vulkan"
 
       - name: Record Unity Android Vulkan visual metrics
@@ -1475,6 +1477,19 @@ jobs:
             $failed = $true
           }
 
+          $externalCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external.png -ErrorAction SilentlyContinue
+          if ($externalCapture) {
+            python tests/tools/compare_render_metrics.py $externalCapture.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/unity-android-vulkan-external-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+          } else {
+            '{"passed":false,"errors":["missing Firebase Robo external device-screen capture"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-external-metrics.json
+            Write-Warning "Missing Firebase Robo external device-screen capture"
+            $failed = $true
+          }
+
           if ($failed) { exit 1 }
 
       - name: Write Unity Android Vulkan screenshot report
@@ -1492,6 +1507,14 @@ jobs:
           if ($compositionCapture) {
             New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/composition | Out-Null
             Copy-Item -LiteralPath $compositionCapture.FullName -Destination artifacts/unity-android-vulkan/captures/composition/unity-android-vulkan-composition.png -Force
+          }
+          $externalCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external.png -ErrorAction SilentlyContinue
+          if ($externalCapture) {
+            python tests/tools/write_render_report.py `
+              --metrics-json artifacts/unity-android-vulkan/unity-android-vulkan-external-metrics.json `
+              --candidate-capture $externalCapture.FullName `
+              --output-dir artifacts/unity-android-vulkan/captures/external `
+              --markdown-output artifacts/unity-android-vulkan/external-render-report.md
           }
 
       - name: Write CI manifest

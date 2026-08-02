@@ -53,6 +53,17 @@ def main() -> int:
         capture = root / "ftl-results/device/screencap_after.png"
         capture.parent.mkdir(parents=True)
         capture.write_bytes(b"png")
+        robo_artifacts = root / "ftl-results/device/artifacts"
+        robo_artifacts.mkdir(parents=True)
+        (robo_artifacts / "0.png").write_bytes(b"device-details")
+        (robo_artifacts / "1.png").write_bytes(b"first-app-frame")
+        (robo_artifacts / "6.png").write_bytes(b"last-app-frame")
+        nested_app_capture = robo_artifacts / "sdcard/app/files/internal.png"
+        nested_app_capture.parent.mkdir(parents=True)
+        nested_app_capture.write_bytes(b"newer-but-not-the-screen")
+        external_capture = root / "unity-android-vulkan-external.png"
+        assert tool.copy_latest_robo_screen_capture(root / "ftl-results", external_capture) == external_capture
+        assert external_capture.read_bytes() == b"last-app-frame"
         logcat = root / "ftl-results/device/logcat"
         logcat.write_text(
             "06-12 IMMAVAL renderFrame frame=60 drawCalls=12\n"
@@ -119,6 +130,7 @@ def main() -> int:
         args.environment_variable = []
         args.required_capture_name = []
         args.required_marker = []
+        args.external_screen_capture_name = ""
         args.robo_script = Path("unity-wait.roboscript")
         args.test = Path("ftl-test.apk")
         args.timeout = "7m"

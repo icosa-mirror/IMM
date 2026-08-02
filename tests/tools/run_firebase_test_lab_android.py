@@ -125,6 +125,30 @@ def find_failed_test_results(root: Path) -> list[str]:
     return failures
 
 
+def copy_latest_robo_screen_capture(results_root: Path, destination: Path) -> Path | None:
+    """Copy the last screen image captured externally by Robo.
+
+    Robo stores these as numeric PNGs directly below an ``artifacts``
+    directory. Nested PNGs are app-generated files pulled from sdcard and are
+    deliberately excluded: they do not prove that pixels reached the device
+    display.
+    """
+    candidates = [
+        path
+        for path in results_root.rglob("*.png")
+        if path.is_file()
+        and path.parent.name == "artifacts"
+        and path.stem.isdigit()
+        and int(path.stem) > 0
+    ]
+    if not candidates:
+        return None
+    latest = max(candidates, key=lambda path: (int(path.stem), path.as_posix()))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(latest, destination)
+    return destination
+
+
 def collect_diagnostic_lines(root: Path, patterns: list[str] | None = None, limit: int = 80) -> list[str]:
     if not root.exists():
         return []
@@ -263,6 +287,7 @@ def main() -> int:
     parser.add_argument("--directory-to-pull", action="append", default=[])
     parser.add_argument("--required-marker", action="append", default=[])
     parser.add_argument("--required-capture-name", action="append", default=[])
+    parser.add_argument("--external-screen-capture-name", default="")
     parser.add_argument("--client-label", default="")
     parser.add_argument("--gcloud-attempts", type=int, default=2)
     args = parser.parse_args()
@@ -309,6 +334,16 @@ def main() -> int:
             errors.append(f"Missing required Firebase Test Lab capture: {name}")
         else:
             captures.extend(found)
+
+    if args.external_screen_capture_name:
+        external_capture = copy_latest_robo_screen_capture(
+            results_root,
+            args.artifact_dir / args.external_screen_capture_name,
+        )
+        if external_capture is None:
+            errors.append("Missing external Firebase Robo device-screen capture")
+        else:
+            captures.append(external_capture)
 
     gcloud_exit_ignored = gcloud_exit != 0 and is_tool_results_api_disabled(stderr_path) and not errors
     if gcloud_exit != 0 and not gcloud_exit_ignored:

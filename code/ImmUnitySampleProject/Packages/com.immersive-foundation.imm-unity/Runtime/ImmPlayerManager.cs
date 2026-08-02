@@ -13,12 +13,35 @@ namespace ImmPlayer
 {
     internal sealed class VulkanPresentationCamera : MonoBehaviour
     {
+        private int _presentedFrameCount;
+
         internal RenderTexture PresentationTarget { get; set; }
         internal Camera PresentationCamera { get; set; }
         internal CommandBuffer PresentationCommandBuffer { get; set; }
-        internal Material PresentationMaterial { get; set; }
         internal Camera SourceCamera { get; set; }
         internal int SourceCullingMask { get; set; }
+
+        private void OnRenderImage(RenderTexture source, RenderTexture destination)
+        {
+            if (PresentationTarget == null || !PresentationTarget.IsCreated())
+            {
+                Graphics.Blit(source, destination);
+                return;
+            }
+
+            // Let Unity provide and own the final camera destination. In
+            // particular, do not attempt to discover or retain Android's
+            // rotating Vulkan swapchain image from the native plug-in.
+            Graphics.Blit(PresentationTarget, destination);
+            if (_presentedFrameCount < 8)
+            {
+                ++_presentedFrameCount;
+                Debug.Log(
+                    $"[IMM_UNITY_VK_ON_RENDER_IMAGE_PRESENT_20260802] " +
+                    $"frame={Time.frameCount} source={PresentationTarget.width}x{PresentationTarget.height} " +
+                    $"cameraInput={source.width}x{source.height} destinationIsBackbuffer={destination == null}");
+            }
+        }
 
         private void OnDestroy()
         {
@@ -34,11 +57,6 @@ namespace ImmPlayer
             {
                 PresentationCommandBuffer.Release();
                 PresentationCommandBuffer = null;
-            }
-            if (PresentationMaterial != null)
-            {
-                Destroy(PresentationMaterial);
-                PresentationMaterial = null;
             }
             if (PresentationTarget == null)
                 return;
@@ -899,7 +917,6 @@ namespace ImmPlayer
             presentationTarget.Create();
 
             int sourceCullingMask = cam.cullingMask;
-            cam.cullingMask &= ~(1 << 31);
 
             var presenterObject = new GameObject($"IMM Vulkan Presenter ({cam.name})");
             presenterObject.transform.SetParent(transform, false);
@@ -916,7 +933,7 @@ namespace ImmPlayer
             presenterCamera.nearClipPlane = 0.01f;
             presenterCamera.farClipPlane = 10.0f;
             presenterCamera.aspect = width / (float)height;
-            presenterCamera.cullingMask = 1 << 31;
+            presenterCamera.cullingMask = 0;
             presenterCamera.allowHDR = false;
             presenterCamera.allowMSAA = false;
             presenterCamera.useOcclusionCulling = false;
@@ -925,39 +942,9 @@ namespace ImmPlayer
             presenterCamera.rect = cam.rect;
             presenterCamera.targetTexture = null;
 
-            Shader presentationShader = Shader.Find("IMM/VulkanPresentation");
-            if (presentationShader == null)
-            {
-                Debug.LogError("[IMM_UNITY_VK_QUAD_PRESENTER_20260801] shader=missing");
-                presentationTarget.Release();
-                Destroy(presentationTarget);
-                Destroy(presenterObject);
-                cam.cullingMask = sourceCullingMask;
-                return target;
-            }
-
-            GameObject presentationQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            presentationQuad.name = $"IMM Vulkan Presentation Quad ({cam.name})";
-            presentationQuad.layer = 31;
-            presentationQuad.transform.SetParent(presenterCamera.transform, false);
-            presentationQuad.transform.localPosition = new Vector3(0.0f, 0.0f, 1.0f);
-            presentationQuad.transform.localRotation = Quaternion.identity;
-            presentationQuad.transform.localScale = new Vector3(2.0f * presenterCamera.aspect, 2.0f, 1.0f);
-            Collider presentationCollider = presentationQuad.GetComponent<Collider>();
-            if (presentationCollider != null)
-                Destroy(presentationCollider);
-
-            var presentationMaterial = new Material(presentationShader)
-            {
-                name = $"IMM Vulkan Presentation Material ({cam.name})",
-                mainTexture = presentationTarget
-            };
-            presentationQuad.GetComponent<MeshRenderer>().sharedMaterial = presentationMaterial;
-
             VulkanPresentationCamera presenter = presenterObject.AddComponent<VulkanPresentationCamera>();
             presenter.PresentationTarget = presentationTarget;
             presenter.PresentationCamera = presenterCamera;
-            presenter.PresentationMaterial = presentationMaterial;
             presenter.SourceCamera = cam;
             presenter.SourceCullingMask = sourceCullingMask;
             _vulkanPresentationCameras[cam] = presenter;
@@ -965,12 +952,11 @@ namespace ImmPlayer
             Debug.Log(
                 $"[IMM_UNITY_VK_PRESENT_BACKBUFFER_20260731] camera={cam.name} source={width}x{height} " +
                 $"mainDepth={cam.depth} presenterDepth={presenterCamera.depth} " +
-                $"mode=unity-mesh-renderer " +
+                $"mode=unity-on-render-image " +
                 $"ordering=native-before-present");
             Debug.Log(
-                $"[IMM_UNITY_VK_QUAD_PRESENTER_20260801] camera={presenterCamera.name} " +
+                $"[IMM_UNITY_VK_ON_RENDER_IMAGE_PRESENTER_20260802] camera={presenterCamera.name} " +
                 $"source={presentationTarget.width}x{presentationTarget.height} mainCamera={cam.name} " +
-                $"shader={presentationShader.name} layer={presentationQuad.layer} " +
                 $"forceIntoRenderTexture={presenterCamera.forceIntoRenderTexture} " +
                 $"screen={Screen.width}x{Screen.height} presenterPixels={presenterCamera.pixelWidth}x{presenterCamera.pixelHeight}");
             return target;
