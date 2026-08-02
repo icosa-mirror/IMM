@@ -149,14 +149,15 @@ def main() -> int:
             "#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_ANDROID",
             "return CameraEvent.AfterEverything;",
             "SetVulkanCameraRenderBuffers",
-            "[IMM_UNITY_ANDROID_VK_TARGET_20260729]",
-            "[IMM_UNITY_ANDROID_VK_CALLBACK_20260729]",
             "return CameraEvent.AfterForwardOpaque;",
-            "bool useHostRenderPass = false;",
-            "cam.cullingMask &= ~(1 << 31);",
-            "ConfigureEvent(EnsureInside) restores the camera's tracked",
-            "info.CommandBuffer.IssuePluginEvent(_renderEventFunc, prepareEventId)",
             "info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId)",
+            "info.CommandBuffer.SetRenderTarget(cameraTarget);",
+            "RenderTexture eyeTarget = info.VulkanEyeTargets[blitEye];",
+            "Material composite = GetVulkanCompositeMaterial();",
+            "info.CommandBuffer.Blit(eyeTarget, cameraTarget, composite);",
+            "UnityEngine.XR.XRSettings.isDeviceActive",
+            "ImmNativePlugin.SetVulkanDedicatedQueueAllowed(allowDedicatedVulkanQueue ? 1 : 0)",
+            "[IMM_UNITY_VK_COMPOSITE_20260802]",
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",
@@ -174,31 +175,19 @@ def main() -> int:
             "render_only",
         ],
         ROOT / "code/appImmUnity/src/main.cpp": [
-            "const bool deferUnityMetalFrameBegin = false;",
-            "config.metalUnityProjectionAdjusted = true;",
-            "config.reverseDepthBuffer = true;",
-            "Unity Android Vulkan interface initialized:",
-            "Unity Android Vulkan renderer initialized from host device",
             "config.rendererApi = piRenderer::API::Vulkan;",
-            "config.reverseDepthBuffer = true;",
             "CommandRecordingState(",
             "kUnityVulkanRenderPass_EnsureInside",
-            "BeginUnityCommandBufferUploadFrame(",
             "RenderPreparedCamera(",
             "iRenderUnityVulkanCameraInHostRenderPass(",
-            "const bool useHostDepth = hasDepthAttachment;",
-            "const bool hostDepthReverseZ =",
-            "[IMM_UNITY_ANDROID_VK_HOST_DEPTH_20260801]",
-            "[IMM_UNITY_VK_PREWARM_20260731]",
-            "resourcesPrepared",
             "[IMM_UNITY_VK_HOST_RT_20260612]",
-            "mVulkanInstance.getInstanceProcAddr",
-            "BeginExternalImageCommandBufferFramePreserveColor(",
-            "[IMM_UNITY_VK_UNITY_COMMAND_BUFFER_20260730]",
-            "[IMM_UNITY_VK_DIRECT_RT_20260731]",
-            "[IMM_UNITY_VK_POST_ACCESS_20260802]",
-            "ordering=imm-to-unity",
-            "transition=unity-consumer",
+            "BeginExternalImageFrame(",
+            "EndExternalImageFrame();",
+            "AccessRenderBufferTexture(",
+            "const bool passiveAccess = vulkanRenderer->UsesDedicatedQueue();",
+            "kUnityVulkanResourceAccess_ObserveOnly",
+            "kUnityVulkanResourceAccess_PipelineBarrier",
+            "unityVulkanDevice.allowDedicatedQueue = sAllowDedicatedVulkanQueue;",
             "Unity Vulkan render:",
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
@@ -208,13 +197,14 @@ def main() -> int:
             "SetUnityProjectionAdjusted(true)",
         ],
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp": [
-            "struct piVulkanBorrowedPipeline",
-            "externalDevice->getInstanceProcAddr",
-            "rejected lazy texture upload inside Unity host render pass",
-            "iRetireGraphicsPipeline(",
-            "iCollectBorrowedPipelines(",
-            "[IMM_UNITY_VK_DEFER_PIPELINE_20260731]",
-            "[IMM_UNITY_ANDROID_VK_FORCE_NEAR_DEPTH_20260802]",
+            "bool ownsDedicatedQueue = false;",
+            "externalDevice->allowDedicatedQueue &&",
+            "[IMM_UNITY_VK_QUEUE_20260802] mode=host reason=dedicated-queue-not-authorized layoutOwner=unity",
+            "batchRingBridgeSemaphores",
+            "iFlushBatch(",
+            "BeginExternalImageFrameWithView(",
+            "mState->batchAppendShaderReadTransition =",
+            "mState->ownsDedicatedQueue &&",
         ],
         ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm": [
             "if (mState->unityProjectionAdjusted)",
@@ -233,8 +223,24 @@ def main() -> int:
     unity_native = (
         ROOT / "code/appImmUnity/src/main.cpp"
     ).read_text(encoding="utf-8")
-    if "AccessQueue(" in unity_native:
-        errors.append("Unity Vulkan same-frame render path must not submit through AccessQueue")
+    access_queue_call = "AccessQueue(iUnityVulkanQueueRenderCallback, event_id, &context, true)"
+    if unity_native.count(access_queue_call) != 1:
+        errors.append("Unity Vulkan host fallback must contain exactly one synchronized AccessQueue call")
+    else:
+        passive_branch = unity_native.find("if (passiveAccess)")
+        access_queue = unity_native.find(access_queue_call)
+        if passive_branch < 0 or passive_branch > access_queue:
+            errors.append("Unity Vulkan dedicated-queue bypass must precede the host AccessQueue fallback")
+        elif "return true;" not in unity_native[passive_branch:access_queue]:
+            errors.append("Unity Vulkan dedicated-queue path must return before the host AccessQueue fallback")
+
+    vulkan_native = (
+        ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
+    ).read_text(encoding="utf-8")
+    if vulkan_native.count("mState->ownsDedicatedQueue &&") < 3:
+        errors.append(
+            "Unity Vulkan shader-read transitions and bridge synchronization must remain dedicated-queue-only"
+        )
 
     unity_smoke = (
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
