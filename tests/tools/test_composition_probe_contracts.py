@@ -17,6 +17,12 @@ def require_tokens(path: Path, tokens: list[str]) -> list[str]:
 
 def main() -> int:
     checks = {
+        ROOT / "tests/tools/prepare_unity_ci_project.py": [
+            '"com.unity.test-framework": "1.1.33"',
+            '"com.unity.xr.management": "4.5.4"',
+            '"com.unity.xr.openxr": "1.14.3"',
+            "strip_android_xr_manifest(output)",
+        ],
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs": [
             "AnalyzeProbeRegion",
             "rearOccluded",

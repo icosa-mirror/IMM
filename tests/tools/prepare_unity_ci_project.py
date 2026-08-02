@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 MINIMAL_DEPENDENCIES = {
+    "com.unity.test-framework": "1.1.33",
     "com.unity.ugui": "1.0.0",
     "com.unity.xr.management": "4.5.4",
     "com.unity.xr.openxr": "1.14.3",
