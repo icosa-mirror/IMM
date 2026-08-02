@@ -229,10 +229,10 @@ namespace ImmPlayer
                     ImmPlayerManager compositionManager = FindObjectOfType<ImmPlayerManager>();
                     if (compositionManager != null)
                     {
-                        compositionManager.SetFlatAndroidVulkanHostCompositionForValidation(true);
-                        // Let the camera rebuild its command buffer for the host-pass
-                        // phase before adding the explicitly ordered probe draws.
-                        yield return null;
+                        compositionManager.SetFlatAndroidVulkanSharedDepthCompositionForValidation(true);
+                        // Let the manager recreate its explicit offscreen target with
+                        // a depth attachment before adding the ordered probe draws.
+                        yield return new WaitForEndOfFrame();
                     }
                 }
 #endif
@@ -752,6 +752,17 @@ namespace ImmPlayer
                 name = "IMM Android Vulkan Ordered Depth Probes"
             };
 
+            ImmPlayerManager manager = FindObjectOfType<ImmPlayerManager>();
+            RenderTexture compositionTarget = manager != null
+                ? manager.GetAndroidVulkanUnityPresentationTargetForValidation(cam)
+                : null;
+            if (compositionTarget == null || compositionTarget.depth <= 0)
+            {
+                RecordCompositionFailure("ordered depth probes missing shared offscreen depth target");
+                return;
+            }
+            _orderedDepthProbeCommandBuffer.SetRenderTarget(compositionTarget);
+
             GameObject[] probes = { _frontProbe, _rearOccludedProbe, _rearVisibleProbe };
             foreach (GameObject probe in probes)
             {
@@ -779,7 +790,9 @@ namespace ImmPlayer
             cam.AddCommandBuffer(probeEvent, _orderedDepthProbeCommandBuffer);
             Debug.Log(
                 $"[IMM_UNITY_ANDROID_VK_ORDERED_DEPTH_PROBES_20260802] camera={cam.name} " +
-                $"event={probeEvent} attached={cam.GetCommandBuffers(probeEvent).Length} ordering=imm-then-unity-probes");
+                $"event={probeEvent} attached={cam.GetCommandBuffers(probeEvent).Length} " +
+                $"target={compositionTarget.width}x{compositionTarget.height} depth={compositionTarget.depth} " +
+                $"ordering=imm-then-unity-probes");
         }
 #endif
 
