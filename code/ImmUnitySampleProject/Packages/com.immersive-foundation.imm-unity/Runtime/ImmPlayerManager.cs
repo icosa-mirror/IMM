@@ -1076,6 +1076,15 @@ namespace ImmPlayer
         public void SetFlatAndroidVulkanHostCompositionForValidation(bool enabled)
         {
             _flatAndroidVulkanHostComposition = enabled;
+            foreach (Camera camera in _cameras.Keys)
+            {
+                if (camera == null)
+                    continue;
+
+                ImmAndroidVulkanPresenter presenter = camera.GetComponent<ImmAndroidVulkanPresenter>();
+                if (presenter != null)
+                    presenter.enabled = !enabled;
+            }
             Debug.Log(
                 $"[IMM_UNITY_ANDROID_VK_HOST_COMPOSITION_20260802] enabled={(enabled ? 1 : 0)} " +
                 $"frame={Time.frameCount}");
