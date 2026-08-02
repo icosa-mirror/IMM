@@ -358,10 +358,11 @@ namespace ImmPlayer
 #endif
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-                bool allowDedicatedVulkanQueue = UnityEngine.XR.XRSettings.isDeviceActive;
+                bool allowDedicatedVulkanQueue =
+                    SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan;
                 ImmNativePlugin.SetVulkanDedicatedQueueAllowed(allowDedicatedVulkanQueue ? 1 : 0);
                 Debug.Log(
-                    $"[IMM_UNITY_VK_QUEUE_20260802] xrDeviceActive={allowDedicatedVulkanQueue} " +
+                    $"[IMM_UNITY_VK_QUEUE_20260802] vulkanDevice={allowDedicatedVulkanQueue} " +
                     $"mode={(allowDedicatedVulkanQueue ? "dedicated-requested" : "host-access-queue")}");
 #endif
 
