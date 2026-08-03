@@ -188,6 +188,7 @@ jobs:
           python tests/tools/test_repack_android_native_library.py
           python tests/tools/test_classify_composition_modes.py
           python tests/tools/test_classify_android_unity_vulkan.py
+          python tests/tools/test_classify_android_godot_vulkan.py
           python tests/tools/test_vr_probe_contracts.py
           python tests/tools/test_standalone_openxr_vr_contracts.py
           python tests/tools/test_android_quest_vr_contracts.py

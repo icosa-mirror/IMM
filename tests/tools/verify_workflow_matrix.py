@@ -31,7 +31,7 @@ REQUIRED_JOBS = {
         "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Write CI manifest", "Collect artifact summary"],
         "android-standalone-vulkan": ["Check Firebase Test Lab configuration", "Build Android Vulkan APKs", "Run Android Vulkan smoke in Firebase Test Lab", "Record Android Vulkan screenshot metrics", "Write Android Vulkan screenshot report", "Write CI manifest", "Collect artifact summary"],
         "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Verify OpenXR log contract", "Write CI manifest", "Collect artifact summary"],
-        "android-godot-vulkan": ["Check Firebase Test Lab configuration", "Build Android Godot APK", "Run Android Godot Vulkan smoke in Firebase Test Lab", "Record Android Godot Vulkan screenshot metrics", "Write Android Godot Vulkan screenshot report", "Write CI manifest", "Collect artifact summary"],
+        "android-godot-vulkan": ["Check Firebase Test Lab configuration", "Build Android Godot APK", "Run Android Godot Vulkan smoke in Firebase Test Lab", "Record Android Godot Vulkan screenshot metrics", "Write Android Godot Vulkan screenshot report", "Classify Android Godot Vulkan result", "Write CI manifest", "Collect artifact summary"],
         "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR app smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
         "ios-device-smoke": ["Preflight iOS device runner", "Verify iOS package target", "Write CI manifest", "Collect artifact summary"],
         "device-evidence-report": ["Download device artifacts", "Verify device matrix evidence", "Upload device evidence report", "Hide per-lane device artifacts"],
@@ -39,7 +39,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
-        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
+        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Enforce Unity project Play-button contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-player-build": ["Download same-commit Unity native plugin", "Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
@@ -186,6 +186,13 @@ REQUIRED_ALWAYS_STEPS = {
         "unity-windows-directx-composition": {
             "Compare Unity DirectX render metrics against committed DirectX baseline",
             "Verify Unity DirectX composition log contract",
+        },
+    },
+    ".github/workflows/ci-device.yml": {
+        "android-godot-vulkan": {
+            "Record Android Godot Vulkan screenshot metrics",
+            "Write Android Godot Vulkan screenshot report",
+            "Classify Android Godot Vulkan result",
         },
     },
     ".github/workflows/ci-gpu.yml": {
@@ -613,7 +620,9 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         "Plugins/OSX/ImmUnityPlugin.bundle",
         'chmod +x "$plugin_binary"',
         "codesign --verify --deep --strict",
-        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
+        "manualExit: true",
+        "-immSmokeCapturePath",
         '$app/Contents/MacOS',
         "-perm -111",
         "enableGpu: true",
@@ -623,6 +632,30 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
             errors.append(
                 f"{workflow_rel} unity-macos-metal-composition missing same-commit native plugin token: {token}"
             )
+
+    if "manualExit: true" not in macos_body:
+        errors.append(
+            f"{workflow_rel} unity-macos-metal-composition must suppress GameCI's -quit flag while the asynchronous Editor Play smoke runs"
+        )
+
+
+def verify_unity_editor_version_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
+    if workflow_rel != ".github/workflows/ci-engine.yml":
+        return
+
+    text = path.read_text(encoding="utf-8")
+    unity_match = re.search(r'^  UNITY_VERSION:\s*["\']?([^"\'\s]+)', text, re.MULTILINE)
+    android_match = re.search(r'^  UNITY_ANDROID_VULKAN_VERSION:\s*["\']?([^"\'\s]+)', text, re.MULTILINE)
+    project_path = path.parents[2] / "code/ImmUnitySampleProject/ProjectSettings/ProjectVersion.txt"
+    project_text = project_path.read_text(encoding="utf-8") if project_path.exists() else ""
+    project_match = re.search(r"^m_EditorVersion:\s*(\S+)", project_text, re.MULTILINE)
+    versions = {
+        "UNITY_VERSION": unity_match.group(1) if unity_match else "",
+        "UNITY_ANDROID_VULKAN_VERSION": android_match.group(1) if android_match else "",
+        "project": project_match.group(1) if project_match else "",
+    }
+    if not all(versions.values()) or len(set(versions.values())) != 1:
+        errors.append(f"{workflow_rel} Unity editor versions do not match the serialized project: {versions}")
 
 
 def verify_godot_macos_clean_source_build_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
@@ -693,6 +726,7 @@ def verify_ci_core_self_test_contract(path: Path, workflow_rel: str, errors: lis
         "python tests/tools/test_verify_full_depth_evidence_report.py",
         "python tests/tools/test_classify_composition_modes.py",
         "python tests/tools/test_classify_android_unity_vulkan.py",
+        "python tests/tools/test_classify_android_godot_vulkan.py",
     ]
     for token in required_tokens:
         if token not in text:
@@ -800,6 +834,7 @@ def main() -> int:
         verify_release_assets(workflow_path, workflow_rel, errors)
         verify_unity_vulkan_full_depth_display_contract(workflow_path, workflow_rel, errors)
         verify_unity_same_commit_native_plugin_contract(workflow_path, workflow_rel, errors)
+        verify_unity_editor_version_contract(workflow_path, workflow_rel, errors)
         verify_godot_macos_clean_source_build_contract(workflow_path, workflow_rel, errors)
         verify_full_depth_validation_report_contract(workflow_path, workflow_rel, errors)
         verify_ci_core_self_test_contract(workflow_path, workflow_rel, errors)

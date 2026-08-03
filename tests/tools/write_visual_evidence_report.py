@@ -190,6 +190,15 @@ def discover_reports(input_root: Path) -> list[tuple[str, Path]]:
     for captures_dir in input_root.rglob("captures"):
         if not captures_dir.is_dir():
             continue
+        # A lane-level render report owns every capture mode below its local
+        # captures directory. Rediscovering those folders as independent
+        # sections lets a sibling failed metric/status leak into otherwise
+        # valid editor-play or sample-play evidence (for example, the Unity
+        # Metal ordered-overlay failure appearing as an "Editorplay" result).
+        # Aggregate evidence directories do not have this lane-local report,
+        # so their per-lane capture folders are still discovered below.
+        if (captures_dir.parent / "render-report.md").is_file():
+            continue
         for child in captures_dir.iterdir():
             if not child.is_dir():
                 continue

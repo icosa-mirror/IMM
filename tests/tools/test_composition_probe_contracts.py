@@ -289,6 +289,8 @@ def main() -> int:
             "android-godot-vulkan-composition-metrics.json",
             "vulkan_render_candidate.png",
             "vulkan_visual_smoke.png",
+            "classify_android_godot_vulkan.py",
+            "android-godot-vulkan-status.json",
         ],
         ROOT / "tests/tools/composition_status.py": [
             "composition_mode",

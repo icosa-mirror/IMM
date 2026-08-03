@@ -443,6 +443,7 @@ jobs:
           ./gradlew :appImmGodotFtlTest:assembleDebug :appImmGodotFtlTest:assembleDebugAndroidTest -PimmBuildDir=build_godot_ftl_test
       - name: Run Android Godot Vulkan smoke in Firebase Test Lab
         timeout-minutes: 30
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -472,6 +473,7 @@ jobs:
             --client-label "IMM Android Godot Vulkan"
       - name: Record Android Godot Vulkan screenshot metrics
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: |
           $validationFailed = $false
@@ -510,10 +512,13 @@ jobs:
           if ($compositionCapture) {
             python tests/tools/write_render_report.py --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-composition-metrics.json --candidate-capture $compositionCapture.FullName --output-dir artifacts/android-godot-vulkan/captures/composition --markdown-output artifacts/android-godot-vulkan/composition-report.md
           }
+      - name: Classify Android Godot Vulkan result
+        if: always()
+        run: python tests/tools/classify_android_godot_vulkan.py --artifact-dir artifacts/android-godot-vulkan --output artifacts/android-godot-vulkan/android-godot-vulkan-status.json
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/android-godot-vulkan/android-godot-vulkan-status.json --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh

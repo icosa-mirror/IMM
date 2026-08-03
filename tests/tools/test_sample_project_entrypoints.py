@@ -113,8 +113,9 @@ def main() -> int:
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
     for token in [
         "BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
+        "manualExit: true",
         "Record Unity project Play-button render metrics",
-        "Verify Unity project Play-button log contract",
+        "Write Unity project Play-button render report",
         "Enforce Unity project Play-button contract",
     ]:
         assert token in engine_workflow

@@ -125,6 +125,9 @@ def main() -> int:
             "# IMM Render Report\n\n![Metal](captures/unity-macos-metal.png)\n",
             encoding="utf-8",
         )
+        metal_editor_play = metal_captures / "editor-play"
+        metal_editor_play.mkdir()
+        (metal_editor_play / "unity-editor-play.png").write_bytes(PNG_1X1)
         (metal / "render-metrics.json").write_text(
             json.dumps(
                 {
@@ -256,6 +259,9 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        godot_sample_play = godot_overlay_captures / "sample-play"
+        godot_sample_play.mkdir()
+        (godot_sample_play / "godot-sample-play.png").write_bytes(PNG_1X1)
         godot_full_depth = input_root / "GPUMatrixEvidence" / "godot-windows-vulkan-full-depth"
         godot_full_depth_captures = godot_full_depth / "captures"
         godot_full_depth_captures.mkdir(parents=True)
@@ -460,6 +466,8 @@ def main() -> int:
         assert "## Full Depth\n" not in text
         assert "## Orderedoverlay\n" not in text
         assert "## Ordered Overlay\n" not in text
+        assert "## Editorplay\n" not in text
+        assert "## Sampleplay\n" not in text
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)

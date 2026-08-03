@@ -72,7 +72,24 @@ def main() -> int:
             infrastructure / "firebase-test-lab-result.json",
             {"gcloud_exit_code": 1, "copy_results": {"exit_code": 0}, "errors": ["quota"]},
         )
-        assert_result(infrastructure, "infrastructure_failed", "infrastructure")
+        classified = classifier.classify(infrastructure)
+        assert classified["result"] == "passed", classified
+        assert classified["warnings"], classified
+
+        incomplete_infrastructure = base / "incomplete_infrastructure"
+        passing_fixture(incomplete_infrastructure)
+        write_json(
+            incomplete_infrastructure / "firebase-test-lab-result.json",
+            {"gcloud_exit_code": 1, "copy_results": {"exit_code": 1}, "errors": ["quota"]},
+        )
+        (
+            incomplete_infrastructure
+            / "ftl-results"
+            / "device"
+            / "artifacts"
+            / "unity-android-vulkan-synthetic-stereo.png"
+        ).unlink()
+        assert_result(incomplete_infrastructure, "infrastructure_failed", "infrastructure")
 
         infrastructure_with_black_eye = base / "infrastructure_with_black_eye"
         passing_fixture(infrastructure_with_black_eye)

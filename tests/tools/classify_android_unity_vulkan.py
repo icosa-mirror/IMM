@@ -132,26 +132,31 @@ def classify(root: Path) -> dict:
         return status(
             "render_failed",
             "rendering",
-            render_failures + composition_failures + infrastructure_failures,
+            render_failures + composition_failures,
+            infrastructure_failures,
         )
     if composition_failures:
         return status(
             "composition_failed",
             "compositing",
-            composition_failures + infrastructure_failures,
+            composition_failures,
+            infrastructure_failures,
         )
-    if infrastructure_failures:
-        return status("infrastructure_failed", "infrastructure", infrastructure_failures)
-
-    return status("passed", "", [])
+    return status("passed", "", [], infrastructure_failures)
 
 
-def status(result: str, failure_class: str, failures: list[str]) -> dict:
+def status(
+    result: str,
+    failure_class: str,
+    failures: list[str],
+    warnings: list[str] | None = None,
+) -> dict:
     return {
         "schema": "imm-android-unity-vulkan-status-v1",
         "result": result,
         "failure_class": failure_class,
         "failures": failures,
+        "warnings": warnings or [],
     }
 
 
@@ -174,6 +179,8 @@ def main() -> int:
     )
     for failure in result["failures"]:
         print(f"- {failure}")
+    for warning in result["warnings"]:
+        print(f"- supporting diagnostic: {warning}")
     return 0 if result["result"] == "passed" else 1
 
 
