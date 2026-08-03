@@ -365,8 +365,8 @@ def main() -> int:
 
         # Exercise the production Unity/macOS/Metal contract against both
         # tolerated renderer drift and visually wrong full-size captures. The
-        # correlation floor is intentionally below two reviewed CI captures
-        # (0.444 and 0.451), while these bad poses remain well outside it.
+        # correlation floor is intentionally below the reviewed CI captures
+        # (0.387, 0.444, and 0.451), while these bad poses remain well outside it.
         repo_root = Path(__file__).resolve().parents[2]
         macos_reference_path = repo_root / "tests/baselines/render/unity-windows-directx-sample1.png"
         macos_contract_path = repo_root / "tests/baselines/render/unity-macos-metal-sample1.json"

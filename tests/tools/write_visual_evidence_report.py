@@ -460,6 +460,61 @@ def find_json(root: Path, *names: str) -> dict:
     return {}
 
 
+def report_candidate_stems(report: Path) -> set[str]:
+    """Return candidate capture stems named by a generated render report."""
+    if not report.is_file() or report.suffix.lower() != ".md":
+        return set()
+    try:
+        lines = report.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return set()
+
+    stems: set[str] = set()
+    in_candidate_section = False
+    for line in lines:
+        heading = line.strip().lower()
+        if heading.startswith("### "):
+            in_candidate_section = heading == "### candidate"
+            continue
+        if not in_candidate_section:
+            continue
+        match = re.search(r"!\[[^\]]*\]\(([^)]+)\)", line)
+        if match:
+            stems.add(Path(match.group(1).split("?", 1)[0]).stem.lower())
+            in_candidate_section = False
+    return stems
+
+
+def load_metric_candidates(root: Path) -> list[dict]:
+    candidates: list[dict] = []
+    for path in sorted(root.rglob("*metrics*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("candidate"), dict):
+            candidates.append(data)
+    return candidates
+
+
+def metrics_failed(metrics: dict) -> bool:
+    return metrics.get("passed") is False or bool(metrics.get("errors"))
+
+
+def complete_metrics_evidence(metrics: dict) -> bool:
+    spatial = metrics.get("spatial_luma_grid")
+    return (
+        isinstance(metrics.get("passed"), bool)
+        and isinstance(metrics.get("candidate"), dict)
+        and isinstance(metrics.get("reference"), dict)
+        and isinstance(metrics.get("contract"), dict)
+        and isinstance(spatial, dict)
+        and not spatial.get("error")
+        and isinstance(spatial.get("mean_abs_delta"), (int, float))
+        and isinstance(spatial.get("correlation"), (int, float))
+    )
+
+
 def find_manifest(root: Path, key: str) -> dict:
     for path in sorted(root.rglob("manifest.json")):
         try:
@@ -522,41 +577,45 @@ def preserve_status_manifests(input_root: Path, output_dir: Path) -> None:
             )
 
 
-def find_metrics(root: Path) -> dict:
-    fallback: dict = {}
-    for path in sorted(root.rglob("*metrics*.json")):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict) and "candidate" in data:
-            if not fallback:
-                fallback = data
-            if strict_metrics_evidence(data):
-                return data
-    return fallback
+def find_metrics(root: Path, report: Path | None = None) -> dict:
+    candidates = load_metric_candidates(root)
+    if not candidates:
+        return {}
+
+    candidate_stems = report_candidate_stems(report) if report is not None else set()
+    if candidate_stems:
+        matched = [
+            data
+            for data in candidates
+            if Path(str(data.get("candidate", {}).get("path", ""))).stem.lower() in candidate_stems
+        ]
+        if matched:
+            # A report is authoritative for its named candidate. Never replace
+            # its failed visual result with an unrelated passing metric from
+            # another capture mode in the same lane artifact.
+            return next((data for data in matched if metrics_failed(data)), matched[0])
+
+    # Without an explicit candidate link, bias toward preserving a complete
+    # failure. Choosing the first passing sibling creates a false green report.
+    complete = [data for data in candidates if complete_metrics_evidence(data)]
+    failed = [data for data in complete if metrics_failed(data)]
+    if failed:
+        return failed[0]
+    passing = [data for data in complete if strict_metrics_evidence(data)]
+    if passing:
+        return passing[0]
+    return candidates[0]
 
 
 def strict_metrics_evidence(metrics: dict) -> bool:
-    spatial = metrics.get("spatial_luma_grid")
-    return (
-        metrics.get("passed") is True
-        and isinstance(metrics.get("candidate"), dict)
-        and isinstance(metrics.get("reference"), dict)
-        and isinstance(metrics.get("contract"), dict)
-        and isinstance(spatial, dict)
-        and not spatial.get("error")
-        and isinstance(spatial.get("mean_abs_delta"), (int, float))
-        and isinstance(spatial.get("correlation"), (int, float))
-    )
+    return metrics.get("passed") is True and complete_metrics_evidence(metrics)
 
 
 def find_strict_metrics(root: Path) -> dict:
-    for path in sorted(root.rglob("*metrics*.json")):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(data, dict) and strict_metrics_evidence(data):
-            return data
-    return {}
+    return next(
+        (data for data in load_metric_candidates(root) if strict_metrics_evidence(data)),
+        {},
+    )
 
 
 def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, str]:
@@ -685,7 +744,7 @@ def main() -> int:
     visual_sections = 0
     for key, report in reports:
         root = artifact_root_for(report)
-        metrics = find_metrics(root)
+        metrics = find_metrics(root, report)
         status = find_json(root, "composition-status.json")
         manifest = find_manifest(root, key)
         images = find_images_for_report(report, key)

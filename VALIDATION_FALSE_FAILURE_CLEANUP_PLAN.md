@@ -2,7 +2,7 @@
 
 ## Objective
 
-Make the validation report show failures only when the tested rendering contract is genuinely broken. Visual evidence remains authoritative. Text and log checks may fail early, but must not reject a visually proven render merely because a redundant diagnostic message was absent.
+Make the validation report trustworthy in both directions: correct renders must not fail for irrelevant reasons, and broken renders must never pass because a visual contract is missing or too weak. Visual evidence remains authoritative. Text and log checks may fail early, but must not reject a visually proven render merely because a redundant diagnostic message was absent, and they can never substitute for a successful visual rendering check.
 
 The cyan depth/occlusion defect is a genuine failure and must remain visible until corrected.
 
@@ -10,12 +10,14 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 
 ### Current priority order
 
-1. Validate the implemented Godot Vulkan projection and full-depth depth-comparison fixes on Android and Windows captures. The projection now uses Godot/Vulkan zero-to-one coefficients, and the compositor no longer inverts the host depth sample.
-2. Fix ordered-overlay composition without generic fullscreen alpha blending. IMM uses discard/stencil, MSAA coverage, and stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not a valid substitute. The latest Godot callback-order experiment removed the cyan probe but also hid required magenta/yellow probes, so this remains open.
-3. Fix and validate the Unity Metal ordered-overlay cyan occlusion defect. Keep the check localized to the must-be-occluded region and preserve the existing visual baseline.
-4. Run one full suite and manually confirm that every remaining red entry describes a real render, composition, runtime, or infrastructure defect.
-5. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
-6. Use the stereo lane to detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
+1. Make the validation signal trustworthy before further product-side stereo work. Eliminate known false failures, and add negative fixtures proving the validators reject reverse-Z, missing IMM content, duplicated stereo views, sky-only eyes, incorrect cyan occlusion, black/default scenes, and graphics-API fallback. Every validation step must include an authoritative visual check; logs remain fast-fail diagnostics only.
+2. Run one full suite at an exact revision, manually inspect every capture, and reconcile every automatic result with the image. Do not proceed on the basis of a green report until known-bad fixtures fail, and do not accept red entries caused only by optional logs, stale thresholds, duplicate report rows, or infrastructure errors mislabeled as rendering defects.
+3. Fix genuine rendering/composition defects already exposed by the trustworthy suite: validate the Godot Vulkan projection and full-depth corrections, then fix ordered-overlay occlusion without generic fullscreen alpha blending. IMM uses discard/stencil, MSAA coverage, and stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not a valid substitute.
+4. Fix Unity Android Vulkan Quest Multi Pass stereo without changing the working Metal, OpenGL, DirectX, Windows Vulkan, or non-XR paths. Render both IMM eyes deterministically once per frame and make eye selection part of Unity's stereo-aware presentation pass rather than mutable `OnPreCull` state.
+5. Make the Firebase synthetic-stereo lane exercise that same production render-both-eyes and presentation code. Target priming currently produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical and the sequential `Camera.Render()` harness bypasses the Quest failure mode.
+6. Add Single Pass Instanced validation after Multi Pass is correct. The architecture must support Single Pass without another redesign, although true Vulkan multiview is a later performance optimization rather than a prerequisite for correctness.
+
+Validation reliability is a gate, not a background cleanup task. Product fixes must retain full cross-platform validation so a narrowly targeted Android Vulkan change cannot silently regress an already working target.
 
 ### Unity Quest Vulkan stereo facts
 
@@ -24,15 +26,56 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 - A real Quest test confirms a product failure in that supported path: the left eye renders IMM strokes correctly while the right eye shows only Unity's background sky sphere.
 - Firebase synthetic stereo is not yet a Quest-equivalent test. It manually invokes `Camera.Render()` twice and supplies the eye index, so it verifies two target writes and capture plumbing but bypasses Unity's real XR Multi Pass callback/eye-target/composite handoff.
 - The synthetic lane is currently correctly red because its two images are byte-identical despite distinct targets/events. Do not use it as evidence that the Quest right-eye failure is fixed.
-- Next diagnostic/fix: capture the real XR Multi Pass callback state for each eye—`stereoActiveEye`, event ID, native offscreen target pointer, native render completion, and managed composite source—and require the right-eye capture to contain IMM content before the Quest path can pass.
+- Other VR targets already render correctly. Do not replace or broadly redesign their stereo integration. The additional offscreen-render-and-present mechanism is specific to Android Vulkan because Unity's Android Vulkan display render buffer is not reliably accessible to the native plugin.
+- The current Android Vulkan path reuses one mutable per-camera command buffer and chooses its event ID and source eye texture while handling `OnPreCull`. Unity may prepare both Multi Pass eyes before executing their render work, allowing the second callback to replace state needed by one pass. This is the leading explanation for left-eye IMM content with a right-eye sky-only result, but a real-device capture of the native right-eye target must distinguish native target failure from presentation failure.
+- The durable fix is to collect both eye matrices, render both Android Vulkan IMM targets deterministically once per frame, and present them through a Unity stereo-aware pass that selects the eye at GPU execution time. Do not make CPU-side `stereoActiveEye` state or a repeatedly cleared command buffer authoritative for eye selection.
+- Multi Pass remains the first acceptance target. The implementation must nevertheless carry both eye results together so Single Pass Instanced can use the same producer and presentation path later.
+
+### Unity Android Vulkan stereo implementation
+
+#### Phase A: isolate the failing handoff on Quest
+
+1. Add uniquely prefixed, frame-correlated diagnostics for both eyes: uploaded matrix translation, event ID, native target pointer, native render completion, and presentation source.
+2. Capture each native Android Vulkan eye RenderTexture before Unity presentation.
+3. Classify the failure from image evidence:
+   - right native eye contains IMM but the displayed right eye does not: repair the Unity presentation step;
+   - right native eye is empty: repair native event/target/matrix routing before presentation;
+   - both native eyes contain identical views: repair matrix upload or eye indexing.
+4. Treat logs only as fast-fail evidence. A fix is accepted only when both displayed Quest eyes contain the expected IMM view.
+
+#### Phase B: replace mutable per-eye callback state
+
+1. Obtain both current XR eye view/projection matrices once per frame.
+2. Maintain two Android Vulkan offscreen eye targets initially. Do not alter the direct-rendering paths used by working graphics APIs.
+3. Enqueue both native eye renders in deterministic order in one immutable frame command sequence, or in two immutable eye sequences whose contents cannot be overwritten by the other eye's callback.
+4. Bind both completed eye targets to the presentation material.
+5. Present through a stereo-aware Unity shader/pass. Select left or right on the GPU using Unity's stereo eye index; do not set one mutable `_ImmEyeTex` from C# during `OnPreCull`.
+6. Preserve IMM's actual visibility model: alpha cut/discard, MSAA coverage, and stippled OIT. Do not introduce generic fullscreen straight-alpha blending as part of the stereo fix.
+7. Re-query Unity render-buffer identities after recreation, pause/resume, or resolution changes; do not rely on stale native pointers.
+
+Multi Pass exit criterion: on Quest Vulkan, both eyes contain IMM strokes over the Unity scene, have the correct per-eye view, and remain correct over repeated frames and pause/resume. Existing Metal, OpenGL, DirectX, Windows Vulkan, mono Android Vulkan, and composition evidence must not regress.
+
+#### Phase C: extend the same design to Single Pass Instanced
+
+1. Enable Single Pass Instanced only after the Multi Pass result is accepted.
+2. Render both eye results from one native event. Initially, two sequential native eye renders are acceptable; correctness does not require Vulkan multiview.
+3. Use the same stereo-aware Unity presentation pass so an instanced draw selects the matching eye result.
+4. Prefer a two-layer `Texture2DArray` representation when native and Unity resource access is proven reliable. Until then, two ordinary RenderTextures bound simultaneously are an acceptable compatibility implementation.
+5. Add true Vulkan multiview rendering into the two array layers only as a measured optimization. It is not part of the first correctness fix.
+
+Single Pass exit criterion: Quest Vulkan Single Pass Instanced displays correct, distinct IMM content in both eyes and passes the same visual contracts as Multi Pass, with no fallback to Multi Pass hidden by the test.
 
 The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejecting Vulkan and falling back to Direct3D must report `runtime_failed`. It is no longer the primary route to cloud stereo evidence.
 
 The Godot Run-button regression is now locally reproduced and fixed. The Quest-oriented Vulkan renderer had applied pipelined external-image submission and Unity reverse-Z depth handling to Godot even though Godot samples its standard-depth intermediate image in the same compositor callback. The corrected path waits on the non-dedicated queue, uses normal near-to-zero depth ordering, and restores shader-read layout before handoff. Two additional startup hazards were found and guarded: bounding-box queries during partial loading and child-count queries on non-group layers. The validation launches `project.godot` without a scene/script override, requires a clean native log, freezes only the evidence capture at frame zero, and compares the resulting 1280x720 frame to a reviewed Godot Vulkan baseline with a localized character/front-surface depth-order check.
 
-### 1. Finish and verify the false-failure cleanup on `main`
+### 1. Finish and verify validation-signal cleanup on `main`
 
 Current implementation status: the validator contracts for the reviewed Android Godot depth defects, missing Godot IMM content, and cyan leakage are present. Product-side Godot projection/depth fixes are pushed but awaiting cloud confirmation. Unity Metal and Godot ordered-overlay rendering are still product failures, not validator false positives. The temporary generic alpha-blend compositor change was reverted because IMM's OIT/coverage model does not expose ordinary straight-alpha scene compositing.
+
+Full run `30854621320` exposed a report-level false pass even though the underlying job correctly failed: `godot-vulkan-ordered-overlay.png` showed the cyan square in front of the character, and its dedicated metric rejected leakage (`0.007910 > 0.000250`), but the aggregate report selected the sibling passing render-only metric and printed `passed`. Metric aggregation now associates a generated report with its named candidate capture and preserves that candidate's failed metric. A regression fixture contains both a passing render-only metric and a failed ordered-overlay metric and requires the aggregate section to remain `composition_failed` through normalization.
+
+The same run exposed a renderer-variation false failure in the otherwise reviewed Unity Metal render: spatial correlation was `0.387` against a `0.400` floor. The Metal-only floor is now `0.350`; black, default-scene, shifted-pose, missing-content, and composition fixtures remain independently rejected. Cloud validation is still required before this cleanup gate is complete.
 
 Full runs `30811686247`, `30813880906`, `30816894610`, and `30820773061` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30820773061` contains all 16 supported rows and preserves both semantic eye captures. It also exposed two remaining false report signals: a generic root-level `Composition` section and a visually correct Unity Metal render rejected only because spatial MAD was `0.152` against `0.150`.
 
@@ -45,7 +88,7 @@ Full runs `30811686247`, `30813880906`, `30816894610`, and `30820773061` have be
 7. Classify Android Unity Vulkan from its actual evidence instead of hard-coding every failure as `compositing`: app/API crashes are `runtime`, Firebase command or collection failures are `infrastructure`, absent authoritative captures are `evidence`, failed render/stereo images are `rendering`, and only a failed depth image after the other contracts pass is `compositing`.
 8. Run the full suite and manually inspect the regenerated report.
 
-Exit criterion: every report result agrees with its underlying evidence, and every remaining red entry is actionable.
+Exit criterion: every report result agrees with its underlying evidence, every remaining red entry is actionable, and each known-bad visual fixture is rejected for the correct reason.
 
 ### 2. Finish the Android/Firebase synthetic-stereo Vulkan lane
 
@@ -53,19 +96,21 @@ The immediate implementation priority is hardware-backed Android Vulkan in Fireb
 
 Run `30820773061` proves target priming works: both split eye images independently pass the approved render baseline, and the exact native write-target pointers are non-zero and distinct. The files are nevertheless byte-identical, so the stereo disparity contract correctly fails. The next iteration uses an exaggerated validation-only eye separation and records the uploaded matrix translations, while retaining the strict requirement that the resulting images differ. Log-only success is not accepted.
 
-1. Add a deterministic Android synthetic-stereo mode that renders two adjacent offscreen eye targets in one frame.
-2. Run that mode on a Firebase device that reports and uses Vulkan.
-3. Capture a side-by-side image through the existing Firebase video/evidence path.
-4. Keep the test honest:
+1. Make synthetic stereo call the production render-both-eyes entry point. Remove its dependence on manually selecting an eye and invoking `Camera.Render()` twice as the authoritative test.
+2. Add a deterministic Android presentation fixture that exposes the two produced eye views side by side without requiring an OpenXR headset.
+3. Run that mode on a Firebase device that reports and uses Vulkan.
+4. Capture a side-by-side image through the existing Firebase video/evidence path.
+5. Keep the test honest:
    - require `actual=Vulkan`;
    - require eye 0 and eye 1 to use the same IMM camera ID;
    - require distinct adjacent eye event IDs;
    - require distinct non-zero native render-target pointers;
    - require a side-by-side image with independently validated left and right halves;
    - never accept an API fallback or a single duplicated eye as synthetic-stereo Vulkan evidence.
-5. Add a negative fixture or classifier test in which one half contains only the Unity sky/default scene; it must fail even when the other half renders IMM correctly.
-6. Inspect the resulting image manually before declaring the lane valid.
-7. Record the limitation in the report: this exercises IMM's Android Vulkan eye routing and composition, not the Quest/OpenXR compositor itself.
+6. Add a negative fixture or classifier test in which one half contains only the Unity sky/default scene; it must fail even when the other half renders IMM correctly.
+7. Add a duplicated-eye negative fixture; two independently valid but byte-identical views must fail the disparity contract.
+8. Inspect the resulting image manually before declaring the lane valid.
+9. Record the limitation in the report: this exercises the production IMM Android Vulkan two-eye producer and a non-XR presentation fixture, not the Quest/OpenXR compositor itself. A Quest acceptance test remains required for the headset handoff.
 
 Exit criterion: the Firebase job produces recognizable IMM content in both eye images through the Vulkan path, both halves satisfy an approved visual baseline, and the combined evidence appears in the validation report.
 
@@ -192,6 +237,7 @@ Required cases:
 The report should become shorter and more trustworthy:
 
 - correct Metal and DirectX renders no longer appear as visual failures because of stale thresholds or redundant log markers;
+- known-bad reverse-Z, missing-content, duplicated-eye, sky-only-eye, black/default-scene, and incorrect-occlusion images cannot appear green;
 - infrastructure problems are clearly separated from rendering defects;
 - the synthetic-stereo lane provides two-eye Vulkan evidence without requiring a physical headset;
 - the cyan depth/occlusion issue remains red until the rendering itself is corrected.

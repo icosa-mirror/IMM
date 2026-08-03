@@ -185,7 +185,7 @@ def main() -> int:
             json.dumps(
                 {
                     "schema": "imm-ci-artifact-manifest-v1",
-                    "classification": {"result": "expected_failed", "failure_class": "compositing"},
+                    "classification": {"result": "failed", "failure_class": "compositing"},
                     "matrix": {
                         "product": "godot",
                         "platform": "windows",
@@ -201,8 +201,43 @@ def main() -> int:
         godot_overlay_captures.mkdir(parents=True)
         (godot_overlay_captures / "godot-vulkan-ordered-overlay.png").write_bytes(PNG_1X1)
         (godot_overlay / "render-report.md").write_text(
-            "# IMM Render Report\n\n### godot-vulkan-ordered-overlay.png\n"
-            "![Godot](captures/godot-vulkan-ordered-overlay.png)\n",
+            "# IMM Render Report\n\n## Captures\n### Candidate\n"
+            "![Candidate](captures/godot-vulkan-ordered-overlay.png)\n",
+            encoding="utf-8",
+        )
+        passing_render_metrics = {
+            "passed": True,
+            "candidate": {
+                "path": "artifacts/godot-smoke-windows-vulkan/godot-vulkan-render.ppm",
+                "width": 1,
+                "height": 1,
+            },
+            "reference": {"width": 1, "height": 1},
+            "contract": {"path": "godot-windows-vulkan-sample1.json"},
+            "spatial_luma_grid": {"mean_abs_delta": 0.01, "correlation": 0.99},
+            "errors": [],
+        }
+        failed_overlay_metrics = {
+            "passed": False,
+            "candidate": {
+                "path": "artifacts/godot-smoke-windows-vulkan-ordered-overlay/godot-vulkan-ordered-overlay.ppm",
+                "width": 1,
+                "height": 1,
+            },
+            "reference": {"width": 1, "height": 1},
+            "contract": {"path": "sample1-ordered-overlay.json"},
+            "spatial_luma_grid": {"mean_abs_delta": 0.02, "correlation": 0.98},
+            "errors": [
+                "color component probe character-occluded-cyan share 0.007910 "
+                "exceeds contract maximum 0.000250"
+            ],
+        }
+        (godot_overlay / "godot-vulkan-render-metrics.json").write_text(
+            json.dumps(passing_render_metrics),
+            encoding="utf-8",
+        )
+        (godot_overlay / "godot-vulkan-ordered-overlay-metrics.json").write_text(
+            json.dumps(failed_overlay_metrics),
             encoding="utf-8",
         )
         (godot_overlay / "composition-status.json").write_text(
@@ -400,6 +435,20 @@ def main() -> int:
         assert "![unity-windows-vulkan-full-depth.png]" in text
         assert "## Windows Godot Vulkan Ordered Overlay" in text
         assert "![godot-vulkan-ordered-overlay.png]" in text
+        assert "## Windows Godot Vulkan Ordered Overlay\n\n- Result: composition_failed" in text
+        assert "character-occluded-cyan share 0.007910 exceeds contract maximum 0.000250" in text
+        normalized_overlay_metrics = json.loads(
+            (
+                output
+                / "captures"
+                / "windows-godot-vulkan-ordered-overlay"
+                / "render-metrics.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert normalized_overlay_metrics["passed"] is False
+        assert normalized_overlay_metrics["candidate"]["path"].endswith(
+            "godot-vulkan-ordered-overlay.ppm"
+        )
         assert "## Godot Windows Vulkan Full Depth" in text
         assert "![godot-vulkan-full-depth.png]" in text
         assert "### Missing Supported Evidence" in text
