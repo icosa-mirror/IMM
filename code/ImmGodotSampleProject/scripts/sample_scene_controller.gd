@@ -185,6 +185,11 @@ func _run_sample_play_smoke() -> void:
 			# Keep the visual evidence deterministic without changing normal Run
 			# Project playback. Asset loading duration must not select the frame.
 			viewer.pause()
+			viewer.set_time(0, 0)
+			await get_tree().process_frame
+			if not _jump_to_active_spawn_area():
+				_sample_play_smoke_failed("frame-zero spawn area is unavailable")
+				return
 			for _frame in range(SAMPLE_PLAY_SMOKE_SETTLE_FRAMES):
 				viewer.set_time(0, 0)
 				await get_tree().process_frame

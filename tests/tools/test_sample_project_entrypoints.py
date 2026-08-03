@@ -71,6 +71,13 @@ def main() -> int:
     )[1].split("- name:", 1)[0]
     assert "-TimeoutSeconds 180" in godot_play_runtime_step
     assert "const SAMPLE_PLAY_SMOKE_SETTLE_FRAMES := 3" in godot_controller
+    smoke_body = godot_controller.split("func _run_sample_play_smoke() -> void:", 1)[1].split(
+        "func _sample_play_smoke_failed", 1
+    )[0]
+    first_seek = smoke_body.index("viewer.set_time(0, 0)")
+    frame_zero_spawn = smoke_body.index("_jump_to_active_spawn_area()", first_seek)
+    settle_loop = smoke_body.index("for _frame in range(SAMPLE_PLAY_SMOKE_SETTLE_FRAMES):")
+    assert first_seek < frame_zero_spawn < settle_loop
 
     vulkan_renderer = (
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
