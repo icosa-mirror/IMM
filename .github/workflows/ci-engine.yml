@@ -1521,6 +1521,23 @@ jobs:
           if ($deviceVideo) {
             python tests/tools/validate_render_video.py $deviceVideo.FullName `
               --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
+              --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json `
+              --sample-interval-seconds 2 `
+              --minimum-consecutive-frames 2
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+            $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
+            if ($externalRenderCapture) {
+              python tests/tools/compare_render_metrics.py $externalRenderCapture.FullName `
+                --reference tests/baselines/render/windows-directx-sample1.ppm `
+                --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
+                --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-metrics.json
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            }
+
+            python tests/tools/validate_render_video.py $deviceVideo.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
               --contract tests/baselines/render/unity-android-vulkan-external-sample1.json `
               --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external.png `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-video-validation.json `
@@ -1536,6 +1553,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) { $failed = $true }
             }
           } else {
+            '{"passed":false,"errors":["missing Firebase physical-device video"],"frames":[]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json
             '{"passed":false,"errors":["missing Firebase physical-device video"],"frames":[]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-external-video-validation.json
             Write-Warning "Missing Firebase physical-device video"
             $failed = $true
@@ -1558,6 +1576,11 @@ jobs:
           if ($compositionCapture) {
             New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/composition | Out-Null
             Copy-Item -LiteralPath $compositionCapture.FullName -Destination artifacts/unity-android-vulkan/captures/composition/unity-android-vulkan-composition.png -Force
+          }
+          $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
+          if ($externalRenderCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/external-render | Out-Null
+            Copy-Item -LiteralPath $externalRenderCapture.FullName -Destination artifacts/unity-android-vulkan/captures/external-render/unity-android-vulkan-external-render.png -Force
           }
           $externalCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external.png -ErrorAction SilentlyContinue
           if ($externalCapture) {
