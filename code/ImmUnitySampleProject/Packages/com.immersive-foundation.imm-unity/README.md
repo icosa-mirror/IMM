@@ -2,6 +2,36 @@
 
 Local UPM package for the IMM Unity runtime, editor tools, and samples.
 
+## Android Vulkan rendering contract
+
+On Android Vulkan, IMM does not access Unity's display render buffer or
+swapchain. Flat cameras render IMM color into explicit, non-MSAA Unity
+`RenderTexture` slots. Depth-aware composition uses a corresponding explicit
+depth texture. The current render-buffer pointers are supplied with each render
+event, so a resolution change or Unity texture recreation cannot leave the
+native renderer using a stale image.
+
+The Android player requests an additional graphics queue during Vulkan device
+creation. IMM submits its offscreen work on that distinct queue and signals the
+slot's bridge semaphore. Unity's graphics queue waits on that semaphore before
+the camera consumes the slot. Queue, command-buffer, fence, semaphore, and image
+wrapper reuse is tied to the same slot lifetime. The native renderer uses this
+path only after confirming the additional queue was created; otherwise it uses
+the host-queue fallback and reports the selected mode.
+
+Unity retains ownership of the Android surface, orientation, color conversion,
+frame pacing, and presentation. In the built-in render pipeline the original
+camera's `OnRenderImage` hook samples the completed IMM texture and writes to
+Unity's supplied destination. The depth-aware material compares Unity's camera
+depth with IMM's sampled reverse-Z depth before selecting color. Application
+code must not cache `Display.main.colorBuffer` for this path: some Android
+Vulkan devices expose only a 1x1 placeholder instead of the camera surface.
+
+The CI validation APK runs this contract on physical Firebase hardware. Its
+internal render and composition captures are diagnostic; passing requires the
+external device video to contain a stable frame that satisfies the perceptual
+baseline contract.
+
 The production authoring surface is currently available on Windows x64. Query
 `ImmAuthoringRuntime.Capabilities` at runtime instead of inferring support from
 the presence of a playback plugin. Detailed ownership, threading, limits,

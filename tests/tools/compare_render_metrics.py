@@ -732,6 +732,158 @@ def validate_spatial_contract(contract: dict, spatial_metrics: dict | None) -> l
     return errors
 
 
+def collect_color_component_metrics(candidate_path: Path, specification: dict) -> dict:
+    width, height, pixels, _ = read_rgb_capture(candidate_path)
+    crop_aspect_ratio = specification.get("center_crop_aspect_ratio")
+    crop = center_crop_region(
+        width,
+        height,
+        float(crop_aspect_ratio) if crop_aspect_ratio is not None else None,
+    )
+    crop_x, crop_y, crop_width, crop_height = crop
+    crop_pixels = crop_width * crop_height
+    probe_results: list[dict] = []
+
+    for probe in specification.get("probes", []):
+        name = str(probe.get("name", "unnamed"))
+        target = probe.get("target_rgb")
+        if not isinstance(target, list) or len(target) != 3:
+            raise ValueError(f"color component probe {name!r} requires a three-channel target_rgb")
+        target_rgb = tuple(int(channel) for channel in target)
+        tolerance = int(probe.get("channel_tolerance", 0))
+        region = probe.get("region_normalized", {})
+        if not isinstance(region, dict):
+            raise ValueError(f"color component probe {name!r} requires region_normalized")
+        normalized_x = float(region.get("x", 0.0))
+        normalized_y = float(region.get("y", 0.0))
+        normalized_width = float(region.get("width", 1.0))
+        normalized_height = float(region.get("height", 1.0))
+        if (
+            normalized_width <= 0.0
+            or normalized_height <= 0.0
+            or normalized_x < 0.0
+            or normalized_y < 0.0
+            or normalized_x + normalized_width > 1.0
+            or normalized_y + normalized_height > 1.0
+        ):
+            raise ValueError(f"color component probe {name!r} has an invalid normalized region")
+
+        region_x = crop_x + round(normalized_x * crop_width)
+        region_y = crop_y + round(normalized_y * crop_height)
+        region_width = max(1, round(normalized_width * crop_width))
+        region_height = max(1, round(normalized_height * crop_height))
+        region_width = min(region_width, crop_x + crop_width - region_x)
+        region_height = min(region_height, crop_y + crop_height - region_y)
+        matches = bytearray(region_width * region_height)
+        matched_pixels = 0
+        for local_y in range(region_height):
+            source_row = (region_y + local_y) * width
+            match_row = local_y * region_width
+            for local_x in range(region_width):
+                source_index = (source_row + region_x + local_x) * 3
+                r, g, b = pixels[source_index : source_index + 3]
+                if (
+                    abs(r - target_rgb[0]) <= tolerance
+                    and abs(g - target_rgb[1]) <= tolerance
+                    and abs(b - target_rgb[2]) <= tolerance
+                ):
+                    matches[match_row + local_x] = 1
+                    matched_pixels += 1
+
+        largest_component = 0
+        largest_bounds: dict | None = None
+        for start in range(len(matches)):
+            if not matches[start]:
+                continue
+            matches[start] = 0
+            stack = [start]
+            component_size = 0
+            min_x = region_width
+            min_y = region_height
+            max_x = -1
+            max_y = -1
+            while stack:
+                index = stack.pop()
+                local_y, local_x = divmod(index, region_width)
+                component_size += 1
+                min_x = min(min_x, local_x)
+                min_y = min(min_y, local_y)
+                max_x = max(max_x, local_x)
+                max_y = max(max_y, local_y)
+                if local_x > 0 and matches[index - 1]:
+                    matches[index - 1] = 0
+                    stack.append(index - 1)
+                if local_x + 1 < region_width and matches[index + 1]:
+                    matches[index + 1] = 0
+                    stack.append(index + 1)
+                if local_y > 0 and matches[index - region_width]:
+                    matches[index - region_width] = 0
+                    stack.append(index - region_width)
+                if local_y + 1 < region_height and matches[index + region_width]:
+                    matches[index + region_width] = 0
+                    stack.append(index + region_width)
+            if component_size > largest_component:
+                largest_component = component_size
+                largest_bounds = {
+                    "x": region_x + min_x,
+                    "y": region_y + min_y,
+                    "width": max_x - min_x + 1,
+                    "height": max_y - min_y + 1,
+                }
+
+        probe_results.append(
+            {
+                "name": name,
+                "target_rgb": list(target_rgb),
+                "channel_tolerance": tolerance,
+                "region": {
+                    "x": region_x,
+                    "y": region_y,
+                    "width": region_width,
+                    "height": region_height,
+                },
+                "matched_pixels": matched_pixels,
+                "largest_component_pixels": largest_component,
+                "largest_component_share_of_crop": largest_component / crop_pixels if crop_pixels else 0.0,
+                "largest_component_bounds": largest_bounds,
+            }
+        )
+
+    return {
+        "center_crop": {
+            "x": crop_x,
+            "y": crop_y,
+            "width": crop_width,
+            "height": crop_height,
+        },
+        "probes": probe_results,
+    }
+
+
+def validate_color_component_contract(specification: dict, metrics: dict) -> list[str]:
+    errors: list[str] = []
+    expected_probes = specification.get("probes", [])
+    actual_probes = metrics.get("probes", [])
+    for expected, actual in zip(expected_probes, actual_probes):
+        name = actual["name"]
+        share = float(actual["largest_component_share_of_crop"])
+        minimum = expected.get("minimum_largest_component_share_of_crop")
+        maximum = expected.get("maximum_largest_component_share_of_crop")
+        if minimum is not None and share < float(minimum):
+            errors.append(
+                f"color component probe {name} share {share:.6f} is below contract minimum {float(minimum):.6f}"
+            )
+        if maximum is not None and share > float(maximum):
+            errors.append(
+                f"color component probe {name} share {share:.6f} exceeds contract maximum {float(maximum):.6f}"
+            )
+    if len(actual_probes) != len(expected_probes):
+        errors.append(
+            f"color component probe result count {len(actual_probes)} differs from contract count {len(expected_probes)}"
+        )
+    return errors
+
+
 def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract_path: Path | None) -> dict:
     contract = json.loads(contract_path.read_text(encoding="utf-8")) if contract_path else {}
     validation = contract.get("validation", {}) if isinstance(contract, dict) else {}
@@ -771,6 +923,15 @@ def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract
             output["spatial_luma_grid"] = spatial_metrics
         errors.extend(validate_contract(contract, candidate))
         errors.extend(validate_spatial_contract(contract, spatial_metrics))
+        color_component_specification = (
+            validation.get("expected_color_components") if isinstance(validation, dict) else None
+        )
+        if isinstance(color_component_specification, dict):
+            color_component_metrics = collect_color_component_metrics(candidate_path, color_component_specification)
+            output["color_component_probes"] = color_component_metrics
+            errors.extend(
+                validate_color_component_contract(color_component_specification, color_component_metrics)
+            )
     output["passed"] = not errors
     output["errors"] = errors
     return output

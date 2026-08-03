@@ -67,6 +67,38 @@ def add_horizontal_bars(width: int, height: int, pixels: list[tuple[int, int, in
     return barred
 
 
+def blank_right_half(width: int, height: int, pixels: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+    return [
+        pixel if x < width // 2 else (0, 0, 0)
+        for y in range(height)
+        for x, pixel in enumerate(pixels[y * width : (y + 1) * width])
+    ]
+
+
+def diagnostic_squares_only(width: int, height: int) -> list[tuple[int, int, int]]:
+    pixels = [(0, 0, 0)] * (width * height)
+    for x, color in ((1, (255, 0, 255)), (3, (255, 255, 0)), (5, (0, 255, 255))):
+        for y in range(1, 3):
+            for local_x in range(x, min(width, x + 2)):
+                pixels[y * width + local_x] = color
+    return pixels
+
+
+def make_probe_pixels(width: int, height: int, show_rear_occluded: bool) -> list[tuple[int, int, int]]:
+    pixels = [(16, 20, 24)] * (width * height)
+    rectangles = [
+        (23, 48, 45, 80, (255, 0, 255)),
+        (57, 14, 78, 41, (255, 255, 0)),
+    ]
+    if show_rear_occluded:
+        rectangles.append((45, 35, 69, 65, (0, 255, 255)))
+    for x0, y0, x1, y1, color in rectangles:
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                pixels[y * width + x] = color
+    return pixels
+
+
 def main() -> int:
     width = 8
     height = 8
@@ -78,6 +110,11 @@ def main() -> int:
         compressed_path = temp / "compressed.ppm"
         scaled_path = temp / "scaled.ppm"
         barred_path = temp / "barred.ppm"
+        partial_path = temp / "partial.ppm"
+        black_path = temp / "black.ppm"
+        diagnostic_path = temp / "diagnostic-squares.ppm"
+        probe_good_path = temp / "probe-good.ppm"
+        probe_wrong_depth_path = temp / "probe-wrong-depth.ppm"
         png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
         contract_path = temp / "contract.json"
@@ -89,6 +126,11 @@ def main() -> int:
         write_ppm(compressed_path, width, height, compress_contrast(pixels))
         write_ppm(scaled_path, width * 2, height * 2, scale_2x(width, height, pixels))
         write_ppm(barred_path, width * 2, height, add_horizontal_bars(width, height, pixels))
+        write_ppm(partial_path, width, height, blank_right_half(width, height, pixels))
+        write_ppm(black_path, width, height, [(0, 0, 0)] * (width * height))
+        write_ppm(diagnostic_path, width, height, diagnostic_squares_only(width, height))
+        write_ppm(probe_good_path, 100, 100, make_probe_pixels(100, 100, False))
+        write_ppm(probe_wrong_depth_path, 100, 100, make_probe_pixels(100, 100, True))
         write_render_report.write_png(
             png_path,
             width,
@@ -153,6 +195,33 @@ def main() -> int:
         }
         contract_path.write_text(json.dumps(contract), encoding="utf-8")
 
+        probe_contract = {
+            "center_crop_aspect_ratio": 1.0,
+            "probes": [
+                {
+                    "name": "front-magenta",
+                    "target_rgb": [255, 0, 255],
+                    "channel_tolerance": 8,
+                    "region_normalized": {"x": 0.2, "y": 0.45, "width": 0.3, "height": 0.4},
+                    "minimum_largest_component_share_of_crop": 0.04,
+                },
+                {
+                    "name": "rear-visible-yellow",
+                    "target_rgb": [255, 255, 0],
+                    "channel_tolerance": 8,
+                    "region_normalized": {"x": 0.55, "y": 0.1, "width": 0.3, "height": 0.35},
+                    "minimum_largest_component_share_of_crop": 0.04,
+                },
+                {
+                    "name": "rear-occluded-cyan",
+                    "target_rgb": [0, 255, 255],
+                    "channel_tolerance": 8,
+                    "region_normalized": {"x": 0.4, "y": 0.3, "width": 0.35, "height": 0.4},
+                    "maximum_largest_component_share_of_crop": 0.01,
+                },
+            ],
+        }
+
         assert not compare_render_metrics.compare_metrics(reference, same)
         assert png["format"] == "png"
         assert png["non_black_pixels"] == reference["non_black_pixels"]
@@ -198,6 +267,22 @@ def main() -> int:
         )
         assert any("vertical luma profile" in error or "centroid" in error for error in compare_render_metrics.compare_metrics(reference, flipped))
         assert any("visible luma mean" in error for error in compare_render_metrics.compare_metrics(reference, dark))
+
+        # Each required known-bad visual class must be rejected by pixels, not
+        # merely by an application log or capture-existence check.
+        for known_bad_path in (black_path, partial_path, flipped_path, diagnostic_path):
+            known_bad = compare_render_metrics.evaluate_capture(known_bad_path, reference_path, contract_path)
+            assert not known_bad["passed"], f"known-bad capture unexpectedly passed: {known_bad_path.name}"
+
+        probe_good = compare_render_metrics.collect_color_component_metrics(probe_good_path, probe_contract)
+        assert compare_render_metrics.validate_color_component_contract(probe_contract, probe_good) == []
+        probe_wrong_depth = compare_render_metrics.collect_color_component_metrics(
+            probe_wrong_depth_path, probe_contract
+        )
+        wrong_depth_errors = compare_render_metrics.validate_color_component_contract(
+            probe_contract, probe_wrong_depth
+        )
+        assert any("rear-occluded-cyan" in error for error in wrong_depth_errors)
 
         output_path.write_text(json.dumps({"passed": True}, indent=2), encoding="utf-8")
 

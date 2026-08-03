@@ -45,35 +45,6 @@ Shader "IMM/VulkanDepthComposite"
             }
             ENDCG
         }
-
-        // Validation diagnostic: R=Unity depth, G=IMM depth, B=vertically
-        // flipped IMM depth. Reverse-Z values are amplified so the physical
-        // device capture can distinguish clear, range, and orientation faults.
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment fragDepthDebug
-            #include "UnityCG.cginc"
-
-            UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
-            UNITY_DECLARE_DEPTH_TEXTURE(_ImmDepthTex);
-
-            fixed4 fragDepthDebug(v2f_img input) : SV_Target
-            {
-                float unityDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, input.uv);
-                float immDepth = SAMPLE_DEPTH_TEXTURE(_ImmDepthTex, input.uv);
-                float flippedImmDepth = SAMPLE_DEPTH_TEXTURE(
-                    _ImmDepthTex,
-                    float2(input.uv.x, 1.0 - input.uv.y));
-                return fixed4(
-                    saturate(unityDepth * 8.0),
-                    saturate(immDepth * 8.0),
-                    saturate(flippedImmDepth * 8.0),
-                    1.0);
-            }
-            ENDCG
-        }
     }
     Fallback Off
 }

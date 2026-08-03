@@ -14,6 +14,32 @@
       "min_correlation": 0.7,
       "width": 32
     },
+    "expected_color_components": {
+      "center_crop_aspect_ratio": 1.7777777778,
+      "probes": [
+        {
+          "name": "front-magenta",
+          "target_rgb": [255, 0, 255],
+          "channel_tolerance": 110,
+          "region_normalized": { "x": 0.23, "y": 0.48, "width": 0.22, "height": 0.32 },
+          "minimum_largest_component_share_of_crop": 0.01
+        },
+        {
+          "name": "rear-visible-yellow",
+          "target_rgb": [255, 255, 0],
+          "channel_tolerance": 110,
+          "region_normalized": { "x": 0.57, "y": 0.14, "width": 0.21, "height": 0.27 },
+          "minimum_largest_component_share_of_crop": 0.0075
+        },
+        {
+          "name": "rear-occluded-cyan",
+          "target_rgb": [0, 255, 255],
+          "channel_tolerance": 110,
+          "region_normalized": { "x": 0.45, "y": 0.35, "width": 0.24, "height": 0.3 },
+          "maximum_largest_component_share_of_crop": 0.002
+        }
+      ]
+    },
     "expected_visible_luma_mean": { "max": 85, "min": 32 },
     "minimum_luma_span": 16,
     "minimum_near_visible_pixels": 10000,

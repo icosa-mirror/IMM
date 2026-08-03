@@ -92,6 +92,7 @@ def main() -> int:
                         "errors": result["errors"],
                         "candidate": result["candidate"],
                         "spatial_luma_grid": result.get("spatial_luma_grid"),
+                        "color_component_probes": result.get("color_component_probes"),
                     }
                 )
                 stable_run = first_stable_run(passed, args.minimum_consecutive_frames)

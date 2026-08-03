@@ -1208,9 +1208,8 @@ namespace ImmPlayer
                     return false;
                 composite.SetTexture("_ImmColorTex", eyeTarget);
                 composite.SetTexture("_ImmDepthTex", eyeDepthTarget);
-                // Pass zero is the compositor. Omitting the pass index executes
-                // every material pass, allowing the validation-only depth view
-                // to overwrite the presented image when that pass is present.
+                // Select the compositor explicitly so future auxiliary material
+                // passes cannot alter final presentation.
                 Graphics.Blit(source, destination, composite, 0);
             }
             else
@@ -1258,48 +1257,6 @@ namespace ImmPlayer
             // color/depth only at final presentation, so there is no intermediate
             // texture containing the completed composition.
             return null;
-        }
-
-        public Texture2D CaptureAndroidVulkanDepthDebugForValidation(
-            Camera cam,
-            int width,
-            int height)
-        {
-            if (!_flatAndroidVulkanSharedDepthComposition ||
-                cam == null ||
-                !_cameras.TryGetValue(cam, out PerCameraInfo info))
-                return null;
-
-            RenderTexture immDepth = info.VulkanEyeDepthTargets[0];
-            Material material = GetVulkanDepthCompositeMaterial();
-            if (immDepth == null || material == null || material.passCount < 2)
-                return null;
-
-            material.SetTexture("_ImmDepthTex", immDepth);
-            RenderTexture debugTarget = RenderTexture.GetTemporary(
-                width,
-                height,
-                0,
-                RenderTextureFormat.ARGB32,
-                RenderTextureReadWrite.Linear);
-            RenderTexture previous = RenderTexture.active;
-            try
-            {
-                Graphics.Blit(Texture2D.blackTexture, debugTarget, material, 1);
-                RenderTexture.active = debugTarget;
-                var capture = new Texture2D(width, height, TextureFormat.RGBA32, false, true);
-                capture.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
-                capture.Apply(false, false);
-                Debug.Log(
-                    $"[IMM_UNITY_VK_DEPTH_DEBUG_20260803] captured {width}x{height} " +
-                    $"immDepth={immDepth.GetInstanceID()}");
-                return capture;
-            }
-            finally
-            {
-                RenderTexture.active = previous;
-                RenderTexture.ReleaseTemporary(debugTarget);
-            }
         }
 
         private bool ShouldRenderCamera(Camera cam)
