@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: >
           python tests\tools\compare_render_metrics.py artifacts\windows-standalone-directx\windows-directx-sample1.ppm
-          --reference tests\baselines\render\godot-windows-vulkan-sample-play.png
+          --reference tests\baselines\render\windows-directx-sample1.ppm
           --contract tests\baselines\render\windows-directx-sample1.json
           --json-output artifacts\windows-standalone-directx\directx-vs-committed-directx-render-metrics.json
 
@@ -730,7 +730,7 @@ jobs:
         run: >
           python tests\tools\compare_render_metrics.py
           artifacts\godot-smoke-windows-vulkan\godot-sample-play.png
-          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --reference tests\baselines\render\godot-windows-vulkan-sample-play.png
           --contract tests\baselines\render\godot-windows-vulkan-sample-play.json
           --json-output artifacts\godot-smoke-windows-vulkan\godot-sample-play-metrics.json
 
@@ -741,7 +741,7 @@ jobs:
         run: >
           python tests\tools\write_render_report.py
           --metrics-json artifacts\godot-smoke-windows-vulkan\godot-sample-play-metrics.json
-          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --reference-capture tests\baselines\render\godot-windows-vulkan-sample-play.png
           --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-sample-play.png
           --output-dir artifacts\godot-smoke-windows-vulkan\captures\sample-play
           --markdown-output artifacts\godot-smoke-windows-vulkan\sample-play-report.md

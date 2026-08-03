@@ -49,6 +49,15 @@ def main() -> int:
     ]:
         assert token in gpu_workflow
     assert "godot-windows-vulkan-sample-play.json" in gpu_workflow
+    directx_metrics_step = gpu_workflow.split(
+        "- name: Compare DirectX render metrics against committed DirectX baseline", 1
+    )[1].split("- name:", 1)[0]
+    assert "--reference tests\\baselines\\render\\windows-directx-sample1.ppm" in directx_metrics_step
+    assert "godot-windows-vulkan-sample-play.png" not in directx_metrics_step
+    godot_play_metrics_step = gpu_workflow.split(
+        "- name: Record Godot project Run-button render metrics", 1
+    )[1].split("- name:", 1)[0]
+    assert "--reference tests\\baselines\\render\\godot-windows-vulkan-sample-play.png" in godot_play_metrics_step
 
     vulkan_renderer = (
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
