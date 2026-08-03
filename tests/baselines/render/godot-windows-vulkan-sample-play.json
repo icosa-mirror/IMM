@@ -2,7 +2,7 @@
   "baseline": "godot-windows-vulkan-sample-play",
   "capture_source": "project.godot run/main_scene (equivalent to editor Run Project)",
   "fixture": "exampleImmFiles/sample1.imm",
-  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "reference_capture": "tests/baselines/render/godot-windows-vulkan-sample-play.png",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "png",
@@ -21,6 +21,16 @@
       "min_correlation": 0.82,
       "width": 32
     },
+    "expected_spatial_luma_regions": [
+      {
+        "name": "character-front-depth-order",
+        "region_normalized": { "x": 0.47, "y": 0.4, "width": 0.1, "height": 0.25 },
+        "width": 8,
+        "height": 12,
+        "max_mean_abs_delta": 0.04,
+        "min_correlation": 0.9
+      }
+    ],
     "expected_vertical_luma_profile": {
       "tolerance": 0.09,
       "values": [0.332, 0.259, 0.13, 0.111, 0.168]

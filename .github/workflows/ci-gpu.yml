@@ -53,7 +53,7 @@ jobs:
         shell: pwsh
         run: >
           python tests\tools\compare_render_metrics.py artifacts\windows-standalone-directx\windows-directx-sample1.ppm
-          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --reference tests\baselines\render\godot-windows-vulkan-sample-play.png
           --contract tests\baselines\render\windows-directx-sample1.json
           --json-output artifacts\windows-standalone-directx\directx-vs-committed-directx-render-metrics.json
 

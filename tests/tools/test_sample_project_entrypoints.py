@@ -54,6 +54,7 @@ def main() -> int:
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
     ).read_text(encoding="utf-8")
     assert "const bool skipWait = state->ownsDedicatedQueue &&" in vulkan_renderer
+    assert "return state && state->ownsDedicatedQueue && !state->hostRenderPassFrameActive" in vulkan_renderer
     shader_read_handoff = vulkan_renderer.index(
         "if (mState->externalFrameColorTexture &&\n"
         "        !mState->externalFramePreservesHostColor"

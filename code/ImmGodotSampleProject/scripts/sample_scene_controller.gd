@@ -182,7 +182,11 @@ func _run_sample_play_smoke() -> void:
 	var deadline_msec := Time.get_ticks_msec() + int(SAMPLE_PLAY_SMOKE_TIMEOUT_SECONDS * 1000.0)
 	while Time.get_ticks_msec() < deadline_msec:
 		if viewer.is_loaded() and viewer.is_sequence_ready() and _initial_camera_framed and viewer.get_layer_count() > 0:
+			# Keep the visual evidence deterministic without changing normal Run
+			# Project playback. Asset loading duration must not select the frame.
+			viewer.pause()
 			for _frame in range(SAMPLE_PLAY_SMOKE_SETTLE_FRAMES):
+				viewer.set_time(0, 0)
 				await get_tree().process_frame
 			await RenderingServer.frame_post_draw
 			var capture_path := OS.get_environment("IMM_GODOT_SAMPLE_PLAY_CAPTURE")

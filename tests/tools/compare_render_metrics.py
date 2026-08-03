@@ -310,6 +310,55 @@ def collect_spatial_metrics(
     return metrics
 
 
+def collect_spatial_region_metrics(
+    reference_path: Path,
+    candidate_path: Path,
+    specification: dict,
+) -> dict:
+    reference_width, reference_height, reference_pixels, _ = read_rgb_capture(reference_path)
+    candidate_width, candidate_height, candidate_pixels, _ = read_rgb_capture(candidate_path)
+    region = specification.get("region_normalized", {})
+    if not isinstance(region, dict):
+        return {"name": specification.get("name", "unnamed"), "error": "region_normalized is required"}
+
+    normalized = (
+        float(region.get("x", 0.0)),
+        float(region.get("y", 0.0)),
+        float(region.get("width", 0.0)),
+        float(region.get("height", 0.0)),
+    )
+    if normalized[0] < 0.0 or normalized[1] < 0.0 or normalized[2] <= 0.0 or normalized[3] <= 0.0 or normalized[0] + normalized[2] > 1.0 or normalized[1] + normalized[3] > 1.0:
+        return {"name": specification.get("name", "unnamed"), "error": "region_normalized is outside the capture"}
+
+    def pixel_region(width: int, height: int) -> tuple[int, int, int, int]:
+        x = round(normalized[0] * width)
+        y = round(normalized[1] * height)
+        region_width = max(1, round(normalized[2] * width))
+        region_height = max(1, round(normalized[3] * height))
+        return x, y, min(region_width, width - x), min(region_height, height - y)
+
+    grid_width = int(specification.get("width", 8))
+    grid_height = int(specification.get("height", 12))
+    reference_region = pixel_region(reference_width, reference_height)
+    candidate_region = pixel_region(candidate_width, candidate_height)
+    reference_grid = compute_spatial_luma_grid_region(
+        reference_width, reference_height, reference_pixels, grid_width, grid_height, *reference_region
+    )
+    candidate_grid = compute_spatial_luma_grid_region(
+        candidate_width, candidate_height, candidate_pixels, grid_width, grid_height, *candidate_region
+    )
+    metrics = compare_luma_grids(reference_grid, candidate_grid)
+    metrics.update({
+        "name": str(specification.get("name", "unnamed")),
+        "grid_width": grid_width,
+        "grid_height": grid_height,
+        "region_normalized": dict(region),
+        "reference_region": dict(zip(("x", "y", "width", "height"), reference_region)),
+        "candidate_region": dict(zip(("x", "y", "width", "height"), candidate_region)),
+    })
+    return metrics
+
+
 def read_rgb_capture(path: Path) -> tuple[int, int, bytes, str]:
     suffix = path.suffix.lower()
     if suffix == ".ppm":
@@ -732,6 +781,38 @@ def validate_spatial_contract(contract: dict, spatial_metrics: dict | None) -> l
     return errors
 
 
+def validate_spatial_region_contract(specifications: list, metrics: list[dict] | None) -> list[str]:
+    if not metrics:
+        return ["spatial region comparisons require a reference capture"] if specifications else []
+    errors: list[str] = []
+    for index, specification in enumerate(specifications):
+        name = str(specification.get("name", f"region-{index}"))
+        if index >= len(metrics):
+            errors.append(f"spatial region {name} result is missing")
+            continue
+        actual = metrics[index]
+        if actual.get("error"):
+            errors.append(f"spatial region {name} comparison failed: {actual['error']}")
+            continue
+        mean_abs_delta = actual.get("mean_abs_delta")
+        maximum = specification.get("max_mean_abs_delta")
+        if mean_abs_delta is None:
+            errors.append(f"spatial region {name} mean_abs_delta is missing")
+        elif maximum is not None and mean_abs_delta > float(maximum):
+            errors.append(
+                f"spatial region {name} mean_abs_delta {mean_abs_delta:.3f} exceeds contract maximum {float(maximum):.3f}"
+            )
+        correlation = actual.get("correlation")
+        minimum = specification.get("min_correlation")
+        if correlation is None:
+            errors.append(f"spatial region {name} correlation is missing")
+        elif minimum is not None and correlation < float(minimum):
+            errors.append(
+                f"spatial region {name} correlation {correlation:.3f} is below contract minimum {float(minimum):.3f}"
+            )
+    return errors
+
+
 def collect_color_component_metrics(candidate_path: Path, specification: dict) -> dict:
     width, height, pixels, _ = read_rgb_capture(candidate_path)
     crop_aspect_ratio = specification.get("center_crop_aspect_ratio")
@@ -983,6 +1064,15 @@ def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract
             output["spatial_luma_grid"] = spatial_metrics
         errors.extend(validate_contract(contract, candidate))
         errors.extend(validate_spatial_contract(contract, spatial_metrics))
+        region_specifications = validation.get("expected_spatial_luma_regions", []) if isinstance(validation, dict) else []
+        if isinstance(region_specifications, list) and region_specifications:
+            region_metrics = (
+                [collect_spatial_region_metrics(reference_path, candidate_path, specification) for specification in region_specifications]
+                if reference_path
+                else None
+            )
+            output["spatial_luma_regions"] = region_metrics
+            errors.extend(validate_spatial_region_contract(region_specifications, region_metrics))
         color_component_specification = (
             validation.get("expected_color_components") if isinstance(validation, dict) else None
         )

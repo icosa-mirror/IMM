@@ -174,6 +174,16 @@ def main() -> int:
                     "max_mean_abs_delta": 0.04,
                     "min_correlation": 0.9,
                 },
+                "expected_spatial_luma_regions": [
+                    {
+                        "name": "upper-detail",
+                        "region_normalized": {"x": 0.0, "y": 0.0, "width": 0.75, "height": 0.5},
+                        "width": 3,
+                        "height": 2,
+                        "max_mean_abs_delta": 0.02,
+                        "min_correlation": 0.9,
+                    }
+                ],
                 "expected_visible_channel_means": {
                     "values": reference["visible_channel_means"],
                     "tolerance": 16,
@@ -354,12 +364,15 @@ def main() -> int:
         godot_play_contract_path = (
             repo_root / "tests/baselines/render/godot-windows-vulkan-sample-play.json"
         )
+        godot_play_reference_path = (
+            repo_root / "tests/baselines/render/godot-windows-vulkan-sample-play.png"
+        )
         godot_wrong_pose = compare_render_metrics.evaluate_capture(
-            wrong_pose_path, macos_reference_path, godot_play_contract_path
+            wrong_pose_path, godot_play_reference_path, godot_play_contract_path
         )
         assert not godot_wrong_pose["passed"], "shifted Godot Run camera pose unexpectedly passed"
         godot_default_scene = compare_render_metrics.evaluate_capture(
-            default_scene_path, macos_reference_path, godot_play_contract_path
+            default_scene_path, godot_play_reference_path, godot_play_contract_path
         )
         assert not godot_default_scene["passed"], "default Godot Run scene unexpectedly passed"
 
