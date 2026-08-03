@@ -57,6 +57,7 @@ foreach ($name in $environmentNames) {
 
 $output = @()
 $exitCode = -1
+$timedOut = $false
 try {
     $env:IMM_GODOT_SAMPLE_PLAY_SMOKE = "1"
     $env:IMM_GODOT_SAMPLE_PLAY_CAPTURE = $capture
@@ -81,9 +82,11 @@ try {
         if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         }
-        throw "Godot sample Play smoke timed out after $TimeoutSeconds seconds"
+        $timedOut = $true
     }
-    $exitCode = $process.ExitCode
+    if (-not $timedOut) {
+        $exitCode = $process.ExitCode
+    }
 }
 finally {
     foreach ($entry in $previousEnvironment.GetEnumerator()) {
@@ -104,6 +107,15 @@ finally {
 
 $output | ForEach-Object { Write-Host $_ }
 $outputText = $output -join "`n"
+if ($timedOut) {
+    foreach ($diagnosticPath in @($controllerLog, $nativeLog)) {
+        if (Test-Path -LiteralPath $diagnosticPath) {
+            Write-Host "$([string]$diagnosticPath):"
+            Get-Content -LiteralPath $diagnosticPath | ForEach-Object { Write-Host $_ }
+        }
+    }
+    throw "Godot sample Play smoke timed out after $TimeoutSeconds seconds"
+}
 if ($exitCode -ne 0) {
     throw "Godot sample Play smoke failed with exit code $exitCode"
 }

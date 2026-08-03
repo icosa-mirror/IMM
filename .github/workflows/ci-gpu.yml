@@ -721,6 +721,7 @@ jobs:
           -GodotExe $env:GODOT_EXE
           -CapturePath artifacts\godot-smoke-windows-vulkan\godot-sample-play.png
           -LogDir artifacts\godot-smoke-windows-vulkan\sample-play
+          -TimeoutSeconds 180
 
       - name: Record Godot project Run-button render metrics
         id: godot_sample_play_metrics

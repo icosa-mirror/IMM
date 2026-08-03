@@ -41,6 +41,8 @@ def main() -> int:
     assert "--script" not in godot_args
     assert '"--resolution", "1280x720"' in godot_args
     assert '"IMM_ASSERT_"' in godot_helper
+    assert '$timedOut = $false' in godot_helper
+    assert 'Get-Content -LiteralPath $diagnosticPath' in godot_helper
     for token in [
         "Run Godot project Run-button smoke",
         "Record Godot project Run-button render metrics",
@@ -58,6 +60,11 @@ def main() -> int:
         "- name: Record Godot project Run-button render metrics", 1
     )[1].split("- name:", 1)[0]
     assert "--reference tests\\baselines\\render\\godot-windows-vulkan-sample-play.png" in godot_play_metrics_step
+    godot_play_runtime_step = gpu_workflow.split(
+        "- name: Run Godot project Run-button smoke", 1
+    )[1].split("- name:", 1)[0]
+    assert "-TimeoutSeconds 180" in godot_play_runtime_step
+    assert "const SAMPLE_PLAY_SMOKE_SETTLE_FRAMES := 3" in godot_controller
 
     vulkan_renderer = (
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
