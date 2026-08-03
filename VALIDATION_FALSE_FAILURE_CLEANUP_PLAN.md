@@ -10,17 +10,20 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 
 ### Current priority order
 
-1. Make the five reviewed invalid captures from run `30838738732` fail for their actual pixel defects: Android Godot reversed depth in both render and composition captures, missing IMM content in Godot full-depth, and foreground cyan in Unity Metal and Godot ordered-overlay captures.
-2. Keep the checks localized: a character/front-depth region for reversed Z, a sample1 brush-content component for missing IMM, and a small must-be-occluded region for cyan leakage. Do not tighten global render similarity to catch local composition defects.
-3. Run one full suite and manually confirm that every remaining red entry describes a real render, composition, runtime, or infrastructure defect.
-4. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
-5. Use the stereo lane to detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
+1. Validate the implemented Godot Vulkan projection and full-depth depth-comparison fixes on Android and Windows captures. The projection now uses Godot/Vulkan zero-to-one coefficients, and the compositor no longer inverts the host depth sample.
+2. Fix ordered-overlay composition without generic fullscreen alpha blending. IMM uses discard/stencil, MSAA coverage, and stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not a valid substitute. The latest Godot callback-order experiment removed the cyan probe but also hid required magenta/yellow probes, so this remains open.
+3. Fix and validate the Unity Metal ordered-overlay cyan occlusion defect. Keep the check localized to the must-be-occluded region and preserve the existing visual baseline.
+4. Run one full suite and manually confirm that every remaining red entry describes a real render, composition, runtime, or infrastructure defect.
+5. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
+6. Use the stereo lane to detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
 
 The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejecting Vulkan and falling back to Direct3D must report `runtime_failed`. It is no longer the primary route to cloud stereo evidence.
 
 The Godot Run-button regression is now locally reproduced and fixed. The Quest-oriented Vulkan renderer had applied pipelined external-image submission and Unity reverse-Z depth handling to Godot even though Godot samples its standard-depth intermediate image in the same compositor callback. The corrected path waits on the non-dedicated queue, uses normal near-to-zero depth ordering, and restores shader-read layout before handoff. Two additional startup hazards were found and guarded: bounding-box queries during partial loading and child-count queries on non-group layers. The validation launches `project.godot` without a scene/script override, requires a clean native log, freezes only the evidence capture at frame zero, and compares the resulting 1280x720 frame to a reviewed Godot Vulkan baseline with a localized character/front-surface depth-order check.
 
 ### 1. Finish and verify the false-failure cleanup on `main`
+
+Current implementation status: the validator contracts for the reviewed Android Godot depth defects, missing Godot IMM content, and cyan leakage are present. Product-side Godot projection/depth fixes are pushed but awaiting cloud confirmation. Unity Metal and Godot ordered-overlay rendering are still product failures, not validator false positives. The temporary generic alpha-blend compositor change was reverted because IMM's OIT/coverage model does not expose ordinary straight-alpha scene compositing.
 
 Full runs `30811686247`, `30813880906`, `30816894610`, and `30820773061` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30820773061` contains all 16 supported rows and preserves both semantic eye captures. It also exposed two remaining false report signals: a generic root-level `Composition` section and a visually correct Unity Metal render rejected only because spatial MAD was `0.152` against `0.150`.
 
