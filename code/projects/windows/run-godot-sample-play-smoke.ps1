@@ -36,6 +36,21 @@ if (-not $GodotExe -or -not (Test-Path -LiteralPath $GodotExe)) {
 }
 $godot = (Resolve-Path -LiteralPath $GodotExe).Path
 
+# Opening a freshly cloned project in the editor builds Godot's resource UID
+# cache and discovers GDExtensions before the user presses Run. Reproduce that
+# initialization when CI has no project cache yet.
+$extensionList = Join-Path $project ".godot\extension_list.cfg"
+if (-not (Test-Path -LiteralPath $extensionList)) {
+    Write-Host "[IMM_GODOT_SAMPLE_PLAY_20260803] importing fresh Godot project"
+    & $godot --editor --headless --path $project --quit
+    if ($LASTEXITCODE -ne 0) {
+        throw "Godot sample project import failed with exit code $LASTEXITCODE"
+    }
+    if (-not (Test-Path -LiteralPath $extensionList)) {
+        throw "Godot sample project import did not discover its GDExtension"
+    }
+}
+
 $stdoutPath = Join-Path $logs "godot-sample-play.stdout.log"
 $stderrPath = Join-Path $logs "godot-sample-play.stderr.log"
 $controllerLog = Join-Path $logs "godot-sample-play-controller.log"

@@ -20,7 +20,10 @@ def main() -> int:
     godot_helper = (ROOT / "code/projects/windows/run-godot-sample-play-smoke.ps1").read_text(encoding="utf-8")
     gpu_workflow = (ROOT / ".github/workflows/ci-gpu.yml").read_text(encoding="utf-8")
 
-    assert 'run/main_scene="uid://dxrq2se1fvtxw"' in godot_project
+    # A res:// path must work in a fresh checkout before Godot has built its
+    # editor UID cache. A uid:// main scene can leave Run Project idle forever.
+    assert 'run/main_scene="res://scenes/SampleScene.tscn"' in godot_project
+    assert 'run/main_scene="uid://' not in godot_project
     assert "load_on_ready = true" not in godot_scene
     warmup = godot_controller.index("for _frame in range(3):")
     load = godot_controller.index("viewer.load_document()", warmup)
@@ -43,6 +46,8 @@ def main() -> int:
     assert '"IMM_ASSERT_"' in godot_helper
     assert '$timedOut = $false' in godot_helper
     assert 'Get-Content -LiteralPath $diagnosticPath' in godot_helper
+    assert '".godot\\extension_list.cfg"' in godot_helper
+    assert '--editor --headless --path $project --quit' in godot_helper
     for token in [
         "Run Godot project Run-button smoke",
         "Record Godot project Run-button render metrics",
