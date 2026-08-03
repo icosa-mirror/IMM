@@ -50,6 +50,12 @@ def main() -> int:
             "FindObjectOfType<ImmFeatureExamples>()",
             "FreezeCompositionPlaybackIfRequested();",
         ],
+        ROOT / "code/ImmUnitySampleProject/Assets/Resources/ImmUnitySmokeUnlitColor.shader": [
+            'Shader "IMM/SmokeUnlitColor"',
+            '"RenderType" = "Opaque"',
+            'Name "ShadowCaster"',
+            '"LightMode" = "ShadowCaster"',
+        ],
         ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd": [
             "_analyze_scene_probe_region",
             "_project_probe_rect",
@@ -124,7 +130,7 @@ def main() -> int:
             'required-marker "source=offscreenRT"',
             'required-marker "Vulkan renderer began external image frame"',
             'required-marker "Unity Vulkan render:"',
-            'required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presentation-texture"',
+            'required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presented-screen"',
             'required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"',
             'required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801]"',
             'required-marker "[IMM_UNITY_VK_ONRENDERIMAGE_20260802]"',

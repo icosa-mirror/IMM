@@ -9363,7 +9363,10 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
             mState->externalFrameDepthTexture = entry.depthTexture;
             mState->externalFramePrimeDepthTexture = entry.primeDepthTexture;
             mState->externalFrameRenderTarget = entry.renderTarget;
-            mState->externalFrameUsesHostDepth = entry.depthTexture != nullptr && !entry.depthForSampling;
+            // Every cached external target has a depthTexture because IMM creates
+            // a private one when the host supplies no depth. Only a non-null
+            // external depth handle represents genuine host depth.
+            mState->externalFrameUsesHostDepth = entry.depthImage != 0 && !entry.depthForSampling;
             mState->externalFrameHostDepthReverseZ = mState->externalFrameUsesHostDepth;
             mState->externalFrameDepthForSampling = entry.depthForSampling;
             mState->externalFramePreservesHostColor = false;

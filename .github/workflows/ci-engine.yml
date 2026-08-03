@@ -1471,7 +1471,7 @@ jobs:
           --required-marker "Unity Vulkan render:"
           --required-marker "Loaded in CPU"
           --required-marker "Loaded in GPU"
-          --required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presentation-texture"
+          --required-marker "[IMM_UNITY_SMOKE] render source=unity-vulkan-presented-screen"
           --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801]"
           --required-marker "[IMM_UNITY_VK_ONRENDERIMAGE_20260802]"
