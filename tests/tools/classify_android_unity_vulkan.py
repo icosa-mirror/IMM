@@ -31,7 +31,6 @@ RENDER_EVIDENCE = (
     "unity-android-vulkan-synthetic-right-metrics.json",
     "unity-android-vulkan-synthetic-stereo-log-contract.json",
     "unity-android-vulkan-external-render-video-validation.json",
-    "unity-android-vulkan-external-render-metrics.json",
 )
 COMPOSITION_EVIDENCE = "unity-android-vulkan-composition-metrics.json"
 
@@ -92,13 +91,12 @@ def classify(root: Path) -> dict:
 
     copy_exit = (firebase.get("copy_results") or {}).get("exit_code")
     gcloud_exit = firebase.get("gcloud_exit_code")
-    if copy_exit not in (None, 0) or gcloud_exit not in (None, 0):
-        if copy_exit not in (None, 0):
-            failures.append(f"Firebase artifact copy exited with {copy_exit}")
-        if gcloud_exit not in (None, 0):
-            failures.append(f"Firebase test command exited with {gcloud_exit}")
-        failures.extend(str(item) for item in firebase.get("errors", []) if str(item))
-        return status("infrastructure_failed", "infrastructure", failures)
+    infrastructure_failures: list[str] = []
+    if copy_exit not in (None, 0):
+        infrastructure_failures.append(f"Firebase artifact copy exited with {copy_exit}")
+    if gcloud_exit not in (None, 0):
+        infrastructure_failures.append(f"Firebase test command exited with {gcloud_exit}")
+    infrastructure_failures.extend(str(item) for item in firebase.get("errors", []) if str(item))
 
     missing: list[str] = []
     for capture_name in REQUIRED_CAPTURES:
@@ -108,6 +106,8 @@ def classify(root: Path) -> dict:
         path = root / evidence_name
         if read_json(path) is None:
             missing.append(f"missing or invalid validation evidence: {evidence_name}")
+    if missing and infrastructure_failures:
+        return status("infrastructure_failed", "infrastructure", infrastructure_failures + missing)
     if missing:
         return status("evidence_incomplete", "evidence", missing)
 
@@ -117,17 +117,31 @@ def classify(root: Path) -> dict:
         assert value is not None
         if not evidence_passed(value):
             render_failures.extend(evidence_errors(name, value))
-    if render_failures:
-        return status("render_failed", "rendering", render_failures)
-
     composition = read_json(root / COMPOSITION_EVIDENCE)
     assert composition is not None
-    if not evidence_passed(composition):
+    composition_failures = (
+        evidence_errors(COMPOSITION_EVIDENCE, composition)
+        if not evidence_passed(composition)
+        else []
+    )
+
+    # Once the full visual evidence set exists, its verdict is authoritative.
+    # A Firebase CLI/reporting error remains useful supporting evidence, but it
+    # must not mask a black eye image or a real depth-composition defect.
+    if render_failures:
+        return status(
+            "render_failed",
+            "rendering",
+            render_failures + composition_failures + infrastructure_failures,
+        )
+    if composition_failures:
         return status(
             "composition_failed",
             "compositing",
-            evidence_errors(COMPOSITION_EVIDENCE, composition),
+            composition_failures + infrastructure_failures,
         )
+    if infrastructure_failures:
+        return status("infrastructure_failed", "infrastructure", infrastructure_failures)
 
     return status("passed", "", [])
 

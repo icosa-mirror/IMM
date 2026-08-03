@@ -21,6 +21,7 @@ def main() -> int:
 
     assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
+    assert slugify("UnityAndroidVulkan") == "unity-android-vulkan"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
@@ -103,10 +104,14 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
-        for generic_name in ["render", "full-depth", "ordered-overlay"]:
+        for generic_name in ["composition", "render", "full-depth", "ordered-overlay"]:
             generic_capture = engine / "captures" / generic_name
             generic_capture.mkdir(parents=True)
             (generic_capture / f"{generic_name}.png").write_bytes(PNG_1X1)
+            (generic_capture / "render-report.md").write_text(
+                f"# {generic_name}\n\n![capture]({generic_name}.png)\n",
+                encoding="utf-8",
+            )
 
         metal = input_root / "UnityMacOSMetalComposition"
         metal_captures = metal / "captures"
@@ -154,6 +159,19 @@ def main() -> int:
                     },
                 }
             ),
+            encoding="utf-8",
+        )
+
+        # Semantically distinct eye files must both survive aggregation even
+        # when their bytes are identical; identical content is itself useful
+        # failure evidence for a stereo contract.
+        stereo_root = input_root / "UnityAndroidVulkan"
+        stereo = stereo_root / "captures" / "synthetic-stereo"
+        stereo.mkdir(parents=True)
+        (stereo / "unity-android-vulkan-synthetic-left.png").write_bytes(PNG_1X1)
+        (stereo / "unity-android-vulkan-synthetic-right.png").write_bytes(PNG_1X1)
+        (stereo_root / "render-report.md").write_text(
+            "# Android stereo\n\n![left](captures/synthetic-stereo/unity-android-vulkan-synthetic-left.png)\n",
             encoding="utf-8",
         )
 
@@ -359,6 +377,8 @@ def main() -> int:
         assert "## Unity macOS Metal Composition" in text
         assert "## Unity macOS Metal Composition\n\n- Result: composition_failed" in text
         assert "- Lane status: failed" in text
+        assert "unity-android-vulkan-synthetic-left.png" in text
+        assert "unity-android-vulkan-synthetic-right.png" in text
         assert "Composition mode: full_depth" in text
         assert "Composition contract: depth_composition" in text
         assert "Ordered overlay: not_tested" in text
@@ -382,8 +402,11 @@ def main() -> int:
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text
         assert "## Enginevalidationevidence" not in text
         assert "## Render\n" not in text
+        assert "## Composition\n" not in text
         assert "## Fulldepth\n" not in text
+        assert "## Full Depth\n" not in text
         assert "## Orderedoverlay\n" not in text
+        assert "## Ordered Overlay\n" not in text
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
@@ -451,7 +474,7 @@ def main() -> int:
             text=True,
         )
         assert first_result.returncode == 0, first_result.stdout + first_result.stderr
-        normalized = first_output / "captures" / "unityandroidvulkan"
+        normalized = first_output / "captures" / "unity-android-vulkan"
         assert (normalized / "render-metrics.json").exists()
         assert (normalized / "manifest.json").exists()
         preserved_preflights = list((first_output / "status-manifests").rglob("manifest.json"))
@@ -530,7 +553,7 @@ def main() -> int:
         second_text = second_report.read_text(encoding="utf-8")
         assert "| unity/all/non-vr/preflight | supported | passed | no |" in second_text
         assert "| unity/android/non-vr/vulkan | supported | passed | yes |" in second_text
-        assert "## Unityandroidvulkan\n\n- Result: passed" in second_text
+        assert "## Unity Android Vulkan\n\n- Result: passed" in second_text
 
     print("Visual evidence report tests passed")
     return 0

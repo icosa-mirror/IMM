@@ -74,6 +74,30 @@ def main() -> int:
         )
         assert_result(infrastructure, "infrastructure_failed", "infrastructure")
 
+        infrastructure_with_black_eye = base / "infrastructure_with_black_eye"
+        passing_fixture(infrastructure_with_black_eye)
+        write_json(
+            infrastructure_with_black_eye / "firebase-test-lab-result.json",
+            {"gcloud_exit_code": 1, "copy_results": {"exit_code": 0}, "errors": ["reporting API disabled"]},
+        )
+        write_json(
+            infrastructure_with_black_eye / "unity-android-vulkan-synthetic-left-metrics.json",
+            {"passed": False, "errors": ["black eye"]},
+        )
+        assert_result(infrastructure_with_black_eye, "render_failed", "rendering")
+
+        infrastructure_with_composition = base / "infrastructure_with_composition"
+        passing_fixture(infrastructure_with_composition)
+        write_json(
+            infrastructure_with_composition / "firebase-test-lab-result.json",
+            {"gcloud_exit_code": 1, "copy_results": {"exit_code": 0}, "errors": ["reporting API disabled"]},
+        )
+        write_json(
+            infrastructure_with_composition / classifier.COMPOSITION_EVIDENCE,
+            {"passed": False, "errors": ["cyan leakage"]},
+        )
+        assert_result(infrastructure_with_composition, "composition_failed", "compositing")
+
         crash = base / "crash"
         passing_fixture(crash)
         crash_file = crash / "ftl-results" / "device" / "data_app_native_crash_0_com_ImmersiveFoundation_IMMUnityTest.txt"

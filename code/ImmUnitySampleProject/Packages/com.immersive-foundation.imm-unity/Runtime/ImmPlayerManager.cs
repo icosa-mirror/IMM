@@ -1265,11 +1265,42 @@ namespace ImmPlayer
             renderCamera = null;
         }
 
-        public RenderTexture GetAndroidVulkanPresentationTargetForValidation(Camera cam)
+        public RenderTexture GetAndroidVulkanPresentationTargetForValidation(Camera cam, int eye = 0)
         {
             if (cam == null || !_cameras.TryGetValue(cam, out PerCameraInfo info))
                 return null;
-            return info.VulkanEyeTargets[0];
+            if (eye < 0 || eye >= info.VulkanEyeTargets.Length)
+                throw new ArgumentOutOfRangeException(nameof(eye), eye, "Vulkan validation eye must be 0 or 1.");
+            return info.VulkanEyeTargets[eye];
+        }
+
+        public RenderTexture PrepareSyntheticStereoEyeTargetForValidation(
+            Camera cam,
+            int eye,
+            int width,
+            int height)
+        {
+            if (cam == null || !_cameras.TryGetValue(cam, out PerCameraInfo info))
+                return null;
+            if (eye < 0 || eye >= info.VulkanEyeTargets.Length)
+                throw new ArgumentOutOfRangeException(nameof(eye), eye, "Synthetic stereo eye must be 0 or 1.");
+
+            RenderTexture target = EnsureVulkanEyeTarget(info, eye, width, height);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                // Android Vulkan can keep a newly-created RenderTexture's
+                // RenderBuffer pointer at zero until Unity first binds it.
+                // Prime the actual native write target before Camera.Render's
+                // pre-render callback hands that RenderBuffer to the plugin.
+                RenderTexture.active = target;
+                GL.Clear(false, true, Color.clear);
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+            }
+            return target;
         }
 
         public RenderTexture GetAndroidVulkanUnityPresentationTargetForValidation(Camera cam)

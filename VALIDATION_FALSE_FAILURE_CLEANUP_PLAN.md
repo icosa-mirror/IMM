@@ -20,7 +20,7 @@ The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejec
 
 ### 1. Finish and verify the false-failure cleanup on `main`
 
-Full runs `30811686247` and `30813880906` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30813880906` also exposed a marginal Metal render threshold false negative, status-only manifest loss between nested reports, a `macOS` slug mismatch, generic duplicate capture sections, and a Unity 6 Android Swappy crash on Firebase's second activity focus.
+Full runs `30811686247`, `30813880906`, and `30816894610` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30816894610` confirms that the corrected Metal render threshold and nested manifest preservation work, all 16 supported rows now have evidence, and the Unity 6 Android Swappy crash is avoided. It also proves that both synthetic eyes are black because their exact native write-target pointers are zero on the first render after the offscreen target is resized.
 
 1. Index every valid manifest, including failed and expected-failed manifests, while allowing only a passed manifest to satisfy a supported row.
 2. Carry non-build status manifests and their strict visual metrics through each aggregation layer so the final report retains preflight and failed-lane evidence.
@@ -37,7 +37,7 @@ Exit criterion: every report result agrees with its underlying evidence, and eve
 
 The immediate implementation priority is hardware-backed Android Vulkan in Firebase, reusing the existing Unity Android Vulkan build and capture infrastructure. The synthetic test exercises IMM eye routing and composition without requiring an OpenXR headset or separate-eye presentation.
 
-Run `30813880906` proves that the first Firebase process dispatched both synthetic eyes and wrote the combined capture, but the logged native pointers came from the read buffers rather than the actual native write targets. Firebase then relaunched the activity and Unity crashed in `SwappyVk_setAutoSwapInterval`, so the images were not present in the final pulled directory. Log-only success is not accepted.
+Run `30816894610` pulled the combined and split eye images and independently compared them. Both are black and byte-identical, so the lane correctly fails. The exact native write-target logs are now authoritative and show `0x0` for both eyes: the synthetic camera changes the manager's internal offscreen target from the device resolution to 1280x720, creates each eye texture during `Camera.Render`, and asks for its RenderBuffer before Unity has first bound it. The next iteration primes both internal eye textures before dispatch. Log-only success is not accepted.
 
 1. Add a deterministic Android synthetic-stereo mode that renders two adjacent offscreen eye targets in one frame.
 2. Run that mode on a Firebase device that reports and uses Vulkan.
@@ -189,3 +189,4 @@ The report should become shorter and more trustworthy:
 - The Windows software-Vulkan synthetic lane must continue to report `runtime_failed` rather than a visual failure when Unity falls back to Direct3D.
 - The primary cloud stereo strategy is now an ARM64 Android/Firebase hardware-Vulkan lane, avoiding both the unsupported Windows software-Vulkan device and the x86_64 native dependency gap.
 - The known Swappy failure artifact from run `30813880906` is now covered by a classifier regression test and is reported as `runtime_failed`, rather than the lane's former hard-coded `compositing` label.
+- Run `30816894610` shows why complete visual evidence must outrank a secondary Firebase CLI failure: the CLI returned `1` because Cloud Tool Results API is disabled after the test, but all captures were downloaded and contain an unambiguous black-eye rendering failure. The classifier now reports that result as `render_failed` and retains the Firebase error as supporting detail.

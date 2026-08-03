@@ -467,6 +467,21 @@ namespace ImmPlayer
 
                     camera.targetTexture = target;
                     manager.SetSyntheticStereoEyeForValidation(camera, eye);
+                    RenderTexture nativeEyeTarget = manager.PrepareSyntheticStereoEyeTargetForValidation(
+                        camera,
+                        eye,
+                        CaptureWidth,
+                        CaptureHeight);
+                    if (nativeEyeTarget == null)
+                    {
+                        Debug.LogError($"{stereoPrefix} failed to prepare native eye target for eye={eye}");
+                        QuitIfRequested(8);
+                        yield break;
+                    }
+                    yield return null;
+                    Debug.Log(
+                        $"{stereoPrefix} primed eye={eye} targetId={nativeEyeTarget.GetInstanceID()} " +
+                        $"targetPtr=0x{nativeEyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
                     camera.Render();
                     eyeCaptures[eye] = CaptureRenderTextureExact(target);
                     Debug.Log(

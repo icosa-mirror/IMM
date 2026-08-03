@@ -77,6 +77,7 @@ def slugify(value: str) -> str:
         "godotsmokemacosmetal": "macos-godot-metal",
         "unitywindowsdirectxcomposition": "unity-windows-directx-composition",
         "unitymacosmetalcomposition": "unity-macos-metal-composition",
+        "unityandroidvulkan": "unity-android-vulkan",
         "unitywindowsvulkanorderedoverlay": "unity-windows-vulkan-ordered-overlay",
         "unitywindowsvulkanfulldepth": "unity-windows-vulkan-full-depth",
         "unitywindowsvulkansyntheticstereo": "unity-windows-vulkan-synthetic-stereo",
@@ -177,6 +178,10 @@ def discover_reports(input_root: Path) -> list[tuple[str, Path]]:
     selected: dict[str, Path] = {}
     for report in reports:
         key = report_key(report)
+        if key in GENERIC_CAPTURE_SECTION_KEYS and any(
+            parent.name.lower() == "captures" for parent in report.parents
+        ):
+            continue
         current = selected.get(key)
         if current is None or report_rank(report) < report_rank(current):
             selected[key] = report
@@ -434,13 +439,13 @@ def find_images_for_report(report: Path, key: str) -> list[Path]:
         for path in root.rglob("*")
         if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
     ]
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     unique: list[Path] = []
     for image in sorted(candidates):
-        digest = sha256_file(image)
-        if digest in seen:
+        identity = (sha256_file(image), image.name.lower())
+        if identity in seen:
             continue
-        seen.add(digest)
+        seen.add(identity)
         unique.append(image)
     return unique
 
