@@ -1,0 +1,30 @@
+{
+  "baseline": "sample1-composition-content",
+  "capture_source": "composition capture after scene and IMM rendering",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "allow_reference_dimension_mismatch": true,
+    "format": "ppm-p6",
+    "minimum_dimensions": { "height": 540, "width": 960 },
+    "requires_nonblank_capture": true,
+    "expected_spatial_luma_grid": {
+      "height": 9,
+      "max_mean_abs_delta": 0.22,
+      "min_correlation": 0.1,
+      "width": 16
+    },
+    "expected_color_components": {
+      "probes": [
+        {
+          "name": "sample1-lower-red-brush-content",
+          "target_rgb": [90, 25, 25],
+          "channel_tolerance": 25,
+          "region_normalized": { "x": 0.0, "y": 0.5, "width": 0.9, "height": 0.5 },
+          "minimum_largest_component_share_of_crop": 0.0005
+        }
+      ]
+    }
+  }
+}

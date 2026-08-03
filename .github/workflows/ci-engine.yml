@@ -395,17 +395,25 @@ jobs:
       - name: Record Unity macOS Metal render metrics
         if: always()
         run: |
+          metrics_status=0
           python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-render.png \
             --reference tests/baselines/render/unity-windows-directx-sample1.png \
             --contract tests/baselines/render/unity-macos-metal-sample1.json \
-            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-render-metrics.json
+            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-render-metrics.json || metrics_status=$?
           python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
-            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-composition-content.json \
+            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json \
+            --diagnostic-overlay-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-diagnostic.png || metrics_status=$?
           python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay.png \
-            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay-metrics.json
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-ordered-overlay.json \
+            --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay-metrics.json \
+            --diagnostic-overlay-output artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay-diagnostic.png || metrics_status=$?
+          exit "$metrics_status"
 
       - name: Write Unity macOS Metal render reports
         if: always()
@@ -691,12 +699,22 @@ jobs:
       - name: Compare Unity DirectX render metrics against committed DirectX baseline
         if: always()
         shell: pwsh
-        run: >
-          python tests\tools\compare_render_metrics.py
-          artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
-          --reference tests\baselines\render\unity-windows-directx-sample1.png
-          --contract tests\baselines\render\unity-windows-directx-sample1.json
-          --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
+        run: |
+          $validationFailed = $false
+          python tests\tools\compare_render_metrics.py `
+            artifacts\unity-windows-directx-composition\unity-windows-directx-render.png `
+            --reference tests\baselines\render\unity-windows-directx-sample1.png `
+            --contract tests\baselines\render\unity-windows-directx-sample1.json `
+            --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-render-metrics.json
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+          python tests\tools\compare_render_metrics.py `
+            artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\sample1-composition-content.json `
+            --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json `
+            --diagnostic-overlay-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-diagnostic.png
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+          if ($validationFailed) { exit 1 }
 
       - name: Write Unity DirectX composition report
         if: always()
@@ -704,8 +722,8 @@ jobs:
         run: >
           python tests\tools\write_render_report.py
           --metrics-json artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
-          --reference-capture tests\baselines\render\unity-windows-directx-sample1.png
-          --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png
           --status-json artifacts\unity-windows-directx-composition\composition-status.json
           --output-dir artifacts\unity-windows-directx-composition\captures
           --markdown-output artifacts\unity-windows-directx-composition\render-report.md
@@ -1130,15 +1148,20 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $validationFailed = $false
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render.png `
             --reference tests\baselines\render\unity-windows-directx-sample1.png `
             --contract tests\baselines\render\unity-windows-directx-sample1.json `
             --json-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render-metrics.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png `
-            --json-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay-metrics.json
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\sample1-ordered-overlay.json `
+            --json-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay-metrics.json `
+            --diagnostic-overlay-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay-diagnostic.png
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           python tests\tools\write_render_report.py `
             --metrics-json artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay-metrics.json `
             --candidate-capture artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png `
@@ -1150,6 +1173,7 @@ jobs:
             --candidate-capture artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render.png `
             --output-dir artifacts\unity-windows-vulkan-ordered-overlay\captures\render `
             --markdown-output artifacts\unity-windows-vulkan-ordered-overlay\render-baseline-report.md
+          if ($validationFailed) { exit 1 }
 
       - name: Stage Unity Vulkan ordered overlay capture evidence
         if: always()
@@ -1335,15 +1359,20 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $validationFailed = $false
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render.png `
             --reference tests\baselines\render\unity-windows-directx-sample1.png `
             --contract tests\baselines\render\unity-windows-directx-sample1.json `
             --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render-metrics.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth.png `
-            --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-metrics.json
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\sample1-composition-content.json `
+            --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-metrics.json `
+            --diagnostic-overlay-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-diagnostic.png
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           python tests\tools\write_render_report.py `
             --metrics-json artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-metrics.json `
             --candidate-capture artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth.png `
@@ -1355,6 +1384,7 @@ jobs:
             --candidate-capture artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render.png `
             --output-dir artifacts\unity-windows-vulkan-full-depth\captures\render `
             --markdown-output artifacts\unity-windows-vulkan-full-depth\render-baseline-report.md
+          if ($validationFailed) { exit 1 }
 
       - name: Stage Unity Vulkan full depth capture evidence
         if: always()

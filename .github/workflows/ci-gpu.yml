@@ -789,15 +789,21 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $validationFailed = $false
           python tests\tools\compare_render_metrics.py `
             artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm `
             --reference tests\baselines\render\windows-directx-sample1.ppm `
             --contract tests\baselines\render\godot-windows-vulkan-sample1.json `
             --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-render-metrics.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           python tests\tools\compare_render_metrics.py `
             artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
-            --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\sample1-composition-content.json `
+            --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json `
+            --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-diagnostic.ppm
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+          if ($validationFailed) { exit 1 }
 
       - name: Write Godot Vulkan render report
         if: always()
@@ -836,15 +842,21 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $validationFailed = $false
           python tests\tools\compare_render_metrics.py `
             artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm `
             --reference tests\baselines\render\windows-directx-sample1.ppm `
             --contract tests\baselines\render\godot-windows-vulkan-sample1.json `
             --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-render-metrics.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           python tests\tools\compare_render_metrics.py `
             artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay.ppm `
-            --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\sample1-ordered-overlay.json `
+            --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json `
+            --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-diagnostic.ppm
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+          if ($validationFailed) { exit 1 }
 
       - name: Write Godot Vulkan ordered overlay report
         if: always()
@@ -1125,14 +1137,19 @@ jobs:
       - name: Record Godot Metal render metrics
         if: always()
         run: |
+          metrics_status=0
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-smoke-macos-metal/metal_render_baseline.png \
             --reference tests/baselines/render/windows-directx-sample1.ppm \
             --contract tests/baselines/render/macos-metal-sample1.json \
-            --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+            --json-output artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json || metrics_status=$?
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-smoke-macos-metal/metal_visual_smoke.png \
-            --json-output artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-composition-content.json \
+            --json-output artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json \
+            --diagnostic-overlay-output artifacts/godot-smoke-macos-metal/godot-metal-composition-diagnostic.png || metrics_status=$?
+          exit "$metrics_status"
 
       - name: Write Godot Metal render report
         if: always()

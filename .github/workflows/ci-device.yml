@@ -474,18 +474,31 @@ jobs:
         if: always()
         shell: pwsh
         run: |
+          $validationFailed = $false
           $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_render_candidate.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($capture) {
             python tests/tools/compare_render_metrics.py $capture.FullName `
               --reference tests/baselines/render/windows-directx-sample1.ppm `
               --contract tests/baselines/render/godot-android-vulkan-sample1.json `
               --json-output artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           } else {
             New-Item -ItemType Directory -Force artifacts/android-godot-vulkan | Out-Null
             '{"passed":false,"errors":["missing Firebase Test Lab vulkan_render_candidate.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json
-            throw "Missing Firebase Test Lab vulkan_render_candidate.png"
+            $validationFailed = $true
           }
+          $compositionCapture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($compositionCapture) {
+            python tests/tools/compare_render_metrics.py $compositionCapture.FullName `
+              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --contract tests/baselines/render/godot-android-vulkan-composition-sample1.json `
+              --json-output artifacts/android-godot-vulkan/android-godot-vulkan-composition-metrics.json
+            if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+          } else {
+            '{"passed":false,"errors":["missing Firebase Test Lab vulkan_visual_smoke.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/android-godot-vulkan/android-godot-vulkan-composition-metrics.json
+            $validationFailed = $true
+          }
+          if ($validationFailed) { exit 1 }
       - name: Write Android Godot Vulkan screenshot report
         if: always()
         shell: pwsh
@@ -495,8 +508,7 @@ jobs:
           python tests/tools/write_render_report.py --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-godot-vulkan/captures --markdown-output artifacts/android-godot-vulkan/render-report.md
           $compositionCapture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter vulkan_visual_smoke.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($compositionCapture) {
-            New-Item -ItemType Directory -Force artifacts/android-godot-vulkan/captures/composition | Out-Null
-            Copy-Item -LiteralPath $compositionCapture.FullName -Destination artifacts/android-godot-vulkan/captures/composition/vulkan_visual_smoke.png -Force
+            python tests/tools/write_render_report.py --metrics-json artifacts/android-godot-vulkan/android-godot-vulkan-composition-metrics.json --candidate-capture $compositionCapture.FullName --output-dir artifacts/android-godot-vulkan/captures/composition --markdown-output artifacts/android-godot-vulkan/composition-report.md
           }
       - name: Write CI manifest
         if: always()

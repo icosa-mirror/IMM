@@ -1,18 +1,20 @@
 {
-  "baseline": "godot-android-vulkan-sample1",
-  "capture_source": "VisualSmokeScene render candidate capture",
-  "fixture": "exampleImmFiles/sample1.imm",
+  "baseline": "godot-android-vulkan-composition-sample1",
+  "capture_source": "VisualSmokeScene composition capture",
+  "fixture": "exampleImmFiles/sample1.imm with composition probes",
   "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "allow_reference_dimension_mismatch": true,
     "format": "png",
+    "minimum_dimensions": { "height": 720, "width": 1280 },
+    "requires_nonblank_capture": true,
     "expected_spatial_luma_grid": {
       "center_crop_aspect_ratio": 1.7777777778,
-      "height": 18,
-      "max_mean_abs_delta": 0.12,
-      "min_correlation": 0.75,
-      "width": 32
+      "height": 9,
+      "max_mean_abs_delta": 0.22,
+      "min_correlation": 0.25,
+      "width": 16
     },
     "expected_spatial_luma_regions": [
       {
@@ -23,13 +25,6 @@
         "height": 12,
         "max_mean_abs_delta": 0.18
       }
-    ],
-    "expected_visible_luma_mean": { "max": 95, "min": 25 },
-    "minimum_luma_span": 16,
-    "minimum_near_visible_pixels": 10000,
-    "minimum_non_black_pixels": 20000,
-    "minimum_dimensions": { "height": 720, "width": 1280 },
-    "requires_nonblank_capture": true,
-    "requires_orientation_metrics": true
+    ]
   }
 }

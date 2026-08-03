@@ -86,6 +86,9 @@ def diagnostic_squares_only(width: int, height: int) -> list[tuple[int, int, int
 
 def make_probe_pixels(width: int, height: int, show_rear_occluded: bool) -> list[tuple[int, int, int]]:
     pixels = [(16, 20, 24)] * (width * height)
+    for y in range(height // 2, height):
+        for x in range((width * 9) // 10):
+            pixels[y * width + x] = (90, 25, 25)
     rectangles = [
         (23, 48, 45, 80, (255, 0, 255)),
         (57, 14, 78, 41, (255, 255, 0)),
@@ -317,6 +320,48 @@ def main() -> int:
         assert probe_overlay_path.exists()
         _, _, overlay_pixels, _ = compare_render_metrics.read_rgb_capture(probe_overlay_path)
         assert bytes((255, 32, 32)) in overlay_pixels
+
+        production_overlay_contract = json.loads(
+            (Path(__file__).resolve().parents[2] / "tests/baselines/render/sample1-ordered-overlay.json").read_text(
+                encoding="utf-8"
+            )
+        )["validation"]["expected_color_components"]
+        production_overlay_good = compare_render_metrics.collect_color_component_metrics(
+            probe_good_path, production_overlay_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_overlay_contract, production_overlay_good
+        ) == []
+        production_overlay_wrong_depth = compare_render_metrics.collect_color_component_metrics(
+            probe_wrong_depth_path, production_overlay_contract
+        )
+        assert any(
+            "character-occluded-cyan" in error
+            for error in compare_render_metrics.validate_color_component_contract(
+                production_overlay_contract, production_overlay_wrong_depth
+            )
+        )
+
+        production_content_contract = json.loads(
+            (Path(__file__).resolve().parents[2] / "tests/baselines/render/sample1-composition-content.json").read_text(
+                encoding="utf-8"
+            )
+        )["validation"]["expected_color_components"]
+        production_content_present = compare_render_metrics.collect_color_component_metrics(
+            probe_good_path, production_content_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_content_contract, production_content_present
+        ) == []
+        production_content_missing = compare_render_metrics.collect_color_component_metrics(
+            black_path, production_content_contract
+        )
+        assert any(
+            "sample1-lower-red-brush-content" in error
+            for error in compare_render_metrics.validate_color_component_contract(
+                production_content_contract, production_content_missing
+            )
+        )
 
         # Exercise the production Unity/macOS/Metal contract against both
         # tolerated renderer drift and visually wrong full-size captures. The

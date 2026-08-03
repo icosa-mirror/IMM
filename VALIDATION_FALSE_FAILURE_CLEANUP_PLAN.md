@@ -10,10 +10,10 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 
 ### Current priority order
 
-1. Gate the user-facing Godot Run-button and Unity Editor Play entry points with runtime logs and baseline-reviewed captures. The Godot gate must catch the `load_on_ready=true` regression that bypassed Vulkan warm-up.
-2. Finish the two remaining report false-failure corrections from full run `30820773061`: suppress root-level generic composition reports and allow the reviewed Unity Metal render whose spatial MAD exceeded the old limit by `0.002`.
-3. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
-4. Run one full suite and manually confirm that every remaining red entry describes a real render, composition, runtime, or infrastructure defect.
+1. Make the five reviewed invalid captures from run `30838738732` fail for their actual pixel defects: Android Godot reversed depth in both render and composition captures, missing IMM content in Godot full-depth, and foreground cyan in Unity Metal and Godot ordered-overlay captures.
+2. Keep the checks localized: a character/front-depth region for reversed Z, a sample1 brush-content component for missing IMM, and a small must-be-occluded region for cyan leakage. Do not tighten global render similarity to catch local composition defects.
+3. Run one full suite and manually confirm that every remaining red entry describes a real render, composition, runtime, or infrastructure defect.
+4. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
 5. Use the stereo lane to detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
 
 The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejecting Vulkan and falling back to Direct3D must report `runtime_failed`. It is no longer the primary route to cloud stereo evidence.
