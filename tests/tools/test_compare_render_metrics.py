@@ -363,6 +363,50 @@ def main() -> int:
             )
         )
 
+        # Both Android Godot contracts must reject localized foreground/depth
+        # corruption around the character. This is the pixel-level regression
+        # fixture for the reverse-Z failure that broad whole-frame metrics
+        # previously allowed through.
+        for contract_name in (
+            "godot-android-vulkan-sample1.json",
+            "godot-android-vulkan-composition-sample1.json",
+        ):
+            android_godot_contract = json.loads(
+                (
+                    Path(__file__).resolve().parents[2]
+                    / "tests/baselines/render"
+                    / contract_name
+                ).read_text(encoding="utf-8")
+            )
+            depth_regions = android_godot_contract["validation"]["expected_spatial_luma_regions"]
+            good_depth_metrics = [
+                compare_render_metrics.collect_spatial_region_metrics(
+                    probe_good_path,
+                    probe_good_path,
+                    specification,
+                )
+                for specification in depth_regions
+            ]
+            assert compare_render_metrics.validate_spatial_region_contract(
+                depth_regions,
+                good_depth_metrics,
+            ) == []
+            wrong_depth_metrics = [
+                compare_render_metrics.collect_spatial_region_metrics(
+                    probe_good_path,
+                    probe_wrong_depth_path,
+                    specification,
+                )
+                for specification in depth_regions
+            ]
+            depth_errors = compare_render_metrics.validate_spatial_region_contract(
+                depth_regions,
+                wrong_depth_metrics,
+            )
+            assert any("character-front-depth-order" in error for error in depth_errors), (
+                f"{contract_name} accepted localized reverse-Z foreground corruption"
+            )
+
         # Exercise the production Unity/macOS/Metal contract against both
         # tolerated renderer drift and visually wrong full-size captures. The
         # correlation floor is intentionally below the reviewed CI captures

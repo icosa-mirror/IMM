@@ -77,6 +77,10 @@ Full run `30854621320` exposed a report-level false pass even though the underly
 
 The same run exposed a renderer-variation false failure in the otherwise reviewed Unity Metal render: spatial correlation was `0.387` against a `0.400` floor. The Metal-only floor is now `0.350`; black, default-scene, shifted-pose, missing-content, and composition fixtures remain independently rejected. Cloud validation is still required before this cleanup gate is complete.
 
+The Android Godot `character-front-depth-order` regions now have a pixel-level negative fixture, rather than only a source-token check. The fixture injects foreground geometry into the reviewed character region and requires both the render-only and composition contracts to reject it, covering the reverse-Z/incorrect foreground ordering class that broad whole-frame metrics previously missed.
+
+The first cloud run after the report fix also proved the preflight signal is useful: Unity 6 project serialization had changed Android `m_InitManagerOnStart` from `0` to `1`, bypassing the scene-controlled `SampleSceneVR` bootstrap and making ordinary Android launches try to enter XR. This is a genuine sample-project regression, not a false failure. Restore `m_InitManagerOnStart: 0`, retain the verifier contract, and let the VR scene initialize OpenXR explicitly.
+
 Full runs `30811686247`, `30813880906`, `30816894610`, and `30820773061` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30820773061` contains all 16 supported rows and preserves both semantic eye captures. It also exposed two remaining false report signals: a generic root-level `Composition` section and a visually correct Unity Metal render rejected only because spatial MAD was `0.152` against `0.150`.
 
 1. Index every valid manifest, including failed and expected-failed manifests, while allowing only a passed manifest to satisfy a supported row.
