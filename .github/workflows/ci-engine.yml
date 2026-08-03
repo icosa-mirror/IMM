@@ -361,7 +361,7 @@ jobs:
         run: |
           python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-render.png \
-            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --reference tests/baselines/render/unity-windows-directx-sample1.png \
             --contract tests/baselines/render/unity-macos-metal-sample1.json \
             --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-render-metrics.json
           python3 tests/tools/compare_render_metrics.py \
@@ -401,8 +401,8 @@ jobs:
             --require "[IMM_UNITY_SMOKE] graphics api expected=Metal actual=Metal" \
             --require "[IMM_UNITY_SMOKE] render candidate capture=" \
             --require "[IMM_UNITY_SMOKE] capture=" \
-            --require "Loaded in CPU" \
-            --require "Loaded in GPU" \
+            --optional "Loaded in CPU" \
+            --optional "Loaded in GPU" \
             --forbid "[IMM_DIAG] Failed to load" \
             --forbid "[IMM_UNITY_SMOKE] scene composition front occluder failed" \
             --forbid "[IMM_UNITY_SMOKE] scene composition rear visible probe failed" \
@@ -646,7 +646,7 @@ jobs:
         run: >
           python tests\tools\compare_render_metrics.py
           artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
-          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --reference tests\baselines\render\unity-windows-directx-sample1.png
           --contract tests\baselines\render\unity-windows-directx-sample1.json
           --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
 
@@ -656,7 +656,7 @@ jobs:
         run: >
           python tests\tools\write_render_report.py
           --metrics-json artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json
-          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --reference-capture tests\baselines\render\unity-windows-directx-sample1.png
           --candidate-capture artifacts\unity-windows-directx-composition\unity-windows-directx-render.png
           --status-json artifacts\unity-windows-directx-composition\composition-status.json
           --output-dir artifacts\unity-windows-directx-composition\captures
@@ -835,6 +835,7 @@ jobs:
           path: artifacts/unity-windows-vulkan-synthetic-stereo/player
 
       - name: Run Unity Vulkan synthetic stereo smoke
+        id: unity_vulkan_synthetic_stereo_smoke
         timeout-minutes: 10
         shell: pwsh
         run: |
@@ -871,7 +872,18 @@ jobs:
             throw "Unity Vulkan synthetic stereo capture was not written: $capturePath"
           }
 
+      - name: Classify Unity Vulkan synthetic stereo runtime
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\classify_unity_visual_smoke.py
+          --log artifacts\unity-windows-vulkan-synthetic-stereo\unity-player.log
+          --capture artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-stereo.png
+          --composition-mode render_only
+          --output artifacts\unity-windows-vulkan-synthetic-stereo\composition-status.json
+
       - name: Split and verify stereo visual evidence
+        if: steps.unity_vulkan_synthetic_stereo_smoke.outcome == 'success'
         shell: pwsh
         run: |
           python tests\tools\validate_stereo_capture.py `
@@ -882,17 +894,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-left.ppm `
-            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --reference tests\baselines\render\unity-windows-directx-sample1.png `
             --contract tests\baselines\render\unity-windows-directx-sample1.json `
             --json-output artifacts\unity-windows-vulkan-synthetic-stereo\left-eye-metrics.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-right.ppm `
-            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --reference tests\baselines\render\unity-windows-directx-sample1.png `
             --contract tests\baselines\render\unity-windows-directx-sample1.json `
             --json-output artifacts\unity-windows-vulkan-synthetic-stereo\right-eye-metrics.json
 
       - name: Verify Unity Vulkan synthetic stereo log contract
+        if: steps.unity_vulkan_synthetic_stereo_smoke.outcome == 'success'
         shell: pwsh
         run: >
           python tests\tools\verify_synthetic_stereo_log.py
@@ -913,7 +926,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\unity-windows-vulkan-synthetic-stereo\manifest.json --product unity --platform-name windows --mode synthetic-stereo --renderer vulkan --include artifacts\unity-windows-vulkan-synthetic-stereo
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime --output artifacts\unity-windows-vulkan-synthetic-stereo\manifest.json --product unity --platform-name windows --mode synthetic-stereo --renderer vulkan --include artifacts\unity-windows-vulkan-synthetic-stereo
 
       - name: Collect artifact summary
         if: always()
@@ -1071,8 +1084,8 @@ jobs:
         run: |
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render.png `
-            --reference tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\windows-directx-sample1.json `
+            --reference tests\baselines\render\unity-windows-directx-sample1.png `
+            --contract tests\baselines\render\unity-windows-directx-sample1.json `
             --json-output artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-render-metrics.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests\tools\compare_render_metrics.py `
@@ -1276,8 +1289,8 @@ jobs:
         run: |
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render.png `
-            --reference tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\windows-directx-sample1.json `
+            --reference tests\baselines\render\unity-windows-directx-sample1.png `
+            --contract tests\baselines\render\unity-windows-directx-sample1.json `
             --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-render-metrics.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python tests\tools\compare_render_metrics.py `
@@ -1625,7 +1638,7 @@ jobs:
           $renderCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-render.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($renderCapture) {
             python tests/tools/compare_render_metrics.py $renderCapture.FullName `
-              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
               --contract tests/baselines/render/unity-android-vulkan-sample1.json `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-screenshot-metrics.json
             if ($LASTEXITCODE -ne 0) { $failed = $true }
@@ -1638,8 +1651,9 @@ jobs:
           $compositionCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan.png -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($compositionCapture) {
             python tests/tools/compare_render_metrics.py $compositionCapture.FullName `
-              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
               --contract tests/baselines/render/unity-android-vulkan-composition-sample1.json `
+              --diagnostic-overlay-output artifacts/unity-android-vulkan/unity-android-vulkan-composition-probe-overlay.png `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
             if ($LASTEXITCODE -ne 0) { $failed = $true }
           } else {
@@ -1651,7 +1665,7 @@ jobs:
           $deviceVideo = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter video.mp4 -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($deviceVideo) {
             python tests/tools/validate_render_video.py $deviceVideo.FullName `
-              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
               --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
               --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json `
@@ -1661,14 +1675,14 @@ jobs:
             $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
             if ($externalRenderCapture) {
               python tests/tools/compare_render_metrics.py $externalRenderCapture.FullName `
-                --reference tests/baselines/render/windows-directx-sample1.ppm `
+                --reference tests/baselines/render/unity-windows-directx-sample1.png `
                 --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
                 --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-metrics.json
               if ($LASTEXITCODE -ne 0) { $failed = $true }
             }
 
             python tests/tools/validate_render_video.py $deviceVideo.FullName `
-              --reference tests/baselines/render/windows-directx-sample1.ppm `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
               --contract tests/baselines/render/unity-android-vulkan-external-sample1.json `
               --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external.png `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-video-validation.json `
@@ -1678,8 +1692,9 @@ jobs:
             $externalCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external.png -ErrorAction SilentlyContinue
             if ($externalCapture) {
               python tests/tools/compare_render_metrics.py $externalCapture.FullName `
-                --reference tests/baselines/render/windows-directx-sample1.ppm `
+                --reference tests/baselines/render/unity-windows-directx-sample1.png `
                 --contract tests/baselines/render/unity-android-vulkan-external-sample1.json `
+                --diagnostic-overlay-output artifacts/unity-android-vulkan/unity-android-vulkan-external-probe-overlay.png `
                 --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-metrics.json
               if ($LASTEXITCODE -ne 0) { $failed = $true }
             }

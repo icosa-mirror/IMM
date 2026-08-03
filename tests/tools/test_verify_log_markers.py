@@ -57,6 +57,27 @@ def main() -> int:
         assert result["passed"] is True
         assert result["required"][1]["count"] == 1
 
+        optional_output = root / "optional.json"
+        optional = run_verify(
+            "--log",
+            str(log),
+            "--require",
+            "IMM_ANDROID_OPENXR_PROBE begin",
+            "--optional",
+            "Loaded in CPU",
+            "--optional",
+            "Loaded in GPU",
+            "--output",
+            str(optional_output),
+        )
+        assert optional.returncode == 0, optional.stderr
+        optional_result = json.loads(optional_output.read_text(encoding="utf-8"))
+        assert optional_result["passed"] is True
+        assert optional_result["optional"] == [
+            {"marker": "Loaded in CPU", "count": 0, "present": False},
+            {"marker": "Loaded in GPU", "count": 0, "present": False},
+        ]
+
         failed = run_verify(
             "--log",
             str(log),

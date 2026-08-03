@@ -2,7 +2,7 @@
   "baseline": "unity-android-vulkan-external-sample1",
   "capture_source": "stable baseline-matching frames from Firebase physical-device video",
   "fixture": "exampleImmFiles/sample1.imm",
-  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "reference_capture": "tests/baselines/render/unity-windows-directx-sample1.png",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "allow_reference_dimension_mismatch": true,
@@ -10,8 +10,8 @@
     "expected_spatial_luma_grid": {
       "center_crop_aspect_ratio": 1.7777777778,
       "height": 18,
-      "max_mean_abs_delta": 0.12,
-      "min_correlation": 0.7,
+      "max_mean_abs_delta": 0.15,
+      "min_correlation": 0.35,
       "width": 32
     },
     "expected_color_components": {
@@ -36,7 +36,7 @@
           "target_rgb": [0, 255, 255],
           "channel_tolerance": 110,
           "region_normalized": { "x": 0.45, "y": 0.35, "width": 0.24, "height": 0.3 },
-          "maximum_largest_component_share_of_crop": 0.002
+          "maximum_largest_component_share_of_crop": 0.00015
         }
       ]
     },

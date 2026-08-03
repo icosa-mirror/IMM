@@ -499,24 +499,49 @@ def find_strict_metrics(root: Path) -> dict:
 
 
 def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, str]:
+    status_result = status.get("result")
+    if status_result in {
+        "runtime_failed",
+        "infrastructure_failed",
+        "evidence_incomplete",
+    }:
+        return (status_result, status.get("failure_class", ""))
+    if status_result == "render_failed":
+        return ("render_failed", status.get("failure_class", "rendering"))
     errors = metrics.get("errors") or []
     if errors or metrics.get("passed") is False:
-        return ("failed", "rendering")
-    if not strict_metrics_evidence(metrics):
-        return ("failed", "visual-contract")
+        if errors and all(str(error).startswith("color component probe ") for error in errors):
+            return ("composition_failed", "compositing")
+        return ("render_failed", "rendering")
+    if status_result == "composition_failed":
+        return ("composition_failed", status.get("failure_class", "compositing"))
+    if metrics and not strict_metrics_evidence(metrics):
+        return ("evidence_incomplete", "evidence")
+    if status_result == "passed":
+        return ("passed", "")
     classification = manifest.get("classification") or {}
     result = classification.get("result")
     failure_class = classification.get("failure_class", "")
     if result in {"failed", "failure", "cancelled"}:
-        return ("failed", failure_class)
+        mapped = {
+            "visual": "render_failed",
+            "rendering": "render_failed",
+            "compositing": "composition_failed",
+            "runtime": "runtime_failed",
+            "runtime-launch": "runtime_failed",
+            "infrastructure": "infrastructure_failed",
+            "vr-device-infrastructure": "infrastructure_failed",
+            "evidence": "evidence_incomplete",
+        }.get(failure_class, "infrastructure_failed")
+        return (mapped, failure_class)
     if result == "expected_failed":
-        return ("failed", failure_class or "compositing")
+        return ("composition_failed", failure_class or "compositing")
     if result == "passed":
         return ("passed", failure_class)
     if status.get("compositing") == "expected_failed":
-        return ("failed", "compositing")
+        return ("composition_failed", "compositing")
     if status.get("compositing") == "failed":
-        return ("failed", "compositing")
+        return ("composition_failed", "compositing")
     if status.get("rendering") == "success" or metrics.get("passed") is True:
         return ("passed", "")
     return ("unknown", "")
@@ -588,6 +613,8 @@ def main() -> int:
         "# IMM CI Validation Evidence",
         "",
         "This is the report to read first. It summarizes render correctness, known composition failures, and the captured images used as evidence.",
+        "",
+        "Result vocabulary: `render_failed` means a produced image violated its visual contract; `composition_failed` means depth or ordering was wrong; `runtime_failed` means the requested player/API did not run; `infrastructure_failed` means the runner or external service failed; `evidence_incomplete` means no authoritative verdict could be formed.",
         "",
     ]
     add_matrix_coverage(lines, coverage)

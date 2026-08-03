@@ -16,6 +16,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log", type=Path, action="append", required=True)
     parser.add_argument("--require", action="append", default=[])
+    parser.add_argument(
+        "--optional",
+        action="append",
+        default=[],
+        help="Record a diagnostic marker without making its absence fail the contract.",
+    )
     parser.add_argument("--forbid", action="append", default=[])
     parser.add_argument("--label", default="log-marker-contract")
     parser.add_argument("--output", type=Path, required=True)
@@ -40,6 +46,11 @@ def main() -> int:
         if count <= 0:
             errors.append(f"Required marker not found: {marker}")
 
+    optional = []
+    for marker in args.optional:
+        count = count_marker(combined_text, marker)
+        optional.append({"marker": marker, "count": count, "present": count > 0})
+
     forbidden = []
     for marker in args.forbid:
         count = count_marker(combined_text, marker)
@@ -52,6 +63,7 @@ def main() -> int:
         "label": args.label,
         "logs": logs,
         "required": required,
+        "optional": optional,
         "forbidden": forbidden,
         "passed": not errors,
         "errors": errors,

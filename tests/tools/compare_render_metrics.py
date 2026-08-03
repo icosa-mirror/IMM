@@ -869,19 +869,79 @@ def validate_color_component_contract(specification: dict, metrics: dict) -> lis
         share = float(actual["largest_component_share_of_crop"])
         minimum = expected.get("minimum_largest_component_share_of_crop")
         maximum = expected.get("maximum_largest_component_share_of_crop")
+        probe_errors: list[str] = []
         if minimum is not None and share < float(minimum):
-            errors.append(
+            probe_errors.append(
                 f"color component probe {name} share {share:.6f} is below contract minimum {float(minimum):.6f}"
             )
         if maximum is not None and share > float(maximum):
-            errors.append(
+            probe_errors.append(
                 f"color component probe {name} share {share:.6f} exceeds contract maximum {float(maximum):.6f}"
             )
+        actual["passed"] = not probe_errors
+        actual["errors"] = probe_errors
+        errors.extend(probe_errors)
     if len(actual_probes) != len(expected_probes):
         errors.append(
             f"color component probe result count {len(actual_probes)} differs from contract count {len(expected_probes)}"
         )
     return errors
+
+
+def write_color_component_diagnostic_overlay(candidate_path: Path, metrics: dict, output_path: Path) -> None:
+    width, height, source_pixels, _ = read_rgb_capture(candidate_path)
+    pixels = bytearray(source_pixels)
+    for probe in metrics.get("probes", []):
+        if probe.get("passed") is True:
+            continue
+        bounds = probe.get("largest_component_bounds")
+        if not isinstance(bounds, dict):
+            continue
+        target = tuple(int(channel) for channel in probe.get("target_rgb", []))
+        if len(target) != 3:
+            continue
+        tolerance = int(probe.get("channel_tolerance", 0))
+        x0 = max(0, int(bounds.get("x", 0)))
+        y0 = max(0, int(bounds.get("y", 0)))
+        x1 = min(width, x0 + max(0, int(bounds.get("width", 0))))
+        y1 = min(height, y0 + max(0, int(bounds.get("height", 0))))
+        for y in range(y0, y1):
+            for x in range(x0, x1):
+                index = (y * width + x) * 3
+                r, g, b = source_pixels[index : index + 3]
+                if all(abs(actual - expected) <= tolerance for actual, expected in zip((r, g, b), target)):
+                    pixels[index : index + 3] = bytes((255, 32, 32))
+        for x in range(x0, x1):
+            for y in {y0, max(y0, y1 - 1)}:
+                index = (y * width + x) * 3
+                pixels[index : index + 3] = bytes((255, 255, 255))
+        for y in range(y0, y1):
+            for x in {x0, max(x0, x1 - 1)}:
+                index = (y * width + x) * 3
+                pixels[index : index + 3] = bytes((255, 255, 255))
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.suffix.lower() == ".png":
+        scanlines = bytearray()
+        stride = width * 3
+        for y in range(height):
+            scanlines.append(0)
+            scanlines.extend(pixels[y * stride : (y + 1) * stride])
+
+        def chunk(kind: bytes, payload: bytes) -> bytes:
+            checksum = zlib.crc32(kind + payload) & 0xFFFFFFFF
+            return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", checksum)
+
+        output_path.write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(bytes(scanlines), level=6))
+            + chunk(b"IEND", b"")
+        )
+        return
+    with output_path.open("wb") as handle:
+        handle.write(f"P6\n{width} {height}\n255\n".encode("ascii"))
+        handle.write(pixels)
 
 
 def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract_path: Path | None) -> dict:
@@ -943,10 +1003,15 @@ def main() -> int:
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--contract", type=Path)
     parser.add_argument("--json-output", type=Path, required=True)
+    parser.add_argument("--diagnostic-overlay-output", type=Path)
     args = parser.parse_args()
 
     output = evaluate_capture(args.candidate, args.reference, args.contract)
     errors = output["errors"]
+
+    color_metrics = output.get("color_component_probes")
+    if args.diagnostic_overlay_output and isinstance(color_metrics, dict):
+        write_color_component_diagnostic_overlay(args.candidate, color_metrics, args.diagnostic_overlay_output)
 
     args.json_output.parent.mkdir(parents=True, exist_ok=True)
     args.json_output.write_text(json.dumps(output, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")

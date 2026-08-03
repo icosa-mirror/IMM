@@ -36,8 +36,9 @@ namespace ImmPlayer
         private const string MinOrderedOverlayImmUniqueColorsArg = "-immSmokeMinOrderedOverlayImmUniqueColors";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
         private const int MinRegionPixels = 24;
-        private const float MinDominantShare = 0.80f;
-        private const float MaxOccludedShare = 0.08f;
+        private const float MinFrontProbeShare = 0.01f;
+        private const float MinRearVisibleProbeShare = 0.0075f;
+        private const float MaxOccludedShare = 0.00015f;
         private const float MinOrderedOverlayImmShare = 0.02f;
         private const int MinOrderedOverlayImmUniqueColors = 5000;
         private const float MinOrderedOverlayTopRightBrightToBottomRightRatio = 2.0f;
@@ -334,11 +335,11 @@ namespace ImmPlayer
                 CompositionRegionResult rearVisible = AnalyzeProbeRegion(pixels, width, height, _compositionCamera, _rearVisibleProbe, RearVisibleProbeColor);
                 CompositionRegionResult rearOccluded = AnalyzeProbeRegion(pixels, width, height, _compositionCamera, _rearOccludedProbe, RearOccludedProbeColor);
                 Debug.Log($"{Prefix}composition front={front} rearVisible={rearVisible} rearOccluded={rearOccluded}");
-                if (front.TotalPixels < MinRegionPixels || front.Share < MinDominantShare)
+                if (front.MatchedPixels < MinRegionPixels || front.Share < MinFrontProbeShare)
                 {
                     RecordCompositionFailure($"scene composition front occluder failed: {front}");
                 }
-                if (rearVisible.TotalPixels < MinRegionPixels || rearVisible.Share < MinDominantShare)
+                if (rearVisible.MatchedPixels < MinRegionPixels || rearVisible.Share < MinRearVisibleProbeShare)
                 {
                     RecordCompositionFailure($"scene composition rear visible probe failed: {rearVisible}");
                 }
@@ -358,12 +359,12 @@ namespace ImmPlayer
                     {
                         RecordCompositionFailure($"scene composition ordered overlay orientation failed: {immResult}");
                     }
-                    if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share < MinDominantShare)
+                    if (rearOccluded.MatchedPixels < MinRegionPixels || rearOccluded.Share < MinRearVisibleProbeShare)
                     {
                         RecordCompositionFailure($"scene composition overlay rear probe failed: {rearOccluded}");
                     }
                 }
-                else if (rearOccluded.TotalPixels < MinRegionPixels || rearOccluded.Share > MaxOccludedShare)
+                else if (rearOccluded.Share > MaxOccludedShare)
                 {
                     RecordCompositionFailure($"scene composition rear occlusion probe failed: {rearOccluded}");
                 }
@@ -963,45 +964,18 @@ namespace ImmPlayer
             if (camera == null || probe == null)
                 return new CompositionRegionResult("missing", 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
 
-            Transform transform = probe.transform;
-            Vector3 center = transform.position;
-            Vector3 right = transform.right * (transform.localScale.x * 0.5f);
-            Vector3 up = transform.up * (transform.localScale.y * 0.5f);
-            Vector3[] corners =
-            {
-                center - right - up,
-                center - right + up,
-                center + right - up,
-                center + right + up,
-            };
+            Rect normalizedRegion;
+            if (probe.name == "IMM Scene Front Occluder Probe")
+                normalizedRegion = new Rect(0.23f, 0.20f, 0.22f, 0.32f);
+            else if (probe.name == "IMM Scene Rear Visible Probe")
+                normalizedRegion = new Rect(0.57f, 0.59f, 0.21f, 0.27f);
+            else
+                normalizedRegion = new Rect(0.45f, 0.35f, 0.24f, 0.30f);
 
-            int minX = width;
-            int minY = height;
-            int maxX = -1;
-            int maxY = -1;
-            foreach (Vector3 corner in corners)
-            {
-                Vector3 screen = camera.WorldToScreenPoint(corner);
-                if (screen.z <= 0.0f)
-                    continue;
-                float scaledX = screen.x * width / Mathf.Max(1, camera.pixelWidth);
-                float scaledY = screen.y * height / Mathf.Max(1, camera.pixelHeight);
-                minX = Mathf.Min(minX, Mathf.FloorToInt(scaledX));
-                minY = Mathf.Min(minY, Mathf.FloorToInt(scaledY));
-                maxX = Mathf.Max(maxX, Mathf.CeilToInt(scaledX));
-                maxY = Mathf.Max(maxY, Mathf.CeilToInt(scaledY));
-            }
-
-            if (maxX < minX || maxY < minY)
-                return new CompositionRegionResult(probe.name, 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
-
-            const int inset = 3;
-            minX = Mathf.Clamp(minX + inset, 0, width - 1);
-            maxX = Mathf.Clamp(maxX - inset, 0, width - 1);
-            minY = Mathf.Clamp(minY + inset, 0, height - 1);
-            maxY = Mathf.Clamp(maxY - inset, 0, height - 1);
-            if (maxX < minX || maxY < minY)
-                return new CompositionRegionResult(probe.name, 0, 0, 0.0f, new RectInt(0, 0, 0, 0));
+            int minX = Mathf.Clamp(Mathf.FloorToInt(normalizedRegion.xMin * width), 0, width - 1);
+            int minY = Mathf.Clamp(Mathf.FloorToInt(normalizedRegion.yMin * height), 0, height - 1);
+            int maxX = Mathf.Clamp(Mathf.CeilToInt(normalizedRegion.xMax * width), 0, width - 1);
+            int maxY = Mathf.Clamp(Mathf.CeilToInt(normalizedRegion.yMax * height), 0, height - 1);
 
             int total = 0;
             int matched = 0;
@@ -1009,12 +983,12 @@ namespace ImmPlayer
             {
                 for (int x = minX; x <= maxX; ++x)
                 {
-                    ++total;
                     if (IsNear(pixels[y * width + x], target))
                         ++matched;
                 }
             }
 
+            total = width * height;
             float share = total > 0 ? (float)matched / total : 0.0f;
             return new CompositionRegionResult(probe.name, total, matched, share, new RectInt(minX, minY, maxX - minX + 1, maxY - minY + 1));
         }

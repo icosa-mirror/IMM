@@ -115,6 +115,7 @@ def main() -> int:
         diagnostic_path = temp / "diagnostic-squares.ppm"
         probe_good_path = temp / "probe-good.ppm"
         probe_wrong_depth_path = temp / "probe-wrong-depth.ppm"
+        probe_overlay_path = temp / "probe-wrong-depth-overlay.png"
         png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
         contract_path = temp / "contract.json"
@@ -283,6 +284,14 @@ def main() -> int:
             probe_contract, probe_wrong_depth
         )
         assert any("rear-occluded-cyan" in error for error in wrong_depth_errors)
+        compare_render_metrics.write_color_component_diagnostic_overlay(
+            probe_wrong_depth_path,
+            probe_wrong_depth,
+            probe_overlay_path,
+        )
+        assert probe_overlay_path.exists()
+        _, _, overlay_pixels, _ = compare_render_metrics.read_rgb_capture(probe_overlay_path)
+        assert bytes((255, 32, 32)) in overlay_pixels
 
         output_path.write_text(json.dumps({"passed": True}, indent=2), encoding="utf-8")
 

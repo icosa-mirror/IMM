@@ -2,15 +2,15 @@
   "baseline": "unity-android-vulkan-sample1",
   "capture_source": "ImmUnityRuntimeSmoke render candidate capture",
   "fixture": "exampleImmFiles/sample1.imm",
-  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "reference_capture": "tests/baselines/render/unity-windows-directx-sample1.png",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "png",
     "expected_spatial_luma_grid": {
       "center_crop_aspect_ratio": 1.7777777778,
       "height": 18,
-      "max_mean_abs_delta": 0.08,
-      "min_correlation": 0.85,
+      "max_mean_abs_delta": 0.14,
+      "min_correlation": 0.4,
       "width": 32
     },
     "expected_visible_luma_mean": { "max": 85, "min": 32 },

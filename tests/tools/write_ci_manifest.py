@@ -130,7 +130,7 @@ def main() -> int:
     parser.add_argument("--mode", required=True)
     parser.add_argument("--renderer", required=True)
     parser.add_argument("--status", default="passed")
-    parser.add_argument("--failure-class", default="", choices=["", "build", "packaging", "api", "content-parse", "visual", "compositing", "audio", "runtime-launch", "vr-device-infrastructure", "release-validation", "unknown"])
+    parser.add_argument("--failure-class", default="", choices=["", "build", "packaging", "api", "content-parse", "visual", "rendering", "compositing", "audio", "runtime", "runtime-launch", "infrastructure", "vr-device-infrastructure", "evidence", "release-validation", "unknown"])
     parser.add_argument("--fixture", action="append", default=[], help="Fixture file to hash into the manifest")
     parser.add_argument("--include", action="append", default=[], help="File or directory to hash into the manifest")
     args = parser.parse_args()

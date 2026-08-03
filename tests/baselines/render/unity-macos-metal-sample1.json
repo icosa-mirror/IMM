@@ -2,7 +2,7 @@
   "baseline": "unity-macos-metal-sample1",
   "capture_source": "ImmUnityRuntimeSmoke render candidate capture",
   "fixture": "exampleImmFiles/sample1.imm",
-  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "reference_capture": "tests/baselines/render/unity-windows-directx-sample1.png",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
     "format": "png",

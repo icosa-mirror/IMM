@@ -176,8 +176,20 @@ def main() -> int:
         )
         returncode, status = run_unity_classifier(temp, "ordered_overlay", load_failure_log)
         assert returncode == 1
+        assert status["result"] == "runtime_failed"
         assert status["rendering"] == "failed"
         assert any("[IMM_DIAG] Failed to load" in failure for failure in status["failures"])
+
+        vulkan_fallback_log = "\n".join(
+            [
+                "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Direct3D11",
+                "[IMM_UNITY_SMOKE] graphics api probe failed: expected Vulkan, actual Direct3D11",
+            ]
+        )
+        returncode, status = run_unity_classifier(temp, "render_only", vulkan_fallback_log)
+        assert returncode == 1
+        assert status["result"] == "runtime_failed"
+        assert status["failure_class"] == "runtime"
 
         returncode, status = run_unity_classifier(
             temp,
@@ -185,6 +197,7 @@ def main() -> int:
             "[IMM_UNITY_SMOKE] capture=C:/tmp/render_only.png width=1280 height=720",
         )
         assert returncode == 0
+        assert status["result"] == "passed"
         assert status["composition_mode"] == "render_only"
         assert status["composition_contract"] == "render_only"
         assert status["compositing"] == "not_tested"

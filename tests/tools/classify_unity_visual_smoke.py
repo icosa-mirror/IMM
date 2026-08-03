@@ -20,6 +20,12 @@ RENDER_FAILURE_MARKERS = [
     "Failed to load from StreamingAssets",
 ]
 
+RUNTIME_FAILURE_MARKERS = [
+    "[IMM_UNITY_SMOKE] graphics api probe failed",
+    "[IMM_DIAG] Failed to load",
+    "Failed to load from StreamingAssets",
+]
+
 CAPTURE_METRICS_RE = re.compile(r"\[IMM_UNITY_SMOKE\] capture=.*?\bnonZero=(?P<non_zero>\d+)\b.*?\bcolorBuckets=(?P<color_buckets>\d+)\b")
 
 
@@ -54,12 +60,17 @@ def main() -> int:
         for line in text.splitlines()
         if "[IMM_UNITY_SMOKE] scene composition" in line and "failed" in line
     ]
-    render_failures = [marker for marker in RENDER_FAILURE_MARKERS if marker in text]
+    runtime_failures = [marker for marker in RUNTIME_FAILURE_MARKERS if marker in text]
+    render_failures = [
+        marker for marker in RENDER_FAILURE_MARKERS
+        if marker in text and marker not in RUNTIME_FAILURE_MARKERS
+    ]
     render_failures.extend(capture_metric_failures(text))
     rendering_succeeded = (
         ("[IMM_EDITOR_SMOKE] passed:" in text or "[IMM_UNITY_SMOKE] capture=" in text)
         and args.capture.exists()
         and not render_failures
+        and not runtime_failures
     )
     if rendering_succeeded and not composition_failures:
         if args.composition_mode == "full_depth" and "[IMM_UNITY_SMOKE] scene composition probe passed" not in text:
@@ -68,18 +79,46 @@ def main() -> int:
             composition_failures.append("scene composition ordered overlay probe missing failed")
 
     composition_fields = build_composition_fields(args.composition_mode, rendering_succeeded, composition_failures)
+    evidence_failures = []
+    if not args.log.exists():
+        evidence_failures.append(f"missing log: {args.log}")
+    if not args.capture.exists():
+        evidence_failures.append(f"missing capture: {args.capture}")
+
+    if runtime_failures:
+        result = "runtime_failed"
+        failure_class = "runtime"
+    elif evidence_failures:
+        result = "evidence_incomplete"
+        failure_class = "evidence"
+    elif render_failures or not rendering_succeeded:
+        result = "render_failed"
+        failure_class = "rendering"
+    elif composition_failures:
+        result = "composition_failed"
+        failure_class = "compositing"
+    else:
+        result = "passed"
+        failure_class = ""
+
     status = {
         "schema": "imm-composition-status-v1",
+        "result": result,
         "rendering": "success" if rendering_succeeded else "failed",
-        "failure_class": "compositing" if composition_failures else ("" if rendering_succeeded else "visual"),
-        "failures": composition_failures + [f"rendering failure marker: {marker}" for marker in render_failures],
+        "failure_class": failure_class,
+        "failures": (
+            evidence_failures
+            + composition_failures
+            + [f"runtime failure marker: {marker}" for marker in runtime_failures]
+            + [f"rendering failure marker: {marker}" for marker in render_failures]
+        ),
     }
     status.update(composition_fields)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     print(f"Unity visual smoke status written: {args.output}")
 
-    if classification_succeeded(status):
+    if result == "passed" and classification_succeeded(status):
         return 0
     return 1
 

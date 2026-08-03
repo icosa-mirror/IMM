@@ -58,18 +58,35 @@ def main() -> int:
             composition_failures.append("scene composition ordered overlay probe missing failed")
 
     composition_fields = build_composition_fields(args.composition_mode, rendering_succeeded, composition_failures)
+    if not args.log.exists():
+        result = "evidence_incomplete"
+        failure_class = "evidence"
+        evidence_failures = [f"missing log: {args.log}"]
+    elif render_failures or not rendering_succeeded:
+        result = "render_failed"
+        failure_class = "rendering"
+        evidence_failures = []
+    elif composition_failures:
+        result = "composition_failed"
+        failure_class = "compositing"
+        evidence_failures = []
+    else:
+        result = "passed"
+        failure_class = ""
+        evidence_failures = []
     status = {
         "schema": "imm-composition-status-v1",
+        "result": result,
         "rendering": "success" if rendering_succeeded else "failed",
-        "failure_class": "compositing" if composition_failures else ("" if rendering_succeeded else "visual"),
-        "failures": composition_failures + [f"rendering failure marker: {marker}" for marker in render_failures],
+        "failure_class": failure_class,
+        "failures": evidence_failures + composition_failures + [f"rendering failure marker: {marker}" for marker in render_failures],
     }
     status.update(composition_fields)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
     print(f"Godot visual smoke status written: {args.output}")
 
-    if classification_succeeded(status):
+    if result == "passed" and classification_succeeded(status):
         return 0
     return 1
 

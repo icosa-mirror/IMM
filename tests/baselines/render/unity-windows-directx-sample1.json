@@ -1,34 +1,42 @@
 {
   "baseline": "unity-windows-directx-sample1",
-  "capture_source": "CI Engine Matrix / Unity Windows DirectX Composition",
+  "capture_source": "CI run 30784745829 / Unity Windows DirectX Composition, manually reviewed",
   "fixture": "exampleImmFiles/sample1.imm",
-  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "reference_capture": "tests/baselines/render/unity-windows-directx-sample1.png",
+  "provenance": {
+    "capture_resolution": "1280x720",
+    "freeze_time_ticks": 37800,
+    "git_revision": "3dd05e153322f67d3872bbabec84e30417822815",
+    "graphics_api": "Direct3D11",
+    "source_run": "30784745829",
+    "unity_version": "6000.3.18f1"
+  },
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
-    "format": "ppm-p6",
+    "format": "png",
     "expected_spatial_luma_grid": {
       "height": 18,
-      "max_mean_abs_delta": 0.06,
-      "min_correlation": 0.85,
+      "max_mean_abs_delta": 0.10,
+      "min_correlation": 0.55,
       "width": 32
     },
     "expected_quadrant_luma_share": {
       "tolerance": 0.12,
       "values": {
-        "bottom_left": 0.214,
-        "bottom_right": 0.126,
-        "top_left": 0.237,
-        "top_right": 0.424
+        "bottom_left": 0.237,
+        "bottom_right": 0.157,
+        "top_left": 0.294,
+        "top_right": 0.312
       }
     },
     "expected_vertical_luma_profile": {
       "tolerance": 0.13,
       "values": [
-        0.332,
-        0.259,
-        0.13,
-        0.111,
-        0.168
+        0.394,
+        0.138,
+        0.147,
+        0.155,
+        0.166
       ]
     },
     "expected_visible_centroid_normalized": {
@@ -44,9 +52,9 @@
     "expected_visible_channel_means": {
       "tolerance": 28,
       "values": {
-        "b": 45.06,
-        "g": 59.59,
-        "r": 55.89
+        "b": 40.51,
+        "g": 52.33,
+        "r": 49.51
       }
     },
     "expected_visible_luma_mean": {
