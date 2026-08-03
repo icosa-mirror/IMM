@@ -656,9 +656,9 @@ func _create_scene_probe(name: String, color: Color, size: Vector3, ordered_over
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.albedo_color = color
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	if ordered_overlay:
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.no_depth_test = true
+	# Ordered-overlay probes remain opaque scene geometry. Transparent probes are
+	# evaluated after the compositor and were discarded when IMM was moved to
+	# POST_TRANSPARENT, which also made the front/yellow probes disappear.
 	var probe: MeshInstance3D = MeshInstance3D.new()
 	probe.name = name
 	probe.mesh = mesh
