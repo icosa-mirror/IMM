@@ -10,7 +10,7 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 
 ### Current priority order
 
-1. Land the low-risk report corrections identified by full run `30811686247`: count failed manifests as present evidence, preserve their failure class, remove duplicate capture-mode sections, and label the DirectX/Metal depth failures as `compositing`.
+1. Land the low-risk report corrections identified by full run `30811686247`: count failed manifests as present evidence, preserve status-only manifests across nested aggregates, preserve their failure class, canonicalize macOS lane identity, remove duplicate capture-mode sections, and label the DirectX/Metal depth failures as `compositing`.
 2. Run the full suite again and confirm that every remaining red entry describes a real defect or a genuine runtime limitation.
 3. Move synthetic-stereo execution from the Windows software-Vulkan experiment to the existing Android/Firebase hardware-Vulkan route.
 4. Make the Android player render both synthetic eyes side-by-side, then independently validate the left and right halves against the approved Unity render baseline.
@@ -20,19 +20,24 @@ The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejec
 
 ### 1. Finish and verify the false-failure cleanup on `main`
 
-Full run `30811686247` at revision `300f8fdc457241c5ca32f3afeb88ac99208ce5b3` has been inspected. Its images show that the Unity DirectX, Unity Metal, Unity Android Vulkan, and Godot Metal red entries are genuine composition failures, not render failures. It also exposed two aggregate-report defects: failed manifests were counted as missing evidence, and nested capture modes were rediscovered as duplicate lanes.
+Full runs `30811686247` and `30813880906` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30813880906` also exposed a marginal Metal render threshold false negative, status-only manifest loss between nested reports, a `macOS` slug mismatch, generic duplicate capture sections, and a Unity 6 Android Swappy crash on Firebase's second activity focus.
 
 1. Index every valid manifest, including failed and expected-failed manifests, while allowing only a passed manifest to satisfy a supported row.
-2. Show the manifest result and failure class in the aggregate report.
-3. Suppress generic nested capture-mode sections such as `Render`, `Full depth`, and `Ordered overlay` when the authoritative parent lane is already reported.
-4. Classify the Unity DirectX and Metal cyan depth failures as `compositing`, not generic `visual` failures.
-5. Run the full suite and manually inspect the regenerated report.
+2. Carry non-build status manifests and their strict visual metrics through each aggregation layer so the final report retains preflight and failed-lane evidence.
+3. Canonicalize `macOS` identifiers before matching reports, manifests, and matrix rows.
+4. Show the manifest result and failure class in the aggregate report.
+5. Suppress generic nested capture-mode sections such as `Render`, `Full depth`, and `Ordered overlay` when the authoritative parent lane is already reported.
+6. Classify the Unity DirectX and Metal cyan depth failures as `compositing`, not generic `visual` failures.
+7. Classify Android Unity Vulkan from its actual evidence instead of hard-coding every failure as `compositing`: app/API crashes are `runtime`, Firebase command or collection failures are `infrastructure`, absent authoritative captures are `evidence`, failed render/stereo images are `rendering`, and only a failed depth image after the other contracts pass is `compositing`.
+8. Run the full suite and manually inspect the regenerated report.
 
 Exit criterion: every report result agrees with its underlying evidence, and every remaining red entry is actionable.
 
 ### 2. Finish the Android/Firebase synthetic-stereo Vulkan lane
 
 The immediate implementation priority is hardware-backed Android Vulkan in Firebase, reusing the existing Unity Android Vulkan build and capture infrastructure. The synthetic test exercises IMM eye routing and composition without requiring an OpenXR headset or separate-eye presentation.
+
+Run `30813880906` proves that the first Firebase process dispatched both synthetic eyes and wrote the combined capture, but the logged native pointers came from the read buffers rather than the actual native write targets. Firebase then relaunched the activity and Unity crashed in `SwappyVk_setAutoSwapInterval`, so the images were not present in the final pulled directory. Log-only success is not accepted.
 
 1. Add a deterministic Android synthetic-stereo mode that renders two adjacent offscreen eye targets in one frame.
 2. Run that mode on a Firebase device that reports and uses Vulkan.
@@ -183,3 +188,4 @@ The report should become shorter and more trustworthy:
 - The repository's Android native dependency graph is ARM64-only, including the imported static libraries and `libjpeg-turbo`. An x86_64 Android emulator lane therefore requires a separate native-porting task and is not a workflow-only substitute.
 - The Windows software-Vulkan synthetic lane must continue to report `runtime_failed` rather than a visual failure when Unity falls back to Direct3D.
 - The primary cloud stereo strategy is now an ARM64 Android/Firebase hardware-Vulkan lane, avoiding both the unsupported Windows software-Vulkan device and the x86_64 native dependency gap.
+- The known Swappy failure artifact from run `30813880906` is now covered by a classifier regression test and is reported as `runtime_failed`, rather than the lane's former hard-coded `compositing` label.

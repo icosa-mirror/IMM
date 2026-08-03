@@ -95,7 +95,7 @@ def slugify(value: str) -> str:
     for old, new in compact_replacements.items():
         compact = compact.replace(old, new)
     slug = re.sub(r"[^A-Za-z0-9]+", "-", normalize_label(compact)).strip("-").lower()
-    slug = slug.replace("direct-x", "directx").replace("open-gl", "opengl")
+    slug = slug.replace("direct-x", "directx").replace("open-gl", "opengl").replace("mac-os", "macos")
     return f"{slug}{suffix}" if slug else f"evidence{suffix}"
 
 
@@ -134,6 +134,7 @@ def display_name(key: str) -> str:
     key = normalize_label(key.replace("/", "-"))
     key = re.sub(r"(?i)direct[-_\s]*x", "directx", key)
     key = re.sub(r"(?i)open[-_\s]*gl", "opengl", key)
+    key = re.sub(r"(?i)mac[-_\s]*os", "macos", key)
     replacements = {
         "android": "Android",
         "directx": "DirectX",
@@ -219,7 +220,7 @@ def row_matches_key(row: dict, observed_key: str) -> bool:
     key = slugify(observed_key)
     terms = [product, platform, renderer]
     if product == "unity" and platform == "all":
-        terms = ["unity"]
+        terms = ["unity", "preflight"] if renderer == "preflight" else ["unity"]
     if renderer == "native":
         terms = [product, platform]
     if renderer == "preflight":
@@ -475,6 +476,45 @@ def write_section_json(section_dir: Path, name: str, data: dict) -> None:
     )
 
 
+def preserve_status_manifests(input_root: Path, output_dir: Path) -> None:
+    """Carry non-build lane results through every evidence aggregation layer."""
+    for manifest_path in sorted(input_root.rglob("manifest.json")):
+        if output_dir == manifest_path.parent or output_dir in manifest_path.parents:
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(manifest, dict) or manifest.get("schema") != "imm-ci-artifact-manifest-v1":
+            continue
+        matrix = manifest.get("matrix")
+        classification = manifest.get("classification")
+        if not isinstance(matrix, dict) or not isinstance(classification, dict):
+            continue
+        if classification.get("failure_class") == "build":
+            continue
+        matrix_key = "-".join(
+            str(matrix.get(part, ""))
+            for part in ["product", "platform", "mode", "renderer"]
+        )
+        canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        digest = hashlib.sha256(canonical).hexdigest()[:12]
+        destination = output_dir / "status-manifests" / f"{slugify(matrix_key)}-{digest}" / "manifest.json"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        strict_metrics = find_strict_metrics(manifest_path.parent)
+        if strict_metrics:
+            (destination.parent / "render-metrics.json").write_text(
+                json.dumps(strict_metrics, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+
+
 def find_metrics(root: Path) -> dict:
     fallback: dict = {}
     for path in sorted(root.rglob("*metrics*.json")):
@@ -619,6 +659,7 @@ def main() -> int:
     report_path = args.markdown_output.resolve()
     capture_output_dir = output_dir / "captures"
     output_dir.mkdir(parents=True, exist_ok=True)
+    preserve_status_manifests(input_root, output_dir)
 
     reports = discover_reports(input_root)
     coverage = matrix_coverage_rows(args.matrix_status, input_root, reports)

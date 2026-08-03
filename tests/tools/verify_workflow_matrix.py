@@ -46,10 +46,10 @@ REQUIRED_JOBS = {
         "unity-windows-vulkan-synthetic-stereo": ["Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight hosted Unity Vulkan stereo runner", "Run Unity Vulkan synthetic stereo smoke", "Classify Unity Vulkan synthetic stereo runtime", "Split and verify stereo visual evidence", "Verify Unity Vulkan synthetic stereo log contract", "Stage Unity Vulkan synthetic stereo capture evidence", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan synthetic stereo artifacts"],
         "unity-windows-vulkan-ordered-overlay": ["Preflight Unity Vulkan runner", "Run Unity Vulkan ordered overlay smoke", "Classify Unity Vulkan ordered overlay status", "Write Unity Vulkan ordered overlay report", "Stage Unity Vulkan ordered overlay capture evidence", "Verify Unity Vulkan ordered overlay log contract", "Verify Unity Vulkan ordered overlay native render contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-full-depth": ["Preflight Unity Vulkan runner", "Run Unity Vulkan full depth smoke", "Classify Unity Vulkan full depth status", "Write Unity Vulkan full depth report", "Stage Unity Vulkan full depth capture evidence", "Verify Unity Vulkan full depth log contract", "Verify Unity Vulkan full depth native render contract", "Write CI manifest", "Collect artifact summary"],
-        "unity-android-vulkan": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
+        "unity-android-vulkan": ["Download same-commit Android Unity native plugin", "Stage same-commit Android Unity native plugin", "Prepare clean non-XR Unity Android project", "Preflight Unity Android Vulkan runner", "Build Unity Android Vulkan smoke player", "Verify Unity Android APK is non-XR", "Check Firebase Test Lab configuration", "Verify Firebase Adreno device target", "Run Unity Android Vulkan smoke in Firebase Test Lab", "Record Unity Android Vulkan visual metrics", "Write Unity Android Vulkan screenshot report", "Classify Unity Android Vulkan result", "Write CI manifest", "Collect artifact summary", "Upload Unity Android Vulkan artifacts"],
         "unity-windows-openxr-vr": ["Download same-commit Windows native plugin", "Preflight Unity OpenXR VR runner", "Run Unity OpenXR VR smoke", "Record Unity OpenXR VR metrics", "Write Unity OpenXR VR render report", "Verify Unity OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "godot-package-import": ["Run Godot local verifier", "Verify Godot package import harness", "Write CI manifest", "Collect artifact summary"],
-        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Write engine aggregate status manifests", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
+        "engine-evidence-report": ["Download engine artifacts", "Verify engine matrix evidence", "Write engine visual evidence report", "Upload engine visual evidence", "Hide per-lane engine artifacts"],
     },
     ".github/workflows/ci-gpu.yml": {
         "windows-standalone-directx": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight DirectX runner", "Capture DirectX sample1", "Compare DirectX render metrics against committed DirectX baseline", "Write DirectX render report", "Write CI manifest", "Collect artifact summary"],
@@ -301,8 +301,11 @@ def verify_manifest_status_arguments(path: Path, workflow_rel: str, errors: list
         window = "\n".join(lines[index : min(index + 4, len(lines))])
         if "--status" not in window:
             errors.append(f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass --status")
-        if "--failure-class" not in window:
-            errors.append(f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass --failure-class")
+        if "--failure-class" not in window and "--classification-json" not in window:
+            errors.append(
+                f"{workflow_rel}:{index + 1} write_ci_manifest.py invocation must pass "
+                "--failure-class or --classification-json"
+            )
 
 
 def verify_reusable_workflow(path: Path, workflow_rel: str, errors: list[str]) -> None:
@@ -689,6 +692,7 @@ def verify_ci_core_self_test_contract(path: Path, workflow_rel: str, errors: lis
         "python tests/tools/test_write_visual_evidence_report.py",
         "python tests/tools/test_verify_full_depth_evidence_report.py",
         "python tests/tools/test_classify_composition_modes.py",
+        "python tests/tools/test_classify_android_unity_vulkan.py",
     ]
     for token in required_tokens:
         if token not in text:
@@ -713,6 +717,7 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "unity-render-player.log",
             "unity-android-vulkan-render.png",
             "unity-android-vulkan-sample1.json",
+            "[IMM_UNITY_ANDROID_VK_CI_FRAME_PACING_20260803] optimizedFramePacing=0",
             "unity-android-vulkan-synthetic-stereo.png",
             "unity-android-vulkan-synthetic-left.png",
             "unity-android-vulkan-synthetic-right.png",

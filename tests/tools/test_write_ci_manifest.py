@@ -112,6 +112,41 @@ def main() -> int:
         assert expected_manifest["classification"]["result"] == "expected_failed"
         assert expected_manifest["classification"]["failure_class"] == "compositing"
 
+        classified_status = Path(temp_dir) / "classified-status.json"
+        classified_status.write_text(
+            json.dumps({"result": "runtime_failed", "failure_class": "runtime"}),
+            encoding="utf-8",
+        )
+        classified_output = Path(temp_dir) / "classified-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_ci_manifest.py",
+                "--output",
+                str(classified_output),
+                "--repo-root",
+                str(root),
+                "--product",
+                "unity",
+                "--platform-name",
+                "android",
+                "--mode",
+                "non-vr",
+                "--renderer",
+                "vulkan",
+                "--status",
+                "failure",
+                "--classification-json",
+                str(classified_status),
+            ],
+            check=True,
+        )
+        classified_manifest = json.loads(classified_output.read_text(encoding="utf-8"))
+        assert classified_manifest["classification"] == {
+            "result": "failed",
+            "failure_class": "runtime",
+        }
+
     print("CI manifest tests passed")
     return 0
 

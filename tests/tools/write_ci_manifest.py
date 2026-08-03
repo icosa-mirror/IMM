@@ -131,6 +131,11 @@ def main() -> int:
     parser.add_argument("--renderer", required=True)
     parser.add_argument("--status", default="passed")
     parser.add_argument("--failure-class", default="", choices=["", "build", "packaging", "api", "content-parse", "visual", "rendering", "compositing", "audio", "runtime", "runtime-launch", "infrastructure", "vr-device-infrastructure", "evidence", "release-validation", "unknown"])
+    parser.add_argument(
+        "--classification-json",
+        type=Path,
+        help="Status JSON containing result and failure_class from an evidence classifier",
+    )
     parser.add_argument("--fixture", action="append", default=[], help="Fixture file to hash into the manifest")
     parser.add_argument("--include", action="append", default=[], help="File or directory to hash into the manifest")
     args = parser.parse_args()
@@ -148,6 +153,22 @@ def main() -> int:
     fixture_paths = [Path(item) for item in args.fixture] if args.fixture else default_fixtures(root)
     status = normalize_status(args.status)
     failure_class = args.failure_class
+    if args.classification_json:
+        try:
+            classifier = json.loads(args.classification_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"could not read --classification-json: {exc}")
+        if not isinstance(classifier, dict):
+            parser.error("--classification-json must contain a JSON object")
+        classifier_result = str(classifier.get("result") or "").strip()
+        classifier_failure_class = str(classifier.get("failure_class") or "").strip()
+        if classifier_result == "passed" and status == "passed":
+            failure_class = ""
+        elif classifier_result != "passed":
+            status = "failed" if status == "passed" else status
+            failure_class = classifier_failure_class or failure_class or "unknown"
+        elif status != "passed":
+            failure_class = failure_class or "infrastructure"
     if status == "passed":
         failure_class = ""
     elif not failure_class:

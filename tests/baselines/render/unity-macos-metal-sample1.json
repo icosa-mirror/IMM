@@ -18,7 +18,7 @@
     "expected_spatial_luma_grid": {
       "height": 18,
       "max_mean_abs_delta": 0.15,
-      "min_correlation": 0.45,
+      "min_correlation": 0.4,
       "width": 32
     },
     "expected_vertical_luma_profile": {

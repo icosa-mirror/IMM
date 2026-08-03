@@ -17,6 +17,11 @@ PNG_1X1 = bytes.fromhex(
 
 
 def main() -> int:
+    from write_visual_evidence_report import slugify
+
+    assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
+    assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
         input_root = temp / "input"
@@ -38,7 +43,7 @@ def main() -> int:
                         "product": "unity",
                         "platform": "all",
                         "mode": "non-vr",
-                        "renderer": "native",
+                        "renderer": "preflight",
                     },
                 }
             ),
@@ -102,6 +107,55 @@ def main() -> int:
             generic_capture = engine / "captures" / generic_name
             generic_capture.mkdir(parents=True)
             (generic_capture / f"{generic_name}.png").write_bytes(PNG_1X1)
+
+        metal = input_root / "UnityMacOSMetalComposition"
+        metal_captures = metal / "captures"
+        metal_captures.mkdir(parents=True)
+        (metal_captures / "unity-macos-metal.png").write_bytes(PNG_1X1)
+        (metal / "render-report.md").write_text(
+            "# IMM Render Report\n\n![Metal](captures/unity-macos-metal.png)\n",
+            encoding="utf-8",
+        )
+        (metal / "render-metrics.json").write_text(
+            json.dumps(
+                {
+                    "passed": True,
+                    "candidate": {"width": 1, "height": 1},
+                    "reference": {"width": 1, "height": 1},
+                    "contract": {"minimum_spatial_correlation": 0.4},
+                    "spatial_luma_grid": {"mean_abs_delta": 0.01, "correlation": 0.99},
+                    "errors": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (metal / "composition-status.json").write_text(
+            json.dumps(
+                {
+                    "result": "composition_failed",
+                    "failure_class": "compositing",
+                    "rendering": "success",
+                    "compositing": "failed",
+                    "failures": ["cyan depth leakage"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (metal / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {"result": "failed", "failure_class": "compositing"},
+                    "matrix": {
+                        "product": "unity",
+                        "platform": "macos",
+                        "mode": "non-vr",
+                        "renderer": "metal",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
 
         gpu = input_root / "GPUMatrixEvidence" / "WindowsGodotVulkan-GPU"
         gpu.mkdir(parents=True)
@@ -199,11 +253,21 @@ def main() -> int:
                             "product": "unity",
                             "platform": "all",
                             "mode": "non-vr",
-                            "renderer": "native",
+                            "renderer": "preflight",
                             "status": "supported",
                             "hosted_gate": "CI Engine Matrix / Unity Package Import",
-                            "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
+                            "baseline": "tests/baselines/content/sample1.json",
                             "reason": "Unity package import is supported.",
+                        },
+                        {
+                            "product": "unity",
+                            "platform": "macos",
+                            "mode": "non-vr",
+                            "renderer": "metal",
+                            "status": "supported",
+                            "hosted_gate": "CI Engine Matrix / Unity macOS Metal Composition",
+                            "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
+                            "reason": "Unity Metal is supported.",
                         },
                         {
                             "product": "standalone",
@@ -284,13 +348,17 @@ def main() -> int:
         assert "standalone/macos/non-vr/metal (missing evidence)" in result.stdout
         text = report.read_text(encoding="utf-8")
         assert "## Matrix Coverage" in text
-        assert "| unity/all/non-vr/native | supported | passed | yes |" in text
+        assert "| unity/all/non-vr/preflight | supported | passed | no |" in text
+        assert "| unity/macos/non-vr/metal | supported | failed | yes |" in text
         assert "| standalone/macos/non-vr/metal | supported | missing evidence | yes |" in text
         assert "| godot/windows/vr/openxr | deferred | deferred | no |" in text
         assert "| godot/windows/non-vr/preflight | supported | passed | no |" in text
         assert "| godot/windows/non-vr/vulkan | supported | failed | yes |" in text
         assert "| standalone/ios/non-vr/native | unsupported | unsupported | no |" in text
         assert "## Unity Windows DirectX Composition" in text
+        assert "## Unity macOS Metal Composition" in text
+        assert "## Unity macOS Metal Composition\n\n- Result: composition_failed" in text
+        assert "- Lane status: failed" in text
         assert "Composition mode: full_depth" in text
         assert "Composition contract: depth_composition" in text
         assert "Ordered overlay: not_tested" in text
@@ -351,6 +419,19 @@ def main() -> int:
             },
         }
         (raw / "manifest.json").write_text(json.dumps(android_manifest), encoding="utf-8")
+        preflight = temp / "raw" / "UnityPackageImport"
+        preflight.mkdir(parents=True)
+        preflight_manifest = {
+            "schema": "imm-ci-artifact-manifest-v1",
+            "classification": {"result": "passed"},
+            "matrix": {
+                "product": "unity",
+                "platform": "all",
+                "mode": "non-vr",
+                "renderer": "preflight",
+            },
+        }
+        (preflight / "manifest.json").write_text(json.dumps(preflight_manifest), encoding="utf-8")
 
         first_output = temp / "first"
         first_report = first_output / "ENGINE_VALIDATION_REPORT.md"
@@ -373,6 +454,11 @@ def main() -> int:
         normalized = first_output / "captures" / "unityandroidvulkan"
         assert (normalized / "render-metrics.json").exists()
         assert (normalized / "manifest.json").exists()
+        preserved_preflights = list((first_output / "status-manifests").rglob("manifest.json"))
+        assert any(
+            json.loads(path.read_text(encoding="utf-8")).get("matrix", {}).get("renderer") == "preflight"
+            for path in preserved_preflights
+        )
 
         aggregate_dir = first_output / "status-manifests" / "unity-non-vr"
         aggregate_dir.mkdir(parents=True)
@@ -394,6 +480,16 @@ def main() -> int:
                 {
                     "schema": "imm-testing-matrix-status-v1",
                     "rows": [
+                        {
+                            "product": "unity",
+                            "platform": "all",
+                            "mode": "non-vr",
+                            "renderer": "preflight",
+                            "status": "supported",
+                            "hosted_gate": "CI Engine Matrix / Unity Package Import",
+                            "baseline": "tests/baselines/content/sample1.json",
+                            "reason": "Unity package import is validated.",
+                        },
                         {
                             "product": "unity",
                             "platform": "android",
@@ -432,6 +528,7 @@ def main() -> int:
         )
         assert second_result.returncode == 0, second_result.stdout + second_result.stderr
         second_text = second_report.read_text(encoding="utf-8")
+        assert "| unity/all/non-vr/preflight | supported | passed | no |" in second_text
         assert "| unity/android/non-vr/vulkan | supported | passed | yes |" in second_text
         assert "## Unityandroidvulkan\n\n- Result: passed" in second_text
 

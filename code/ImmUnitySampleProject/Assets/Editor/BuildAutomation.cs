@@ -96,12 +96,20 @@ namespace ImmPlayer.Editor
             }
 
             AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
+            bool previousOptimizedFramePacing = PlayerSettings.Android.optimizedFramePacing;
             XRGeneralSettings androidXrSettings =
                 XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
             bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
             try
             {
                 PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                // Firebase may focus the activity twice during a Robo run. Unity
+                // 6.0.3's Swappy Vulkan wrapper can dereference an uninitialized
+                // mutex during that second focus transition, after valid captures
+                // were already produced. This validation build does not measure
+                // frame pacing, so keep Swappy out of its presentation path.
+                PlayerSettings.Android.optimizedFramePacing = false;
+                Debug.Log("[IMM_UNITY_ANDROID_VK_CI_FRAME_PACING_20260803] optimizedFramePacing=0");
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = false;
@@ -117,6 +125,7 @@ namespace ImmPlayer.Editor
             finally
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
+                PlayerSettings.Android.optimizedFramePacing = previousOptimizedFramePacing;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;

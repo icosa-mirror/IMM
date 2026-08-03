@@ -153,7 +153,6 @@ def main() -> int:
             "unity-android-vulkan-external-render-metrics.json",
             "unity-android-vulkan-external-render.png",
             "--minimum-consecutive-frames 2",
-            "--minimum-consecutive-frames 5",
             "unity-android-vulkan-composition-metrics.json",
             "unity-windows-directx-sample1.png",
             "unity-android-vulkan-sample1.json",

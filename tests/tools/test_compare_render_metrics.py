@@ -293,6 +293,64 @@ def main() -> int:
         _, _, overlay_pixels, _ = compare_render_metrics.read_rgb_capture(probe_overlay_path)
         assert bytes((255, 32, 32)) in overlay_pixels
 
+        # Exercise the production Unity/macOS/Metal contract against both
+        # tolerated renderer drift and visually wrong full-size captures. The
+        # correlation floor is intentionally below two reviewed CI captures
+        # (0.444 and 0.451), while these bad poses remain well outside it.
+        repo_root = Path(__file__).resolve().parents[2]
+        macos_reference_path = repo_root / "tests/baselines/render/unity-windows-directx-sample1.png"
+        macos_contract_path = repo_root / "tests/baselines/render/unity-macos-metal-sample1.json"
+        macos_width, macos_height, macos_pixels, _ = compare_render_metrics.read_rgb_capture(
+            macos_reference_path
+        )
+        macos_row_bytes = macos_width * 3
+
+        mild_drift_path = temp / "macos-mild-drift.png"
+        write_render_report.write_png(
+            mild_drift_path,
+            macos_width,
+            macos_height,
+            bytes(min(255, channel + 3) for channel in macos_pixels),
+        )
+        mild_drift = compare_render_metrics.evaluate_capture(
+            mild_drift_path, macos_reference_path, macos_contract_path
+        )
+        assert mild_drift["passed"], mild_drift["errors"]
+
+        pose_shift = macos_width // 4
+        wrong_pose_pixels = b"".join(
+            row[pose_shift * 3 :] + row[: pose_shift * 3]
+            for y in range(macos_height)
+            for row in [macos_pixels[y * macos_row_bytes : (y + 1) * macos_row_bytes]]
+        )
+        wrong_pose_path = temp / "macos-wrong-pose.png"
+        write_render_report.write_png(wrong_pose_path, macos_width, macos_height, wrong_pose_pixels)
+        wrong_pose = compare_render_metrics.evaluate_capture(
+            wrong_pose_path, macos_reference_path, macos_contract_path
+        )
+        assert not wrong_pose["passed"], "shifted Unity camera pose unexpectedly passed"
+        assert any("spatial luma grid correlation" in error for error in wrong_pose["errors"])
+
+        default_scene_pixels = bytearray([70, 100, 140] * (macos_width * macos_height))
+        for x0, y0, x1, y1, color in [
+            (180, 250, 430, 500, (255, 0, 255)),
+            (800, 100, 1000, 260, (255, 255, 0)),
+            (570, 280, 800, 480, (0, 255, 255)),
+        ]:
+            for y in range(y0, y1):
+                for x in range(x0, x1):
+                    offset = (y * macos_width + x) * 3
+                    default_scene_pixels[offset : offset + 3] = bytes(color)
+        default_scene_path = temp / "macos-default-scene-probes.png"
+        write_render_report.write_png(
+            default_scene_path, macos_width, macos_height, bytes(default_scene_pixels)
+        )
+        default_scene = compare_render_metrics.evaluate_capture(
+            default_scene_path, macos_reference_path, macos_contract_path
+        )
+        assert not default_scene["passed"], "default scene with probe squares unexpectedly passed"
+        assert any("spatial luma grid" in error for error in default_scene["errors"])
+
         output_path.write_text(json.dumps({"passed": True}, indent=2), encoding="utf-8")
 
     print("Render metric drift tests passed")

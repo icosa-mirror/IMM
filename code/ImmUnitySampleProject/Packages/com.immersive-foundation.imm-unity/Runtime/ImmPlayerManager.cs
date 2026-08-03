@@ -1574,15 +1574,24 @@ namespace ImmPlayer
                         if (xrRt != null)
                             hostDepthPtr = xrRt.depthBuffer.GetNativeRenderBufferPtr();
                     }
+                    IntPtr eyeTargetPtr = eyeTarget.colorBuffer.GetNativeRenderBufferPtr();
                     ImmNativePlugin.SetVulkanCameraEyeRenderBuffers(
                         info.CameraId,
                         vulkanEye,
-                        eyeTarget.colorBuffer.GetNativeRenderBufferPtr(),
+                        eyeTargetPtr,
                         hostDepthPtr,
                         eyeTarget.width,
                         eyeTarget.height,
                         1,
                         eyeDepthTarget != null ? 1 : 0);
+                    if (useSyntheticStereo)
+                    {
+                        int syntheticEventId = (info.CameraId << 8) | (vulkanEye & 0x1);
+                        Debug.Log(
+                            $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
+                            $"eye={vulkanEye} eventId={syntheticEventId} " +
+                            $"targetId={eyeTarget.GetInstanceID()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
+                    }
                     if (!_loggedVulkanRenderTargetSource.Contains(cam))
                     {
                         _loggedVulkanRenderTargetSource.Add(cam);
@@ -1651,15 +1660,6 @@ namespace ImmPlayer
             }
 
             int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
-            if (useSyntheticStereo)
-            {
-                RenderTexture syntheticTarget = info.VulkanEyeTargets[eyeIndex & 1];
-                Debug.Log(
-                    $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
-                    $"eye={eyeIndex} eventId={eventId} " +
-                    $"targetId={(syntheticTarget != null ? syntheticTarget.GetInstanceID() : 0)} " +
-                    $"targetPtr=0x{(syntheticTarget != null ? syntheticTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64() : 0):X}");
-            }
             info.CommandBuffer.Clear();
             if (IsVulkanRuntime())
             {

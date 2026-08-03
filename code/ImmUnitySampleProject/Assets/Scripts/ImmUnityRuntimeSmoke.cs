@@ -83,6 +83,7 @@ namespace ImmPlayer
                 Application.persistentDataPath,
                 "imm-ci",
                 "unity-android-vulkan-synthetic-stereo.png");
+            Debug.Log("[IMM_UNITY_ANDROID_VK_CI_FRAME_PACING_20260803] optimizedFramePacing=0");
             Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
 #endif
         }

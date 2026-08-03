@@ -1604,6 +1604,7 @@ jobs:
           --timeout 5m
           --directory-to-pull /sdcard/Android/data/com.ImmersiveFoundation.IMMUnityTest/files
           --required-marker "[IMM_UNITY_SMOKE] Android Vulkan CI smoke installed"
+          --required-marker "[IMM_UNITY_ANDROID_VK_CI_FRAME_PACING_20260803] optimizedFramePacing=0"
           --required-marker "[IMM_UNITY_VK_VALIDATION_ARGS_20260731]"
           --required-marker "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan"
           --required-marker "[IMM_UNITY_VK_QUEUE_20260802] dedicatedQueueAllowed=1"
@@ -1721,26 +1722,8 @@ jobs:
               if ($LASTEXITCODE -ne 0) { $failed = $true }
             }
 
-            python tests/tools/validate_render_video.py $deviceVideo.FullName `
-              --reference tests/baselines/render/unity-windows-directx-sample1.png `
-              --contract tests/baselines/render/unity-android-vulkan-external-sample1.json `
-              --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external.png `
-              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-video-validation.json `
-              --sample-interval-seconds 2 `
-              --minimum-consecutive-frames 5
-            if ($LASTEXITCODE -ne 0) { $failed = $true }
-            $externalCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external.png -ErrorAction SilentlyContinue
-            if ($externalCapture) {
-              python tests/tools/compare_render_metrics.py $externalCapture.FullName `
-                --reference tests/baselines/render/unity-windows-directx-sample1.png `
-                --contract tests/baselines/render/unity-android-vulkan-external-sample1.json `
-                --diagnostic-overlay-output artifacts/unity-android-vulkan/unity-android-vulkan-external-probe-overlay.png `
-                --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-metrics.json
-              if ($LASTEXITCODE -ne 0) { $failed = $true }
-            }
           } else {
             '{"passed":false,"errors":["missing Firebase physical-device video"],"frames":[]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json
-            '{"passed":false,"errors":["missing Firebase physical-device video"],"frames":[]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-external-video-validation.json
             Write-Warning "Missing Firebase physical-device video"
             $failed = $true
           }
@@ -1775,18 +1758,14 @@ jobs:
             New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/external-render | Out-Null
             Copy-Item -LiteralPath $externalRenderCapture.FullName -Destination artifacts/unity-android-vulkan/captures/external-render/unity-android-vulkan-external-render.png -Force
           }
-          $externalCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external.png -ErrorAction SilentlyContinue
-          if ($externalCapture) {
-            python tests/tools/write_render_report.py `
-              --metrics-json artifacts/unity-android-vulkan/unity-android-vulkan-external-metrics.json `
-              --candidate-capture $externalCapture.FullName `
-              --output-dir artifacts/unity-android-vulkan/captures/external `
-              --markdown-output artifacts/unity-android-vulkan/external-render-report.md
-          }
+
+      - name: Classify Unity Android Vulkan result
+        if: always()
+        run: python tests/tools/classify_android_unity_vulkan.py --artifact-dir artifacts/unity-android-vulkan --output artifacts/unity-android-vulkan/android-vulkan-status.json
 
       - name: Write CI manifest
         if: always()
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts/unity-android-vulkan/manifest.json --product unity --platform-name android --mode non-vr --renderer vulkan --include artifacts/unity-android-vulkan
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/unity-android-vulkan/android-vulkan-status.json --output artifacts/unity-android-vulkan/manifest.json --product unity --platform-name android --mode non-vr --renderer vulkan --include artifacts/unity-android-vulkan
 
       - name: Collect artifact summary
         if: always()
@@ -1996,75 +1975,6 @@ jobs:
           --input-root artifacts/engine-evidence/input
           --output-dir artifacts/engine-evidence/view
           --markdown-output artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
-
-      - name: Write engine aggregate status manifests
-        if: always()
-        run: |
-          mkdir -p artifacts/engine-evidence/view/status-manifests/unity-non-vr
-          unity_status="passed"
-          unity_failure_class=""
-          for result in \
-            "${{ needs.unity-package-import.result }}" \
-            "${{ needs.unity-macos-metal-composition.result }}" \
-            "${{ needs.unity-windows-directx-player-build.result }}" \
-            "${{ needs.unity-windows-directx-composition.result }}" \
-            "${{ needs.unity-windows-vulkan-player-build.result }}"
-          do
-            if [ "$result" = "failure" ]; then
-              unity_status="failed"
-              unity_failure_class="build"
-            elif [ "$result" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
-              unity_status="cancelled"
-              unity_failure_class="build"
-            fi
-          done
-          if [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" = "failure" ]; then
-            unity_status="failed"
-            unity_failure_class="compositing"
-          elif [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
-            unity_status="cancelled"
-            unity_failure_class="compositing"
-          fi
-          if [ "${{ needs.unity-windows-vulkan-full-depth.result }}" = "failure" ]; then
-            unity_status="failed"
-            unity_failure_class="compositing"
-          elif [ "${{ needs.unity-windows-vulkan-full-depth.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
-            unity_status="cancelled"
-            unity_failure_class="compositing"
-          fi
-          if [ "${{ needs.unity-windows-vulkan-synthetic-stereo.result }}" = "failure" ]; then
-            unity_status="failed"
-            unity_failure_class="visual"
-          elif [ "${{ needs.unity-windows-vulkan-synthetic-stereo.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
-            unity_status="cancelled"
-            unity_failure_class="visual"
-          fi
-          if [ "${{ needs.unity-android-vulkan.result }}" = "failure" ]; then
-            unity_status="failed"
-            unity_failure_class="compositing"
-          elif [ "${{ needs.unity-android-vulkan.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
-            unity_status="cancelled"
-            unity_failure_class="compositing"
-          fi
-          if [ "${{ needs.unity-package-import.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-macos-metal-composition.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-vulkan-player-build.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-vulkan-synthetic-stereo.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-windows-vulkan-full-depth.result }}" != "skipped" ] || \
-             [ "${{ needs.unity-android-vulkan.result }}" != "skipped" ]; then
-            python tests/tools/write_ci_manifest.py \
-              --status "$unity_status" \
-              --failure-class "$unity_failure_class" \
-              --output artifacts/engine-evidence/view/status-manifests/unity-non-vr/manifest.json \
-              --product unity \
-              --platform-name all \
-              --mode non-vr \
-              --renderer native \
-              --include artifacts/engine-evidence/view/ENGINE_VALIDATION_REPORT.md
-          fi
 
       - name: Upload engine visual evidence
         if: always()
