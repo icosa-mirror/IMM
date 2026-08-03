@@ -1508,7 +1508,7 @@ jobs:
           if ($compositionCapture) {
             python tests/tools/compare_render_metrics.py $compositionCapture.FullName `
               --reference tests/baselines/render/windows-directx-sample1.ppm `
-              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --contract tests/baselines/render/unity-android-vulkan-composition-sample1.json `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
             if ($LASTEXITCODE -ne 0) { $failed = $true }
           } else {
