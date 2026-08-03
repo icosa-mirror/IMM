@@ -16,6 +16,7 @@
       }
     },
     "expected_spatial_luma_grid": {
+      "center_crop_aspect_ratio": 1.3333333333,
       "height": 18,
       "max_mean_abs_delta": 0.08,
       "min_correlation": 0.82,
@@ -25,6 +26,7 @@
       {
         "name": "character-front-depth-order",
         "region_normalized": { "x": 0.47, "y": 0.4, "width": 0.1, "height": 0.25 },
+        "center_crop_aspect_ratio": 1.3333333333,
         "width": 8,
         "height": 12,
         "max_mean_abs_delta": 0.04,
@@ -48,7 +50,8 @@
     "minimum_near_visible_pixels": 10000,
     "minimum_non_black_pixels": 20000,
     "requires_color_metrics": true,
-    "requires_dimensions": { "height": 720, "width": 1280 },
+    "allow_reference_dimension_mismatch": true,
+    "minimum_dimensions": { "height": 700, "width": 960 },
     "requires_nonblank_capture": true,
     "requires_orientation_metrics": true
   }

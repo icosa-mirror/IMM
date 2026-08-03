@@ -244,9 +244,24 @@ def main() -> int:
         flipped_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, flipped_path, 4, 4)
         barred_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, barred_path, 4, 4)
         cropped_barred_spatial = compare_render_metrics.collect_spatial_metrics(reference_path, barred_path, 4, 4, 1.0)
+        cropped_region_specification = {
+            "name": "center-cropped-detail",
+            "center_crop_aspect_ratio": 1.0,
+            "region_normalized": {"x": 0.0, "y": 0.0, "width": 0.75, "height": 0.5},
+            "width": 3,
+            "height": 2,
+            "max_mean_abs_delta": 0.02,
+            "min_correlation": 0.9,
+        }
+        cropped_barred_region = compare_render_metrics.collect_spatial_region_metrics(
+            reference_path, barred_path, cropped_region_specification
+        )
         assert compare_render_metrics.validate_spatial_contract(contract, same_spatial) == []
         assert compare_render_metrics.validate_spatial_contract(contract, scaled_spatial) == []
         assert compare_render_metrics.validate_spatial_contract(contract, cropped_barred_spatial) == []
+        assert compare_render_metrics.validate_spatial_region_contract(
+            [cropped_region_specification], [cropped_barred_region]
+        ) == []
         assert compare_render_metrics.validate_spatial_contract(contract, barred_spatial)
         scaled = compare_render_metrics.collect_metrics(scaled_path)
         assert any("width differs" in error for error in compare_render_metrics.compare_metrics(reference, scaled))

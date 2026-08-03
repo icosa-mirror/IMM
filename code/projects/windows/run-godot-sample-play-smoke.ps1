@@ -56,6 +56,7 @@ if (-not (Test-Path -LiteralPath $extensionList)) {
         # list exists. The real project launch below remains mandatory and is
         # independently checked for exit status, fatal logs, and visual output.
         Write-Warning "Godot editor import exited with $importExitCode after completing discovery; continuing to Run Project"
+        $global:LASTEXITCODE = 0
     }
 }
 

@@ -330,12 +330,19 @@ def collect_spatial_region_metrics(
     if normalized[0] < 0.0 or normalized[1] < 0.0 or normalized[2] <= 0.0 or normalized[3] <= 0.0 or normalized[0] + normalized[2] > 1.0 or normalized[1] + normalized[3] > 1.0:
         return {"name": specification.get("name", "unnamed"), "error": "region_normalized is outside the capture"}
 
+    crop_aspect_ratio = specification.get("center_crop_aspect_ratio")
+
     def pixel_region(width: int, height: int) -> tuple[int, int, int, int]:
-        x = round(normalized[0] * width)
-        y = round(normalized[1] * height)
-        region_width = max(1, round(normalized[2] * width))
-        region_height = max(1, round(normalized[3] * height))
-        return x, y, min(region_width, width - x), min(region_height, height - y)
+        crop_x, crop_y, crop_width, crop_height = center_crop_region(
+            width,
+            height,
+            float(crop_aspect_ratio) if crop_aspect_ratio is not None else None,
+        )
+        x = crop_x + round(normalized[0] * crop_width)
+        y = crop_y + round(normalized[1] * crop_height)
+        region_width = max(1, round(normalized[2] * crop_width))
+        region_height = max(1, round(normalized[3] * crop_height))
+        return x, y, min(region_width, crop_x + crop_width - x), min(region_height, crop_y + crop_height - y)
 
     grid_width = int(specification.get("width", 8))
     grid_height = int(specification.get("height", 12))
@@ -353,6 +360,7 @@ def collect_spatial_region_metrics(
         "grid_width": grid_width,
         "grid_height": grid_height,
         "region_normalized": dict(region),
+        "center_crop_aspect_ratio": crop_aspect_ratio,
         "reference_region": dict(zip(("x", "y", "width", "height"), reference_region)),
         "candidate_region": dict(zip(("x", "y", "width", "height"), candidate_region)),
     })
