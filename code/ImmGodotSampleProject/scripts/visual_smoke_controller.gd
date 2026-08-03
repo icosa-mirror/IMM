@@ -140,8 +140,10 @@ func _setup_compositor() -> bool:
 	var compositor: Compositor = Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
 	if _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY:
-		_compositor_effect.set("effect_callback_type", CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
-		print("IMM Godot %s visual smoke ordered overlay compositor callback: PRE_TRANSPARENT" % _selected_renderer_name())
+		# IMM must be the final layer. PRE_TRANSPARENT leaves scene probes
+		# (including the cyan rear probe) in front of the IMM character.
+		_compositor_effect.set("effect_callback_type", CompositorEffect.EFFECT_CALLBACK_TYPE_POST_TRANSPARENT)
+		print("IMM Godot %s visual smoke ordered overlay compositor callback: POST_TRANSPARENT" % _selected_renderer_name())
 	var callback_override: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_CALLBACK_TYPE", -1)
 	if callback_override >= 0 and callback_override < CompositorEffect.EFFECT_CALLBACK_TYPE_MAX:
 		_compositor_effect.set("effect_callback_type", callback_override)

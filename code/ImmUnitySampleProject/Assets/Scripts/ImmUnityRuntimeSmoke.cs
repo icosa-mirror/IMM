@@ -909,6 +909,11 @@ namespace ImmPlayer
                 Camera candidate = cameras[i];
                 if (candidate == null || candidate.cullingMask == 0)
                     continue;
+                // Probes belong to the scene camera. The dedicated overlay
+                // camera is intentionally later than IMM and would put the
+                // cyan rear probe in front of the IMM character.
+                if (candidate.name.Contains("Overlay Fixture Camera", StringComparison.Ordinal))
+                    continue;
                 if (best == null || candidate.depth > best.depth)
                     best = candidate;
             }

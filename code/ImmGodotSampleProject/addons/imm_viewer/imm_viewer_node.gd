@@ -413,11 +413,14 @@ func transform_to_matrix_array(transform: Transform3D) -> PackedFloat32Array:
 func make_perspective_projection(fov_degrees: float, aspect: float, z_near: float, z_far: float) -> PackedFloat32Array:
     var f := 1.0 / tan(deg_to_rad(fov_degrees) * 0.5)
     var depth := z_near - z_far
+    # Godot's Vulkan clip space is zero-to-one. The previous coefficients
+    # were the OpenGL [-1, 1] form, which made the native Vulkan depth test
+    # run with the near/far ordering inverted.
     return PackedFloat32Array([
         f / aspect, 0.0, 0.0, 0.0,
         0.0, f, 0.0, 0.0,
-        0.0, 0.0, (z_far + z_near) / depth, -1.0,
-        0.0, 0.0, (2.0 * z_far * z_near) / depth, 0.0,
+        0.0, 0.0, z_far / depth, -1.0,
+        0.0, 0.0, (z_far * z_near) / depth, 0.0,
     ])
 
 func _cycle_spawn_area(offset: int) -> void:

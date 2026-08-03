@@ -71,7 +71,7 @@ def main() -> int:
             "MAX_SCENE_PROBE_OCCLUDED_SHARE",
             "COMPOSITION_MODE_ORDERED_OVERLAY",
             "IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE",
-            "EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT",
+            "EFFECT_CALLBACK_TYPE_POST_TRANSPARENT",
             "scene composition %s ordered overlay rear probe failed",
             "scene composition %s %s IMM visibility failed",
             "last_depth_aware_vulkan_composite",
@@ -201,6 +201,15 @@ def main() -> int:
             "expected_color_components",
             "sample1-lower-red-brush-content",
             "minimum_largest_component_share_of_crop",
+        ],
+        ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd": [
+            "Godot's Vulkan clip space is zero-to-one",
+            "z_far / depth",
+            "(z_far * z_near) / depth",
+        ],
+        ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp": [
+            "Both the IMM intermediate depth and Godot's Vulkan scene depth use",
+            "imm_depth > host_depth",
         ],
         ROOT / "tests/baselines/render/sample1-ordered-overlay.json": [
             "expected_color_components",
@@ -369,6 +378,8 @@ def main() -> int:
     unity_smoke = (
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
     ).read_text(encoding="utf-8")
+    if 'Overlay Fixture Camera", StringComparison.Ordinal' not in unity_smoke:
+        errors.append("Unity ordered-overlay probes must use the scene camera, not the late overlay camera")
     if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in unity_smoke:
         errors.append(
             "Unity smoke capture must detect its explicit RenderTexture instead of forcing projection"
