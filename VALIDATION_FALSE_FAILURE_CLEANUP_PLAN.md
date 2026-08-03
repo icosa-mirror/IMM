@@ -17,6 +17,15 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 5. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
 6. Use the stereo lane to detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
 
+### Unity Quest Vulkan stereo facts
+
+- The Unity sample is configured for Multi Pass (`m_StereoRenderingPath: 0`). This is the mode the IMM Unity plugin expects for Quest Vulkan.
+- The plugin explicitly does not support instanced single-pass and forces a stereo camera to its `TwoPass` integration path, except for its legacy `SinglePass` mode.
+- A real Quest test confirms a product failure in that supported path: the left eye renders IMM strokes correctly while the right eye shows only Unity's background sky sphere.
+- Firebase synthetic stereo is not yet a Quest-equivalent test. It manually invokes `Camera.Render()` twice and supplies the eye index, so it verifies two target writes and capture plumbing but bypasses Unity's real XR Multi Pass callback/eye-target/composite handoff.
+- The synthetic lane is currently correctly red because its two images are byte-identical despite distinct targets/events. Do not use it as evidence that the Quest right-eye failure is fixed.
+- Next diagnostic/fix: capture the real XR Multi Pass callback state for each eye—`stereoActiveEye`, event ID, native offscreen target pointer, native render completion, and managed composite source—and require the right-eye capture to contain IMM content before the Quest path can pass.
+
 The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejecting Vulkan and falling back to Direct3D must report `runtime_failed`. It is no longer the primary route to cloud stereo evidence.
 
 The Godot Run-button regression is now locally reproduced and fixed. The Quest-oriented Vulkan renderer had applied pipelined external-image submission and Unity reverse-Z depth handling to Godot even though Godot samples its standard-depth intermediate image in the same compositor callback. The corrected path waits on the non-dedicated queue, uses normal near-to-zero depth ordering, and restores shader-read layout before handoff. Two additional startup hazards were found and guarded: bounding-box queries during partial loading and child-count queries on non-group layers. The validation launches `project.godot` without a scene/script override, requires a clean native log, freezes only the evidence capture at frame zero, and compares the resulting 1280x720 frame to a reviewed Godot Vulkan baseline with a localized character/front-surface depth-order check.
