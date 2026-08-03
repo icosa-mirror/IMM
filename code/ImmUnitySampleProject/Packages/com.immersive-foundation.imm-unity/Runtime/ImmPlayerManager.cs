@@ -687,9 +687,13 @@ namespace ImmPlayer
             // A/B; IMM_UNITY_VK_NO_DOUBLE_BUFFER still forces single (now default).
             public readonly RenderTexture[] VulkanEyeTargets = new RenderTexture[2];
             public readonly RenderTexture[,] VulkanEyeBuffers = new RenderTexture[2, 3];
+            public readonly RenderTexture[] VulkanEyeDepthTargets = new RenderTexture[2];
+            public readonly RenderTexture[] VulkanEyeDepthWriteTargets = new RenderTexture[2];
+            public readonly RenderTexture[,] VulkanEyeDepthBuffers = new RenderTexture[2, 3];
         }
 
         private Material _vulkanCompositeMaterial;
+        private Material _vulkanDepthCompositeMaterial;
         private int _vulkanCompositeLogCount;
         private int _vulkanOnRenderImageLogCount;
 
@@ -705,14 +709,27 @@ namespace ImmPlayer
             RenderTexture write = EnsureVulkanEyeBuffer(info, eye, writeSlot, width, height);
             RenderTexture read = buffered ? EnsureVulkanEyeBuffer(info, eye, readSlot, width, height) : write;
             info.VulkanEyeTargets[eye] = read;
+            if (_flatAndroidVulkanSharedDepthComposition)
+            {
+                RenderTexture writeDepth = EnsureVulkanEyeDepthBuffer(info, eye, writeSlot, width, height);
+                info.VulkanEyeDepthWriteTargets[eye] = writeDepth;
+                info.VulkanEyeDepthTargets[eye] = buffered
+                    ? EnsureVulkanEyeDepthBuffer(info, eye, readSlot, width, height)
+                    : writeDepth;
+            }
+            else
+            {
+                info.VulkanEyeDepthTargets[eye] = null;
+                info.VulkanEyeDepthWriteTargets[eye] = null;
+            }
             return write;
         }
 
         private RenderTexture EnsureVulkanEyeBuffer(PerCameraInfo info, int eye, int parity, int width, int height)
         {
             RenderTexture rt = info.VulkanEyeBuffers[eye, parity];
-            int depthBits = _flatAndroidVulkanSharedDepthComposition ? 24 : 0;
-            if (rt != null && (rt.width != width || rt.height != height || rt.depth != depthBits))
+            const int depthBits = 0;
+            if (rt != null && (rt.width != width || rt.height != height))
             {
                 rt.Release();
                 UnityEngine.Object.Destroy(rt);
@@ -731,6 +748,40 @@ namespace ImmPlayer
                 Debug.Log($"[IMM_UNITY_VK_OFFSCREEN_20260716] created eye buffer cam={info.CameraId} eye={eye} parity={parity} {width}x{height} depth={depthBits}");
             }
             info.VulkanEyeBuffers[eye, parity] = rt;
+            return rt;
+        }
+
+        private RenderTexture EnsureVulkanEyeDepthBuffer(
+            PerCameraInfo info,
+            int eye,
+            int parity,
+            int width,
+            int height)
+        {
+            RenderTexture rt = info.VulkanEyeDepthBuffers[eye, parity];
+            if (rt != null && (rt.width != width || rt.height != height))
+            {
+                rt.Release();
+                UnityEngine.Object.Destroy(rt);
+                rt = null;
+            }
+            if (rt == null)
+            {
+                rt = new RenderTexture(width, height, 24, RenderTextureFormat.Depth)
+                {
+                    name = $"IMM Vulkan Depth {eye}.{parity} (cam {info.CameraId})",
+                    antiAliasing = 1,
+                    filterMode = FilterMode.Point,
+                    wrapMode = TextureWrapMode.Clamp,
+                    useMipMap = false,
+                    autoGenerateMips = false
+                };
+                rt.Create();
+                Debug.Log(
+                    $"[IMM_UNITY_VK_DEPTH_OFFSCREEN_20260803] created eye depth " +
+                    $"cam={info.CameraId} eye={eye} parity={parity} {width}x{height}");
+            }
+            info.VulkanEyeDepthBuffers[eye, parity] = rt;
             return rt;
         }
 
@@ -929,6 +980,21 @@ namespace ImmPlayer
             return _vulkanCompositeMaterial;
         }
 
+        private Material GetVulkanDepthCompositeMaterial()
+        {
+            if (_vulkanDepthCompositeMaterial == null)
+            {
+                Shader shader = Resources.Load<Shader>("ImmVulkanDepthComposite");
+                if (shader != null)
+                    _vulkanDepthCompositeMaterial = new Material(shader);
+                Debug.Log(
+                    $"[IMM_UNITY_VK_DEPTH_COMPOSITE_20260803] " +
+                    $"shader={(shader != null ? shader.name : "missing")} " +
+                    $"supported={(shader != null && shader.isSupported)}");
+            }
+            return _vulkanDepthCompositeMaterial;
+        }
+
         public bool UsesCommandBufferRendering => _useCommandBufferRendering;
 
         public bool IsReadyForDocumentLoad
@@ -1095,6 +1161,11 @@ namespace ImmPlayer
         public void SetFlatAndroidVulkanSharedDepthCompositionForValidation(bool enabled)
         {
             _flatAndroidVulkanSharedDepthComposition = enabled;
+            foreach (Camera camera in _cameras.Keys)
+            {
+                if (camera != null)
+                    camera.depthTextureMode |= DepthTextureMode.Depth;
+            }
             Debug.Log(
                 $"[IMM_UNITY_ANDROID_VK_SHARED_DEPTH_20260802] enabled={(enabled ? 1 : 0)} " +
                 $"frame={Time.frameCount}");
@@ -1121,16 +1192,32 @@ namespace ImmPlayer
                 return false;
 
             RenderTexture eyeTarget = info.VulkanEyeTargets[0];
-            Material composite = GetVulkanCompositeMaterial();
-            if (eyeTarget == null || composite == null)
+            if (eyeTarget == null)
                 return false;
 
             // OnRenderImage is Unity's supported final-presentation hook in the
             // built-in pipeline. Unity owns the destination (including Android's
             // Vulkan swapchain/intermediate and pre-rotation), so no native code
             // attempts to discover or retain the display image.
-            Graphics.Blit(source, destination);
-            Graphics.Blit(eyeTarget, destination, composite);
+            Material composite;
+            RenderTexture eyeDepthTarget = info.VulkanEyeDepthTargets[0];
+            if (_flatAndroidVulkanSharedDepthComposition && eyeDepthTarget != null)
+            {
+                composite = GetVulkanDepthCompositeMaterial();
+                if (composite == null)
+                    return false;
+                composite.SetTexture("_ImmColorTex", eyeTarget);
+                composite.SetTexture("_ImmDepthTex", eyeDepthTarget);
+                Graphics.Blit(source, destination, composite);
+            }
+            else
+            {
+                composite = GetVulkanCompositeMaterial();
+                if (composite == null)
+                    return false;
+                Graphics.Blit(source, destination);
+                Graphics.Blit(eyeTarget, destination, composite);
+            }
             if (_vulkanOnRenderImageLogCount < 8)
             {
                 ++_vulkanOnRenderImageLogCount;
@@ -1138,7 +1225,8 @@ namespace ImmPlayer
                     $"[IMM_UNITY_VK_ONRENDERIMAGE_20260802] frame={Time.frameCount} cam={cam.name} " +
                     $"source={(source != null ? source.GetInstanceID() : 0)} " +
                     $"destination={(destination != null ? destination.GetInstanceID() : 0)} " +
-                    $"imm={eyeTarget.GetInstanceID()} shader={composite.shader.name} " +
+                    $"imm={eyeTarget.GetInstanceID()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetInstanceID() : 0)} " +
+                    $"shader={composite.shader.name} " +
                     $"supported={composite.shader.isSupported}");
             }
             return true;
@@ -1163,13 +1251,10 @@ namespace ImmPlayer
 
         public RenderTexture GetAndroidVulkanUnityPresentationTargetForValidation(Camera cam)
         {
-            if (!_flatAndroidVulkanSharedDepthComposition)
-                return null;
-
-            // Shared-depth validation draws the Unity probes into the same explicit
-            // color/depth target that receives the native IMM render. Unity then
-            // presents this composed target through the normal Android camera path.
-            return GetAndroidVulkanPresentationTargetForValidation(cam);
+            // The depth-aware presenter combines Unity color/depth with IMM
+            // color/depth only at final presentation, so there is no intermediate
+            // texture containing the completed composition.
+            return null;
         }
 
         private bool ShouldRenderCamera(Camera cam)
@@ -1431,8 +1516,11 @@ namespace ImmPlayer
                     // depth-test against Unity geometry. Off by default until the
                     // native 4x depth-prime draw lands (attaching 1x host depth
                     // today forces the pass back to single-sampled).
-                    IntPtr hostDepthPtr = _flatAndroidVulkanSharedDepthComposition
-                        ? eyeTarget.depthBuffer.GetNativeRenderBufferPtr()
+                    RenderTexture eyeDepthTarget = _flatAndroidVulkanSharedDepthComposition
+                        ? info.VulkanEyeDepthWriteTargets[rtEye]
+                        : null;
+                    IntPtr hostDepthPtr = eyeDepthTarget != null
+                        ? eyeDepthTarget.depthBuffer.GetNativeRenderBufferPtr()
                         : IntPtr.Zero;
                     if (hostDepthPtr == IntPtr.Zero && IsEnvFlagEnabled("IMM_UNITY_VK_HOST_DEPTH"))
                     {
@@ -1447,7 +1535,8 @@ namespace ImmPlayer
                         hostDepthPtr,
                         eyeTarget.width,
                         eyeTarget.height,
-                        1);
+                        1,
+                        eyeDepthTarget != null ? 1 : 0);
                     if (!_loggedVulkanRenderTargetSource.Contains(cam))
                     {
                         _loggedVulkanRenderTargetSource.Add(cam);

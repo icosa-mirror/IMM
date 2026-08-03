@@ -224,6 +224,7 @@ struct ImmUnityPlugin
                 int width = 0;
                 int height = 0;
                 int samples = 1;
+                bool depthForSampling = false;
             } mVulkanCameraTarget[256][2];
 #endif
 #if defined(__APPLE__)
@@ -639,6 +640,7 @@ struct UnityVulkanRenderContext
     uint64_t depthImage = 0;
     uint32_t depthFormat = 0;
     uint32_t depthSamples = 1;
+    bool depthForSampling = false;
     int width = 0;
     int height = 0;
 };
@@ -704,7 +706,8 @@ static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, vo
         context->height,
         1,
         reinterpret_cast<void *>(static_cast<uintptr_t>(context->depthImage)),
-        context->depthImage != 0 ? context->depthFormat : 0);
+        context->depthImage != 0 ? context->depthFormat : 0,
+        context->depthForSampling);
     if (!frameBegun)
     {
         iLog().Printf(LT_ERROR, L"Unity Vulkan queue render skipped: failed to begin external image frame for camera=%d", context->cameraID);
@@ -864,6 +867,7 @@ static bool iRenderUnityVulkanCamera(int cameraID, int event_id, piRenderer *ren
     context.depthImage = static_cast<uint64_t>(depthImage.image);
     context.depthFormat = static_cast<uint32_t>(depthImage.format);
     context.depthSamples = static_cast<uint32_t>(depthImage.samples);
+    context.depthForSampling = target.depthForSampling;
     context.width = width;
     context.height = height;
 
@@ -1604,7 +1608,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetCameraViewport(int
 #endif
 }
 
-extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraEyeRenderBuffers(int cameraID, int eye, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples)
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraEyeRenderBuffers(int cameraID, int eye, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples, int depthForSampling)
 {
     if (cameraID < 0 || cameraID > 255 || eye < 0 || eye > 1) return;
 #if defined(IMM_UNITY_VULKAN)
@@ -1615,19 +1619,21 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraEyeRen
     target.width = width;
     target.height = height;
     target.samples = samples > 0 ? samples : 1;
+    target.depthForSampling = depthForSampling != 0;
 #else
     (void)colorRenderBuffer;
     (void)depthRenderBuffer;
     (void)width;
     (void)height;
     (void)samples;
+    (void)depthForSampling;
 #endif
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetVulkanCameraRenderBuffers(int cameraID, void *colorRenderBuffer, void *depthRenderBuffer, int width, int height, int samples)
 {
-    SetVulkanCameraEyeRenderBuffers(cameraID, 0, colorRenderBuffer, depthRenderBuffer, width, height, samples);
-    SetVulkanCameraEyeRenderBuffers(cameraID, 1, colorRenderBuffer, depthRenderBuffer, width, height, samples);
+    SetVulkanCameraEyeRenderBuffers(cameraID, 0, colorRenderBuffer, depthRenderBuffer, width, height, samples, 0);
+    SetVulkanCameraEyeRenderBuffers(cameraID, 1, colorRenderBuffer, depthRenderBuffer, width, height, samples, 0);
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, // 0=linear 1=gamma

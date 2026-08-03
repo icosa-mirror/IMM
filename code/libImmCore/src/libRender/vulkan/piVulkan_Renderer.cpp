@@ -338,6 +338,7 @@ static constexpr VkAttachmentStoreOp VK_ATTACHMENT_STORE_OP_STORE = 0;
 static constexpr VkAttachmentStoreOp VK_ATTACHMENT_STORE_OP_DONT_CARE = 1;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL = 2;
 static constexpr VkImageLayout VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL = 3;
+static constexpr VkImageLayout VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL = 4;
 static constexpr VkPipelineBindPoint VK_PIPELINE_BIND_POINT_GRAPHICS = 0;
 static constexpr VkSubpassContents VK_SUBPASS_CONTENTS_INLINE = 0;
 
@@ -1526,6 +1527,7 @@ struct piVulkanState
     piRTarget externalFrameRenderTarget = nullptr;
     bool externalFrameUsesHostDepth = false;
     bool externalFrameHostDepthReverseZ = false;
+    bool externalFrameDepthForSampling = false;
     bool externalFramePreservesHostColor = false;
     // Persistent wrappers for external images (Unity's offscreen eye RTs are
     // stable VkImages): view/renderpass/framebuffer/depth survive across
@@ -1533,10 +1535,12 @@ struct piVulkanState
     struct ExternalImageCacheEntry
     {
         VkImage image = 0;
+        VkImage depthImage = 0;
         uint32_t vkFormat = 0;
         int width = 0;
         int height = 0;
         int arrayLayers = 0;
+        bool depthForSampling = false;
         piTexture colorTexture = nullptr;
         piTexture depthTexture = nullptr;
         piTexture primeDepthTexture = nullptr;  // host depth wrapper for the prime draw (sampled, not attached)
@@ -1604,7 +1608,9 @@ struct piVulkanState
     // EndExternalImageFrame. Disable with IMM_UNITY_VK_NO_BATCHED_TRANSITION.
     int batchedTransitionResolved = -1;                             // -1 unknown, 0 off, 1 on
     bool batchAppendShaderReadTransition = false;                   // set by EndExternalImageFrame for its (end-of-eye) flush only
+    bool batchAppendDepthShaderReadTransition = false;              // same submit, for Unity sampling of explicit IMM depth
     bool batchedTransitionReported = false;
+    bool depthSampleTransitionReported = false;
     // Reverse-Z on the external eye path (Unity Vulkan projections are always
     // reversed-Z): GREATER compare + 0.0 depth clear. See iExternalReverseZEnabled.
     int externalReverseZResolved = -1;                              // -1 unknown, 0 off, 1 on
@@ -4715,6 +4721,37 @@ static bool iFlushBatch(piVulkanState *state, piRenderer::piReporter *reporter, 
             iReport(reporter, "Vulkan renderer batched transition ACTIVE: shader-read barrier rides the eye submit");
         }
     }
+    const bool appendDepthTransition = state->batchAppendDepthShaderReadTransition &&
+                                       target && target->depth && target->depth->image != 0 &&
+                                       state->vkCmdPipelineBarrier != nullptr;
+    state->batchAppendDepthShaderReadTransition = false;
+    if (appendDepthTransition)
+    {
+        VkImageMemoryBarrier toShader = {};
+        toShader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        toShader.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        toShader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        toShader.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        toShader.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        toShader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        toShader.image = target->depth->image;
+        toShader.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        toShader.subresourceRange.baseMipLevel = 0;
+        toShader.subresourceRange.levelCount = 1;
+        toShader.subresourceRange.baseArrayLayer = 0;
+        toShader.subresourceRange.layerCount = 1;
+        state->vkCmdPipelineBarrier(
+            state->commandBuffer,
+            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &toShader);
+        if (!state->depthSampleTransitionReported)
+        {
+            state->depthSampleTransitionReported = true;
+            iReport(reporter, "[IMM_UNITY_VK_DEPTH_SAMPLE_20260803] depth shader-read transition recorded");
+        }
+    }
     // Host-depth prime layout restore: hand the host depth image back in the
     // layout Unity's own tracking expects, inside the same submission that
     // sampled it (Unity never observes the sandwich).
@@ -4796,6 +4833,9 @@ static bool iFlushBatch(piVulkanState *state, piRenderer::piReporter *reporter, 
     if (target && target->color[0])
         target->color[0]->imageLayout = appendTransition ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                                                          : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (target && target->depth)
+        target->depth->imageLayout = appendDepthTransition ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                                                           : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
     if (!state->batchReported)
     {
         state->batchReported = true;
@@ -6533,7 +6573,12 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
 
     VkImageMemoryBarrier toTransfer = {};
     toTransfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    toTransfer.srcAccessMask = texture->imageLayout == VK_IMAGE_LAYOUT_UNDEFINED ? 0 : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    const bool wasShaderRead = texture->imageLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL ||
+                               texture->imageLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    toTransfer.srcAccessMask = texture->imageLayout == VK_IMAGE_LAYOUT_UNDEFINED
+                                   ? 0
+                                   : (wasShaderRead ? VK_ACCESS_SHADER_READ_BIT
+                                                    : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
     toTransfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     toTransfer.oldLayout = texture->imageLayout;
     toTransfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -6543,7 +6588,9 @@ static bool iClearDepthTextureImage(piVulkanState *state, piTexture texture, piR
     toTransfer.subresourceRange = range;
     const VkPipelineStageFlags sourceStage = texture->imageLayout == VK_IMAGE_LAYOUT_UNDEFINED
                                                  ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                                                 : (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
+                                                 : (wasShaderRead
+                                                        ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                                                        : (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT));
     state->vkCmdPipelineBarrier(state->commandBuffer,
                                 sourceStage,
                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -9058,6 +9105,11 @@ void piRendererVulkan::EndExternalImageFrame(void)
             iBatchedTransitionEnabled(mState) &&
             !mState->externalFramePreservesHostColor &&
             mState->externalFrameColorTexture != nullptr;
+        mState->batchAppendDepthShaderReadTransition =
+            mState->ownsDedicatedQueue &&
+            iBatchedTransitionEnabled(mState) &&
+            mState->externalFrameDepthForSampling &&
+            mState->externalFrameDepthTexture != nullptr;
         // Composite bridge: this eye's submit signals its slot semaphore, and a
         // wait-only submission queued on Unity's own queue - ahead of Unity's
         // frame submit in submission order - makes the composite blit execute
@@ -9164,6 +9216,7 @@ void piRendererVulkan::EndExternalImageFrame(void)
     }
     mState->externalFrameUsesHostDepth = false;
     mState->externalFrameHostDepthReverseZ = false;
+    mState->externalFrameDepthForSampling = false;
     mState->externalFramePreservesHostColor = false;
     mState->hostRenderPassFrameActive = false;
     if (wasHostRenderPassFrame)
@@ -9262,7 +9315,8 @@ bool piRendererVulkan::DebugClearHostRenderPassColor(float red, float green, flo
 }
 
 bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers,
-                                               void *hostDepthImage, uint32_t hostDepthVkFormat)
+                                               void *hostDepthImage, uint32_t hostDepthVkFormat,
+                                               bool depthForSampling)
 {
     EndExternalImageFrame();
     if (!mState || image == nullptr || width <= 0 || height <= 0 || arrayLayers <= 0 || vkFormat == 0 || !mState->vkCreateImageView)
@@ -9272,12 +9326,14 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
 
     const bool cacheEnabled = !iRendererFlagEnabled("IMM_UNITY_VK_NO_EXTERNAL_IMAGE_CACHE");
     const VkImage vkImage = static_cast<VkImage>(reinterpret_cast<uintptr_t>(image));
+    const VkImage vkDepthImage = static_cast<VkImage>(reinterpret_cast<uintptr_t>(hostDepthImage));
     if (cacheEnabled)
     {
         for (int i = 0; i < piVulkanState::kExternalImageCacheSize; ++i)
         {
             piVulkanState::ExternalImageCacheEntry &entry = mState->externalImageCache[i];
-            if (entry.renderTarget == nullptr || entry.image != vkImage || entry.vkFormat != vkFormat ||
+            if (entry.renderTarget == nullptr || entry.image != vkImage || entry.depthImage != vkDepthImage ||
+                entry.depthForSampling != depthForSampling || entry.vkFormat != vkFormat ||
                 entry.width != width || entry.height != height || entry.arrayLayers != arrayLayers)
             {
                 continue;
@@ -9307,8 +9363,9 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
             mState->externalFrameDepthTexture = entry.depthTexture;
             mState->externalFramePrimeDepthTexture = entry.primeDepthTexture;
             mState->externalFrameRenderTarget = entry.renderTarget;
-            mState->externalFrameUsesHostDepth = false;
-            mState->externalFrameHostDepthReverseZ = false;
+            mState->externalFrameUsesHostDepth = entry.depthTexture != nullptr && !entry.depthForSampling;
+            mState->externalFrameHostDepthReverseZ = mState->externalFrameUsesHostDepth;
+            mState->externalFrameDepthForSampling = entry.depthForSampling;
             mState->externalFramePreservesHostColor = false;
             mState->externalFrameFromCache = true;
             // Eager batch open - MUST come after the externalFrame* assignments
@@ -9382,7 +9439,7 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
                                          passHostDepth ? hostDepthImage : nullptr,
                                          passHostDepth ? reinterpret_cast<void *>(hostDepthView) : nullptr,
                                          passHostDepth ? hostDepthVkFormat : 0,
-                                         VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, passHostDepth, true, false))
+                                         VK_SAMPLE_COUNT_1_BIT, width, height, arrayLayers, false, passHostDepth, true, depthForSampling))
     {
         if (hostDepthView != VK_NULL_IMAGE_VIEW)
             mState->vkDestroyImageView(mState->device, hostDepthView, nullptr);
@@ -9393,6 +9450,9 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
     {
         mState->externalFrameColorTexture->ownsImageView = true;
     }
+    mState->externalFrameDepthForSampling = depthForSampling && passHostDepth;
+    if (passHostDepth && !depthForSampling)
+        mState->externalFrameHostDepthReverseZ = true;
 
     if (cacheEnabled && mState->externalFrameRenderTarget != nullptr)
     {
@@ -9423,10 +9483,12 @@ bool piRendererVulkan::BeginExternalImageFrame(void *image, uint32_t vkFormat, i
                 DestroyTexture(entry.primeDepthTexture);
         }
         entry.image = vkImage;
+        entry.depthImage = vkDepthImage;
         entry.vkFormat = vkFormat;
         entry.width = width;
         entry.height = height;
         entry.arrayLayers = arrayLayers;
+        entry.depthForSampling = depthForSampling && passHostDepth;
         entry.colorTexture = mState->externalFrameColorTexture;
         entry.depthTexture = mState->externalFrameDepthTexture;
         entry.primeDepthTexture = mState->externalFramePrimeDepthTexture;

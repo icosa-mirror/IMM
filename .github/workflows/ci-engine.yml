@@ -1475,6 +1475,8 @@ jobs:
           --required-marker "[IMM_UNITY_SMOKE] scene composition probe passed"
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_RT_20260801]"
           --required-marker "[IMM_UNITY_VK_ONRENDERIMAGE_20260802]"
+          --required-marker "[IMM_UNITY_VK_DEPTH_SAMPLE_20260803]"
+          --required-marker "[IMM_UNITY_VK_DEPTH_COMPOSITE_20260803]"
           --required-marker "shader=Unlit/Transparent supported=True"
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_HOLD_20260731]"
           --required-marker "[IMM_UNITY_SMOKE] render candidate capture="

@@ -39,7 +39,8 @@ public:
     void SwapBuffers(void) override;
     void *GetContext(void) override;
     bool BeginExternalImageFrame(void *image, uint32_t vkFormat, int width, int height, int arrayLayers,
-                                 void *hostDepthImage = nullptr, uint32_t hostDepthVkFormat = 0);
+                                 void *hostDepthImage = nullptr, uint32_t hostDepthVkFormat = 0,
+                                 bool depthForSampling = false);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, int width, int height);
     bool BeginExternalImageFrame(void *image, void *imageView, uint32_t vkFormat, void *depthImage, void *depthImageView, uint32_t depthVkFormat, int width, int height, bool clearExternalDepth = false);
     bool BeginExternalImageFramePreserveColor(void *image, uint32_t vkFormat, uint32_t colorVkSamples, void *depthImage, uint32_t depthVkFormat, uint32_t depthVkSamples, int width, int height);

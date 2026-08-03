@@ -45,8 +45,7 @@ def main() -> int:
             "? CaptureScreenTexture()",
             "frameCount = 90;",
             "[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729]",
-            "[IMM_UNITY_ANDROID_VK_ORDERED_DEPTH_PROBES_20260802]",
-            "ordering=imm-then-unity-probes",
+            "scene composition probes created",
             "FindObjectOfType<ImmFeatureExamples>()",
             "FreezeCompositionPlaybackIfRequested();",
         ],
@@ -159,6 +158,14 @@ def main() -> int:
             'ValidationArgument = "-force-vulkan-layers"',
             "[IMM_UNITY_VK_VALIDATION_ARGS_20260731]",
         ],
+        ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/Resources/ImmVulkanDepthComposite.shader": [
+            "_CameraDepthTexture",
+            "_ImmColorTex",
+            "_ImmDepthTex",
+            "SAMPLE_DEPTH_TEXTURE",
+            "UNITY_REVERSED_Z",
+            "unityIsNearer",
+        ],
         ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [
             "#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN || UNITY_ANDROID",
             "SetVulkanCameraRenderBuffers",
@@ -172,8 +179,11 @@ def main() -> int:
             "Material composite = GetVulkanCompositeMaterial();",
             "Graphics.Blit(eyeTarget, destination, composite);",
             "SetFlatAndroidVulkanSharedDepthCompositionForValidation",
-            "if (!_flatAndroidVulkanSharedDepthComposition)",
-            "return GetAndroidVulkanPresentationTargetForValidation(cam);",
+            "VulkanEyeDepthTargets",
+            "VulkanEyeDepthWriteTargets",
+            "ImmVulkanDepthComposite",
+            "eyeDepthTarget != null ? 1 : 0",
+            "[IMM_UNITY_VK_DEPTH_COMPOSITE_20260803]",
             "SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan",
             "ImmNativePlugin.SetVulkanDedicatedQueueAllowed(allowDedicatedVulkanQueue ? 1 : 0)",
             "[IMM_UNITY_VK_ONRENDERIMAGE_20260802]",
@@ -220,6 +230,8 @@ def main() -> int:
             "externalDevice->allowDedicatedQueue &&",
             "[IMM_UNITY_VK_QUEUE_20260802] mode=host reason=dedicated-queue-not-authorized layoutOwner=unity",
             "batchRingBridgeSemaphores",
+            "batchAppendDepthShaderReadTransition",
+            "[IMM_UNITY_VK_DEPTH_SAMPLE_20260803]",
             "iFlushBatch(",
             "BeginExternalImageFrameWithView(",
             "mState->batchAppendShaderReadTransition =",
@@ -283,27 +295,6 @@ def main() -> int:
     ):
         errors.append(
             "Unity composition playback must be frozen before its render candidate is captured"
-        )
-
-    unity_manager = (
-        ROOT
-        / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs"
-    ).read_text(encoding="utf-8")
-    shared_target_method = unity_manager.find(
-        "public RenderTexture GetAndroidVulkanUnityPresentationTargetForValidation(Camera cam)"
-    )
-    shared_target_return = unity_manager.find(
-        "return GetAndroidVulkanPresentationTargetForValidation(cam);",
-        shared_target_method,
-    )
-    next_method = unity_manager.find("\n        private ", shared_target_method)
-    if (
-        shared_target_method < 0
-        or shared_target_return < 0
-        or (next_method >= 0 and shared_target_return > next_method)
-    ):
-        errors.append(
-            "Unity Android Vulkan shared-depth validation must expose its composed offscreen target"
         )
 
     windows_godot_smoke = (

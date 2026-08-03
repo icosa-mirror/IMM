@@ -90,7 +90,6 @@ namespace ImmPlayer
         private GameObject _frontProbe;
         private GameObject _rearOccludedProbe;
         private GameObject _rearVisibleProbe;
-        private CommandBuffer _orderedDepthProbeCommandBuffer;
         private RenderTexture _diagnosticCameraTargetTexture;
         private readonly List<string> _compositionFailures = new List<string>();
 
@@ -736,65 +735,9 @@ namespace ImmPlayer
             _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.70f - up * 0.35f - forward * 1.00f, cam.transform.rotation, new Vector3(0.50f, 0.50f, 0.06f), probeLayer);
             _rearOccludedProbe = CreateProbe("IMM Scene Rear Occlusion Probe", RearOccludedProbeColor, center + forward * 0.95f + right * 0.25f, cam.transform.rotation, new Vector3(0.75f, 0.75f, 0.06f), probeLayer);
             _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 1.30f + up * 0.85f + forward * 0.35f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
-#if UNITY_ANDROID && IMM_UNITY_ANDROID_VULKAN_CI
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan)
-                AttachOrderedDepthProbeCommandBuffer(cam);
-#endif
             Debug.Log($"{Prefix}scene composition probes created center={center} camera={cam.name} overlay={_overlayProbeEnabled} layer={probeLayer}");
             return true;
         }
-
-#if UNITY_ANDROID && IMM_UNITY_ANDROID_VULKAN_CI
-        private void AttachOrderedDepthProbeCommandBuffer(Camera cam)
-        {
-            _orderedDepthProbeCommandBuffer = new CommandBuffer
-            {
-                name = "IMM Android Vulkan Ordered Depth Probes"
-            };
-
-            ImmPlayerManager manager = FindObjectOfType<ImmPlayerManager>();
-            RenderTexture compositionTarget = manager != null
-                ? manager.GetAndroidVulkanUnityPresentationTargetForValidation(cam)
-                : null;
-            if (compositionTarget == null || compositionTarget.depth <= 0)
-            {
-                RecordCompositionFailure("ordered depth probes missing shared offscreen depth target");
-                return;
-            }
-            _orderedDepthProbeCommandBuffer.SetRenderTarget(compositionTarget);
-
-            GameObject[] probes = { _frontProbe, _rearOccludedProbe, _rearVisibleProbe };
-            foreach (GameObject probe in probes)
-            {
-                MeshFilter meshFilter = probe != null ? probe.GetComponent<MeshFilter>() : null;
-                MeshRenderer meshRenderer = probe != null ? probe.GetComponent<MeshRenderer>() : null;
-                if (meshFilter == null || meshFilter.sharedMesh == null ||
-                    meshRenderer == null || meshRenderer.sharedMaterial == null)
-                {
-                    RecordCompositionFailure($"ordered depth probe command buffer missing mesh/material for {probe?.name ?? "null"}");
-                    continue;
-                }
-
-                // Prevent the normal opaque phase from drawing the fixture.
-                // The command buffer is attached after ImmPlayerManager's
-                // plugin-event buffer at the same event, giving the test an
-                // explicit IMM -> Unity draw order on the same target.
-                meshRenderer.enabled = false;
-                _orderedDepthProbeCommandBuffer.DrawMesh(
-                    meshFilter.sharedMesh,
-                    probe.transform.localToWorldMatrix,
-                    meshRenderer.sharedMaterial);
-            }
-
-            const CameraEvent probeEvent = CameraEvent.AfterForwardOpaque;
-            cam.AddCommandBuffer(probeEvent, _orderedDepthProbeCommandBuffer);
-            Debug.Log(
-                $"[IMM_UNITY_ANDROID_VK_ORDERED_DEPTH_PROBES_20260802] camera={cam.name} " +
-                $"event={probeEvent} attached={cam.GetCommandBuffers(probeEvent).Length} " +
-                $"target={compositionTarget.width}x{compositionTarget.height} depth={compositionTarget.depth} " +
-                $"ordering=imm-then-unity-probes");
-        }
-#endif
 
         private static Camera FindOverlayCompositionCamera()
         {
