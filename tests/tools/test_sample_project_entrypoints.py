@@ -47,7 +47,7 @@ def main() -> int:
     assert '$timedOut = $false' in godot_helper
     assert 'Get-Content -LiteralPath $diagnosticPath' in godot_helper
     assert '".godot\\extension_list.cfg"' in godot_helper
-    assert '--editor --headless --path $project --quit' in godot_helper
+    assert '--editor --headless --audio-driver Dummy --path $project --quit' in godot_helper
     for token in [
         "Run Godot project Run-button smoke",
         "Record Godot project Run-button render metrics",

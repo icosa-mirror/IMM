@@ -42,7 +42,10 @@ $godot = (Resolve-Path -LiteralPath $GodotExe).Path
 $extensionList = Join-Path $project ".godot\extension_list.cfg"
 if (-not (Test-Path -LiteralPath $extensionList)) {
     Write-Host "[IMM_GODOT_SAMPLE_PLAY_20260803] importing fresh Godot project"
-    & $godot --editor --headless --path $project --quit
+    # Hosted Windows runners have no audio endpoint. Use Godot's dummy driver
+    # during import so editor shutdown does not traverse the unavailable WASAPI
+    # device path; the subsequent Run smoke still exercises the normal project.
+    & $godot --editor --headless --audio-driver Dummy --path $project --quit
     if ($LASTEXITCODE -ne 0) {
         throw "Godot sample project import failed with exit code $LASTEXITCODE"
     }
