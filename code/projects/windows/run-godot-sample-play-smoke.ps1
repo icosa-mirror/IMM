@@ -46,11 +46,16 @@ if (-not (Test-Path -LiteralPath $extensionList)) {
     # during import so editor shutdown does not traverse the unavailable WASAPI
     # device path; the subsequent Run smoke still exercises the normal project.
     & $godot --editor --headless --audio-driver Dummy --path $project --quit
-    if ($LASTEXITCODE -ne 0) {
-        throw "Godot sample project import failed with exit code $LASTEXITCODE"
-    }
+    $importExitCode = $LASTEXITCODE
     if (-not (Test-Path -LiteralPath $extensionList)) {
-        throw "Godot sample project import did not discover its GDExtension"
+        throw "Godot sample project import did not discover its GDExtension (exit code $importExitCode)"
+    }
+    if ($importExitCode -ne 0) {
+        # Godot 4.5 can fault while tearing down a headless Windows editor on a
+        # runner without hardware/audio. Import is complete once the extension
+        # list exists. The real project launch below remains mandatory and is
+        # independently checked for exit status, fatal logs, and visual output.
+        Write-Warning "Godot editor import exited with $importExitCode after completing discovery; continuing to Run Project"
     }
 }
 
