@@ -16,3 +16,10 @@
 - If continued progress depends on an important user approval, decision, or other blocker, never mention it only once in a live update and then continue as though it was communicated.
 - Either stop work and make the blocker plus the exact response needed the terminal response, or continue useful work while repeating the blocker and exact response needed on every line of every user-visible update until the user answers, so it cannot scroll past unnoticed.
 - Treat the blocked part of the goal as paused until the user explicitly answers. Do not claim that the user failed to answer a request that appeared only in an earlier, potentially scrolled-off update.
+
+# IMM rendering compatibility evidence
+
+- IMM Unity rendering works on the Firebase CI Android device, including the Android Vulkan path sufficiently to produce scene content, although its visual result may still be incorrect.
+- IMM rendering works with OpenGL and Metal.
+- IMM rendering works with Vulkan on Windows, subject to reconfirmation if that distinction becomes important.
+- A normal modern local Android phone can expose Unity's Vulkan display render buffer as a 1x1 image through `IUnityGraphicsVulkan::AccessRenderBufferTexture` while the camera surface is full resolution. Treat this as an Android Vulkan portability problem in the direct-display integration, not evidence that Vulkan, Android, or IMM rendering is generally unsupported.
