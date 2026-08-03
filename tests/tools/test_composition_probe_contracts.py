@@ -92,6 +92,8 @@ def main() -> int:
             "depth_composition",
             "not_claimed",
             'IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION = "1"',
+            'CompositionMode -eq "full_depth" -or $CompositionMode -eq "ordered_overlay"',
+            "coverage/discard plus the host depth image",
             "Render-only baseline comparison is performed by the shared render-metrics contract.",
             "render fidelity is validated from the separate render-only capture",
         ],

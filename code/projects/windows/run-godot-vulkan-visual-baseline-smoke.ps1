@@ -144,7 +144,11 @@ try {
     $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = "1"
     $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $CompositionMode
     $env:IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES = "0"
-    if ($CompositionMode -eq "full_depth") {
+    if ($CompositionMode -eq "full_depth" -or $CompositionMode -eq "ordered_overlay") {
+        # Ordered overlay is still presented after the scene, but it must use
+        # IMM coverage/discard plus the host depth image. A plain fullscreen
+        # overwrite cannot hide the cyan rear probe without destroying the
+        # scene behind transparent IMM pixels.
         Remove-Item -Path "env:IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION" -ErrorAction SilentlyContinue
         $env:IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION = "1"
     }
@@ -232,7 +236,7 @@ $compositionStatus = [ordered]@{
     composition_contract = $compositionContract
     compositing = $compositingStatus
     ordered_overlay = if ($CompositionMode -eq "ordered_overlay") { $compositingStatus } else { "not_tested" }
-    depth_composition = if ($CompositionMode -eq "render_only") { "not_tested" } elseif ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "failed" } else { "success" }
+    depth_composition = if ($CompositionMode -eq "render_only") { "not_tested" } elseif ($compositionFailures.Count -gt 0) { "failed" } else { "success" }
     depth_interleaving = if ($CompositionMode -eq "render_only") { "not_claimed" } elseif ($CompositionMode -eq "ordered_overlay") { "not_claimed" } elseif ($compositionFailures.Count -gt 0) { "failed" } else { "success" }
     expected = $false
     failure_class = if ($compositionFailures.Count -gt 0) { "compositing" } else { "" }
