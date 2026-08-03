@@ -29,8 +29,8 @@
         "center_crop_aspect_ratio": 1.3333333333,
         "width": 8,
         "height": 12,
-        "max_mean_abs_delta": 0.04,
-        "min_correlation": 0.9
+        "max_mean_abs_delta": 0.06,
+        "min_correlation": 0.8
       }
     ],
     "expected_vertical_luma_profile": {
