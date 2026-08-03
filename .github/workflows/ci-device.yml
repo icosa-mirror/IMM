@@ -501,7 +501,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime --output artifacts/android-godot-vulkan/manifest.json --product godot --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-godot-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh

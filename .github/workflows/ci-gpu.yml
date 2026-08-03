@@ -820,7 +820,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-render-only --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-render-only --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -1093,7 +1093,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
       - name: Collect artifact summary
         if: always()
         run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-smoke-macos-metal --require-manifest --output artifacts/godot-smoke-macos-metal/artifact-summary.json
