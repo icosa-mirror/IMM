@@ -76,6 +76,10 @@ namespace ImmPlayer
                 Application.persistentDataPath,
                 "imm-ci",
                 "unity-android-vulkan-presented.png");
+            smoke._depthDebugCapturePath = Path.Combine(
+                Application.persistentDataPath,
+                "imm-ci",
+                "unity-android-vulkan-depth-debug.png");
             Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
 #endif
         }
@@ -83,6 +87,7 @@ namespace ImmPlayer
         private string _capturePath;
         private string _renderCapturePath;
         private string _presentationCapturePath;
+        private string _depthDebugCapturePath;
         private bool _compositionProbeEnabled;
         private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
@@ -376,6 +381,20 @@ namespace ImmPlayer
 
             File.WriteAllBytes(fullPath, tex.EncodeToPNG());
             Destroy(tex);
+
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            if (compositionPlayerManager != null && !string.IsNullOrEmpty(_depthDebugCapturePath))
+            {
+                Texture2D depthDebug = compositionPlayerManager.CaptureAndroidVulkanDepthDebugForValidation(
+                    captureCamera,
+                    CaptureWidth,
+                    CaptureHeight);
+                if (depthDebug != null)
+                    WriteCapture(depthDebug, _depthDebugCapturePath, "depth debug");
+                else
+                    RecordCompositionFailure("missing Android Vulkan depth debug capture");
+            }
+#endif
 
             Debug.Log($"{Prefix}capture={fullPath} width={width} height={height} pixels={pixels.Length} nonZero={nonZero} colorBuckets={colorBuckets} hash={hash}");
             ReleaseDiagnosticCameraTargetTexture();

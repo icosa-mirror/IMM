@@ -1257,6 +1257,48 @@ namespace ImmPlayer
             return null;
         }
 
+        public Texture2D CaptureAndroidVulkanDepthDebugForValidation(
+            Camera cam,
+            int width,
+            int height)
+        {
+            if (!_flatAndroidVulkanSharedDepthComposition ||
+                cam == null ||
+                !_cameras.TryGetValue(cam, out PerCameraInfo info))
+                return null;
+
+            RenderTexture immDepth = info.VulkanEyeDepthTargets[0];
+            Material material = GetVulkanDepthCompositeMaterial();
+            if (immDepth == null || material == null || material.passCount < 2)
+                return null;
+
+            material.SetTexture("_ImmDepthTex", immDepth);
+            RenderTexture debugTarget = RenderTexture.GetTemporary(
+                width,
+                height,
+                0,
+                RenderTextureFormat.ARGB32,
+                RenderTextureReadWrite.Linear);
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(Texture2D.blackTexture, debugTarget, material, 1);
+                RenderTexture.active = debugTarget;
+                var capture = new Texture2D(width, height, TextureFormat.RGBA32, false, true);
+                capture.ReadPixels(new Rect(0, 0, width, height), 0, 0, false);
+                capture.Apply(false, false);
+                Debug.Log(
+                    $"[IMM_UNITY_VK_DEPTH_DEBUG_20260803] captured {width}x{height} " +
+                    $"immDepth={immDepth.GetInstanceID()}");
+                return capture;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(debugTarget);
+            }
+        }
+
         private bool ShouldRenderCamera(Camera cam)
         {
             if (cam == null)

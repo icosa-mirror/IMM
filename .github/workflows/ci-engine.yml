@@ -1483,6 +1483,7 @@ jobs:
           --required-marker "[IMM_UNITY_SMOKE] capture="
           --required-capture-name unity-android-vulkan-render.png
           --required-capture-name unity-android-vulkan.png
+          --required-capture-name unity-android-vulkan-depth-debug.png
           --external-screen-capture-name unity-android-vulkan-robo-final.png
           --client-label "IMM Unity Android Vulkan"
 
