@@ -384,7 +384,8 @@ def sha256_file(path: Path) -> str:
 
 def artifact_root_for(report: Path) -> Path:
     if report.is_dir():
-        if (report / "composition-status.json").exists():
+        evidence_names = ["composition-status.json", "render-metrics.json", "manifest.json"]
+        if any((report / name).exists() for name in evidence_names):
             return report
         if report.parent.name == "captures":
             return report.parent.parent
@@ -436,18 +437,26 @@ def find_json(root: Path, *names: str) -> dict:
 
 
 def find_manifest(root: Path, key: str) -> dict:
-    fallback: dict = {}
     for path in sorted(root.rglob("manifest.json")):
         try:
             manifest = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if not fallback:
-            fallback = manifest
         matrix = manifest.get("matrix") if isinstance(manifest, dict) else None
         if isinstance(matrix, dict) and row_matches_key(matrix, key):
             return manifest
-    return fallback
+    return {}
+
+
+def write_section_json(section_dir: Path, name: str, data: dict) -> None:
+    if not data:
+        return
+    section_dir.mkdir(parents=True, exist_ok=True)
+    (section_dir / name).write_text(
+        json.dumps(data, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
 
 
 def find_metrics(root: Path) -> dict:
@@ -637,10 +646,10 @@ def main() -> int:
             lines.append(f"### {image.name}")
             lines.append(f"![{image.name}]({relative_link(copied_image, report_path)})")
             lines.append("")
-        if status:
-            status_output = capture_output_dir / section_slug / "composition-status.json"
-            status_output.parent.mkdir(parents=True, exist_ok=True)
-            status_output.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+        section_output_dir = capture_output_dir / section_slug
+        write_section_json(section_output_dir, "render-metrics.json", metrics)
+        write_section_json(section_output_dir, "composition-status.json", status)
+        write_section_json(section_output_dir, "manifest.json", manifest)
 
     if visual_sections == 0:
         lines.append("No visual render evidence was found in the downloaded artifacts.")

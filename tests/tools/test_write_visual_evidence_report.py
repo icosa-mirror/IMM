@@ -310,6 +310,124 @@ def main() -> int:
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text
         assert "## Enginevalidationevidence" not in text
 
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+        raw = temp / "raw" / "UnityAndroidVulkan"
+        captures = raw / "captures"
+        captures.mkdir(parents=True)
+        (captures / "unity-android-vulkan-render.png").write_bytes(PNG_1X1)
+        (raw / "render-report.md").write_text(
+            "# IMM Render Report\n\n### unity-android-vulkan-render.png\n"
+            "![Unity Android Vulkan](captures/unity-android-vulkan-render.png)\n",
+            encoding="utf-8",
+        )
+        strict_metrics = {
+            "passed": True,
+            "candidate": {"width": 1, "height": 1},
+            "reference": {"width": 1, "height": 1},
+            "contract": {"minimum_spatial_correlation": 0.78},
+            "spatial_luma_grid": {"mean_abs_delta": 0.01, "correlation": 0.99},
+            "errors": [],
+        }
+        (raw / "unity-android-vulkan-render-metrics.json").write_text(
+            json.dumps(strict_metrics),
+            encoding="utf-8",
+        )
+        android_manifest = {
+            "schema": "imm-ci-artifact-manifest-v1",
+            "classification": {"result": "passed"},
+            "matrix": {
+                "product": "unity",
+                "platform": "android",
+                "mode": "non-vr",
+                "renderer": "vulkan",
+            },
+        }
+        (raw / "manifest.json").write_text(json.dumps(android_manifest), encoding="utf-8")
+
+        first_output = temp / "first"
+        first_report = first_output / "ENGINE_VALIDATION_REPORT.md"
+        first_result = subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_visual_evidence_report.py",
+                "--input-root",
+                str(temp / "raw"),
+                "--output-dir",
+                str(first_output),
+                "--markdown-output",
+                str(first_report),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert first_result.returncode == 0, first_result.stdout + first_result.stderr
+        normalized = first_output / "captures" / "unityandroidvulkan"
+        assert (normalized / "render-metrics.json").exists()
+        assert (normalized / "manifest.json").exists()
+
+        aggregate_dir = first_output / "status-manifests" / "unity-non-vr"
+        aggregate_dir.mkdir(parents=True)
+        aggregate_manifest = {
+            "schema": "imm-ci-artifact-manifest-v1",
+            "classification": {"result": "failed", "failure_class": "rendering"},
+            "matrix": {
+                "product": "unity",
+                "platform": "all",
+                "mode": "non-vr",
+                "renderer": "native",
+            },
+        }
+        (aggregate_dir / "manifest.json").write_text(json.dumps(aggregate_manifest), encoding="utf-8")
+
+        matrix = temp / "android-matrix.json"
+        matrix.write_text(
+            json.dumps(
+                {
+                    "schema": "imm-testing-matrix-status-v1",
+                    "rows": [
+                        {
+                            "product": "unity",
+                            "platform": "android",
+                            "mode": "non-vr",
+                            "renderer": "vulkan",
+                            "status": "supported",
+                            "hardware_gate": "CI Engine Matrix / Unity Android Vulkan",
+                            "baseline": "tests/baselines/render/unity-android-vulkan-sample1.json",
+                            "reason": "Android Vulkan is physically validated.",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        second_output = temp / "second"
+        second_report = second_output / "VALIDATION_REPORT.md"
+        second_result = subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_visual_evidence_report.py",
+                "--input-root",
+                str(first_output),
+                "--output-dir",
+                str(second_output),
+                "--matrix-status",
+                str(matrix),
+                "--required-evidence-scope",
+                "all",
+                "--markdown-output",
+                str(second_report),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert second_result.returncode == 0, second_result.stdout + second_result.stderr
+        second_text = second_report.read_text(encoding="utf-8")
+        assert "| unity/android/non-vr/vulkan | supported | passed | yes |" in second_text
+        assert "## Unityandroidvulkan\n\n- Result: passed" in second_text
+
     print("Visual evidence report tests passed")
     return 0
 
