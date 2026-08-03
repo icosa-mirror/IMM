@@ -8,11 +8,15 @@ import json
 from pathlib import Path
 
 from compare_render_metrics import compute_rgb_metrics, read_rgb_capture
+from write_render_report import write_png
 
 
-def write_ppm(path: Path, width: int, height: int, pixels: bytes) -> None:
+def write_rgb_capture(path: Path, width: int, height: int, pixels: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
+    if path.suffix.lower() == ".png":
+        write_png(path, width, height, pixels)
+    else:
+        path.write_bytes(f"P6\n{width} {height}\n255\n".encode("ascii") + pixels)
 
 
 def split_stereo(width: int, height: int, pixels: bytes) -> tuple[bytes, bytes]:
@@ -78,8 +82,8 @@ def main() -> int:
 
     eye_width = width // 2 if width % 2 == 0 else 0
     if left and right:
-        write_ppm(args.left_output, eye_width, height, left)
-        write_ppm(args.right_output, eye_width, height, right)
+        write_rgb_capture(args.left_output, eye_width, height, left)
+        write_rgb_capture(args.right_output, eye_width, height, right)
 
     result = {
         "schema": "imm-synthetic-stereo-capture-v1",

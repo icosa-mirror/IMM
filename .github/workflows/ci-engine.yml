@@ -418,7 +418,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/unity-macos-metal-composition/manifest.json --product unity --platform-name macos --mode non-vr --renderer metal --include artifacts/unity-macos-metal-composition
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts/unity-macos-metal-composition/manifest.json --product unity --platform-name macos --mode non-vr --renderer metal --include artifacts/unity-macos-metal-composition
 
       - name: Collect artifact summary
         if: always()
@@ -675,7 +675,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name windows --mode non-vr --renderer directx --include artifacts\unity-windows-directx-composition
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts\unity-windows-directx-composition\manifest.json --product unity --platform-name windows --mode non-vr --renderer directx --include artifacts\unity-windows-directx-composition
 
       - name: Collect artifact summary
         if: always()
@@ -1624,8 +1624,11 @@ jobs:
           --required-marker "shader=Unlit/Transparent supported=True"
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_HOLD_20260731]"
           --required-marker "[IMM_UNITY_SMOKE] render candidate capture="
+          --required-marker "[IMM_UNITY_VK_SYNTH_STEREO_20260803] passed"
+          --required-marker "[IMM_UNITY_SMOKE] synthetic stereo Vulkan capture="
           --required-marker "[IMM_UNITY_SMOKE] capture="
           --required-capture-name unity-android-vulkan-render.png
+          --required-capture-name unity-android-vulkan-synthetic-stereo.png
           --required-capture-name unity-android-vulkan.png
           --external-screen-capture-name unity-android-vulkan-robo-final.png
           --client-label "IMM Unity Android Vulkan"
@@ -1659,6 +1662,43 @@ jobs:
           } else {
             '{"passed":false,"errors":["missing Firebase Test Lab unity-android-vulkan.png"],"candidate":{}}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-composition-metrics.json
             Write-Warning "Missing Firebase Test Lab unity-android-vulkan.png"
+            $failed = $true
+          }
+
+          $stereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($stereoCapture) {
+            python tests/tools/validate_stereo_capture.py $stereoCapture.FullName `
+              --left-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png `
+              --right-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-structure.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right-metrics.json
+            if ($LASTEXITCODE -ne 0) { $failed = $true }
+
+            $firebaseLog = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -File -Filter logcat -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($firebaseLog) {
+              python tests/tools/verify_synthetic_stereo_log.py `
+                --log $firebaseLog.FullName `
+                --output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-log-contract.json
+              if ($LASTEXITCODE -ne 0) { $failed = $true }
+            } else {
+              '{"status":"failed","failures":["missing Firebase device log for synthetic stereo contract"]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-log-contract.json
+              Write-Warning "Missing Firebase device log for synthetic stereo contract"
+              $failed = $true
+            }
+          } else {
+            '{"status":"failed","failures":["missing Firebase Test Lab unity-android-vulkan-synthetic-stereo.png"]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-stereo-structure.json
+            Write-Warning "Missing Firebase Test Lab unity-android-vulkan-synthetic-stereo.png"
             $failed = $true
           }
 
@@ -1722,6 +1762,13 @@ jobs:
           if ($compositionCapture) {
             New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/composition | Out-Null
             Copy-Item -LiteralPath $compositionCapture.FullName -Destination artifacts/unity-android-vulkan/captures/composition/unity-android-vulkan-composition.png -Force
+          }
+          $stereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($stereoCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/synthetic-stereo | Out-Null
+            Copy-Item -LiteralPath $stereoCapture.FullName -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-stereo.png -Force
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-left.png -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-right.png -Force -ErrorAction SilentlyContinue
           }
           $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
           if ($externalRenderCapture) {

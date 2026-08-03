@@ -212,6 +212,11 @@ def main() -> int:
             "CI GPU Matrix /",
         )
         assert expected_failed.returncode == 1, "Expected-failed evidence must not satisfy a supported matrix row"
+        expected_failed_report = json.loads(
+            (temp / "expected-failed-output/matrix-evidence.json").read_text(encoding="utf-8")
+        )
+        assert expected_failed_report["rows"][0]["evidence_count"] == 1
+        assert "validation manifest reports expected_failed" in expected_failed.stdout
         assert "# IMM Matrix Evidence Report" in (temp / "passing-output/matrix-evidence.md").read_text(encoding="utf-8")
 
         log_only_visual = artifact(

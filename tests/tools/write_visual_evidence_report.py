@@ -21,6 +21,14 @@ AGGREGATE_REPORT_NAMES = {
     "GPU_VALIDATION_REPORT.md",
     "CORE_VALIDATION_REPORT.md",
 }
+GENERIC_CAPTURE_SECTION_KEYS = {
+    "composition",
+    "externalrender",
+    "fulldepth",
+    "orderedoverlay",
+    "render",
+    "syntheticstereo",
+}
 
 
 def normalize_label(value: str) -> str:
@@ -180,6 +188,12 @@ def discover_reports(input_root: Path) -> list[tuple[str, Path]]:
             if not any(path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES for path in child.rglob("*")):
                 continue
             key = slugify(child.name)
+            # Capture-mode subdirectories are inputs to their parent lane report,
+            # not independent validation lanes. Rediscovering them produces
+            # misleading sections such as "Render" and "Full depth" alongside
+            # the authoritative Unity/macOS/Metal section.
+            if key in GENERIC_CAPTURE_SECTION_KEYS:
+                continue
             selected.setdefault(key, child)
     return sorted(selected.items(), key=lambda item: display_name(item[0]))
 

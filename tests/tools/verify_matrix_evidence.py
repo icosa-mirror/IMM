@@ -114,7 +114,7 @@ def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], lis
                 if content.get("schema") != "imm-ci-artifact-manifest-v1":
                     continue
                 classification = content.get("classification", {})
-                if not isinstance(classification, dict) or classification.get("result") != "passed":
+                if not isinstance(classification, dict):
                     continue
                 matrix = content.get("matrix", {})
                 if not isinstance(matrix, dict):
@@ -130,6 +130,8 @@ def index_evidence(summaries: list[dict]) -> dict[tuple[str, str, str, str], lis
                         "summary": summary.get("_summary_path", ""),
                         "artifact": artifact.get("path", ""),
                         "manifest": manifest.get("file", ""),
+                        "result": str(classification.get("result") or "unknown"),
+                        "failure_class": str(classification.get("failure_class") or ""),
                         "metrics": artifact.get("metrics", []),
                         "passing_reference_metrics": passing_reference_metrics(artifact),
                         "reports": artifact.get("reports", []),
@@ -164,7 +166,19 @@ def selected_rows(rows: list[dict], scope: str, gate_prefix: str) -> list[dict]:
 def evaluate_row(row: dict, evidence: list[dict]) -> dict:
     errors: list[str] = []
     if not evidence:
-        errors.append("missing passed manifest evidence")
+        errors.append("missing manifest evidence")
+    nonpassing = [item for item in evidence if item["result"] != "passed"]
+    passing = [item for item in evidence if item["result"] == "passed"]
+    if evidence and not passing:
+        classifications = sorted(
+            {
+                f"{item['result']} ({item['failure_class']})"
+                if item["failure_class"]
+                else item["result"]
+                for item in nonpassing
+            }
+        )
+        errors.append(f"validation manifest reports {', '.join(classifications)}")
 
     has_preflight = any(item["passing_preflights"] for item in evidence)
     has_firebase_result = any(has_firebase_test_lab_result(item.get("files", [])) for item in evidence)
@@ -248,11 +262,13 @@ def write_reports(results: dict, json_output: Path, markdown_output: Path) -> No
         lines.append(f"## {row['key']}")
         evidence_table = [["Summary", "Artifact", "Manifest", "Preflights", "Metrics", "Reports", "Contracts", "Captures"]]
         for item in row["evidence"]:
+            failure_suffix = f"/{item['failure_class']}" if item["failure_class"] else ""
+            manifest_label = f"{item['manifest']} [{item['result']}{failure_suffix}]"
             evidence_table.append(
                 [
                     str(item["summary"]),
                     str(item["artifact"]),
-                    str(item["manifest"]),
+                    manifest_label,
                     str(len(item["passing_preflights"])),
                     str(len(item["metrics"])),
                     str(len(item["reports"])),

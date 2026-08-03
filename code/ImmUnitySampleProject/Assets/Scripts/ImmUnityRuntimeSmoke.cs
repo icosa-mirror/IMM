@@ -79,6 +79,10 @@ namespace ImmPlayer
                 Application.persistentDataPath,
                 "imm-ci",
                 "unity-android-vulkan-presented.png");
+            smoke._syntheticStereoCapturePath = Path.Combine(
+                Application.persistentDataPath,
+                "imm-ci",
+                "unity-android-vulkan-synthetic-stereo.png");
             Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
 #endif
         }
@@ -86,6 +90,7 @@ namespace ImmPlayer
         private string _capturePath;
         private string _renderCapturePath;
         private string _presentationCapturePath;
+        private string _syntheticStereoCapturePath;
         private bool _compositionProbeEnabled;
         private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
@@ -165,7 +170,7 @@ namespace ImmPlayer
 
             if (_syntheticStereoProbeEnabled)
             {
-                yield return CaptureSyntheticStereoProbe();
+                yield return CaptureSyntheticStereoProbe(_capturePath, true);
                 yield break;
             }
 
@@ -222,6 +227,13 @@ namespace ImmPlayer
                 }
 #endif
             }
+
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            if (!string.IsNullOrEmpty(_syntheticStereoCapturePath))
+            {
+                yield return CaptureSyntheticStereoProbe(_syntheticStereoCapturePath, false);
+            }
+#endif
 
             if (_compositionProbeEnabled)
             {
@@ -414,7 +426,7 @@ namespace ImmPlayer
             UnityEngine.Object.Destroy(texture);
         }
 
-        private IEnumerator CaptureSyntheticStereoProbe()
+        private IEnumerator CaptureSyntheticStereoProbe(string capturePath, bool quitAfterCapture)
         {
             const string stereoPrefix = "[IMM_UNITY_VK_SYNTH_STEREO_20260803]";
             if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
@@ -467,11 +479,14 @@ namespace ImmPlayer
                 stereoCapture.SetPixels32(0, 0, CaptureWidth, CaptureHeight, eyeCaptures[0].GetPixels32());
                 stereoCapture.SetPixels32(CaptureWidth, 0, CaptureWidth, CaptureHeight, eyeCaptures[1].GetPixels32());
                 stereoCapture.Apply(false, false);
-                WriteCapture(stereoCapture, _capturePath, "synthetic stereo Vulkan");
+                WriteCapture(stereoCapture, capturePath, "synthetic stereo Vulkan");
                 Debug.Log(
                     $"{stereoPrefix} passed leftTargetId={eyeTargets[0].GetInstanceID()} " +
-                    $"rightTargetId={eyeTargets[1].GetInstanceID()} capture={Path.GetFullPath(_capturePath)}");
-                QuitIfRequested(0);
+                    $"rightTargetId={eyeTargets[1].GetInstanceID()} capture={Path.GetFullPath(capturePath)}");
+                if (quitAfterCapture)
+                {
+                    QuitIfRequested(0);
+                }
             }
             finally
             {

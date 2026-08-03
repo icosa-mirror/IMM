@@ -98,6 +98,10 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        for generic_name in ["render", "full-depth", "ordered-overlay"]:
+            generic_capture = engine / "captures" / generic_name
+            generic_capture.mkdir(parents=True)
+            (generic_capture / f"{generic_name}.png").write_bytes(PNG_1X1)
 
         gpu = input_root / "GPUMatrixEvidence" / "WindowsGodotVulkan-GPU"
         gpu.mkdir(parents=True)
@@ -309,6 +313,9 @@ def main() -> int:
         assert "### Missing Supported Evidence" in text
         assert "standalone/macos/non-vr/metal: macOS Metal standalone is supported." in text
         assert "## Enginevalidationevidence" not in text
+        assert "## Render\n" not in text
+        assert "## Fulldepth\n" not in text
+        assert "## Orderedoverlay\n" not in text
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)

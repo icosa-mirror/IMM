@@ -8,30 +8,51 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 
 ## Execution order
 
-### 1. Finish the hosted synthetic-stereo Vulkan lane
+### Current priority order
 
-This is the immediate priority. Do not begin broad validation-threshold changes until this lane produces inspectable left/right Vulkan evidence.
+1. Land the low-risk report corrections identified by full run `30811686247`: count failed manifests as present evidence, preserve their failure class, remove duplicate capture-mode sections, and label the DirectX/Metal depth failures as `compositing`.
+2. Run the full suite again and confirm that every remaining red entry describes a real defect or a genuine runtime limitation.
+3. Move synthetic-stereo execution from the Windows software-Vulkan experiment to the existing Android/Firebase hardware-Vulkan route.
+4. Make the Android player render both synthetic eyes side-by-side, then independently validate the left and right halves against the approved Unity render baseline.
+5. Use that lane to reproduce and detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
 
-1. Determine why Unity 2022.3 rejects the hosted Mesa Lavapipe ICD and falls back to Direct3D 11.
-2. Test the smallest viable hosted Vulkan configuration:
-   - verify the ICD independently before launching Unity;
-   - capture Unity's Vulkan initialization diagnostics;
-   - ensure the player build contains Vulkan shader variants;
-   - disable automatic graphics-API fallback so Vulkan initialization failure is explicit;
-   - use a supported software Vulkan implementation or a different hosted runner image if Lavapipe cannot satisfy Unity.
-3. Keep the test honest:
+The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejecting Vulkan and falling back to Direct3D must report `runtime_failed`. It is no longer the primary route to cloud stereo evidence.
+
+### 1. Finish and verify the false-failure cleanup on `main`
+
+Full run `30811686247` at revision `300f8fdc457241c5ca32f3afeb88ac99208ce5b3` has been inspected. Its images show that the Unity DirectX, Unity Metal, Unity Android Vulkan, and Godot Metal red entries are genuine composition failures, not render failures. It also exposed two aggregate-report defects: failed manifests were counted as missing evidence, and nested capture modes were rediscovered as duplicate lanes.
+
+1. Index every valid manifest, including failed and expected-failed manifests, while allowing only a passed manifest to satisfy a supported row.
+2. Show the manifest result and failure class in the aggregate report.
+3. Suppress generic nested capture-mode sections such as `Render`, `Full depth`, and `Ordered overlay` when the authoritative parent lane is already reported.
+4. Classify the Unity DirectX and Metal cyan depth failures as `compositing`, not generic `visual` failures.
+5. Run the full suite and manually inspect the regenerated report.
+
+Exit criterion: every report result agrees with its underlying evidence, and every remaining red entry is actionable.
+
+### 2. Finish the Android/Firebase synthetic-stereo Vulkan lane
+
+The immediate implementation priority is hardware-backed Android Vulkan in Firebase, reusing the existing Unity Android Vulkan build and capture infrastructure. The synthetic test exercises IMM eye routing and composition without requiring an OpenXR headset or separate-eye presentation.
+
+1. Add a deterministic Android synthetic-stereo mode that renders two adjacent offscreen eye targets in one frame.
+2. Run that mode on a Firebase device that reports and uses Vulkan.
+3. Capture a side-by-side image through the existing Firebase video/evidence path.
+4. Keep the test honest:
    - require `actual=Vulkan`;
    - require eye 0 and eye 1 to use the same IMM camera ID;
    - require distinct adjacent eye event IDs;
    - require distinct non-zero native render-target pointers;
    - require a side-by-side image with independently validated left and right halves;
-   - never accept Direct3D fallback as synthetic-stereo Vulkan evidence.
-4. Inspect the resulting image manually before declaring the lane valid.
-5. Record the limitation in the report: this exercises IMM's Vulkan eye routing and composition, not the Quest/OpenXR compositor.
+   - never accept an API fallback or a single duplicated eye as synthetic-stereo Vulkan evidence.
+5. Add a negative fixture or classifier test in which one half contains only the Unity sky/default scene; it must fail even when the other half renders IMM correctly.
+6. Inspect the resulting image manually before declaring the lane valid.
+7. Record the limitation in the report: this exercises IMM's Android Vulkan eye routing and composition, not the Quest/OpenXR compositor itself.
 
-Exit criterion: the hosted job produces recognizable IMM content in both eye images through the Vulkan path, both halves satisfy an approved visual baseline, and the combined evidence appears in the validation report.
+Exit criterion: the Firebase job produces recognizable IMM content in both eye images through the Vulkan path, both halves satisfy an approved visual baseline, and the combined evidence appears in the validation report.
 
-### 2. Inventory every reported failure by failure class
+### 3. Inventory every reported failure by failure class
+
+Status: completed for full run `30811686247`; results are recorded in `VALIDATION_FAILURE_INVENTORY.md`.
 
 For one exact commit and workflow run, create a table containing:
 
@@ -46,9 +67,9 @@ For one exact commit and workflow run, create a table containing:
 
 Do not change thresholds until the associated image has been inspected.
 
-### 3. Fix log-only false failures
+### 4. Fix log-only false failures
 
-The current macOS Metal job is red because `Loaded in CPU` and `Loaded in GPU` are missing from the selected Unity player log even though the captured IMM scene proves that CPU loading and GPU upload occurred.
+Status: completed. The macOS Metal lane no longer fails because the optional `Loaded in CPU` and `Loaded in GPU` diagnostic strings are absent. Explicit load errors and the mandatory visual checks remain failures.
 
 1. Find the actual destination of native IMM logs on each platform.
 2. If the markers are reliably available in another artifact, validate that artifact instead.
@@ -58,9 +79,9 @@ The current macOS Metal job is red because `Loaded in CPU` and `Loaded in GPU` a
 
 Exit criterion: Metal does not fail solely because redundant native log strings are absent, while genuine document-load failures still fail before visual comparison.
 
-### 4. Repair stale or mismatched visual baselines
+### 5. Repair stale or mismatched visual baselines
 
-The current Windows DirectX render is visually plausible but is compared with a baseline whose spatial distribution no longer matches the current Unity camera and scene presentation.
+Status: the reviewed Unity render baseline now accepts the correct DirectX, Metal, and Android Vulkan render-only captures from run `30811686247`. No baseline change is justified by that run.
 
 1. Confirm the intended camera pose, playback timestamp, resolution, color space, and scene state for every Unity capture.
 2. Generate candidate baselines only from a reviewed, correct rendering of that exact fixture.
@@ -76,9 +97,9 @@ The current Windows DirectX render is visually plausible but is compared with a 
 
 Exit criterion: reviewed correct images pass repeatedly, and deliberately altered black, default-scene, displaced-camera, and missing-content fixtures fail.
 
-### 5. Rework composition probes around their actual visible geometry
+### 6. Rework composition probes around their actual visible geometry
 
-The current DirectX probe rejects visually intact magenta and yellow squares because its projected analysis rectangles include substantial pixels outside the visible square. Fixed dominant-color shares are therefore measuring projection/coverage mismatch as though it were composition failure.
+Run `30811686247` shows that the front-visible and rear-visible probe checks are no longer causing the Unity failures. The remaining Unity failures are cyan leakage in regions that should be occluded. Do not broaden probe thresholds unless a reviewed, visually correct capture is rejected.
 
 1. Derive the expected probe mask from the rendered probe geometry rather than a loose projected bounding rectangle.
 2. Ignore antialiased boundary pixels and allow a small renderer-dependent edge tolerance.
@@ -88,7 +109,7 @@ The current DirectX probe rejects visually intact magenta and yellow squares bec
 
 Exit criterion: intact probes pass on DirectX, Metal, Vulkan, and OpenGL; deliberately incorrect depth ordering fails on every applicable renderer.
 
-### 6. Make the cyan depth defect an explicit, reliable contract
+### 7. Make the cyan depth defect an explicit, reliable contract
 
 The cyan probe currently exposes an apparent depth/occlusion problem, but at least one classifier reports success. Tightening this check is more important than making the report green.
 
@@ -105,7 +126,7 @@ The cyan probe currently exposes an apparent depth/occlusion problem, but at lea
 
 Exit criterion: the known cyan defect fails with a clear diagnostic overlay, while a reviewed correct occlusion capture passes across repeated runs.
 
-### 7. Separate product failures from infrastructure and evidence failures
+### 8. Separate product failures from infrastructure and evidence failures
 
 Do not label a renderer visually broken when the failure occurred before rendering.
 
@@ -120,7 +141,7 @@ Use distinct report states:
 
 Aggregate reports must preserve these distinctions instead of flattening all of them into a red visual failure.
 
-### 8. Add regression tests for the validators themselves
+### 9. Add regression tests for the validators themselves
 
 Each validator must be tested with known positive and negative fixtures.
 
@@ -139,7 +160,7 @@ Required cases:
 - requested Vulkan falling back to another API fails as a runtime failure;
 - missing capture reports `evidence_incomplete`, not `render_failed`.
 
-### 9. Verify the cleaned report on an exact revision
+### 10. Verify the cleaned report on an exact revision
 
 1. Run the full cloud validation suite.
 2. Download and manually inspect every rendered capture, including both synthetic eyes.
@@ -160,4 +181,5 @@ The report should become shorter and more trustworthy:
 
 - Run `30804478423` (`82c538c038035ad373a36fb924b0ba23b2d50df2`) proved that the standard GitHub Windows runner exposes no Vulkan GPU accepted by Unity. Mesa Lavapipe was installed and selected correctly, but Unity reported no Vulkan device and fell back to Direct3D 11.
 - The repository's Android native dependency graph is ARM64-only, including the imported static libraries and `libjpeg-turbo`. An x86_64 Android emulator lane therefore requires a separate native-porting task and is not a workflow-only substitute.
-- Until hosted GPU capacity or an x86_64 Android plugin exists, the hosted synthetic lane must report `runtime_failed` rather than a visual failure. Its strict two-eye Vulkan contract remains unchanged and cannot pass on a Direct3D fallback.
+- The Windows software-Vulkan synthetic lane must continue to report `runtime_failed` rather than a visual failure when Unity falls back to Direct3D.
+- The primary cloud stereo strategy is now an ARM64 Android/Firebase hardware-Vulkan lane, avoiding both the unsupported Windows software-Vulkan device and the x86_64 native dependency gap.
