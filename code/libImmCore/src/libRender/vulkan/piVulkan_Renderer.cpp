@@ -9614,7 +9614,13 @@ bool piRendererVulkan::BeginExternalImageFrameWithView(void *image, void *imageV
     // PRIME mode keeps the MSAA contract: the host depth is SAMPLED by a
     // fullscreen depth-only draw at batch open (laid into the transient 4x
     // depth) instead of being attached at 1x.
-    const bool primeHostDepth = hasExternalDepth && iMsaaEnabled(mState) && iDepthPrimeEnabled(mState);
+    // A depth image owned by this frame and sampled by Unity must be the image
+    // IMM actually writes. PRIME mode treats the external image as an input and
+    // renders into a private multisampled depth attachment, which leaves the
+    // external texture without IMM depth for the presentation shader. Keep
+    // PRIME only for genuine host depth that IMM consumes.
+    const bool primeHostDepth = hasExternalDepth && !clearExternalDepth &&
+                                iMsaaEnabled(mState) && iDepthPrimeEnabled(mState);
     piTexture depthTexture = nullptr;
     piTexture primeDepthTexture = nullptr;
     if (hasExternalDepth)

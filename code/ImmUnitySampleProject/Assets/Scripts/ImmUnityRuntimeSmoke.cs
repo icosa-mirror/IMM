@@ -179,24 +179,16 @@ namespace ImmPlayer
                 }
 #if IMM_UNITY_ANDROID_VULKAN_CI
                 ImmPlayerManager playerManager = FindObjectOfType<ImmPlayerManager>();
-                RenderTexture vulkanPresentationTarget = playerManager != null
-                    ? playerManager.GetAndroidVulkanPresentationTargetForValidation(renderCaptureCamera)
-                    : null;
-                Texture2D renderCapture;
-                if (vulkanPresentationTarget != null)
-                {
-                    Debug.Log(
-                        $"{Prefix}render source=unity-vulkan-presentation-texture " +
-                        $"size={vulkanPresentationTarget.width}x{vulkanPresentationTarget.height}");
-                    renderCapture = CaptureRenderTexture(vulkanPresentationTarget);
-                }
-                else
-                {
-                    Debug.Log(
-                        $"{Prefix}render source=unity-vulkan-active-render-pass " +
-                        $"size={Screen.width}x{Screen.height}");
-                    renderCapture = CaptureScreenTexture();
-                }
+                // The native eye texture is written on IMM's dedicated queue.
+                // Reading it back directly here bypasses Unity's presentation
+                // synchronization and can capture a black/stale slot even while
+                // the displayed frame is correct. This validation is explicitly
+                // for the rendered result, so capture the same presented surface
+                // that the physical-device video observes.
+                Debug.Log(
+                    $"{Prefix}render source=unity-vulkan-presented-screen " +
+                    $"size={Screen.width}x{Screen.height}");
+                Texture2D renderCapture = CaptureScreenTexture();
 #else
                 Texture2D renderCapture = _diagnosticCameraTargetTexture != null
                     ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
