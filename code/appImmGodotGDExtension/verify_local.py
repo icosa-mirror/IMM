@@ -105,7 +105,7 @@ def verify_project_renderer() -> None:
     rendering_method = unquote(rendering_match.group(1)) if rendering_match else "forward_plus"
     if rendering_method != "forward_plus":
         raise RuntimeError(f"Unexpected sample renderer path: {rendering_method!r}")
-    if 'run/main_scene="uid://dxrq2se1fvtxw"' not in project:
+    if 'run/main_scene="res://scenes/SampleScene.tscn"' not in project:
         raise RuntimeError("Godot sample project Run button must launch SampleScene.tscn")
 
     print("Godot sample renderer path ok", flush=True)
