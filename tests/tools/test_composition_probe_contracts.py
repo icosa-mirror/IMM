@@ -48,8 +48,13 @@ def main() -> int:
             "frameCount = 90;",
             "[IMM_UNITY_ANDROID_VK_SMOKE_FRAMES_20260729]",
             "scene composition probes created",
+            "const float rearOccludedDistance = 10.0f;",
+            "const float originalRearOccludedDistance = 3.95f;",
             "FindObjectOfType<ImmFeatureExamples>()",
             "FreezeCompositionPlaybackIfRequested();",
+        ],
+        ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [
+            'Graphics.Blit(source, destination, composite, 0);',
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Resources/ImmUnitySmokeUnlitColor.shader": [
             'Shader "IMM/SmokeUnlitColor"',

@@ -1208,7 +1208,10 @@ namespace ImmPlayer
                     return false;
                 composite.SetTexture("_ImmColorTex", eyeTarget);
                 composite.SetTexture("_ImmDepthTex", eyeDepthTarget);
-                Graphics.Blit(source, destination, composite);
+                // Pass zero is the compositor. Omitting the pass index executes
+                // every material pass, allowing the validation-only depth view
+                // to overwrite the presented image when that pass is present.
+                Graphics.Blit(source, destination, composite, 0);
             }
             else
             {
