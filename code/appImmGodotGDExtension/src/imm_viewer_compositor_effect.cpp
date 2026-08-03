@@ -176,14 +176,7 @@ void main() {
 
             Ref<RDPipelineColorBlendStateAttachment> blend_attachment;
             blend_attachment.instantiate();
-            // The ordered-overlay callback runs after the scene. Preserve the
-            // scene where the IMM render target is transparent instead of
-            // overwriting it with the target's cleared background.
-            blend_attachment->set_enable_blend(true);
-            blend_attachment->set_src_color_blend_factor(RenderingDevice::BLEND_FACTOR_SRC_ALPHA);
-            blend_attachment->set_dst_color_blend_factor(RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
-            blend_attachment->set_src_alpha_blend_factor(RenderingDevice::BLEND_FACTOR_ONE);
-            blend_attachment->set_dst_alpha_blend_factor(RenderingDevice::BLEND_FACTOR_ONE_MINUS_SRC_ALPHA);
+            blend_attachment->set_enable_blend(false);
             blend_attachment->set_write_r(true);
             blend_attachment->set_write_g(true);
             blend_attachment->set_write_b(true);

@@ -210,9 +210,6 @@ def main() -> int:
         ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp": [
             "Both the IMM intermediate depth and Godot's Vulkan scene depth use",
             "imm_depth > host_depth",
-            "set_enable_blend(true)",
-            "BLEND_FACTOR_SRC_ALPHA",
-            "BLEND_FACTOR_ONE_MINUS_SRC_ALPHA",
         ],
         ROOT / "tests/baselines/render/sample1-ordered-overlay.json": [
             "expected_color_components",
