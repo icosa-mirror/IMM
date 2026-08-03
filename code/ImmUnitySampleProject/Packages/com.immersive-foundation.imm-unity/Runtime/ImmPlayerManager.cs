@@ -158,6 +158,8 @@ namespace ImmPlayer
         private int _appleMetalEventLogCount = 0;
         private bool _flatAndroidVulkanHostComposition;
         private bool _flatAndroidVulkanSharedDepthComposition;
+        private Camera _syntheticStereoCameraForValidation;
+        private int _syntheticStereoEyeForValidation = -1;
         private static Mesh _vulkanOverlayFixtureMesh;
         private static Material _vulkanOverlayFixtureMaterial;
 
@@ -1171,6 +1173,25 @@ namespace ImmPlayer
                 $"frame={Time.frameCount}");
         }
 
+        /// <summary>
+        /// Selects one synthetic stereo eye for the next explicit Camera.Render call.
+        /// This is a non-XR CI fixture: it exercises the real Vulkan per-camera/per-eye
+        /// render-target and event-ID path, but does not emulate an XR compositor.
+        /// Pass -1 to clear the override.
+        /// </summary>
+        public void SetSyntheticStereoEyeForValidation(Camera camera, int eye)
+        {
+            if (eye < -1 || eye > 1)
+                throw new ArgumentOutOfRangeException(nameof(eye), eye, "Synthetic stereo eye must be -1, 0, or 1.");
+
+            _syntheticStereoCameraForValidation = eye >= 0 ? camera : null;
+            _syntheticStereoEyeForValidation = eye;
+            _lastMatrixSetFrame = -1;
+            Debug.Log(
+                $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] select eye={eye} " +
+                $"camera={(camera != null ? camera.name : "none")} frame={Time.frameCount}");
+        }
+
         private void EnsureFlatAndroidVulkanPresenter(Camera cam)
         {
             if (!UsesFlatAndroidVulkanPresenter(cam))
@@ -1370,6 +1391,8 @@ namespace ImmPlayer
 
             PerCameraInfo info = GetOrCreateCameraInfo(cam, _useCommandBufferRendering);
             bool useHostComposition = UsesFlatAndroidVulkanHostComposition(cam);
+            bool useSyntheticStereo =
+                _syntheticStereoEyeForValidation >= 0 && _syntheticStereoCameraForValidation == cam;
 
             if (IsVulkanRuntime() && IsEnvFlagEnabled("IMM_UNITY_VK_NO_RENDER_EVENTS"))
             {
@@ -1395,6 +1418,8 @@ namespace ImmPlayer
                 return;
 
             int stereoMode = ResolveStereoMode(cam);
+            if (useSyntheticStereo)
+                stereoMode = (int)StereoMode.TwoPass;
 
             // Single pose sample per frame: multipass runs this per eye pass with
             // poses ~half a frame apart, but the compositor timewarps BOTH eyes
@@ -1472,7 +1497,24 @@ namespace ImmPlayer
                 }
             }
 
-            bool hasStereoMatrices = cam.stereoEnabled || xrMatricesApplied;
+            bool syntheticMatricesApplied = false;
+            if (useSyntheticStereo)
+            {
+                // Deliberately separate the two views by a conventional 64 mm IPD.
+                // Both matrices are uploaded together so eye selection is entirely
+                // performed by the native event ID, matching the XR two-pass path.
+                const float halfIpd = 0.032f;
+                Matrix4x4 leftView = Matrix4x4.Translate(new Vector3(halfIpd, 0.0f, 0.0f)) * cam.worldToCameraMatrix;
+                Matrix4x4 rightView = Matrix4x4.Translate(new Vector3(-halfIpd, 0.0f, 0.0f)) * cam.worldToCameraMatrix;
+                Matrix4x4 eyeProjection = GL.GetGPUProjectionMatrix(cam.nonJitteredProjectionMatrix, true);
+                ConvertMatrixToArray(info.WorldToLeft, leftView);
+                ConvertMatrixToArray(info.LeftProj, eyeProjection);
+                ConvertMatrixToArray(info.WorldToRight, rightView);
+                ConvertMatrixToArray(info.RightProj, eyeProjection);
+                syntheticMatricesApplied = true;
+            }
+
+            bool hasStereoMatrices = cam.stereoEnabled || xrMatricesApplied || syntheticMatricesApplied;
             ImmNativePlugin.SetMatrices(
                 info.CameraId,
                 stereoMode,
@@ -1496,9 +1538,11 @@ namespace ImmPlayer
                 }
 
                 int vulkanEye = 0;
-                if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled && cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right)
+                if (useSyntheticStereo)
+                    vulkanEye = _syntheticStereoEyeForValidation;
+                else if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled && cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right)
                     vulkanEye = 1;
-                bool useOffscreenTargets = Application.platform == RuntimePlatform.Android &&
+                bool useOffscreenTargets = (Application.platform == RuntimePlatform.Android || useSyntheticStereo) &&
                     !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET") &&
                     !useHostComposition;
 
@@ -1597,12 +1641,25 @@ namespace ImmPlayer
                 return;
 
             int eyeIndex = 0;
-            if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
+            if (useSyntheticStereo)
+            {
+                eyeIndex = _syntheticStereoEyeForValidation;
+            }
+            else if (stereoMode == (int)StereoMode.TwoPass && cam.stereoEnabled)
             {
                 eyeIndex = cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0;
             }
 
             int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
+            if (useSyntheticStereo)
+            {
+                RenderTexture syntheticTarget = info.VulkanEyeTargets[eyeIndex & 1];
+                Debug.Log(
+                    $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
+                    $"eye={eyeIndex} eventId={eventId} " +
+                    $"targetId={(syntheticTarget != null ? syntheticTarget.GetInstanceID() : 0)} " +
+                    $"targetPtr=0x{(syntheticTarget != null ? syntheticTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64() : 0):X}");
+            }
             info.CommandBuffer.Clear();
             if (IsVulkanRuntime())
             {
@@ -1639,9 +1696,7 @@ namespace ImmPlayer
                 {
                     info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId);
                 }
-                if (Application.platform == RuntimePlatform.Android &&
-                    !useHostComposition &&
-                    !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET"))
+                if (useOffscreenTargets)
                 {
                     // Probe: blit the LEFT RT into BOTH eyes. Right eye lights up -> the
                     // right RT was empty (native render side); still dark -> the right

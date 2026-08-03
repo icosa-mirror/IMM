@@ -42,6 +42,7 @@ def normalize_label(value: str) -> str:
         "unity-macos-metal-composition": "Unity-macOS-Metal-Composition",
         "unity-windows-vulkan-ordered-overlay": "Unity-Windows-Vulkan-Ordered-Overlay",
         "unity-windows-vulkan-full-depth": "Unity-Windows-Vulkan-Full-Depth",
+        "unity-windows-vulkan-synthetic-stereo": "Unity-Windows-Vulkan-Synthetic-Stereo",
         "godot-windows-vulkan-full-depth": "Godot-Windows-Vulkan-Full-Depth",
     }
     for old, new in replacements.items():
@@ -70,6 +71,7 @@ def slugify(value: str) -> str:
         "unitymacosmetalcomposition": "unity-macos-metal-composition",
         "unitywindowsvulkanorderedoverlay": "unity-windows-vulkan-ordered-overlay",
         "unitywindowsvulkanfulldepth": "unity-windows-vulkan-full-depth",
+        "unitywindowsvulkansyntheticstereo": "unity-windows-vulkan-synthetic-stereo",
         "godotwindowsvulkanfulldepth": "godot-windows-vulkan-full-depth",
         "windowsgodotvulkanorderedoverlay": "windows-godot-vulkan-ordered-overlay",
         "windowsgodotvulkan": "windows-godot-vulkan",

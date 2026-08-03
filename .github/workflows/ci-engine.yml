@@ -798,6 +798,137 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  unity-windows-vulkan-synthetic-stereo:
+    name: Unity Windows Vulkan Synthetic Stereo
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    needs: unity-windows-vulkan-player-build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Mesa lavapipe
+        id: msys2-unity-vulkan-stereo
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-mesa
+
+      - name: Configure Mesa lavapipe Vulkan ICD
+        shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2-unity-vulkan-stereo.outputs.msys2-location }}
+        run: .\tests\tools\configure_windows_lavapipe.ps1 -Msys2Location $env:MSYS2_LOCATION -ArtifactDirectory artifacts\unity-windows-vulkan-synthetic-stereo
+
+      - name: Preflight hosted Unity Vulkan stereo runner
+        shell: pwsh
+        run: python tests\tools\preflight_runner.py --profile unity-windows-vulkan --output artifacts\unity-windows-vulkan-synthetic-stereo\preflight.json --require-env VK_ICD_FILENAMES
+
+      - name: Download Unity Vulkan smoke player
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityWindowsVulkanPlayer
+          path: artifacts/unity-windows-vulkan-synthetic-stereo/player
+
+      - name: Run Unity Vulkan synthetic stereo smoke
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $artifactDir = Resolve-Path artifacts\unity-windows-vulkan-synthetic-stereo
+          $player = Join-Path $artifactDir "player\ImmUnitySmoke.exe"
+          if (-not (Test-Path $player)) {
+            throw "Unity Vulkan smoke player was not built: $player"
+          }
+          $capturePath = Join-Path $artifactDir "unity-windows-vulkan-synthetic-stereo.png"
+          $playerLog = Join-Path $artifactDir "unity-player.log"
+          $playerArgs = @(
+            "-logFile", $playerLog,
+            "-screen-width", "1280",
+            "-screen-height", "720",
+            "-screen-fullscreen", "0",
+            "-force-vulkan",
+            "-immSmokeCapturePath", $capturePath,
+            "-immSmokeFrames", "240",
+            "-immSmokeQuit", "1",
+            "-immSmokeExpectedGraphicsApi", "Vulkan",
+            "-immSmokeSyntheticStereoProbe", "1"
+          )
+          $process = Start-Process -FilePath $player -ArgumentList $playerArgs -WorkingDirectory $artifactDir -PassThru
+          if (-not $process.WaitForExit(240000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (Test-Path $playerLog) { Get-Content $playerLog }
+            throw "Unity Vulkan synthetic stereo player timed out"
+          }
+          if (Test-Path $playerLog) { Get-Content $playerLog }
+          if ($process.ExitCode -ne 0) {
+            throw "Unity Vulkan synthetic stereo player exited with code $($process.ExitCode)"
+          }
+          if (-not (Test-Path $capturePath)) {
+            throw "Unity Vulkan synthetic stereo capture was not written: $capturePath"
+          }
+
+      - name: Split and verify stereo visual evidence
+        shell: pwsh
+        run: |
+          python tests\tools\validate_stereo_capture.py `
+            artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-stereo.png `
+            --left-output artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-left.ppm `
+            --right-output artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-right.ppm `
+            --json-output artifacts\unity-windows-vulkan-synthetic-stereo\stereo-structure.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\tools\compare_render_metrics.py `
+            artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-left.ppm `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\unity-windows-directx-sample1.json `
+            --json-output artifacts\unity-windows-vulkan-synthetic-stereo\left-eye-metrics.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests\tools\compare_render_metrics.py `
+            artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-right.ppm `
+            --reference tests\baselines\render\windows-directx-sample1.ppm `
+            --contract tests\baselines\render\unity-windows-directx-sample1.json `
+            --json-output artifacts\unity-windows-vulkan-synthetic-stereo\right-eye-metrics.json
+
+      - name: Verify Unity Vulkan synthetic stereo log contract
+        shell: pwsh
+        run: >
+          python tests\tools\verify_synthetic_stereo_log.py
+          --log artifacts\unity-windows-vulkan-synthetic-stereo\unity-player.log
+          --output artifacts\unity-windows-vulkan-synthetic-stereo\log-contract.json
+
+      - name: Stage Unity Vulkan synthetic stereo capture evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $captureDir = "artifacts\unity-windows-vulkan-synthetic-stereo\captures\unity-windows-vulkan-synthetic-stereo"
+          New-Item -ItemType Directory -Force -Path $captureDir | Out-Null
+          $source = "artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-stereo.png"
+          if (Test-Path $source) {
+            Copy-Item $source (Join-Path $captureDir "unity-windows-vulkan-synthetic-stereo.png") -Force
+          }
+
+      - name: Write CI manifest
+        if: always()
+        shell: pwsh
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts\unity-windows-vulkan-synthetic-stereo\manifest.json --product unity --platform-name windows --mode synthetic-stereo --renderer vulkan --include artifacts\unity-windows-vulkan-synthetic-stereo
+
+      - name: Collect artifact summary
+        if: always()
+        shell: pwsh
+        run: python tests\tools\collect_ci_artifacts.py --artifact-dir artifacts\unity-windows-vulkan-synthetic-stereo --require-manifest --output artifacts\unity-windows-vulkan-synthetic-stereo\artifact-summary.json
+
+      - name: Upload Unity Vulkan synthetic stereo artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityWindowsVulkanSyntheticStereo
+          path: artifacts/unity-windows-vulkan-synthetic-stereo
+          if-no-files-found: ignore
+          retention-days: 14
+
   unity-windows-vulkan-ordered-overlay:
     name: Unity Windows Vulkan Ordered Overlay
     if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
@@ -1766,6 +1897,7 @@ jobs:
       - unity-windows-directx-player-build
       - unity-windows-directx-composition
       - unity-windows-vulkan-player-build
+      - unity-windows-vulkan-synthetic-stereo
       - unity-windows-vulkan-ordered-overlay
       - unity-windows-vulkan-full-depth
       - unity-android-vulkan
@@ -1838,6 +1970,13 @@ jobs:
             unity_status="cancelled"
             unity_failure_class="compositing"
           fi
+          if [ "${{ needs.unity-windows-vulkan-synthetic-stereo.result }}" = "failure" ]; then
+            unity_status="failed"
+            unity_failure_class="visual"
+          elif [ "${{ needs.unity-windows-vulkan-synthetic-stereo.result }}" = "cancelled" ] && [ "$unity_status" != "failed" ]; then
+            unity_status="cancelled"
+            unity_failure_class="visual"
+          fi
           if [ "${{ needs.unity-android-vulkan.result }}" = "failure" ]; then
             unity_status="failed"
             unity_failure_class="compositing"
@@ -1850,6 +1989,7 @@ jobs:
              [ "${{ needs.unity-windows-directx-player-build.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-directx-composition.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-vulkan-player-build.result }}" != "skipped" ] || \
+             [ "${{ needs.unity-windows-vulkan-synthetic-stereo.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-vulkan-ordered-overlay.result }}" != "skipped" ] || \
              [ "${{ needs.unity-windows-vulkan-full-depth.result }}" != "skipped" ] || \
              [ "${{ needs.unity-android-vulkan.result }}" != "skipped" ]; then

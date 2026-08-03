@@ -20,6 +20,7 @@ namespace ImmPlayer
         private const string FreezePlaybackEnv = "IMM_UNITY_SMOKE_FREEZE_PLAYBACK";
         private const string FreezeTimeTicksEnv = "IMM_UNITY_SMOKE_FREEZE_TIME_TICKS";
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
+        private const string SyntheticStereoProbeEnv = "IMM_UNITY_SMOKE_SYNTHETIC_STEREO_PROBE";
         private const string ExpectedGraphicsApiEnv = "IMM_UNITY_EXPECT_GRAPHICS_API";
         private const string DisableMsaaEnv = "IMM_UNITY_SMOKE_DISABLE_MSAA";
         private const string CaptureCameraTextureEnv = "IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE";
@@ -30,6 +31,7 @@ namespace ImmPlayer
         private const string CompositionProbeArg = "-immSmokeCompositionProbe";
         private const string OverlayProbeArg = "-immSmokeOverlayProbe";
         private const string XrProbeArg = "-immSmokeXrProbe";
+        private const string SyntheticStereoProbeArg = "-immSmokeSyntheticStereoProbe";
         private const string ExpectedGraphicsApiArg = "-immSmokeExpectedGraphicsApi";
         private const string MinOrderedOverlayImmUniqueColorsArg = "-immSmokeMinOrderedOverlayImmUniqueColors";
         private const string Prefix = "[IMM_UNITY_SMOKE] ";
@@ -86,6 +88,7 @@ namespace ImmPlayer
         private bool _compositionProbeEnabled;
         private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
+        private bool _syntheticStereoProbeEnabled;
         private Camera _compositionCamera;
         private GameObject _frontProbe;
         private GameObject _rearOccludedProbe;
@@ -99,6 +102,7 @@ namespace ImmPlayer
             _compositionProbeEnabled = IsEnabled(CompositionProbeArg, CompositionProbeEnv);
             _overlayProbeEnabled = IsEnabled(OverlayProbeArg, OverlayProbeEnv);
             _xrProbeEnabled = IsEnabled(XrProbeArg, XrProbeEnv);
+            _syntheticStereoProbeEnabled = IsEnabled(SyntheticStereoProbeArg, SyntheticStereoProbeEnv);
 #if IMM_UNITY_ANDROID_VULKAN_CI
             frameCount = 90;
             _compositionProbeEnabled = true;
@@ -157,6 +161,12 @@ namespace ImmPlayer
             }
 
             yield return StabilizeSampleViewpoint();
+
+            if (_syntheticStereoProbeEnabled)
+            {
+                yield return CaptureSyntheticStereoProbe();
+                yield break;
+            }
 
             if (_compositionProbeEnabled)
             {
@@ -403,6 +413,85 @@ namespace ImmPlayer
             UnityEngine.Object.Destroy(texture);
         }
 
+        private IEnumerator CaptureSyntheticStereoProbe()
+        {
+            const string stereoPrefix = "[IMM_UNITY_VK_SYNTH_STEREO_20260803]";
+            if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
+            {
+                Debug.LogError($"{stereoPrefix} expected Vulkan but found {SystemInfo.graphicsDeviceType}");
+                QuitIfRequested(7);
+                yield break;
+            }
+
+            Camera camera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
+            ImmPlayerManager manager = FindObjectOfType<ImmPlayerManager>();
+            if (camera == null || manager == null)
+            {
+                Debug.LogError($"{stereoPrefix} missing camera or IMM manager");
+                QuitIfRequested(2);
+                yield break;
+            }
+
+            var eyeTargets = new RenderTexture[2];
+            var eyeCaptures = new Texture2D[2];
+            RenderTexture originalTarget = camera.targetTexture;
+            bool originalEnabled = camera.enabled;
+            try
+            {
+                camera.enabled = false;
+                for (int eye = 0; eye < 2; ++eye)
+                {
+                    var target = new RenderTexture(CaptureWidth, CaptureHeight, 24, RenderTextureFormat.ARGB32)
+                    {
+                        name = $"IMM synthetic stereo presented eye {eye}",
+                        antiAliasing = 1,
+                        useMipMap = false,
+                        autoGenerateMips = false
+                    };
+                    target.Create();
+                    eyeTargets[eye] = target;
+
+                    camera.targetTexture = target;
+                    manager.SetSyntheticStereoEyeForValidation(camera, eye);
+                    camera.Render();
+                    eyeCaptures[eye] = CaptureRenderTextureExact(target);
+                    Debug.Log(
+                        $"{stereoPrefix} captured eye={eye} targetId={target.GetInstanceID()} " +
+                        $"targetPtr=0x{target.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X} " +
+                        $"size={target.width}x{target.height}");
+                    yield return null;
+                }
+
+                var stereoCapture = new Texture2D(CaptureWidth * 2, CaptureHeight, TextureFormat.RGB24, false);
+                stereoCapture.SetPixels32(0, 0, CaptureWidth, CaptureHeight, eyeCaptures[0].GetPixels32());
+                stereoCapture.SetPixels32(CaptureWidth, 0, CaptureWidth, CaptureHeight, eyeCaptures[1].GetPixels32());
+                stereoCapture.Apply(false, false);
+                WriteCapture(stereoCapture, _capturePath, "synthetic stereo Vulkan");
+                Debug.Log(
+                    $"{stereoPrefix} passed leftTargetId={eyeTargets[0].GetInstanceID()} " +
+                    $"rightTargetId={eyeTargets[1].GetInstanceID()} capture={Path.GetFullPath(_capturePath)}");
+                QuitIfRequested(0);
+            }
+            finally
+            {
+                manager.SetSyntheticStereoEyeForValidation(null, -1);
+                camera.targetTexture = originalTarget;
+                camera.enabled = originalEnabled;
+                foreach (Texture2D capture in eyeCaptures)
+                {
+                    if (capture != null)
+                        Destroy(capture);
+                }
+                foreach (RenderTexture target in eyeTargets)
+                {
+                    if (target == null)
+                        continue;
+                    target.Release();
+                    Destroy(target);
+                }
+            }
+        }
+
         private void ConfigureDiagnosticCameraTargetTexture()
         {
             Camera camera = Camera.main;
@@ -460,6 +549,39 @@ namespace ImmPlayer
                 tex.ReadPixels(new Rect(0, 0, CaptureWidth, CaptureHeight), 0, 0, false);
                 tex.Apply(false, false);
                 return tex;
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+                RenderTexture.ReleaseTemporary(stagingTexture);
+            }
+        }
+
+        private static Texture2D CaptureRenderTextureExact(RenderTexture renderTexture)
+        {
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture stagingTexture = RenderTexture.GetTemporary(
+                renderTexture.width,
+                renderTexture.height,
+                0,
+                RenderTextureFormat.ARGB32,
+                RenderTextureReadWrite.Default);
+            try
+            {
+                Graphics.Blit(renderTexture, stagingTexture);
+                RenderTexture.active = stagingTexture;
+                var texture = new Texture2D(
+                    renderTexture.width,
+                    renderTexture.height,
+                    TextureFormat.RGB24,
+                    false);
+                texture.ReadPixels(
+                    new Rect(0, 0, renderTexture.width, renderTexture.height),
+                    0,
+                    0,
+                    false);
+                texture.Apply(false, false);
+                return texture;
             }
             finally
             {
