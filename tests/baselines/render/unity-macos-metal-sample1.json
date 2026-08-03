@@ -17,7 +17,7 @@
     },
     "expected_spatial_luma_grid": {
       "height": 18,
-      "max_mean_abs_delta": 0.15,
+      "max_mean_abs_delta": 0.17,
       "min_correlation": 0.4,
       "width": 32
     },

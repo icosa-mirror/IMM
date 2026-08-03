@@ -33,6 +33,8 @@ def main() -> int:
         )
         log.write_text(
             common
+            + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
+            + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
             + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
             + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n",
             encoding="utf-8",
@@ -43,6 +45,8 @@ def main() -> int:
 
         log.write_text(
             common
+            + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
+            + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
             + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
             + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=10 targetPtr=0xABC\n",
             encoding="utf-8",
@@ -51,6 +55,19 @@ def main() -> int:
         assert failed.returncode != 0
         failures = json.loads(output.read_text(encoding="utf-8"))["failures"]
         assert any("shared" in failure for failure in failures)
+
+        log.write_text(
+            common
+            + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.032 leftTx=1.032000 rightTx=0.968000\n"
+            + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.032 leftTx=1.032000 rightTx=0.968000\n"
+            + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
+            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n",
+            encoding="utf-8",
+        )
+        weak_matrices = invoke(tool, log, output)
+        assert weak_matrices.returncode != 0
+        failures = json.loads(output.read_text(encoding="utf-8"))["failures"]
+        assert any("matrix separation is too small" in failure for failure in failures)
     return 0
 
 

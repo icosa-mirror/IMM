@@ -178,9 +178,11 @@ def discover_reports(input_root: Path) -> list[tuple[str, Path]]:
     selected: dict[str, Path] = {}
     for report in reports:
         key = report_key(report)
-        if key in GENERIC_CAPTURE_SECTION_KEYS and any(
-            parent.name.lower() == "captures" for parent in report.parents
-        ):
+        # These are subordinate render-mode reports produced inside a lane's
+        # artifact. Their captures belong under the authoritative matrix lane,
+        # regardless of whether the producer wrote the report at artifact root
+        # or below captures/.
+        if key in GENERIC_CAPTURE_SECTION_KEYS:
             continue
         current = selected.get(key)
         if current is None or report_rank(report) < report_rank(current):

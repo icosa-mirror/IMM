@@ -711,6 +711,54 @@ jobs:
           "exit_code=$LASTEXITCODE" | Out-File -FilePath $out -Append
           exit 0
 
+      - name: Run Godot project Run-button smoke
+        id: godot_sample_play
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: pwsh
+        run: >
+          .\code\projects\windows\run-godot-sample-play-smoke.ps1
+          -GodotExe $env:GODOT_EXE
+          -CapturePath artifacts\godot-smoke-windows-vulkan\godot-sample-play.png
+          -LogDir artifacts\godot-smoke-windows-vulkan\sample-play
+
+      - name: Record Godot project Run-button render metrics
+        id: godot_sample_play_metrics
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: >
+          python tests\tools\compare_render_metrics.py
+          artifacts\godot-smoke-windows-vulkan\godot-sample-play.png
+          --reference tests\baselines\render\windows-directx-sample1.ppm
+          --contract tests\baselines\render\godot-windows-vulkan-sample1.json
+          --json-output artifacts\godot-smoke-windows-vulkan\godot-sample-play-metrics.json
+
+      - name: Write Godot project Run-button render report
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-sample-play-metrics.json
+          --reference-capture tests\baselines\render\windows-directx-sample1.ppm
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-sample-play.png
+          --output-dir artifacts\godot-smoke-windows-vulkan\captures\sample-play
+          --markdown-output artifacts\godot-smoke-windows-vulkan\sample-play-report.md
+
+      - name: Verify Godot project Run-button log contract
+        id: godot_sample_play_log
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: >
+          python tests\tools\verify_log_markers.py
+          --log artifacts\godot-smoke-windows-vulkan\sample-play\godot-sample-play-controller.log
+          --label godot-windows-vulkan-sample-play
+          --require "[IMM_GODOT_SAMPLE_PLAY_20260803] passed"
+          --forbid "[IMM_GODOT_SAMPLE_PLAY_20260803] failed"
+          --output artifacts\godot-smoke-windows-vulkan\godot-sample-play-log-contract.json
+
       - name: Run Godot Vulkan render-only baseline smoke
         timeout-minutes: 10
         shell: pwsh
@@ -816,6 +864,18 @@ jobs:
           --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm
           --output-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay\captures\render
           --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-baseline-report.md
+
+      - name: Enforce Godot project Run-button contract
+        if: always()
+        shell: pwsh
+        run: |
+          $failed = @()
+          if ("${{ steps.godot_sample_play.outcome }}" -ne "success") { $failed += "runtime" }
+          if ("${{ steps.godot_sample_play_metrics.outcome }}" -ne "success") { $failed += "visual" }
+          if ("${{ steps.godot_sample_play_log.outcome }}" -ne "success") { $failed += "log" }
+          if ($failed.Count -gt 0) {
+            throw "Godot project Run-button contract failed: $($failed -join ', ')"
+          }
 
       - name: Write CI manifest
         if: always()

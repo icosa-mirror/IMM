@@ -26,8 +26,10 @@ COMPOSITOR_EFFECT_HEADER = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_co
 COMPOSITOR_EFFECT_SOURCE = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp"
 WINDOWS_BUILD_HELPER = ROOT / "code/projects/windows/build-godot-extension.ps1"
 WINDOWS_SMOKE_HELPER = ROOT / "code/projects/windows/run-godot-smoke.ps1"
+WINDOWS_SAMPLE_PLAY_HELPER = ROOT / "code/projects/windows/run-godot-sample-play-smoke.ps1"
 WORKFLOW = ROOT / ".github/workflows/build.yml"
 CI_ORCHESTRATOR = ROOT / ".github/workflows/ci-validation.yml"
+CI_GPU_WORKFLOW = ROOT / ".github/workflows/ci-gpu.yml"
 SCONSTRUCT = ROOT / "code/appImmGodotGDExtension/SConstruct"
 GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runner.gd"
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
@@ -336,10 +338,15 @@ def verify_godot_scenes() -> None:
     if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
         raise RuntimeError("VisualSmokeScene.tscn must not reference the script stub")
 
-    if node_by_name(sample_nodes, "ImmViewer").get("type") != "ImmViewerNode":
+    sample_viewer = node_by_name(sample_nodes, "ImmViewer")
+    if sample_viewer.get("type") != "ImmViewerNode":
         raise RuntimeError("SampleScene.tscn ImmViewer must be native ImmViewerNode")
-    if node_by_name(sample_nodes, "ImmViewer").get("document_path") != '"../../exampleImmFiles/sample1.imm"':
+    if sample_viewer.get("document_path") != '"../../exampleImmFiles/sample1.imm"':
         raise RuntimeError("SampleScene.tscn ImmViewer must reference the committed sample1.imm fixture")
+    if sample_viewer.get("load_on_ready") == "true":
+        raise RuntimeError(
+            "SampleScene.tscn must leave load_on_ready disabled so the controller can queue Vulkan warm-up frames"
+        )
     if node_by_name(script_nodes, "ImmViewer").get("type") != "Node":
         raise RuntimeError("ScriptSmokeScene.tscn ImmViewer must be a script-backed Node")
     if node_by_name(native_nodes, "ImmViewer").get("type") != "ImmViewerNode":
@@ -371,16 +378,19 @@ def verify_godot_scenes() -> None:
 def verify_windows_build_wiring() -> None:
     helper = WINDOWS_BUILD_HELPER.read_text(encoding="utf-8")
     smoke_helper = WINDOWS_SMOKE_HELPER.read_text(encoding="utf-8")
+    sample_play_helper = WINDOWS_SAMPLE_PLAY_HELPER.read_text(encoding="utf-8")
     smoke_runner = GODOT_SMOKE_RUNNER.read_text(encoding="utf-8")
     script_stub = GODOT_SCRIPT_STUB.read_text(encoding="utf-8")
     godot_addon_readme = GODOT_ADDON_README.read_text(encoding="utf-8")
     sconstruct = SCONSTRUCT.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
     orchestrator = CI_ORCHESTRATOR.read_text(encoding="utf-8")
+    gpu_workflow = CI_GPU_WORKFLOW.read_text(encoding="utf-8")
 
     for script_path, script_text in [
         (WINDOWS_BUILD_HELPER, helper),
         (WINDOWS_SMOKE_HELPER, smoke_helper),
+        (WINDOWS_SAMPLE_PLAY_HELPER, sample_play_helper),
     ]:
         if script_text.count("{") != script_text.count("}"):
             raise RuntimeError(f"PowerShell brace balance looks wrong in {script_path}")
@@ -400,6 +410,17 @@ def verify_windows_build_wiring() -> None:
     for token in ["Configuration", "PreflightOnly", "Godot smoke preflight passed", "Join-Path $sampleProject", "$platform $variant", "imm_godot_extension.dll", "libimm_godot_extension.dylib", "ImmGodotPlugin.dll", "libImmGodotPlugin.dylib", "Audio360.dll", "opus.dll", "opusenc.dll", "zlib1.dll", "jpeg62.dll", "libpng16.dll", "ogg.dll", "vorbis.dll", "Godot GDExtension runtime files are missing", "GodotExe", "RequireExtension", "SmokeScene", "LogDir", "LoadUnloadCycles", "RendererApi", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "godot-smoke-output.log", "godot-smoke-summary.txt", "godot-extension-files.txt", "Expected staged extension files:", "FOUND`t", "MISSING`t", "Mirrored $Configuration GDExtension files for Godot editor feature lookup", "SuccessMarker=", "HasSuccessMarker=", "did not print success marker", "ExtensionDir=", "EditorExtensionDir=", "EditorExtensionDll=", "ScriptSmokeScene.tscn", "NativeSmokeScene.tscn", "IMM_GODOT_EXPECT_NATIVE", "smoke_test_runner.gd", "--headless"]:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
+
+    for token in ["IMM_GODOT_SAMPLE_PLAY_SMOKE", "IMM_GODOT_SAMPLE_PLAY_CAPTURE", "IMM_GODOT_SAMPLE_PLAY_LOG", "run/main_scene", "godot-sample-play-controller.log", "[IMM_GODOT_SAMPLE_PLAY_20260803] passed", "VK_ERROR_DEVICE_LOST", "signal 11"]:
+        if token not in sample_play_helper:
+            raise RuntimeError(f"Godot sample Play helper is missing contract token: {token}")
+    godot_args = sample_play_helper.split("$godotArgs = @(", 1)[1].split(")", 1)[0]
+    if "--scene" in godot_args or "--script" in godot_args:
+        raise RuntimeError("Godot sample Play helper must launch project.godot run/main_scene without an override")
+
+    for token in ["Run Godot project Run-button smoke", "run-godot-sample-play-smoke.ps1", "Record Godot project Run-button render metrics", "Verify Godot project Run-button log contract", "Enforce Godot project Run-button contract"]:
+        if token not in gpu_workflow:
+            raise RuntimeError(f"Godot GPU workflow is missing sample Play contract token: {token}")
 
     for token in ["EXPECTED_RENDERER", "EXTENSION_PATH", "GDExtensionManager.load_extension", "SCRIPT_SCENE", "NATIVE_SCENE", "IMM_GODOT_LOAD_UNLOAD_CYCLES", "IMM_GODOT_RENDERER_API", "requested_renderer_api", "render backend diagnostics reported renderer_api", "_exercise_load_unload_cycles", 'is_class("ImmViewerNode")', "auto_queue_render", "render_camera_path", "is_render_camera_registered", "load_document", "is_loaded", "ImmViewer did not load", "document_loaded signal was not emitted by load_document", "document_unloaded signal was not emitted by unload_document", "playback_changed signal was not emitted by auto-play load", "spawn_area_changed signal was not emitted by next/previous spawn-area navigation", "native_backend_initialized", "native_backend_failed", "did not match expected_native", "_connect_viewer_signals", "_wait_for_timeline_ready", "get_document_state", "set_document_transform", "get_document_transform", "get_background_color", "RenderingServer.set_default_clear_color", "RenderingServer.get_default_clear_color", "get_chapter_count", "get_current_chapter", "set_time", "get_time", "get_play_time", "get_play_time_seconds", "seek_relative_seconds", "seek_relative_seconds(0.5) did not advance get_play_time()", "seek_relative_seconds should clamp below zero", "get_bounding_box", "get_layer_count", "get_layer_info", "get_layer_diagnostics", "set_layer_visible", "clear_layer_visibility_override", "set_layer_opacity", "set_layer_transform", "clear_layer_transform_override", "visibility_override_enabled", "override-capable layer", "transform_override_enabled", "get_spawn_area_ids", "get_active_spawn_area_index", "get_spawn_area_info", "get_active_spawn_area_info", "next_spawn_area", "previous_spawn_area", "get_active_spawn_area_index %d was outside %d authored spawn areas", "get_spawn_area_info(%d) returned an empty Dictionary", "get_active_spawn_area_info id %d did not match active spawn id %d", "next_spawn_area moved active index to %d instead of %d", "previous_spawn_area restored active index to %d instead of %d", "_validate_spawn_area_info", "_vector_is_finite", "basis_x", "basis_y", "basis_z", "raw_position", "raw_rotation", "raw_rotation_w", "scale", "basis_x/basis_y were not orthogonal", "converted basis did not preserve right-handed orientation", "transform scale was not positive", "allow_translation", "locomotion", "set_volume", "get_volume", "skip_forward", "skip_back", "pause()", "play()", "toggle_pause()", "restart()", "queue_render_camera_transform", "get_render_diagnostics", "get_render_backend_diagnostics", "vulkan_adapter_candidate", "last_projection_size", "adapter_graphics_initialized_count", "adapter_before_render_count", "adapter_after_render_count", "adapter_last_viewport_width", "camera %d was not auto-registered by ImmViewer", "IMM Godot smoke test passed"]:
         if token not in smoke_runner:
@@ -619,6 +640,7 @@ def verify_powershell_syntax() -> None:
     scripts = [
         WINDOWS_BUILD_HELPER,
         WINDOWS_SMOKE_HELPER,
+        WINDOWS_SAMPLE_PLAY_HELPER,
     ]
     script_literals = "\n".join(f"    '{str(script).replace(chr(39), chr(39) + chr(39))}'" for script in scripts)
     command = [

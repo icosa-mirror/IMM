@@ -112,6 +112,10 @@ def main() -> int:
                 f"# {generic_name}\n\n![capture]({generic_name}.png)\n",
                 encoding="utf-8",
             )
+        (engine / "composition-render-report.md").write_text(
+            "# Composition\n\n![capture](captures/composition/composition.png)\n",
+            encoding="utf-8",
+        )
 
         metal = input_root / "UnityMacOSMetalComposition"
         metal_captures = metal / "captures"

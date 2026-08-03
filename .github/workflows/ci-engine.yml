@@ -284,11 +284,47 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneOSX
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke
           allowDirtyBuild: true
           enableGpu: true
           cacheUnityInstallationOnMac: true
-          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-editor.log -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app
+          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-editor.log -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app -immSmokeCapturePath ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
+
+      - name: Record Unity project Play-button render metrics
+        id: unity_editor_play_metrics
+        if: always()
+        continue-on-error: true
+        run: >
+          python3 tests/tools/compare_render_metrics.py
+          artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
+          --reference tests/baselines/render/unity-windows-directx-sample1.png
+          --contract tests/baselines/render/unity-macos-metal-sample1.json
+          --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play-metrics.json
+
+      - name: Write Unity project Play-button render report
+        if: always()
+        continue-on-error: true
+        run: >
+          python3 tests/tools/write_render_report.py
+          --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play-metrics.json
+          --reference-capture tests/baselines/render/unity-windows-directx-sample1.png
+          --candidate-capture artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
+          --output-dir artifacts/unity-macos-metal-composition/captures/editor-play
+          --markdown-output artifacts/unity-macos-metal-composition/editor-play-report.md
+
+      - name: Verify Unity project Play-button log contract
+        id: unity_editor_play_log
+        if: always()
+        continue-on-error: true
+        run: >
+          python3 tests/tools/verify_log_markers.py
+          --log artifacts/unity-macos-metal-composition/unity-editor.log
+          --label unity-macos-metal-editor-play
+          --require "[IMM_EDITOR_SMOKE] entering macOS play mode"
+          --require "[IMM_EDITOR_SMOKE] passed:"
+          --require "[IMM_UNITY_SMOKE] capture="
+          --forbid "[IMM_EDITOR_SMOKE] failed:"
+          --output artifacts/unity-macos-metal-composition/unity-editor-play-log-contract.json
 
       - name: Run Unity macOS Metal visual smokes
         timeout-minutes: 8
@@ -415,6 +451,18 @@ jobs:
             --require "[IMM_UNITY_SMOKE] scene composition overlay probe passed" \
             --require "[IMM_UNITY_SMOKE] capture=" \
             --output artifacts/unity-macos-metal-composition/ordered-overlay-log-contract.json
+
+      - name: Enforce Unity project Play-button contract
+        if: always()
+        run: |
+          failed=()
+          if [ "${{ steps.unity_macos_metal_player_build.outcome }}" != "success" ]; then failed+=(runtime); fi
+          if [ "${{ steps.unity_editor_play_metrics.outcome }}" != "success" ]; then failed+=(visual); fi
+          if [ "${{ steps.unity_editor_play_log.outcome }}" != "success" ]; then failed+=(log); fi
+          if [ "${#failed[@]}" -gt 0 ]; then
+            printf 'Unity project Play-button contract failed: %s\n' "${failed[*]}"
+            exit 1
+          fi
 
       - name: Write CI manifest
         if: always()

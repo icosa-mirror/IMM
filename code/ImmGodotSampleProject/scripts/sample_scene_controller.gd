@@ -5,6 +5,9 @@ const BOOST_MULTIPLIER := 3.0
 const VOLUME_STEP := 0.1
 const SPAWN_AREA_FRAME_WAIT_SECONDS := 2.0
 const CAMERA_ID := 0
+const SAMPLE_PLAY_SMOKE_PREFIX := "[IMM_GODOT_SAMPLE_PLAY_20260803]"
+const SAMPLE_PLAY_SMOKE_TIMEOUT_SECONDS := 20.0
+const SAMPLE_PLAY_SMOKE_SETTLE_FRAMES := 30
 
 @onready var viewer := $ImmViewer
 @onready var camera_rig: Node3D = $CameraRig
@@ -17,6 +20,9 @@ var _last_background_color := Color.BLACK
 var _initial_camera_framed := false
 
 func _ready() -> void:
+	var native_log_path := OS.get_environment("IMM_GODOT_LOG_FILE")
+	if not native_log_path.is_empty():
+		viewer.log_file_path = native_log_path
 	viewer.document_loaded.connect(_on_document_loaded)
 	viewer.document_unloaded.connect(_update_status)
 	viewer.playback_changed.connect(_on_playback_changed)
@@ -112,6 +118,8 @@ func _on_spawn_area_changed(_active_index: int) -> void:
 
 func _run_initial_playback() -> void:
 	await _load_document_after_render_warmup()
+	if OS.get_environment("IMM_GODOT_SAMPLE_PLAY_SMOKE") == "1":
+		await _run_sample_play_smoke()
 
 func _load_document_after_render_warmup() -> void:
 	if viewer.is_loaded():
@@ -169,6 +177,62 @@ func _queue_active_camera() -> void:
 	var width: int = max(int(viewport_size.x), 1)
 	var height: int = max(int(viewport_size.y), 1)
 	viewer.queue_render_camera_transform(camera.global_transform, width, height, camera.fov, CAMERA_ID)
+
+func _run_sample_play_smoke() -> void:
+	var deadline_msec := Time.get_ticks_msec() + int(SAMPLE_PLAY_SMOKE_TIMEOUT_SECONDS * 1000.0)
+	while Time.get_ticks_msec() < deadline_msec:
+		if viewer.is_loaded() and viewer.is_sequence_ready() and _initial_camera_framed and viewer.get_layer_count() > 0:
+			for _frame in range(SAMPLE_PLAY_SMOKE_SETTLE_FRAMES):
+				await get_tree().process_frame
+			await RenderingServer.frame_post_draw
+			var capture_path := OS.get_environment("IMM_GODOT_SAMPLE_PLAY_CAPTURE")
+			if capture_path.is_empty():
+				_sample_play_smoke_failed("capture path is empty")
+				return
+			var image := get_viewport().get_texture().get_image()
+			if image == null or image.is_empty():
+				_sample_play_smoke_failed("viewport capture is empty")
+				return
+			var save_result := image.save_png(capture_path)
+			if save_result != OK:
+				_sample_play_smoke_failed("save_png failed with %d for %s" % [save_result, capture_path])
+				return
+			var success := "%s passed capture=%s layers=%d camera_ids=%s" % [
+				SAMPLE_PLAY_SMOKE_PREFIX,
+				capture_path,
+				viewer.get_layer_count(),
+				str(viewer.get_registered_render_camera_ids()),
+			]
+			_write_sample_play_smoke_log(success)
+			print(success)
+			get_tree().quit(0)
+			return
+		await get_tree().process_frame
+	_sample_play_smoke_failed(
+		"timed out loaded=%s ready=%s framed=%s layers=%d camera_ids=%s" % [
+			str(viewer.is_loaded()),
+			str(viewer.is_sequence_ready()),
+			str(_initial_camera_framed),
+			viewer.get_layer_count(),
+			str(viewer.get_registered_render_camera_ids()),
+		]
+	)
+
+func _sample_play_smoke_failed(reason: String) -> void:
+	var failure := "%s failed: %s" % [SAMPLE_PLAY_SMOKE_PREFIX, reason]
+	_write_sample_play_smoke_log(failure)
+	push_error(failure)
+	get_tree().quit(1)
+
+func _write_sample_play_smoke_log(message: String) -> void:
+	var log_path := OS.get_environment("IMM_GODOT_SAMPLE_PLAY_LOG")
+	if log_path.is_empty():
+		log_path = "user://sample_play_smoke.log"
+	var log_file := FileAccess.open(log_path, FileAccess.WRITE)
+	if log_file == null:
+		push_error("%s could not open log path: %s" % [SAMPLE_PLAY_SMOKE_PREFIX, log_path])
+		return
+	log_file.store_line(message)
 
 func _toggle_first_layer_visibility() -> void:
 	if viewer.get_layer_count() <= 0:

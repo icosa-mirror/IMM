@@ -195,6 +195,7 @@ jobs:
           python tests/tools/test_standalone_opengl_vr_contracts.py
           python tests/tools/test_validate_stereo_capture.py
           python tests/tools/test_verify_synthetic_stereo_log.py
+          python tests/tools/test_sample_project_entrypoints.py
 
       - name: Write CI manifest
         if: always()

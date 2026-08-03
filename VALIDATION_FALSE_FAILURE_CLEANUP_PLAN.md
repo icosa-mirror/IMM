@@ -10,17 +10,17 @@ The cyan depth/occlusion defect is a genuine failure and must remain visible unt
 
 ### Current priority order
 
-1. Land the low-risk report corrections identified by full run `30811686247`: count failed manifests as present evidence, preserve status-only manifests across nested aggregates, preserve their failure class, canonicalize macOS lane identity, remove duplicate capture-mode sections, and label the DirectX/Metal depth failures as `compositing`.
-2. Run the full suite again and confirm that every remaining red entry describes a real defect or a genuine runtime limitation.
-3. Move synthetic-stereo execution from the Windows software-Vulkan experiment to the existing Android/Firebase hardware-Vulkan route.
-4. Make the Android player render both synthetic eyes side-by-side, then independently validate the left and right halves against the approved Unity render baseline.
-5. Use that lane to reproduce and detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
+1. Gate the user-facing Godot Run-button and Unity Editor Play entry points with runtime logs and baseline-reviewed captures. The Godot gate must catch the `load_on_ready=true` regression that bypassed Vulkan warm-up.
+2. Finish the two remaining report false-failure corrections from full run `30820773061`: suppress root-level generic composition reports and allow the reviewed Unity Metal render whose spatial MAD exceeded the old limit by `0.002`.
+3. Finish Android/Firebase synthetic stereo. Target priming now produces two correct IMM eye captures with distinct non-zero targets and event IDs, but the captures are byte-identical; the lane must remain red until view disparity is visible.
+4. Run one full suite and manually confirm that every remaining red entry describes a real render, composition, runtime, or infrastructure defect.
+5. Use the stereo lane to detect the Quest defect where one eye contains IMM strokes while the other contains only the sky sphere.
 
 The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejecting Vulkan and falling back to Direct3D must report `runtime_failed`. It is no longer the primary route to cloud stereo evidence.
 
 ### 1. Finish and verify the false-failure cleanup on `main`
 
-Full runs `30811686247`, `30813880906`, and `30816894610` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30816894610` confirms that the corrected Metal render threshold and nested manifest preservation work, all 16 supported rows now have evidence, and the Unity 6 Android Swappy crash is avoided. It also proves that both synthetic eyes are black because their exact native write-target pointers are zero on the first render after the offscreen target is resized.
+Full runs `30811686247`, `30813880906`, `30816894610`, and `30820773061` have been inspected. Their images show that Unity DirectX, Unity Metal full-depth, Unity Android Vulkan composition, and Godot Metal have genuine composition failures. Run `30820773061` contains all 16 supported rows and preserves both semantic eye captures. It also exposed two remaining false report signals: a generic root-level `Composition` section and a visually correct Unity Metal render rejected only because spatial MAD was `0.152` against `0.150`.
 
 1. Index every valid manifest, including failed and expected-failed manifests, while allowing only a passed manifest to satisfy a supported row.
 2. Carry non-build status manifests and their strict visual metrics through each aggregation layer so the final report retains preflight and failed-lane evidence.
@@ -37,7 +37,7 @@ Exit criterion: every report result agrees with its underlying evidence, and eve
 
 The immediate implementation priority is hardware-backed Android Vulkan in Firebase, reusing the existing Unity Android Vulkan build and capture infrastructure. The synthetic test exercises IMM eye routing and composition without requiring an OpenXR headset or separate-eye presentation.
 
-Run `30816894610` pulled the combined and split eye images and independently compared them. Both are black and byte-identical, so the lane correctly fails. The exact native write-target logs are now authoritative and show `0x0` for both eyes: the synthetic camera changes the manager's internal offscreen target from the device resolution to 1280x720, creates each eye texture during `Camera.Render`, and asks for its RenderBuffer before Unity has first bound it. The next iteration primes both internal eye textures before dispatch. Log-only success is not accepted.
+Run `30820773061` proves target priming works: both split eye images independently pass the approved render baseline, and the exact native write-target pointers are non-zero and distinct. The files are nevertheless byte-identical, so the stereo disparity contract correctly fails. The next iteration uses an exaggerated validation-only eye separation and records the uploaded matrix translations, while retaining the strict requirement that the resulting images differ. Log-only success is not accepted.
 
 1. Add a deterministic Android synthetic-stereo mode that renders two adjacent offscreen eye targets in one frame.
 2. Run that mode on a Firebase device that reports and uses Vulkan.

@@ -1531,10 +1531,13 @@ namespace ImmPlayer
             bool syntheticMatricesApplied = false;
             if (useSyntheticStereo)
             {
-                // Deliberately separate the two views by a conventional 64 mm IPD.
+                // Use an exaggerated validation-only separation. A conventional
+                // 64 mm IPD can quantize to identical pixels at this fixture's
+                // scale, which would make the cloud check ambiguous even when
+                // native eye selection works.
                 // Both matrices are uploaded together so eye selection is entirely
                 // performed by the native event ID, matching the XR two-pass path.
-                const float halfIpd = 0.032f;
+                const float halfIpd = 0.15f;
                 Matrix4x4 leftView = Matrix4x4.Translate(new Vector3(halfIpd, 0.0f, 0.0f)) * cam.worldToCameraMatrix;
                 Matrix4x4 rightView = Matrix4x4.Translate(new Vector3(-halfIpd, 0.0f, 0.0f)) * cam.worldToCameraMatrix;
                 Matrix4x4 eyeProjection = GL.GetGPUProjectionMatrix(cam.nonJitteredProjectionMatrix, true);
@@ -1542,6 +1545,10 @@ namespace ImmPlayer
                 ConvertMatrixToArray(info.LeftProj, eyeProjection);
                 ConvertMatrixToArray(info.WorldToRight, rightView);
                 ConvertMatrixToArray(info.RightProj, eyeProjection);
+                Debug.Log(
+                    $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] matrices cameraId={info.CameraId} " +
+                    $"selectedEye={_syntheticStereoEyeForValidation} halfIpd={halfIpd:F3} " +
+                    $"leftTx={leftView.m03:F6} rightTx={rightView.m03:F6}");
                 syntheticMatricesApplied = true;
             }
 

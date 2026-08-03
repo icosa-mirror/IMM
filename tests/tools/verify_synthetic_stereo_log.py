@@ -15,6 +15,12 @@ DISPATCH = re.compile(
     + r" dispatch cameraId=(?P<camera>\d+) eye=(?P<eye>[01]) "
     + r"eventId=(?P<event>\d+) targetId=(?P<target>-?\d+) targetPtr=0x(?P<pointer>[0-9A-Fa-f]+)"
 )
+MATRICES = re.compile(
+    re.escape(PREFIX)
+    + r" matrices cameraId=(?P<camera>\d+) selectedEye=(?P<eye>[01]) "
+    + r"halfIpd=(?P<half_ipd>-?\d+(?:\.\d+)?) "
+    + r"leftTx=(?P<left_tx>-?\d+(?:\.\d+)?) rightTx=(?P<right_tx>-?\d+(?:\.\d+)?)"
+)
 
 
 def main() -> int:
@@ -29,10 +35,23 @@ def main() -> int:
         values = {key: int(value, 16 if key == "pointer" else 10) for key, value in match.groupdict().items()}
         latest_by_eye[values["eye"]] = values
 
+    matrices_by_eye: dict[int, dict[str, float | int]] = {}
+    for match in MATRICES.finditer(text):
+        values: dict[str, float | int] = {
+            "camera": int(match.group("camera")),
+            "eye": int(match.group("eye")),
+            "half_ipd": float(match.group("half_ipd")),
+            "left_tx": float(match.group("left_tx")),
+            "right_tx": float(match.group("right_tx")),
+        }
+        matrices_by_eye[int(values["eye"])] = values
+
     failures: list[str] = []
     for eye in (0, 1):
         if eye not in latest_by_eye:
             failures.append(f"missing dispatch for eye {eye}")
+        if eye not in matrices_by_eye:
+            failures.append(f"missing matrix upload for eye {eye}")
 
     if not failures:
         left = latest_by_eye[0]
@@ -48,6 +67,15 @@ def main() -> int:
                 f"eye native pointers are invalid or shared: 0x{left['pointer']:X} and 0x{right['pointer']:X}"
             )
 
+    if len(matrices_by_eye) == 2:
+        for eye, matrices in matrices_by_eye.items():
+            separation = abs(float(matrices["left_tx"]) - float(matrices["right_tx"]))
+            if float(matrices["half_ipd"]) < 0.1 or separation < 0.2:
+                failures.append(
+                    f"eye {eye} matrix separation is too small: halfIpd={matrices['half_ipd']} "
+                    f"leftTx={matrices['left_tx']} rightTx={matrices['right_tx']}"
+                )
+
     required_markers = [
         "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan",
         f"{PREFIX} passed",
@@ -61,6 +89,7 @@ def main() -> int:
         "schema": "imm-unity-vulkan-synthetic-stereo-log-v1",
         "status": "failed" if failures else "passed",
         "dispatches": latest_by_eye,
+        "matrices": matrices_by_eye,
         "failures": failures,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
