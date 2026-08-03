@@ -351,6 +351,18 @@ def main() -> int:
         assert not default_scene["passed"], "default scene with probe squares unexpectedly passed"
         assert any("spatial luma grid" in error for error in default_scene["errors"])
 
+        godot_play_contract_path = (
+            repo_root / "tests/baselines/render/godot-windows-vulkan-sample-play.json"
+        )
+        godot_wrong_pose = compare_render_metrics.evaluate_capture(
+            wrong_pose_path, macos_reference_path, godot_play_contract_path
+        )
+        assert not godot_wrong_pose["passed"], "shifted Godot Run camera pose unexpectedly passed"
+        godot_default_scene = compare_render_metrics.evaluate_capture(
+            default_scene_path, macos_reference_path, godot_play_contract_path
+        )
+        assert not godot_default_scene["passed"], "default Godot Run scene unexpectedly passed"
+
         output_path.write_text(json.dumps({"passed": True}, indent=2), encoding="utf-8")
 
     print("Render metric drift tests passed")

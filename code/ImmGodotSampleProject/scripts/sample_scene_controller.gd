@@ -254,8 +254,10 @@ func _update_status(_unused: Variant = null) -> void:
 
 	var lines := PackedStringArray()
 	var state: Dictionary = viewer.get_document_state()
-	var bounds: Dictionary = viewer.get_bounding_box()
-	var spawn_info: Dictionary = viewer.get_active_spawn_area_info()
+	var sequence_ready := bool(state.get("sequence_ready", false))
+	var bounds: Dictionary = viewer.get_bounding_box() if sequence_ready else {}
+	var spawn_info: Dictionary = viewer.get_active_spawn_area_info() if sequence_ready else {}
+	var layer_count: int = int(viewer.get_layer_count()) if sequence_ready else 0
 	var spawn_name: String = "none"
 	if not spawn_info.is_empty():
 		spawn_name = str(spawn_info.get("name", spawn_info.get("id", "unknown")))
@@ -275,8 +277,8 @@ func _update_status(_unused: Variant = null) -> void:
 	lines.append("Time: %.2fs" % viewer.get_play_time_seconds())
 	lines.append("Volume: %d%%" % int(round(viewer.get_volume() * 100.0)))
 	lines.append("Render Cameras: %s" % str(viewer.get_registered_render_camera_ids()))
-	lines.append("Layers: %d" % viewer.get_layer_count())
-	if viewer.get_layer_count() > 0:
+	lines.append("Layers: %d" % layer_count)
+	if layer_count > 0:
 		var first_layer: Dictionary = viewer.get_layer_info(0)
 		var layer_id: int = int(first_layer.get("id", -1))
 		var diagnostics: Dictionary = viewer.get_layer_diagnostics(layer_id) if layer_id >= 0 else {}

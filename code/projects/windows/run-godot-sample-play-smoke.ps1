@@ -69,7 +69,7 @@ try {
         "--path", $project,
         "--rendering-driver", "vulkan",
         "--rendering-method", "forward_plus",
-        "--resolution", "1024x576",
+        "--resolution", "1280x720",
         "--fixed-fps", "30"
     )
     $process = Start-Process -FilePath $godot `
@@ -113,6 +113,9 @@ if (-not (Test-Path -LiteralPath $capture)) {
 if (-not (Test-Path -LiteralPath $controllerLog)) {
     throw "Godot sample Play smoke did not write controller log: $controllerLog"
 }
+if (-not (Test-Path -LiteralPath $nativeLog)) {
+    throw "Godot sample Play smoke did not write native log: $nativeLog"
+}
 $controllerText = Get-Content -Raw -LiteralPath $controllerLog
 if (-not $controllerText.Contains("[IMM_GODOT_SAMPLE_PLAY_20260803] passed")) {
     throw "Godot sample Play smoke did not write its success marker"
@@ -121,7 +124,7 @@ $fatalText = $outputText
 if (Test-Path -LiteralPath $nativeLog) {
     $fatalText += "`n" + (Get-Content -Raw -LiteralPath $nativeLog)
 }
-foreach ($forbidden in @("VK_ERROR_DEVICE_LOST", "Device Lost", "signal 11", "Segmentation fault")) {
+foreach ($forbidden in @("VK_ERROR_DEVICE_LOST", "Device Lost", "signal 11", "Segmentation fault", "IMM_ASSERT_")) {
     if ($fatalText.Contains($forbidden)) {
         throw "Godot sample Play smoke logs contain fatal marker: $forbidden"
     }

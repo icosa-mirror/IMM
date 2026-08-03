@@ -491,7 +491,7 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_IsSequenceReady(int id)
 
 extern "C" IMMGODOT_EXPORT int ImmGodot_GetBoundingBox(int id, ImmGodotBounds3 *bounds)
 {
-    if (bounds == nullptr)
+    if (bounds == nullptr || !iPlayer().IsSequenceReady(id))
         return -1;
 
     bound3 nativeBounds = d2f(iPlayer().GetDocumentBBox(id));

@@ -463,7 +463,9 @@ namespace ImmPlayer
             info.bbox.mMinZ = (float)bb.mMinZ;
             info.bbox.mMaxZ = (float)bb.mMaxZ;
         }
-        info.numChildren = (int)target->GetNumChildren();
+        info.numChildren = target->GetType() == Layer::Type::Group
+                               ? static_cast<int>(target->GetNumChildren())
+                               : 0;
         info.assetId = (int)target->GetAssetID();
 
         iCopyWide(info.name, sizeof(info.name) / sizeof(wchar_t), target->GetName().GetS());

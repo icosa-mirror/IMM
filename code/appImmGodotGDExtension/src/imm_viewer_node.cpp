@@ -1341,7 +1341,13 @@ bool ImmViewerNode::initialize_native_backend()
     adapter.onGraphicsShutdown = &ImmViewerNode::render_adapter_graphics_shutdown;
     ImmGodot_SetRenderAdapter(&adapter);
 
-    const String log_path = resolve_load_path(_log_file_path);
+    String configured_log_path = _log_file_path;
+    const char *environment_log_path = std::getenv("IMM_GODOT_LOG_FILE");
+    if (environment_log_path != nullptr && environment_log_path[0] != '\0')
+    {
+        configured_log_path = String::utf8(environment_log_path);
+    }
+    const String log_path = resolve_load_path(configured_log_path);
     const String tmp_path = resolve_load_path(_tmp_folder_path);
     CharString log_utf8 = log_path.utf8();
     CharString tmp_utf8 = tmp_path.utf8();

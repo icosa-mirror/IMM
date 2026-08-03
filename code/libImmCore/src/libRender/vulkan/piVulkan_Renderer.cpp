@@ -4808,7 +4808,13 @@ static bool iFlushBatch(piVulkanState *state, piRenderer::piReporter *reporter, 
     // Pipelined: leave the slot's fence pending; it is waited when the ring
     // wraps back to the slot (two eyes later) or by iWaitAllBatchFences before
     // any mutating utility work.
-    const bool skipWait = iPipelinedSubmitEnabled(state) &&
+    // Deferred completion is valid only for the Unity dedicated-queue path,
+    // where the host consumes a different buffered eye image and the bridge
+    // semaphore orders later composition. Godot renders to an intermediate
+    // image and samples it in the same compositor callback, so it requires a
+    // completed submission before the image is handed back.
+    const bool skipWait = state->ownsDedicatedQueue &&
+                          iPipelinedSubmitEnabled(state) &&
                           state->externalFrameRenderTarget != nullptr &&
                           target == state->externalFrameRenderTarget;
     if (!skipWait)
@@ -9173,7 +9179,6 @@ void piRendererVulkan::EndExternalImageFrame(void)
         iReport(mReporter, message);
     }
     if (mState->externalFrameColorTexture &&
-        mState->ownsDedicatedQueue &&
         !mState->externalFramePreservesHostColor &&
         mState->externalFrameColorTexture->imageLayout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL &&
         !iTransitionColorTextureToShaderRead(mState, mState->externalFrameColorTexture))

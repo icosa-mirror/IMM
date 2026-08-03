@@ -411,7 +411,7 @@ def verify_windows_build_wiring() -> None:
         if token not in smoke_helper:
             raise RuntimeError(f"Windows Godot smoke helper is missing token: {token}")
 
-    for token in ["IMM_GODOT_SAMPLE_PLAY_SMOKE", "IMM_GODOT_SAMPLE_PLAY_CAPTURE", "IMM_GODOT_SAMPLE_PLAY_LOG", "run/main_scene", "godot-sample-play-controller.log", "[IMM_GODOT_SAMPLE_PLAY_20260803] passed", "VK_ERROR_DEVICE_LOST", "signal 11"]:
+    for token in ["IMM_GODOT_SAMPLE_PLAY_SMOKE", "IMM_GODOT_SAMPLE_PLAY_CAPTURE", "IMM_GODOT_SAMPLE_PLAY_LOG", "run/main_scene", "godot-sample-play-controller.log", "godot-sample-play-native.log", "[IMM_GODOT_SAMPLE_PLAY_20260803] passed", "VK_ERROR_DEVICE_LOST", "signal 11", "IMM_ASSERT_"]:
         if token not in sample_play_helper:
             raise RuntimeError(f"Godot sample Play helper is missing contract token: {token}")
     godot_args = sample_play_helper.split("$godotArgs = @(", 1)[1].split(")", 1)[0]

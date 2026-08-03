@@ -25,6 +25,8 @@ def main() -> int:
     warmup = godot_controller.index("for _frame in range(3):")
     load = godot_controller.index("viewer.load_document()", warmup)
     assert warmup < load
+    assert 'viewer.get_bounding_box() if sequence_ready else {}' in godot_controller
+    assert 'int(viewer.get_layer_count()) if sequence_ready else 0' in godot_controller
     for token in [
         "IMM_GODOT_SAMPLE_PLAY_SMOKE",
         "IMM_GODOT_SAMPLE_PLAY_CAPTURE",
@@ -37,6 +39,8 @@ def main() -> int:
     godot_args = godot_helper.split("$godotArgs = @(", 1)[1].split(")", 1)[0]
     assert "--scene" not in godot_args
     assert "--script" not in godot_args
+    assert '"--resolution", "1280x720"' in godot_args
+    assert '"IMM_ASSERT_"' in godot_helper
     for token in [
         "Run Godot project Run-button smoke",
         "Record Godot project Run-button render metrics",
@@ -44,6 +48,28 @@ def main() -> int:
         "Enforce Godot project Run-button contract",
     ]:
         assert token in gpu_workflow
+    assert "godot-windows-vulkan-sample-play.json" in gpu_workflow
+
+    vulkan_renderer = (
+        ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
+    ).read_text(encoding="utf-8")
+    assert "const bool skipWait = state->ownsDedicatedQueue &&" in vulkan_renderer
+    shader_read_handoff = vulkan_renderer.index(
+        "if (mState->externalFrameColorTexture &&\n"
+        "        !mState->externalFramePreservesHostColor"
+    )
+    assert shader_read_handoff >= 0
+
+    godot_native = (ROOT / "code/appImmGodot/src/main.cpp").read_text(encoding="utf-8")
+    assert "if (bounds == nullptr || !iPlayer().IsSequenceReady(id))" in godot_native
+
+    player_source = (ROOT / "code/libImmPlayer/src/player.cpp").read_text(encoding="utf-8")
+    assert "info.numChildren = target->GetType() == Layer::Type::Group" in player_source
+
+    godot_node = (
+        ROOT / "code/appImmGodotGDExtension/src/imm_viewer_node.cpp"
+    ).read_text(encoding="utf-8")
+    assert 'std::getenv("IMM_GODOT_LOG_FILE")' in godot_node
 
     unity_automation = (ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs").read_text(encoding="utf-8")
     engine_workflow = (ROOT / ".github/workflows/ci-engine.yml").read_text(encoding="utf-8")

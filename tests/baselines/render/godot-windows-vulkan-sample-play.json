@@ -1,0 +1,45 @@
+{
+  "baseline": "godot-windows-vulkan-sample-play",
+  "capture_source": "project.godot run/main_scene (equivalent to editor Run Project)",
+  "fixture": "exampleImmFiles/sample1.imm",
+  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "format": "png",
+    "expected_quadrant_luma_share": {
+      "tolerance": 0.13,
+      "values": {
+        "bottom_left": 0.214,
+        "bottom_right": 0.126,
+        "top_left": 0.237,
+        "top_right": 0.424
+      }
+    },
+    "expected_spatial_luma_grid": {
+      "height": 18,
+      "max_mean_abs_delta": 0.08,
+      "min_correlation": 0.82,
+      "width": 32
+    },
+    "expected_vertical_luma_profile": {
+      "tolerance": 0.09,
+      "values": [0.332, 0.259, 0.13, 0.111, 0.168]
+    },
+    "expected_visible_centroid_normalized": {
+      "x": { "max": 0.62, "min": 0.38 },
+      "y": { "max": 0.62, "min": 0.38 }
+    },
+    "expected_visible_channel_means": {
+      "tolerance": 28,
+      "values": { "b": 45.06, "g": 59.59, "r": 55.89 }
+    },
+    "expected_visible_luma_mean": { "max": 85, "min": 32 },
+    "minimum_luma_span": 16,
+    "minimum_near_visible_pixels": 10000,
+    "minimum_non_black_pixels": 20000,
+    "requires_color_metrics": true,
+    "requires_dimensions": { "height": 720, "width": 1280 },
+    "requires_nonblank_capture": true,
+    "requires_orientation_metrics": true
+  }
+}
