@@ -600,14 +600,38 @@ namespace ImmPlayer.Editor
         private static bool TryCaptureEditorPlayScreenshot(string capturePath)
         {
             Texture2D capture = null;
+            RenderTexture target = null;
+            RenderTexture previousActive = RenderTexture.active;
+            Camera camera = Camera.main;
+            if (camera == null)
+            {
+                camera = UnityEngine.Object.FindObjectOfType<Camera>();
+            }
+            if (camera == null)
+            {
+                UnityEngine.Debug.LogError("[IMM_EDITOR_CAMERA_CAPTURE_20260804] no active camera found");
+                return false;
+            }
+
+            RenderTexture previousCameraTarget = camera.targetTexture;
             try
             {
-                capture = UnityEngine.ScreenCapture.CaptureScreenshotAsTexture();
-                if (capture == null || capture.width <= 0 || capture.height <= 0)
-                {
-                    UnityEngine.Debug.LogError("[IMM_EDITOR_CAMERA_CAPTURE_20260804] ScreenCapture returned no pixels");
-                    return false;
-                }
+                const int captureWidth = 1280;
+                const int captureHeight = 720;
+                target = RenderTexture.GetTemporary(
+                    captureWidth,
+                    captureHeight,
+                    24,
+                    RenderTextureFormat.ARGB32,
+                    RenderTextureReadWrite.Default);
+                target.name = "IMM Editor Play Smoke Capture";
+                camera.targetTexture = target;
+                camera.Render();
+
+                RenderTexture.active = target;
+                capture = new Texture2D(captureWidth, captureHeight, TextureFormat.RGB24, false);
+                capture.ReadPixels(new Rect(0, 0, captureWidth, captureHeight), 0, 0, false);
+                capture.Apply(false, false);
 
                 string directory = Path.GetDirectoryName(capturePath);
                 if (!string.IsNullOrEmpty(directory))
@@ -625,9 +649,15 @@ namespace ImmPlayer.Editor
             }
             finally
             {
+                camera.targetTexture = previousCameraTarget;
+                RenderTexture.active = previousActive;
                 if (capture != null)
                 {
                     UnityEngine.Object.DestroyImmediate(capture);
+                }
+                if (target != null)
+                {
+                    RenderTexture.ReleaseTemporary(target);
                 }
             }
         }

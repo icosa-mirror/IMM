@@ -84,7 +84,12 @@ def diagnostic_squares_only(width: int, height: int) -> list[tuple[int, int, int
     return pixels
 
 
-def make_probe_pixels(width: int, height: int, show_rear_occluded: bool) -> list[tuple[int, int, int]]:
+def make_probe_pixels(
+    width: int,
+    height: int,
+    show_rear_occluded: bool,
+    show_legitimate_cyan: bool = False,
+) -> list[tuple[int, int, int]]:
     pixels = [(16, 20, 24)] * (width * height)
     for y in range(height // 2, height):
         for x in range((width * 9) // 10):
@@ -95,6 +100,8 @@ def make_probe_pixels(width: int, height: int, show_rear_occluded: bool) -> list
     ]
     if show_rear_occluded:
         rectangles.append((45, 35, 69, 65, (0, 255, 255)))
+    if show_legitimate_cyan:
+        rectangles.append((63, 42, 68, 47, (0, 255, 255)))
     for x0, y0, x1, y1, color in rectangles:
         for y in range(y0, y1):
             for x in range(x0, x1):
@@ -117,6 +124,7 @@ def main() -> int:
         black_path = temp / "black.ppm"
         diagnostic_path = temp / "diagnostic-squares.ppm"
         probe_good_path = temp / "probe-good.ppm"
+        probe_legitimate_cyan_path = temp / "probe-legitimate-cyan.ppm"
         probe_wrong_depth_path = temp / "probe-wrong-depth.ppm"
         probe_overlay_path = temp / "probe-wrong-depth-overlay.png"
         png_path = temp / "candidate.png"
@@ -134,6 +142,12 @@ def main() -> int:
         write_ppm(black_path, width, height, [(0, 0, 0)] * (width * height))
         write_ppm(diagnostic_path, width, height, diagnostic_squares_only(width, height))
         write_ppm(probe_good_path, 100, 100, make_probe_pixels(100, 100, False))
+        write_ppm(
+            probe_legitimate_cyan_path,
+            100,
+            100,
+            make_probe_pixels(100, 100, False, show_legitimate_cyan=True),
+        )
         write_ppm(probe_wrong_depth_path, 100, 100, make_probe_pixels(100, 100, True))
         write_render_report.write_png(
             png_path,
@@ -331,6 +345,12 @@ def main() -> int:
         )
         assert compare_render_metrics.validate_color_component_contract(
             production_overlay_contract, production_overlay_good
+        ) == []
+        production_overlay_legitimate_cyan = compare_render_metrics.collect_color_component_metrics(
+            probe_legitimate_cyan_path, production_overlay_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_overlay_contract, production_overlay_legitimate_cyan
         ) == []
         production_overlay_wrong_depth = compare_render_metrics.collect_color_component_metrics(
             probe_wrong_depth_path, production_overlay_contract

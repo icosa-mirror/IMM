@@ -41,8 +41,8 @@
         {
           "name": "character-occluded-cyan",
           "target_rgb": [0, 255, 255],
-          "channel_tolerance": 110,
-          "region_normalized": { "x": 0.45, "y": 0.35, "width": 0.24, "height": 0.3 },
+          "channel_tolerance": 48,
+          "region_normalized": { "x": 0.45, "y": 0.38, "width": 0.15, "height": 0.25 },
           "maximum_largest_component_share_of_crop": 0.00015
         }
       ]
