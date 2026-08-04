@@ -146,32 +146,39 @@ def classify(
         if marker in log_text
     ]
 
-    warnings: list[str] = []
-    if player_build_outcome != "success":
-        if missing:
-            runtime_failures.append(
-                f"Unity macOS Metal player build step ended as {player_build_outcome}"
-            )
-        else:
-            warnings.append(
-                f"player build step ended as {player_build_outcome} after complete visual evidence"
-            )
-    if editor_play_outcome != "success":
-        editor_missing = any("Editor Play" in item or "editor-play" in item for item in missing)
-        if editor_missing:
-            runtime_failures.append(
-                f"Unity Editor Play invocation ended as {editor_play_outcome} without complete evidence"
-            )
-        else:
-            warnings.append(
-                f"Editor Play invocation ended as {editor_play_outcome} after its image passed"
-            )
-
     render_metric = metrics["render-only visual contract"]
     editor_metric = metrics["Editor Play visual contract"]
     full_depth_metric = metrics["full-depth visual contract"]
     overlay_metric = metrics["ordered-overlay visual contract"]
     editor_missing = [item for item in missing if "Editor Play" in item or "editor-play" in item]
+    player_missing = [item for item in missing if item not in editor_missing]
+    warnings: list[str] = []
+    editor_evidence_failures: list[str] = []
+    infrastructure_failures: list[str] = []
+    if player_build_outcome != "success":
+        if player_missing:
+            runtime_failures.append(
+                f"Unity macOS Metal player build step ended as {player_build_outcome}"
+            )
+        else:
+            warnings.append(
+                f"combined player-build/Editor-Play step ended as {player_build_outcome} "
+                "after complete player visual evidence"
+            )
+    if editor_play_outcome != "success":
+        if editor_missing:
+            message = (
+                f"Unity Editor Play validation ended as {editor_play_outcome} without complete evidence"
+            )
+            if "no valid unity editor license found" in log_text:
+                infrastructure_failures.append(f"{message}: Unity license unavailable")
+            else:
+                editor_evidence_failures.append(message)
+        else:
+            warnings.append(
+                f"Editor Play validation ended as {editor_play_outcome} after its image passed"
+            )
+
     full_depth_missing = [
         item for item in missing
         if "render-only" in item or "full-depth" in item or "metal-render" in item
@@ -188,40 +195,50 @@ def classify(
         "ordered_overlay", render_metric, overlay_metric, overlay_missing
     )
 
+    render_failures: list[str] = []
+    for label in ("Editor Play visual contract", "render-only visual contract"):
+        value = metrics[label]
+        if value is not None and value.get("passed") is not True:
+            render_failures.extend(metric_failures(label, value))
+    composition_failures: list[str] = []
+    for label in ("full-depth visual contract", "ordered-overlay visual contract"):
+        value = metrics[label]
+        if value is not None and value.get("passed") is not True:
+            composition_failures.extend(metric_failures(label, value))
+
     if runtime_failures:
         result = "runtime_failed"
         failure_class = "runtime"
         failures = runtime_failures
-    elif missing:
+    elif player_missing:
         result = "evidence_incomplete"
         failure_class = "evidence"
-        failures = missing
+        failures = player_missing
+    elif render_failures:
+        result = "render_failed"
+        failure_class = "rendering"
+        failures = render_failures
+    elif composition_failures:
+        result = "composition_failed"
+        failure_class = "compositing"
+        failures = composition_failures
+    elif infrastructure_failures:
+        result = "infrastructure_failed"
+        failure_class = "infrastructure"
+        failures = infrastructure_failures
+    elif editor_evidence_failures or editor_missing:
+        result = "evidence_incomplete"
+        failure_class = "evidence"
+        failures = editor_evidence_failures + editor_missing
     else:
-        render_failures: list[str] = []
-        for label in ("Editor Play visual contract", "render-only visual contract"):
-            value = metrics[label]
-            assert value is not None
-            if value.get("passed") is not True:
-                render_failures.extend(metric_failures(label, value))
-        composition_failures: list[str] = []
-        for label in ("full-depth visual contract", "ordered-overlay visual contract"):
-            value = metrics[label]
-            assert value is not None
-            if value.get("passed") is not True:
-                composition_failures.extend(metric_failures(label, value))
+        result = "passed"
+        failure_class = ""
+        failures = []
 
-        if render_failures:
-            result = "render_failed"
-            failure_class = "rendering"
-            failures = render_failures
-        elif composition_failures:
-            result = "composition_failed"
-            failure_class = "compositing"
-            failures = composition_failures
-        else:
-            result = "passed"
-            failure_class = ""
-            failures = []
+    if result in {"render_failed", "composition_failed"}:
+        warnings.extend(infrastructure_failures)
+        warnings.extend(editor_evidence_failures)
+        warnings.extend(editor_missing)
 
     lane_status = {
         "schema": "imm-unity-macos-metal-status-v1",

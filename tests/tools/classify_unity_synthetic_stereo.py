@@ -78,23 +78,31 @@ def main() -> int:
     if runtime_failures:
         result = "runtime_failed"
         failure_class = "runtime"
+        failures = runtime_failures
+        warnings = evidence_failures + render_failures
     elif evidence_failures:
         result = "evidence_incomplete"
         failure_class = "evidence"
+        failures = evidence_failures
+        warnings = render_failures
     elif render_failures:
         result = "render_failed"
         failure_class = "rendering"
+        failures = render_failures
+        warnings = []
     else:
         result = "passed"
         failure_class = ""
+        failures = []
+        warnings = []
 
     status = {
         "schema": "imm-composition-status-v1",
         "result": result,
         "rendering": "success" if result == "passed" else "failed",
         "failure_class": failure_class,
-        "failures": runtime_failures + evidence_failures + render_failures,
-        "warnings": [],
+        "failures": failures,
+        "warnings": warnings,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

@@ -39,7 +39,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
-        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player", "Run Unity project Play-button smoke", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Classify Unity macOS Metal evidence", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
+        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player and run project Play-button smoke", "Confirm Unity project Play-button smoke capture", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Classify Unity macOS Metal evidence", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Classify Unity DirectX visual evidence", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-player-build": ["Download same-commit Unity native plugin", "Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
@@ -157,7 +157,7 @@ REQUIRED_STEP_TIMEOUTS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"Run Unity batchmode package import tests"},
-        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player", "Run Unity project Play-button smoke", "Run Unity macOS Metal visual smokes"},
+        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player and run project Play-button smoke", "Run Unity macOS Metal visual smokes"},
         "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
         "unity-windows-vulkan-ordered-overlay": {"Run Unity Vulkan ordered overlay smoke"},
         "unity-windows-vulkan-full-depth": {"Run Unity Vulkan full depth smoke"},
@@ -640,10 +640,10 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         "Plugins/OSX/ImmUnityPlugin.bundle",
         'chmod +x "$plugin_binary"',
         "codesign --verify --deep --strict",
-        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
-        "name: Run Unity project Play-button smoke",
-        "-executeMethod ImmPlayer.Editor.BuildAutomation.RunMacOSEditorPlayModeSmoke",
-        'unity="/Applications/Unity/Hub/Editor/${UNITY_VERSION}/Unity.app/Contents/MacOS/Unity"',
+        "name: Build Unity macOS Metal smoke player and run project Play-button smoke",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
+        "manualExit: true",
+        "name: Confirm Unity project Play-button smoke capture",
         "-immSmokeCapturePath",
         '$app/Contents/MacOS',
         "-perm -111",
@@ -656,13 +656,15 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
             )
 
     editor_play_match = re.search(
-        r"(?ms)^\s*- name: Run Unity project Play-button smoke\s*$.*?(?=^\s*- name:|\Z)",
+        r"(?ms)^\s*- name: Build Unity macOS Metal smoke player and run project Play-button smoke\s*$.*?(?=^\s*- name:|\Z)",
         macos_body,
     )
     editor_play_body = editor_play_match.group(0) if editor_play_match else ""
-    if "-quit" in editor_play_body:
+    if not editor_play_body:
+        errors.append(f"{workflow_rel} Unity Editor Play build-and-capture step is missing")
+    elif "manualExit: true" not in editor_play_body:
         errors.append(
-            f"{workflow_rel} Unity Editor Play invocation must not pass -quit while the asynchronous capture runs"
+            f"{workflow_rel} Unity Editor Play build-and-capture step must let the editor method exit after capture"
         )
 
 

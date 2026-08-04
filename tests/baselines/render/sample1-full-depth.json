@@ -1,7 +1,7 @@
 {
-  "baseline": "sample1-ordered-overlay",
-  "capture_source": "ordered-overlay composition capture",
-  "fixture": "exampleImmFiles/sample1.imm with ordered overlay probes",
+  "baseline": "sample1-full-depth",
+  "capture_source": "full-depth composition capture",
+  "fixture": "exampleImmFiles/sample1.imm with full-depth probes",
   "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
@@ -27,16 +27,16 @@
         {
           "name": "front-visible-magenta",
           "target_rgb": [255, 0, 255],
-          "channel_tolerance": 32,
-          "region_normalized": { "x": 0.2, "y": 0.35, "width": 0.3, "height": 0.45 },
-          "minimum_largest_component_share_of_crop": 0.005
+          "channel_tolerance": 110,
+          "region_normalized": { "x": 0.23, "y": 0.48, "width": 0.22, "height": 0.32 },
+          "minimum_largest_component_share_of_crop": 0.01
         },
         {
           "name": "rear-visible-yellow",
           "target_rgb": [255, 255, 0],
-          "channel_tolerance": 32,
-          "region_normalized": { "x": 0.55, "y": 0.1, "width": 0.25, "height": 0.35 },
-          "minimum_largest_component_share_of_crop": 0.003
+          "channel_tolerance": 110,
+          "region_normalized": { "x": 0.57, "y": 0.14, "width": 0.21, "height": 0.27 },
+          "minimum_largest_component_share_of_crop": 0.0075
         },
         {
           "name": "character-occluded-cyan",

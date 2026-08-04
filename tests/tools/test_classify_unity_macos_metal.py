@@ -116,8 +116,36 @@ def main() -> int:
             root, editor_outcome="failure"
         )
         assert completed.returncode == 1
-        assert lane["result"] == "runtime_failed"
-        assert lane["failure_class"] == "runtime"
+        assert lane["result"] == "evidence_incomplete"
+        assert lane["failure_class"] == "evidence"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        prepare(root)
+        (root / "unity-macos-metal-editor-play.png").unlink()
+        (root / "unity-editor-play.log").write_text(
+            "No valid Unity Editor license found. Please activate your license.\n",
+            encoding="utf-8",
+        )
+        completed, lane, _editor, _full_depth, _overlay = classify(
+            root, editor_outcome="failure"
+        )
+        assert completed.returncode == 1
+        assert lane["result"] == "infrastructure_failed"
+        assert lane["failure_class"] == "infrastructure"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        prepare(root)
+        (root / "unity-macos-metal-editor-play.png").unlink()
+        write_metric(root / "unity-macos-metal-full-depth-metrics.json", False, "cyan leakage")
+        completed, lane, _editor, _full_depth, _overlay = classify(
+            root, editor_outcome="failure"
+        )
+        assert completed.returncode == 1
+        assert lane["result"] == "composition_failed"
+        assert lane["failure_class"] == "compositing"
+        assert lane["warnings"], "Missing Editor Play evidence must remain visible"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)

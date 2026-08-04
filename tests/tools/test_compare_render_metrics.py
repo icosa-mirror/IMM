@@ -342,6 +342,27 @@ def main() -> int:
             )
         )
 
+        production_full_depth_contract = json.loads(
+            (Path(__file__).resolve().parents[2] / "tests/baselines/render/sample1-full-depth.json").read_text(
+                encoding="utf-8"
+            )
+        )["validation"]["expected_color_components"]
+        production_full_depth_good = compare_render_metrics.collect_color_component_metrics(
+            probe_good_path, production_full_depth_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_full_depth_contract, production_full_depth_good
+        ) == []
+        production_full_depth_wrong_depth = compare_render_metrics.collect_color_component_metrics(
+            probe_wrong_depth_path, production_full_depth_contract
+        )
+        assert any(
+            "character-occluded-cyan" in error
+            for error in compare_render_metrics.validate_color_component_contract(
+                production_full_depth_contract, production_full_depth_wrong_depth
+            )
+        )
+
         production_content_contract = json.loads(
             (Path(__file__).resolve().parents[2] / "tests/baselines/render/sample1-composition-content.json").read_text(
                 encoding="utf-8"

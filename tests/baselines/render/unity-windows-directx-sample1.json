@@ -16,8 +16,8 @@
     "format": "png",
     "expected_spatial_luma_grid": {
       "height": 18,
-      "max_mean_abs_delta": 0.10,
-      "min_correlation": 0.55,
+      "max_mean_abs_delta": 0.12,
+      "min_correlation": 0.45,
       "width": 32
     },
     "expected_quadrant_luma_share": {

@@ -271,7 +271,7 @@ jobs:
       - name: Prepare Unity macOS Metal artifact directory
         run: mkdir -p artifacts/unity-macos-metal-composition build/unity-smoke/macos-metal
 
-      - name: Build Unity macOS Metal smoke player
+      - name: Build Unity macOS Metal smoke player and run project Play-button smoke
         id: unity_macos_metal_player_build
         timeout-minutes: 25
         continue-on-error: true
@@ -285,29 +285,21 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneOSX
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke
+          manualExit: true
           allowDirtyBuild: true
           enableGpu: true
           cacheUnityInstallationOnMac: true
-          customParameters: -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app
+          customParameters: -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app -immSmokeCapturePath ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
 
-      - name: Run Unity project Play-button smoke
+      - name: Confirm Unity project Play-button smoke capture
         id: unity_editor_play
-        if: always() && steps.unity_macos_metal_player_build.outcome == 'success'
+        if: always()
         continue-on-error: true
-        timeout-minutes: 5
         run: |
           set -euo pipefail
-          unity="/Applications/Unity/Hub/Editor/${UNITY_VERSION}/Unity.app/Contents/MacOS/Unity"
-          test -x "$unity"
-          IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
-          "$unity" \
-            -batchmode \
-            -force-metal \
-            -projectPath "$PWD/code/ImmUnitySampleProject" \
-            -executeMethod ImmPlayer.Editor.BuildAutomation.RunMacOSEditorPlayModeSmoke \
-            -immSmokeCapturePath "$PWD/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png" \
-            -logFile "$PWD/artifacts/unity-macos-metal-composition/unity-editor-play.log"
+          capture="$PWD/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png"
+          test -s "$capture"
 
       - name: Record Unity project Play-button render metrics
         id: unity_editor_play_metrics
@@ -412,7 +404,7 @@ jobs:
           python3 tests/tools/compare_render_metrics.py \
             artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth.png \
             --reference tests/baselines/render/windows-directx-sample1.ppm \
-            --contract tests/baselines/render/sample1-composition-content.json \
+            --contract tests/baselines/render/sample1-full-depth.json \
             --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-metrics.json \
             --diagnostic-overlay-output artifacts/unity-macos-metal-composition/unity-macos-metal-full-depth-diagnostic.png || metrics_status=$?
           python3 tests/tools/compare_render_metrics.py \
@@ -723,7 +715,7 @@ jobs:
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-directx-composition\unity-windows-directx-composition.png `
             --reference tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\sample1-composition-content.json `
+            --contract tests\baselines\render\sample1-full-depth.json `
             --json-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-metrics.json `
             --diagnostic-overlay-output artifacts\unity-windows-directx-composition\unity-windows-directx-composition-diagnostic.png
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
@@ -1452,7 +1444,7 @@ jobs:
           python tests\tools\compare_render_metrics.py `
             artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth.png `
             --reference tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\sample1-composition-content.json `
+            --contract tests\baselines\render\sample1-full-depth.json `
             --json-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-metrics.json `
             --diagnostic-overlay-output artifacts\unity-windows-vulkan-full-depth\unity-windows-vulkan-full-depth-diagnostic.png
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }

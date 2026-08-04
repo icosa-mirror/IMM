@@ -66,6 +66,8 @@ def main() -> int:
         assert runtime_failed.returncode != 0
         assert status["result"] == "runtime_failed"
         assert status["failure_class"] == "runtime"
+        assert status["failures"] == ["runtime classification failed: Vulkan unavailable"]
+        assert status["warnings"], "Missing downstream evidence should remain diagnostic"
 
         write_json(root / "runtime.json", {"result": "passed", "failures": []})
         incomplete, status = invoke(tool, root)

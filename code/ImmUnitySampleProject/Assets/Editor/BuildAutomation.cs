@@ -171,6 +171,12 @@ namespace ImmPlayer.Editor
             BuildPlayer(BuildTarget.StandaloneOSX, outputPath, BuildOptions.Development, "macOS Metal smoke player");
         }
 
+        public static void BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke()
+        {
+            BuildMacOSMetalSmokePlayer();
+            RunMacOSEditorPlayModeSmoke();
+        }
+
         public static void BuildIOSDevelopment()
         {
             EnsureBuildTargetSupported(BuildTargetGroup.iOS, BuildTarget.iOS, "iOS");
@@ -566,8 +572,13 @@ namespace ImmPlayer.Editor
                 elapsed.TotalSeconds > captureDelaySeconds)
             {
                 SessionState.SetBool(EditorSmokeCaptureRequestedKey, true);
-                UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] requesting editor fallback capture: {s_EditorSmokeCapturePath}");
-                UnityEngine.ScreenCapture.CaptureScreenshot(s_EditorSmokeCapturePath);
+                UnityEngine.Debug.Log($"[IMM_EDITOR_CAMERA_CAPTURE_20260804] requesting synchronous Play-mode capture: {s_EditorSmokeCapturePath}");
+                if (!TryCaptureEditorPlayScreenshot(s_EditorSmokeCapturePath))
+                {
+                    s_EditorSmokeRequestedExit = true;
+                    EditorApplication.Exit(2);
+                    return;
+                }
             }
 
             if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
@@ -583,6 +594,41 @@ namespace ImmPlayer.Editor
                 s_EditorSmokeRequestedExit = true;
                 UnityEngine.Debug.LogError($"[IMM_EDITOR_SMOKE] timed out waiting for capture: {s_EditorSmokeCapturePath}");
                 EditorApplication.Exit(2);
+            }
+        }
+
+        private static bool TryCaptureEditorPlayScreenshot(string capturePath)
+        {
+            Texture2D capture = null;
+            try
+            {
+                capture = UnityEngine.ScreenCapture.CaptureScreenshotAsTexture();
+                if (capture == null || capture.width <= 0 || capture.height <= 0)
+                {
+                    UnityEngine.Debug.LogError("[IMM_EDITOR_CAMERA_CAPTURE_20260804] ScreenCapture returned no pixels");
+                    return false;
+                }
+
+                string directory = Path.GetDirectoryName(capturePath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+                File.WriteAllBytes(capturePath, capture.EncodeToPNG());
+                UnityEngine.Debug.Log($"[IMM_EDITOR_CAMERA_CAPTURE_20260804] wrote {capture.width}x{capture.height} capture: {capturePath}");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                UnityEngine.Debug.LogError($"[IMM_EDITOR_CAMERA_CAPTURE_20260804] failed: {exception}");
+                return false;
+            }
+            finally
+            {
+                if (capture != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(capture);
+                }
             }
         }
 

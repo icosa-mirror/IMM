@@ -802,7 +802,7 @@ jobs:
           python tests\tools\compare_render_metrics.py `
             artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
             --reference tests\baselines\render\windows-directx-sample1.ppm `
-            --contract tests\baselines\render\sample1-composition-content.json `
+            --contract tests\baselines\render\sample1-full-depth.json `
             --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json `
             --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-diagnostic.ppm
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
@@ -1157,7 +1157,7 @@ jobs:
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-smoke-macos-metal/metal_visual_smoke.png \
             --reference tests/baselines/render/windows-directx-sample1.ppm \
-            --contract tests/baselines/render/sample1-composition-content.json \
+            --contract tests/baselines/render/sample1-full-depth.json \
             --json-output artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json \
             --diagnostic-overlay-output artifacts/godot-smoke-macos-metal/godot-metal-composition-diagnostic.png || metrics_status=$?
           exit "$metrics_status"

@@ -104,20 +104,26 @@ def main() -> int:
     unity_automation = (ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs").read_text(encoding="utf-8")
     engine_workflow = (ROOT / ".github/workflows/ci-engine.yml").read_text(encoding="utf-8")
     assert '"Assets/Scenes/SampleScene.unity"' in unity_automation
-    assert "BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke" not in unity_automation
+    combined_smoke = method_body(
+        unity_automation,
+        "public static void BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke()",
+    )
+    assert "BuildMacOSMetalSmokePlayer();" in combined_smoke
+    assert "RunMacOSEditorPlayModeSmoke();" in combined_smoke
     editor_play = method_body(unity_automation, "public static void RunMacOSEditorPlayModeSmoke()")
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
+    assert "ScreenCapture.CaptureScreenshotAsTexture()" in unity_automation
+    assert "[IMM_EDITOR_CAMERA_CAPTURE_20260804]" in unity_automation
     for token in [
-        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
-        "Run Unity project Play-button smoke",
-        "-executeMethod ImmPlayer.Editor.BuildAutomation.RunMacOSEditorPlayModeSmoke",
+        "Build Unity macOS Metal smoke player and run project Play-button smoke",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
+        "manualExit: true",
+        "Confirm Unity project Play-button smoke capture",
         "Record Unity project Play-button render metrics",
         "Write Unity project Play-button render report",
         "Classify Unity macOS Metal evidence",
     ]:
         assert token in engine_workflow
-    editor_play_step = engine_workflow.split("- name: Run Unity project Play-button smoke", 1)[1].split("- name:", 1)[0]
-    assert "-quit" not in editor_play_step
 
     print("Sample project entrypoint contracts passed")
     return 0
