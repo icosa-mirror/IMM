@@ -1212,16 +1212,27 @@ namespace ImmPlayer
                 !_cameras.TryGetValue(cam, out PerCameraInfo info))
                 return false;
 
-            RenderTexture eyeTarget = info.VulkanEyeTargets[0];
+            int presentationEye =
+                _syntheticStereoCameraForValidation == cam && _syntheticStereoEyeForValidation >= 0
+                    ? _syntheticStereoEyeForValidation
+                    : 0;
+            RenderTexture eyeTarget = info.VulkanEyeTargets[presentationEye];
             if (eyeTarget == null)
                 return false;
+            if (_syntheticStereoCameraForValidation == cam && _syntheticStereoEyeForValidation >= 0)
+            {
+                Debug.Log(
+                    $"[IMM_SYNTH_PRESENT_EYE_20260804] eye={presentationEye} " +
+                    $"targetId={eyeTarget.GetInstanceID()} " +
+                    $"targetPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
+            }
 
             // OnRenderImage is Unity's supported final-presentation hook in the
             // built-in pipeline. Unity owns the destination (including Android's
             // Vulkan swapchain/intermediate and pre-rotation), so no native code
             // attempts to discover or retain the display image.
             Material composite;
-            RenderTexture eyeDepthTarget = info.VulkanEyeDepthTargets[0];
+            RenderTexture eyeDepthTarget = info.VulkanEyeDepthTargets[presentationEye];
             if (_flatAndroidVulkanSharedDepthComposition && eyeDepthTarget != null)
             {
                 composite = GetVulkanDepthCompositeMaterial();
@@ -1248,6 +1259,7 @@ namespace ImmPlayer
                     $"[IMM_UNITY_VK_ONRENDERIMAGE_20260802] frame={Time.frameCount} cam={cam.name} " +
                     $"source={(source != null ? source.GetInstanceID() : 0)} " +
                     $"destination={(destination != null ? destination.GetInstanceID() : 0)} " +
+                    $"eye={presentationEye} " +
                     $"imm={eyeTarget.GetInstanceID()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetInstanceID() : 0)} " +
                     $"shader={composite.shader.name} " +
                     $"supported={composite.shader.isSupported}");

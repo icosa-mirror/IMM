@@ -1911,7 +1911,7 @@ jobs:
               --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
               --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json `
-              --sample-interval-seconds 1 `
+              --sample-interval-seconds 2 `
               --minimum-consecutive-frames 2
             if ($LASTEXITCODE -ne 0) { $failed = $true }
             $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue

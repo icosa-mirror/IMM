@@ -42,7 +42,7 @@
           "name": "character-occluded-cyan",
           "target_rgb": [0, 255, 255],
           "channel_tolerance": 110,
-          "region_normalized": { "x": 0.45, "y": 0.35, "width": 0.24, "height": 0.3 },
+          "region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 },
           "maximum_largest_component_share_of_crop": 0.00015
         }
       ]

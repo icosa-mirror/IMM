@@ -383,6 +383,33 @@ def main() -> int:
             )
         )
 
+        android_composition_contract = json.loads(
+            (Path(__file__).resolve().parents[2] / "tests/baselines/render/unity-android-vulkan-composition-sample1.json").read_text(
+                encoding="utf-8"
+            )
+        )["validation"]["expected_color_components"]
+        android_composition_good = compare_render_metrics.collect_color_component_metrics(
+            probe_good_path, android_composition_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            android_composition_contract, android_composition_good
+        ) == []
+        android_composition_legitimate_cyan = compare_render_metrics.collect_color_component_metrics(
+            probe_legitimate_cyan_path, android_composition_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            android_composition_contract, android_composition_legitimate_cyan
+        ) == []
+        android_composition_wrong_depth = compare_render_metrics.collect_color_component_metrics(
+            probe_wrong_depth_path, android_composition_contract
+        )
+        assert any(
+            "rear-occluded-cyan" in error
+            for error in compare_render_metrics.validate_color_component_contract(
+                android_composition_contract, android_composition_wrong_depth
+            )
+        )
+
         production_content_contract = json.loads(
             (Path(__file__).resolve().parents[2] / "tests/baselines/render/sample1-composition-content.json").read_text(
                 encoding="utf-8"

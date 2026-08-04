@@ -21,6 +21,10 @@ MATRICES = re.compile(
     + r"halfIpd=(?P<half_ipd>-?\d+(?:\.\d+)?) "
     + r"leftTx=(?P<left_tx>-?\d+(?:\.\d+)?) rightTx=(?P<right_tx>-?\d+(?:\.\d+)?)"
 )
+PRESENT = re.compile(
+    r"\[IMM_SYNTH_PRESENT_EYE_20260804\] eye=(?P<eye>[01]) "
+    r"targetId=(?P<target>-?\d+) targetPtr=0x(?P<pointer>[0-9A-Fa-f]+)"
+)
 
 
 def main() -> int:
@@ -46,12 +50,23 @@ def main() -> int:
         }
         matrices_by_eye[int(values["eye"])] = values
 
+    presentations_by_eye: dict[int, dict[str, int]] = {}
+    for match in PRESENT.finditer(text):
+        values = {
+            "eye": int(match.group("eye")),
+            "target": int(match.group("target")),
+            "pointer": int(match.group("pointer"), 16),
+        }
+        presentations_by_eye[values["eye"]] = values
+
     failures: list[str] = []
     for eye in (0, 1):
         if eye not in latest_by_eye:
             failures.append(f"missing dispatch for eye {eye}")
         if eye not in matrices_by_eye:
             failures.append(f"missing matrix upload for eye {eye}")
+        if eye not in presentations_by_eye:
+            failures.append(f"missing presentation for eye {eye}")
 
     if not failures:
         left = latest_by_eye[0]
@@ -76,6 +91,20 @@ def main() -> int:
                     f"leftTx={matrices['left_tx']} rightTx={matrices['right_tx']}"
                 )
 
+    if len(presentations_by_eye) == 2 and len(latest_by_eye) == 2:
+        for eye in (0, 1):
+            presentation = presentations_by_eye[eye]
+            dispatch = latest_by_eye[eye]
+            if presentation["target"] != dispatch["target"]:
+                failures.append(
+                    f"eye {eye} presented target {presentation['target']} but dispatched target {dispatch['target']}"
+                )
+            if presentation["pointer"] == 0 or presentation["pointer"] != dispatch["pointer"]:
+                failures.append(
+                    f"eye {eye} presented native pointer 0x{presentation['pointer']:X} "
+                    f"but dispatched 0x{dispatch['pointer']:X}"
+                )
+
     required_markers = [
         "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan",
         f"{PREFIX} passed",
@@ -90,6 +119,7 @@ def main() -> int:
         "status": "failed" if failures else "passed",
         "dispatches": latest_by_eye,
         "matrices": matrices_by_eye,
+        "presentations": presentations_by_eye,
         "failures": failures,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

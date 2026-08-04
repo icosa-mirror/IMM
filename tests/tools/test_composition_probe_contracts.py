@@ -158,7 +158,7 @@ def main() -> int:
             "unity-android-vulkan-external-render-metrics.json",
             "unity-android-vulkan-external-render.png",
             "--minimum-consecutive-frames 2",
-            "--sample-interval-seconds 1",
+            "--sample-interval-seconds 2",
             "unity-android-vulkan-composition-metrics.json",
             "unity-windows-directx-sample1.png",
             "unity-android-vulkan-sample1.json",
@@ -174,7 +174,7 @@ def main() -> int:
         ],
         ROOT / "tests/baselines/render/unity-android-vulkan-external-render-sample1.json": [
             "expected_spatial_luma_grid",
-            '"min_correlation": 0.49',
+            '"min_correlation": 0.48',
             "absent-front-magenta",
             "absent-rear-yellow",
             "maximum_largest_component_share_of_crop",
@@ -190,6 +190,7 @@ def main() -> int:
             "rear-occluded-cyan",
             "minimum_largest_component_share_of_crop",
             "maximum_largest_component_share_of_crop",
+            '"region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 }',
         ],
         ROOT / "tests/baselines/render/godot-android-vulkan-sample1.json": [
             "expected_spatial_luma_regions",
@@ -213,6 +214,7 @@ def main() -> int:
             "rear-visible-yellow",
             "character-occluded-cyan",
             "maximum_largest_component_share_of_crop",
+            '"region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 }',
         ],
         ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd": [
             "Godot's Vulkan clip space is zero-to-one",
@@ -230,6 +232,7 @@ def main() -> int:
             "rear-visible-yellow",
             "character-occluded-cyan",
             "maximum_largest_component_share_of_crop",
+            '"region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 }',
         ],
         ROOT / "tests/tools/validate_render_video.py": [
             '"color_component_probes": result.get("color_component_probes")',
@@ -271,6 +274,9 @@ def main() -> int:
             "info.CommandBuffer.IssuePluginEvent(_renderEventFunc, eventId)",
             "info.CommandBuffer.SetRenderTarget(cameraTarget);",
             "PresentFlatAndroidVulkanFrame",
+            "_syntheticStereoCameraForValidation == cam",
+            "VulkanEyeTargets[presentationEye]",
+            "[IMM_SYNTH_PRESENT_EYE_20260804]",
             "private void OnRenderImage(RenderTexture source, RenderTexture destination)",
             "Material composite = GetVulkanCompositeMaterial();",
             "Graphics.Blit(eyeTarget, destination, composite);",

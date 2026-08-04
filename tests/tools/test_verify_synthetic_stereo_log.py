@@ -36,7 +36,9 @@ def main() -> int:
             + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
             + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
             + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
-            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n",
+            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=0 targetId=10 targetPtr=0xABC\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=1 targetId=11 targetPtr=0xDEF\n",
             encoding="utf-8",
         )
         passed = invoke(tool, log, output)
@@ -48,7 +50,9 @@ def main() -> int:
             + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
             + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
             + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
-            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=10 targetPtr=0xABC\n",
+            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=10 targetPtr=0xABC\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=0 targetId=10 targetPtr=0xABC\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=1 targetId=10 targetPtr=0xABC\n",
             encoding="utf-8",
         )
         failed = invoke(tool, log, output)
@@ -61,13 +65,30 @@ def main() -> int:
             + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.032 leftTx=1.032000 rightTx=0.968000\n"
             + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.032 leftTx=1.032000 rightTx=0.968000\n"
             + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
-            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n",
+            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=0 targetId=10 targetPtr=0xABC\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=1 targetId=11 targetPtr=0xDEF\n",
             encoding="utf-8",
         )
         weak_matrices = invoke(tool, log, output)
         assert weak_matrices.returncode != 0
         failures = json.loads(output.read_text(encoding="utf-8"))["failures"]
         assert any("matrix separation is too small" in failure for failure in failures)
+
+        log.write_text(
+            common
+            + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
+            + f"{PREFIX} matrices cameraId=3 selectedEye=1 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
+            + f"{PREFIX} dispatch cameraId=3 eye=0 eventId=768 targetId=10 targetPtr=0xABC\n"
+            + f"{PREFIX} dispatch cameraId=3 eye=1 eventId=769 targetId=11 targetPtr=0xDEF\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=0 targetId=10 targetPtr=0xABC\n"
+            + "[IMM_SYNTH_PRESENT_EYE_20260804] eye=1 targetId=10 targetPtr=0xABC\n",
+            encoding="utf-8",
+        )
+        wrong_presentation = invoke(tool, log, output)
+        assert wrong_presentation.returncode != 0
+        failures = json.loads(output.read_text(encoding="utf-8"))["failures"]
+        assert any("presented target" in failure for failure in failures)
     return 0
 
 

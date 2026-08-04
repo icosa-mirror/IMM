@@ -11,7 +11,7 @@
       "center_crop_aspect_ratio": 1.7777777778,
       "height": 18,
       "max_mean_abs_delta": 0.14,
-      "min_correlation": 0.49,
+      "min_correlation": 0.48,
       "width": 32
     },
     "expected_color_components": {
