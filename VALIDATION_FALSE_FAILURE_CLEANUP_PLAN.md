@@ -6,6 +6,20 @@ Make the validation report trustworthy in both directions: correct renders must 
 
 The cyan depth/occlusion contract must distinguish genuinely foreground cyan inside the character silhouette from the intentionally visible rim of a rear square and authored cyan scene details. The Windows Godot ordered-overlay image remains a genuine failure because cyan fills the character interior; reviewed Unity Metal and Android full-depth captures do not.
 
+The combined report starts with a four-by-three visual matrix using the fixed
+primary backends Windows/DX11, Android/Vulkan, macOS/Metal, and iOS/Metal.
+Status cells contain color only: green is visually passed depth composition,
+orange is a visually passed render whose required depth path is absent (and is
+therefore still CI-failing for Godot/Unity), red is a produced rendering or
+attempted depth-composition failure, and gray is genuinely untested or out of
+scope. Godot and Unity can never become green from render-only evidence, and
+both orange and gray engine cells remain required validation gaps.
+
+The Android Unity lane's optional `ffmpeg` installation is bounded to five
+minutes, with two-minute package-manager command limits. This prevents a
+runner package-manager stall from consuming the entire one-hour device job
+before Firebase validation begins.
+
 ## Execution order
 
 ### Current audited state: run `30901787140`
@@ -27,10 +41,13 @@ The same run exposed two remaining false report signals. They are now fixed loca
 
 After those corrections, the remaining visible failures in `30901787140` are genuine or explicit coverage limitations:
 
-- Unity Metal ordered-overlay: magenta and yellow probes are absent;
+- Unity Metal ordered-overlay: magenta and yellow probes are absent. Source tracing found a fixture bug: ordered-overlay setup set the base camera culling mask to zero, then created all three probes on layer 0, which neither the base camera nor the later layer-30 overlay camera rendered. The base camera now reserves layer 29 for the composition probes while the later overlay remains isolated on layer 30; cloud confirmation is pending.
 - Windows Godot full-depth: only the sky/background is present;
-- Windows Godot ordered-overlay: the cyan rear square is drawn over the character;
-- macOS Godot Metal composition: required probes are absent;
+- Windows Godot ordered-overlay: the cyan rear square is drawn over the character. The fixture applied the transparent/no-depth-test ordered-overlay material to all three probes, so cyan could never be occluded. The corrected fixture keeps cyan opaque before the `PRE_TRANSPARENT` IMM callback while magenta/yellow remain transparent after it; this tests both sides of the ordering boundary without the previously broken `POST_TRANSPARENT` strategy. Cloud confirmation is pending.
+- macOS Godot Metal: its current color-intermediate integration has no host
+  depth input, so it cannot yet satisfy the required depth-composition
+  contract. Render-only evidence must not convert this required gap into a
+  pass; the lane remains failed until Metal host-depth composition works.
 - hosted Windows Unity Vulkan synthetic stereo: Unity rejects Lavapipe Vulkan and falls back to Direct3D, so no Vulkan image exists;
 - Windows Unity Vulkan full-depth/ordered-overlay: hardware-gated jobs did not run, so the non-VR Vulkan row has incomplete evidence rather than a visual failure.
 
@@ -314,3 +331,20 @@ The report should become shorter and more trustworthy:
 - The primary cloud stereo strategy is now an ARM64 Android/Firebase hardware-Vulkan lane, avoiding both the unsupported Windows software-Vulkan device and the x86_64 native dependency gap.
 - The known Swappy failure artifact from run `30813880906` is now covered by a classifier regression test and is reported as `runtime_failed`, rather than the lane's former hard-coded `compositing` label.
 - Run `30816894610` shows why complete visual evidence must outrank a secondary Firebase CLI failure: the CLI returned `1` because Cloud Tool Results API is disabled after the test, but all captures were downloaded and contain an unambiguous black-eye rendering failure. The classifier now reports that result as `render_failed` and retains the Firebase error as supporting detail.
+
+### Godot Vulkan full-depth sky-only capture
+
+- Root cause identified in the shared Vulkan external-image path: Godot's
+  intermediate depth pipeline uses normal-Z/LESS, but the image was cleared to
+  `0.0` by the Unity external-eye reverse-Z feature flag. That rejects every
+  IMM depth-tested fragment and leaves only Godot's sky/background.
+- The clear now follows the player's configured LESS/GREATER depth state, with
+  an explicit integration-level reverse-Z declaration retained as a first-frame
+  fallback. Godot external images declare normal-Z and clear to `1.0`; Unity
+  external images declare reverse-Z and clear to `0.0` even on platforms that
+  do not use Android's dedicated queue.
+- Godot 4.3+ exposes the scene depth texture as reverse-Z. The compositor now
+  converts that sample to normal-Z before comparing it with IMM's normal-Z
+  intermediate depth. The prior direct comparison mixed opposite conventions.
+- CI must still visually confirm that authored strokes return and that the
+  full-depth cyan probe is occluded correctly.

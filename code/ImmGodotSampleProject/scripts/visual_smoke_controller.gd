@@ -630,7 +630,11 @@ func _setup_scene_composition_probe() -> void:
 	_front_scene_probe.global_position = center - right * 0.70 - up * 0.35 - forward * 1.00
 	_front_scene_probe.look_at(camera.global_position, Vector3.UP)
 
-	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(0.75, 0.75, probe_depth), ordered_overlay)
+	# In ordered-overlay mode this rear probe remains opaque so Godot draws it
+	# before the PRE_TRANSPARENT IMM compositor callback. The front and visible
+	# probes are transparent and draw afterward. Applying the same transparent,
+	# no-depth-test material to all three made cyan occlusion impossible.
+	_rear_occluded_scene_probe = _create_scene_probe("IMMSceneRearOccludedProbe", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(0.75, 0.75, probe_depth), false)
 	add_child(_rear_occluded_scene_probe)
 	_rear_occluded_scene_probe.global_position = center + forward * 0.95 + right * 0.25
 	_rear_occluded_scene_probe.look_at(camera.global_position, Vector3.UP)
@@ -639,6 +643,8 @@ func _setup_scene_composition_probe() -> void:
 	add_child(_rear_visible_scene_probe)
 	_rear_visible_scene_probe.global_position = center + right * 1.30 + up * 0.85 + forward * 0.35
 	_rear_visible_scene_probe.look_at(camera.global_position, Vector3.UP)
+	if ordered_overlay:
+		print("[IMM_GODOT_ORDERED_OVERLAY_PROBE_SPLIT_20260804] rear=opaque-before-imm front-visible=transparent-after-imm")
 	print("IMM Godot %s visual smoke scene composition probes: front=%s rear_occluded=%s rear_visible=%s size=%.3f" % [
 		_selected_renderer_name(),
 		str(_front_scene_probe.global_position),
@@ -647,14 +653,14 @@ func _setup_scene_composition_probe() -> void:
 		probe_size,
 	])
 
-func _create_scene_probe(name: String, color: Color, size: Vector3, ordered_overlay: bool) -> MeshInstance3D:
+func _create_scene_probe(name: String, color: Color, size: Vector3, draw_after_imm: bool) -> MeshInstance3D:
 	var mesh: BoxMesh = BoxMesh.new()
 	mesh.size = size
 	var material: StandardMaterial3D = StandardMaterial3D.new()
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.albedo_color = color
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	if ordered_overlay:
+	if draw_after_imm:
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.no_depth_test = true
 	var probe: MeshInstance3D = MeshInstance3D.new()

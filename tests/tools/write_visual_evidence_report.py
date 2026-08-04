@@ -29,6 +29,19 @@ GENERIC_CAPTURE_SECTION_KEYS = {
     "render",
     "syntheticstereo",
 }
+VISUAL_MATRIX_TARGETS = {
+    "windows": ("DX11", "directx"),
+    "android": ("Vulkan", "vulkan"),
+    "macos": ("Metal", "metal"),
+    "ios": ("Metal", "metal"),
+}
+VISUAL_MATRIX_PRODUCTS = ("standalone", "godot", "unity")
+VISUAL_MATRIX_SYMBOLS = {
+    "depth_passed": "🟩",
+    "render_passed": "🟧",
+    "failed": "🟥",
+    "not_tested": "⬜",
+}
 
 
 def normalize_label(value: str) -> str:
@@ -344,6 +357,110 @@ def matrix_coverage_rows(matrix_status: Path | None, input_root: Path, reports: 
             }
         )
     return coverage
+
+
+def visual_matrix_row(
+    coverage: list[dict], product: str, platform: str, renderer: str
+) -> dict | None:
+    return next(
+        (
+            row
+            for row in coverage
+            if str(row["matrix"].get("product") or "") == product
+            and str(row["matrix"].get("platform") or "") == platform
+            and str(row["matrix"].get("mode") or "") == "non-vr"
+            and str(row["matrix"].get("renderer") or "") == renderer
+        ),
+        None,
+    )
+
+
+def manifest_has_depth_evidence(manifest: dict) -> bool:
+    classification = manifest.get("classification") or {}
+    if classification.get("result") != "passed":
+        return False
+    if (
+        classification.get("composition_mode") == "full_depth"
+        and classification.get("depth_composition") == "success"
+    ):
+        return True
+    for item in manifest.get("files") or []:
+        path = str(item.get("path") or "").lower() if isinstance(item, dict) else ""
+        if path.endswith(".json") and (
+            "full-depth" in path or "composition-metrics" in path
+        ):
+            return True
+    return False
+
+
+def row_has_depth_evidence(input_root: Path, row: dict) -> bool:
+    if any(manifest_has_depth_evidence(item) for item in matching_manifests(input_root, row)):
+        return True
+    expected = row.get("matrix") or {}
+    for status_path in input_root.rglob("composition-status.json"):
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(status, dict):
+            continue
+        nearby_manifest = find_manifest(status_path.parent, slugify("-".join(
+            str(expected.get(part) or "")
+            for part in ("product", "platform", "mode", "renderer")
+        )))
+        if not nearby_manifest:
+            continue
+        if (
+            status.get("composition_mode") == "full_depth"
+            and status.get("depth_composition") == "success"
+            and status.get("result", "passed") == "passed"
+        ):
+            return True
+    return False
+
+
+def visual_matrix_cell(
+    coverage: list[dict], input_root: Path, product: str, platform: str, renderer: str
+) -> str:
+    row = visual_matrix_row(coverage, product, platform, renderer)
+    if row is None or row["status"] != "supported":
+        return "not_tested"
+    if row["coverage_status"] != "passed":
+        return "failed"
+    if product == "standalone":
+        return "render_passed"
+    return "depth_passed" if row_has_depth_evidence(input_root, row) else "render_passed"
+
+
+def add_visual_matrix(
+    lines: list[str], coverage: list[dict], input_root: Path
+) -> dict[tuple[str, str], str]:
+    if not coverage:
+        return {}
+    cells: dict[tuple[str, str], str] = {}
+    lines.extend(
+        [
+            "## Visual Matrix",
+            "",
+            "🟩 depth composition passed · 🟧 render passed but required depth is absent · 🟥 rendering or attempted depth composition failed · ⬜ not tested/out of scope",
+            "",
+            "| Platform | Standalone | Godot | Unity |",
+            "| --- | :---: | :---: | :---: |",
+        ]
+    )
+    for platform, (backend_label, renderer) in VISUAL_MATRIX_TARGETS.items():
+        values = []
+        for product in VISUAL_MATRIX_PRODUCTS:
+            status = visual_matrix_cell(
+                coverage, input_root, product, platform, renderer
+            )
+            cells[(platform, product)] = status
+            values.append(VISUAL_MATRIX_SYMBOLS[status])
+        lines.append(
+            f"| {display_name(platform)} · {backend_label} | {' | '.join(values)} |"
+        )
+    lines.append("")
+    return cells
 
 
 def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
@@ -843,6 +960,7 @@ def main() -> int:
         "Result vocabulary: `render_failed` means a produced image violated its visual contract; `composition_failed` means depth or ordering was wrong; `runtime_failed` means the requested player/API did not run; `infrastructure_failed` means the runner or external service failed; `evidence_incomplete` means no authoritative verdict could be formed.",
         "",
     ]
+    visual_matrix = add_visual_matrix(lines, coverage, input_root)
     add_matrix_coverage(lines, coverage)
     add_status_only_sections(lines, coverage, input_root, reports)
 
@@ -930,6 +1048,26 @@ def main() -> int:
     if invalid_supported:
         for row in invalid_supported:
             print(f"Supported validation evidence is not valid: {row['key']} ({row['coverage_status']})")
+        return 1
+    complete_visual_matrix_scope = all(
+        any(
+            str(row["matrix"].get("platform") or "") == platform
+            for row in coverage
+        )
+        for platform in VISUAL_MATRIX_TARGETS
+    )
+    required_depth_gaps = [
+        (platform, product)
+        for (platform, product), status in visual_matrix.items()
+        if complete_visual_matrix_scope
+        and product in {"godot", "unity"}
+        and status != "depth_passed"
+    ]
+    if required_depth_gaps:
+        for platform, product in required_depth_gaps:
+            print(
+                f"Required depth validation is not valid: {product}/{platform}"
+            )
         return 1
     return 0
 

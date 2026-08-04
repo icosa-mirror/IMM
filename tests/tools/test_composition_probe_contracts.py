@@ -32,6 +32,9 @@ def main() -> int:
             "OverlayProbeEnv",
             "CaptureCameraTexture",
             "CaptureOrderedCameraStackTexture(captureCamera)",
+            "const int compositionProbeLayer = 29;",
+            "cam.cullingMask = 1 << compositionProbeLayer;",
+            "[IMM_ORDERED_OVERLAY_PROBE_LAYER_20260804]",
             "CaptureWidth",
             "captureCamera.targetTexture = renderTexture",
             "camera.targetTexture = renderTexture",
@@ -72,6 +75,8 @@ def main() -> int:
             "COMPOSITION_MODE_ORDERED_OVERLAY",
             "IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE",
             "EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT",
+            "IMMSceneRearOccludedProbe\", SCENE_REAR_OCCLUDED_PROBE_COLOR, Vector3(0.75, 0.75, probe_depth), false",
+            "[IMM_GODOT_ORDERED_OVERLAY_PROBE_SPLIT_20260804]",
             "scene composition %s ordered overlay rear probe failed",
             "scene composition %s %s IMM visibility failed",
             "last_depth_aware_vulkan_composite",
@@ -153,6 +158,7 @@ def main() -> int:
             "Record Unity Android Vulkan visual metrics",
             "--external-screen-capture-name unity-android-vulkan-robo-final.png",
             "validate_render_video.py",
+            "sudo timeout 120 apt-get install --yes ffmpeg",
             "unity-android-vulkan-external-render-sample1.json",
             "unity-android-vulkan-external-render-video-validation.json",
             "unity-android-vulkan-external-render-metrics.json",
@@ -222,8 +228,9 @@ def main() -> int:
             "(z_far * z_near) / depth",
         ],
         ROOT / "code/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp": [
-            "Both the IMM intermediate depth and Godot's Vulkan scene depth use",
-            "imm_depth > host_depth",
+            "Godot 4.3+",
+            "float host_depth_normal = 1.0 - host_depth;",
+            "imm_depth > host_depth_normal",
         ],
         ROOT / "tests/baselines/render/sample1-ordered-overlay.json": [
             "expected_color_components",
@@ -352,6 +359,9 @@ def main() -> int:
             "BeginExternalImageFrameWithView(",
             "mState->batchAppendShaderReadTransition =",
             "mState->ownsDedicatedQueue &&",
+            "externalDepthReverseZ",
+            "[IMM_EXTERNAL_DEPTH_CLEAR_20260804] convention=normal-z clear=1",
+            "clearExternalDepthAsReverseZ ? 0.0f : 1.0f",
         ],
         ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm": [
             "if (mState->unityProjectionAdjusted)",
@@ -393,6 +403,28 @@ def main() -> int:
     if vulkan_native.count("mState->ownsDedicatedQueue &&") < 3:
         errors.append(
             "Unity Vulkan shader-read transitions and bridge synchronization must remain dedicated-queue-only"
+        )
+    godot_depth_clear = vulkan_native.find(
+        "const bool clearExternalDepthAsReverseZ ="
+    )
+    godot_depth_clear_call = vulkan_native.find(
+        "clearExternalDepthAsReverseZ ? 0.0f : 1.0f"
+    )
+    if godot_depth_clear < 0 or godot_depth_clear_call < godot_depth_clear:
+        errors.append(
+            "External depth clear must use the same Unity-only reverse-Z decision as its depth pipeline"
+        )
+    elif "mState->externalDepthReverseZ" not in vulkan_native[
+        godot_depth_clear:godot_depth_clear_call
+    ]:
+        errors.append(
+            "External depth clear must distinguish Unity reverse-Z from Godot normal-Z"
+        )
+    elif "mState->currentDepthState->lessEqual" not in vulkan_native[
+        godot_depth_clear:godot_depth_clear_call
+    ]:
+        errors.append(
+            "External depth clear must preserve reverse-Z for Unity paths without a dedicated queue"
         )
 
     unity_smoke = (

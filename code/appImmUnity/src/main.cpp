@@ -1663,6 +1663,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.graphicsQueue = gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue;
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         unityVulkanDevice.allowDedicatedQueue = sAllowDedicatedVulkanQueue;
+        unityVulkanDevice.externalDepthReverseZ = true;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;
         __android_log_print(ANDROID_LOG_INFO, "ImmUnityPlugin", "Configuring IMM for Unity Vulkan external device (Quest)");
@@ -1693,6 +1694,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         unityVulkanDevice.graphicsQueue = gImmUnityPlugin.UnityAPI.mVulkanInstance.graphicsQueue;
         unityVulkanDevice.graphicsQueueFamilyIndex = gImmUnityPlugin.UnityAPI.mVulkanInstance.queueFamilyIndex;
         unityVulkanDevice.allowDedicatedQueue = false;
+        unityVulkanDevice.externalDepthReverseZ = true;
         config.rendererApi = piRenderer::API::Vulkan;
         config.graphicsDevice = &unityVulkanDevice;
         config.initializeRendererOnInit = true;

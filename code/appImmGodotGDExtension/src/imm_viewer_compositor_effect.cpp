@@ -245,11 +245,13 @@ void main() {
     vec4 imm_color = texture(source_color, uv_interp);
     float imm_depth = texture(source_depth, uv_interp).r;
     float host_depth = texture(scene_depth, uv_interp).r;
-    // Both the IMM intermediate depth and Godot's Vulkan scene depth use
-    // normal zero-to-one depth (near=0, far=1). Inverting the host sample
-    // here made every IMM fragment appear behind the scene and left only
-    // the sky sphere in the final composition.
-    if (imm_color.a <= 0.01 || imm_depth >= 0.9999 || imm_depth > host_depth) {
+    // IMM's Godot intermediate is normal-Z (near=0, far=1), while Godot 4.3+
+    // exposes its scene depth texture as reverse-Z (near=1, far=0). Compare
+    // both values in normal-Z space. The intermediate itself must separately
+    // be cleared to 1.0; a 0.0 clear rejects every IMM fragment during its
+    // own LESS depth pass before this shader runs.
+    float host_depth_normal = 1.0 - host_depth;
+    if (imm_color.a <= 0.01 || imm_depth >= 0.9999 || imm_depth > host_depth_normal) {
         discard;
     }
     frag_color = imm_color;

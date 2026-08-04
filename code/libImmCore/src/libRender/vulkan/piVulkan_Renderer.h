@@ -18,6 +18,7 @@ struct piVulkanExternalDevice
     void *graphicsQueue;
     uint32_t graphicsQueueFamilyIndex;
     bool allowDedicatedQueue;
+    bool externalDepthReverseZ;
 };
 
 class piRendererVulkan : public piRenderer

@@ -17,11 +17,48 @@ PNG_1X1 = bytes.fromhex(
 
 
 def main() -> int:
-    from write_visual_evidence_report import slugify
+    from write_visual_evidence_report import slugify, visual_matrix_cell
 
     assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
     assert slugify("UnityAndroidVulkan") == "unity-android-vulkan"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+        lane = temp / "unity-android-vulkan"
+        lane.mkdir()
+        matrix_row = {
+            "matrix": {
+                "product": "unity",
+                "platform": "android",
+                "mode": "non-vr",
+                "renderer": "vulkan",
+            },
+            "status": "supported",
+            "coverage_status": "passed",
+        }
+        manifest = {
+            "classification": {"result": "passed"},
+            "matrix": matrix_row["matrix"],
+            "files": [{"path": "unity-android-vulkan-render-metrics.json"}],
+        }
+        (lane / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        assert (
+            visual_matrix_cell(
+                [matrix_row], temp, "unity", "android", "vulkan"
+            )
+            == "render_passed"
+        ), "Render-only evidence must be orange, not green, for a required Unity depth cell"
+        manifest["files"].append(
+            {"path": "unity-android-vulkan-composition-metrics.json"}
+        )
+        (lane / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        assert (
+            visual_matrix_cell(
+                [matrix_row], temp, "unity", "android", "vulkan"
+            )
+            == "depth_passed"
+        )
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
@@ -410,6 +447,11 @@ def main() -> int:
         assert result.returncode == 1, "Expected invalid supported visual evidence to fail aggregation"
         assert "standalone/macos/non-vr/metal (missing evidence)" in result.stdout
         text = report.read_text(encoding="utf-8")
+        assert "## Visual Matrix" in text
+        assert "| Platform | Standalone | Godot | Unity |" in text
+        assert "| macOS · Metal | 🟥 | ⬜ | 🟥 |" in text
+        assert "| iOS · Metal | ⬜ | ⬜ | ⬜ |" in text
+        assert "Render only" not in text
         assert "## Matrix Coverage" in text
         assert "| unity/all/non-vr/preflight | supported | passed | no |" in text
         assert "| unity/macos/non-vr/metal | supported | failed | yes |" in text

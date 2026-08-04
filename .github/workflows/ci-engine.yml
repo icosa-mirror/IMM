@@ -1755,12 +1755,13 @@ jobs:
           gcloud firebase test android models describe "$model_id"
 
       - name: Install physical-device video validator dependency
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
           if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install --yes ffmpeg
+            sudo timeout 120 apt-get update
+            sudo timeout 120 apt-get install --yes ffmpeg
           fi
           ffmpeg -version
 

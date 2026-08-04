@@ -845,13 +845,15 @@ namespace ImmPlayer
                 return;
             }
 
+            const int compositionProbeLayer = 29;
             const int overlayLayer = 30;
             if (cam.clearFlags == CameraClearFlags.SolidColor)
             {
                 cam.clearFlags = CameraClearFlags.Skybox;
                 Debug.Log($"{Prefix}overlay fixture restored skybox clear for AfterSkybox render event");
             }
-            cam.cullingMask = 0;
+            cam.cullingMask = 1 << compositionProbeLayer;
+            Debug.Log($"[IMM_ORDERED_OVERLAY_PROBE_LAYER_20260804] baseCamera={cam.name} probeLayer={compositionProbeLayer} overlayLayer={overlayLayer}");
 
             GameObject cube = CreateSmokeQuad("IMM Runtime Overlay Fixture Cube");
             cube.layer = overlayLayer;

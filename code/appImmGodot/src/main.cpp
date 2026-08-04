@@ -270,6 +270,7 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_BeginVulkanFrame(const ImmGodotVulkanFra
     externalDevice.device = frame->device;
     externalDevice.graphicsQueue = frame->graphicsQueue;
     externalDevice.graphicsQueueFamilyIndex = frame->graphicsQueueFamilyIndex;
+    externalDevice.externalDepthReverseZ = false;
     if (externalDevice.instance == nullptr ||
         externalDevice.physicalDevice == nullptr ||
         externalDevice.device == nullptr ||
