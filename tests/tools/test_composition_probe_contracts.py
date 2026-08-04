@@ -171,6 +171,7 @@ def main() -> int:
         ],
         ROOT / "tests/baselines/render/unity-android-vulkan-external-render-sample1.json": [
             "expected_spatial_luma_grid",
+            '"min_correlation": 0.49',
             "absent-front-magenta",
             "absent-rear-yellow",
             "maximum_largest_component_share_of_crop",

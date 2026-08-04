@@ -113,6 +113,17 @@ namespace ImmPlayer
         public ImmDocument.SpawnAreaInfo[] spawnAreas;
         public LayerListEntry[] layerList;
 
+        /// <summary>
+        /// True once the native document can render and the sample's initial viewpoint has settled.
+        /// </summary>
+        public bool IsDocumentRenderReady =>
+            _doc != null &&
+            _doc.IsSequenceReady() &&
+            _spawnAreaIds.Length > 0 &&
+            currentSpawnAreaIndex >= 0 &&
+            _initialSpawnAreaCoroutine == null &&
+            _spawnAreaApplyCoroutine == null;
+
         private ImmDocument _doc;
         private bool _isApplyingEdits;
         private bool _isSyncingSelection;

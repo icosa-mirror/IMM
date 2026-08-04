@@ -24,6 +24,7 @@ namespace ImmPlayer
         private const string ExpectedGraphicsApiEnv = "IMM_UNITY_EXPECT_GRAPHICS_API";
         private const string DisableMsaaEnv = "IMM_UNITY_SMOKE_DISABLE_MSAA";
         private const string CaptureCameraTextureEnv = "IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE";
+        private const string DisabledEnv = "IMM_UNITY_SMOKE_DISABLED";
         private const string CapturePathArg = "-immSmokeCapturePath";
         private const string RenderCapturePathArg = "-immSmokeRenderCapturePath";
         private const string FramesArg = "-immSmokeFrames";
@@ -53,6 +54,9 @@ namespace ImmPlayer
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Install()
         {
+            if (IsTruthyValue(Environment.GetEnvironmentVariable(DisabledEnv)))
+                return;
+
             string capturePath = GetCommandLineValue(CapturePathArg);
             if (string.IsNullOrEmpty(capturePath))
             {
@@ -296,13 +300,8 @@ namespace ImmPlayer
             }
 #else
             bool usePresentedFrameCapture = !IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv)) &&
-                (Application.isEditor ||
-                _overlayProbeEnabled ||
+                (_overlayProbeEnabled ||
                 (_compositionProbeEnabled && SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan));
-            if (Application.isEditor && usePresentedFrameCapture)
-            {
-                Debug.Log("[IMM_EDITOR_END_OF_FRAME_CAPTURE_20260804] capturing the normally presented Game View frame");
-            }
             Texture2D tex = _diagnosticCameraTargetTexture != null
                 ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
                 : (_overlayProbeEnabled && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Vulkan

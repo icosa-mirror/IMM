@@ -112,15 +112,29 @@ def main() -> int:
     assert "RunMacOSEditorPlayModeSmoke();" in combined_smoke
     editor_play = method_body(unity_automation, "public static void RunMacOSEditorPlayModeSmoke()")
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
-    assert "TryCaptureEditorPlayScreenshot" not in unity_automation
-    assert "CaptureScreenshotAsTexture" not in unity_automation
+    assert "featureExamples.IsDocumentRenderReady" in unity_automation
+    assert "TryPumpEditorPlayCamera()" in unity_automation
+    assert "EditorSmokePumpInterval" in unity_automation
+    assert "camera.targetTexture = target;" in unity_automation
+    assert "camera.Render();" in unity_automation
+    assert "capture.ReadPixels(" in unity_automation
+    assert "camera.targetTexture = previousCameraTarget;" in unity_automation
+    assert "[IMM_EDITOR_READY_CAPTURE_20260804]" in unity_automation
+    assert 'Environment.SetEnvironmentVariable(RuntimeSmokeDisabledEnv, "1");' in unity_automation
+    unity_feature_examples = (
+        ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmFeatureExamples.cs"
+    ).read_text(encoding="utf-8")
+    assert "public bool IsDocumentRenderReady =>" in unity_feature_examples
+    assert "_doc.IsSequenceReady()" in unity_feature_examples
+    assert "_spawnAreaIds.Length > 0" in unity_feature_examples
+    assert "currentSpawnAreaIndex >= 0" in unity_feature_examples
+    assert "_initialSpawnAreaCoroutine == null" in unity_feature_examples
+    assert "_spawnAreaApplyCoroutine == null" in unity_feature_examples
     unity_runtime_smoke = (
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
     ).read_text(encoding="utf-8")
-    assert "Application.isEditor ||" in unity_runtime_smoke
-    assert "yield return new WaitForEndOfFrame();" in unity_runtime_smoke
-    assert "Texture2D screenTexture = ScreenCapture.CaptureScreenshotAsTexture();" in unity_runtime_smoke
-    assert "[IMM_EDITOR_END_OF_FRAME_CAPTURE_20260804]" in unity_runtime_smoke
+    assert "IMM_UNITY_SMOKE_DISABLED" in unity_runtime_smoke
+    assert "if (IsTruthyValue(Environment.GetEnvironmentVariable(DisabledEnv)))" in unity_runtime_smoke
     for token in [
         "Build Unity macOS Metal smoke player and run project Play-button smoke",
         "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
