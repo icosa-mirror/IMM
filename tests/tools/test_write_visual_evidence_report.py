@@ -17,7 +17,13 @@ PNG_1X1 = bytes.fromhex(
 
 
 def main() -> int:
-    from write_visual_evidence_report import slugify, visual_matrix_cell
+    from write_visual_evidence_report import (
+        VISUAL_MATRIX_SYMBOLS,
+        slugify,
+        visual_matrix_cell,
+    )
+
+    assert VISUAL_MATRIX_SYMBOLS["render_passed"] == "🟨"
 
     assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
@@ -65,7 +71,7 @@ def main() -> int:
                 [matrix_row], temp, "unity", "android", "vulkan"
             )
             == "render_passed"
-        ), "Render-only evidence must be orange, not green, for a required Unity depth cell"
+        ), "Render-only evidence must be yellow, not green, for a required Unity depth cell"
         manifest["files"].append(
             {"path": "unity-android-vulkan-composition-metrics.json"}
         )

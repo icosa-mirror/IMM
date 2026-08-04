@@ -239,20 +239,32 @@ layout(location = 0) in vec2 uv_interp;
 layout(set = 0, binding = 0) uniform sampler2D source_color;
 layout(set = 0, binding = 1) uniform sampler2D source_depth;
 layout(set = 0, binding = 2) uniform sampler2D scene_depth;
+layout(set = 0, binding = 3) uniform sampler2D host_color;
 layout(location = 0) out vec4 frag_color;
 
 void main() {
-    vec4 imm_color = texture(source_color, uv_interp);
-    float imm_depth = texture(source_depth, uv_interp).r;
+    // A second fullscreen pass copies this merged texture into Godot color.
+    // That pass applies the renderer's X flip, so sample the native IMM
+    // intermediates with the compensating coordinate here. Godot color and
+    // depth intentionally retain uv_interp: the two passes then cancel for
+    // host resources while preserving the single required IMM flip.
+    vec2 imm_uv = vec2(1.0 - uv_interp.x, uv_interp.y);
+    vec4 imm_color = texture(source_color, imm_uv);
+    float imm_depth = texture(source_depth, imm_uv).r;
     float host_depth = texture(scene_depth, uv_interp).r;
+    vec4 preserved_host_color = texture(host_color, uv_interp);
     // IMM's Godot intermediate is normal-Z (near=0, far=1), while Godot 4.3+
     // exposes its scene depth texture as reverse-Z (near=1, far=0). Compare
     // both values in normal-Z space. The intermediate itself must separately
     // be cleared to 1.0; a 0.0 clear rejects every IMM fragment during its
     // own LESS depth pass before this shader runs.
     float host_depth_normal = 1.0 - host_depth;
-    if (imm_color.a <= 0.01 || imm_depth >= 0.9999 || imm_depth > host_depth_normal) {
-        discard;
+    // The IMM 360 picture is valid far-plane content (depth 1.0). Transparent
+    // color, not far depth, identifies untouched intermediate pixels. Host
+    // geometry still wins because its normal-Z depth is less than 1.0.
+    if (imm_color.a <= 0.01 || imm_depth > host_depth_normal) {
+        frag_color = preserved_host_color;
+        return;
     }
     frag_color = imm_color;
 }
@@ -461,9 +473,9 @@ void main() {
         return true;
     }
 
-    bool composite_texture_to_color_with_depth(RenderingDevice *rendering_device, const RID &source_texture, const RID &source_depth_texture, const RID &scene_depth_texture, const RID &color_texture)
+    bool composite_texture_to_color_with_depth(RenderingDevice *rendering_device, const RID &source_texture, const RID &source_depth_texture, const RID &scene_depth_texture, const RID &host_color_texture, const RID &color_texture)
     {
-        if (rendering_device == nullptr || !source_texture.is_valid() || !source_depth_texture.is_valid() || !scene_depth_texture.is_valid() || !color_texture.is_valid())
+        if (rendering_device == nullptr || !source_texture.is_valid() || !source_depth_texture.is_valid() || !scene_depth_texture.is_valid() || !host_color_texture.is_valid() || !color_texture.is_valid())
         {
             return false;
         }
@@ -513,6 +525,14 @@ void main() {
         scene_depth_uniform->add_id(g_composite_resources->sampler);
         scene_depth_uniform->add_id(scene_depth_texture);
         uniforms.push_back(scene_depth_uniform);
+
+        Ref<RDUniform> host_color_uniform;
+        host_color_uniform.instantiate();
+        host_color_uniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE);
+        host_color_uniform->set_binding(3);
+        host_color_uniform->add_id(g_composite_resources->sampler);
+        host_color_uniform->add_id(host_color_texture);
+        uniforms.push_back(host_color_uniform);
 
         RID uniform_set = rendering_device->uniform_set_create(uniforms, g_composite_resources->depth_shader, 0);
         if (!uniform_set.is_valid())
@@ -564,6 +584,10 @@ ImmViewerCompositorEffect::~ImmViewerCompositorEffect()
     if (rendering_device != nullptr && _intermediate_depth_texture.is_valid())
     {
         rendering_device->free_rid(_intermediate_depth_texture);
+    }
+    if (rendering_device != nullptr && _depth_composited_texture.is_valid())
+    {
+        rendering_device->free_rid(_depth_composited_texture);
     }
 }
 
@@ -637,6 +661,38 @@ RID ImmViewerCompositorEffect::ensure_intermediate_depth_texture(RenderingDevice
     _intermediate_depth_size = _intermediate_depth_texture.is_valid() ? size : Vector2i();
     _intermediate_depth_format = _intermediate_depth_texture.is_valid() ? format : -1;
     return _intermediate_depth_texture;
+}
+
+RID ImmViewerCompositorEffect::ensure_depth_composited_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height)
+{
+    if (rendering_device == nullptr || !color_texture.is_valid() || width <= 0 || height <= 0)
+    {
+        return RID();
+    }
+
+    Ref<RDTextureFormat> color_format = rendering_device->texture_get_format(color_texture);
+    if (!color_format.is_valid())
+    {
+        return RID();
+    }
+
+    const int64_t format = static_cast<int64_t>(color_format->get_format());
+    const Vector2i size(width, height);
+    if (_depth_composited_texture.is_valid() && _depth_composited_size == size && _depth_composited_format == format)
+    {
+        return _depth_composited_texture;
+    }
+
+    if (_depth_composited_texture.is_valid())
+    {
+        rendering_device->free_rid(_depth_composited_texture);
+        _depth_composited_texture = RID();
+    }
+
+    _depth_composited_texture = create_intermediate_texture(rendering_device, color_texture, width, height);
+    _depth_composited_size = _depth_composited_texture.is_valid() ? size : Vector2i();
+    _depth_composited_format = _depth_composited_texture.is_valid() ? format : -1;
+    return _depth_composited_texture;
 }
 
 void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, RenderData *render_data)
@@ -767,6 +823,8 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     bool direct_vulkan_color_target = false;
     bool had_intermediate_texture = false;
     bool had_intermediate_depth_texture = false;
+    bool had_depth_composited_texture = false;
+    bool depth_color_merge_result = false;
     bool depth_aware_vulkan_composite = false;
     bool depth_aware_vulkan_composite_result = false;
     int intermediate_nonzero_bytes = -1;
@@ -901,8 +959,15 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
             }
             if (use_intermediate_depth)
             {
+                RID depth_composited_texture = ensure_depth_composited_texture(rendering_device, color_texture, render_width, render_height);
+                had_depth_composited_texture = depth_composited_texture.is_valid();
                 depth_aware_vulkan_composite = true;
-                depth_aware_vulkan_composite_result = composite_texture_to_color_with_depth(rendering_device, intermediate_texture, intermediate_depth_texture, depth_texture, color_texture);
+                depth_color_merge_result =
+                    had_depth_composited_texture &&
+                    composite_texture_to_color_with_depth(rendering_device, intermediate_texture, intermediate_depth_texture, depth_texture, color_texture, depth_composited_texture);
+                depth_aware_vulkan_composite_result =
+                    depth_color_merge_result &&
+                    composite_texture_to_color(rendering_device, depth_composited_texture, color_texture);
                 composite_result = depth_aware_vulkan_composite_result;
             }
             else
@@ -937,6 +1002,8 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _last_direct_vulkan_color_target = direct_vulkan_color_target;
         _last_had_intermediate_texture = had_intermediate_texture;
         _last_had_intermediate_depth_texture = had_intermediate_depth_texture;
+        _last_had_depth_composited_texture = had_depth_composited_texture;
+        _last_depth_color_merge_result = depth_color_merge_result;
         _last_depth_aware_vulkan_composite = depth_aware_vulkan_composite;
         _last_depth_aware_vulkan_composite_result = depth_aware_vulkan_composite_result;
         _last_intermediate_nonzero_bytes = intermediate_nonzero_bytes;
@@ -992,6 +1059,8 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["last_direct_vulkan_color_target"] = _last_direct_vulkan_color_target;
     result["last_had_intermediate_texture"] = _last_had_intermediate_texture;
     result["last_had_intermediate_depth_texture"] = _last_had_intermediate_depth_texture;
+    result["last_had_depth_composited_texture"] = _last_had_depth_composited_texture;
+    result["last_depth_color_merge_result"] = _last_depth_color_merge_result;
     result["last_depth_aware_vulkan_composite"] = _last_depth_aware_vulkan_composite;
     result["last_depth_aware_vulkan_composite_result"] = _last_depth_aware_vulkan_composite_result;
     result["last_intermediate_nonzero_bytes"] = _last_intermediate_nonzero_bytes;

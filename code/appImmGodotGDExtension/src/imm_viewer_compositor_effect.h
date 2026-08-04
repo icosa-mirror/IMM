@@ -30,14 +30,18 @@ namespace godot
     private:
         RID ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height);
         RID ensure_intermediate_depth_texture(RenderingDevice *rendering_device, int width, int height);
+        RID ensure_depth_composited_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height);
 
         mutable std::mutex _diagnostics_mutex;
         RID _intermediate_texture;
         RID _intermediate_depth_texture;
+        RID _depth_composited_texture;
         Vector2i _intermediate_size;
         Vector2i _intermediate_depth_size;
+        Vector2i _depth_composited_size;
         int64_t _intermediate_format = -1;
         int64_t _intermediate_depth_format = -1;
+        int64_t _depth_composited_format = -1;
         int _callback_count = 0;
         int _last_callback_type = -1;
         bool _last_had_render_data = false;
@@ -57,6 +61,8 @@ namespace godot
         bool _last_direct_vulkan_color_target = false;
         bool _last_had_intermediate_texture = false;
         bool _last_had_intermediate_depth_texture = false;
+        bool _last_had_depth_composited_texture = false;
+        bool _last_depth_color_merge_result = false;
         bool _last_depth_aware_vulkan_composite = false;
         bool _last_depth_aware_vulkan_composite_result = false;
         int _last_intermediate_nonzero_bytes = -1;

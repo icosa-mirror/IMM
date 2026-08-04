@@ -10,12 +10,12 @@ The combined report starts with a four-by-three visual matrix whose rows name
 platforms only; the canonical renderer is implicit and selected per cell.
 Windows standalone and Unity use DX11, while Windows Godot uses Vulkan. Android
 uses Vulkan and macOS/iOS use Metal. Status cells contain color only: green is a
-passed standalone render or visually passed engine depth composition, orange is
+passed standalone render or visually passed engine depth composition, yellow is
 a visually passed engine render whose required depth path is absent (and is
 therefore still CI-failing for Godot/Unity), red is a produced rendering or
 attempted depth-composition failure, and gray is genuinely untested or out of
 scope. Godot and Unity can never become green from render-only evidence, and
-both orange and gray engine cells remain required validation gaps.
+both yellow and gray engine cells remain required validation gaps.
 
 The Android Unity lane's optional `ffmpeg` installation is bounded to five
 minutes, with two-minute package-manager command limits. This prevents a
@@ -79,6 +79,26 @@ Run `30907547626` at `18b22b41` provides the next audited job-level results:
   probes in full-depth on the pushed revision. The pending Metal depth
   attachment/render-graph composite change is the next cloud experiment.
 
+Run `30909845212` at `dc7a99d4` confirms that the ordered-overlay repair is
+visually correct on Windows Godot Vulkan: the IMM scene and all probes are
+present, and cyan leakage in the character occlusion region is zero. The job
+nevertheless failed because its GDScript fast-fail check was inverted and
+required cyan in the region that the visual contract correctly requires to be
+occluded. Ordered-overlay and full-depth now use the same rear-occlusion probe
+condition; logs can no longer reject the correct image for the opposite rule.
+
+The same run isolates the remaining shared Godot full-depth defect on both
+Windows Vulkan and macOS Metal. IMM geometry and the depth probes render, but
+the IMM far-depth 360 background is absent and rejected host pixels become
+black. The compositor now performs depth selection into a separate complete
+color target, writing either IMM or preserved Godot color for every pixel,
+then copies that merged target back to Godot color. It identifies untouched IMM
+pixels by transparent color rather than rejecting depth 1.0, because the 360
+background is legitimate far-plane content. A local Windows Vulkan capture
+contains the complete scene and correct occlusion, passes the authoritative
+`sample1-full-depth` comparator at correlation `0.935`, and passes the pixel
+probes. Cloud Vulkan and Metal confirmation is pending.
+
 The next cloud run must confirm the reporting and cyan corrections. Once confirmed, product work proceeds only on the genuine failures above, with the Quest two-eye physical acceptance test remaining the Android Vulkan exit criterion.
 
 ### Current priority order
@@ -86,10 +106,9 @@ The next cloud run must confirm the reporting and cyan corrections. Once confirm
 1. **Current gate:** finish removing false visual failures before further product-side stereo changes. The validators reject reverse-Z, missing IMM content, duplicated stereo views, sky-only eyes, cyan inside the must-be-occluded character interior, black/default scenes, and graphics-API fallback. Every validation step includes an authoritative visual check; logs remain fast-fail diagnostics only.
 2. **Cloud-confirmed through run `30901787140`, with one reporting and one Metal edge-tolerance follow-up awaiting rerun:** run the full suite at an exact revision, manually inspect every capture, and reconcile every automatic result with the image. The Android external-display contract accepts normal animated-renderer variation at correlation `0.480` while retaining two consecutive samples plus independent blank/default/probe rejection. The cyan contract is localized to the character interior because the previous broad region counted correct visible square edges and a cyan butterfly.
 3. **Cloud synthetic milestone complete; Quest acceptance remains:** Quest Multi Pass native eye production and the Firebase presentation fixture now produce distinct, correct eye pairs without changing the working Metal, OpenGL, DirectX, Windows Vulkan, or non-XR paths. Confirm both displayed eyes on a physical Quest before calling the OpenXR handoff fixed.
-4. Fix the remaining genuine rendering/composition defects: preserve Godot
-   Vulkan host color in full-depth, confirm Godot Metal full-depth through the
-   same render-graph depth path, and retain the now-confirmed Godot and Unity
-   ordered-overlay repairs. IMM uses discard/stencil, MSAA coverage, and
+4. Confirm the locally corrected Godot Vulkan and Metal full-depth path in the
+   cloud and retain the now-confirmed Godot and Unity ordered-overlay repairs.
+   IMM uses discard/stencil, MSAA coverage, and
    stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not
    a valid substitute.
 5. Add Single Pass Instanced validation after Multi Pass is correct. The architecture must support Single Pass without another redesign, although true Vulkan multiview is a later performance optimization rather than a prerequisite for correctness.

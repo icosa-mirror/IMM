@@ -281,15 +281,19 @@ func _run_visual_smoke() -> void:
 					failures.append("full-depth Vulkan composition render-graph depth composite failed")
 				if not bool(compositor_diagnostics.get("last_had_intermediate_texture", false)) or not bool(compositor_diagnostics.get("last_had_intermediate_depth_texture", false)):
 					failures.append("full-depth Vulkan composition did not render IMM into color and depth intermediate textures")
+				if not bool(compositor_diagnostics.get("last_had_depth_composited_texture", false)) or not bool(compositor_diagnostics.get("last_depth_color_merge_result", false)):
+					failures.append("full-depth Vulkan composition did not merge IMM depth with Godot host color in a separate render-graph target")
 				if int(compositor_diagnostics.get("last_vulkan_depth_image_handle", 0)) == 0 or int(compositor_diagnostics.get("last_vulkan_depth_image_view_handle", 0)) == 0:
 					failures.append("full-depth Vulkan composition did not receive Godot depth image handles")
 		else:
 			if not bool(compositor_diagnostics.get("last_metal_frame_started", false)):
 				failures.append("ImmViewerCompositorEffect did not start a Metal frame")
 			if _visual_smoke_composition_mode() == COMPOSITION_MODE_FULL_DEPTH:
-				print("[IMM_GODOT_METAL_DEPTH_COMPOSITE_20260804] color=%s depth=%s composite=%s" % [
+				print("[IMM_GODOT_METAL_DEPTH_COMPOSITE_20260804] color=%s depth=%s merged_color=%s merge=%s composite=%s" % [
 					str(compositor_diagnostics.get("last_had_intermediate_texture", false)),
 					str(compositor_diagnostics.get("last_had_intermediate_depth_texture", false)),
+					str(compositor_diagnostics.get("last_had_depth_composited_texture", false)),
+					str(compositor_diagnostics.get("last_depth_color_merge_result", false)),
 					str(compositor_diagnostics.get("last_depth_aware_vulkan_composite_result", false)),
 				])
 				if not bool(compositor_diagnostics.get("last_depth_aware_vulkan_composite", false)):
@@ -298,6 +302,8 @@ func _run_visual_smoke() -> void:
 					failures.append("full-depth Metal composition render-graph depth composite failed")
 				if not bool(compositor_diagnostics.get("last_had_intermediate_texture", false)) or not bool(compositor_diagnostics.get("last_had_intermediate_depth_texture", false)):
 					failures.append("full-depth Metal composition did not render IMM into color and depth intermediate textures")
+				if not bool(compositor_diagnostics.get("last_had_depth_composited_texture", false)) or not bool(compositor_diagnostics.get("last_depth_color_merge_result", false)):
+					failures.append("full-depth Metal composition did not merge IMM depth with Godot host color in a separate render-graph target")
 		if int(compositor_diagnostics.get("last_render_result", -1)) < 0:
 			failures.append("ImmGodot_RenderCamera returned %d" % int(compositor_diagnostics.get("last_render_result", -1)))
 
@@ -705,15 +711,11 @@ func _append_scene_composition_failures(diagnostics: Dictionary, failures: Array
 	var front: Dictionary = diagnostics.get("front_probe", {})
 	var rear_visible: Dictionary = diagnostics.get("rear_visible_probe", {})
 	var rear_occluded: Dictionary = diagnostics.get("rear_occluded_probe", {})
-	var ordered_overlay: bool = _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY
 	if int(front.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(front.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
 		failures.append("scene composition %s front occluder probe failed: %s" % [label, str(front)])
 	if int(rear_visible.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_visible.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
 		failures.append("scene composition %s rear visible probe failed: %s" % [label, str(rear_visible)])
-	if ordered_overlay:
-		if int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) < MIN_SCENE_PROBE_DOMINANT_SHARE:
-			failures.append("scene composition %s ordered overlay rear probe failed: %s" % [label, str(rear_occluded)])
-	elif int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) > MAX_SCENE_PROBE_OCCLUDED_SHARE:
+	if int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) > MAX_SCENE_PROBE_OCCLUDED_SHARE:
 		failures.append("scene composition %s rear occlusion leakage probe failed: %s" % [label, str(rear_occluded)])
 
 func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Color) -> Dictionary:

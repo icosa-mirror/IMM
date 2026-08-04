@@ -55,7 +55,7 @@ VISUAL_MATRIX_PRODUCTS = ("standalone", "godot", "unity")
 VISUAL_MATRIX_SYMBOLS = {
     "passed": "🟩",
     "depth_passed": "🟩",
-    "render_passed": "🟧",
+    "render_passed": "🟨",
     "failed": "🟥",
     "not_tested": "⬜",
 }
@@ -459,7 +459,7 @@ def add_visual_matrix(
         [
             "## Visual Matrix",
             "",
-            "🟩 validation passed · 🟧 engine render passed but required depth is absent · 🟥 rendering or attempted depth composition failed · ⬜ not tested/out of scope",
+            "🟩 validation passed · 🟨 engine render passed but required depth is absent · 🟥 rendering or attempted depth composition failed · ⬜ not tested/out of scope",
             "",
             "| Platform | Standalone | Godot | Unity |",
             "| --- | :---: | :---: | :---: |",
