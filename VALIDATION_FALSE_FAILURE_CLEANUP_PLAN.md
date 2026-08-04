@@ -8,11 +8,39 @@ The cyan depth/occlusion contract must distinguish genuinely foreground cyan ins
 
 ## Execution order
 
+### Current audited state: run `30901787140`
+
+Run `30901787140` at `3e776a57` is the first cloud run in which the complete Unity Android Vulkan lane passes and its images survive manual review:
+
+- render-only, composition, and physical-screen captures contain the expected IMM scene;
+- both presented synthetic eyes contain complete, distinct views with real parallax;
+- the presented pair matches the independently captured native-eye pair;
+- the full-depth cyan probe is correctly occluded by the character apart from its exposed rim;
+- the external-video validator selects two consecutive valid frames at two-second cadence.
+
+This is strong cloud evidence for the native Multi Pass eye-matrix fix and the validation presenter fix. It is not a substitute for the final Quest/OpenXR compositor test, which still requires both physical eyes to be inspected.
+
+The same run exposed two remaining false report signals. They are now fixed locally:
+
+1. A passed build-only manifest with no strict image was converted into `failed` and overrode a sibling passing visual manifest. Build-only evidence is now `evidence_incomplete`: it still fails closed when it is the only evidence, but cannot override an authoritative visual pass. This corrects the false `unity/windows/non-vr/directx` matrix result and distinguishes the hardware-gated Windows Vulkan evidence gap from a produced bad image.
+2. Unity Metal full-depth contained only a small renderer-dependent cyan edge component (`0.000207` of the crop), but the limit was `0.000150`. The reviewed image is correctly occluded. The limit is now `0.000500`; the known-bad Windows Godot overlay remains rejected at `0.003597`, more than seven times the revised maximum. Positive edge-noise fixtures and the existing foreground-cyan negative fixture protect both sides of the boundary.
+
+After those corrections, the remaining visible failures in `30901787140` are genuine or explicit coverage limitations:
+
+- Unity Metal ordered-overlay: magenta and yellow probes are absent;
+- Windows Godot full-depth: only the sky/background is present;
+- Windows Godot ordered-overlay: the cyan rear square is drawn over the character;
+- macOS Godot Metal composition: required probes are absent;
+- hosted Windows Unity Vulkan synthetic stereo: Unity rejects Lavapipe Vulkan and falls back to Direct3D, so no Vulkan image exists;
+- Windows Unity Vulkan full-depth/ordered-overlay: hardware-gated jobs did not run, so the non-VR Vulkan row has incomplete evidence rather than a visual failure.
+
+The next cloud run must confirm the reporting and cyan corrections. Once confirmed, product work proceeds only on the genuine failures above, with the Quest two-eye physical acceptance test remaining the Android Vulkan exit criterion.
+
 ### Current priority order
 
 1. **Current gate:** finish removing false visual failures before further product-side stereo changes. The validators reject reverse-Z, missing IMM content, duplicated stereo views, sky-only eyes, cyan inside the must-be-occluded character interior, black/default scenes, and graphics-API fallback. Every validation step includes an authoritative visual check; logs remain fast-fail diagnostics only.
-2. **Completed with run `30892709675`, with corrections from `30897579019`:** run the full suite at an exact revision, manually inspect every capture, and reconcile every automatic result with the image. The Android external-display contract accepts normal animated-renderer variation at correlation `0.480` while retaining two consecutive samples plus independent blank/default/probe rejection. The cyan contract is localized to the character interior because the previous broad region counted correct visible square edges and a cyan butterfly.
-3. After that gate is cloud-confirmed, fix the genuine Unity Android Vulkan stereo failure. Repair Quest Multi Pass so both eyes contain distinct, correct IMM content and make the Firebase synthetic-stereo lane exercise the same production two-eye producer/presentation path, without changing the working Metal, OpenGL, DirectX, Windows Vulkan, or non-XR paths.
+2. **Cloud-confirmed through run `30901787140`, with one reporting and one Metal edge-tolerance follow-up awaiting rerun:** run the full suite at an exact revision, manually inspect every capture, and reconcile every automatic result with the image. The Android external-display contract accepts normal animated-renderer variation at correlation `0.480` while retaining two consecutive samples plus independent blank/default/probe rejection. The cyan contract is localized to the character interior because the previous broad region counted correct visible square edges and a cyan butterfly.
+3. **Cloud synthetic milestone complete; Quest acceptance remains:** Quest Multi Pass native eye production and the Firebase presentation fixture now produce distinct, correct eye pairs without changing the working Metal, OpenGL, DirectX, Windows Vulkan, or non-XR paths. Confirm both displayed eyes on a physical Quest before calling the OpenXR handoff fixed.
 4. Fix the remaining genuine rendering/composition defects: Godot Vulkan full-depth/sky-only output, Godot ordered-overlay occlusion, and Unity Metal ordered-overlay probe loss. IMM uses discard/stencil, MSAA coverage, and stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not a valid substitute.
 5. Add Single Pass Instanced validation after Multi Pass is correct. The architecture must support Single Pass without another redesign, although true Vulkan multiview is a later performance optimization rather than a prerequisite for correctness.
 
@@ -24,12 +52,12 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
 - The plugin explicitly does not support instanced single-pass and forces a stereo camera to its `TwoPass` integration path, except for its legacy `SinglePass` mode.
 - A real Quest test confirms a product failure in that supported path: the left eye renders IMM strokes correctly while the right eye shows only Unity's background sky sphere.
 - Firebase synthetic stereo is not yet a Quest-equivalent test. It manually invokes `Camera.Render()` twice and supplies the eye index, so it verifies two target writes and capture plumbing but bypasses Unity's real XR Multi Pass callback/eye-target/composite handoff.
-- The synthetic lane is currently correctly red because its two images are byte-identical despite distinct targets/events. Do not use it as evidence that the Quest right-eye failure is fixed.
+- The Firebase synthetic lane now passes with distinct, independently valid native and presented eye pairs. Use it as evidence that native eye production and the flat validation presenter are correct, but not as proof that the Quest/OpenXR compositor displays both eyes.
 - Fork commit `52f3e462` exposed a concrete native Multi Pass defect: Vulkan paint shaders index `mEye[pass.mID]`, but `RenderStereoMultiPass` only populated slot 0. The equivalent fix is now on `main` as `df970cd0`; each one-eye call copies the current eye matrix into both shader slots so the paint and picture shader variants consume the same current-eye transform. CI rebuilds the Android native plugin from that revision and injects it into the APK, so this is not merely a source-only change.
 - Run `30899560536` isolates the handoff. Both native eye RenderTextures independently pass the approved render baseline and differ by `697101` pixels, while the presented pair is byte-identical (`0` changed pixels) and shows eye 0 twice. This cloud-proves that the rebuilt native Multi Pass patch produces correct distinct left/right IMM renders; the failure is downstream in the flat synthetic presentation fixture.
 - Source tracing found that downstream bug: the flat Android Vulkan `OnRenderImage` presenter always sampled `VulkanEyeTargets[0]`, including during the explicit eye-1 synthetic render. The validation-only override now selects `VulkanEyeTargets[presentationEye]`, and its log contract requires each presented target ID and native pointer to equal the corresponding dispatched eye target. This does not alter ordinary mono Android presentation or the real stereo XR path.
 - Other VR targets already render correctly. Do not replace or broadly redesign their stereo integration. The additional offscreen-render-and-present mechanism is specific to Android Vulkan because Unity's Android Vulkan display render buffer is not reliably accessible to the native plugin.
-- The current Android Vulkan path reuses one mutable per-camera command buffer and chooses its event ID and source eye texture while handling `OnPreCull`. Unity may prepare both Multi Pass eyes before executing their render work, allowing the second callback to replace state needed by one pass. This is the leading explanation for left-eye IMM content with a right-eye sky-only result, but a real-device capture of the native right-eye target must distinguish native target failure from presentation failure.
+- The Android Vulkan path still reuses one mutable per-camera command buffer and chooses its event ID and source eye texture while handling `OnPreCull`. Although the native shader-eye defect is fixed and cloud eye targets are now correct, a physical Quest retest must determine whether Unity's real XR callback/compositor handoff has any remaining right-eye failure.
 - The durable fix is to collect both eye matrices, render both Android Vulkan IMM targets deterministically once per frame, and present them through a Unity stereo-aware pass that selects the eye at GPU execution time. Do not make CPU-side `stereoActiveEye` state or a repeatedly cleared command buffer authoritative for eye selection.
 - Multi Pass remains the first acceptance target. The implementation must nevertheless carry both eye results together so Single Pass Instanced can use the same producer and presentation path later.
 

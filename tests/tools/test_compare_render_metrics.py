@@ -89,6 +89,7 @@ def make_probe_pixels(
     height: int,
     show_rear_occluded: bool,
     show_legitimate_cyan: bool = False,
+    occluded_edge_pixel_count: int = 0,
 ) -> list[tuple[int, int, int]]:
     pixels = [(16, 20, 24)] * (width * height)
     for y in range(height // 2, height):
@@ -106,6 +107,8 @@ def make_probe_pixels(
         for y in range(y0, y1):
             for x in range(x0, x1):
                 pixels[y * width + x] = color
+    for index in range(occluded_edge_pixel_count):
+        pixels[(48 + index) * width + 52] = (0, 255, 255)
     return pixels
 
 
@@ -125,6 +128,7 @@ def main() -> int:
         diagnostic_path = temp / "diagnostic-squares.ppm"
         probe_good_path = temp / "probe-good.ppm"
         probe_legitimate_cyan_path = temp / "probe-legitimate-cyan.ppm"
+        probe_small_occluded_edge_path = temp / "probe-small-occluded-edge.ppm"
         probe_wrong_depth_path = temp / "probe-wrong-depth.ppm"
         probe_overlay_path = temp / "probe-wrong-depth-overlay.png"
         png_path = temp / "candidate.png"
@@ -147,6 +151,12 @@ def main() -> int:
             100,
             100,
             make_probe_pixels(100, 100, False, show_legitimate_cyan=True),
+        )
+        write_ppm(
+            probe_small_occluded_edge_path,
+            100,
+            100,
+            make_probe_pixels(100, 100, False, occluded_edge_pixel_count=2),
         )
         write_ppm(probe_wrong_depth_path, 100, 100, make_probe_pixels(100, 100, True))
         write_render_report.write_png(
@@ -352,6 +362,12 @@ def main() -> int:
         assert compare_render_metrics.validate_color_component_contract(
             production_overlay_contract, production_overlay_legitimate_cyan
         ) == []
+        production_overlay_small_edge = compare_render_metrics.collect_color_component_metrics(
+            probe_small_occluded_edge_path, production_overlay_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_overlay_contract, production_overlay_small_edge
+        ) == []
         production_overlay_wrong_depth = compare_render_metrics.collect_color_component_metrics(
             probe_wrong_depth_path, production_overlay_contract
         )
@@ -372,6 +388,12 @@ def main() -> int:
         )
         assert compare_render_metrics.validate_color_component_contract(
             production_full_depth_contract, production_full_depth_good
+        ) == []
+        production_full_depth_small_edge = compare_render_metrics.collect_color_component_metrics(
+            probe_small_occluded_edge_path, production_full_depth_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_full_depth_contract, production_full_depth_small_edge
         ) == []
         production_full_depth_wrong_depth = compare_render_metrics.collect_color_component_metrics(
             probe_wrong_depth_path, production_full_depth_contract
@@ -399,6 +421,12 @@ def main() -> int:
         )
         assert compare_render_metrics.validate_color_component_contract(
             android_composition_contract, android_composition_legitimate_cyan
+        ) == []
+        android_composition_small_edge = compare_render_metrics.collect_color_component_metrics(
+            probe_small_occluded_edge_path, android_composition_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            android_composition_contract, android_composition_small_edge
         ) == []
         android_composition_wrong_depth = compare_render_metrics.collect_color_component_metrics(
             probe_wrong_depth_path, android_composition_contract

@@ -276,8 +276,16 @@ def observed_matrix_results(input_root: Path, report_keys: set[str]) -> dict[str
                 if str(classification.get("failure_class") or "") == "build":
                     continue
             renderer = str(matrix.get("renderer") or "")
-            if renderer in VISUAL_RENDERERS and not find_strict_metrics(manifest_path.parent):
-                result = "failed"
+            if (
+                renderer in VISUAL_RENDERERS
+                and not find_strict_metrics(manifest_path.parent)
+                and result not in {"failed", "failure", "cancelled", "expected_failed"}
+            ):
+                # A build/package manifest is useful supporting evidence, but
+                # it cannot make a visual row pass or fail. Keep it explicitly
+                # incomplete so a sibling visual pass remains authoritative,
+                # while a row with only build evidence still fails closed.
+                result = "evidence_incomplete"
             observed.setdefault(key, set()).add(result or "present")
     return observed
 
@@ -306,6 +314,8 @@ def coverage_status_for(row: dict, results: set[str]) -> str:
         return "expected failure"
     if "passed" in results:
         return "passed"
+    if "evidence_incomplete" in results:
+        return "evidence_incomplete"
     return "failed"
 
 
@@ -342,6 +352,7 @@ def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
     supported = [row for row in coverage if row["status"] == "supported"]
     missing = [row for row in supported if row["coverage_status"] == "missing evidence"]
     failed = [row for row in supported if row["coverage_status"] == "failed"]
+    incomplete = [row for row in supported if row["coverage_status"] == "evidence_incomplete"]
     expected_failed = [row for row in supported if row["coverage_status"] == "expected failure"]
     deferred = [row for row in coverage if row["status"] == "deferred"]
     unsupported = [row for row in coverage if row["status"] == "unsupported"]
@@ -353,6 +364,7 @@ def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
             f"- Supported rows with evidence in this artifact: {len(supported) - len(missing)}",
             f"- Supported rows missing evidence in this artifact: {len(missing)}",
             f"- Supported rows failed: {len(failed)}",
+            f"- Supported rows evidence-incomplete: {len(incomplete)}",
             f"- Supported rows expected-failed: {len(expected_failed)}",
             f"- Deferred rows: {len(deferred)}",
             f"- Unsupported rows: {len(unsupported)}",
@@ -375,6 +387,11 @@ def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
     if failed:
         lines.append("### Failed Supported Evidence")
         for row in failed:
+            lines.append(f"- {row['key']}: {row['reason']}")
+        lines.append("")
+    if incomplete:
+        lines.append("### Evidence-Incomplete Supported Evidence")
+        for row in incomplete:
             lines.append(f"- {row['key']}: {row['reason']}")
         lines.append("")
     if expected_failed:
@@ -417,7 +434,11 @@ def status_only_result(row: dict, manifest: dict) -> tuple[str, str]:
     classification = manifest.get("classification") or {}
     result = str(classification.get("result") or row["coverage_status"])
     failure_class = str(classification.get("failure_class") or "")
-    if row["visual"] and row["coverage_status"] == "failed" and result == "passed":
+    if (
+        row["visual"]
+        and row["coverage_status"] in {"failed", "evidence_incomplete"}
+        and result == "passed"
+    ):
         return "evidence_incomplete", "evidence"
     if result in {"failed", "failure"}:
         result = {
@@ -895,7 +916,11 @@ def main() -> int:
     for row in coverage:
         if row["status"] != "supported":
             continue
-        evidence_invalid = row["coverage_status"] in {"failed", "expected failure"}
+        evidence_invalid = row["coverage_status"] in {
+            "failed",
+            "expected failure",
+            "evidence_incomplete",
+        }
         missing_required = row["coverage_status"] == "missing evidence" and (
             args.required_evidence_scope == "all"
             or (args.required_evidence_scope == "hosted" and bool(row["hosted_gate"]))

@@ -39,7 +39,7 @@ namespace ImmPlayer
         private const int MinRegionPixels = 24;
         private const float MinFrontProbeShare = 0.01f;
         private const float MinRearVisibleProbeShare = 0.0075f;
-        private const float MaxOccludedShare = 0.00015f;
+        private const float MaxOccludedShare = 0.0005f;
         private const float MinOrderedOverlayImmShare = 0.02f;
         private const int MinOrderedOverlayImmUniqueColors = 5000;
         private const float MinOrderedOverlayTopRightBrightToBottomRightRatio = 2.0f;

@@ -657,11 +657,71 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        directx_visual = temp / "raw" / "UnityWindowsDirectXComposition"
+        directx_visual.mkdir(parents=True)
+        (directx_visual / "render-metrics.json").write_text(
+            json.dumps(
+                {
+                    "passed": True,
+                    "candidate": {"width": 1, "height": 1},
+                    "reference": {"width": 1, "height": 1},
+                    "contract": {"path": "unity-windows-directx-sample1.json"},
+                    "spatial_luma_grid": {
+                        "mean_abs_delta": 0.01,
+                        "correlation": 0.99,
+                    },
+                    "errors": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (directx_visual / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {"result": "passed", "failure_class": ""},
+                    "matrix": {
+                        "product": "unity",
+                        "platform": "windows",
+                        "mode": "non-vr",
+                        "renderer": "directx",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        directx_build = temp / "raw" / "UnityWindowsDirectXPlayerBuild"
+        directx_build.mkdir(parents=True)
+        (directx_build / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {"result": "passed", "failure_class": ""},
+                    "matrix": {
+                        "product": "unity",
+                        "platform": "windows",
+                        "mode": "non-vr",
+                        "renderer": "directx",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         matrix = temp / "matrix.json"
         matrix.write_text(
             json.dumps(
                 {
                     "rows": [
+                        {
+                            "product": "unity",
+                            "platform": "windows",
+                            "mode": "non-vr",
+                            "renderer": "directx",
+                            "status": "supported",
+                            "hosted_gate": "CI Engine Matrix / Unity Windows DirectX",
+                            "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
+                            "reason": "Passing visual evidence must outrank a build-only manifest.",
+                        },
                         {
                             "product": "unity",
                             "platform": "windows",
@@ -706,6 +766,8 @@ def main() -> int:
         assert completed.returncode == 1
         text = report.read_text(encoding="utf-8")
         assert "## Status-Only Evidence" in text
+        assert "| unity/windows/non-vr/directx | supported | passed | yes |" in text
+        assert "| unity/windows/synthetic-stereo/vulkan | supported | failed | yes |" in text
         assert "### Unity Windows Synthetic Stereo Vulkan" in text
         assert "- Result: runtime_failed" in text
         assert "- Failure class: runtime" in text
