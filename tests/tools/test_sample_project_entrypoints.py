@@ -112,11 +112,15 @@ def main() -> int:
     assert "RunMacOSEditorPlayModeSmoke();" in combined_smoke
     editor_play = method_body(unity_automation, "public static void RunMacOSEditorPlayModeSmoke()")
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
-    assert "camera.targetTexture = target;" in unity_automation
-    assert "camera.Render();" in unity_automation
-    assert "capture.ReadPixels(" in unity_automation
-    assert "camera.targetTexture = previousCameraTarget;" in unity_automation
-    assert "[IMM_EDITOR_CAMERA_CAPTURE_20260804]" in unity_automation
+    assert "TryCaptureEditorPlayScreenshot" not in unity_automation
+    assert "CaptureScreenshotAsTexture" not in unity_automation
+    unity_runtime_smoke = (
+        ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
+    ).read_text(encoding="utf-8")
+    assert "Application.isEditor ||" in unity_runtime_smoke
+    assert "yield return new WaitForEndOfFrame();" in unity_runtime_smoke
+    assert "Texture2D screenTexture = ScreenCapture.CaptureScreenshotAsTexture();" in unity_runtime_smoke
+    assert "[IMM_EDITOR_END_OF_FRAME_CAPTURE_20260804]" in unity_runtime_smoke
     for token in [
         "Build Unity macOS Metal smoke player and run project Play-button smoke",
         "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",

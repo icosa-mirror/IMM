@@ -25,13 +25,11 @@ namespace ImmPlayer.Editor
         private const string RuntimeSmokeCompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
         private const string RuntimeSmokeOverlayProbeEnv = "IMM_UNITY_SMOKE_OVERLAY_PROBE";
         private const string RuntimeSmokeXrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
-        private const string EditorSmokeCaptureDelaySecondsEnv = "IMM_UNITY_EDITOR_SMOKE_CAPTURE_DELAY_SECONDS";
         private const string EditorOverlayFixtureEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE";
         private const string EditorOverlayFixtureSolidClearEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE_SOLID_CLEAR";
         private const string EditorOverlayFixtureSecondCameraEnv = "IMM_UNITY_EDITOR_OVERLAY_FIXTURE_SECOND_CAMERA";
         private const string EditorSmokeActiveKey = "IMM_EDITOR_SMOKE_ACTIVE";
         private const string EditorSmokeCapturePathKey = "IMM_EDITOR_SMOKE_CAPTURE_PATH";
-        private const string EditorSmokeCaptureRequestedKey = "IMM_EDITOR_SMOKE_CAPTURE_REQUESTED";
         private const string EditorSmokeNativeLogPathKey = "IMM_EDITOR_SMOKE_NATIVE_LOG_PATH";
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
@@ -557,30 +555,6 @@ namespace ImmPlayer.Editor
                 }
             }
 
-            TimeSpan elapsed = DateTime.UtcNow - s_EditorSmokeStartTimeUtc;
-            double captureDelaySeconds = 8.0;
-            string captureDelayText = Environment.GetEnvironmentVariable(EditorSmokeCaptureDelaySecondsEnv);
-            if (!string.IsNullOrEmpty(captureDelayText) &&
-                double.TryParse(captureDelayText, out double configuredCaptureDelaySeconds) &&
-                configuredCaptureDelaySeconds >= 0.0)
-            {
-                captureDelaySeconds = configuredCaptureDelaySeconds;
-            }
-
-            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) &&
-                !SessionState.GetBool(EditorSmokeCaptureRequestedKey, false) &&
-                elapsed.TotalSeconds > captureDelaySeconds)
-            {
-                SessionState.SetBool(EditorSmokeCaptureRequestedKey, true);
-                UnityEngine.Debug.Log($"[IMM_EDITOR_CAMERA_CAPTURE_20260804] requesting synchronous Play-mode capture: {s_EditorSmokeCapturePath}");
-                if (!TryCaptureEditorPlayScreenshot(s_EditorSmokeCapturePath))
-                {
-                    s_EditorSmokeRequestedExit = true;
-                    EditorApplication.Exit(2);
-                    return;
-                }
-            }
-
             if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
             {
                 s_EditorSmokeRequestedExit = true;
@@ -589,76 +563,12 @@ namespace ImmPlayer.Editor
                 return;
             }
 
+            TimeSpan elapsed = DateTime.UtcNow - s_EditorSmokeStartTimeUtc;
             if (elapsed.TotalSeconds > 90.0)
             {
                 s_EditorSmokeRequestedExit = true;
                 UnityEngine.Debug.LogError($"[IMM_EDITOR_SMOKE] timed out waiting for capture: {s_EditorSmokeCapturePath}");
                 EditorApplication.Exit(2);
-            }
-        }
-
-        private static bool TryCaptureEditorPlayScreenshot(string capturePath)
-        {
-            Texture2D capture = null;
-            RenderTexture target = null;
-            RenderTexture previousActive = RenderTexture.active;
-            Camera camera = Camera.main;
-            if (camera == null)
-            {
-                camera = UnityEngine.Object.FindObjectOfType<Camera>();
-            }
-            if (camera == null)
-            {
-                UnityEngine.Debug.LogError("[IMM_EDITOR_CAMERA_CAPTURE_20260804] no active camera found");
-                return false;
-            }
-
-            RenderTexture previousCameraTarget = camera.targetTexture;
-            try
-            {
-                const int captureWidth = 1280;
-                const int captureHeight = 720;
-                target = RenderTexture.GetTemporary(
-                    captureWidth,
-                    captureHeight,
-                    24,
-                    RenderTextureFormat.ARGB32,
-                    RenderTextureReadWrite.Default);
-                target.name = "IMM Editor Play Smoke Capture";
-                camera.targetTexture = target;
-                camera.Render();
-
-                RenderTexture.active = target;
-                capture = new Texture2D(captureWidth, captureHeight, TextureFormat.RGB24, false);
-                capture.ReadPixels(new Rect(0, 0, captureWidth, captureHeight), 0, 0, false);
-                capture.Apply(false, false);
-
-                string directory = Path.GetDirectoryName(capturePath);
-                if (!string.IsNullOrEmpty(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-                File.WriteAllBytes(capturePath, capture.EncodeToPNG());
-                UnityEngine.Debug.Log($"[IMM_EDITOR_CAMERA_CAPTURE_20260804] wrote {capture.width}x{capture.height} capture: {capturePath}");
-                return true;
-            }
-            catch (Exception exception)
-            {
-                UnityEngine.Debug.LogError($"[IMM_EDITOR_CAMERA_CAPTURE_20260804] failed: {exception}");
-                return false;
-            }
-            finally
-            {
-                camera.targetTexture = previousCameraTarget;
-                RenderTexture.active = previousActive;
-                if (capture != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(capture);
-                }
-                if (target != null)
-                {
-                    RenderTexture.ReleaseTemporary(target);
-                }
             }
         }
 
@@ -705,7 +615,6 @@ namespace ImmPlayer.Editor
         {
             SessionState.EraseBool(EditorSmokeActiveKey);
             SessionState.EraseString(EditorSmokeCapturePathKey);
-            SessionState.EraseBool(EditorSmokeCaptureRequestedKey);
             SessionState.EraseString(EditorSmokeNativeLogPathKey);
             SessionState.EraseString(EditorSmokeStartTicksKey);
         }

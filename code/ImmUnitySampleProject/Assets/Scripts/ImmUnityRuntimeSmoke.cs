@@ -296,8 +296,13 @@ namespace ImmPlayer
             }
 #else
             bool usePresentedFrameCapture = !IsTruthyValue(Environment.GetEnvironmentVariable(CaptureCameraTextureEnv)) &&
-                (_overlayProbeEnabled ||
+                (Application.isEditor ||
+                _overlayProbeEnabled ||
                 (_compositionProbeEnabled && SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Vulkan));
+            if (Application.isEditor && usePresentedFrameCapture)
+            {
+                Debug.Log("[IMM_EDITOR_END_OF_FRAME_CAPTURE_20260804] capturing the normally presented Game View frame");
+            }
             Texture2D tex = _diagnosticCameraTargetTexture != null
                 ? CaptureRenderTexture(_diagnosticCameraTargetTexture)
                 : (_overlayProbeEnabled && SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Vulkan
