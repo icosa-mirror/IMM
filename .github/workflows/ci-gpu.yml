@@ -1118,6 +1118,7 @@ jobs:
           cp "$native" code/ImmGodotSampleProject/addons/imm_viewer/bin/macos/debug/libImmGodotPlugin.dylib
 
       - name: Run Godot Metal visual smoke
+        continue-on-error: true
         timeout-minutes: 8
         run: |
           set -euo pipefail
@@ -1145,6 +1146,7 @@ jobs:
 
       - name: Record Godot Metal render metrics
         if: always()
+        continue-on-error: true
         run: |
           metrics_status=0
           python3 tests/tools/compare_render_metrics.py \
@@ -1160,8 +1162,22 @@ jobs:
             --diagnostic-overlay-output artifacts/godot-smoke-macos-metal/godot-metal-composition-diagnostic.png || metrics_status=$?
           exit "$metrics_status"
 
+      - name: Classify Godot Metal visual evidence
+        if: always()
+        run: >
+          python3 tests/tools/classify_godot_visual_smoke.py
+          --log artifacts/godot-smoke-macos-metal/godot-metal-smoke.log
+          --renderer metal
+          --composition-mode full_depth
+          --render-capture artifacts/godot-smoke-macos-metal/metal_render_baseline.png
+          --composition-capture artifacts/godot-smoke-macos-metal/metal_visual_smoke.png
+          --render-metrics artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
+          --composition-metrics artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json
+          --output artifacts/godot-smoke-macos-metal/composition-status.json
+
       - name: Write Godot Metal render report
         if: always()
+        continue-on-error: true
         run: >
           python3 tests/tools/write_render_report.py
           --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-render-metrics.json
@@ -1170,6 +1186,7 @@ jobs:
           --markdown-output artifacts/godot-smoke-macos-metal/render-report.md
       - name: Write Godot Metal composition report
         if: always()
+        continue-on-error: true
         run: >
           python3 tests/tools/write_render_report.py
           --metrics-json artifacts/godot-smoke-macos-metal/godot-metal-composition-metrics.json
@@ -1180,7 +1197,7 @@ jobs:
 
       - name: Write CI manifest
         if: always()
-        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/godot-smoke-macos-metal/composition-status.json --output artifacts/godot-smoke-macos-metal/manifest.json --product godot --platform-name macos --mode non-vr --renderer metal --include artifacts/godot-smoke-macos-metal
       - name: Collect artifact summary
         if: always()
         run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-smoke-macos-metal --require-manifest --output artifacts/godot-smoke-macos-metal/artifact-summary.json

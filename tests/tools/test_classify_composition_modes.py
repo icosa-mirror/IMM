@@ -66,6 +66,87 @@ def run_godot_classifier(temp: Path, mode: str, log_text: str) -> tuple[int, dic
     return result.returncode, json.loads(output.read_text(encoding="utf-8"))
 
 
+def write_metric(path: Path, passed: bool, failure: str = "visual mismatch") -> None:
+    path.write_text(
+        json.dumps({"passed": passed, "errors": [] if passed else [failure]}),
+        encoding="utf-8",
+    )
+
+
+def run_unity_external_classifier(
+    temp: Path,
+    name: str,
+    log_text: str,
+    render_passed: bool,
+    composition_passed: bool,
+    expected_api: str | None = None,
+) -> tuple[int, dict]:
+    log = temp / f"unity_external_{name}.log"
+    render_capture = temp / f"unity_external_{name}_render.png"
+    composition_capture = temp / f"unity_external_{name}_composition.png"
+    render_metrics = temp / f"unity_external_{name}_render.json"
+    composition_metrics = temp / f"unity_external_{name}_composition.json"
+    output = temp / f"unity_external_{name}_status.json"
+    log.write_text(log_text, encoding="utf-8")
+    render_capture.write_bytes(PNG_1X1)
+    composition_capture.write_bytes(PNG_1X1)
+    write_metric(render_metrics, render_passed, "missing IMM content")
+    write_metric(composition_metrics, composition_passed, "cyan leakage")
+    command = [
+        sys.executable,
+        "tests/tools/classify_unity_visual_smoke.py",
+        "--log", str(log),
+        "--capture", str(composition_capture),
+        "--render-capture", str(render_capture),
+        "--render-metrics", str(render_metrics),
+        "--composition-metrics", str(composition_metrics),
+        "--composition-mode", "full_depth",
+        "--output", str(output),
+    ]
+    if expected_api:
+        command.extend(["--expected-graphics-api", expected_api])
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    return result.returncode, json.loads(output.read_text(encoding="utf-8"))
+
+
+def run_godot_external_classifier(
+    temp: Path,
+    name: str,
+    log_text: str,
+    render_passed: bool,
+    composition_passed: bool,
+) -> tuple[int, dict]:
+    log = temp / f"godot_external_{name}.log"
+    render_capture = temp / f"godot_external_{name}_render.png"
+    composition_capture = temp / f"godot_external_{name}_composition.png"
+    render_metrics = temp / f"godot_external_{name}_render.json"
+    composition_metrics = temp / f"godot_external_{name}_composition.json"
+    output = temp / f"godot_external_{name}_status.json"
+    log.write_text(log_text, encoding="utf-8")
+    render_capture.write_bytes(PNG_1X1)
+    composition_capture.write_bytes(PNG_1X1)
+    write_metric(render_metrics, render_passed, "missing IMM content")
+    write_metric(composition_metrics, composition_passed, "cyan leakage")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "tests/tools/classify_godot_visual_smoke.py",
+            "--log", str(log),
+            "--renderer", "metal",
+            "--composition-mode", "full_depth",
+            "--render-capture", str(render_capture),
+            "--composition-capture", str(composition_capture),
+            "--render-metrics", str(render_metrics),
+            "--composition-metrics", str(composition_metrics),
+            "--output", str(output),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, json.loads(output.read_text(encoding="utf-8"))
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
@@ -234,6 +315,89 @@ def main() -> int:
         assert status["compositing"] == "success"
         assert status["depth_composition"] == "success"
         assert status["depth_interleaving"] == "success"
+
+        returncode, status = run_unity_external_classifier(
+            temp,
+            "visual_overrides_missing_marker",
+            "[IMM_UNITY_SMOKE] scene composition rear occlusion probe failed: stale diagnostic\n",
+            True,
+            True,
+        )
+        assert returncode == 0
+        assert status["result"] == "passed"
+        assert status["rendering"] == "success"
+        assert status["compositing"] == "success"
+        assert status["warnings"]
+
+        returncode, status = run_unity_external_classifier(
+            temp,
+            "cyan_leakage",
+            "[IMM_UNITY_SMOKE] capture=composition.png\n",
+            True,
+            False,
+        )
+        assert returncode == 1
+        assert status["result"] == "composition_failed"
+        assert status["rendering"] == "success"
+        assert status["failure_class"] == "compositing"
+
+        returncode, status = run_unity_external_classifier(
+            temp,
+            "vulkan_proven",
+            "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Vulkan\n",
+            True,
+            True,
+            "Vulkan",
+        )
+        assert returncode == 0
+        assert status["result"] == "passed"
+
+        returncode, status = run_unity_external_classifier(
+            temp,
+            "vulkan_unproven",
+            "[IMM_UNITY_SMOKE] capture=composition.png\n",
+            True,
+            True,
+            "Vulkan",
+        )
+        assert returncode == 1
+        assert status["result"] == "evidence_incomplete"
+        assert status["failure_class"] == "evidence"
+
+        returncode, status = run_godot_external_classifier(
+            temp,
+            "visual_overrides_probe_log",
+            "ERROR: scene composition rear probe failed: stale diagnostic\n",
+            True,
+            True,
+        )
+        assert returncode == 0
+        assert status["result"] == "passed"
+        assert status["rendering"] == "success"
+        assert status["compositing"] == "success"
+        assert status["warnings"]
+
+        returncode, status = run_godot_external_classifier(
+            temp,
+            "cyan_leakage",
+            "ordinary Godot output\n",
+            True,
+            False,
+        )
+        assert returncode == 1
+        assert status["result"] == "composition_failed"
+        assert status["rendering"] == "success"
+
+        returncode, status = run_godot_external_classifier(
+            temp,
+            "device_lost",
+            "VK_ERROR_DEVICE_LOST\n",
+            True,
+            True,
+        )
+        assert returncode == 1
+        assert status["result"] == "runtime_failed"
+        assert status["failure_class"] == "runtime"
 
     print("Composition mode classifier tests passed")
     return 0
