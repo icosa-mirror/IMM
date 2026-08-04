@@ -434,6 +434,7 @@ namespace ImmPlayer
         private IEnumerator CaptureSyntheticStereoProbe(string capturePath, bool quitAfterCapture)
         {
             const string stereoPrefix = "[IMM_UNITY_VK_SYNTH_STEREO_20260803]";
+            const string nativeEyePrefix = "[IMM_SYNTH_NATIVE_EYE_20260804]";
             if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Vulkan)
             {
                 Debug.LogError($"{stereoPrefix} expected Vulkan but found {SystemInfo.graphicsDeviceType}");
@@ -452,6 +453,7 @@ namespace ImmPlayer
 
             var eyeTargets = new RenderTexture[2];
             var eyeCaptures = new Texture2D[2];
+            var nativeEyeCaptures = new Texture2D[2];
             RenderTexture originalTarget = camera.targetTexture;
             bool originalEnabled = camera.enabled;
             try
@@ -488,10 +490,15 @@ namespace ImmPlayer
                         $"targetPtr=0x{nativeEyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
                     camera.Render();
                     eyeCaptures[eye] = CaptureRenderTextureExact(target);
+                    nativeEyeCaptures[eye] = CaptureRenderTextureExact(nativeEyeTarget);
                     Debug.Log(
                         $"{stereoPrefix} captured eye={eye} targetId={target.GetInstanceID()} " +
                         $"targetPtr=0x{target.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X} " +
                         $"size={target.width}x{target.height}");
+                    Debug.Log(
+                        $"{nativeEyePrefix} captured eye={eye} targetId={nativeEyeTarget.GetInstanceID()} " +
+                        $"targetPtr=0x{nativeEyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X} " +
+                        $"size={nativeEyeTarget.width}x{nativeEyeTarget.height}");
                     yield return null;
                 }
 
@@ -500,6 +507,16 @@ namespace ImmPlayer
                 stereoCapture.SetPixels32(CaptureWidth, 0, CaptureWidth, CaptureHeight, eyeCaptures[1].GetPixels32());
                 stereoCapture.Apply(false, false);
                 WriteCapture(stereoCapture, capturePath, "synthetic stereo Vulkan");
+
+                var nativeStereoCapture = new Texture2D(CaptureWidth * 2, CaptureHeight, TextureFormat.RGB24, false);
+                nativeStereoCapture.SetPixels32(0, 0, CaptureWidth, CaptureHeight, nativeEyeCaptures[0].GetPixels32());
+                nativeStereoCapture.SetPixels32(CaptureWidth, 0, CaptureWidth, CaptureHeight, nativeEyeCaptures[1].GetPixels32());
+                nativeStereoCapture.Apply(false, false);
+                string nativeCapturePath = Path.Combine(
+                    Path.GetDirectoryName(Path.GetFullPath(capturePath)),
+                    $"{Path.GetFileNameWithoutExtension(capturePath)}-native{Path.GetExtension(capturePath)}");
+                WriteCapture(nativeStereoCapture, nativeCapturePath, "synthetic native-eye Vulkan");
+                Debug.Log($"{nativeEyePrefix} pair capture={nativeCapturePath}");
                 Debug.Log(
                     $"{stereoPrefix} passed leftTargetId={eyeTargets[0].GetInstanceID()} " +
                     $"rightTargetId={eyeTargets[1].GetInstanceID()} capture={Path.GetFullPath(capturePath)}");
@@ -514,6 +531,11 @@ namespace ImmPlayer
                 camera.targetTexture = originalTarget;
                 camera.enabled = originalEnabled;
                 foreach (Texture2D capture in eyeCaptures)
+                {
+                    if (capture != null)
+                        Destroy(capture);
+                }
+                foreach (Texture2D capture in nativeEyeCaptures)
                 {
                     if (capture != null)
                         Destroy(capture);

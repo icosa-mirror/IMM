@@ -1803,10 +1803,12 @@ jobs:
           --required-marker "[IMM_UNITY_ANDROID_VK_COMPOSITION_HOLD_20260731]"
           --required-marker "[IMM_UNITY_SMOKE] render candidate capture="
           --required-marker "[IMM_UNITY_VK_SYNTH_STEREO_20260803] passed"
+          --required-marker "[IMM_SYNTH_NATIVE_EYE_20260804] pair capture="
           --required-marker "[IMM_UNITY_SMOKE] synthetic stereo Vulkan capture="
           --required-marker "[IMM_UNITY_SMOKE] capture="
           --required-capture-name unity-android-vulkan-render.png
           --required-capture-name unity-android-vulkan-synthetic-stereo.png
+          --required-capture-name unity-android-vulkan-synthetic-stereo-native.png
           --required-capture-name unity-android-vulkan.png
           --external-screen-capture-name unity-android-vulkan-robo-final.png
           --client-label "IMM Unity Android Vulkan"
@@ -1881,6 +1883,27 @@ jobs:
             $failed = $true
           }
 
+          $nativeStereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo-native.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nativeStereoCapture) {
+            python tests/tools/validate_stereo_capture.py $nativeStereoCapture.FullName `
+              --left-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left.png `
+              --right-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right.png `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-stereo-structure.json
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left-metrics.json
+
+            python tests/tools/compare_render_metrics.py artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right.png `
+              --reference tests/baselines/render/unity-windows-directx-sample1.png `
+              --contract tests/baselines/render/unity-android-vulkan-sample1.json `
+              --json-output artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right-metrics.json
+          } else {
+            '{"status":"failed","failures":["missing Firebase Test Lab unity-android-vulkan-synthetic-stereo-native.png"]}' | Set-Content -Encoding utf8 artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-stereo-structure.json
+            Write-Warning "Missing Firebase Test Lab native-eye synthetic stereo capture"
+          }
+
           $deviceVideo = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter video.mp4 -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($deviceVideo) {
             python tests/tools/validate_render_video.py $deviceVideo.FullName `
@@ -1888,7 +1911,7 @@ jobs:
               --contract tests/baselines/render/unity-android-vulkan-external-render-sample1.json `
               --capture-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png `
               --json-output artifacts/unity-android-vulkan/unity-android-vulkan-external-render-video-validation.json `
-              --sample-interval-seconds 2 `
+              --sample-interval-seconds 1 `
               --minimum-consecutive-frames 2
             if ($LASTEXITCODE -ne 0) { $failed = $true }
             $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
@@ -1930,6 +1953,13 @@ jobs:
             Copy-Item -LiteralPath $stereoCapture.FullName -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-stereo.png -Force
             Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-left.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-left.png -Force -ErrorAction SilentlyContinue
             Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-right.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo/unity-android-vulkan-synthetic-right.png -Force -ErrorAction SilentlyContinue
+          }
+          $nativeStereoCapture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-synthetic-stereo-native.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nativeStereoCapture) {
+            New-Item -ItemType Directory -Force artifacts/unity-android-vulkan/captures/synthetic-stereo-native | Out-Null
+            Copy-Item -LiteralPath $nativeStereoCapture.FullName -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo-native/unity-android-vulkan-synthetic-stereo-native.png -Force
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-left.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo-native/unity-android-vulkan-synthetic-native-left.png -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath artifacts/unity-android-vulkan/unity-android-vulkan-synthetic-native-right.png -Destination artifacts/unity-android-vulkan/captures/synthetic-stereo-native/unity-android-vulkan-synthetic-native-right.png -Force -ErrorAction SilentlyContinue
           }
           $externalRenderCapture = Get-Item artifacts/unity-android-vulkan/unity-android-vulkan-external-render.png -ErrorAction SilentlyContinue
           if ($externalRenderCapture) {
