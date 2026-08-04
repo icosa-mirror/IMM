@@ -983,23 +983,30 @@ jobs:
         continue-on-error: true
         shell: pwsh
         run: |
+          $validationFailed = $false
           python tests\tools\validate_stereo_capture.py `
             artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-stereo.png `
             --left-output artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-left.ppm `
             --right-output artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-right.ppm `
             --json-output artifacts\unity-windows-vulkan-synthetic-stereo\stereo-structure.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests\tools\compare_render_metrics.py `
-            artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-left.ppm `
-            --reference tests\baselines\render\unity-windows-directx-sample1.png `
-            --contract tests\baselines\render\unity-windows-directx-sample1.json `
-            --json-output artifacts\unity-windows-vulkan-synthetic-stereo\left-eye-metrics.json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tests\tools\compare_render_metrics.py `
-            artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-right.ppm `
-            --reference tests\baselines\render\unity-windows-directx-sample1.png `
-            --contract tests\baselines\render\unity-windows-directx-sample1.json `
-            --json-output artifacts\unity-windows-vulkan-synthetic-stereo\right-eye-metrics.json
+          if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+          $eyeContracts = @(
+            @{ Capture = "artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-left.ppm"; Metrics = "artifacts\unity-windows-vulkan-synthetic-stereo\left-eye-metrics.json" },
+            @{ Capture = "artifacts\unity-windows-vulkan-synthetic-stereo\unity-windows-vulkan-synthetic-right.ppm"; Metrics = "artifacts\unity-windows-vulkan-synthetic-stereo\right-eye-metrics.json" }
+          )
+          foreach ($eye in $eyeContracts) {
+            if (Test-Path $eye.Capture) {
+              python tests\tools\compare_render_metrics.py `
+                $eye.Capture `
+                --reference tests\baselines\render\unity-windows-directx-sample1.png `
+                --contract tests\baselines\render\unity-windows-directx-sample1.json `
+                --json-output $eye.Metrics
+              if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
+            } else {
+              $validationFailed = $true
+            }
+          }
+          if ($validationFailed) { exit 1 }
 
       - name: Verify Unity Vulkan synthetic stereo log contract
         if: always()
