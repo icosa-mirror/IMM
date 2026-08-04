@@ -418,7 +418,7 @@ def verify_windows_build_wiring() -> None:
     if "--scene" in godot_args or "--script" in godot_args:
         raise RuntimeError("Godot sample Play helper must launch project.godot run/main_scene without an override")
 
-    for token in ["Run Godot project Run-button smoke", "run-godot-sample-play-smoke.ps1", "Record Godot project Run-button render metrics", "Verify Godot project Run-button log contract", "Enforce Godot project Run-button contract"]:
+    for token in ["Run Godot project Run-button smoke", "run-godot-sample-play-smoke.ps1", "Record Godot project Run-button render metrics", "Verify Godot project Run-button log contract", "Classify Windows Godot Vulkan evidence"]:
         if token not in gpu_workflow:
             raise RuntimeError(f"Godot GPU workflow is missing sample Play contract token: {token}")
 
