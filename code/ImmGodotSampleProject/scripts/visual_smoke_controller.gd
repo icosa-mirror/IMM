@@ -139,9 +139,14 @@ func _setup_compositor() -> bool:
 
 	var compositor: Compositor = Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
-	if _visual_smoke_composition_mode() == COMPOSITION_MODE_ORDERED_OVERLAY:
+	if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
 		_compositor_effect.set("effect_callback_type", CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
-		print("IMM Godot %s visual smoke ordered overlay compositor callback: PRE_TRANSPARENT" % _selected_renderer_name())
+		_compositor_effect.set("access_resolved_color", true)
+		_compositor_effect.set("access_resolved_depth", true)
+		print("[IMM_GODOT_COMPOSITION_STAGE_20260804] renderer=%s mode=%s callback=PRE_TRANSPARENT resolved_color=true resolved_depth=true" % [
+			_selected_renderer_name(),
+			_visual_smoke_composition_mode(),
+		])
 	var callback_override: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_CALLBACK_TYPE", -1)
 	if callback_override >= 0 and callback_override < CompositorEffect.EFFECT_CALLBACK_TYPE_MAX:
 		_compositor_effect.set("effect_callback_type", callback_override)
@@ -278,8 +283,21 @@ func _run_visual_smoke() -> void:
 					failures.append("full-depth Vulkan composition did not render IMM into color and depth intermediate textures")
 				if int(compositor_diagnostics.get("last_vulkan_depth_image_handle", 0)) == 0 or int(compositor_diagnostics.get("last_vulkan_depth_image_view_handle", 0)) == 0:
 					failures.append("full-depth Vulkan composition did not receive Godot depth image handles")
-		elif not bool(compositor_diagnostics.get("last_metal_frame_started", false)):
-			failures.append("ImmViewerCompositorEffect did not start a Metal frame")
+		else:
+			if not bool(compositor_diagnostics.get("last_metal_frame_started", false)):
+				failures.append("ImmViewerCompositorEffect did not start a Metal frame")
+			if _visual_smoke_composition_mode() == COMPOSITION_MODE_FULL_DEPTH:
+				print("[IMM_GODOT_METAL_DEPTH_COMPOSITE_20260804] color=%s depth=%s composite=%s" % [
+					str(compositor_diagnostics.get("last_had_intermediate_texture", false)),
+					str(compositor_diagnostics.get("last_had_intermediate_depth_texture", false)),
+					str(compositor_diagnostics.get("last_depth_aware_vulkan_composite_result", false)),
+				])
+				if not bool(compositor_diagnostics.get("last_depth_aware_vulkan_composite", false)):
+					failures.append("full-depth Metal composition did not run the Godot render-graph depth composite path")
+				if not bool(compositor_diagnostics.get("last_depth_aware_vulkan_composite_result", false)):
+					failures.append("full-depth Metal composition render-graph depth composite failed")
+				if not bool(compositor_diagnostics.get("last_had_intermediate_texture", false)) or not bool(compositor_diagnostics.get("last_had_intermediate_depth_texture", false)):
+					failures.append("full-depth Metal composition did not render IMM into color and depth intermediate textures")
 		if int(compositor_diagnostics.get("last_render_result", -1)) < 0:
 			failures.append("ImmGodot_RenderCamera returned %d" % int(compositor_diagnostics.get("last_render_result", -1)))
 

@@ -777,7 +777,9 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         const int render_width = render_request.width > 0 ? render_request.width : target_size.x;
         const int render_height = render_request.height > 0 ? render_request.height : target_size.y;
         const bool direct_vulkan_depth_composition_enabled = std::getenv("IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION") != nullptr;
-        const bool render_graph_depth_composition_enabled = std::getenv("IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION") != nullptr;
+        const bool render_graph_depth_composition_enabled =
+            std::getenv("IMM_GODOT_RENDER_GRAPH_DEPTH_COMPOSITION") != nullptr ||
+            std::getenv("IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION") != nullptr;
         const bool can_direct_vulkan_color_target = direct_vulkan_depth_composition_enabled &&
                                                    !render_graph_depth_composition_enabled &&
                                                    vulkan_instance_handle != 0 &&
@@ -834,6 +836,9 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         const uint32_t render_depth_texture_format = use_intermediate_depth
                                                          ? static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, intermediate_depth_texture, 0))
                                                          : 0;
+        const uint64_t render_depth_texture_handle = use_intermediate_depth
+                                                         ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, intermediate_depth_texture, 0)
+                                                         : 0;
         intermediate_depth_image_handle = render_depth_vulkan_image_handle;
         intermediate_depth_image_view_handle = render_depth_texture_view_handle;
         intermediate_depth_image_format = render_depth_texture_format;
@@ -859,6 +864,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         {
             metal_frame_started = ImmViewerGodotBeginMetalTextureFrame(command_queue_handle,
                                                                        render_texture_handle,
+                                                                       render_depth_texture_handle,
                                                                        render_width,
                                                                        render_height);
         }

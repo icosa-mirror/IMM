@@ -576,6 +576,42 @@ def main() -> int:
         )
         assert not godot_default_scene["passed"], "default Godot Run scene unexpectedly passed"
 
+        # The Run-project depth region tolerates normal cross-run stipple and
+        # renderer drift, but a foreground surface replacing the character
+        # must still fail. This models the localized reverse-Z/face-order
+        # corruption the region was added to catch.
+        godot_width, godot_height, godot_pixels, _ = compare_render_metrics.read_rgb_capture(
+            godot_play_reference_path
+        )
+        godot_wrong_depth_pixels = bytearray(godot_pixels)
+        center_crop_width = int(round(godot_height * 1.3333333333))
+        center_crop_x = (godot_width - center_crop_width) // 2
+        region_x = center_crop_x + int(round(center_crop_width * 0.47))
+        region_y = int(round(godot_height * 0.4))
+        region_width = int(round(center_crop_width * 0.1))
+        region_height = int(round(godot_height * 0.25))
+        for y in range(region_y, region_y + region_height):
+            for x in range(region_x, region_x + region_width):
+                offset = (y * godot_width + x) * 3
+                godot_wrong_depth_pixels[offset : offset + 3] = bytes((20, 70, 20))
+        godot_wrong_depth_path = temp / "godot-run-wrong-depth.png"
+        write_render_report.write_png(
+            godot_wrong_depth_path,
+            godot_width,
+            godot_height,
+            bytes(godot_wrong_depth_pixels),
+        )
+        godot_wrong_depth = compare_render_metrics.evaluate_capture(
+            godot_wrong_depth_path,
+            godot_play_reference_path,
+            godot_play_contract_path,
+        )
+        assert not godot_wrong_depth["passed"], "localized Godot Run depth corruption unexpectedly passed"
+        assert any(
+            "character-front-depth-order" in error
+            for error in godot_wrong_depth["errors"]
+        ), godot_wrong_depth["errors"]
+
         output_path.write_text(json.dumps({"passed": True}, indent=2), encoding="utf-8")
 
     print("Render metric drift tests passed")

@@ -30,13 +30,30 @@ GENERIC_CAPTURE_SECTION_KEYS = {
     "syntheticstereo",
 }
 VISUAL_MATRIX_TARGETS = {
-    "windows": ("DX11", "directx"),
-    "android": ("Vulkan", "vulkan"),
-    "macos": ("Metal", "metal"),
-    "ios": ("Metal", "metal"),
+    "windows": {
+        "standalone": "directx",
+        "godot": "vulkan",
+        "unity": "directx",
+    },
+    "android": {
+        "standalone": "vulkan",
+        "godot": "vulkan",
+        "unity": "vulkan",
+    },
+    "macos": {
+        "standalone": "metal",
+        "godot": "metal",
+        "unity": "metal",
+    },
+    "ios": {
+        "standalone": "metal",
+        "godot": "metal",
+        "unity": "metal",
+    },
 }
 VISUAL_MATRIX_PRODUCTS = ("standalone", "godot", "unity")
 VISUAL_MATRIX_SYMBOLS = {
+    "passed": "🟩",
     "depth_passed": "🟩",
     "render_passed": "🟧",
     "failed": "🟥",
@@ -428,7 +445,7 @@ def visual_matrix_cell(
     if row["coverage_status"] != "passed":
         return "failed"
     if product == "standalone":
-        return "render_passed"
+        return "passed"
     return "depth_passed" if row_has_depth_evidence(input_root, row) else "render_passed"
 
 
@@ -442,23 +459,22 @@ def add_visual_matrix(
         [
             "## Visual Matrix",
             "",
-            "🟩 depth composition passed · 🟧 render passed but required depth is absent · 🟥 rendering or attempted depth composition failed · ⬜ not tested/out of scope",
+            "🟩 validation passed · 🟧 engine render passed but required depth is absent · 🟥 rendering or attempted depth composition failed · ⬜ not tested/out of scope",
             "",
             "| Platform | Standalone | Godot | Unity |",
             "| --- | :---: | :---: | :---: |",
         ]
     )
-    for platform, (backend_label, renderer) in VISUAL_MATRIX_TARGETS.items():
+    for platform, product_renderers in VISUAL_MATRIX_TARGETS.items():
         values = []
         for product in VISUAL_MATRIX_PRODUCTS:
+            renderer = product_renderers[product]
             status = visual_matrix_cell(
                 coverage, input_root, product, platform, renderer
             )
             cells[(platform, product)] = status
             values.append(VISUAL_MATRIX_SYMBOLS[status])
-        lines.append(
-            f"| {display_name(platform)} · {backend_label} | {' | '.join(values)} |"
-        )
+        lines.append(f"| {display_name(platform)} | {' | '.join(values)} |")
     lines.append("")
     return cells
 

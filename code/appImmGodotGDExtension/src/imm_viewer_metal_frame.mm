@@ -17,6 +17,7 @@ namespace godot
 {
     bool ImmViewerGodotBeginMetalTextureFrame(uint64_t command_queue_handle,
                                               uint64_t color_texture_handle,
+                                              uint64_t depth_texture_handle,
                                               int width,
                                               int height)
     {
@@ -24,6 +25,7 @@ namespace godot
 
         id<MTLCommandQueue> command_queue = (__bridge id<MTLCommandQueue>)(reinterpret_cast<void *>(command_queue_handle));
         id<MTLTexture> color_texture = (__bridge id<MTLTexture>)(reinterpret_cast<void *>(color_texture_handle));
+        id<MTLTexture> depth_texture = (__bridge id<MTLTexture>)(reinterpret_cast<void *>(depth_texture_handle));
         if (command_queue == nil || color_texture == nil || width <= 0 || height <= 0)
         {
             return false;
@@ -42,6 +44,16 @@ namespace godot
             pass_descriptor.colorAttachments[0].loadAction = MTLLoadActionLoad;
         }
         pass_descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+        if (depth_texture != nil)
+        {
+            // The Godot IMM player uses normal-Z/LESS. This intermediate is
+            // sampled after the native frame and compared with Godot's
+            // reverse-Z scene depth by the shared RenderingDevice compositor.
+            pass_descriptor.depthAttachment.texture = depth_texture;
+            pass_descriptor.depthAttachment.loadAction = MTLLoadActionClear;
+            pass_descriptor.depthAttachment.storeAction = MTLStoreActionStore;
+            pass_descriptor.depthAttachment.clearDepth = 1.0;
+        }
 
         ImmGodotMetalFrame frame = {};
         frame.version = 1;

@@ -23,6 +23,23 @@ def main() -> int:
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
     assert slugify("UnityAndroidVulkan") == "unity-android-vulkan"
 
+    standalone_row = {
+        "matrix": {
+            "product": "standalone",
+            "platform": "windows",
+            "mode": "non-vr",
+            "renderer": "directx",
+        },
+        "status": "supported",
+        "coverage_status": "passed",
+    }
+    assert (
+        visual_matrix_cell(
+            [standalone_row], Path.cwd(), "standalone", "windows", "directx"
+        )
+        == "passed"
+    ), "A successful standalone render must be green because depth does not apply"
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
         lane = temp / "unity-android-vulkan"
@@ -449,8 +466,11 @@ def main() -> int:
         text = report.read_text(encoding="utf-8")
         assert "## Visual Matrix" in text
         assert "| Platform | Standalone | Godot | Unity |" in text
-        assert "| macOS · Metal | 🟥 | ⬜ | 🟥 |" in text
-        assert "| iOS · Metal | ⬜ | ⬜ | ⬜ |" in text
+        assert "| Windows | ⬜ | 🟥 | ⬜ |" in text
+        assert "| macOS | 🟥 | ⬜ | 🟥 |" in text
+        assert "| iOS | ⬜ | ⬜ | ⬜ |" in text
+        assert "Windows ·" not in text
+        assert "macOS ·" not in text
         assert "Render only" not in text
         assert "## Matrix Coverage" in text
         assert "| unity/all/non-vr/preflight | supported | passed | no |" in text

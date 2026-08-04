@@ -1129,6 +1129,7 @@ jobs:
           IMM_GODOT_VISUAL_SMOKE_WIDTH=1024 \
           IMM_GODOT_VISUAL_SMOKE_HEIGHT=576 \
           IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA=1 \
+          IMM_GODOT_RENDER_GRAPH_DEPTH_COMPOSITION=1 \
           IMM_GODOT_DEBUG=1 \
           IMM_GODOT_LOG_FILE="$PWD/artifacts/godot-smoke-macos-metal/imm-godot-native.log" \
           IMM_GODOT_VISUAL_SMOKE_RENDER_PNG="$PWD/artifacts/godot-smoke-macos-metal/metal_render_baseline.png" \

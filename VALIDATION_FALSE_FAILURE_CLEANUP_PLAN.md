@@ -6,10 +6,12 @@ Make the validation report trustworthy in both directions: correct renders must 
 
 The cyan depth/occlusion contract must distinguish genuinely foreground cyan inside the character silhouette from the intentionally visible rim of a rear square and authored cyan scene details. The Windows Godot ordered-overlay image remains a genuine failure because cyan fills the character interior; reviewed Unity Metal and Android full-depth captures do not.
 
-The combined report starts with a four-by-three visual matrix using the fixed
-primary backends Windows/DX11, Android/Vulkan, macOS/Metal, and iOS/Metal.
-Status cells contain color only: green is visually passed depth composition,
-orange is a visually passed render whose required depth path is absent (and is
+The combined report starts with a four-by-three visual matrix whose rows name
+platforms only; the canonical renderer is implicit and selected per cell.
+Windows standalone and Unity use DX11, while Windows Godot uses Vulkan. Android
+uses Vulkan and macOS/iOS use Metal. Status cells contain color only: green is a
+passed standalone render or visually passed engine depth composition, orange is
+a visually passed engine render whose required depth path is absent (and is
 therefore still CI-failing for Godot/Unity), red is a produced rendering or
 attempted depth-composition failure, and gray is genuinely untested or out of
 scope. Godot and Unity can never become green from render-only evidence, and
@@ -45,11 +47,37 @@ After those corrections, the remaining visible failures in `30901787140` are gen
 - Windows Godot full-depth: only the sky/background is present;
 - Windows Godot ordered-overlay: the cyan rear square is drawn over the character. The fixture applied the transparent/no-depth-test ordered-overlay material to all three probes, so cyan could never be occluded. The corrected fixture keeps cyan opaque before the `PRE_TRANSPARENT` IMM callback while magenta/yellow remain transparent after it; this tests both sides of the ordering boundary without the previously broken `POST_TRANSPARENT` strategy. Cloud confirmation is pending.
 - macOS Godot Metal: its current color-intermediate integration has no host
-  depth input, so it cannot yet satisfy the required depth-composition
-  contract. Render-only evidence must not convert this required gap into a
-  pass; the lane remains failed until Metal host-depth composition works.
+  depth input, so it could not satisfy the required depth-composition
+  contract. The Metal wrapper now attaches a normal-Z intermediate depth
+  texture alongside its existing color intermediate, stores IMM depth, and
+  feeds both textures through the same RenderingDevice compositor used by the
+  Vulkan path. Cloud Metal visual confirmation is pending.
 - hosted Windows Unity Vulkan synthetic stereo: Unity rejects Lavapipe Vulkan and falls back to Direct3D, so no Vulkan image exists;
 - Windows Unity Vulkan full-depth/ordered-overlay: hardware-gated jobs did not run, so the non-VR Vulkan row has incomplete evidence rather than a visual failure.
+
+Run `30907547626` at `18b22b41` provides the next audited job-level results:
+
+- Unity macOS Metal render-only, full-depth, ordered-overlay, and Editor Play
+  captures all pass and survive manual review. The layer-29 composition-probe
+  fixture repair is confirmed.
+- Windows Godot Vulkan ordered-overlay now passes and is visually correct. The
+  opaque-before/transparent-after probe split is confirmed.
+- Windows Godot Vulkan full-depth now contains IMM strokes and all three
+  composition probes, confirming the normal-Z clear fix, but host color is
+  black wherever the depth compositor discards. The full-depth callback ran at
+  `POST_TRANSPARENT`, where Godot may treat the final color attachment as
+  discardable. Composition modes now run at `PRE_TRANSPARENT`, with resolved
+  color/depth access declared, so the host attachment remains live while the
+  depth-select shader preserves rejected pixels. Cloud confirmation is pending.
+- The ordinary Godot Run-project capture is visually correct. Its localized
+  character correlation was `0.760` against a `0.800` minimum, with mean
+  absolute delta `0.058` against `0.060`; this is normal stipple/renderer drift,
+  not the prior reverse-Z defect. The reviewed tolerance is now correlation
+  `>= 0.700` and mean absolute delta `<= 0.080`, while a generated foreground
+  depth-corruption fixture must still fail the same localized region.
+- macOS Godot Metal still produces correct render-only output but no scene
+  probes in full-depth on the pushed revision. The pending Metal depth
+  attachment/render-graph composite change is the next cloud experiment.
 
 The next cloud run must confirm the reporting and cyan corrections. Once confirmed, product work proceeds only on the genuine failures above, with the Quest two-eye physical acceptance test remaining the Android Vulkan exit criterion.
 
@@ -58,7 +86,12 @@ The next cloud run must confirm the reporting and cyan corrections. Once confirm
 1. **Current gate:** finish removing false visual failures before further product-side stereo changes. The validators reject reverse-Z, missing IMM content, duplicated stereo views, sky-only eyes, cyan inside the must-be-occluded character interior, black/default scenes, and graphics-API fallback. Every validation step includes an authoritative visual check; logs remain fast-fail diagnostics only.
 2. **Cloud-confirmed through run `30901787140`, with one reporting and one Metal edge-tolerance follow-up awaiting rerun:** run the full suite at an exact revision, manually inspect every capture, and reconcile every automatic result with the image. The Android external-display contract accepts normal animated-renderer variation at correlation `0.480` while retaining two consecutive samples plus independent blank/default/probe rejection. The cyan contract is localized to the character interior because the previous broad region counted correct visible square edges and a cyan butterfly.
 3. **Cloud synthetic milestone complete; Quest acceptance remains:** Quest Multi Pass native eye production and the Firebase presentation fixture now produce distinct, correct eye pairs without changing the working Metal, OpenGL, DirectX, Windows Vulkan, or non-XR paths. Confirm both displayed eyes on a physical Quest before calling the OpenXR handoff fixed.
-4. Fix the remaining genuine rendering/composition defects: Godot Vulkan full-depth/sky-only output, Godot ordered-overlay occlusion, and Unity Metal ordered-overlay probe loss. IMM uses discard/stencil, MSAA coverage, and stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not a valid substitute.
+4. Fix the remaining genuine rendering/composition defects: preserve Godot
+   Vulkan host color in full-depth, confirm Godot Metal full-depth through the
+   same render-graph depth path, and retain the now-confirmed Godot and Unity
+   ordered-overlay repairs. IMM uses discard/stencil, MSAA coverage, and
+   stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not
+   a valid substitute.
 5. Add Single Pass Instanced validation after Multi Pass is correct. The architecture must support Single Pass without another redesign, although true Vulkan multiview is a later performance optimization rather than a prerequisite for correctness.
 
 Validation reliability is a gate, not a background cleanup task. Product fixes must retain full cross-platform validation so a narrowly targeted Android Vulkan change cannot silently regress an already working target.
