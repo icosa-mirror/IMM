@@ -114,7 +114,14 @@ def main() -> int:
 
         classified_status = Path(temp_dir) / "classified-status.json"
         classified_status.write_text(
-            json.dumps({"result": "runtime_failed", "failure_class": "runtime"}),
+            json.dumps(
+                {
+                    "result": "runtime_failed",
+                    "failure_class": "runtime",
+                    "failures": ["requested Vulkan fell back to Direct3D"],
+                    "warnings": ["supporting log marker absent"],
+                }
+            ),
             encoding="utf-8",
         )
         classified_output = Path(temp_dir) / "classified-manifest.json"
@@ -145,6 +152,8 @@ def main() -> int:
         assert classified_manifest["classification"] == {
             "result": "failed",
             "failure_class": "runtime",
+            "failures": ["requested Vulkan fell back to Direct3D"],
+            "warnings": ["supporting log marker absent"],
         }
 
     print("CI manifest tests passed")

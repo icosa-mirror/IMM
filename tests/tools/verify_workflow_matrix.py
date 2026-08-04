@@ -39,7 +39,7 @@ REQUIRED_JOBS = {
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
         "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
-        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Enforce Unity project Play-button contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
+        "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player", "Run Unity project Play-button smoke", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Classify Unity macOS Metal evidence", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
         "unity-windows-directx-composition": ["Preflight Unity DirectX runner", "Run Unity DirectX composition smoke", "Compare Unity DirectX render metrics against committed DirectX baseline", "Write Unity DirectX composition report", "Verify Unity DirectX composition log contract", "Write CI manifest", "Collect artifact summary"],
         "unity-windows-vulkan-player-build": ["Download same-commit Unity native plugin", "Preflight Unity Vulkan runner", "Build Unity Vulkan smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity Vulkan smoke player", "Upload Unity Vulkan build artifacts"],
@@ -57,7 +57,7 @@ REQUIRED_JOBS = {
         "windows-standalone-opengl": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Install Mesa llvmpipe OpenGL", "Configure Mesa llvmpipe OpenGL", "Preflight OpenGL runner", "Capture OpenGL sample1", "Compare OpenGL render metrics against committed DirectX baseline", "Write OpenGL render report", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-openxr-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenXR VR runner", "Run Windows OpenXR VR smoke", "Verify Windows OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "windows-standalone-opengl-vr": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Preflight Windows OpenGL VR runner", "Run Windows OpenGL VR smoke", "Verify Windows OpenGL VR log contract", "Write CI manifest", "Collect artifact summary"],
-        "windows-godot-vulkan": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Run Godot Vulkan render-only baseline smoke", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Write Godot Vulkan render report", "Write Godot Vulkan render baseline report", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Write Godot Vulkan ordered overlay report", "Write Godot Vulkan ordered overlay baseline report", "Write CI manifest", "Collect artifact summary"],
+        "windows-godot-vulkan": ["Download Windows viewer build artifact", "Stage Windows viewer build artifact", "Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Install Mesa lavapipe", "Configure Mesa lavapipe Vulkan ICD", "Preflight Godot Vulkan runner", "Run Godot Vulkan render-only baseline smoke", "Run Godot Vulkan visual baseline smoke", "Record Godot Vulkan full depth metrics", "Run Godot Vulkan ordered overlay smoke", "Record Godot Vulkan ordered overlay metrics", "Classify Windows Godot Vulkan evidence", "Write Godot Vulkan render report", "Write Godot Vulkan render baseline report", "Write Godot Vulkan ordered overlay report", "Write Godot Vulkan ordered overlay baseline report", "Write CI manifest", "Collect artifact summary"],
         "windows-godot-openxr-vr": ["Download Windows Godot extension build artifact", "Stage Windows Godot extension build artifact", "Preflight Godot OpenXR VR runner", "Run Godot OpenXR VR smoke", "Verify Godot OpenXR VR log contract", "Write CI manifest", "Collect artifact summary"],
         "macos-standalone-metal": ["Download macOS viewer build artifact", "Preflight macOS Metal runner", "Verify macOS Metal build artifact", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write CI manifest", "Collect artifact summary"],
         "macos-godot-metal": ["Preflight Godot Metal runner", "Download macOS Godot extension build artifact", "Stage macOS Godot extension build artifact", "Run Godot Metal visual smoke", "Record Godot Metal render metrics", "Write Godot Metal render report", "Write Godot Metal composition report", "Write CI manifest", "Collect artifact summary"],
@@ -157,7 +157,7 @@ REQUIRED_STEP_TIMEOUTS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-package-import": {"Run Unity batchmode package import tests"},
-        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player", "Run Unity macOS Metal visual smokes"},
+        "unity-macos-metal-composition": {"Build Unity macOS Metal smoke player", "Run Unity project Play-button smoke", "Run Unity macOS Metal visual smokes"},
         "unity-windows-directx-composition": {"Run Unity DirectX composition smoke"},
         "unity-windows-vulkan-ordered-overlay": {"Run Unity Vulkan ordered overlay smoke"},
         "unity-windows-vulkan-full-depth": {"Run Unity Vulkan full depth smoke"},
@@ -181,6 +181,7 @@ REQUIRED_ALWAYS_STEPS = {
         "unity-macos-metal-composition": {
             "Classify Unity macOS Metal visual smokes",
             "Record Unity macOS Metal render metrics",
+            "Classify Unity macOS Metal evidence",
             "Verify Unity macOS Metal log contract",
         },
         "unity-windows-directx-composition": {
@@ -199,6 +200,7 @@ REQUIRED_ALWAYS_STEPS = {
         "windows-godot-vulkan": {
             "Record Godot Vulkan full depth metrics",
             "Run Godot Vulkan ordered overlay smoke",
+            "Classify Windows Godot Vulkan evidence",
         },
         "macos-godot-metal": {
             "Record Godot Metal render metrics",
@@ -620,8 +622,10 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
         "Plugins/OSX/ImmUnityPlugin.bundle",
         'chmod +x "$plugin_binary"',
         "codesign --verify --deep --strict",
-        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
-        "manualExit: true",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
+        "name: Run Unity project Play-button smoke",
+        "-executeMethod ImmPlayer.Editor.BuildAutomation.RunMacOSEditorPlayModeSmoke",
+        'unity="/Applications/Unity/Hub/Editor/${UNITY_VERSION}/Unity.app/Contents/MacOS/Unity"',
         "-immSmokeCapturePath",
         '$app/Contents/MacOS',
         "-perm -111",
@@ -633,9 +637,14 @@ def verify_unity_same_commit_native_plugin_contract(path: Path, workflow_rel: st
                 f"{workflow_rel} unity-macos-metal-composition missing same-commit native plugin token: {token}"
             )
 
-    if "manualExit: true" not in macos_body:
+    editor_play_match = re.search(
+        r"(?ms)^\s*- name: Run Unity project Play-button smoke\s*$.*?(?=^\s*- name:|\Z)",
+        macos_body,
+    )
+    editor_play_body = editor_play_match.group(0) if editor_play_match else ""
+    if "-quit" in editor_play_body:
         errors.append(
-            f"{workflow_rel} unity-macos-metal-composition must suppress GameCI's -quit flag while the asynchronous Editor Play smoke runs"
+            f"{workflow_rel} Unity Editor Play invocation must not pass -quit while the asynchronous capture runs"
         )
 
 
@@ -756,7 +765,9 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "unity-android-vulkan-synthetic-left.png",
             "unity-android-vulkan-synthetic-right.png",
             "verify_synthetic_stereo_log.py",
-            "--failure-class compositing --output artifacts/unity-macos-metal-composition/manifest.json",
+            "--classification-json artifacts/unity-macos-metal-composition/unity-macos-metal-status.json",
+            "classify_unity_macos_metal.py",
+            "--classification-json artifacts\\unity-windows-vulkan-synthetic-stereo\\composition-status.json",
             "--failure-class compositing --output artifacts\\unity-windows-directx-composition\\manifest.json",
             "--reference tests/baselines/render/unity-windows-directx-sample1.png",
             "render candidate capture=",
@@ -765,6 +776,8 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "godot-vulkan-render.ppm",
             "Run Godot Vulkan render-only baseline smoke",
             "godot-windows-vulkan-sample1.json",
+            "classify_windows_godot_vulkan.py",
+            "--classification-json artifacts\\godot-smoke-windows-vulkan\\windows-godot-vulkan-status.json",
             "metal_render_baseline.png",
             "--reference tests/baselines/render/windows-directx-sample1.ppm",
         ],

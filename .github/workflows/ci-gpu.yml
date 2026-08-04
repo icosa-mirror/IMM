@@ -761,6 +761,7 @@ jobs:
           --output artifacts\godot-smoke-windows-vulkan\godot-sample-play-log-contract.json
 
       - name: Run Godot Vulkan render-only baseline smoke
+        continue-on-error: true
         timeout-minutes: 10
         shell: pwsh
         run: >
@@ -774,6 +775,7 @@ jobs:
           -LogDir artifacts\godot-smoke-windows-vulkan-render-only
 
       - name: Run Godot Vulkan visual baseline smoke
+        continue-on-error: true
         timeout-minutes: 10
         shell: pwsh
         run: >
@@ -787,6 +789,7 @@ jobs:
 
       - name: Record Godot Vulkan full depth metrics
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: |
           $validationFailed = $false
@@ -805,28 +808,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           if ($validationFailed) { exit 1 }
 
-      - name: Write Godot Vulkan render report
-        if: always()
-        shell: pwsh
-        run: >
-          python tests\tools\write_render_report.py
-          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
-          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
-          --status-json artifacts\godot-smoke-windows-vulkan\composition-status.json
-          --output-dir artifacts\godot-smoke-windows-vulkan\captures
-          --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
-      - name: Write Godot Vulkan render baseline report
-        if: always()
-        shell: pwsh
-        run: >
-          python tests\tools\write_render_report.py
-          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-render-metrics.json
-          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm
-          --output-dir artifacts\godot-smoke-windows-vulkan\captures\render
-          --markdown-output artifacts\godot-smoke-windows-vulkan\render-baseline-report.md
-
       - name: Run Godot Vulkan ordered overlay smoke
         if: always()
+        continue-on-error: true
         timeout-minutes: 10
         shell: pwsh
         run: >
@@ -840,6 +824,7 @@ jobs:
 
       - name: Record Godot Vulkan ordered overlay metrics
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: |
           $validationFailed = $false
@@ -858,8 +843,43 @@ jobs:
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           if ($validationFailed) { exit 1 }
 
+      - name: Classify Windows Godot Vulkan evidence
+        if: always()
+        shell: pwsh
+        run: >
+          python tests\tools\classify_windows_godot_vulkan.py
+          --artifact-dir artifacts\godot-smoke-windows-vulkan
+          --render-only-dir artifacts\godot-smoke-windows-vulkan-render-only
+          --ordered-overlay-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay
+          --output artifacts\godot-smoke-windows-vulkan\windows-godot-vulkan-status.json
+          --full-depth-status-output artifacts\godot-smoke-windows-vulkan\composition-status.json
+          --ordered-overlay-status-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\composition-status.json
+
+      - name: Write Godot Vulkan render report
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
+          --status-json artifacts\godot-smoke-windows-vulkan\composition-status.json
+          --output-dir artifacts\godot-smoke-windows-vulkan\captures
+          --markdown-output artifacts\godot-smoke-windows-vulkan\render-report.md
+      - name: Write Godot Vulkan render baseline report
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: >
+          python tests\tools\write_render_report.py
+          --metrics-json artifacts\godot-smoke-windows-vulkan\godot-vulkan-render-metrics.json
+          --candidate-capture artifacts\godot-smoke-windows-vulkan\godot-vulkan-render.ppm
+          --output-dir artifacts\godot-smoke-windows-vulkan\captures\render
+          --markdown-output artifacts\godot-smoke-windows-vulkan\render-baseline-report.md
+
       - name: Write Godot Vulkan ordered overlay report
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: >
           python tests\tools\write_render_report.py
@@ -870,6 +890,7 @@ jobs:
           --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-report.md
       - name: Write Godot Vulkan ordered overlay baseline report
         if: always()
+        continue-on-error: true
         shell: pwsh
         run: >
           python tests\tools\write_render_report.py
@@ -878,22 +899,10 @@ jobs:
           --output-dir artifacts\godot-smoke-windows-vulkan-ordered-overlay\captures\render
           --markdown-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\render-baseline-report.md
 
-      - name: Enforce Godot project Run-button contract
-        if: always()
-        shell: pwsh
-        run: |
-          $failed = @()
-          if ("${{ steps.godot_sample_play.outcome }}" -ne "success") { $failed += "runtime" }
-          if ("${{ steps.godot_sample_play_metrics.outcome }}" -ne "success") { $failed += "visual" }
-          if ("${{ steps.godot_sample_play_log.outcome }}" -ne "success") { $failed += "log" }
-          if ($failed.Count -gt 0) {
-            throw "Godot project Run-button contract failed: $($failed -join ', ')"
-          }
-
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-render-only --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts\godot-smoke-windows-vulkan\windows-godot-vulkan-status.json --output artifacts\godot-smoke-windows-vulkan\manifest.json --product godot --platform-name windows --mode non-vr --renderer vulkan --include artifacts\godot-smoke-windows-vulkan --include artifacts\godot-smoke-windows-vulkan-render-only --include artifacts\godot-smoke-windows-vulkan-ordered-overlay
       - name: Collect artifact summary
         if: always()
         shell: pwsh

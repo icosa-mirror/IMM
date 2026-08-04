@@ -214,7 +214,12 @@ $compositionContract = if ($CompositionMode -eq "ordered_overlay") {
 } else {
     "render_only"
 }
-$renderingStatus = if ($exitCode -eq 0) { "success" } else { "failed" }
+$hasRequiredCaptures = (Test-Path -LiteralPath $CapturePath -PathType Leaf) -and
+    (Test-Path -LiteralPath $RenderCapturePath -PathType Leaf)
+# Godot returns a non-zero process code when an in-scene composition probe
+# fails. That is not evidence that the render itself failed: the two captures
+# are the render evidence and are checked by the shared visual metrics step.
+$renderingStatus = if ($hasRequiredCaptures) { "success" } else { "failed" }
 $compositingStatus = if ($CompositionMode -eq "render_only") {
     "not_tested"
 } elseif ($compositionFailures.Count -gt 0) {

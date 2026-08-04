@@ -285,12 +285,29 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: StandaloneOSX
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke
-          manualExit: true
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer
           allowDirtyBuild: true
           enableGpu: true
           cacheUnityInstallationOnMac: true
-          customParameters: -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app -immSmokeCapturePath ${{ github.workspace }}/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
+          customParameters: -immSmokePlayerPath ${{ github.workspace }}/build/unity-smoke/macos-metal/ImmUnitySmoke.app
+
+      - name: Run Unity project Play-button smoke
+        id: unity_editor_play
+        if: always() && steps.unity_macos_metal_player_build.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          unity="/Applications/Unity/Hub/Editor/${UNITY_VERSION}/Unity.app/Contents/MacOS/Unity"
+          test -x "$unity"
+          IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
+          "$unity" \
+            -batchmode \
+            -force-metal \
+            -projectPath "$PWD/code/ImmUnitySampleProject" \
+            -executeMethod ImmPlayer.Editor.BuildAutomation.RunMacOSEditorPlayModeSmoke \
+            -immSmokeCapturePath "$PWD/artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png" \
+            -logFile "$PWD/artifacts/unity-macos-metal-composition/unity-editor-play.log"
 
       - name: Record Unity project Play-button render metrics
         id: unity_editor_play_metrics
@@ -315,6 +332,7 @@ jobs:
           --markdown-output artifacts/unity-macos-metal-composition/editor-play-report.md
 
       - name: Run Unity macOS Metal visual smokes
+        continue-on-error: true
         timeout-minutes: 8
         run: |
           set -euo pipefail
@@ -363,6 +381,7 @@ jobs:
 
       - name: Classify Unity macOS Metal visual smokes
         if: always()
+        continue-on-error: true
         run: |
           full_depth_status=0
           python3 tests/tools/classify_unity_visual_smoke.py \
@@ -382,6 +401,7 @@ jobs:
 
       - name: Record Unity macOS Metal render metrics
         if: always()
+        continue-on-error: true
         run: |
           metrics_status=0
           python3 tests/tools/compare_render_metrics.py \
@@ -403,8 +423,21 @@ jobs:
             --diagnostic-overlay-output artifacts/unity-macos-metal-composition/unity-macos-metal-ordered-overlay-diagnostic.png || metrics_status=$?
           exit "$metrics_status"
 
+      - name: Classify Unity macOS Metal evidence
+        if: always()
+        run: >
+          python3 tests/tools/classify_unity_macos_metal.py
+          --artifact-dir artifacts/unity-macos-metal-composition
+          --player-build-outcome "${{ steps.unity_macos_metal_player_build.outcome }}"
+          --editor-play-outcome "${{ steps.unity_editor_play.outcome }}"
+          --output artifacts/unity-macos-metal-composition/unity-macos-metal-status.json
+          --editor-play-status-output artifacts/unity-macos-metal-composition/editor-play-status.json
+          --full-depth-status-output artifacts/unity-macos-metal-composition/full-depth-status.json
+          --ordered-overlay-status-output artifacts/unity-macos-metal-composition/ordered-overlay-status.json
+
       - name: Write Unity macOS Metal render reports
         if: always()
+        continue-on-error: true
         run: |
           python3 tests/tools/write_render_report.py \
             --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-render-metrics.json \
@@ -426,6 +459,7 @@ jobs:
 
       - name: Verify Unity macOS Metal log contract
         if: always()
+        continue-on-error: true
         run: |
           python3 tests/tools/verify_log_markers.py \
             --log artifacts/unity-macos-metal-composition/unity-full-depth-player.log \
@@ -448,20 +482,9 @@ jobs:
             --require "[IMM_UNITY_SMOKE] capture=" \
             --output artifacts/unity-macos-metal-composition/ordered-overlay-log-contract.json
 
-      - name: Enforce Unity project Play-button contract
-        if: always()
-        run: |
-          failed=()
-          if [ "${{ steps.unity_macos_metal_player_build.outcome }}" != "success" ]; then failed+=(runtime); fi
-          if [ "${{ steps.unity_editor_play_metrics.outcome }}" != "success" ]; then failed+=(visual); fi
-          if [ "${#failed[@]}" -gt 0 ]; then
-            printf 'Unity project Play-button contract failed: %s\n' "${failed[*]}"
-            exit 1
-          fi
-
       - name: Write CI manifest
         if: always()
-        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class compositing --output artifacts/unity-macos-metal-composition/manifest.json --product unity --platform-name macos --mode non-vr --renderer metal --include artifacts/unity-macos-metal-composition
+        run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/unity-macos-metal-composition/unity-macos-metal-status.json --output artifacts/unity-macos-metal-composition/manifest.json --product unity --platform-name macos --mode non-vr --renderer metal --include artifacts/unity-macos-metal-composition
 
       - name: Collect artifact summary
         if: always()
@@ -979,7 +1002,7 @@ jobs:
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --failure-class runtime --output artifacts\unity-windows-vulkan-synthetic-stereo\manifest.json --product unity --platform-name windows --mode synthetic-stereo --renderer vulkan --include artifacts\unity-windows-vulkan-synthetic-stereo
+        run: python tests\tools\write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts\unity-windows-vulkan-synthetic-stereo\composition-status.json --output artifacts\unity-windows-vulkan-synthetic-stereo\manifest.json --product unity --platform-name windows --mode synthetic-stereo --renderer vulkan --include artifacts\unity-windows-vulkan-synthetic-stereo
 
       - name: Collect artifact summary
         if: always()

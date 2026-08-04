@@ -153,6 +153,7 @@ def main() -> int:
     fixture_paths = [Path(item) for item in args.fixture] if args.fixture else default_fixtures(root)
     status = normalize_status(args.status)
     failure_class = args.failure_class
+    classifier_details: dict = {}
     if args.classification_json:
         try:
             classifier = json.loads(args.classification_json.read_text(encoding="utf-8"))
@@ -162,6 +163,10 @@ def main() -> int:
             parser.error("--classification-json must contain a JSON object")
         classifier_result = str(classifier.get("result") or "").strip()
         classifier_failure_class = str(classifier.get("failure_class") or "").strip()
+        for key in ("failures", "warnings"):
+            value = classifier.get(key)
+            if isinstance(value, list):
+                classifier_details[key] = [str(item) for item in value if str(item)]
         if classifier_result == "passed" and status == "passed":
             failure_class = ""
         elif classifier_result != "passed":
@@ -184,6 +189,7 @@ def main() -> int:
         "classification": {
             "result": status,
             "failure_class": failure_class,
+            **classifier_details,
         },
         "matrix": {
             "product": args.product,

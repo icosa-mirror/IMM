@@ -243,6 +243,13 @@ def row_matches_key(row: dict, observed_key: str) -> bool:
         terms = [product, renderer]
     if mode == "vr":
         terms.append("vr")
+    elif mode not in {"", "non-vr"}:
+        terms.append(mode)
+    elif mode == "non-vr" and any(
+        other_mode in key
+        for other_mode in ("synthetic-stereo", "openxr-vr", "opengl-vr", "quest-vr")
+    ):
+        return False
     return all(not term or term == "all" or slugify(term) in key for term in terms)
 
 
@@ -323,6 +330,7 @@ def matrix_coverage_rows(matrix_status: Path | None, input_root: Path, reports: 
                 "hosted_gate": row.get("hosted_gate") or "",
                 "hardware_gate": row.get("hardware_gate") or "",
                 "reason": row.get("owner_decision") or row.get("reason") or "",
+                "matrix": row,
             }
         )
     return coverage
@@ -386,11 +394,57 @@ def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
         lines.append("")
 
 
-def add_status_only_sections(lines: list[str], coverage: list[dict]) -> None:
-    rows = [
-        row for row in coverage
-        if row["status"] == "supported" and row["coverage_status"] != "missing evidence" and not row["visual"]
-    ]
+def matching_manifests(input_root: Path, row: dict) -> list[dict]:
+    expected = row.get("matrix") or {}
+    matches: list[dict] = []
+    for path in input_root.rglob("manifest.json"):
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        matrix = manifest.get("matrix") if isinstance(manifest, dict) else None
+        if not isinstance(matrix, dict):
+            continue
+        if all(
+            str(matrix.get(part) or "").lower() == str(expected.get(part) or "").lower()
+            for part in ("product", "platform", "mode", "renderer")
+        ):
+            matches.append(manifest)
+    return matches
+
+
+def status_only_result(row: dict, manifest: dict) -> tuple[str, str]:
+    classification = manifest.get("classification") or {}
+    result = str(classification.get("result") or row["coverage_status"])
+    failure_class = str(classification.get("failure_class") or "")
+    if row["visual"] and row["coverage_status"] == "failed" and result == "passed":
+        return "evidence_incomplete", "evidence"
+    if result in {"failed", "failure"}:
+        result = {
+            "compositing": "composition_failed",
+            "evidence": "evidence_incomplete",
+            "infrastructure": "infrastructure_failed",
+            "rendering": "render_failed",
+            "runtime": "runtime_failed",
+            "runtime-launch": "runtime_failed",
+        }.get(failure_class, "failed")
+    return result, failure_class
+
+
+def add_status_only_sections(
+    lines: list[str],
+    coverage: list[dict],
+    input_root: Path,
+    reports: list[tuple[str, Path]],
+) -> None:
+    report_keys = {key for key, _report in reports}
+    rows = []
+    for row in coverage:
+        if row["status"] != "supported" or row["coverage_status"] == "missing evidence":
+            continue
+        has_visual_report = any(row_matches_key(row["matrix"], key) for key in report_keys)
+        if not row["visual"] or not has_visual_report:
+            rows.append(row)
     if not rows:
         return
     lines.append("## Status-Only Evidence")
@@ -398,7 +452,28 @@ def add_status_only_sections(lines: list[str], coverage: list[dict]) -> None:
     for row in rows:
         lines.append(f"### {display_name(row['key'])}")
         lines.append("")
-        lines.append(f"- Result: {row['coverage_status']}")
+        manifests = matching_manifests(input_root, row)
+        manifests.sort(
+            key=lambda manifest: (
+                str((manifest.get("classification") or {}).get("result") or "") == "passed",
+                str((manifest.get("classification") or {}).get("failure_class") or "") == "build",
+            )
+        )
+        manifest = manifests[0] if manifests else {}
+        result, failure_class = status_only_result(row, manifest)
+        lines.append(f"- Result: {result}")
+        if failure_class:
+            lines.append(f"- Failure class: {failure_class}")
+        classification = manifest.get("classification") or {}
+        for failure in classification.get("failures") or []:
+            lines.append(f"- Failure: {failure}")
+        if (
+            result == "evidence_incomplete"
+            and not (classification.get("failures") or [])
+        ):
+            lines.append("- Failure: no strict visual report was produced for this supported visual row")
+        for warning in classification.get("warnings") or []:
+            lines.append(f"- Supporting diagnostic: {warning}")
         gate = row["hardware_gate"] or row["hosted_gate"]
         if gate:
             lines.append(f"- Gate: {gate}")
@@ -748,7 +823,7 @@ def main() -> int:
         "",
     ]
     add_matrix_coverage(lines, coverage)
-    add_status_only_sections(lines, coverage)
+    add_status_only_sections(lines, coverage, input_root, reports)
 
     visual_sections = 0
     for key, report in reports:

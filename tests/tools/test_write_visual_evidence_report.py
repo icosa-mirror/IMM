@@ -616,6 +616,105 @@ def main() -> int:
         assert "| unity/android/non-vr/vulkan | supported | passed | yes |" in second_text
         assert "## Unity Android Vulkan\n\n- Result: passed" in second_text
 
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+        raw = temp / "raw" / "UnityWindowsVulkanSyntheticStereo"
+        raw.mkdir(parents=True)
+        (raw / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {
+                        "result": "failed",
+                        "failure_class": "runtime",
+                        "failures": ["requested Vulkan fell back to Direct3D 11"],
+                        "warnings": ["Lavapipe was selected by the loader"],
+                    },
+                    "matrix": {
+                        "product": "unity",
+                        "platform": "windows",
+                        "mode": "synthetic-stereo",
+                        "renderer": "vulkan",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        build_only = temp / "raw" / "UnityWindowsVulkanPlayerBuild"
+        build_only.mkdir(parents=True)
+        (build_only / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "imm-ci-artifact-manifest-v1",
+                    "classification": {"result": "passed", "failure_class": ""},
+                    "matrix": {
+                        "product": "unity",
+                        "platform": "windows",
+                        "mode": "non-vr",
+                        "renderer": "vulkan",
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        matrix = temp / "matrix.json"
+        matrix.write_text(
+            json.dumps(
+                {
+                    "rows": [
+                        {
+                            "product": "unity",
+                            "platform": "windows",
+                            "mode": "non-vr",
+                            "renderer": "vulkan",
+                            "status": "supported",
+                            "hardware_gate": "CI Engine Matrix / Unity Windows Vulkan",
+                            "baseline": "tests/baselines/render/windows-directx-sample1.json",
+                            "reason": "A player build alone is not visual evidence.",
+                        },
+                        {
+                            "product": "unity",
+                            "platform": "windows",
+                            "mode": "synthetic-stereo",
+                            "renderer": "vulkan",
+                            "status": "supported",
+                            "hosted_gate": "CI Engine Matrix / Unity Windows Vulkan stereo",
+                            "baseline": "tests/baselines/render/unity-windows-vulkan-sample1.json",
+                            "reason": "Vulkan must not fall back to another API.",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        output = temp / "output"
+        report = output / "VALIDATION_REPORT.md"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_visual_evidence_report.py",
+                "--input-root", str(temp / "raw"),
+                "--output-dir", str(output),
+                "--matrix-status", str(matrix),
+                "--required-evidence-scope", "all",
+                "--markdown-output", str(report),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 1
+        text = report.read_text(encoding="utf-8")
+        assert "## Status-Only Evidence" in text
+        assert "### Unity Windows Synthetic Stereo Vulkan" in text
+        assert "- Result: runtime_failed" in text
+        assert "- Failure class: runtime" in text
+        assert "- Failure: requested Vulkan fell back to Direct3D 11" in text
+        assert "- Supporting diagnostic: Lavapipe was selected by the loader" in text
+        assert "### Unity Windows Non Vr Vulkan" in text
+        assert "- Result: evidence_incomplete" in text
+        assert "- Failure: no strict visual report was produced for this supported visual row" in text
+
     print("Visual evidence report tests passed")
     return 0
 

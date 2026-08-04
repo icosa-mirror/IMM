@@ -53,7 +53,7 @@ def main() -> int:
         "Run Godot project Run-button smoke",
         "Record Godot project Run-button render metrics",
         "Verify Godot project Run-button log contract",
-        "Enforce Godot project Run-button contract",
+        "Classify Windows Godot Vulkan evidence",
     ]:
         assert token in gpu_workflow
     assert "godot-windows-vulkan-sample-play.json" in gpu_workflow
@@ -104,21 +104,20 @@ def main() -> int:
     unity_automation = (ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs").read_text(encoding="utf-8")
     engine_workflow = (ROOT / ".github/workflows/ci-engine.yml").read_text(encoding="utf-8")
     assert '"Assets/Scenes/SampleScene.unity"' in unity_automation
-    combined = method_body(
-        unity_automation,
-        "public static void BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke()",
-    )
-    assert combined.index("BuildMacOSMetalSmokePlayer();") < combined.index("RunMacOSEditorPlayModeSmoke();")
+    assert "BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke" not in unity_automation
     editor_play = method_body(unity_automation, "public static void RunMacOSEditorPlayModeSmoke()")
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
     for token in [
-        "BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
-        "manualExit: true",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayer",
+        "Run Unity project Play-button smoke",
+        "-executeMethod ImmPlayer.Editor.BuildAutomation.RunMacOSEditorPlayModeSmoke",
         "Record Unity project Play-button render metrics",
         "Write Unity project Play-button render report",
-        "Enforce Unity project Play-button contract",
+        "Classify Unity macOS Metal evidence",
     ]:
         assert token in engine_workflow
+    editor_play_step = engine_workflow.split("- name: Run Unity project Play-button smoke", 1)[1].split("- name:", 1)[0]
+    assert "-quit" not in editor_play_step
 
     print("Sample project entrypoint contracts passed")
     return 0

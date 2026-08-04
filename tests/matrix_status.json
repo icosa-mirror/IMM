@@ -179,6 +179,17 @@
     },
     {
       "product": "unity",
+      "platform": "windows",
+      "mode": "synthetic-stereo",
+      "renderer": "vulkan",
+      "status": "supported",
+      "hosted_gate": "CI Engine Matrix / Unity Windows Vulkan Synthetic Stereo",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
+      "reason": "CI Engine Matrix requires Unity to start with Vulkan, produce two independently valid eye images, and reject graphics-API fallback or duplicated eyes."
+    },
+    {
+      "product": "unity",
       "platform": "macos",
       "mode": "non-vr",
       "renderer": "metal",

@@ -171,12 +171,6 @@ namespace ImmPlayer.Editor
             BuildPlayer(BuildTarget.StandaloneOSX, outputPath, BuildOptions.Development, "macOS Metal smoke player");
         }
 
-        public static void BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke()
-        {
-            BuildMacOSMetalSmokePlayer();
-            RunMacOSEditorPlayModeSmoke();
-        }
-
         public static void BuildIOSDevelopment()
         {
             EnsureBuildTargetSupported(BuildTargetGroup.iOS, BuildTarget.iOS, "iOS");
