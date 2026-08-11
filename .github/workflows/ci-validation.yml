@@ -84,6 +84,7 @@ jobs:
     uses: ./.github/workflows/ci-device.yml
     with:
       hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
+      evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}
     secrets: inherit
 
   engine:
@@ -100,6 +101,7 @@ jobs:
     uses: ./.github/workflows/ci-engine.yml
     with:
       hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
+      evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}
     secrets: inherit
 
   gpu:
@@ -114,6 +116,7 @@ jobs:
     uses: ./.github/workflows/ci-gpu.yml
     with:
       hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}
+      evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}
     secrets: inherit
 
   validation-evidence:

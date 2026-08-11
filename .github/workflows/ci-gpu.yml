@@ -10,10 +10,18 @@ on:
         required: false
         default: false
         type: boolean
+      evidence_scope:
+        description: Matrix evidence scope selected by the calling workflow.
+        required: false
+        default: hosted
+        type: string
 
 permissions:
   actions: write
   contents: read
+
+env:
+  MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}
 
 jobs:
   windows-standalone-directx:
@@ -1252,6 +1260,7 @@ jobs:
       - name: Verify GPU matrix evidence
         run: >
           python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --scope "$MATRIX_EVIDENCE_SCOPE"
           --gate-prefix "CI GPU Matrix /"
           --evidence-root artifacts/gpu-evidence/input
           --json-output artifacts/gpu-evidence/matrix-evidence.json

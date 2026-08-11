@@ -10,12 +10,18 @@ on:
         required: false
         default: false
         type: boolean
+      evidence_scope:
+        description: Matrix evidence scope selected by the calling workflow.
+        required: false
+        default: hosted
+        type: string
 
 permissions:
   actions: write
   contents: read
 
 env:
+  MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}
   FTL_GLES_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GLES_DEVICE || 'model=redfin,version=30,locale=en,orientation=landscape' }}
   FTL_VULKAN_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_VULKAN_DEVICE || 'model=Pixel2.arm,version=33,locale=en,orientation=landscape' }}
   FTL_GODOT_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_GODOT_DEVICE || 'model=akita,version=34,locale=en,orientation=landscape' }}
@@ -80,6 +86,7 @@ jobs:
           ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=GLES -PimmBuildDir=build_gles_ftl
       - name: Run Android GLES smoke in Firebase Test Lab
         timeout-minutes: 30
+        continue-on-error: true
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -128,11 +135,14 @@ jobs:
           }
           $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-gles/missing-native-render-after.ppm" }
           python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-gles/android-gles-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-gles/captures --markdown-output artifacts/android-standalone-gles/render-report.md
+      - name: Classify Android GLES result
+        if: always()
+        run: python tests/tools/classify_android_standalone.py --artifact-dir artifacts/android-standalone-gles --metrics-json android-gles-screenshot-metrics.json --output artifacts/android-standalone-gles/android-gles-status.json
       - name: Write CI manifest
         if: always()
         shell: pwsh
         run: |
-          python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/android-standalone-gles/manifest.json --product standalone --platform-name android --mode non-vr --renderer gles --include artifacts/android-standalone-gles
+          python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/android-standalone-gles/android-gles-status.json --output artifacts/android-standalone-gles/manifest.json --product standalone --platform-name android --mode non-vr --renderer gles --include artifacts/android-standalone-gles
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -203,6 +213,7 @@ jobs:
           ./gradlew :libImmCore:assembleDebug :libImmImporter:assembleDebug :libImmPlayer:assembleDebug :appImmViewer:assembleDebug :appImmViewer:assembleDebugAndroidTest -PimmNonVr=ON -PimmRendererApi=Vulkan -PimmBuildDir=build_vulkan_ftl
       - name: Run Android Vulkan smoke in Firebase Test Lab
         timeout-minutes: 30
+        continue-on-error: true
         shell: bash
         run: >
           python tests/tools/run_firebase_test_lab_android.py
@@ -255,10 +266,13 @@ jobs:
           }
           $captureArg = if ($capture) { $capture.FullName } else { "artifacts/android-standalone-vulkan/missing-native-render-after.ppm" }
           python tests/tools/write_render_report.py --metrics-json artifacts/android-standalone-vulkan/android-vulkan-screenshot-metrics.json --candidate-capture $captureArg --output-dir artifacts/android-standalone-vulkan/captures --markdown-output artifacts/android-standalone-vulkan/render-report.md
+      - name: Classify Android Vulkan result
+        if: always()
+        run: python tests/tools/classify_android_standalone.py --artifact-dir artifacts/android-standalone-vulkan --metrics-json android-vulkan-screenshot-metrics.json --output artifacts/android-standalone-vulkan/android-vulkan-status.json
       - name: Write CI manifest
         if: always()
         shell: pwsh
-        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --failure-class visual --output artifacts/android-standalone-vulkan/manifest.json --product standalone --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-standalone-vulkan
+        run: python tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/android-standalone-vulkan/android-vulkan-status.json --output artifacts/android-standalone-vulkan/manifest.json --product standalone --platform-name android --mode non-vr --renderer vulkan --include artifacts/android-standalone-vulkan
       - name: Collect artifact summary
         if: always()
         shell: pwsh
@@ -649,6 +663,7 @@ jobs:
       - name: Verify device matrix evidence
         run: >
           python tests/tools/verify_matrix_evidence.py tests/matrix_status.json
+          --scope "$MATRIX_EVIDENCE_SCOPE"
           --gate-prefix "CI Device Matrix /"
           --evidence-root artifacts/device-evidence/input
           --json-output artifacts/device-evidence/matrix-evidence.json

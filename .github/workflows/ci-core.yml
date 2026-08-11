@@ -189,6 +189,7 @@ jobs:
           python tests/tools/test_classify_composition_modes.py
           python tests/tools/test_classify_android_unity_vulkan.py
           python tests/tools/test_classify_android_godot_vulkan.py
+          python tests/tools/test_classify_android_standalone.py
           python tests/tools/test_classify_windows_godot_vulkan.py
           python tests/tools/test_classify_unity_macos_metal.py
           python tests/tools/test_vr_probe_contracts.py

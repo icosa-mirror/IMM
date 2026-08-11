@@ -38,6 +38,21 @@ to use the connected-component maximum, so the occlusion detector is unchanged.
 The Android standalone Vulkan lane still failed closed with no capture during
 the ongoing Test Lab incident; it is not a produced visual regression.
 
+Run `31514181525` cloud-confirmed the fragmented-brush correction: both macOS
+Unity Metal and macOS Godot Metal passed their complete visual contracts, as
+did Unity Android Vulkan and every other hosted engine/GPU rendering lane.
+Android standalone Vulkan again produced no capture after waiting for Firebase,
+so it remained red without evidence of a bad frame. The run also exposed a
+report-scope defect: reusable hosted evidence reports inherited the verifier's
+hardware-only default, causing the engine report to demand a skipped
+self-hosted Windows Unity Vulkan row while ignoring the hosted rows it was
+supposed to gate. Device, engine, and GPU reports now receive an explicit
+`hosted` scope in normal validation and `all-supported` only in hardware mode.
+The standalone GLES/Vulkan lanes now classify complete visual evidence
+directly; a valid image can outrank redundant missing log markers, while a
+Firebase failure with no image remains red as `infrastructure` or `evidence`
+instead of being hard-coded as `visual`.
+
 The only currently confirmed product-rendering defect is physical Quest Unity
 Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
 Unity background. macOS Godot Metal was a validation false negative, not a
@@ -192,7 +207,13 @@ while the validated cross-platform suite remains the regression gate.
    plugin. The XR player shell is cached separately so native iterations only
    replace and re-sign the plugin. This artifact accelerates physical testing;
    its successful build and XR manifest checks are not visual-pass evidence.
-2. Rerun the four Android Firebase visual lanes after Google's 11 August 2026
+2. Cloud-confirm the explicit evidence-scope and Android standalone
+   classification corrections. Normal hosted reports must evaluate hosted
+   rows; hardware dispatches must evaluate all supported rows. A complete,
+   passing standalone image is authoritative over redundant Firebase/log
+   diagnostics, but a missing image must remain red and retain its actual
+   infrastructure/evidence classification.
+3. Rerun the four Android Firebase visual lanes after Google's 11 August 2026
    Test Lab availability incident is resolved. Do not weaken or skip their
    required visual checks: an infrastructure failure must remain red and must
    be reported as `infrastructure_failed`, not as a renderer failure or pass.
@@ -200,16 +221,16 @@ while the validated cross-platform suite remains the regression gate.
    Godot Vulkan, and Android standalone GLES all passed, while Android
    standalone Vulkan exhausted its Test Lab execution window without producing
    `native-render-after.ppm`.
-3. Download and manually inspect the complete exact-revision evidence report
+4. Download and manually inspect the complete exact-revision evidence report
    after Firebase can execute the APKs. Preserve the now-confirmed Godot
    Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
    Vulkan, OpenGL, Metal, DirectX, Windows Vulkan, and WASM behavior. The full
    supported hosted workflow must be green; a green aggregate produced by
    suppressing missing visual evidence is not acceptable.
-4. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
+5. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
    same two-eye producer and stereo-aware presentation design; true Vulkan
    multiview remains an optional later optimization.
-5. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
+6. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
    coverage task, and treat Godot iOS as a product implementation task before
    adding its visual-validation lane.
 

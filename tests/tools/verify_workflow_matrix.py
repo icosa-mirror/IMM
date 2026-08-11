@@ -28,8 +28,8 @@ REQUIRED_JOBS = {
         "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report", "Hide per-lane core artifacts"],
     },
     ".github/workflows/ci-device.yml": {
-        "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Write CI manifest", "Collect artifact summary"],
-        "android-standalone-vulkan": ["Check Firebase Test Lab configuration", "Build Android Vulkan APKs", "Run Android Vulkan smoke in Firebase Test Lab", "Record Android Vulkan screenshot metrics", "Write Android Vulkan screenshot report", "Write CI manifest", "Collect artifact summary"],
+        "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Classify Android GLES result", "Write CI manifest", "Collect artifact summary"],
+        "android-standalone-vulkan": ["Check Firebase Test Lab configuration", "Build Android Vulkan APKs", "Run Android Vulkan smoke in Firebase Test Lab", "Record Android Vulkan screenshot metrics", "Write Android Vulkan screenshot report", "Classify Android Vulkan result", "Write CI manifest", "Collect artifact summary"],
         "android-openxr-probe": ["Preflight Quest OpenXR device", "Run Android OpenXR probe smoke", "Verify OpenXR log contract", "Write CI manifest", "Collect artifact summary"],
         "android-godot-vulkan": ["Check Firebase Test Lab configuration", "Build Android Godot APK", "Run Android Godot Vulkan smoke in Firebase Test Lab", "Record Android Godot Vulkan screenshot metrics", "Write Android Godot Vulkan screenshot report", "Classify Android Godot Vulkan result", "Write CI manifest", "Collect artifact summary"],
         "android-quest-vr": ["Preflight Quest VR device", "Run Quest VR app smoke", "Verify Quest VR log contract", "Write CI manifest", "Collect artifact summary"],
@@ -207,6 +207,16 @@ REQUIRED_ALWAYS_STEPS = {
         },
     },
     ".github/workflows/ci-device.yml": {
+        "android-standalone-gles": {
+            "Record Android GLES screenshot metrics",
+            "Write Android GLES screenshot report",
+            "Classify Android GLES result",
+        },
+        "android-standalone-vulkan": {
+            "Record Android Vulkan screenshot metrics",
+            "Write Android Vulkan screenshot report",
+            "Classify Android Vulkan result",
+        },
         "android-godot-vulkan": {
             "Record Android Godot Vulkan screenshot metrics",
             "Write Android Godot Vulkan screenshot report",
@@ -370,6 +380,7 @@ def verify_consolidated_workflow(path: Path, workflow_rel: str, workflow_files: 
             "inputs.mode == 'hardware'",
             "inputs.mode == 'release'",
             "hardware: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' }}",
+            "evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}",
             "contains(github.event.head_commit.message, '[CI VALIDATION]')",
             "contains(github.event.head_commit.message, '[RELEASE]')",
             f"contains(github.event.pull_request.labels.*.name, '{VALIDATION_JOB_LABELS[job_name]}')",
@@ -757,6 +768,7 @@ def verify_ci_core_self_test_contract(path: Path, workflow_rel: str, errors: lis
         "python tests/tools/test_classify_unity_synthetic_stereo.py",
         "python tests/tools/test_classify_android_unity_vulkan.py",
         "python tests/tools/test_classify_android_godot_vulkan.py",
+        "python tests/tools/test_classify_android_standalone.py",
     ]
     for token in required_tokens:
         if token not in text:
@@ -770,9 +782,14 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "--contract tests/baselines/render/macos-standalone-metal-sample1.json",
         ],
         ".github/workflows/ci-device.yml": [
+            "classify_android_standalone.py",
+            "--classification-json artifacts/android-standalone-gles/android-gles-status.json",
+            "--classification-json artifacts/android-standalone-vulkan/android-vulkan-status.json",
             "godot-android-vulkan-sample1.json",
             "vulkan_render_candidate.png",
             "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl",
+            "MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}",
+            "--scope \"$MATRIX_EVIDENCE_SCOPE\"",
         ],
         ".github/workflows/ci-engine.yml": [
             "unity-macos-metal-render.png",
@@ -795,6 +812,8 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "--classification-json artifacts\\unity-windows-vulkan-full-depth\\composition-status.json",
             "--reference tests/baselines/render/unity-windows-directx-sample1.png",
             "render candidate capture=",
+            "MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}",
+            "--scope \"$MATRIX_EVIDENCE_SCOPE\"",
         ],
         ".github/workflows/ci-gpu.yml": [
             "godot-vulkan-render.ppm",
@@ -805,6 +824,8 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "--classification-json artifacts/godot-smoke-macos-metal/composition-status.json",
             "metal_render_baseline.png",
             "--reference tests/baselines/render/windows-directx-sample1.ppm",
+            "MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}",
+            "--scope \"$MATRIX_EVIDENCE_SCOPE\"",
         ],
         ".github/workflows/web-pages.yml": [
             "sample1-web-render-metrics.json",
