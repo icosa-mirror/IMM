@@ -169,12 +169,15 @@ def main() -> int:
                 classifier_details[key] = [str(item) for item in value if str(item)]
         if classifier_result == "passed" and status == "passed":
             failure_class = ""
+        elif classifier_result == "skipped" and status == "passed":
+            status = "skipped"
+            failure_class = ""
         elif classifier_result != "passed":
             status = "failed" if status == "passed" else status
             failure_class = classifier_failure_class or failure_class or "unknown"
         elif status != "passed":
             failure_class = failure_class or "infrastructure"
-    if status == "passed":
+    if status in {"passed", "skipped"}:
         failure_class = ""
     elif not failure_class:
         failure_class = "unknown"

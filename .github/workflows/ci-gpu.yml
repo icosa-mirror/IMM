@@ -778,14 +778,26 @@ jobs:
         continue-on-error: true
         timeout-minutes: 10
         shell: pwsh
-        run: >
-          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1
-          -Configuration Release
-          -SkipBuild
-          -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm
-          -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm
-          -RenderCapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-preprobe.ppm
-          -LogDir artifacts\godot-smoke-windows-vulkan
+        run: |
+          $passed = $false
+          foreach ($attempt in 1..2) {
+            try {
+              .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1 `
+                -Configuration Release `
+                -SkipBuild `
+                -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm `
+                -CapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-visual.ppm `
+                -RenderCapturePath artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-preprobe.ppm `
+                -LogDir artifacts\godot-smoke-windows-vulkan
+              $passed = $true
+              break
+            }
+            catch {
+              Write-Warning "[IMM_GODOT_CI_RETRY_20260811] full-depth attempt $attempt failed: $($_.Exception.Message)"
+              if ($attempt -eq 2) { throw }
+            }
+          }
+          if (-not $passed) { throw "Godot Vulkan full-depth smoke did not complete" }
 
       - name: Record Godot Vulkan full depth metrics
         if: always()

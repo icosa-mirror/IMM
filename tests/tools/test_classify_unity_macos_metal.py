@@ -160,6 +160,22 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         prepare(root)
+        sealed = root / "sealed-editor-play"
+        sealed.mkdir()
+        (root / "unity-macos-metal-editor-play.png").replace(
+            sealed / "unity-macos-metal-editor-play.png"
+        )
+        (root / "unity-macos-metal-editor-play-metrics.json").replace(
+            sealed / "unity-macos-metal-editor-play-metrics.json"
+        )
+        completed, lane, editor, _full_depth, _overlay = classify(root)
+        assert completed.returncode == 0
+        assert lane["result"] == "passed"
+        assert editor["rendering"] == "success"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = Path(temp_dir)
+        prepare(root)
         (root / "unity-full-depth-player.log").write_text(
             "[IMM_UNITY_SMOKE] graphics api probe failed\n",
             encoding="utf-8",

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -126,6 +127,8 @@ def main() -> int:
             "sample1-full-depth.json",
             "sample1-ordered-overlay.json",
             "unity-macos-metal-ordered-overlay-diagnostic.png",
+            "sealed-editor-play",
+            "--allow-host-vulkan-rejection",
             "-immSmokeFrames 120",
             "-immSmokeExpectedGraphicsApi Metal",
             "-immSmokeMinOrderedOverlayImmUniqueColors 3000",
@@ -331,6 +334,7 @@ def main() -> int:
         ],
         ROOT / ".github/workflows/ci-gpu.yml": [
             "Run Godot Vulkan ordered overlay smoke",
+            "[IMM_GODOT_CI_RETRY_20260811]",
             "-CompositionMode ordered_overlay",
             "godot-smoke-windows-vulkan-ordered-overlay",
             "godot-vulkan-ordered-overlay.ppm",
@@ -339,6 +343,11 @@ def main() -> int:
             "sample1-ordered-overlay.json",
             "godot-vulkan-ordered-overlay-diagnostic.ppm",
             "IMM_GODOT_RENDER_GRAPH_DEPTH_COMPOSITION=1",
+        ],
+        ROOT / "tests/tools/run_firebase_test_lab_android.py": [
+            "--infrastructure-retry-delay-seconds",
+            "default=90.0",
+            "time.sleep(retry_delay)",
         ],
         ROOT / ".github/workflows/ci-device.yml": [
             "godot-android-vulkan-sample1.json",
@@ -463,6 +472,20 @@ def main() -> int:
     unity_smoke = (
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmUnityRuntimeSmoke.cs"
     ).read_text(encoding="utf-8")
+    full_depth_contract = json.loads(
+        (
+            ROOT / "tests/baselines/render/sample1-full-depth.json"
+        ).read_text(encoding="utf-8")
+    )
+    lower_red_probe = next(
+        probe
+        for probe in full_depth_contract["validation"]["expected_color_components"]["probes"]
+        if probe["name"] == "sample1-lower-red-brush-content"
+    )
+    if lower_red_probe.get("minimum_largest_component_share_of_crop") != 0.00075:
+        errors.append(
+            "Full-depth lower-red presence threshold must retain the reviewed 0.00075 floor"
+        )
     if 'Overlay Fixture Camera", StringComparison.Ordinal' not in unity_smoke:
         errors.append("Unity ordered-overlay probes must use the scene camera, not the late overlay camera")
     if 'Environment.SetEnvironmentVariable("IMM_UNITY_FORCE_TEXTURE_PROJECTION"' in unity_smoke:

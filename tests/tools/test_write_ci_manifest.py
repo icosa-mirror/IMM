@@ -156,6 +156,50 @@ def main() -> int:
             "warnings": ["supporting log marker absent"],
         }
 
+        skipped_status = Path(temp_dir) / "skipped-status.json"
+        skipped_status.write_text(
+            json.dumps(
+                {
+                    "result": "skipped",
+                    "failure_class": "",
+                    "failures": [],
+                    "warnings": ["host Vulkan unavailable"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        skipped_output = Path(temp_dir) / "skipped-manifest.json"
+        subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_ci_manifest.py",
+                "--output",
+                str(skipped_output),
+                "--repo-root",
+                str(root),
+                "--product",
+                "unity",
+                "--platform-name",
+                "windows",
+                "--mode",
+                "synthetic-stereo",
+                "--renderer",
+                "vulkan",
+                "--status",
+                "success",
+                "--classification-json",
+                str(skipped_status),
+            ],
+            check=True,
+        )
+        skipped_manifest = json.loads(skipped_output.read_text(encoding="utf-8"))
+        assert skipped_manifest["classification"] == {
+            "result": "skipped",
+            "failure_class": "",
+            "failures": [],
+            "warnings": ["host Vulkan unavailable"],
+        }
+
     print("CI manifest tests passed")
     return 0
 

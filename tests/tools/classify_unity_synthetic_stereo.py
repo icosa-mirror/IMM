@@ -34,6 +34,15 @@ def main() -> int:
     parser.add_argument("--left-metrics", type=Path, required=True)
     parser.add_argument("--right-metrics", type=Path, required=True)
     parser.add_argument("--log-contract", type=Path, required=True)
+    parser.add_argument(
+        "--allow-host-vulkan-rejection",
+        action="store_true",
+        help=(
+            "Record an exact Unity-on-hosted-Lavapipe Vulkan rejection as skipped. "
+            "This never creates visual-pass evidence."
+        ),
+    )
+    parser.add_argument("--runtime-log", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -57,6 +66,23 @@ def main() -> int:
     )
 
     runtime = values["runtime classification"]
+    runtime_log = ""
+    if args.runtime_log:
+        try:
+            runtime_log = args.runtime_log.read_text(
+                encoding="utf-8", errors="ignore"
+            )
+        except OSError:
+            runtime_log = ""
+    host_vulkan_rejected = (
+        args.allow_host_vulkan_rejection
+        and runtime is not None
+        and runtime.get("result") == "runtime_failed"
+        and "Forcing GfxDevice: Vulkan" in runtime_log
+        and "Vulkan detection: 0" in runtime_log
+        and "[IMM_UNITY_SMOKE] graphics api expected=Vulkan actual=Direct3D11"
+        in runtime_log
+    )
     runtime_failures: list[str] = []
     if runtime is not None and runtime.get("result") == "runtime_failed":
         runtime_failures = details("runtime classification", runtime)
@@ -75,7 +101,14 @@ def main() -> int:
         if not passed:
             render_failures.extend(details(label, value))
 
-    if runtime_failures:
+    if host_vulkan_rejected:
+        result = "skipped"
+        failure_class = ""
+        failures = []
+        warnings = [
+            "hosted Lavapipe was rejected by Unity before rendering; synthetic stereo Vulkan was not tested"
+        ] + runtime_failures + evidence_failures + render_failures
+    elif runtime_failures:
         result = "runtime_failed"
         failure_class = "runtime"
         failures = runtime_failures
@@ -99,7 +132,9 @@ def main() -> int:
     status = {
         "schema": "imm-composition-status-v1",
         "result": result,
-        "rendering": "success" if result == "passed" else "failed",
+        "rendering": (
+            "success" if result == "passed" else ("not_tested" if result == "skipped" else "failed")
+        ),
         "failure_class": failure_class,
         "failures": failures,
         "warnings": warnings,
@@ -111,7 +146,7 @@ def main() -> int:
         newline="\n",
     )
     print(f"Unity synthetic-stereo status written: {args.output}")
-    return 0 if result == "passed" else 1
+    return 0 if result in {"passed", "skipped"} else 1
 
 
 if __name__ == "__main__":

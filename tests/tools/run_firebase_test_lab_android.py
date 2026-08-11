@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -290,6 +291,12 @@ def main() -> int:
     parser.add_argument("--external-screen-capture-name", default="")
     parser.add_argument("--client-label", default="")
     parser.add_argument("--gcloud-attempts", type=int, default=2)
+    parser.add_argument(
+        "--infrastructure-retry-delay-seconds",
+        type=float,
+        default=90.0,
+        help="Recovery delay before retrying a Firebase infrastructure failure",
+    )
     args = parser.parse_args()
 
     args.artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -313,7 +320,15 @@ def main() -> int:
             break
         if attempt == max_attempts or not is_firebase_infrastructure_failure(stderr_path):
             break
-        print(f"Firebase Test Lab infrastructure failure on attempt {attempt}; retrying with results-dir {args.results_dir}-retry{attempt + 1}", file=sys.stderr)
+        retry_delay = max(0.0, args.infrastructure_retry_delay_seconds)
+        print(
+            f"Firebase Test Lab infrastructure failure on attempt {attempt}; "
+            f"waiting {retry_delay:.0f}s before retrying with results-dir "
+            f"{args.results_dir}-retry{attempt + 1}",
+            file=sys.stderr,
+        )
+        if retry_delay:
+            time.sleep(retry_delay)
 
     copy_info = copy_results(args.results_bucket, args.results_dir, args.artifact_dir)
     if copy_info["exit_code"] != 0:

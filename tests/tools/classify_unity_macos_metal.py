@@ -42,6 +42,13 @@ def metric_failures(label: str, value: dict) -> list[str]:
     return [f"{label} failed{f': {detail}' if detail else ''}"]
 
 
+def resolve_editor_evidence(root: Path, name: str) -> Path:
+    primary = root / name
+    if primary.is_file():
+        return primary
+    return root / "sealed-editor-play" / name
+
+
 def visual_status(
     mode: str,
     render_metric: dict | None,
@@ -113,13 +120,17 @@ def classify(
     editor_play_outcome: str,
 ) -> tuple[dict, dict, dict, dict]:
     capture_paths = {
-        "Editor Play capture": root / "unity-macos-metal-editor-play.png",
+        "Editor Play capture": resolve_editor_evidence(
+            root, "unity-macos-metal-editor-play.png"
+        ),
         "render-only capture": root / "unity-macos-metal-render.png",
         "full-depth capture": root / "unity-macos-metal-full-depth.png",
         "ordered-overlay capture": root / "unity-macos-metal-ordered-overlay.png",
     }
     metric_paths = {
-        "Editor Play visual contract": root / "unity-macos-metal-editor-play-metrics.json",
+        "Editor Play visual contract": resolve_editor_evidence(
+            root, "unity-macos-metal-editor-play-metrics.json"
+        ),
         "render-only visual contract": root / "unity-macos-metal-render-metrics.json",
         "full-depth visual contract": root / "unity-macos-metal-full-depth-metrics.json",
         "ordered-overlay visual contract": root / "unity-macos-metal-ordered-overlay-metrics.json",

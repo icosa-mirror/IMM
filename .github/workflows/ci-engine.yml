@@ -312,14 +312,29 @@ jobs:
           --contract tests/baselines/render/unity-macos-metal-sample1.json
           --json-output artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play-metrics.json
 
+      - name: Seal Unity project Play-button visual evidence
+        id: unity_editor_play_seal
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          artifact_dir="$PWD/artifacts/unity-macos-metal-composition"
+          capture="$artifact_dir/unity-macos-metal-editor-play.png"
+          metrics="$artifact_dir/unity-macos-metal-editor-play-metrics.json"
+          test -s "$capture"
+          test -s "$metrics"
+          mkdir -p "$artifact_dir/sealed-editor-play"
+          cp "$capture" "$artifact_dir/sealed-editor-play/unity-macos-metal-editor-play.png"
+          cp "$metrics" "$artifact_dir/sealed-editor-play/unity-macos-metal-editor-play-metrics.json"
+
       - name: Write Unity project Play-button render report
         if: always()
         continue-on-error: true
         run: >
           python3 tests/tools/write_render_report.py
-          --metrics-json artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play-metrics.json
+          --metrics-json artifacts/unity-macos-metal-composition/sealed-editor-play/unity-macos-metal-editor-play-metrics.json
           --reference-capture tests/baselines/render/unity-windows-directx-sample1.png
-          --candidate-capture artifacts/unity-macos-metal-composition/unity-macos-metal-editor-play.png
+          --candidate-capture artifacts/unity-macos-metal-composition/sealed-editor-play/unity-macos-metal-editor-play.png
           --output-dir artifacts/unity-macos-metal-composition/captures/editor-play
           --markdown-output artifacts/unity-macos-metal-composition/editor-play-report.md
 
@@ -1022,6 +1037,8 @@ jobs:
           --left-metrics artifacts\unity-windows-vulkan-synthetic-stereo\left-eye-metrics.json
           --right-metrics artifacts\unity-windows-vulkan-synthetic-stereo\right-eye-metrics.json
           --log-contract artifacts\unity-windows-vulkan-synthetic-stereo\log-contract.json
+          --runtime-log artifacts\unity-windows-vulkan-synthetic-stereo\unity-player.log
+          --allow-host-vulkan-rejection
           --output artifacts\unity-windows-vulkan-synthetic-stereo\composition-status.json
 
       - name: Stage Unity Vulkan synthetic stereo capture evidence
