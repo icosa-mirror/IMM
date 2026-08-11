@@ -182,11 +182,13 @@
       "platform": "windows",
       "mode": "synthetic-stereo",
       "renderer": "vulkan",
-      "status": "supported",
+      "status": "deferred",
       "hosted_gate": "CI Engine Matrix / Unity Windows Vulkan Synthetic Stereo",
       "hardware_gate": null,
       "baseline": "tests/baselines/render/unity-windows-directx-sample1.json",
-      "reason": "CI Engine Matrix requires Unity to start with Vulkan, produce two independently valid eye images, and reject graphics-API fallback or duplicated eyes."
+      "reason": "The hosted diagnostic verifies that Unity rejects Lavapipe instead of silently claiming Vulkan success, but the hosted runner cannot produce Unity Vulkan pixels. Android Firebase supplies the supported hosted Vulkan synthetic-stereo visual evidence.",
+      "owner_decision": "Keep the Windows Lavapipe lane as a non-canonical runtime diagnostic; do not count its expected skip as either a visual pass or a normal hosted validation failure.",
+      "promotion_criteria": "Promote this row only when a Windows CI runner exposes a Vulkan device accepted by Unity and the lane produces two distinct eye captures that pass the strict visual contracts."
     },
     {
       "product": "unity",

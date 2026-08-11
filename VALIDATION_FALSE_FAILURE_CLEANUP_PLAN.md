@@ -53,6 +53,19 @@ directly; a valid image can outrank redundant missing log markers, while a
 Firebase failure with no image remains red as `infrastructure` or `evidence`
 instead of being hard-coded as `visual`.
 
+Run `31518237544` confirmed that the explicit hosted scope selects the intended
+engine rows, and in doing so exposed a stale support declaration: Windows Unity
+Vulkan synthetic stereo was marked as a supported hosted visual lane even
+though Unity consistently rejects the hosted Lavapipe device and the lane's
+authoritative manifest says `skipped`. That row is now `deferred` and remains a
+runtime diagnostic only. It cannot claim a Vulkan pass, and it no longer makes
+normal hosted validation fail for the known lack of an accepted Windows Vulkan
+device. Unity Android Vulkan remains the supported hosted synthetic-stereo
+visual path and passed in the same run. Android standalone Vulkan reached its
+outer 30-minute Firebase step timeout without a capture or completed Firebase
+summary; the new classifier reported `evidence_incomplete` rather than a visual
+failure, and the device/final reports correctly remained red.
+
 The only currently confirmed product-rendering defect is physical Quest Unity
 Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
 Unity background. macOS Godot Metal was a validation false negative, not a
