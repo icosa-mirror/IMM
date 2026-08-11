@@ -75,6 +75,15 @@ Android standalone Vulkan: Firebase reached the outer 30-minute timeout without
 returning a result or capture during Google's ongoing Test Lab incident. It was
 correctly reported as `evidence_incomplete`, not as a rendering failure.
 
+Run `31527970425` cloud-compiled the eye-authoritative Quest presentation
+iteration and produced an exact-revision Unity 6 OpenXR/Vulkan Quest APK. Its
+non-XR Unity Android Vulkan Firebase lane passed render, composition, external
+screen, and distinct synthetic-eye validation; manual inspection agrees with
+those verdicts. All other hosted canonical visual and evidence jobs passed.
+Android standalone Vulkan was again the sole red lane after its Firebase step
+timed out at 30 minutes without a result or capture, and it again reported
+`evidence_incomplete`. Physical Quest two-eye acceptance remains pending.
+
 The only currently confirmed product-rendering defect is physical Quest Unity
 Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
 Unity background. macOS Godot Metal was a validation false negative, not a
@@ -333,7 +342,8 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
   supported final-image callback to choose `VulkanEyeTargets[0]` or `[1]` and
   composite it into Unity's own per-eye destination. The paired native producer
   is unchanged, and a kill switch retains the previous presentation path for
-  device A/B diagnosis. Cloud compilation and physical Quest acceptance are
+  device A/B diagnosis. Run `31527970425` passed Unity 6 compilation and the
+  non-XR Android Vulkan visual regressions; physical Quest acceptance is
   pending.
 - Multi Pass remains the first acceptance target. The implementation must nevertheless carry both eye results together so Single Pass Instanced can use the same producer and presentation path later.
 
@@ -352,8 +362,9 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
 #### Phase B: replace mutable per-eye callback state
 
 Implementation status: paired production landed in `81e308f9`; Unity 6 cloud
-compilation passed. Eye-authoritative `OnRenderImage` presentation is the active
-follow-up iteration. Physical Quest acceptance remains pending.
+compilation passed. Eye-authoritative `OnRenderImage` presentation landed in
+`53c83170` and passed cloud compilation plus the non-XR Android Vulkan visual
+suite. Physical Quest acceptance remains pending.
 
 1. Obtain both current XR eye view/projection matrices once per frame.
 2. Maintain two Android Vulkan offscreen eye targets initially. Do not alter the direct-rendering paths used by working graphics APIs.
