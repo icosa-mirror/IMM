@@ -1,12 +1,28 @@
 # Android Unity Vulkan Fork Integration Plan
 
+## Status
+
+This plan is a completed and superseded implementation record. It documents
+the fork investigation that informed the Android Unity Vulkan offscreen render
+and presentation work. The Firebase render-only and composition milestones it
+targeted now pass strict physical-screen visual validation.
+
+Do not use the phases or former immediate action below as the current work
+queue. The authoritative active plan is
+`VALIDATION_FALSE_FAILURE_CLEANUP_PLAN.md`, whose remaining Android Unity work
+is the physical Quest Multi Pass handoff followed by Single Pass Instanced.
+
+The fork commit inventory and synchronization analysis remain useful technical
+references. They do not establish that every detail of the fork's dedicated-
+queue implementation is the current or required runtime contract.
+
 ## Objective
 
 Make the 2D Unity Android Vulkan validation jobs render correctly on real Firebase Test Lab hardware, including both the render-only and Unity-composition scenes.
 
 Success requires a physical-device screenshot that visually matches the approved baseline within calibrated perceptual tolerances. Internal render-target captures and log messages are diagnostic evidence only; they cannot make a job pass without the external visual check.
 
-## Current evidence
+## Evidence at the time of investigation
 
 - IMM renders correctly into the explicit Android Vulkan render target used by the Unity sample.
 - The latest internal render and composition captures contain recognizable, substantially correct scene content.
@@ -15,7 +31,7 @@ Success requires a physical-device screenshot that visually matches the approved
 - Recent attempts based on direct recording into Unity's active command buffer and several presenter-camera variants have not produced pixels on the physical Firebase screen.
 - Sleepy-Pete's `vr-main` branch reports a visually verified Unity 6 + Android + Vulkan implementation on Quest hardware. It is architecturally closer to IMM's earlier offscreen/own-submission strategy than to the direct-recording strategy pursued recently.
 
-## Architectural decision
+## Historical architectural decision
 
 Do not reset or revert the repository to an old commit. The current branch contains necessary CI validation improvements, corrected evidence handling, and useful renderer fixes.
 
@@ -49,7 +65,7 @@ Relevant commits include:
 
 These commits have dependencies and should not be cherry-picked blindly or individually without reviewing the complete resulting Vulkan state machine.
 
-## Integration procedure
+## Historical integration procedure
 
 ### Phase 1: Preserve evidence and establish a controlled branch
 
@@ -149,7 +165,7 @@ After both Android Unity Vulkan jobs pass their physical visual gates:
 4. Confirm OpenGL, Metal, Windows Vulkan, Godot, and WASM validation have not regressed.
 5. Rebuild and verify the committed Android ARM64 plug-in binary matches the final source.
 
-## Required proof of completion
+## Historical completion criteria
 
 The work is complete only when all of the following are true in the same current CI revision:
 
@@ -162,6 +178,15 @@ The work is complete only when all of the following are true in the same current
 - The workflow explicitly selects Vulkan and records the active Android graphics API in its evidence.
 - The result is portable across the Firebase device coverage selected for the validation suite, or unsupported devices fail explicitly rather than rendering black while passing.
 
-## Immediate next action
+## Outcome and remaining relevance
 
-Discard the current uncommitted presenter-only experiment, create the controlled integration branch, and compare the fork's complete Android Vulkan subsystem against current `main`. The first implementation target is a close port of the fork's offscreen render, synchronization bridge, and original-camera composite while preserving the current external-screen CI gate.
+The controlled fork comparison and offscreen-presentation integration have
+already been performed. Current Firebase evidence contains visually correct
+Android Unity Vulkan render-only and full-depth composition output, so the
+black physical-screen problem described by this plan is no longer active.
+
+The remaining product defect is different: on a physical Quest using Unity
+Vulkan Multi Pass, the left eye contains IMM while the right eye contains only
+the background. Continue that work from the Quest phases in
+`VALIDATION_FALSE_FAILURE_CLEANUP_PLAN.md`; do not restart this historical fork
+integration procedure.

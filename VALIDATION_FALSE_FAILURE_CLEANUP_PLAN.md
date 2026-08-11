@@ -1,10 +1,29 @@
 # Validation False-Failure Cleanup Plan
 
+## Status
+
+This is the authoritative active plan for validation integrity and the
+remaining Unity Android Vulkan stereo work. The earlier
+`ANDROID_UNITY_VULKAN_FORK_INTEGRATION_PLAN.md` is a completed historical record,
+not a second active implementation plan.
+
+Run `30913083187` completed the false-failure cleanup and cloud-confirmed the
+Godot Vulkan/Metal depth-composition repairs. The active product sequence is
+now physical Quest Multi Pass correctness, regression confirmation, and then
+Single Pass Instanced. iOS work is a separately defined coverage/product gap:
+Unity iOS needs a visual-validation lane, while Godot iOS needs supported
+packaging/runtime integration before visual validation can be meaningful.
+
 ## Objective
 
 Make the validation report trustworthy in both directions: correct renders must not fail for irrelevant reasons, and broken renders must never pass because a visual contract is missing or too weak. Visual evidence remains authoritative. Text and log checks may fail early, but must not reject a visually proven render merely because a redundant diagnostic message was absent, and they can never substitute for a successful visual rendering check.
 
-The cyan depth/occlusion contract must distinguish genuinely foreground cyan inside the character silhouette from the intentionally visible rim of a rear square and authored cyan scene details. The Windows Godot ordered-overlay image remains a genuine failure because cyan fills the character interior; reviewed Unity Metal and Android full-depth captures do not.
+The cyan depth/occlusion contract distinguishes genuinely foreground cyan
+inside the character silhouette from the intentionally visible rim of a rear
+square and authored cyan scene details. The historical broken Windows Godot
+ordered-overlay capture remains a negative fixture because cyan fills the
+character interior; the current Windows Godot lane and reviewed Unity Metal and
+Android full-depth captures pass.
 
 The combined report starts with a four-by-three visual matrix whose rows name
 platforms only; the canonical renderer is implicit and selected per cell.
@@ -22,9 +41,9 @@ minutes, with two-minute package-manager command limits. This prevents a
 runner package-manager stall from consuming the entire one-hour device job
 before Firebase validation begins.
 
-## Execution order
+## Audit chronology
 
-### Current audited state: run `30901787140`
+### Audit chronology beginning with run `30901787140`
 
 Run `30901787140` at `3e776a57` is the first cloud run in which the complete Unity Android Vulkan lane passes and its images survive manual review:
 
@@ -113,19 +132,29 @@ so the non-VR row has incomplete evidence and the synthetic-stereo row has a
 genuine requested-API runtime failure. Those are coverage/runtime limitations,
 not false visual failures in a produced image.
 
-The next cloud run must confirm the reporting and cyan corrections. Once confirmed, product work proceeds only on the genuine failures above, with the Quest two-eye physical acceptance test remaining the Android Vulkan exit criterion.
+Run `30913083187` supplied the required cloud confirmation. Product work now
+proceeds only on the remaining Quest two-eye defect and later stereo expansion,
+while the validated cross-platform suite remains the regression gate.
 
 ### Current priority order
 
-1. **Current gate:** finish removing false visual failures before further product-side stereo changes. The validators reject reverse-Z, missing IMM content, duplicated stereo views, sky-only eyes, cyan inside the must-be-occluded character interior, black/default scenes, and graphics-API fallback. Every validation step includes an authoritative visual check; logs remain fast-fail diagnostics only.
-2. **Cloud-confirmed through run `30901787140`, with one reporting and one Metal edge-tolerance follow-up awaiting rerun:** run the full suite at an exact revision, manually inspect every capture, and reconcile every automatic result with the image. The Android external-display contract accepts normal animated-renderer variation at correlation `0.480` while retaining two consecutive samples plus independent blank/default/probe rejection. The cyan contract is localized to the character interior because the previous broad region counted correct visible square edges and a cyan butterfly.
-3. **Cloud synthetic milestone complete; Quest acceptance remains:** Quest Multi Pass native eye production and the Firebase presentation fixture now produce distinct, correct eye pairs without changing the working Metal, OpenGL, DirectX, Windows Vulkan, or non-XR paths. Confirm both displayed eyes on a physical Quest before calling the OpenXR handoff fixed.
-4. **Cloud complete in `30913083187`:** retain the corrected Godot Vulkan and
-   Metal full-depth path and the Godot and Unity ordered-overlay repairs. IMM
-   uses discard/stencil, MSAA coverage, and
-   stippled OIT; ordinary `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` compositing is not
-   a valid substitute.
-5. Add Single Pass Instanced validation after Multi Pass is correct. The architecture must support Single Pass without another redesign, although true Vulkan multiview is a later performance optimization rather than a prerequisite for correctness.
+1. Fix physical Quest Unity Vulkan Multi Pass. Both displayed eyes must contain
+   the correct distinct IMM view; the current real-device result has a correct
+   left eye and a background-only right eye.
+2. Use the existing per-eye native captures and add Quest-correlated evidence
+   to determine whether the remaining fault is native right-eye production or
+   the OpenXR presentation handoff. Logs may fast-fail, but physical two-eye
+   output is the acceptance evidence.
+3. Run the full cross-platform suite after the Quest change and manually review
+   its captures. Preserve the cloud-confirmed Godot Vulkan/Metal depth path,
+   Unity/Godot composition repairs, Android non-XR Vulkan, OpenGL, Metal,
+   DirectX, Windows Vulkan and WASM behavior.
+4. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
+   same two-eye producer and stereo-aware presentation design; true Vulkan
+   multiview remains an optional later optimization.
+5. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
+   coverage task, and treat Godot iOS as a product implementation task before
+   adding its visual-validation lane.
 
 Validation reliability is a gate, not a background cleanup task. Product fixes must retain full cross-platform validation so a narrowly targeted Android Vulkan change cannot silently regress an already working target.
 
@@ -182,11 +211,18 @@ The Windows Lavapipe lane remains useful as a runtime-contract test: Unity rejec
 
 The Godot Run-button regression is now locally reproduced and fixed. The Quest-oriented Vulkan renderer had applied pipelined external-image submission and Unity reverse-Z depth handling to Godot even though Godot samples its standard-depth intermediate image in the same compositor callback. The corrected path waits on the non-dedicated queue, uses normal near-to-zero depth ordering, and restores shader-read layout before handoff. Two additional startup hazards were found and guarded: bounding-box queries during partial loading and child-count queries on non-group layers. The validation launches `project.godot` without a scene/script override, requires a clean native log, freezes only the evidence capture at frame zero, and compares the resulting 1280x720 frame to a reviewed Godot Vulkan baseline with a localized character/front-surface depth-order check.
 
-### 1. Finish and verify validation-signal cleanup on `main`
+## Completed validation-cleanup workstreams
 
-Current implementation status: the validator contracts for the reviewed Android Godot depth defects, missing Godot IMM content, duplicated stereo views, sky-only eyes, and localized cyan leakage are present. Unity Metal ordered-overlay probe loss and Godot ordered-overlay foreground cyan are product failures. Unity DirectX, Unity Metal full-depth, and Unity Android full-depth were false failures caused by measuring valid cyan outside the must-be-occluded character interior. The temporary generic alpha-blend compositor change was reverted because IMM's OIT/coverage model does not expose ordinary straight-alpha scene compositing.
+The following workstreams are retained as an audit record. Statements such as
+"pending" or "latest" inside their run-by-run findings describe the state at
+that historical point; they are not current priorities. Run `30913083187` is
+the later authoritative cleanup confirmation.
 
-Full run `30892709675` at `df6e68c0` is the latest manually audited exact-revision run. Its aggregate artifact, Android lane artifact, and targeted macOS lane rerun artifact were inspected. The audit closes the remaining CI-only Editor Play and Android physical-screen false failures:
+### 1. Validation-signal cleanup on `main`
+
+At this stage of the cleanup, validator contracts for the reviewed Android Godot depth defects, missing Godot IMM content, duplicated stereo views, sky-only eyes, and localized cyan leakage were present. Unity Metal ordered-overlay probe loss and Godot ordered-overlay foreground cyan were product failures. Unity DirectX, Unity Metal full-depth, and Unity Android full-depth were false failures caused by measuring valid cyan outside the must-be-occluded character interior. The temporary generic alpha-blend compositor change was reverted because IMM's OIT/coverage model does not expose ordinary straight-alpha scene compositing.
+
+At that stage, full run `30892709675` at `df6e68c0` was the latest manually audited exact-revision run. Its aggregate artifact, Android lane artifact, and targeted macOS lane rerun artifact were inspected. The audit closed the remaining CI-only Editor Play and Android physical-screen false failures:
 
 1. The Unity Windows DirectX render-only image is visually correct, but its renderer variation narrowly exceeded the old spatial thresholds (`MAD 0.104 > 0.100`, `correlation 0.520 < 0.550`). The DirectX-only contract now uses `MAD <= 0.120` and `correlation >= 0.450`; the reviewed cloud image passes, while existing black, displaced, missing-content, and default-scene negative fixtures remain rejected.
 2. The generic `sample1-composition-content` contract checked only broad IMM content. It therefore allowed a macOS Godot composition image with no magenta/yellow probes to pass. All full-depth lanes now use a dedicated `sample1-full-depth` contract requiring recognizable IMM content, both visible probes, and near-zero cyan leakage in the reviewed occlusion region. The ordered-overlay contract checks the same required probes and restricts cyan leakage measurement to the character occlusion area.
@@ -204,13 +240,13 @@ The earlier `df6e68c0` audit removed most false visual failures but did not clos
 
 Run `30867812844` confirmed the DirectX render-only false negative is removed and the stricter full-depth contract catches the previously false-passing macOS Godot image. Its aggregate artifact was manually audited image by image: all green visual lanes contain recognizable IMM content; Windows Godot full-depth is sky-only; Windows Godot ordered overlay has cyan in front; Android synthetic stereo contains two valid but byte-identical eyes; and hosted Windows Unity Vulkan is an API-fallback runtime failure. The initial conclusion that the reviewed Unity DirectX, Metal full-depth, and Android full-depth images had cyan leakage was wrong; item 10 records the pixel-localized correction. Follow-up run `30869412758` cloud-proved that the narrowed ordered-overlay region excludes legitimate cyan butterfly content while continuing to reject the actual Windows Godot cyan square. Run `30892709675` then cloud-proved both the Android physical-screen correction and the readiness-gated macOS Editor Play capture.
 
-Full run `30861503259` was manually audited. It confirmed the earlier conclusions and proved two fixes in the cloud: Android Godot now passes from its two valid visual contracts despite a missing redundant log marker, and nested Editor/Sample Play captures no longer become bogus independent report lanes. Every remaining visible red image in that run is a genuine rendering or composition failure. The audit nevertheless exposed three remaining validation/reporting defects, now fixed locally and awaiting one cloud confirmation run:
+Full run `30861503259` was manually audited. It confirmed the earlier conclusions and proved two fixes in the cloud: Android Godot passed from its two valid visual contracts despite a missing redundant log marker, and nested Editor/Sample Play captures no longer became bogus independent report lanes. Every remaining visible red image in that run was a genuine rendering or composition failure. The audit nevertheless exposed three validation/reporting defects that were fixed locally and at that point awaited cloud confirmation:
 
 1. Windows Godot hard-coded every failed job as `runtime`, while its in-scene process exit also set `Rendering: failed` when only a composition probe failed. A lane-level evidence classifier now requires the Run-button, render-only, full-depth, and ordered-overlay captures and metrics. It writes consistent full-depth/overlay status JSON, reports the reviewed render as successful while preserving cyan/missing-content failures as `composition_failed`, and treats a missing redundant success marker as a warning. Only explicit crash/device-loss evidence produces `runtime_failed`.
 2. A separate macOS Unity Editor invocation cannot reuse the GameCI license after the builder action returns it; run `30865518088` demonstrated that this path fails before rendering with `No valid Unity Editor license found`. The build and project Play-button smoke are therefore combined into one licensed GameCI invocation with `manualExit: true`. A runtime coroutine captures the normal Game View at end of frame and writes the PNG before the Editor controller exits Play mode. A confirmation step requires the file. The lane-level classifier requires the Editor Play, render-only, full-depth, and ordered-overlay images and metrics, while a missing Editor capture cannot hide an independently proven player composition failure.
 3. The hosted Windows Unity Vulkan fallback had no image and therefore disappeared from the detailed report. Synthetic stereo is now a distinct supported matrix row rather than contaminating the non-VR Vulkan row. Failed status-only visual lanes receive their own section, result, failure class, and classifier details; a build-only manifest is explicitly `evidence_incomplete`, never visual success.
 
-A subsequent suite-wide audit found the same architectural false-failure risk in four additional visual lanes: Unity Windows DirectX, Unity Windows Vulkan full-depth, Unity Windows Vulkan ordered-overlay, and Godot macOS Metal. Their run, preliminary classification, metric, report, and redundant log checks now collect diagnostics without independently deciding the job. A final lane classifier requires the relevant captures and external baseline metrics, preserves explicit crashes and requested-API fallback as hard failures, and makes passing image evidence authoritative over stale in-scene probe messages. The Windows Vulkan synthetic-stereo lane likewise has one final classifier combining the runtime result, side-by-side structure check, independent left/right baseline metrics, and per-eye target/matrix routing contract; its manifest no longer cites only the preliminary runtime result. These changes pass local classifier and workflow-contract tests but remain part of the pending exact-revision cloud audit.
+A subsequent suite-wide audit found the same architectural false-failure risk in four additional visual lanes: Unity Windows DirectX, Unity Windows Vulkan full-depth, Unity Windows Vulkan ordered-overlay, and Godot macOS Metal. Their run, preliminary classification, metric, report, and redundant log checks now collect diagnostics without independently deciding the job. A final lane classifier requires the relevant captures and external baseline metrics, preserves explicit crashes and requested-API fallback as hard failures, and makes passing image evidence authoritative over stale in-scene probe messages. The Windows Vulkan synthetic-stereo lane likewise has one final classifier combining the runtime result, side-by-side structure check, independent left/right baseline metrics, and per-eye target/matrix routing contract; its manifest no longer cites only the preliminary runtime result. These changes passed local classifier and workflow-contract tests and were subsequently covered by the exact-revision cloud audit.
 
 The Android Unity classifier retains the same completed-evidence rule: a secondary Firebase reporting error becomes a warning once every required image exists and passes, but it cannot mask a render, composition, stereo, external-screen, API-fallback, crash, or incomplete-evidence failure. Classifier failures and warnings are now preserved in manifests so aggregate status-only sections can explain the verdict.
 
@@ -237,7 +273,7 @@ Full runs `30811686247`, `30813880906`, `30816894610`, and `30820773061` have be
 
 Exit criterion: every report result agrees with its underlying evidence, every remaining red entry is actionable, and each known-bad visual fixture is rejected for the correct reason.
 
-### 2. Finish the Android/Firebase synthetic-stereo Vulkan lane
+### 2. Android/Firebase synthetic-stereo Vulkan lane
 
 The immediate implementation priority is hardware-backed Android Vulkan in Firebase, reusing the existing Unity Android Vulkan build and capture infrastructure. The synthetic test exercises IMM eye routing and composition without requiring an OpenXR headset or separate-eye presentation.
 
@@ -261,7 +297,7 @@ Run `30820773061` proves target priming works: both split eye images independent
 
 Exit criterion: the Firebase job produces recognizable IMM content in both eye images through the Vulkan path, both halves satisfy an approved visual baseline, and the combined evidence appears in the validation report.
 
-### 3. Inventory every reported failure by failure class
+### 3. Reported-failure inventory by failure class
 
 Status: completed for full run `30811686247`; results are recorded in `VALIDATION_FAILURE_INVENTORY.md`.
 
@@ -278,7 +314,7 @@ For one exact commit and workflow run, create a table containing:
 
 Do not change thresholds until the associated image has been inspected.
 
-### 4. Fix log-only false failures
+### 4. Log-only false failures
 
 Status: completed. The macOS Metal lane no longer fails because the optional `Loaded in CPU` and `Loaded in GPU` diagnostic strings are absent. Explicit load errors and the mandatory visual checks remain failures.
 
@@ -290,7 +326,7 @@ Status: completed. The macOS Metal lane no longer fails because the optional `Lo
 
 Exit criterion: Metal does not fail solely because redundant native log strings are absent, while genuine document-load failures still fail before visual comparison.
 
-### 5. Repair stale or mismatched visual baselines
+### 5. Stale or mismatched visual baselines
 
 Status: the reviewed Unity render baseline now accepts the correct DirectX, Metal, and Android Vulkan render-only captures from run `30811686247`. No baseline change is justified by that run.
 
@@ -308,7 +344,7 @@ Status: the reviewed Unity render baseline now accepts the correct DirectX, Meta
 
 Exit criterion: reviewed correct images pass repeatedly, and deliberately altered black, default-scene, displaced-camera, and missing-content fixtures fail.
 
-### 6. Rework composition probes around their actual visible geometry
+### 6. Composition probes based on actual visible geometry
 
 Run `30811686247` shows that the front-visible and rear-visible probe checks are no longer causing the Unity failures. Later pixel inspection proved that broad cyan-region failures can count valid outside-silhouette pixels. Keep the leakage threshold strict, but apply it only inside the reviewed must-be-occluded character interior.
 
@@ -320,7 +356,7 @@ Run `30811686247` shows that the front-visible and rear-visible probe checks are
 
 Exit criterion: intact probes pass on DirectX, Metal, Vulkan, and OpenGL; deliberately incorrect depth ordering fails on every applicable renderer.
 
-### 7. Make the cyan depth defect an explicit, reliable contract
+### 7. Explicit cyan depth contract
 
 The cyan probe currently exposes an apparent depth/occlusion problem, but at least one classifier reports success. Tightening this check is more important than making the report green.
 
@@ -337,7 +373,7 @@ The cyan probe currently exposes an apparent depth/occlusion problem, but at lea
 
 Exit criterion: the known cyan defect fails with a clear diagnostic overlay, while a reviewed correct occlusion capture passes across repeated runs.
 
-### 8. Separate product failures from infrastructure and evidence failures
+### 8. Product, infrastructure and evidence failure separation
 
 Do not label a renderer visually broken when the failure occurred before rendering.
 
@@ -352,7 +388,7 @@ Use distinct report states:
 
 Aggregate reports must preserve these distinctions instead of flattening all of them into a red visual failure.
 
-### 9. Add regression tests for the validators themselves
+### 9. Validator regression tests
 
 Each validator must be tested with known positive and negative fixtures.
 
@@ -371,7 +407,7 @@ Required cases:
 - requested Vulkan falling back to another API fails as a runtime failure;
 - missing capture reports `evidence_incomplete`, not `render_failed`.
 
-### 10. Verify the cleaned report on an exact revision
+### 10. Exact-revision cleaned-report audit
 
 1. Run the full cloud validation suite.
 2. Download and manually inspect every rendered capture, including both synthetic eyes.
@@ -379,15 +415,16 @@ Required cases:
 4. Confirm that all remaining failures are reproducible, correctly classified, and actionable.
 5. Do not loosen a contract merely to make the report green.
 
-## Expected outcome
+## Validation-cleanup outcome
 
-The report should become shorter and more trustworthy:
+Run `30913083187` demonstrated the intended outcome:
 
 - correct Metal and DirectX renders no longer appear as visual failures because of stale thresholds or redundant log markers;
 - known-bad reverse-Z, missing-content, duplicated-eye, sky-only-eye, black/default-scene, and incorrect-occlusion images cannot appear green;
 - infrastructure problems are clearly separated from rendering defects;
 - the synthetic-stereo lane provides two-eye Vulkan evidence without requiring a physical headset;
-- the cyan depth/occlusion issue remains red until the rendering itself is corrected.
+- corrected depth/occlusion output passes, while the known-bad cyan fixtures
+  remain rejected.
 
 ## Implementation findings
 
@@ -412,5 +449,6 @@ The report should become shorter and more trustworthy:
 - Godot 4.3+ exposes the scene depth texture as reverse-Z. The compositor now
   converts that sample to normal-Z before comparing it with IMM's normal-Z
   intermediate depth. The prior direct comparison mixed opposite conventions.
-- CI must still visually confirm that authored strokes return and that the
-  full-depth cyan probe is occluded correctly.
+- Run `30913083187` visually confirmed that authored strokes returned and that
+  the full-depth cyan probe was occluded correctly on Windows Vulkan and macOS
+  Metal.
