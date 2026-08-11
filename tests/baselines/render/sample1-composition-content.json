@@ -22,7 +22,7 @@
           "target_rgb": [90, 25, 25],
           "channel_tolerance": 25,
           "region_normalized": { "x": 0.0, "y": 0.5, "width": 0.9, "height": 0.5 },
-          "minimum_largest_component_share_of_crop": 0.0004
+          "minimum_matched_pixel_share_of_crop": 0.0004
         }
       ]
     }

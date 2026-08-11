@@ -221,7 +221,7 @@ def main() -> int:
         ROOT / "tests/baselines/render/sample1-composition-content.json": [
             "expected_color_components",
             "sample1-lower-red-brush-content",
-            "minimum_largest_component_share_of_crop",
+            "minimum_matched_pixel_share_of_crop",
         ],
         ROOT / "tests/baselines/render/sample1-full-depth.json": [
             "expected_color_components",
@@ -229,6 +229,7 @@ def main() -> int:
             "front-visible-magenta",
             "rear-visible-yellow",
             "character-occluded-cyan",
+            "minimum_matched_pixel_share_of_crop",
             "maximum_largest_component_share_of_crop",
             '"region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 }',
         ],
@@ -260,6 +261,7 @@ def main() -> int:
             "front-visible-magenta",
             "rear-visible-yellow",
             "character-occluded-cyan",
+            "minimum_matched_pixel_share_of_crop",
             "maximum_largest_component_share_of_crop",
             '"region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 }',
         ],
@@ -482,9 +484,13 @@ def main() -> int:
         for probe in full_depth_contract["validation"]["expected_color_components"]["probes"]
         if probe["name"] == "sample1-lower-red-brush-content"
     )
-    if lower_red_probe.get("minimum_largest_component_share_of_crop") != 0.00075:
+    if lower_red_probe.get("minimum_matched_pixel_share_of_crop") != 0.0005:
         errors.append(
-            "Full-depth lower-red presence threshold must retain the reviewed 0.00075 floor"
+            "Full-depth lower-red presence threshold must retain the reviewed total-pixel 0.0005 floor"
+        )
+    if "minimum_largest_component_share_of_crop" in lower_red_probe:
+        errors.append(
+            "Stippled lower-red IMM content must not require one contiguous color component"
         )
     if 'Overlay Fixture Camera", StringComparison.Ordinal' not in unity_smoke:
         errors.append("Unity ordered-overlay probes must use the scene camera, not the late overlay camera")

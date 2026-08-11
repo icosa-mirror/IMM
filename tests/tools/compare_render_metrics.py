@@ -932,6 +932,7 @@ def collect_color_component_metrics(candidate_path: Path, specification: dict) -
                     "height": region_height,
                 },
                 "matched_pixels": matched_pixels,
+                "matched_pixel_share_of_crop": matched_pixels / crop_pixels if crop_pixels else 0.0,
                 "largest_component_pixels": largest_component,
                 "largest_component_share_of_crop": largest_component / crop_pixels if crop_pixels else 0.0,
                 "largest_component_bounds": largest_bounds,
@@ -956,8 +957,11 @@ def validate_color_component_contract(specification: dict, metrics: dict) -> lis
     for expected, actual in zip(expected_probes, actual_probes):
         name = actual["name"]
         share = float(actual["largest_component_share_of_crop"])
+        matched_share = float(actual["matched_pixel_share_of_crop"])
         minimum = expected.get("minimum_largest_component_share_of_crop")
         maximum = expected.get("maximum_largest_component_share_of_crop")
+        minimum_matched = expected.get("minimum_matched_pixel_share_of_crop")
+        maximum_matched = expected.get("maximum_matched_pixel_share_of_crop")
         probe_errors: list[str] = []
         if minimum is not None and share < float(minimum):
             probe_errors.append(
@@ -966,6 +970,14 @@ def validate_color_component_contract(specification: dict, metrics: dict) -> lis
         if maximum is not None and share > float(maximum):
             probe_errors.append(
                 f"color component probe {name} share {share:.6f} exceeds contract maximum {float(maximum):.6f}"
+            )
+        if minimum_matched is not None and matched_share < float(minimum_matched):
+            probe_errors.append(
+                f"color component probe {name} matched share {matched_share:.6f} is below contract minimum {float(minimum_matched):.6f}"
+            )
+        if maximum_matched is not None and matched_share > float(maximum_matched):
+            probe_errors.append(
+                f"color component probe {name} matched share {matched_share:.6f} exceeds contract maximum {float(maximum_matched):.6f}"
             )
         actual["passed"] = not probe_errors
         actual["errors"] = probe_errors

@@ -112,6 +112,20 @@ def make_probe_pixels(
     return pixels
 
 
+def make_fragmented_lower_red_probe_pixels(width: int, height: int) -> list[tuple[int, int, int]]:
+    pixels = make_probe_pixels(width, height, False)
+    background = (16, 20, 24)
+    lower_red = (90, 25, 25)
+    for index, pixel in enumerate(pixels):
+        if pixel == lower_red:
+            pixels[index] = background
+    for index in range(20):
+        x = (index * 37) % ((width * 9) // 10)
+        y = height // 2 + ((index * 23) % (height // 2))
+        pixels[y * width + x] = lower_red
+    return pixels
+
+
 def main() -> int:
     width = 8
     height = 8
@@ -127,6 +141,7 @@ def main() -> int:
         black_path = temp / "black.ppm"
         diagnostic_path = temp / "diagnostic-squares.ppm"
         probe_good_path = temp / "probe-good.ppm"
+        probe_fragmented_red_path = temp / "probe-fragmented-red.ppm"
         probe_legitimate_cyan_path = temp / "probe-legitimate-cyan.ppm"
         probe_small_occluded_edge_path = temp / "probe-small-occluded-edge.ppm"
         probe_wrong_depth_path = temp / "probe-wrong-depth.ppm"
@@ -146,6 +161,12 @@ def main() -> int:
         write_ppm(black_path, width, height, [(0, 0, 0)] * (width * height))
         write_ppm(diagnostic_path, width, height, diagnostic_squares_only(width, height))
         write_ppm(probe_good_path, 100, 100, make_probe_pixels(100, 100, False))
+        write_ppm(
+            probe_fragmented_red_path,
+            100,
+            100,
+            make_fragmented_lower_red_probe_pixels(100, 100),
+        )
         write_ppm(
             probe_legitimate_cyan_path,
             100,
@@ -356,6 +377,19 @@ def main() -> int:
         assert compare_render_metrics.validate_color_component_contract(
             production_overlay_contract, production_overlay_good
         ) == []
+        production_overlay_fragmented_red = compare_render_metrics.collect_color_component_metrics(
+            probe_fragmented_red_path, production_overlay_contract
+        )
+        assert compare_render_metrics.validate_color_component_contract(
+            production_overlay_contract, production_overlay_fragmented_red
+        ) == []
+        fragmented_red_probe = next(
+            probe
+            for probe in production_overlay_fragmented_red["probes"]
+            if probe["name"] == "sample1-lower-red-brush-content"
+        )
+        assert fragmented_red_probe["matched_pixel_share_of_crop"] >= 0.001
+        assert fragmented_red_probe["largest_component_share_of_crop"] < 0.001
         production_overlay_legitimate_cyan = compare_render_metrics.collect_color_component_metrics(
             probe_legitimate_cyan_path, production_overlay_contract
         )

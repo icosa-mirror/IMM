@@ -20,6 +20,23 @@ app launch with `Firebase Test Lab infrastructure failure: Internal System Error
 3` on both attempts during Google's declared 11 August 2026 Test Lab
 availability incident. The dependent engine, device, and final evidence reports
 correctly remained red because no Android visual evidence was produced.
+Run `31509841891` then cloud-built and packaged the first reproducible Unity 6
+OpenXR/Vulkan Quest APK from the exact revision. The Quest shell cache,
+same-commit native-plugin injection, signing, and XR manifest contract all
+passed. Its Firebase Unity Android lane also returned complete visually correct
+render, composition, external-screen, and distinct synthetic-eye evidence.
+Physical two-eye Quest output remains the acceptance test.
+
+That run also exposed two further false negatives in visually correct macOS
+composition images. Unity ordered-overlay and Godot full-depth were rejected
+because the lower red IMM brush was measured as one connected color component.
+That is not stable for IMM's alpha-cut/MSAA/stippled rendering: the same correct
+content varied from `0.006293` to `0.000295` between consecutive cloud runs.
+The lower-red presence probe now measures total matching pixels in its region,
+with reviewed floors below both correct captures. Cyan depth leakage continues
+to use the connected-component maximum, so the occlusion detector is unchanged.
+The Android standalone Vulkan lane still failed closed with no capture during
+the ongoing Test Lab incident; it is not a produced visual regression.
 
 The only currently confirmed product-rendering defect is physical Quest Unity
 Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
@@ -179,6 +196,10 @@ while the validated cross-platform suite remains the regression gate.
    Test Lab availability incident is resolved. Do not weaken or skip their
    required visual checks: an infrastructure failure must remain red and must
    be reported as `infrastructure_failed`, not as a renderer failure or pass.
+   Run `31509841891` showed partial recovery: Unity Android Vulkan, Android
+   Godot Vulkan, and Android standalone GLES all passed, while Android
+   standalone Vulkan exhausted its Test Lab execution window without producing
+   `native-render-after.ppm`.
 3. Download and manually inspect the complete exact-revision evidence report
    after Firebase can execute the APKs. Preserve the now-confirmed Godot
    Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
