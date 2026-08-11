@@ -36,6 +36,7 @@ namespace ImmPlayer.Editor
         private const string EditorSmokeStartTicksKey = "IMM_EDITOR_SMOKE_START_TICKS";
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
         private const string EditorSmokePlayerPathArg = "-immSmokePlayerPath";
+        private const string QuestPlayerPathArg = "-immQuestPlayerPath";
         private const int EditorSmokeReadyPumpCount = 3;
         private static readonly TimeSpan EditorSmokePumpInterval = TimeSpan.FromMilliseconds(100.0);
 
@@ -130,6 +131,61 @@ namespace ImmPlayer.Editor
             {
                 PlayerSettings.Android.targetArchitectures = previousArchitectures;
                 PlayerSettings.Android.optimizedFramePacing = previousOptimizedFramePacing;
+                if (androidXrSettings != null)
+                {
+                    androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
+                }
+            }
+        }
+
+        public static void BuildAndroidOpenXRQuestPlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android, "Android");
+
+            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
+
+            string outputPath = GetCommandLineValue(QuestPlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "android-openxr-quest-player", "ImmUnityQuestVulkan.apk");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+
+            string outputDir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(outputDir))
+            {
+                Directory.CreateDirectory(outputDir);
+            }
+
+            AndroidArchitecture previousArchitectures = PlayerSettings.Android.targetArchitectures;
+            XRGeneralSettings androidXrSettings =
+                XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Android);
+            bool previousInitManagerOnStart = androidXrSettings != null && androidXrSettings.InitManagerOnStart;
+            try
+            {
+                PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+                if (androidXrSettings == null)
+                {
+                    throw new InvalidOperationException("Android XR general settings are missing.");
+                }
+
+                // SampleSceneVR owns XR startup through XrSceneBootstrap. Keeping
+                // project-wide automatic startup disabled also keeps the 2D scene
+                // usable without entering XR.
+                androidXrSettings.InitManagerOnStart = false;
+                Debug.Log("[IMM_UNITY_QUEST_BUILD_20260811] renderer=Vulkan architecture=ARM64 scene=SampleSceneVR xrStartup=scene stereoPath=MultiPass");
+
+                BuildPlayer(
+                    BuildTarget.Android,
+                    outputPath,
+                    BuildOptions.Development,
+                    "Android OpenXR Quest Vulkan player",
+                    scenes: new[] { VrSmokeScene });
+            }
+            finally
+            {
+                PlayerSettings.Android.targetArchitectures = previousArchitectures;
                 if (androidXrSettings != null)
                 {
                     androidXrSettings.InitManagerOnStart = previousInitManagerOnStart;
@@ -517,9 +573,11 @@ namespace ImmPlayer.Editor
             string outputPath,
             BuildOptions options,
             string label,
-            string[] extraScriptingDefines = null)
+            string[] extraScriptingDefines = null,
+            string[] scenes = null)
         {
-            foreach (string scene in SmokeScenes)
+            string[] selectedScenes = scenes ?? SmokeScenes;
+            foreach (string scene in selectedScenes)
             {
                 if (!File.Exists(scene))
                 {
@@ -529,7 +587,7 @@ namespace ImmPlayer.Editor
 
             var buildOptions = new BuildPlayerOptions
             {
-                scenes = SmokeScenes,
+                scenes = selectedScenes,
                 locationPathName = outputPath,
                 target = target,
                 options = options,

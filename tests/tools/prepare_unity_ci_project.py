@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a reduced Unity project for hosted non-VR CI smoke tests."""
+"""Prepare a clean Unity project copy for hosted CI builds."""
 
 from __future__ import annotations
 
@@ -122,21 +122,27 @@ def strip_android_xr_manifest(project: Path) -> None:
     document.write(manifest, encoding="utf-8", xml_declaration=True)
 
 
-def prepare_project(source: Path, output: Path) -> None:
+def prepare_project(source: Path, output: Path, preserve_xr: bool = False) -> None:
     if output.exists():
         shutil.rmtree(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     copytree(source, output)
-    for rel in EXCLUDED_ASSET_PATHS:
-        remove_path(output / rel)
-    strip_android_xr_manifest(output)
-    write_minimal_manifest(output)
+    if not preserve_xr:
+        for rel in EXCLUDED_ASSET_PATHS:
+            remove_path(output / rel)
+        strip_android_xr_manifest(output)
+        write_minimal_manifest(output)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path("code/ImmUnitySampleProject"))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--preserve-xr",
+        action="store_true",
+        help="Keep the source project's XR assets, packages, scene, and manifest declarations.",
+    )
     args = parser.parse_args()
 
     source = args.source.resolve()
@@ -146,7 +152,10 @@ def main() -> int:
     if not (source / "Packages" / "com.immersive-foundation.imm-unity" / "package.json").is_file():
         raise FileNotFoundError(f"Unity source project is missing embedded IMM package: {source}")
 
-    prepare_project(source, output)
+    if args.preserve_xr and not (source / "Assets" / "Scenes" / "SampleSceneVR.unity").is_file():
+        raise FileNotFoundError(f"Unity source project is missing SampleSceneVR.unity: {source}")
+
+    prepare_project(source, output, preserve_xr=args.preserve_xr)
     print(f"Prepared Unity CI project: {output}")
     return 0
 

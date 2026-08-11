@@ -1610,6 +1610,109 @@ jobs:
           destination="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
           cp "$plugin" "$destination"
 
+      - name: Prepare Unity Android OpenXR Quest project
+        run: >
+          python tests/tools/prepare_unity_ci_project.py
+          --source code/ImmUnitySampleProject
+          --output .ci-workspace/unity-android-openxr-quest
+          --preserve-xr
+
+      - name: Restore cached Unity Android OpenXR Quest shell APK
+        id: cache_unity_android_quest_shell
+        uses: actions/cache/restore@v4
+        with:
+          path: .ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+          key: UnityAndroidOpenXRQuestShell-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('tests/tools/prepare_unity_ci_project.py', 'code/ImmUnitySampleProject/Assets/**', 'code/ImmUnitySampleProject/Packages/**', 'code/ImmUnitySampleProject/ProjectSettings/**', '!code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so') }}
+
+      - name: Restore Unity Android OpenXR Quest Library cache
+        id: cache_unity_android_quest_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: .ci-workspace/unity-android-openxr-quest/Library
+          key: UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-
+
+      - name: Build Unity Android OpenXR Quest Vulkan player
+        id: unity_android_quest_build
+        if: steps.cache_unity_android_quest_shell.outputs.cache-hit != 'true'
+        timeout-minutes: 30
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: .ci-workspace/unity-android-openxr-quest
+          unityVersion: ${{ env.UNITY_ANDROID_VULKAN_VERSION }}
+          targetPlatform: Android
+          versioning: None
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildAndroidOpenXRQuestPlayer
+          customParameters: -logFile /github/workspace/artifacts/unity-android-vulkan/unity-quest-editor.log -immQuestPlayerPath /github/workspace/.ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+
+      - name: Save Unity Android OpenXR Quest shell APK cache
+        if: steps.cache_unity_android_quest_shell.outputs.cache-hit != 'true' && steps.unity_android_quest_build.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk
+          key: ${{ steps.cache_unity_android_quest_shell.outputs.cache-primary-key }}
+
+      - name: Inject same-commit plugin into Unity Android OpenXR Quest shell APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shell_apk=".ci-cache/unity-android-openxr-quest-shell/ImmUnityQuestVulkan.apk"
+          plugin="code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so"
+          work_dir="${RUNNER_TEMP}/unity-android-openxr-quest-repack"
+          unsigned_apk="$work_dir/ImmUnityQuestVulkan-unsigned.apk"
+          aligned_apk="$work_dir/ImmUnityQuestVulkan-aligned.apk"
+          output_apk="artifacts/unity-android-vulkan/ImmUnityQuestVulkan.apk"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          if [ -z "$build_tools" ] || [ ! -x "$build_tools/zipalign" ] || [ ! -x "$build_tools/apksigner" ]; then
+            echo "Android SDK zipalign/apksigner tools were not found"
+            exit 1
+          fi
+          mkdir -p "$work_dir" "$(dirname "$output_apk")"
+          python tests/tools/repack_android_native_library.py \
+            --input-apk "$shell_apk" \
+            --library "$plugin" \
+            --entry lib/arm64-v8a/libImmUnityPlugin.so \
+            --output-apk "$unsigned_apk"
+          "$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" "$aligned_apk"
+          if [ ! -f "$work_dir/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$work_dir/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -noprompt
+          fi
+          "$build_tools/apksigner" sign \
+            --ks "$work_dir/debug.keystore" \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$output_apk" \
+            "$aligned_apk"
+          "$build_tools/apksigner" verify --verbose "$output_apk"
+
+      - name: Verify Unity Android OpenXR Quest APK contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="artifacts/unity-android-vulkan/ImmUnityQuestVulkan.apk"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          manifest_dump="artifacts/unity-android-vulkan/quest-android-manifest.txt"
+          "$build_tools/aapt" dump xmltree "$apk" AndroidManifest.xml | tee "$manifest_dump"
+          grep -q "com.oculus.intent.category.VR" "$manifest_dump"
+          grep -q "android.hardware.vr.headtracking" "$manifest_dump"
+          grep -q "com.oculus.supportedDevices" "$manifest_dump"
+
       - name: Prepare clean non-XR Unity Android project
         run: >
           python tests/tools/prepare_unity_ci_project.py
@@ -2016,6 +2119,16 @@ jobs:
         with:
           path: .ci-workspace/unity-android-vulkan-nonxr/Library
           key: UnityLibrary-android-vulkan-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Save Unity Android OpenXR Quest Library cache
+        if: always() && steps.unity_android_quest_build.outcome == 'success' && steps.cache_unity_android_quest_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: .ci-workspace/unity-android-openxr-quest/Library
+          key: UnityLibrary-android-openxr-quest-${{ env.UNITY_ANDROID_VULKAN_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity Android Vulkan artifacts
         if: always()

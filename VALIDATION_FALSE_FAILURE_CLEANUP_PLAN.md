@@ -9,22 +9,28 @@ not a second active implementation plan.
 
 Run `30913083187` cloud-confirmed the Godot Vulkan/Metal depth-composition
 repairs, but it did not permanently close the CI-green workstream. Run
-`31497084250` demonstrates that the hosted workflow can still be red because of
-over-tight visual thresholds, missing evidence, unsupported hosted API lanes,
-and Firebase execution failures. Those results must be classified and repaired
-rather than being mistaken for product-rendering regressions.
+`31497084250` demonstrated that the hosted workflow could still be red because
+of over-tight visual thresholds, missing evidence, unsupported hosted API
+lanes, and Firebase execution failures. Commit `b82d6582` repaired those local
+validation defects. Confirmation run `31501318696` passed every non-Firebase
+canonical rendering lane, including macOS Godot Metal, Windows Godot Vulkan,
+Unity macOS Metal, Unity Windows DirectX, and the GPU evidence report. Its only
+root failures were the four Android Firebase lanes, all of which failed before
+app launch with `Firebase Test Lab infrastructure failure: Internal System Error
+3` on both attempts during Google's declared 11 August 2026 Test Lab
+availability incident. The dependent engine, device, and final evidence reports
+correctly remained red because no Android visual evidence was produced.
 
 The only currently confirmed product-rendering defect is physical Quest Unity
 Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
-Unity background. macOS Godot Metal is currently a validation false negative,
-not a confirmed renderer defect: its smoke run succeeded and its composition
-capture missed the lower-red-brush pixel-share threshold by only `0.000051`
-(`0.000949` measured versus `0.001000` required). The active sequence is to
-restore a genuinely green hosted validation signal, physically verify the
-Quest Multi Pass correction, run the full regression suite, and only then add
-Single Pass Instanced. iOS work remains a separate coverage/product gap: Unity
-iOS needs a visual-validation lane, while Godot iOS needs supported
-packaging/runtime integration before visual validation can be meaningful.
+Unity background. macOS Godot Metal was a validation false negative, not a
+renderer defect; run `31501318696` confirms the reviewed threshold correction.
+The active sequence is to physically verify and, if necessary, continue fixing
+the Quest Multi Pass path, rerun the full hosted suite after the Firebase outage
+ends, and only then add Single Pass Instanced. iOS work remains a separate
+coverage/product gap: Unity iOS needs a visual-validation lane, while Godot iOS
+needs supported packaging/runtime integration before visual validation can be
+meaningful.
 
 ## Objective
 
@@ -158,38 +164,57 @@ while the validated cross-platform suite remains the regression gate.
 
 ### Current priority order
 
-1. Restore a trustworthy green hosted workflow. Finish the evidence-level audit
-   of run `31497084250`, then correct each false-negative, infrastructure, or
-   unsupported-lane outcome without weakening the requirement for a real visual
-   capture on supported rendering lanes.
-2. Treat macOS Godot Metal as the first confirmed false-negative cleanup item,
-   not as a renderer rewrite. Recalibrate the lower-red-brush presence contract
-   using reviewed positive and negative fixtures; `0.000949` must not fail merely
-   because the current minimum is `0.001000`.
-3. Resolve the remaining current hosted red jobs by evidence class: investigate
-   the missing Unity macOS Editor Play capture and rear-occlusion marker; retry
-   or harden the systemic Firebase `gcloud` exit-20/missing-capture failures;
-   audit Windows Godot Vulkan; and make the known unsupported hosted Unity
-   Windows Lavapipe Vulkan diagnostic non-fatal while preserving its truthful
-   `not tested`/runtime-rejected status.
-4. Physically validate the Quest Unity Vulkan Multi Pass correction. Both
+1. Physically validate the Quest Unity Vulkan Multi Pass correction. Both
    displayed eyes must contain the correct distinct IMM view; the pre-fix
    real-device result has a correct left eye and a background-only right eye.
    Use per-eye native captures and the frame-correlated handoff diagnostics if
    the right eye remains absent. Logs may fast-fail, but physical two-eye output
-   is the acceptance evidence.
-5. Run the full cross-platform suite after the Quest result and manually review
-   its captures. Preserve the cloud-confirmed Godot Vulkan/Metal depth path,
-   Unity/Godot composition repairs, Android non-XR Vulkan, OpenGL, Metal,
-   DirectX, Windows Vulkan and WASM behavior. The full supported hosted workflow
-   must be green; a green aggregate produced by suppressing missing visual
-   evidence is not acceptable.
-6. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
+   is the acceptance evidence. The existing Unity Android CI job now also
+   produces `ImmUnityQuestVulkan.apk` from `SampleSceneVR.unity` with Unity 6,
+   Vulkan, ARM64, OpenXR, serialized Multi Pass, and the same-commit native
+   plugin. The XR player shell is cached separately so native iterations only
+   replace and re-sign the plugin. This artifact accelerates physical testing;
+   its successful build and XR manifest checks are not visual-pass evidence.
+2. Rerun the four Android Firebase visual lanes after Google's 11 August 2026
+   Test Lab availability incident is resolved. Do not weaken or skip their
+   required visual checks: an infrastructure failure must remain red and must
+   be reported as `infrastructure_failed`, not as a renderer failure or pass.
+3. Download and manually inspect the complete exact-revision evidence report
+   after Firebase can execute the APKs. Preserve the now-confirmed Godot
+   Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
+   Vulkan, OpenGL, Metal, DirectX, Windows Vulkan, and WASM behavior. The full
+   supported hosted workflow must be green; a green aggregate produced by
+   suppressing missing visual evidence is not acceptable.
+4. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
    same two-eye producer and stereo-aware presentation design; true Vulkan
    multiview remains an optional later optimization.
-7. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
+5. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
    coverage task, and treat Godot iOS as a product implementation task before
    adding its visual-validation lane.
+
+### Run `31501318696` confirmation
+
+1. macOS Godot Metal passed its render-only, full-depth, and ordered-overlay
+   visual contracts. The prior lower-red-brush rejection was a threshold false
+   negative and is closed.
+2. Windows Godot Vulkan passed, including the ordinary Run-button path and the
+   strict depth/ordering evidence. The fail-closed retry remains available but
+   did not convert missing or failed visual evidence into a pass.
+3. Unity macOS Metal and Unity Windows DirectX composition passed. The sealed
+   macOS Editor Play evidence survived collection and was accepted only with
+   passing image metrics.
+4. Hosted Windows Unity Vulkan synthetic stereo reported the exact expected
+   Lavapipe rejection as `skipped`/`not_tested`; it did not claim a Vulkan visual
+   pass. Hardware-gated Windows Vulkan composition rows remained skipped.
+5. Unity Android Vulkan, Android Godot Vulkan, Android standalone Vulkan, and
+   Android standalone GLES each created two Firebase matrices. Every matrix
+   failed before app launch with `Internal System Error 3`; no Android capture
+   was produced. Firebase's status dashboard reported an ongoing, broadly
+   affecting Test Lab availability incident on the same date.
+6. The engine, device, and combined evidence reports correctly failed because
+   their required Android evidence was absent. This is a trustworthy red signal
+   for unavailable validation coverage, not evidence that those four renderers
+   produced bad frames.
 
 ### Run `31497084250` remediation in progress
 
@@ -222,6 +247,11 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
 ### Unity Quest Vulkan stereo facts
 
 - The Unity sample is configured for Multi Pass (`m_StereoRenderingPath: 0`). This is the mode the IMM Unity plugin expects for Quest Vulkan.
+- CI builds a dedicated `ImmUnityQuestVulkan.apk` from the VR scene without
+  stripping OpenXR. It verifies the Quest VR intent category, head-tracking
+  feature, and supported-device declarations, then includes the APK in the
+  Unity Android artifact. This proves build/package configuration only; both
+  physical eyes must still be inspected on Quest.
 - The plugin explicitly does not support instanced single-pass and forces a stereo camera to its `TwoPass` integration path, except for its legacy `SinglePass` mode.
 - A real Quest test confirms a product failure in that supported path: the left eye renders IMM strokes correctly while the right eye shows only Unity's background sky sphere.
 - Firebase synthetic stereo is not yet a Quest-equivalent test. It manually invokes `Camera.Render()` twice and supplies the eye index, so it verifies two target writes and capture plumbing but bypasses Unity's real XR Multi Pass callback/eye-target/composite handoff.

@@ -26,9 +26,20 @@ def main() -> int:
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs": [
             "RunWindowsOpenXREditorPlayModeSmoke",
+            "BuildAndroidOpenXRQuestPlayer",
             "SampleSceneVR.unity",
             "Windows OpenXR VR",
+            "Android OpenXR Quest Vulkan player",
+            "[IMM_UNITY_QUEST_BUILD_20260811]",
+            "scenes: new[] { VrSmokeScene }",
             "IMM_UNITY_SMOKE_XR_PROBE",
+        ],
+        ROOT / "code/ImmUnitySampleProject/ProjectSettings/ProjectSettings.asset": [
+            "m_StereoRenderingPath: 0",
+        ],
+        ROOT / "tests/tools/prepare_unity_ci_project.py": [
+            "--preserve-xr",
+            "prepare_project(source, output, preserve_xr=args.preserve_xr)",
         ],
         ROOT / ".github/workflows/ci-engine.yml": [
             "unity-windows-openxr-vr",
@@ -36,6 +47,10 @@ def main() -> int:
             "Run Unity OpenXR VR smoke",
             "[IMM_UNITY_SMOKE] xr probe passed",
             "unity-openxr-vr-log-contract.json",
+            "Build Unity Android OpenXR Quest Vulkan player",
+            "ImmUnityQuestVulkan.apk",
+            "com.oculus.intent.category.VR",
+            "android.hardware.vr.headtracking",
             "Engine Evidence Report",
         ],
         ROOT / "tests/matrix_status.json": [
