@@ -66,6 +66,15 @@ outer 30-minute Firebase step timeout without a capture or completed Firebase
 summary; the new classifier reported `evidence_incomplete` rather than a visual
 failure, and the device/final reports correctly remained red.
 
+Run `31523497710` cloud-confirmed the completed false-failure cleanup. Every
+produced canonical visual lane passed, including Unity Android Vulkan render,
+composition, and synthetic stereo; Unity and Godot macOS Metal; Windows Godot
+Vulkan; DirectX; Web/WASM; Android GLES; and Android Godot Vulkan. The engine,
+GPU, and core evidence reports also passed. The sole remaining red lane was
+Android standalone Vulkan: Firebase reached the outer 30-minute timeout without
+returning a result or capture during Google's ongoing Test Lab incident. It was
+correctly reported as `evidence_incomplete`, not as a rendering failure.
+
 The only currently confirmed product-rendering defect is physical Quest Unity
 Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
 Unity background. macOS Godot Metal was a validation false negative, not a
@@ -220,30 +229,22 @@ while the validated cross-platform suite remains the regression gate.
    plugin. The XR player shell is cached separately so native iterations only
    replace and re-sign the plugin. This artifact accelerates physical testing;
    its successful build and XR manifest checks are not visual-pass evidence.
-2. Cloud-confirm the explicit evidence-scope and Android standalone
-   classification corrections. Normal hosted reports must evaluate hosted
-   rows; hardware dispatches must evaluate all supported rows. A complete,
-   passing standalone image is authoritative over redundant Firebase/log
-   diagnostics, but a missing image must remain red and retain its actual
-   infrastructure/evidence classification.
-3. Rerun the four Android Firebase visual lanes after Google's 11 August 2026
-   Test Lab availability incident is resolved. Do not weaken or skip their
-   required visual checks: an infrastructure failure must remain red and must
-   be reported as `infrastructure_failed`, not as a renderer failure or pass.
-   Run `31509841891` showed partial recovery: Unity Android Vulkan, Android
-   Godot Vulkan, and Android standalone GLES all passed, while Android
-   standalone Vulkan exhausted its Test Lab execution window without producing
-   `native-render-after.ppm`.
-4. Download and manually inspect the complete exact-revision evidence report
+2. Rerun Android standalone Vulkan after Google's 11 August 2026 Test Lab
+   availability incident is resolved. Do not weaken or skip its required visual
+   checks: run `31523497710` already cloud-confirmed the evidence-scope and lane
+   classification corrections, but Firebase again exhausted the 30-minute
+   execution window without returning a result or `native-render-after.ppm`.
+   That missing evidence must remain red until a real passing capture exists.
+3. Download and manually inspect the complete exact-revision evidence report
    after Firebase can execute the APKs. Preserve the now-confirmed Godot
    Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
    Vulkan, OpenGL, Metal, DirectX, Windows Vulkan, and WASM behavior. The full
    supported hosted workflow must be green; a green aggregate produced by
    suppressing missing visual evidence is not acceptable.
-5. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
+4. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
    same two-eye producer and stereo-aware presentation design; true Vulkan
    multiview remains an optional later optimization.
-6. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
+5. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
    coverage task, and treat Godot iOS as a product implementation task before
    adding its visual-validation lane.
 
@@ -324,6 +325,16 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
   in run `31497084250`. Its Firebase lane is non-XR and can prove that 2D Android
   Vulkan did not regress, but only a physical Quest test can accept the two-eye
   OpenXR handoff.
+- The next Quest iteration removes the GPU-indexed scene quad from the default
+  Multi Pass presentation path. The fork kept that quad opt-in after observing
+  per-eye flicker, and the physical symptom remains at the final handoff. Unity
+  explicitly guarantees that `Camera.stereoActiveEye` identifies the current
+  eye during `OnRenderImage`; the Android Vulkan presenter now uses that
+  supported final-image callback to choose `VulkanEyeTargets[0]` or `[1]` and
+  composite it into Unity's own per-eye destination. The paired native producer
+  is unchanged, and a kill switch retains the previous presentation path for
+  device A/B diagnosis. Cloud compilation and physical Quest acceptance are
+  pending.
 - Multi Pass remains the first acceptance target. The implementation must nevertheless carry both eye results together so Single Pass Instanced can use the same producer and presentation path later.
 
 ### Unity Android Vulkan stereo implementation
@@ -340,14 +351,18 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
 
 #### Phase B: replace mutable per-eye callback state
 
-Implementation status: landed in `81e308f9`; Unity 6 cloud compilation passed.
-Physical Quest acceptance remains pending.
+Implementation status: paired production landed in `81e308f9`; Unity 6 cloud
+compilation passed. Eye-authoritative `OnRenderImage` presentation is the active
+follow-up iteration. Physical Quest acceptance remains pending.
 
 1. Obtain both current XR eye view/projection matrices once per frame.
 2. Maintain two Android Vulkan offscreen eye targets initially. Do not alter the direct-rendering paths used by working graphics APIs.
 3. Enqueue both native eye renders in deterministic order in one immutable frame command sequence, or in two immutable eye sequences whose contents cannot be overwritten by the other eye's callback.
 4. Bind both completed eye targets to the presentation material.
-5. Present through a stereo-aware Unity shader/pass. Select left or right on the GPU using Unity's stereo eye index; do not set one mutable `_ImmEyeTex` from C# during `OnPreCull`.
+5. In Multi Pass, present through `OnRenderImage`, where Unity documents
+   `Camera.stereoActiveEye` as the currently rendering eye. Select the matching
+   immutable eye target there; do not select an eye from `OnPreCull`. Retain a
+   GPU eye-indexed shader path for the later Single Pass Instanced phase.
 6. Preserve IMM's actual visibility model: alpha cut/discard, MSAA coverage, and stippled OIT. Do not introduce generic fullscreen straight-alpha blending as part of the stereo fix.
 7. Re-query Unity render-buffer identities after recreation, pause/resume, or resolution changes; do not rely on stale native pointers.
 

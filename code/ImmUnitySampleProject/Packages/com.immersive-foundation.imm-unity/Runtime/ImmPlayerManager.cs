@@ -25,7 +25,7 @@ namespace ImmPlayer
 
         private void OnRenderImage(RenderTexture source, RenderTexture destination)
         {
-            if (_owner == null || !_owner.enabled || !_owner.PresentFlatAndroidVulkanFrame(_camera, source, destination))
+            if (_owner == null || !_owner.enabled || !_owner.PresentAndroidVulkanFrame(_camera, source, destination))
                 Graphics.Blit(source, destination);
         }
     }
@@ -699,6 +699,7 @@ namespace ImmPlayer
         private Material _vulkanDepthCompositeMaterial;
         private int _vulkanCompositeLogCount;
         private int _vulkanOnRenderImageLogCount;
+        private int _vulkanStereoOnRenderImageLogCount;
 
         // Returns the WRITE buffer for this frame (handed to the native renderer)
         // and updates VulkanEyeTargets[eye] to the READ buffer Unity samples
@@ -1144,6 +1145,22 @@ namespace ImmPlayer
             return IsFlatAndroidVulkanCamera(cam) && !UsesFlatAndroidVulkanHostComposition(cam);
         }
 
+        private static bool UsesStereoAndroidVulkanPresenter(Camera cam)
+        {
+            return Application.platform == RuntimePlatform.Android &&
+                   IsVulkanRuntime() &&
+                   cam != null &&
+                   cam.stereoEnabled &&
+                   ResolveStereoMode(cam) == (int)StereoMode.TwoPass &&
+                   !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET") &&
+                   !IsEnvFlagEnabled("IMM_UNITY_VK_NO_STEREO_PRESENTER");
+        }
+
+        private bool UsesAndroidVulkanPresenter(Camera cam)
+        {
+            return UsesFlatAndroidVulkanPresenter(cam) || UsesStereoAndroidVulkanPresenter(cam);
+        }
+
         public void SetFlatAndroidVulkanHostCompositionForValidation(bool enabled)
         {
             _flatAndroidVulkanHostComposition = enabled;
@@ -1154,7 +1171,7 @@ namespace ImmPlayer
 
                 ImmAndroidVulkanPresenter presenter = camera.GetComponent<ImmAndroidVulkanPresenter>();
                 if (presenter != null)
-                    presenter.enabled = !enabled;
+                    presenter.enabled = UsesAndroidVulkanPresenter(camera);
             }
             Debug.Log(
                 $"[IMM_UNITY_ANDROID_VK_HOST_COMPOSITION_20260802] enabled={(enabled ? 1 : 0)} " +
@@ -1193,30 +1210,38 @@ namespace ImmPlayer
                 $"camera={(camera != null ? camera.name : "none")} frame={Time.frameCount}");
         }
 
-        private void EnsureFlatAndroidVulkanPresenter(Camera cam)
+        private void EnsureAndroidVulkanPresenter(Camera cam)
         {
-            if (!UsesFlatAndroidVulkanPresenter(cam))
+            bool shouldPresent = UsesAndroidVulkanPresenter(cam);
+            ImmAndroidVulkanPresenter presenter = cam != null
+                ? cam.GetComponent<ImmAndroidVulkanPresenter>()
+                : null;
+            if (!shouldPresent)
+            {
+                if (presenter != null)
+                    presenter.enabled = false;
                 return;
+            }
 
-            ImmAndroidVulkanPresenter presenter = cam.GetComponent<ImmAndroidVulkanPresenter>();
             if (presenter == null)
                 presenter = cam.gameObject.AddComponent<ImmAndroidVulkanPresenter>();
             presenter.Configure(this, cam);
+            presenter.enabled = true;
         }
 
-        internal bool PresentFlatAndroidVulkanFrame(
+        internal bool PresentAndroidVulkanFrame(
             Camera cam,
             RenderTexture source,
             RenderTexture destination)
         {
-            if (!UsesFlatAndroidVulkanPresenter(cam) ||
+            if (!UsesAndroidVulkanPresenter(cam) ||
                 !_cameras.TryGetValue(cam, out PerCameraInfo info))
                 return false;
 
             int presentationEye =
                 _syntheticStereoCameraForValidation == cam && _syntheticStereoEyeForValidation >= 0
                     ? _syntheticStereoEyeForValidation
-                    : 0;
+                    : (cam.stereoEnabled && cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0);
             RenderTexture eyeTarget = info.VulkanEyeTargets[presentationEye];
             if (eyeTarget == null)
                 return false;
@@ -1264,6 +1289,16 @@ namespace ImmPlayer
                     $"imm={eyeTarget.GetInstanceID()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetInstanceID() : 0)} " +
                     $"shader={composite.shader.name} " +
                     $"supported={composite.shader.isSupported}");
+            }
+            if (cam.stereoEnabled && (_vulkanStereoOnRenderImageLogCount < 16 || Time.frameCount % 144 == 0))
+            {
+                if (_vulkanStereoOnRenderImageLogCount < 16)
+                    ++_vulkanStereoOnRenderImageLogCount;
+                Debug.Log(
+                    $"[IMM_UNITY_VK_STEREO_PRESENT_20260811] frame={Time.frameCount} cam={cam.name} " +
+                    $"activeEye={cam.stereoActiveEye} selectedEye={presentationEye} " +
+                    $"targetId={eyeTarget.GetInstanceID()} " +
+                    $"targetPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
             }
             return true;
         }
@@ -1464,6 +1499,7 @@ namespace ImmPlayer
             int stereoMode = ResolveStereoMode(cam);
             if (useSyntheticStereo)
                 stereoMode = (int)StereoMode.TwoPass;
+            EnsureAndroidVulkanPresenter(cam);
 
             // Single pose sample per frame: multipass runs this per eye pass with
             // poses ~half a frame apart, but the compositor timewarps BOTH eyes
@@ -1733,6 +1769,7 @@ namespace ImmPlayer
                 !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET");
             bool useAndroidVulkanStereoQuad =
                 useAndroidVulkanStereoSequence &&
+                !UsesStereoAndroidVulkanPresenter(cam) &&
                 !IsEnvFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_QUAD") &&
                 EnsureCompositeQuad(cam, info) != null;
 
@@ -1794,7 +1831,7 @@ namespace ImmPlayer
                     {
                         info.CommandBuffer.SetRenderTarget(cameraTarget, new RenderTargetIdentifier(BuiltinRenderTextureType.Depth));
                     }
-                    else if (!UsesFlatAndroidVulkanPresenter(cam))
+                    else if (!UsesAndroidVulkanPresenter(cam))
                     {
                         info.CommandBuffer.SetRenderTarget(cameraTarget);
                     }
@@ -1832,10 +1869,11 @@ namespace ImmPlayer
                     // showed intermittent per-eye oddness/flicker - the ~9ms
                     // composite cost is intrinsic fullscreen-alpha work, not blit
                     // pass-break overhead. Kept for future experiments only.
-                    bool useQuad = useAndroidVulkanStereoQuad ||
-                                   (IsEnvFlagEnabled("IMM_UNITY_VK_COMPOSITE_QUAD") &&
-                                    !IsEnvFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_QUAD") &&
-                                    EnsureCompositeQuad(cam, info) != null);
+                    bool useQuad = !UsesAndroidVulkanPresenter(cam) &&
+                                   (useAndroidVulkanStereoQuad ||
+                                    (IsEnvFlagEnabled("IMM_UNITY_VK_COMPOSITE_QUAD") &&
+                                     !IsEnvFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_QUAD") &&
+                                     EnsureCompositeQuad(cam, info) != null));
                     if (useQuad)
                     {
                         // Both eye textures are bound on the material. The shader uses
@@ -1844,7 +1882,7 @@ namespace ImmPlayer
                         if (_preCullCount <= 12)
                             Debug.Log($"[IMM_UNITY_VK_QUADEYE] n={_preCullCount} eye={eyeIndex} quadEye=gpu viaCB=0");
                     }
-                    else if (!UsesFlatAndroidVulkanPresenter(cam))
+                    else if (!UsesAndroidVulkanPresenter(cam))
                     {
                         RenderTexture eyeTarget = info.VulkanEyeTargets[blitEye];
                         Material composite = GetVulkanCompositeMaterial();
@@ -1925,7 +1963,7 @@ namespace ImmPlayer
                         Debug.Log($"[IMM_UNITY_VK_EVENT_20260612] cam={cam.name} cameraId={info.CameraId} renderEvent={renderEvent}");
                     }
                     cam.AddCommandBuffer(renderEvent, info.CommandBuffer);
-                    EnsureFlatAndroidVulkanPresenter(cam);
+                    EnsureAndroidVulkanPresenter(cam);
                 }
             }
             return info;
