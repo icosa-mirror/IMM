@@ -692,6 +692,7 @@ namespace ImmPlayer
             public readonly RenderTexture[] VulkanEyeDepthTargets = new RenderTexture[2];
             public readonly RenderTexture[] VulkanEyeDepthWriteTargets = new RenderTexture[2];
             public readonly RenderTexture[,] VulkanEyeDepthBuffers = new RenderTexture[2, 3];
+            public int VulkanStereoCommandBufferFrame = -1;
         }
 
         private Material _vulkanCompositeMaterial;
@@ -1074,7 +1075,7 @@ namespace ImmPlayer
             return true;
         }
 
-        private static RenderTexture GetXrEyeRenderTexture(Camera cam, int stereoMode)
+        private static RenderTexture GetXrEyeRenderTexture(Camera cam, int stereoMode, int explicitEye = -1)
         {
             if (cam == null || !cam.stereoEnabled)
                 return null;
@@ -1088,11 +1089,11 @@ namespace ImmPlayer
             if (renderPassCount <= 0)
                 return null;
             int passIndex = 0;
-            if (stereoMode == (int)StereoMode.TwoPass &&
-                cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right &&
-                renderPassCount > 1)
+            if (stereoMode == (int)StereoMode.TwoPass && renderPassCount > 1)
             {
-                passIndex = 1;
+                passIndex = explicitEye >= 0
+                    ? Mathf.Clamp(explicitEye, 0, renderPassCount - 1)
+                    : (cam.stereoActiveEye == Camera.MonoOrStereoscopicEye.Right ? 1 : 0);
             }
             return display.GetRenderTextureForRenderPass(passIndex);
         }
@@ -1595,6 +1596,12 @@ namespace ImmPlayer
                 bool useOffscreenTargets = (Application.platform == RuntimePlatform.Android || useSyntheticStereo) &&
                     !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET") &&
                     !useHostComposition;
+                bool useAndroidVulkanStereoProducer =
+                    Application.platform == RuntimePlatform.Android &&
+                    cam.stereoEnabled &&
+                    stereoMode == (int)StereoMode.TwoPass &&
+                    useOffscreenTargets &&
+                    !useSyntheticStereo;
 
                 if (useOffscreenTargets)
                 {
@@ -1605,47 +1612,53 @@ namespace ImmPlayer
                     // A/B lever: route BOTH eyes' native draws into eye0's RT. Distinguishes an
                     // eye1-image problem (strokes appear doubled) from an eye1-pass problem
                     // (still a single stroke set).
-                    int rtEye = IsEnvFlagEnabled("IMM_UNITY_VK_EYE0_RT_BOTH_EYES") ? 0 : vulkanEye;
-                    RenderTexture eyeTarget = EnsureVulkanEyeTarget(info, rtEye, cam.pixelWidth, cam.pixelHeight);
-                    // Host-depth interleave groundwork (opt-in): hand the XR
-                    // swapchain's depth surface to the plugin so IMM strokes can
-                    // depth-test against Unity geometry. Off by default until the
-                    // native 4x depth-prime draw lands (attaching 1x host depth
-                    // today forces the pass back to single-sampled).
-                    RenderTexture eyeDepthTarget = _flatAndroidVulkanSharedDepthComposition
-                        ? info.VulkanEyeDepthWriteTargets[rtEye]
-                        : null;
-                    IntPtr hostDepthPtr = eyeDepthTarget != null
-                        ? eyeDepthTarget.depthBuffer.GetNativeRenderBufferPtr()
-                        : IntPtr.Zero;
-                    if (hostDepthPtr == IntPtr.Zero && IsEnvFlagEnabled("IMM_UNITY_VK_HOST_DEPTH"))
+                    int firstEye = useAndroidVulkanStereoProducer ? 0 : vulkanEye;
+                    int lastEye = useAndroidVulkanStereoProducer ? 1 : vulkanEye;
+                    for (int eye = firstEye; eye <= lastEye; ++eye)
                     {
-                        RenderTexture xrRt = GetXrEyeRenderTexture(cam, (int)StereoMode.TwoPass);
-                        if (xrRt != null)
-                            hostDepthPtr = xrRt.depthBuffer.GetNativeRenderBufferPtr();
-                    }
-                    IntPtr eyeTargetPtr = eyeTarget.colorBuffer.GetNativeRenderBufferPtr();
-                    ImmNativePlugin.SetVulkanCameraEyeRenderBuffers(
-                        info.CameraId,
-                        vulkanEye,
-                        eyeTargetPtr,
-                        hostDepthPtr,
-                        eyeTarget.width,
-                        eyeTarget.height,
-                        1,
-                        eyeDepthTarget != null ? 1 : 0);
-                    if (useSyntheticStereo)
-                    {
-                        int syntheticEventId = (info.CameraId << 8) | (vulkanEye & 0x1);
-                        Debug.Log(
-                            $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
-                            $"eye={vulkanEye} eventId={syntheticEventId} " +
-                            $"targetId={eyeTarget.GetInstanceID()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
+                        int rtEye = IsEnvFlagEnabled("IMM_UNITY_VK_EYE0_RT_BOTH_EYES") ? 0 : eye;
+                        RenderTexture eyeTarget = EnsureVulkanEyeTarget(info, rtEye, cam.pixelWidth, cam.pixelHeight);
+                        // Host-depth interleave groundwork (opt-in): hand the XR
+                        // swapchain's depth surface to the plugin so IMM strokes can
+                        // depth-test against Unity geometry. Off by default until the
+                        // native 4x depth-prime draw lands (attaching 1x host depth
+                        // today forces the pass back to single-sampled).
+                        RenderTexture eyeDepthTarget = _flatAndroidVulkanSharedDepthComposition
+                            ? info.VulkanEyeDepthWriteTargets[rtEye]
+                            : null;
+                        IntPtr hostDepthPtr = eyeDepthTarget != null
+                            ? eyeDepthTarget.depthBuffer.GetNativeRenderBufferPtr()
+                            : IntPtr.Zero;
+                        if (hostDepthPtr == IntPtr.Zero && IsEnvFlagEnabled("IMM_UNITY_VK_HOST_DEPTH"))
+                        {
+                            RenderTexture xrRt = GetXrEyeRenderTexture(cam, (int)StereoMode.TwoPass, eye);
+                            if (xrRt != null)
+                                hostDepthPtr = xrRt.depthBuffer.GetNativeRenderBufferPtr();
+                        }
+                        IntPtr eyeTargetPtr = eyeTarget.colorBuffer.GetNativeRenderBufferPtr();
+                        ImmNativePlugin.SetVulkanCameraEyeRenderBuffers(
+                            info.CameraId,
+                            eye,
+                            eyeTargetPtr,
+                            hostDepthPtr,
+                            eyeTarget.width,
+                            eyeTarget.height,
+                            1,
+                            eyeDepthTarget != null ? 1 : 0);
+                        if (useSyntheticStereo)
+                        {
+                            int syntheticEventId = (info.CameraId << 8) | (eye & 0x1);
+                            Debug.Log(
+                                $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
+                                $"eye={eye} eventId={syntheticEventId} " +
+                                $"targetId={eyeTarget.GetInstanceID()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
+                        }
                     }
                     if (!_loggedVulkanRenderTargetSource.Contains(cam))
                     {
                         _loggedVulkanRenderTargetSource.Add(cam);
-                        Debug.Log($"[IMM_UNITY_VK_RT_SRC_20260612] cam={cam.name} cameraId={info.CameraId} source=offscreenRT {eyeTarget.width}x{eyeTarget.height} pixel={cam.pixelWidth}x{cam.pixelHeight} samples=1");
+                        string source = useAndroidVulkanStereoProducer ? "offscreenStereoPair" : "offscreenRT";
+                        Debug.Log($"[IMM_UNITY_VK_RT_SRC_20260612] cam={cam.name} cameraId={info.CameraId} source={source} {cam.pixelWidth}x{cam.pixelHeight} pixel={cam.pixelWidth}x{cam.pixelHeight} samples=1");
                     }
                 }
                 else
@@ -1710,17 +1723,70 @@ namespace ImmPlayer
             }
 
             int eventId = (info.CameraId << 8) | (eyeIndex & 0x1);
+            bool useAndroidVulkanStereoSequence =
+                IsVulkanRuntime() &&
+                Application.platform == RuntimePlatform.Android &&
+                cam.stereoEnabled &&
+                stereoMode == (int)StereoMode.TwoPass &&
+                !useSyntheticStereo &&
+                !useHostComposition &&
+                !IsEnvFlagEnabled("IMM_UNITY_VK_NO_OFFSCREEN_TARGET");
+            bool useAndroidVulkanStereoQuad =
+                useAndroidVulkanStereoSequence &&
+                !IsEnvFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_QUAD") &&
+                EnsureCompositeQuad(cam, info) != null;
+
+            // OnPreCull is not an eye-authoritative callback in Unity Multi Pass:
+            // stereoActiveEye can remain Left for both passes. Build one immutable
+            // two-eye sequence per frame and let Unity's actual stereo draw select
+            // the presentation texture on the GPU.
+            if (useAndroidVulkanStereoSequence && info.VulkanStereoCommandBufferFrame == Time.frameCount)
+                return;
+
             info.CommandBuffer.Clear();
             if (IsVulkanRuntime())
             {
-                if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(eventId))
+                if (useAndroidVulkanStereoSequence)
+                {
+                    int leftEventId = info.CameraId << 8;
+                    int rightEventId = leftEventId | 1;
+                    if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG"))
+                    {
+                        if (_configuredVulkanRenderEvents.Add(leftEventId))
+                        {
+                            int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(leftEventId);
+                            Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={leftEventId} configured={configured}");
+                        }
+                        if (_configuredVulkanRenderEvents.Add(rightEventId))
+                        {
+                            int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(rightEventId);
+                            Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={rightEventId} configured={configured}");
+                        }
+                    }
+                    info.CommandBuffer.IssuePluginEvent(_renderEventFunc, leftEventId);
+                    info.CommandBuffer.IssuePluginEvent(_renderEventFunc, rightEventId);
+                    info.VulkanStereoCommandBufferFrame = Time.frameCount;
+                    if (_preCullCount <= 12 || _preCullCount % 144 == 0)
+                    {
+                        Debug.Log(
+                            $"[IMM_UNITY_VK_STEREO_FRAME_20260811] frame={Time.frameCount} " +
+                            $"cameraId={info.CameraId} activeEye={cam.stereoActiveEye} " +
+                            $"events={leftEventId},{rightEventId} " +
+                            $"leftTarget={(info.VulkanEyeTargets[0] != null ? info.VulkanEyeTargets[0].GetInstanceID() : 0)} " +
+                            $"rightTarget={(info.VulkanEyeTargets[1] != null ? info.VulkanEyeTargets[1].GetInstanceID() : 0)} " +
+                            $"gpuEyeSelection={(useAndroidVulkanStereoQuad ? 1 : 0)}");
+                    }
+                }
+                else if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(eventId))
                 {
                     int configured = ImmNativePlugin.ConfigureVulkanRenderEvent(eventId);
                     Debug.Log($"[IMM_UNITY_VK_EVENTCFG_20260611] eventId={eventId} configured={configured}");
                 }
                 bool useCustomBlit = (useHostComposition || IsEnvFlagEnabled("IMM_UNITY_VK_USE_CUSTOM_BLIT")) &&
                     !IsEnvFlagEnabled("IMM_UNITY_VK_FORCE_PLAIN_EVENT");
-                bool bindCameraTarget = !useHostComposition && !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
+                bool bindCameraTarget = !useAndroidVulkanStereoSequence &&
+                    !useHostComposition &&
+                    !IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_BIND_CAMERA_TARGET");
                 var cameraTarget = new RenderTargetIdentifier(BuiltinRenderTextureType.CameraTarget);
                 if (bindCameraTarget)
                 {
@@ -1733,7 +1799,13 @@ namespace ImmPlayer
                         info.CommandBuffer.SetRenderTarget(cameraTarget);
                     }
                 }
-                if (useCustomBlit && _renderEventAndDataFunc != IntPtr.Zero)
+                if (useAndroidVulkanStereoSequence)
+                {
+                    // The paired native events were recorded above. Presentation is a
+                    // normal Unity stereo draw, so it executes in both eye passes even
+                    // though the camera command buffer itself is not eye-addressable.
+                }
+                else if (useCustomBlit && _renderEventAndDataFunc != IntPtr.Zero)
                 {
                     if (!IsEnvFlagEnabled("IMM_UNITY_VK_SKIP_MANAGED_CONFIG") && _configuredVulkanRenderEvents.Add(VulkanCustomBlitEventId))
                     {
@@ -1760,21 +1832,17 @@ namespace ImmPlayer
                     // showed intermittent per-eye oddness/flicker - the ~9ms
                     // composite cost is intrinsic fullscreen-alpha work, not blit
                     // pass-break overhead. Kept for future experiments only.
-                    bool useQuad = IsEnvFlagEnabled("IMM_UNITY_VK_COMPOSITE_QUAD") &&
-                                   !IsEnvFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_QUAD") &&
-                                   EnsureCompositeQuad(cam, info) != null;
+                    bool useQuad = useAndroidVulkanStereoQuad ||
+                                   (IsEnvFlagEnabled("IMM_UNITY_VK_COMPOSITE_QUAD") &&
+                                    !IsEnvFlagEnabled("IMM_UNITY_VK_NO_COMPOSITE_QUAD") &&
+                                    EnsureCompositeQuad(cam, info) != null);
                     if (useQuad)
                     {
-                        // In-pass composite: bind this pass's eye RT through the command
-                        // buffer, which executes INSIDE the eye's pass - immune to the
-                        // cull-both-then-render-both ordering that made a PreCull-time
-                        // Shader.SetGlobalFloat eye index race (both eyes sampled the
-                        // same RT - "vision feels odd").
-                        RenderTexture quadTarget = info.VulkanEyeTargets[blitEye];
-                        if (quadTarget != null)
-                            info.CommandBuffer.SetGlobalTexture("_ImmEyeTex", quadTarget);
+                        // Both eye textures are bound on the material. The shader uses
+                        // Unity's GPU eye index during the real eye draw; no mutable
+                        // CPU-side eye texture binding participates in presentation.
                         if (_preCullCount <= 12)
-                            Debug.Log($"[IMM_UNITY_VK_QUADEYE] n={_preCullCount} eye={eyeIndex} quadEye={blitEye} viaCB=1");
+                            Debug.Log($"[IMM_UNITY_VK_QUADEYE] n={_preCullCount} eye={eyeIndex} quadEye=gpu viaCB=0");
                     }
                     else if (!UsesFlatAndroidVulkanPresenter(cam))
                     {
