@@ -1,6 +1,92 @@
 {
   "schema": "imm-testing-matrix-status-v1",
-  "updated": "2026-07-29",
+  "updated": "2026-08-12",
+  "audio_pipelines": [
+    {
+      "product": "standalone",
+      "platform": "windows",
+      "status": "actual",
+      "backend": "Audio360",
+      "validation_gate": "Build / Windows"
+    },
+    {
+      "product": "standalone",
+      "platform": "android",
+      "status": "actual",
+      "backend": "OpenSL ES",
+      "validation_gate": "Build / Android"
+    },
+    {
+      "product": "standalone",
+      "platform": "macos",
+      "status": "actual",
+      "backend": "AVFoundation",
+      "validation_gate": "Build / macOS / Validate macOS Metal standalone audio"
+    },
+    {
+      "product": "standalone",
+      "platform": "ios",
+      "status": "unsupported",
+      "backend": null,
+      "validation_gate": null
+    },
+    {
+      "product": "unity",
+      "platform": "windows",
+      "status": "actual",
+      "backend": "Audio360",
+      "validation_gate": "Build / Windows"
+    },
+    {
+      "product": "unity",
+      "platform": "android",
+      "status": "actual",
+      "backend": "OpenSL ES",
+      "validation_gate": "Build / Android"
+    },
+    {
+      "product": "unity",
+      "platform": "macos",
+      "status": "actual",
+      "backend": "AVFoundation",
+      "validation_gate": "CI Engine Matrix / Unity macOS Metal Composition"
+    },
+    {
+      "product": "unity",
+      "platform": "ios",
+      "status": "actual",
+      "backend": "AVFoundation",
+      "validation_gate": "Build / iOS / Verify iOS Unity audio pipeline contract"
+    },
+    {
+      "product": "godot",
+      "platform": "windows",
+      "status": "actual",
+      "backend": "Audio360",
+      "validation_gate": "Build / Windows"
+    },
+    {
+      "product": "godot",
+      "platform": "android",
+      "status": "actual",
+      "backend": "OpenSL ES",
+      "validation_gate": "Build / Android"
+    },
+    {
+      "product": "godot",
+      "platform": "macos",
+      "status": "actual",
+      "backend": "AVFoundation",
+      "validation_gate": "CI GPU Matrix / macOS Godot Metal"
+    },
+    {
+      "product": "godot",
+      "platform": "ios",
+      "status": "unsupported",
+      "backend": null,
+      "validation_gate": null
+    }
+  ],
   "rows": [
     {
       "product": "standalone",

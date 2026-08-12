@@ -1165,6 +1165,17 @@ jobs:
             exit "$smoke_status"
           fi
 
+      - name: Verify Godot Metal audio pipeline
+        if: always()
+        run: |
+          python3 tests/tools/verify_log_markers.py \
+            --log artifacts/godot-smoke-macos-metal/imm-godot-native.log \
+            --label godot-macos-metal-audio \
+            --require "[IMM_AUDIO_PIPELINE_20260812] requested=AVFoundation active=AVFoundation" \
+            --require "Decoded Ogg Opus sound to PCM temp WAV for AVFoundation" \
+            --forbid "[IMM_AUDIO_PIPELINE_20260812] requested=AVFoundation active=Null" \
+            --output artifacts/godot-smoke-macos-metal/audio-log-contract.json
+
       - name: Record Godot Metal render metrics
         if: always()
         continue-on-error: true

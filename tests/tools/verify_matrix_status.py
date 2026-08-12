@@ -11,6 +11,20 @@ from pathlib import Path
 
 VALID_STATUSES = {"supported", "deferred", "unsupported", "waived"}
 REQUIRED_FIELDS = {"product", "platform", "mode", "renderer", "status", "reason"}
+EXPECTED_AUDIO_PIPELINES = {
+    ("standalone", "windows"): "Audio360",
+    ("standalone", "android"): "OpenSL ES",
+    ("standalone", "macos"): "AVFoundation",
+    ("standalone", "ios"): None,
+    ("unity", "windows"): "Audio360",
+    ("unity", "android"): "OpenSL ES",
+    ("unity", "macos"): "AVFoundation",
+    ("unity", "ios"): "AVFoundation",
+    ("godot", "windows"): "Audio360",
+    ("godot", "android"): "OpenSL ES",
+    ("godot", "macos"): "AVFoundation",
+    ("godot", "ios"): None,
+}
 REQUIRED_ROWS = {
     ("standalone", "windows", "non-vr"),
     ("standalone", "windows", "vr"),
@@ -87,6 +101,45 @@ def main() -> int:
     if not isinstance(rows, list) or not rows:
         errors.append("Matrix status must contain a non-empty rows list")
         rows = []
+
+    audio_pipelines = data.get("audio_pipelines")
+    if not isinstance(audio_pipelines, list):
+        errors.append("Matrix status must contain an audio_pipelines list")
+        audio_pipelines = []
+
+    seen_audio_keys: set[tuple[str, str]] = set()
+    for index, pipeline in enumerate(audio_pipelines):
+        if not isinstance(pipeline, dict):
+            errors.append(f"Audio pipeline {index} must be an object")
+            continue
+        key = (str(pipeline.get("product", "")), str(pipeline.get("platform", "")))
+        if key in seen_audio_keys:
+            errors.append(f"Duplicate audio pipeline key: {key}")
+        seen_audio_keys.add(key)
+        if key not in EXPECTED_AUDIO_PIPELINES:
+            errors.append(f"Unexpected audio pipeline key: {key}")
+            continue
+
+        expected_backend = EXPECTED_AUDIO_PIPELINES[key]
+        status = pipeline.get("status")
+        backend = pipeline.get("backend")
+        validation_gate = pipeline.get("validation_gate")
+        if expected_backend is None:
+            if status != "unsupported" or backend is not None or validation_gate is not None:
+                errors.append(f"Unsupported audio pipeline {key} must have status=unsupported and null backend/validation_gate")
+        else:
+            if status != "actual":
+                errors.append(f"Audio pipeline {key} must have status=actual")
+            if backend != expected_backend:
+                errors.append(f"Audio pipeline {key} backend is {backend!r}, expected {expected_backend!r}")
+            if not str(validation_gate or "").strip():
+                errors.append(f"Actual audio pipeline {key} must name a validation_gate")
+            if str(backend).lower() in {"null", "dummy", "silent"}:
+                errors.append(f"Actual audio pipeline {key} cannot use {backend!r}")
+
+    missing_audio_keys = set(EXPECTED_AUDIO_PIPELINES) - seen_audio_keys
+    for key in sorted(missing_audio_keys):
+        errors.append(f"Missing required audio pipeline coverage: {key}")
 
     seen_keys: set[tuple[str, str, str, str]] = set()
     coverage_keys: set[tuple[str, str, str]] = set()

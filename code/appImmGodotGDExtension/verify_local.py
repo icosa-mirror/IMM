@@ -505,10 +505,10 @@ def verify_runtime_dependency_sources() -> None:
 
 def verify_shared_engine_bridge() -> None:
     bridge = (ROOT / "code/appImmShared/src/imm_engine_bridge.cpp").read_text()
-    for token in ["Sound backend unavailable; continuing without audio.", "Sound backend init failed; continuing without audio.", "Failed to create fallback null SoundBackend.", "Failed to initialize fallback null SoundBackend.", "piSoundEngineBackend::API::Null"]:
+    for token in ["Sound backend unavailable; continuing without audio.", "Sound backend init failed; continuing without audio.", "Failed to create fallback null SoundBackend.", "Failed to initialize fallback null SoundBackend.", "piSoundEngineBackend::API::Null", "defined(__APPLE__)", "piSoundEngineBackend::API::AVFoundation", "[IMM_AUDIO_PIPELINE_20260812]"]:
         if token not in bridge:
             raise RuntimeError(f"Shared IMM engine bridge is missing audio fallback token: {token}")
-    print("Shared IMM engine bridge audio fallback ok", flush=True)
+    print("Shared IMM engine bridge platform audio selection and fallback ok", flush=True)
 
 
 def verify_unity_projection_guard() -> None:

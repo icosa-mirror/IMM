@@ -26,7 +26,7 @@ def markdown_table(rows: list[list[str]]) -> list[str]:
     return lines
 
 
-def summarize(rows: list[dict]) -> dict:
+def summarize(rows: list[dict], audio_pipelines: list[dict]) -> dict:
     status_counts = Counter(str(row.get("status", "")) for row in rows)
     supported_rows = [row for row in rows if row.get("status") == "supported"]
     deferred_rows = [row for row in rows if row.get("status") == "deferred"]
@@ -46,6 +46,9 @@ def summarize(rows: list[dict]) -> dict:
         "hardware_gate_count": len(hardware_rows),
         "release_blocker_count": len(release_blockers),
         "release_blockers": [row_key(row) for row in release_blockers],
+        "audio_pipeline_count": len(audio_pipelines),
+        "actual_audio_pipeline_count": sum(pipeline.get("status") == "actual" for pipeline in audio_pipelines),
+        "unsupported_audio_pipeline_count": sum(pipeline.get("status") == "unsupported" for pipeline in audio_pipelines),
     }
 
 
@@ -64,6 +67,8 @@ def build_markdown(data: dict, summary: dict) -> str:
         f"- Hosted gates: {summary['hosted_gate_count']}",
         f"- Hardware gates: {summary['hardware_gate_count']}",
         f"- Release blockers: {summary['release_blocker_count']}",
+        f"- Actual audio pipelines: {summary['actual_audio_pipeline_count']}",
+        f"- Unsupported audio surfaces: {summary['unsupported_audio_pipeline_count']}",
         "",
     ]
 
@@ -91,6 +96,21 @@ def build_markdown(data: dict, summary: dict) -> str:
     lines.extend(markdown_table(table))
     lines.append("")
 
+    lines.append("## Audio Pipelines")
+    audio_rows = [["Product", "Platform", "Status", "Backend", "Validation Gate"]]
+    for pipeline in data.get("audio_pipelines", []):
+        audio_rows.append(
+            [
+                str(pipeline.get("product", "")),
+                str(pipeline.get("platform", "")),
+                str(pipeline.get("status", "")),
+                str(pipeline.get("backend") or ""),
+                str(pipeline.get("validation_gate") or ""),
+            ]
+        )
+    lines.extend(markdown_table(audio_rows))
+    lines.append("")
+
     lines.append("## Unsupported And Waived Decisions")
     decision_rows = [["Row", "Status", "Owner Decision"]]
     for row in rows:
@@ -116,12 +136,16 @@ def main() -> int:
     rows = data.get("rows", [])
     if not isinstance(rows, list):
         rows = []
-    summary = summarize(rows)
+    audio_pipelines = data.get("audio_pipelines", [])
+    if not isinstance(audio_pipelines, list):
+        audio_pipelines = []
+    summary = summarize(rows, audio_pipelines)
     audit = {
         "schema": "imm-testing-matrix-audit-v1",
         "matrix_schema": data.get("schema", ""),
         "updated": data.get("updated", ""),
         "summary": summary,
+        "audio_pipelines": audio_pipelines,
         "rows": [
             {
                 "key": row_key(row),

@@ -48,6 +48,20 @@ def main() -> int:
         assert unknown.returncode != 0, "unknown hosted gate should fail matrix status verification"
         assert "references unknown hosted_gate" in unknown.stderr
 
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "matrix_status.json"
+        data = json.loads(source.read_text(encoding="utf-8"))
+        unity_macos = next(
+            pipeline
+            for pipeline in data["audio_pipelines"]
+            if pipeline["product"] == "unity" and pipeline["platform"] == "macos"
+        )
+        unity_macos["backend"] = "Null"
+        temp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        null_audio = run_verify(temp_path)
+        assert null_audio.returncode != 0, "null audio must fail matrix status verification"
+        assert "expected 'AVFoundation'" in null_audio.stderr
+
     print("Matrix status release policy tests passed")
     return 0
 

@@ -156,7 +156,9 @@ jobs:
           python-version: '3.x'
 
       - name: Verify matrix status coverage
-        run: python tests/tools/verify_matrix_status.py tests/matrix_status.json
+        run: |
+          python tests/tools/verify_matrix_status.py tests/matrix_status.json
+          python tests/tools/verify_audio_pipeline_contract.py
 
       - name: Verify workflow matrix wiring
         run: python tests/tools/verify_workflow_matrix.py
@@ -184,6 +186,7 @@ jobs:
           python tests/tools/test_write_matrix_audit_report.py
           python tests/tools/test_write_ci_manifest.py
           python tests/tools/test_verify_matrix_status.py
+          python tests/tools/verify_audio_pipeline_contract.py
           python tests/tools/test_composition_probe_contracts.py
           python tests/tools/test_repack_android_native_library.py
           python tests/tools/test_classify_composition_modes.py

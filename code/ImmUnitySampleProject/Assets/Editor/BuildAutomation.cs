@@ -400,7 +400,7 @@ namespace ImmPlayer.Editor
             Environment.SetEnvironmentVariable(RuntimeSmokeXrProbeEnv, enableXrProbe ? "1" : string.Empty);
             Environment.SetEnvironmentVariable(RuntimeSmokeDisabledEnv, "1");
 
-            string nativeLogPath = Path.GetFullPath("imm_player_log.txt");
+            string nativeLogPath = Path.Combine(Application.temporaryCachePath, "imm_player_log.txt");
             if (File.Exists(nativeLogPath))
             {
                 File.Delete(nativeLogPath);
@@ -624,7 +624,10 @@ namespace ImmPlayer.Editor
                 }
             }
 
-            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
+            bool requireNativeAudio = Application.platform == RuntimePlatform.OSXEditor;
+            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) &&
+                File.Exists(s_EditorSmokeCapturePath) &&
+                (!requireNativeAudio || EditorSmokeNativeLogPassed()))
             {
                 s_EditorSmokeRequestedExit = true;
                 UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] capture complete: {s_EditorSmokeCapturePath}");
@@ -769,7 +772,10 @@ namespace ImmPlayer.Editor
             EditorApplication.update -= UpdateEditorPlayModeSmoke;
             EditorApplication.playModeStateChanged -= OnEditorPlayModeSmokeStateChanged;
 
-            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) && File.Exists(s_EditorSmokeCapturePath))
+            bool requireNativeAudio = Application.platform == RuntimePlatform.OSXEditor;
+            if (!string.IsNullOrEmpty(s_EditorSmokeCapturePath) &&
+                File.Exists(s_EditorSmokeCapturePath) &&
+                (!requireNativeAudio || EditorSmokeNativeLogPassed()))
             {
                 ClearEditorPlayModeSmokeSession();
                 UnityEngine.Debug.Log($"[IMM_EDITOR_SMOKE] passed: {s_EditorSmokeCapturePath}");
@@ -797,6 +803,7 @@ namespace ImmPlayer.Editor
 
             string nativeLog = File.ReadAllText(nativeLogPath);
             return nativeLog.Contains("Loaded in SPU!") &&
+                   nativeLog.Contains("[IMM_AUDIO_PIPELINE_20260812] requested=AVFoundation active=AVFoundation") &&
                    nativeLog.Contains("Decoded Ogg Opus sound to PCM temp WAV for AVFoundation");
         }
 

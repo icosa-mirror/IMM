@@ -39,6 +39,9 @@ def main() -> int:
         assert audit["summary"]["row_count"] == 27
         assert audit["summary"]["supported_count"] == 16
         assert audit["summary"]["release_blocker_count"] == 8
+        assert audit["summary"]["audio_pipeline_count"] == 12
+        assert audit["summary"]["actual_audio_pipeline_count"] == 10
+        assert audit["summary"]["unsupported_audio_pipeline_count"] == 2
         assert "standalone/android/vr/openxr" in audit["summary"]["release_blockers"]
         assert "unity/windows/synthetic-stereo/vulkan" in audit["summary"]["release_blockers"]
 
@@ -47,6 +50,8 @@ def main() -> int:
         assert "## Release Blockers" in markdown
         assert "standalone/android/vr/openxr" in markdown
         assert "## Matrix Rows" in markdown
+        assert "## Audio Pipelines" in markdown
+        assert "AVFoundation" in markdown
 
     print("Matrix audit report tests passed")
     return 0

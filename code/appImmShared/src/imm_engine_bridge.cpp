@@ -471,16 +471,24 @@ namespace ImmShared
     {
 #if defined(__ANDROID__) || defined(ANDROID)
         const piSoundEngineBackend::API soundApi = piSoundEngineBackend::API::Android;
+        const wchar_t *soundBackendName = L"Android";
 #elif defined(WINDOWS)
         const piSoundEngineBackend::API soundApi = piSoundEngineBackend::API::DirectSoundOVR;
+        const wchar_t *soundBackendName = L"Audio360";
+#elif defined(__APPLE__)
+        const piSoundEngineBackend::API soundApi = piSoundEngineBackend::API::AVFoundation;
+        const wchar_t *soundBackendName = L"AVFoundation";
 #else
         const piSoundEngineBackend::API soundApi = piSoundEngineBackend::API::Null;
+        const wchar_t *soundBackendName = L"Null";
 #endif
+        const wchar_t *activeSoundBackendName = soundBackendName;
         mSoundBackend = piCreateSoundEngineBackend(soundApi, &mLog);
         if (mSoundBackend == nullptr)
         {
             mLog.Printf(LT_WARNING, L"Sound backend unavailable; continuing without audio.");
             mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &mLog);
+            activeSoundBackendName = L"Null";
             if (mSoundBackend == nullptr)
             {
                 mLog.Printf(LT_ERROR, L"Failed to create fallback null SoundBackend.");
@@ -508,6 +516,7 @@ namespace ImmShared
             mLog.Printf(LT_WARNING, L"Sound backend init failed; continuing without audio.");
             piDestroySoundEngineBackend(mSoundBackend);
             mSoundBackend = piCreateSoundEngineBackend(piSoundEngineBackend::API::Null, &mLog);
+            activeSoundBackendName = L"Null";
             if (mSoundBackend == nullptr || !mSoundBackend->Init(nullptr, -1, &config))
             {
                 mLog.Printf(LT_ERROR, L"Failed to initialize fallback null SoundBackend.");
@@ -516,6 +525,7 @@ namespace ImmShared
         }
 
         mSoundInitialized = true;
+        mLog.Printf(LT_DEBUG, L"[IMM_AUDIO_PIPELINE_20260812] requested=%s active=%s", soundBackendName, activeSoundBackendName);
         mLog.Printf(LT_DEBUG, L"SoundBackend initialized successfully.");
         return true;
     }
