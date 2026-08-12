@@ -522,6 +522,137 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  unity-ios-player-build:
+    name: Unity iOS Player Build
+    if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download same-commit Unity package
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmPlayerPlugin-Unity
+          path: artifacts/prebuilt-unity-package
+
+      - name: Download same-commit Stroke Reader package
+        uses: actions/download-artifact@v4
+        with:
+          name: ImmStrokeReaderPlugin-Unity
+          path: artifacts/prebuilt-stroke-reader-package
+
+      - name: Stage same-commit iOS native libraries
+        run: |
+          set -euo pipefail
+          unity_archive="$(find artifacts/prebuilt-unity-package -path '*/Plugins/iOS/libImmUnityPlugin.a' -type f | head -n 1)"
+          stroke_archive="$(find artifacts/prebuilt-stroke-reader-package -path '*/Plugins/iOS/libImmStrokeReader.a' -type f | head -n 1)"
+          test -n "$unity_archive"
+          test -n "$stroke_archive"
+          cp "$unity_archive" code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/iOS/libImmUnityPlugin.a
+          cp "$stroke_archive" code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS/libImmStrokeReader.a
+
+      - name: Restore Unity iOS Library cache
+        id: cache_library_ios
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-
+
+      - name: Prepare Unity iOS artifact directory
+        run: mkdir -p artifacts/unity-ios-player-build
+
+      - name: Export Unity iOS Metal Xcode project
+        id: unity_ios_export
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: iOS
+          versioning: None
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildIOSCIPlayer
+          allowDirtyBuild: true
+          cacheUnityInstallationOnMac: true
+          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-ios-player-build/unity-editor.log -immIosPlayerPath ${{ github.workspace }}/artifacts/unity-ios-player-build/xcode
+
+      - name: Verify generated Unity iOS project contract
+        run: |
+          set -euo pipefail
+          project=artifacts/unity-ios-player-build/xcode/Unity-iPhone.xcodeproj
+          test -d "$project"
+          test -f artifacts/unity-ios-player-build/xcode/Unity-iPhone.xcodeproj/project.pbxproj
+          grep -R -q 'libImmUnityPlugin.a' artifacts/unity-ios-player-build/xcode
+          grep -R -q 'libImmStrokeReader.a' artifacts/unity-ios-player-build/xcode
+          printf '%s\n' \
+            'target=iOS' \
+            'renderer=Metal' \
+            'scene=Assets/Scenes/SampleScene.unity' \
+            'xrStartup=disabled' \
+            'visualEvidence=false' \
+            > artifacts/unity-ios-player-build/generated-project-contract.txt
+
+      - name: Compile generated Unity iOS application without signing
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project artifacts/unity-ios-player-build/xcode/Unity-iPhone.xcodeproj \
+            -scheme Unity-iPhone \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath artifacts/unity-ios-player-build/derived-data \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build \
+            | tee artifacts/unity-ios-player-build/xcodebuild.log
+
+      - name: Write Unity iOS application-build manifest
+        if: always()
+        run: >
+          python3 tests/tools/write_ci_manifest.py
+          --status "${{ job.status }}"
+          --failure-class packaging
+          --output artifacts/unity-ios-player-build/manifest.json
+          --product unity
+          --platform-name ios
+          --mode application-build
+          --renderer metal
+          --include artifacts/unity-ios-player-build
+
+      - name: Collect Unity iOS application-build summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-ios-player-build --require-manifest --output artifacts/unity-ios-player-build/artifact-summary.json
+
+      - name: Save Unity iOS Library cache
+        if: always() && steps.cache_library_ios.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload Unity iOS player-build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityIOSPlayerBuild
+          path: artifacts/unity-ios-player-build
+          if-no-files-found: error
+          retention-days: 14
+
   unity-windows-directx-player-build:
     name: Unity Windows DirectX Player Build
     if: (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
@@ -2280,6 +2411,7 @@ jobs:
       - unity-windows-native-plugin-build
       - unity-package-import
       - unity-macos-metal-composition
+      - unity-ios-player-build
       - unity-windows-directx-player-build
       - unity-windows-directx-composition
       - unity-windows-vulkan-player-build

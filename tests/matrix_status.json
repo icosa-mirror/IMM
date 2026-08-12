@@ -289,6 +289,29 @@
     },
     {
       "product": "unity",
+      "platform": "ios",
+      "mode": "application-build",
+      "renderer": "metal",
+      "status": "supported",
+      "hosted_gate": "CI Engine Matrix / Unity iOS Player Build",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "CI exports the ordinary Unity sample to an iOS Xcode project and compiles the generated application without signing. This is application-build evidence, not visual evidence."
+    },
+    {
+      "product": "unity",
+      "platform": "ios",
+      "mode": "non-vr",
+      "renderer": "metal",
+      "status": "unsupported",
+      "hosted_gate": null,
+      "hardware_gate": null,
+      "baseline": null,
+      "owner_decision": "Unity iOS remains visually unsupported until the generated player runs on a simulator or device and passes render and depth-composition contracts.",
+      "reason": "The application-build lane proves export and linkage only; no authoritative Unity iOS Metal image is currently captured."
+    },
+    {
+      "product": "unity",
       "platform": "android",
       "mode": "non-vr",
       "renderer": "vulkan",

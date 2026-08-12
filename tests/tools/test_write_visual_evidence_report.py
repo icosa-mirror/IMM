@@ -18,6 +18,7 @@ PNG_1X1 = bytes.fromhex(
 
 def main() -> int:
     from write_visual_evidence_report import (
+        VISUAL_MATRIX_TARGETS,
         VISUAL_MATRIX_SYMBOLS,
         add_color_component_table,
         effective_status,
@@ -26,6 +27,12 @@ def main() -> int:
         slugify,
         visual_matrix_cell,
     )
+
+    assert VISUAL_MATRIX_TARGETS["ios"] == {
+        "standalone": "metal",
+        "godot": "metal",
+        "unity": "metal",
+    }, "The main visual matrix must retain all three planned iOS targets"
 
     assert VISUAL_MATRIX_SYMBOLS["render_passed"] == "🟨"
 

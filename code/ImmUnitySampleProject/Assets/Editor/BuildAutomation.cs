@@ -37,6 +37,7 @@ namespace ImmPlayer.Editor
         private const string EditorSmokeCapturePathArg = "-immSmokeCapturePath";
         private const string EditorSmokePlayerPathArg = "-immSmokePlayerPath";
         private const string QuestPlayerPathArg = "-immQuestPlayerPath";
+        private const string IosPlayerPathArg = "-immIosPlayerPath";
         private const int EditorSmokeReadyPumpCount = 3;
         private static readonly TimeSpan EditorSmokePumpInterval = TimeSpan.FromMilliseconds(100.0);
 
@@ -265,6 +266,56 @@ namespace ImmPlayer.Editor
             PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, new[] { GraphicsDeviceType.Metal });
 
             BuildPlayer(BuildTarget.iOS, outputDir, BuildOptions.Development, "iOS Simulator");
+        }
+
+        public static void BuildIOSCIPlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.iOS, BuildTarget.iOS, "iOS");
+
+            string outputPath = GetCommandLineValue(IosPlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "ios-metal-player");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+            Directory.CreateDirectory(outputPath);
+
+            iOSSdkVersion previousSdkVersion = PlayerSettings.iOS.sdkVersion;
+            bool previousDefaultGraphicsApis = PlayerSettings.GetUseDefaultGraphicsAPIs(BuildTarget.iOS);
+            GraphicsDeviceType[] previousGraphicsApis = PlayerSettings.GetGraphicsAPIs(BuildTarget.iOS);
+            XRGeneralSettings iosXrSettings =
+                XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.iOS);
+            bool previousInitManagerOnStart = iosXrSettings != null && iosXrSettings.InitManagerOnStart;
+            try
+            {
+                PlayerSettings.iOS.sdkVersion = iOSSdkVersion.DeviceSDK;
+                PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, false);
+                PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, new[] { GraphicsDeviceType.Metal });
+                if (iosXrSettings != null)
+                {
+                    iosXrSettings.InitManagerOnStart = false;
+                }
+
+                Debug.Log($"[IMM_UNITY_IOS_BUILD_20260812] renderer=Metal sdk=DeviceSDK scene={SmokeScenes[0]} xrStartup=disabled output={outputPath}");
+                BuildPlayer(
+                    BuildTarget.iOS,
+                    outputPath,
+                    BuildOptions.Development,
+                    "iOS Metal CI player");
+            }
+            finally
+            {
+                PlayerSettings.iOS.sdkVersion = previousSdkVersion;
+                PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, previousDefaultGraphicsApis);
+                if (!previousDefaultGraphicsApis && previousGraphicsApis != null && previousGraphicsApis.Length > 0)
+                {
+                    PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, previousGraphicsApis);
+                }
+                if (iosXrSettings != null)
+                {
+                    iosXrSettings.InitManagerOnStart = previousInitManagerOnStart;
+                }
+            }
         }
 
         public static void RunMacOSEditorPlayModeSmoke()

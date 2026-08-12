@@ -54,6 +54,7 @@ KNOWN_HOSTED_GATES = {
     "Build / Windows with IMM_CI_ENABLE_GPU_SMOKE=1",
     "CI Engine Matrix / Unity Package Import",
     "CI Engine Matrix / Unity Android Vulkan",
+    "CI Engine Matrix / Unity iOS Player Build",
     "CI Engine Matrix / Unity Windows DirectX Composition",
     "CI Engine Matrix / Unity Windows Vulkan Synthetic Stereo",
     "CI Engine Matrix / Unity macOS Metal Composition",

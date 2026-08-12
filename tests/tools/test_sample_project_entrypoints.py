@@ -110,6 +110,19 @@ def main() -> int:
     )
     assert "BuildMacOSMetalSmokePlayer();" in combined_smoke
     assert "RunMacOSEditorPlayModeSmoke();" in combined_smoke
+    ios_player_build = method_body(
+        unity_automation,
+        "public static void BuildIOSCIPlayer()",
+    )
+    for token in [
+        "BuildTarget.iOS",
+        "iOSSdkVersion.DeviceSDK",
+        "GraphicsDeviceType.Metal",
+        "SmokeScenes[0]",
+        "iosXrSettings.InitManagerOnStart = false",
+        "[IMM_UNITY_IOS_BUILD_20260812]",
+    ]:
+        assert token in ios_player_build
     editor_play = method_body(unity_automation, "public static void RunMacOSEditorPlayModeSmoke()")
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
     assert "featureExamples.IsDocumentRenderReady" in unity_automation
@@ -143,6 +156,11 @@ def main() -> int:
         "Record Unity project Play-button render metrics",
         "Write Unity project Play-button render report",
         "Classify Unity macOS Metal evidence",
+        "Export Unity iOS Metal Xcode project",
+        "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildIOSCIPlayer",
+        "Compile generated Unity iOS application without signing",
+        "CODE_SIGNING_ALLOWED=NO",
+        "visualEvidence=false",
     ]:
         assert token in engine_workflow
 
