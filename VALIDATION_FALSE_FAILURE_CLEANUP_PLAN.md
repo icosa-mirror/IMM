@@ -125,6 +125,15 @@ the black/default-scene, reverse-Z, or displaced-camera failure classes. Replayi
 the corrected report generator over the exact `31572086600` aggregate artifact
 returns success.
 
+Run `31573753230` cloud-confirms the completed hosted cleanup at commit
+`0749c711`. Every build, runtime, visual lane classifier, matrix evidence report,
+and final aggregate job passed. The report begins with green Windows, Android,
+and macOS rows for standalone, Godot, and Unity; iOS remains explicitly gray and
+out of hosted scope. Android standalone Vulkan is `passed` with a 1280x720
+candidate containing `907083` non-black pixels, and its downloaded image was
+manually reviewed as correct. The hardware-only Windows Unity Vulkan row remains
+visible as `evidence_incomplete` without falsely failing normal hosted CI.
+
 ## Objective
 
 Make the validation report trustworthy in both directions: correct renders must not fail for irrelevant reasons, and broken renders must never pass because a visual contract is missing or too weak. Visual evidence remains authoritative. Text and log checks may fail early, but must not reject a visually proven render merely because a redundant diagnostic message was absent, and they can never substitute for a successful visual rendering check.
