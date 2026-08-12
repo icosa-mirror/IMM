@@ -19,6 +19,7 @@ PNG_1X1 = bytes.fromhex(
 def main() -> int:
     from write_visual_evidence_report import (
         VISUAL_MATRIX_SYMBOLS,
+        effective_status,
         slugify,
         visual_matrix_cell,
     )
@@ -28,6 +29,24 @@ def main() -> int:
     assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
     assert slugify("UnityAndroidVulkan") == "unity-android-vulkan"
+
+    missing_firebase_capture = {
+        "passed": False,
+        "errors": ["missing Firebase Test Lab native-render-after.ppm"],
+    }
+    missing_evidence_manifest = {
+        "classification": {
+            "result": "failed",
+            "failure_class": "evidence",
+        }
+    }
+    assert effective_status(
+        missing_firebase_capture,
+        {},
+        missing_evidence_manifest,
+    ) == ("evidence_incomplete", "evidence"), (
+        "Missing Firebase evidence must not be reported as a rendering failure"
+    )
 
     standalone_row = {
         "matrix": {

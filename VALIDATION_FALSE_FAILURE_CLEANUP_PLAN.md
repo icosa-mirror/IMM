@@ -82,18 +82,21 @@ screen, and distinct synthetic-eye validation; manual inspection agrees with
 those verdicts. All other hosted canonical visual and evidence jobs passed.
 Android standalone Vulkan was again the sole red lane after its Firebase step
 timed out at 30 minutes without a result or capture, and it again reported
-`evidence_incomplete`. Physical Quest two-eye acceptance remains pending.
+`evidence_incomplete`. The exact APK from this run was then installed on a
+physical Quest 3S and manually accepted: both displayed eyes contain the correct
+IMM rendering. This closes the Quest Unity Vulkan Multi Pass product defect.
 
-The only currently confirmed product-rendering defect is physical Quest Unity
-Vulkan Multi Pass: the left eye contains IMM and the right eye contains only the
-Unity background. macOS Godot Metal was a validation false negative, not a
-renderer defect; run `31501318696` confirms the reviewed threshold correction.
-The active sequence is to physically verify and, if necessary, continue fixing
-the Quest Multi Pass path, rerun the full hosted suite after the Firebase outage
-ends, and only then add Single Pass Instanced. iOS work remains a separate
-coverage/product gap: Unity iOS needs a visual-validation lane, while Godot iOS
-needs supported packaging/runtime integration before visual validation can be
-meaningful.
+No product-rendering defect is currently confirmed in the supported hosted
+matrix or the accepted Quest Multi Pass path. macOS Godot Metal was a validation
+false negative, not a renderer defect; run `31501318696` confirms the reviewed
+threshold correction. A rerun of Android standalone Vulkan in run `31527970425`
+again timed out after 30 minutes without a Firebase result or capture. Its lane
+manifest correctly says `evidence_incomplete`, but the combined report incorrectly
+rewrote the missing-capture metrics error as `render_failed`. The report now gives
+typed lane failures precedence over generic metric errors, with a regression test
+covering this exact missing-Firebase-capture case. Firebase evidence must still
+remain red until a real image passes. Single Pass Instanced and iOS remain
+separate future product/coverage workstreams.
 
 ## Objective
 
@@ -221,38 +224,36 @@ so the non-VR row has incomplete evidence and the synthetic-stereo row has a
 genuine requested-API runtime failure. Those are coverage/runtime limitations,
 not false visual failures in a produced image.
 
-Run `30913083187` supplied the required cloud confirmation. Product work now
-proceeds only on the remaining Quest two-eye defect and later stereo expansion,
-while the validated cross-platform suite remains the regression gate.
+Run `30913083187` supplied the required cloud confirmation. The later physical
+Quest 3S test of run `31527970425` supplied the required Multi Pass acceptance.
+The validated cross-platform suite remains the regression gate for later stereo
+expansion.
 
 ### Current priority order
 
-1. Physically validate the Quest Unity Vulkan Multi Pass correction. Both
-   displayed eyes must contain the correct distinct IMM view; the pre-fix
-   real-device result has a correct left eye and a background-only right eye.
-   Use per-eye native captures and the frame-correlated handoff diagnostics if
-   the right eye remains absent. Logs may fast-fail, but physical two-eye output
-   is the acceptance evidence. The existing Unity Android CI job now also
-   produces `ImmUnityQuestVulkan.apk` from `SampleSceneVR.unity` with Unity 6,
-   Vulkan, ARM64, OpenXR, serialized Multi Pass, and the same-commit native
-   plugin. The XR player shell is cached separately so native iterations only
-   replace and re-sign the plugin. This artifact accelerates physical testing;
-   its successful build and XR manifest checks are not visual-pass evidence.
+1. Keep failure classification watertight. The rerun of Android standalone
+   Vulkan in run `31527970425` exposed an aggregate-report precedence bug: the
+   authoritative lane manifest classified the absent Firebase result/capture as
+   `evidence`, while generic missing-capture metrics caused the combined report
+   to print `render_failed`/`rendering`. The report fix and regression test must
+   preserve `evidence_incomplete`/`evidence` through aggregation. Missing
+   evidence remains a red required lane; only its explanation changes.
 2. Rerun Android standalone Vulkan after Google's 11 August 2026 Test Lab
    availability incident is resolved. Do not weaken or skip its required visual
    checks: run `31523497710` already cloud-confirmed the evidence-scope and lane
-   classification corrections, but Firebase again exhausted the 30-minute
-   execution window without returning a result or `native-render-after.ppm`.
-   That missing evidence must remain red until a real passing capture exists.
+   classification corrections, and both attempts in run `31527970425` again
+   exhausted the 30-minute execution window without returning a result or
+   `native-render-after.ppm`. That missing evidence must remain red until a real
+   passing capture exists.
 3. Download and manually inspect the complete exact-revision evidence report
-   after Firebase can execute the APKs. Preserve the now-confirmed Godot
+   after Firebase can execute the standalone APK. Preserve the now-confirmed Godot
    Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
    Vulkan, OpenGL, Metal, DirectX, Windows Vulkan, and WASM behavior. The full
    supported hosted workflow must be green; a green aggregate produced by
    suppressing missing visual evidence is not acceptable.
-4. Add Single Pass Instanced only after Multi Pass passes on Quest. Reuse the
-   same two-eye producer and stereo-aware presentation design; true Vulkan
-   multiview remains an optional later optimization.
+4. Add Single Pass Instanced as a later product extension now that Multi Pass
+   passes on Quest. Reuse the same two-eye producer and stereo-aware presentation
+   design; true Vulkan multiview remains an optional later optimization.
 5. Track iOS accurately: add a Unity iOS Metal visual-validation lane as a
    coverage task, and treat Godot iOS as a product implementation task before
    adding its visual-validation lane.
@@ -318,7 +319,7 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
   Unity Android artifact. This proves build/package configuration only; both
   physical eyes must still be inspected on Quest.
 - The plugin explicitly does not support instanced single-pass and forces a stereo camera to its `TwoPass` integration path, except for its legacy `SinglePass` mode.
-- A real Quest test confirms a product failure in that supported path: the left eye renders IMM strokes correctly while the right eye shows only Unity's background sky sphere.
+- The pre-fix real Quest result was a product failure in that supported path: the left eye rendered IMM strokes correctly while the right eye showed only Unity's background sky sphere.
 - Firebase synthetic stereo is not yet a Quest-equivalent test. It manually invokes `Camera.Render()` twice and supplies the eye index, so it verifies two target writes and capture plumbing but bypasses Unity's real XR Multi Pass callback/eye-target/composite handoff.
 - The Firebase synthetic lane now passes with distinct, independently valid native and presented eye pairs. Use it as evidence that native eye production and the flat validation presenter are correct, but not as proof that the Quest/OpenXR compositor displays both eyes.
 - Fork commit `52f3e462` exposed a concrete native Multi Pass defect: Vulkan paint shaders index `mEye[pass.mID]`, but `RenderStereoMultiPass` only populated slot 0. The equivalent fix is now on `main` as `df970cd0`; each one-eye call copies the current eye matrix into both shader slots so the paint and picture shader variants consume the same current-eye transform. CI rebuilds the Android native plugin from that revision and injects it into the APK, so this is not merely a source-only change.
@@ -343,8 +344,8 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
   composite it into Unity's own per-eye destination. The paired native producer
   is unchanged, and a kill switch retains the previous presentation path for
   device A/B diagnosis. Run `31527970425` passed Unity 6 compilation and the
-  non-XR Android Vulkan visual regressions; physical Quest acceptance is
-  pending.
+  non-XR Android Vulkan visual regressions. The exact APK from that run was then
+  installed on a Quest 3S and both displayed eyes were manually accepted.
 - Multi Pass remains the first acceptance target. The implementation must nevertheless carry both eye results together so Single Pass Instanced can use the same producer and presentation path later.
 
 ### Unity Android Vulkan stereo implementation
@@ -364,7 +365,8 @@ Validation reliability is a gate, not a background cleanup task. Product fixes m
 Implementation status: paired production landed in `81e308f9`; Unity 6 cloud
 compilation passed. Eye-authoritative `OnRenderImage` presentation landed in
 `53c83170` and passed cloud compilation plus the non-XR Android Vulkan visual
-suite. Physical Quest acceptance remains pending.
+suite. The exact-revision APK from run `31527970425` passed physical Quest 3S
+two-eye acceptance.
 
 1. Obtain both current XR eye view/projection matrices once per frame.
 2. Maintain two Android Vulkan offscreen eye targets initially. Do not alter the direct-rendering paths used by working graphics APIs.

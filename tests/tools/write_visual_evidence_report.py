@@ -866,17 +866,13 @@ def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, 
         return (status_result, status.get("failure_class", ""))
     if status_result == "render_failed":
         return ("render_failed", status.get("failure_class", "rendering"))
-    errors = metrics.get("errors") or []
-    if errors or metrics.get("passed") is False:
-        if errors and all(str(error).startswith("color component probe ") for error in errors):
-            return ("composition_failed", "compositing")
-        return ("render_failed", "rendering")
     if status_result == "composition_failed":
         return ("composition_failed", status.get("failure_class", "compositing"))
-    if metrics and not strict_metrics_evidence(metrics):
-        return ("evidence_incomplete", "evidence")
-    if status_result == "passed":
-        return ("passed", "")
+
+    # The lane manifest carries the typed verdict for failures that happen before
+    # a valid visual comparison can be made.  In particular, a missing capture
+    # may also be represented as a metrics error, but it is not a rendering
+    # failure because no image existed to evaluate.
     classification = manifest.get("classification") or {}
     result = classification.get("result")
     failure_class = classification.get("failure_class", "")
@@ -894,6 +890,16 @@ def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, 
         return (mapped, failure_class)
     if result == "expected_failed":
         return ("composition_failed", failure_class or "compositing")
+
+    errors = metrics.get("errors") or []
+    if errors or metrics.get("passed") is False:
+        if errors and all(str(error).startswith("color component probe ") for error in errors):
+            return ("composition_failed", "compositing")
+        return ("render_failed", "rendering")
+    if metrics and not strict_metrics_evidence(metrics):
+        return ("evidence_incomplete", "evidence")
+    if status_result == "passed":
+        return ("passed", "")
     if result == "passed":
         return ("passed", failure_class)
     if status.get("compositing") == "expected_failed":
