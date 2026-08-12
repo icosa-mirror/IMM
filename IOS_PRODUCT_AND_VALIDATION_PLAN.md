@@ -45,6 +45,13 @@ and consume that work rather than introduce a competing audio implementation.
 
 Status: implemented locally; cloud export/Xcode confirmation pending.
 
+Iteration note: commits containing `[CI IOS]` run the focused iOS workflow and
+skip the full validation pipeline. The focused workflow rebuilds the iOS native
+libraries, exports Unity, and compiles Xcode in one macOS job. Generated Xcode
+output and derived data are not uploaded; only compact diagnostic logs,
+contracts, and manifests are retained. Full `[CI VALIDATION]` remains the
+cross-platform regression gate after the focused lane is stable.
+
 ### Implementation
 
 1. Add a deterministic Unity Editor build method for `BuildTarget.iOS` using

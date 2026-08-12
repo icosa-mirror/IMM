@@ -103,6 +103,8 @@ def main() -> int:
 
     unity_automation = (ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs").read_text(encoding="utf-8")
     engine_workflow = (ROOT / ".github/workflows/ci-engine.yml").read_text(encoding="utf-8")
+    ios_workflow = (ROOT / ".github/workflows/ci-ios.yml").read_text(encoding="utf-8")
+    validation_workflow = (ROOT / ".github/workflows/ci-validation.yml").read_text(encoding="utf-8")
     assert '"Assets/Scenes/SampleScene.unity"' in unity_automation
     combined_smoke = method_body(
         unity_automation,
@@ -163,6 +165,19 @@ def main() -> int:
         "visualEvidence=false",
     ]:
         assert token in engine_workflow
+    for token in [
+        "contains(github.event.head_commit.message, '[CI IOS]')",
+        "Build iOS native libraries",
+        "BuildIOSCIPlayer",
+        'build/unity-ios-player/xcode',
+        'runner.temp }}/unity-ios-derived-data',
+        "UnityIOSPlayerBuildDiagnostics",
+    ]:
+        assert token in ios_workflow
+    assert "!contains(github.event.head_commit.message, '[CI IOS]')" in validation_workflow
+    assert "artifacts/unity-ios-player-build/derived-data" not in engine_workflow
+    assert "-project artifacts/unity-ios-player-build/xcode/" not in engine_workflow
+    assert "-immIosPlayerPath ${{ github.workspace }}/artifacts/unity-ios-player-build/xcode" not in engine_workflow
 
     print("Sample project entrypoint contracts passed")
     return 0

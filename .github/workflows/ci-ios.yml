@@ -1,0 +1,157 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI iOS Iteration
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+      - experiment/**
+
+permissions:
+  contents: read
+
+env:
+  UNITY_VERSION: "6000.3.18f1"
+  IMM_UNITY_FALLBACK_LICENSE: |
+    <?xml version="1.0" encoding="UTF-8"?><root><TimeStamp Value="chxldhvc0zh5Vw=="/>
+        <License id="Terms">
+            <MachineBindings>
+                <Binding Key="1" Value="C372866C-B44C-5E48-806F-7583B55F04FB"/>
+                <Binding Key="2" Value="C02F32Y5ML85"/>
+            </MachineBindings>
+            <MachineID Value="LcL/yxIaeUG12OSX31mKDtxcVx8="/>
+            <SerialHash Value="e25c63636985259e763d40cc9253cdfe6a862ceb"/>
+            <Features>
+                <Feature Value="33"/><Feature Value="1"/><Feature Value="12"/><Feature Value="2"/><Feature Value="24"/><Feature Value="3"/><Feature Value="36"/><Feature Value="17"/><Feature Value="19"/><Feature Value="62"/>
+            </Features>
+            <DeveloperData Value="AQAAAEY0LUtFWUItMzYyOC0zWEI3LVBZVVEtTUI5VQ=="/>
+            <SerialMasked Value="F4-KEYB-3628-3XB7-PYUQ-XXXX"/>
+            <StartDate Value="2023-11-21T00:00:00"/>
+            <UpdateDate Value="2023-11-22T06:03:23"/>
+            <InitialActivationDate Value="2023-11-21T06:03:21"/>
+            <LicenseVersion Value="6.x"/>
+            <ClientProvidedVersion Value="2017.2.0"/>
+            <AlwaysOnline Value="false"/>
+            <Entitlements><Entitlement Ns="unity_editor" Tag="UnityPersonal" Type="EDITOR" ValidTo="9999-12-31T00:00:00"/><Entitlement Ns="unity_editor" Tag="DarkSkin" Type="EDITOR_FEATURE" ValidTo="9999-12-31T00:00:00"/></Entitlements>
+        </License><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/2001/REC-xml-c14n-20010315#WithComments"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#Terms"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>9DZF11miRAzx7TIuCxih78B6CXU=</DigestValue></Reference></SignedInfo><SignatureValue>weRQubqMNN61lSZtm/e7S+UDzTPNQjM5aQl/c4aKLH/b2khefpgLfdWneoxdnNopA6+rW6kBqxWthMLdHY+oAOfDsfmMQRTnmQG0Y3G3xh6gjGP1RAIHoLDfFHf+0LQ3FakA2WehcFWPSYeVDrdxm3HWqMmdKWooD9i+J4s4rQFTDx9+/G6yjc5KGTyGxIz3c5kxTEkV2qsFPXsauomY9Z8YPKy+cZK7g+OlpO+LhtzetgTIlIN/qG8eByjlp6nOuVGdDOIrhNJW+vllNyx0qNWPREadVrhFViI4UXegMFRl5gJcrgcrlr/fD+NorDVLfcu7D863QXkkuriILUIq2Q==</SignatureValue></Signature></root>
+
+jobs:
+  unity-ios-player-build:
+    name: Unity iOS Player Build
+    if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS]')
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CMake
+        run: brew install cmake
+
+      - name: Build iOS native libraries
+        run: |
+          set -euo pipefail
+          cmake -S code/projects/ios -B build/ios-native \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build/ios-native --target ImmStrokeReader --config Release
+          cmake --build build/ios-native --target ImmUnity --config Release
+          test -s code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/iOS/libImmUnityPlugin.a
+          test -s code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS/libImmStrokeReader.a
+
+      - name: Restore Unity iOS Library cache
+        id: cache_library
+        uses: actions/cache/restore@v4
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          restore-keys: |
+            UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-
+
+      - name: Prepare compact diagnostic artifact
+        run: mkdir -p artifacts/unity-ios-player-build
+
+      - name: Export Unity iOS Metal Xcode project
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD || 'DoNotStealThis1' }}
+          UNITY_LICENSE: ${{ env.IMM_UNITY_FALLBACK_LICENSE }}
+        with:
+          projectPath: code/ImmUnitySampleProject
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: iOS
+          versioning: None
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildIOSCIPlayer
+          allowDirtyBuild: true
+          cacheUnityInstallationOnMac: true
+          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-ios-player-build/unity-editor.log -immIosPlayerPath ${{ github.workspace }}/build/unity-ios-player/xcode
+
+      - name: Verify generated Unity iOS project contract
+        run: |
+          set -euo pipefail
+          test -f build/unity-ios-player/xcode/Unity-iPhone.xcodeproj/project.pbxproj
+          grep -R -q 'libImmUnityPlugin.a' build/unity-ios-player/xcode
+          grep -R -q 'libImmStrokeReader.a' build/unity-ios-player/xcode
+          printf '%s\n' 'target=iOS' 'renderer=Metal' 'scene=Assets/Scenes/SampleScene.unity' 'xrStartup=disabled' 'visualEvidence=false' > artifacts/unity-ios-player-build/generated-project-contract.txt
+
+      - name: Compile generated Unity iOS application without signing
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project build/unity-ios-player/xcode/Unity-iPhone.xcodeproj \
+            -scheme Unity-iPhone \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "${{ runner.temp }}/unity-ios-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build \
+            2>&1 | tee artifacts/unity-ios-player-build/xcodebuild.log
+
+      - name: Write Unity iOS application-build manifest
+        if: always()
+        run: >
+          python3 tests/tools/write_ci_manifest.py
+          --status "${{ job.status }}"
+          --failure-class packaging
+          --output artifacts/unity-ios-player-build/manifest.json
+          --product unity
+          --platform-name ios
+          --mode application-build
+          --renderer metal
+          --include artifacts/unity-ios-player-build
+
+      - name: Collect compact diagnostic summary
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/unity-ios-player-build --require-manifest --output artifacts/unity-ios-player-build/artifact-summary.json
+
+      - name: Save Unity iOS Library cache
+        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
+        with:
+          path: code/ImmUnitySampleProject/Library
+          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+
+      - name: Upload compact Unity iOS diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnityIOSPlayerBuildDiagnostics
+          path: artifacts/unity-ios-player-build
+          if-no-files-found: error
+          retention-days: 14

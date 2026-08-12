@@ -583,16 +583,16 @@ jobs:
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildIOSCIPlayer
           allowDirtyBuild: true
           cacheUnityInstallationOnMac: true
-          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-ios-player-build/unity-editor.log -immIosPlayerPath ${{ github.workspace }}/artifacts/unity-ios-player-build/xcode
+          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-ios-player-build/unity-editor.log -immIosPlayerPath ${{ github.workspace }}/build/unity-ios-player/xcode
 
       - name: Verify generated Unity iOS project contract
         run: |
           set -euo pipefail
-          project=artifacts/unity-ios-player-build/xcode/Unity-iPhone.xcodeproj
+          project=build/unity-ios-player/xcode/Unity-iPhone.xcodeproj
           test -d "$project"
-          test -f artifacts/unity-ios-player-build/xcode/Unity-iPhone.xcodeproj/project.pbxproj
-          grep -R -q 'libImmUnityPlugin.a' artifacts/unity-ios-player-build/xcode
-          grep -R -q 'libImmStrokeReader.a' artifacts/unity-ios-player-build/xcode
+          test -f build/unity-ios-player/xcode/Unity-iPhone.xcodeproj/project.pbxproj
+          grep -R -q 'libImmUnityPlugin.a' build/unity-ios-player/xcode
+          grep -R -q 'libImmStrokeReader.a' build/unity-ios-player/xcode
           printf '%s\n' \
             'target=iOS' \
             'renderer=Metal' \
@@ -605,12 +605,12 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
-            -project artifacts/unity-ios-player-build/xcode/Unity-iPhone.xcodeproj \
+            -project build/unity-ios-player/xcode/Unity-iPhone.xcodeproj \
             -scheme Unity-iPhone \
             -configuration Debug \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath artifacts/unity-ios-player-build/derived-data \
+            -derivedDataPath "${{ runner.temp }}/unity-ios-derived-data" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \

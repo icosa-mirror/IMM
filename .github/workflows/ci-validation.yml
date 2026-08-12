@@ -36,13 +36,14 @@ jobs:
   build:
     name: Build
     if: >-
-      github.event_name == 'pull_request' ||
+      !contains(github.event.head_commit.message, '[CI IOS]') &&
+      (github.event_name == 'pull_request' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode != 'quick') ||
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
       contains(github.event.head_commit.message, '[CI BUILD]') ||
       contains(github.event.head_commit.message, '[CI VALIDATION]') ||
-      contains(github.event.head_commit.message, '[RELEASE]')
+      contains(github.event.head_commit.message, '[RELEASE]'))
     uses: ./.github/workflows/build.yml
     permissions:
       actions: write
@@ -54,13 +55,14 @@ jobs:
   web:
     name: Web
     if: >-
-      github.event_name == 'pull_request' ||
+      !contains(github.event.head_commit.message, '[CI IOS]') &&
+      (github.event_name == 'pull_request' ||
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.mode != 'quick') ||
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
       contains(github.event.head_commit.message, '[CI BUILD]') ||
       contains(github.event.head_commit.message, '[CI VALIDATION]') ||
-      contains(github.event.head_commit.message, '[RELEASE]')
+      contains(github.event.head_commit.message, '[RELEASE]'))
     uses: ./.github/workflows/web-pages.yml
     permissions:
       contents: read
@@ -69,6 +71,7 @@ jobs:
 
   core:
     name: Core
+    if: ${{ !contains(github.event.head_commit.message, '[CI IOS]') }}
     uses: ./.github/workflows/ci-core.yml
     secrets: inherit
 
@@ -121,7 +124,7 @@ jobs:
 
   validation-evidence:
     name: Validation Evidence
-    if: always()
+    if: ${{ always() && !contains(github.event.head_commit.message, '[CI IOS]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs:

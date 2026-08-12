@@ -27,6 +27,9 @@ REQUIRED_JOBS = {
         "godot-local-verifier": ["Run Godot local verifier", "Write CI manifest", "Collect artifact summary"],
         "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report", "Hide per-lane core artifacts"],
     },
+    ".github/workflows/ci-ios.yml": {
+        "unity-ios-player-build": ["Build iOS native libraries", "Export Unity iOS Metal Xcode project", "Verify generated Unity iOS project contract", "Compile generated Unity iOS application without signing", "Write Unity iOS application-build manifest", "Collect compact diagnostic summary", "Upload compact Unity iOS diagnostics"],
+    },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Classify Android GLES result", "Write CI manifest", "Collect artifact summary"],
         "android-standalone-vulkan": ["Check Firebase Test Lab configuration", "Build Android Vulkan APKs", "Run Android Vulkan smoke in Firebase Test Lab", "Record Android Vulkan screenshot metrics", "Write Android Vulkan screenshot report", "Classify Android Vulkan result", "Write CI manifest", "Collect artifact summary"],
@@ -72,6 +75,9 @@ REQUIRED_JOBS = {
 }
 
 REQUIRED_RUNS_ON = {
+    ".github/workflows/ci-ios.yml": {
+        "unity-ios-player-build": {"macos-14"},
+    },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": {"ubuntu-latest"},
         "android-standalone-vulkan": {"ubuntu-latest"},
@@ -106,6 +112,9 @@ REQUIRED_RUNS_ON = {
     },
 }
 REQUIRED_JOB_TIMEOUTS = {
+    ".github/workflows/ci-ios.yml": {
+        "unity-ios-player-build",
+    },
     ".github/workflows/ci-core.yml": {
         "baseline-content",
         "package-source-layout",
