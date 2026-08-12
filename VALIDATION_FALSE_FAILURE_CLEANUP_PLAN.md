@@ -133,6 +133,23 @@ out of hosted scope. Android standalone Vulkan is `passed` with a 1280x720
 candidate containing `907083` non-black pixels, and its downloaded image was
 manually reviewed as correct. The hardware-only Windows Unity Vulkan row remains
 visible as `evidence_incomplete` without falsely failing normal hosted CI.
+All 38 images in that exact-revision aggregate artifact were then manually
+inspected. Every reported passing capture contains the intended IMM scene; the
+Godot and Unity depth probes have the expected ordering; both Android synthetic
+eyes contain complete, distinct views; and none of the reviewed images shows a
+black/default scene, distant camera, reverse-Z, or missing-content regression.
+
+The final validator-hardening audit replayed the historical broken Windows
+Godot ordered-overlay capture from run `30854621320` through the current
+contract. It remains rejected because the foreground cyan component fills
+`3315` pixels (`0.003597` of the crop), compared with the `0.000500` maximum.
+The generated diagnostic overlay marks that exact component and bounds. The
+report now prints the probe pixel count, area, largest connected component, and
+bounds; Windows Godot diagnostics use embeddable PNG rather than PPM. Pixel
+fixtures also prove that missing, fully hidden, swapped, and incorrectly
+foregrounded probes fail independently. The Unity reference metadata now names
+the exact scene camera in addition to fixture, freeze time, Unity version,
+renderer, source revision, source run, and resolution.
 
 ## Objective
 
@@ -267,27 +284,17 @@ expansion.
 
 ### Current priority order
 
-1. Keep failure classification watertight. The rerun of Android standalone
-   Vulkan in run `31527970425` exposed an aggregate-report precedence bug: the
-   authoritative lane manifest classified the absent Firebase result/capture as
-   `evidence`, while generic missing-capture metrics caused the combined report
-   to print `render_failed`/`rendering`. The report fix and regression test must
-   preserve `evidence_incomplete`/`evidence` through aggregation. Missing
-   evidence remains a red required lane; only its explanation changes. Also
-   retain intermediate artifacts whenever an evidence-report job fails, so a
-   failed-job rerun can combine unchanged passing evidence with the rerun lane.
-2. Cloud-confirm the current aggregate-report classification, hosted-scope
-   enforcement, and success-only artifact cleanup. Attempt 3 of run
-   `31527970425` and clean run `31572086600` confirm Android standalone Vulkan
-   itself passes now that Firebase is available; the next exact-revision run
-   must produce a green combined report without demanding a hardware-only row
-   or losing artifacts needed by a failed-job rerun.
-3. Download and manually inspect the complete exact-revision evidence report
-   after Firebase can execute the standalone APK. Preserve the now-confirmed Godot
-   Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
-   Vulkan, OpenGL, Metal, DirectX, Windows Vulkan, and WASM behavior. The full
-   supported hosted workflow must be green; a green aggregate produced by
-   suppressing missing visual evidence is not acceptable.
+1. Completed: failure classification preserves typed
+   `evidence_incomplete`/`evidence`, missing required evidence stays red, and
+   failed aggregation retains intermediate artifacts for job-level reruns.
+2. Completed: run `31573753230` confirms hosted-scope enforcement,
+   success-only artifact cleanup, all four Firebase paths, and a green combined
+   report without requiring the hardware-only Windows Unity Vulkan row.
+3. Completed: all 38 images from the exact-revision aggregate report were
+   manually inspected and reconciled with their automatic verdicts. The
+   current remaining step is cloud confirmation of the final report-detail and
+   negative-fixture hardening described in the Status section; it must not
+   change any rendering verdict.
 4. Add Single Pass Instanced as a later product extension now that Multi Pass
    passes on Quest. Reuse the same two-eye producer and stereo-aware presentation
    design; true Vulkan multiview remains an optional later optimization.
@@ -500,11 +507,20 @@ Exit criterion: every report result agrees with its underlying evidence, every r
 
 ### 2. Android/Firebase synthetic-stereo Vulkan lane
 
-The immediate implementation priority is hardware-backed Android Vulkan in Firebase, reusing the existing Unity Android Vulkan build and capture infrastructure. The synthetic test exercises IMM eye routing and composition without requiring an OpenXR headset or separate-eye presentation.
+Status: completed as a limited non-XR diagnostic, not as Quest acceptance.
+The hardware-backed Android Vulkan Firebase lane reuses the Unity Android Vulkan
+build and capture infrastructure. It exercises IMM eye routing and composition
+without requiring an OpenXR headset or separate-eye presentation. Its manual
+`Camera.Render()` calls deliberately bypass the real OpenXR Multi Pass callback
+and compositor path, so the earlier proposal below to make it authoritative for
+production render-both-eyes was superseded. Physical Quest inspection remains
+authoritative for headset eye presentation.
 
 Run `30820773061` proves target priming works: both split eye images independently pass the approved render baseline, and the exact native write-target pointers are non-zero and distinct. The files are nevertheless byte-identical, so the stereo disparity contract correctly fails. The next iteration uses an exaggerated validation-only eye separation and records the uploaded matrix translations, while retaining the strict requirement that the resulting images differ. Log-only success is not accepted.
 
-1. Make synthetic stereo call the production render-both-eyes entry point. Remove its dependence on manually selecting an eye and invoking `Camera.Render()` twice as the authoritative test.
+1. Historical proposal, superseded: make synthetic stereo call the production
+   render-both-eyes entry point. The retained fixture instead uses explicit
+   `Camera.Render()` calls and is classified only as a two-target diagnostic.
 2. Add a deterministic Android presentation fixture that exposes the two produced eye views side by side without requiring an OpenXR headset.
 3. Run that mode on a Firebase device that reports and uses Vulkan.
 4. Capture a side-by-side image through the existing Firebase video/evidence path.

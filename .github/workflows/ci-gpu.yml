@@ -824,7 +824,7 @@ jobs:
             --reference tests\baselines\render\windows-directx-sample1.ppm `
             --contract tests\baselines\render\sample1-full-depth.json `
             --json-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-render-metrics.json `
-            --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-diagnostic.ppm
+            --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan\godot-vulkan-full-depth-diagnostic.png
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           if ($validationFailed) { exit 1 }
 
@@ -859,7 +859,7 @@ jobs:
             --reference tests\baselines\render\windows-directx-sample1.ppm `
             --contract tests\baselines\render\sample1-ordered-overlay.json `
             --json-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-metrics.json `
-            --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-diagnostic.ppm
+            --diagnostic-overlay-output artifacts\godot-smoke-windows-vulkan-ordered-overlay\godot-vulkan-ordered-overlay-diagnostic.png
           if ($LASTEXITCODE -ne 0) { $validationFailed = $true }
           if ($validationFailed) { exit 1 }
 

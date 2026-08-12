@@ -4,6 +4,7 @@
   "fixture": "exampleImmFiles/sample1.imm",
   "reference_capture": "tests/baselines/render/unity-windows-directx-sample1.png",
   "provenance": {
+    "camera": "SampleScene/Main Camera after spawn-area viewpoint application",
     "capture_resolution": "1280x720",
     "freeze_time_ticks": 37800,
     "git_revision": "3dd05e153322f67d3872bbabec84e30417822815",

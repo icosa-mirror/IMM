@@ -988,6 +988,41 @@ def add_metrics_table(lines: list[str], metrics: dict) -> None:
     lines.append("")
 
 
+def add_color_component_table(lines: list[str], metrics: dict) -> None:
+    color_metrics = metrics.get("color_component_probes")
+    if not isinstance(color_metrics, dict):
+        return
+    probes = color_metrics.get("probes")
+    if not isinstance(probes, list) or not probes:
+        return
+
+    lines.extend(
+        [
+            "### Color-component probes",
+            "",
+            "| Probe | Passed | Matched pixels | Matched area | Largest component pixels | Largest component area | Bounds |",
+            "| --- | --- | ---: | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for probe in probes:
+        bounds = probe.get("largest_component_bounds")
+        bounds_text = ""
+        if isinstance(bounds, dict):
+            bounds_text = (
+                f"x={bounds.get('x', '')}, y={bounds.get('y', '')}, "
+                f"w={bounds.get('width', '')}, h={bounds.get('height', '')}"
+            )
+        matched_share = float(probe.get("matched_pixel_share_of_crop") or 0.0)
+        largest_share = float(probe.get("largest_component_share_of_crop") or 0.0)
+        lines.append(
+            f"| {probe.get('name', '')} | {str(bool(probe.get('passed'))).lower()} | "
+            f"{probe.get('matched_pixels', 0)} | {matched_share:.6f} | "
+            f"{probe.get('largest_component_pixels', 0)} | {largest_share:.6f} | "
+            f"{bounds_text} |"
+        )
+    lines.append("")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-root", type=Path, required=True)
@@ -1073,6 +1108,7 @@ def main() -> int:
             lines.append("")
 
         add_metrics_table(lines, metrics)
+        add_color_component_table(lines, metrics)
 
         for image in images:
             copied_image = copy_image(image, capture_output_dir / section_slug)

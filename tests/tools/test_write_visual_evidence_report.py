@@ -19,6 +19,7 @@ PNG_1X1 = bytes.fromhex(
 def main() -> int:
     from write_visual_evidence_report import (
         VISUAL_MATRIX_SYMBOLS,
+        add_color_component_table,
         effective_status,
         required_depth_gaps_for_scope,
         row_required_for_scope,
@@ -112,6 +113,34 @@ def main() -> int:
         "Hosted depth enforcement must fail a hosted gap without requiring "
         "unsupported iOS coverage"
     )
+
+    probe_lines: list[str] = []
+    add_color_component_table(
+        probe_lines,
+        {
+            "color_component_probes": {
+                "probes": [
+                    {
+                        "name": "character-occluded-cyan",
+                        "passed": False,
+                        "matched_pixels": 3315,
+                        "matched_pixel_share_of_crop": 0.003597005,
+                        "largest_component_pixels": 3315,
+                        "largest_component_share_of_crop": 0.003597005,
+                        "largest_component_bounds": {
+                            "x": 640,
+                            "y": 331,
+                            "width": 51,
+                            "height": 65,
+                        },
+                    }
+                ]
+            }
+        },
+    )
+    probe_text = "\n".join(probe_lines)
+    assert "| character-occluded-cyan | false | 3315 | 0.003597 | 3315 | 0.003597 |" in probe_text
+    assert "x=640, y=331, w=51, h=65" in probe_text
 
     standalone_row = {
         "matrix": {

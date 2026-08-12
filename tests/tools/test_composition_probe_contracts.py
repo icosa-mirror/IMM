@@ -346,7 +346,7 @@ def main() -> int:
             "composition-status.json",
             "sample1-full-depth.json",
             "sample1-ordered-overlay.json",
-            "godot-vulkan-ordered-overlay-diagnostic.ppm",
+            "godot-vulkan-ordered-overlay-diagnostic.png",
             "IMM_GODOT_RENDER_GRAPH_DEPTH_COMPOSITION=1",
         ],
         ROOT / "tests/tools/run_firebase_test_lab_android.py": [

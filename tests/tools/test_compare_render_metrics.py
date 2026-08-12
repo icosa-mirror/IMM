@@ -90,15 +90,21 @@ def make_probe_pixels(
     show_rear_occluded: bool,
     show_legitimate_cyan: bool = False,
     occluded_edge_pixel_count: int = 0,
+    show_front_magenta: bool = True,
+    show_rear_visible_yellow: bool = True,
+    swap_visible_probe_colors: bool = False,
 ) -> list[tuple[int, int, int]]:
     pixels = [(16, 20, 24)] * (width * height)
     for y in range(height // 2, height):
         for x in range((width * 9) // 10):
             pixels[y * width + x] = (90, 25, 25)
-    rectangles = [
-        (23, 48, 45, 80, (255, 0, 255)),
-        (57, 14, 78, 41, (255, 255, 0)),
-    ]
+    front_color = (255, 255, 0) if swap_visible_probe_colors else (255, 0, 255)
+    rear_color = (255, 0, 255) if swap_visible_probe_colors else (255, 255, 0)
+    rectangles = []
+    if show_front_magenta:
+        rectangles.append((23, 48, 45, 80, front_color))
+    if show_rear_visible_yellow:
+        rectangles.append((57, 14, 78, 41, rear_color))
     if show_rear_occluded:
         rectangles.append((45, 35, 69, 65, (0, 255, 255)))
     if show_legitimate_cyan:
@@ -145,6 +151,9 @@ def main() -> int:
         probe_legitimate_cyan_path = temp / "probe-legitimate-cyan.ppm"
         probe_small_occluded_edge_path = temp / "probe-small-occluded-edge.ppm"
         probe_wrong_depth_path = temp / "probe-wrong-depth.ppm"
+        probe_missing_front_path = temp / "probe-missing-front.ppm"
+        probe_fully_hidden_rear_path = temp / "probe-fully-hidden-rear.ppm"
+        probe_swapped_path = temp / "probe-swapped.ppm"
         probe_overlay_path = temp / "probe-wrong-depth-overlay.png"
         png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
@@ -180,6 +189,24 @@ def main() -> int:
             make_probe_pixels(100, 100, False, occluded_edge_pixel_count=2),
         )
         write_ppm(probe_wrong_depth_path, 100, 100, make_probe_pixels(100, 100, True))
+        write_ppm(
+            probe_missing_front_path,
+            100,
+            100,
+            make_probe_pixels(100, 100, False, show_front_magenta=False),
+        )
+        write_ppm(
+            probe_fully_hidden_rear_path,
+            100,
+            100,
+            make_probe_pixels(100, 100, False, show_rear_visible_yellow=False),
+        )
+        write_ppm(
+            probe_swapped_path,
+            100,
+            100,
+            make_probe_pixels(100, 100, False, swap_visible_probe_colors=True),
+        )
         write_render_report.write_png(
             png_path,
             width,
@@ -365,6 +392,37 @@ def main() -> int:
         assert probe_overlay_path.exists()
         _, _, overlay_pixels, _ = compare_render_metrics.read_rgb_capture(probe_overlay_path)
         assert bytes((255, 32, 32)) in overlay_pixels
+
+        # Pixel fixtures protect each probe failure mode independently. A
+        # missing front probe, a fully hidden rear-visible probe, and probes
+        # swapped between their authored regions must all fail even though the
+        # rest of the IMM-like content remains intact.
+        probe_missing_front = compare_render_metrics.collect_color_component_metrics(
+            probe_missing_front_path, probe_contract
+        )
+        assert any(
+            "front-magenta" in error
+            for error in compare_render_metrics.validate_color_component_contract(
+                probe_contract, probe_missing_front
+            )
+        )
+        probe_fully_hidden_rear = compare_render_metrics.collect_color_component_metrics(
+            probe_fully_hidden_rear_path, probe_contract
+        )
+        assert any(
+            "rear-visible-yellow" in error
+            for error in compare_render_metrics.validate_color_component_contract(
+                probe_contract, probe_fully_hidden_rear
+            )
+        )
+        probe_swapped = compare_render_metrics.collect_color_component_metrics(
+            probe_swapped_path, probe_contract
+        )
+        swapped_errors = compare_render_metrics.validate_color_component_contract(
+            probe_contract, probe_swapped
+        )
+        assert any("front-magenta" in error for error in swapped_errors)
+        assert any("rear-visible-yellow" in error for error in swapped_errors)
 
         production_overlay_contract = json.loads(
             (Path(__file__).resolve().parents[2] / "tests/baselines/render/sample1-ordered-overlay.json").read_text(

@@ -582,6 +582,29 @@ def verify_render_contract_references(root: Path, errors: list[str]) -> None:
                 f"{contract_path.relative_to(root).as_posix()} references missing capture: {reference_capture}"
             )
 
+    unity_reference = root / "tests" / "baselines" / "render" / "unity-windows-directx-sample1.json"
+    try:
+        unity_contract = json.loads(unity_reference.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"cannot read Unity reference provenance from {unity_reference}: {exc}")
+        return
+    provenance = unity_contract.get("provenance")
+    required_provenance = {
+        "camera",
+        "capture_resolution",
+        "freeze_time_ticks",
+        "git_revision",
+        "graphics_api",
+        "source_run",
+        "unity_version",
+    }
+    if not isinstance(provenance, dict):
+        errors.append("Unity reference baseline must include provenance metadata")
+    else:
+        missing = sorted(key for key in required_provenance if provenance.get(key) in (None, ""))
+        if missing:
+            errors.append(f"Unity reference baseline provenance missing: {', '.join(missing)}")
+
 
 def verify_unity_vulkan_full_depth_display_contract(path: Path, workflow_rel: str, errors: list[str]) -> None:
     if workflow_rel != ".github/workflows/ci-engine.yml":
@@ -844,6 +867,8 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "--reference tests/baselines/render/windows-directx-sample1.ppm",
             "MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}",
             "--scope \"$MATRIX_EVIDENCE_SCOPE\"",
+            "godot-vulkan-full-depth-diagnostic.png",
+            "godot-vulkan-ordered-overlay-diagnostic.png",
         ],
         ".github/workflows/web-pages.yml": [
             "sample1-web-render-metrics.json",
