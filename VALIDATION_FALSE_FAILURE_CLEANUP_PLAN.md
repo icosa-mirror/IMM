@@ -109,6 +109,22 @@ now success-only across core, device, engine, GPU, and final aggregation. Failed
 runs retain their intermediate evidence for diagnosis and partial reruns; fully
 successful runs still remove the redundant artifacts.
 
+Clean run `31572086600` then passed every build, runtime, and lane classifier,
+including all four Firebase paths and Android standalone Vulkan's strict image
+comparison. Its final aggregate alone failed because `hosted` report scope
+treated a build-only `evidence_incomplete` observation for the hardware-only
+Windows Unity Vulkan row as required. That row has no `hosted_gate`; normal
+hosted CI cannot and does not run it. Scope enforcement now applies
+`evidence_incomplete` in the same way as missing evidence: it is fatal only when
+the row belongs to the selected scope. A produced failed/expected-failed result
+remains fatal even if it unexpectedly appears outside that scope.
+The retained `native-render-after.png` was manually inspected: it contains the
+complete recognizable IMM scene at the intended camera pose, including the
+character, foreground and rear brush branches, and sky sphere. It does not show
+the black/default-scene, reverse-Z, or displaced-camera failure classes. Replaying
+the corrected report generator over the exact `31572086600` aggregate artifact
+returns success.
+
 ## Objective
 
 Make the validation report trustworthy in both directions: correct renders must not fail for irrelevant reasons, and broken renders must never pass because a visual contract is missing or too weak. Visual evidence remains authoritative. Text and log checks may fail early, but must not reject a visually proven render merely because a redundant diagnostic message was absent, and they can never substitute for a successful visual rendering check.
@@ -251,11 +267,12 @@ expansion.
    evidence remains a red required lane; only its explanation changes. Also
    retain intermediate artifacts whenever an evidence-report job fails, so a
    failed-job rerun can combine unchanged passing evidence with the rerun lane.
-2. Cloud-confirm the current aggregate-report classification and success-only
-   artifact cleanup. Attempt 3 of run `31527970425` already confirms Android
-   standalone Vulkan itself passes now that Firebase is available; the next
-   exact-revision run must produce a green combined report rather than fail on
-   missing artifacts deleted by an earlier failed attempt.
+2. Cloud-confirm the current aggregate-report classification, hosted-scope
+   enforcement, and success-only artifact cleanup. Attempt 3 of run
+   `31527970425` and clean run `31572086600` confirm Android standalone Vulkan
+   itself passes now that Firebase is available; the next exact-revision run
+   must produce a green combined report without demanding a hardware-only row
+   or losing artifacts needed by a failed-job rerun.
 3. Download and manually inspect the complete exact-revision evidence report
    after Firebase can execute the standalone APK. Preserve the now-confirmed Godot
    Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR

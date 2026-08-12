@@ -20,6 +20,8 @@ def main() -> int:
     from write_visual_evidence_report import (
         VISUAL_MATRIX_SYMBOLS,
         effective_status,
+        required_depth_gaps_for_scope,
+        row_required_for_scope,
         slugify,
         visual_matrix_cell,
     )
@@ -46,6 +48,69 @@ def main() -> int:
         missing_evidence_manifest,
     ) == ("evidence_incomplete", "evidence"), (
         "Missing Firebase evidence must not be reported as a rendering failure"
+    )
+
+    hardware_only_row = {
+        "hosted_gate": "",
+        "hardware_gate": "CI Engine Matrix / Unity Windows Vulkan",
+    }
+    assert not row_required_for_scope(hardware_only_row, "hosted"), (
+        "Normal hosted validation must not require a hardware-only lane"
+    )
+    assert row_required_for_scope(hardware_only_row, "all"), (
+        "Hardware validation must still require the hardware-only lane"
+    )
+
+    unsupported_ios_unity = {
+        "status": "unsupported",
+        "hosted_gate": "",
+        "hardware_gate": "",
+        "matrix": {
+            "product": "unity",
+            "platform": "ios",
+            "mode": "non-vr",
+            "renderer": "metal",
+        },
+    }
+    hosted_android_unity = {
+        "status": "supported",
+        "hosted_gate": "CI Engine Matrix / Unity Android Vulkan",
+        "hardware_gate": "",
+        "matrix": {
+            "product": "unity",
+            "platform": "android",
+            "mode": "non-vr",
+            "renderer": "vulkan",
+        },
+    }
+    platform_placeholders = [
+        {
+            "status": "unsupported",
+            "hosted_gate": "",
+            "hardware_gate": "",
+            "matrix": {
+                "product": "standalone",
+                "platform": platform,
+                "mode": "non-vr",
+                "renderer": "native",
+            },
+        }
+        for platform in ("windows", "macos")
+    ]
+    assert required_depth_gaps_for_scope(
+        [
+            unsupported_ios_unity,
+            hosted_android_unity,
+            *platform_placeholders,
+        ],
+        {
+            ("ios", "unity"): "not_tested",
+            ("android", "unity"): "render_passed",
+        },
+        "hosted",
+    ) == [("android", "unity")], (
+        "Hosted depth enforcement must fail a hosted gap without requiring "
+        "unsupported iOS coverage"
     )
 
     standalone_row = {

@@ -376,6 +376,14 @@ def matrix_coverage_rows(matrix_status: Path | None, input_root: Path, reports: 
     return coverage
 
 
+def row_required_for_scope(row: dict, scope: str) -> bool:
+    if scope == "all":
+        return True
+    if scope == "hosted":
+        return bool(row.get("hosted_gate"))
+    return False
+
+
 def visual_matrix_row(
     coverage: list[dict], product: str, platform: str, renderer: str
 ) -> dict | None:
@@ -477,6 +485,36 @@ def add_visual_matrix(
         lines.append(f"| {display_name(platform)} | {' | '.join(values)} |")
     lines.append("")
     return cells
+
+
+def required_depth_gaps_for_scope(
+    coverage: list[dict],
+    visual_matrix: dict[tuple[str, str], str],
+    scope: str,
+) -> list[tuple[str, str]]:
+    complete_visual_matrix_scope = all(
+        any(
+            str(row["matrix"].get("platform") or "") == platform
+            for row in coverage
+        )
+        for platform in VISUAL_MATRIX_TARGETS
+    )
+    if not complete_visual_matrix_scope:
+        return []
+
+    gaps: list[tuple[str, str]] = []
+    for (platform, product), status in visual_matrix.items():
+        if product not in {"godot", "unity"} or status == "depth_passed":
+            continue
+        renderer = VISUAL_MATRIX_TARGETS[platform][product]
+        row = visual_matrix_row(coverage, product, platform, renderer)
+        if (
+            row is not None
+            and row["status"] == "supported"
+            and row_required_for_scope(row, scope)
+        ):
+            gaps.append((platform, product))
+    return gaps
 
 
 def add_matrix_coverage(lines: list[str], coverage: list[dict]) -> None:
@@ -1056,14 +1094,20 @@ def main() -> int:
     for row in coverage:
         if row["status"] != "supported":
             continue
+        required_for_scope = row_required_for_scope(
+            row,
+            args.required_evidence_scope,
+        )
         evidence_invalid = row["coverage_status"] in {
             "failed",
             "expected failure",
-            "evidence_incomplete",
-        }
-        missing_required = row["coverage_status"] == "missing evidence" and (
-            args.required_evidence_scope == "all"
-            or (args.required_evidence_scope == "hosted" and bool(row["hosted_gate"]))
+        } or (
+            row["coverage_status"] == "evidence_incomplete"
+            and required_for_scope
+        )
+        missing_required = (
+            row["coverage_status"] == "missing evidence"
+            and required_for_scope
         )
         if evidence_invalid or missing_required:
             invalid_supported.append(row)
@@ -1071,20 +1115,11 @@ def main() -> int:
         for row in invalid_supported:
             print(f"Supported validation evidence is not valid: {row['key']} ({row['coverage_status']})")
         return 1
-    complete_visual_matrix_scope = all(
-        any(
-            str(row["matrix"].get("platform") or "") == platform
-            for row in coverage
-        )
-        for platform in VISUAL_MATRIX_TARGETS
+    required_depth_gaps = required_depth_gaps_for_scope(
+        coverage,
+        visual_matrix,
+        args.required_evidence_scope,
     )
-    required_depth_gaps = [
-        (platform, product)
-        for (platform, product), status in visual_matrix.items()
-        if complete_visual_matrix_scope
-        and product in {"godot", "unity"}
-        and status != "depth_passed"
-    ]
     if required_depth_gaps:
         for platform, product in required_depth_gaps:
             print(
