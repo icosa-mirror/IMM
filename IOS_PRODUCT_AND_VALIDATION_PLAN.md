@@ -43,7 +43,7 @@ and consume that work rather than introduce a competing audio implementation.
 
 ## Phase 1: Unity iOS player export and compile
 
-Status: implemented locally; cloud export/Xcode confirmation pending.
+Status: cloud export and unsigned device Xcode build confirmed.
 
 Focused run `31581617516` confirmed Unity export, native archive staging, and
 generated-project structure. Xcode then failed while linking `UnityFramework`:
@@ -52,6 +52,12 @@ project did not link zlib. The iOS postprocessor now adds SDK `libz.tbd` to the
 `UnityFramework` target. This is a real application-link dependency that the
 earlier CMake smoke could not expose because that smoke linked `ZLIB::ZLIB`
 directly.
+
+Focused run `31582766456` confirmed the fix at commit `b5a6cef8`: the Unity
+postprocessor added `libz.tbd`, Unity exported the Metal player, and Xcode
+completed the unsigned arm64 device application build. This completes the
+Phase 1 compile/package milestone; it does not constitute runtime visual
+evidence, so the Unity iOS visual-matrix cell remains not tested.
 
 Iteration note: commits containing `[CI IOS]` run the focused iOS workflow and
 skip the full validation pipeline. The focused workflow rebuilds the iOS native
