@@ -235,6 +235,24 @@ REQUIRED_ALWAYS_STEPS = {
         },
     },
 }
+
+REQUIRED_SUCCESS_ONLY_CLEANUP_STEPS = {
+    ".github/workflows/ci-core.yml": {
+        "core-evidence-report": "Hide per-lane core artifacts",
+    },
+    ".github/workflows/ci-device.yml": {
+        "device-evidence-report": "Hide per-lane device artifacts",
+    },
+    ".github/workflows/ci-engine.yml": {
+        "engine-evidence-report": "Hide per-lane engine artifacts",
+    },
+    ".github/workflows/ci-gpu.yml": {
+        "gpu-evidence-report": "Hide per-lane GPU artifacts",
+    },
+    ".github/workflows/ci-validation.yml": {
+        "validation-evidence": "Hide matrix implementation artifacts",
+    },
+}
 REQUIRED_WORKFLOW_TRIGGERS = {
     ".github/workflows/ci-validation.yml": ["build.yml", "web-pages.yml", "ci-core.yml", "ci-device.yml", "ci-engine.yml", "ci-gpu.yml"],
 }
@@ -932,6 +950,27 @@ def main() -> int:
                 missing_labels = required_labels - actual_labels
                 if missing_labels:
                     errors.append(f"{workflow_rel} job {job_name} missing runs-on labels: {sorted(missing_labels)}")
+
+    for workflow_rel, cleanup_jobs in REQUIRED_SUCCESS_ONLY_CLEANUP_STEPS.items():
+        workflow_path = root / workflow_rel
+        if not workflow_path.exists():
+            continue
+        workflow = load_workflow(workflow_path)
+        actual_jobs = workflow.get("jobs", {})
+        for job_name, step_name in cleanup_jobs.items():
+            job = actual_jobs.get(job_name, {})
+            step = steps_by_name(job).get(step_name)
+            if step is None:
+                errors.append(
+                    f"{workflow_rel} job {job_name} missing cleanup step {step_name!r}"
+                )
+                continue
+            condition = str(step.get("if", ""))
+            if "success()" not in condition or "always()" in condition:
+                errors.append(
+                    f"{workflow_rel} job {job_name} cleanup step {step_name!r} "
+                    "must retain intermediate evidence after failure"
+                )
 
     for workflow_rel, workflow_files in REQUIRED_WORKFLOW_TRIGGERS.items():
         workflow_path = root / workflow_rel

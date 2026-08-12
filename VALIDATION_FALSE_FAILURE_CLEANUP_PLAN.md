@@ -98,6 +98,17 @@ covering this exact missing-Firebase-capture case. Firebase evidence must still
 remain red until a real image passes. Single Pass Instanced and iOS remain
 separate future product/coverage workstreams.
 
+Attempt 3 of run `31527970425` executed successfully after Firebase recovered.
+Android standalone Vulkan produced its required `native-render-after.ppm`, ran
+the committed-reference screenshot comparison, and passed the final lane visual
+classifier. The partial rerun nevertheless left the workflow red for an
+unrelated aggregation reason: failed evidence reports had unconditionally
+deleted successful lane and matrix artifacts, so GitHub's “rerun failed jobs”
+could not reconstruct inputs from jobs that were not rerun. Evidence cleanup is
+now success-only across core, device, engine, GPU, and final aggregation. Failed
+runs retain their intermediate evidence for diagnosis and partial reruns; fully
+successful runs still remove the redundant artifacts.
+
 ## Objective
 
 Make the validation report trustworthy in both directions: correct renders must not fail for irrelevant reasons, and broken renders must never pass because a visual contract is missing or too weak. Visual evidence remains authoritative. Text and log checks may fail early, but must not reject a visually proven render merely because a redundant diagnostic message was absent, and they can never substitute for a successful visual rendering check.
@@ -237,14 +248,14 @@ expansion.
    `evidence`, while generic missing-capture metrics caused the combined report
    to print `render_failed`/`rendering`. The report fix and regression test must
    preserve `evidence_incomplete`/`evidence` through aggregation. Missing
-   evidence remains a red required lane; only its explanation changes.
-2. Rerun Android standalone Vulkan after Google's 11 August 2026 Test Lab
-   availability incident is resolved. Do not weaken or skip its required visual
-   checks: run `31523497710` already cloud-confirmed the evidence-scope and lane
-   classification corrections, and both attempts in run `31527970425` again
-   exhausted the 30-minute execution window without returning a result or
-   `native-render-after.ppm`. That missing evidence must remain red until a real
-   passing capture exists.
+   evidence remains a red required lane; only its explanation changes. Also
+   retain intermediate artifacts whenever an evidence-report job fails, so a
+   failed-job rerun can combine unchanged passing evidence with the rerun lane.
+2. Cloud-confirm the current aggregate-report classification and success-only
+   artifact cleanup. Attempt 3 of run `31527970425` already confirms Android
+   standalone Vulkan itself passes now that Firebase is available; the next
+   exact-revision run must produce a green combined report rather than fail on
+   missing artifacts deleted by an earlier failed attempt.
 3. Download and manually inspect the complete exact-revision evidence report
    after Firebase can execute the standalone APK. Preserve the now-confirmed Godot
    Vulkan/Metal depth path, Unity/Godot composition repairs, Android non-XR
