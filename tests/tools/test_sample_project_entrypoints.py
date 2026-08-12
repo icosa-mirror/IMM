@@ -102,6 +102,9 @@ def main() -> int:
     assert 'std::getenv("IMM_GODOT_LOG_FILE")' in godot_node
 
     unity_automation = (ROOT / "code/ImmUnitySampleProject/Assets/Editor/BuildAutomation.cs").read_text(encoding="utf-8")
+    unity_ios_postprocessor = (
+        ROOT / "code/ImmUnitySampleProject/Assets/Editor/IOSBuildPostprocessor.cs"
+    ).read_text(encoding="utf-8")
     engine_workflow = (ROOT / ".github/workflows/ci-engine.yml").read_text(encoding="utf-8")
     ios_workflow = (ROOT / ".github/workflows/ci-ios.yml").read_text(encoding="utf-8")
     validation_workflow = (ROOT / ".github/workflows/ci-validation.yml").read_text(encoding="utf-8")
@@ -135,6 +138,15 @@ def main() -> int:
     assert "capture.ReadPixels(" in unity_automation
     assert "camera.targetTexture = previousCameraTarget;" in unity_automation
     assert "[IMM_EDITOR_READY_CAPTURE_20260804]" in unity_automation
+    for token in [
+        "[PostProcessBuild(100)]",
+        "GetUnityFrameworkTargetGuid()",
+        '"usr/lib/libz.tbd"',
+        "PBXSourceTree.Sdk",
+        "AddFileToBuild(frameworkTarget, zlibGuid)",
+        "[IMM_UNITY_IOS_LINK_20260812]",
+    ]:
+        assert token in unity_ios_postprocessor
     assert 'Environment.SetEnvironmentVariable(RuntimeSmokeDisabledEnv, "1");' in unity_automation
     unity_feature_examples = (
         ROOT / "code/ImmUnitySampleProject/Assets/Scripts/ImmFeatureExamples.cs"

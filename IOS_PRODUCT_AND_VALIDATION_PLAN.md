@@ -45,6 +45,14 @@ and consume that work rather than introduce a competing audio implementation.
 
 Status: implemented locally; cloud export/Xcode confirmation pending.
 
+Focused run `31581617516` confirmed Unity export, native archive staging, and
+generated-project structure. Xcode then failed while linking `UnityFramework`:
+the combined IMM archive contains libpng and importer zlib calls, but the Unity
+project did not link zlib. The iOS postprocessor now adds SDK `libz.tbd` to the
+`UnityFramework` target. This is a real application-link dependency that the
+earlier CMake smoke could not expose because that smoke linked `ZLIB::ZLIB`
+directly.
+
 Iteration note: commits containing `[CI IOS]` run the focused iOS workflow and
 skip the full validation pipeline. The focused workflow rebuilds the iOS native
 libraries, exports Unity, and compiles Xcode in one macOS job. Generated Xcode
