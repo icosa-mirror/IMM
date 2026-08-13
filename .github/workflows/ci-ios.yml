@@ -143,11 +143,18 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          runtime_id="$(xcrun simctl list runtimes available -j | python3 -c 'import json,sys; values=[item for item in json.load(sys.stdin)["runtimes"] if item.get("isAvailable") and item.get("identifier", "").startswith("com.apple.CoreSimulator.SimRuntime.iOS-")]; values.sort(key=lambda item: tuple(int(part) for part in item["version"].split("."))); print(values[-1]["identifier"])')"
-          device_type="$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; values=[item for item in json.load(sys.stdin)["devicetypes"] if item.get("identifier", "").startswith("com.apple.CoreSimulator.SimDeviceType.iPhone-") and "SE" not in item.get("name", "")]; print(values[-1]["identifier"])')"
-          simulator_udid="$(xcrun simctl create 'IMM Unity iOS Metal CI' "$device_type" "$runtime_id")"
+          xcrun simctl list devices available -j > artifacts/unity-ios-player-build/available-simulators.json
+          python3 tests/tools/select_ios_simulator.py \
+            --input artifacts/unity-ios-player-build/available-simulators.json \
+            --output artifacts/unity-ios-player-build/simulator-selection.json
+          runtime_id="$(python3 -c 'import json; print(json.load(open("artifacts/unity-ios-player-build/simulator-selection.json"))["runtime_id"])')"
+          simulator_udid="$(python3 -c 'import json; print(json.load(open("artifacts/unity-ios-player-build/simulator-selection.json"))["udid"])')"
+          device_name="$(python3 -c 'import json; print(json.load(open("artifacts/unity-ios-player-build/simulator-selection.json"))["device_name"])')"
+          test -n "$runtime_id"
+          test -n "$simulator_udid"
+          xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
           echo "SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
-          printf '%s\n' "runtime=$runtime_id" "deviceType=$device_type" "udid=$simulator_udid" > artifacts/unity-ios-player-build/simulator-contract.txt
+          printf '%s\n' "runtime=$runtime_id" "deviceName=$device_name" "udid=$simulator_udid" > artifacts/unity-ios-player-build/simulator-contract.txt
           xcrun simctl boot "$simulator_udid"
           xcrun simctl bootstatus "$simulator_udid" -b
 
@@ -222,7 +229,6 @@ jobs:
         run: |
           if [ -n "${SIMULATOR_UDID:-}" ]; then
             xcrun simctl shutdown "$SIMULATOR_UDID" || true
-            xcrun simctl delete "$SIMULATOR_UDID" || true
           fi
 
       - name: Record Unity iOS Metal render metrics

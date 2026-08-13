@@ -199,8 +199,11 @@ def main() -> int:
         "Run Unity iOS Metal visual smokes",
         "classify_unity_ios_metal.py",
         "UnityIOSMetalComposition",
+        "simctl list devices available",
+        "select_ios_simulator.py",
     ]:
         assert token in ios_workflow
+    assert "simctl create" not in ios_workflow
     assert "!contains(github.event.head_commit.message, '[CI IOS]')" in validation_workflow
     assert "artifacts/unity-ios-player-build/derived-data" not in engine_workflow
     assert "-project artifacts/unity-ios-player-build/xcode/" not in engine_workflow
