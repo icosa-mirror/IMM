@@ -854,6 +854,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
+            OTHER_LDFLAGS='$(inherited) -framework Metal -framework MetalKit -framework QuartzCore -framework AVFoundation -lz' \
             build \
             2>&1 | tee artifacts/godot-ios-metal/xcodebuild-simulator.log
           app="$(find "$simulator_data/Build/Products/Debug-iphonesimulator" -maxdepth 1 -type d -name '*.app' -print -quit)"
