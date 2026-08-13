@@ -479,6 +479,232 @@ jobs:
           echo "GODOT_IOS_APP=$app" >> "$GITHUB_ENV"
           echo "GODOT_IOS_SCHEME=$scheme" >> "$GITHUB_ENV"
 
+      - name: Probe Apple-silicon iOS-on-Mac runtime
+        id: godot_ios_on_mac_probe
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_XCODE_PROJECT:?missing exported Xcode project}"
+          : "${GODOT_IOS_SCHEME:?missing exported Xcode scheme}"
+          test "$(uname -m)" = arm64
+
+          artifact_dir="$PWD/artifacts/godot-ios-metal"
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$GODOT_IOS_SCHEME" \
+            -showdestinations \
+            > "$artifact_dir/xcode-destinations.txt" 2>&1
+          grep -q 'variant:Designed for \[iPad,iPhone\]' "$artifact_dir/xcode-destinations.txt"
+          destination_id="$(python3 -c 'import re; text=open("artifacts/godot-ios-metal/xcode-destinations.txt", encoding="utf-8").read(); match=re.search(r"\{ platform:macOS,.*?id:([^,}]+)", text); print(match.group(1).strip() if match else "")')"
+          test -n "$destination_id"
+          printf '%s\n' \
+            "IMM_IOS_ON_MAC_PROBE destination_id=$destination_id" \
+            "IMM_IOS_ON_MAC_PROBE host_arch=$(uname -m)" \
+            "IMM_IOS_ON_MAC_PROBE host_product=$(sysctl -n hw.model)" \
+            > "$artifact_dir/ios-on-mac-probe.log"
+          security find-identity -v -p codesigning \
+            > "$artifact_dir/codesigning-identities.txt" 2>&1 || true
+          xcrun xcdevice list \
+            > "$artifact_dir/xcdevice-list.json" 2>&1 || true
+          xcrun devicectl list devices \
+            > "$artifact_dir/devicectl-devices.txt" 2>&1 || true
+
+          designed_data="$RUNNER_TEMP/godot-ios-designed-for-ipad-derived-data"
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$GODOT_IOS_SCHEME" \
+            -configuration Debug \
+            -destination "id=$destination_id" \
+            -derivedDataPath "$designed_data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build \
+            2>&1 | tee "$artifact_dir/xcodebuild-designed-for-ipad.log"
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$GODOT_IOS_SCHEME" \
+            -configuration Debug \
+            -destination "id=$destination_id" \
+            -showBuildSettings \
+            > "$artifact_dir/xcodebuild-designed-for-ipad-settings.txt" 2>&1
+
+          app="$(find "$designed_data/Build/Products/Debug-iphoneos" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -d "$app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test -s "$app/$executable"
+          codesign --force --deep --sign - --timestamp=none "$app"
+          codesign --verify --deep --strict --verbose=4 "$app" \
+            > "$artifact_dir/godot-ios-on-mac-codesign-verify.txt" 2>&1
+          codesign -d --verbose=4 --entitlements :- "$app" \
+            > "$artifact_dir/godot-ios-on-mac-codesign-details.txt" 2>&1 || true
+          file "$app/$executable" > "$artifact_dir/godot-ios-on-mac-executable.txt"
+          xcrun vtool -show-build "$app/$executable" \
+            > "$artifact_dir/godot-ios-on-mac-build-version.txt"
+          plutil -p "$app/Info.plist" > "$artifact_dir/godot-ios-on-mac-info-plist.txt"
+          printf '%s\n' \
+            "IMM_IOS_ON_MAC_PROBE godot_app=$app" \
+            "IMM_IOS_ON_MAC_PROBE godot_bundle_id=$bundle_id" \
+            >> "$artifact_dir/ios-on-mac-probe.log"
+          echo "GODOT_IOS_ON_MAC_APP=$app" >> "$GITHUB_ENV"
+
+          control_root="$RUNNER_TEMP/imm-ios-on-mac-control"
+          control_app="$control_root/ImmIOSOnMacControl.app"
+          mkdir -p "$control_app"
+          cp tests/fixtures/ios-on-mac-control/main.m "$control_root/main.m"
+          cp tests/fixtures/ios-on-mac-control/Info.plist "$control_app/Info.plist"
+          sdk="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang \
+            -arch arm64 \
+            -isysroot "$sdk" \
+            -miphoneos-version-min=15.0 \
+            -fobjc-arc \
+            "$control_root/main.m" \
+            -framework UIKit \
+            -framework Foundation \
+            -o "$control_app/ImmIOSOnMacControl"
+          codesign --force --deep --sign - --timestamp=none "$control_app"
+          codesign --verify --deep --strict --verbose=4 "$control_app" \
+            > "$artifact_dir/control-ios-on-mac-codesign-verify.txt" 2>&1
+          codesign -d --verbose=4 --entitlements :- "$control_app" \
+            > "$artifact_dir/control-ios-on-mac-codesign-details.txt" 2>&1 || true
+          file "$control_app/ImmIOSOnMacControl" \
+            > "$artifact_dir/control-ios-on-mac-executable.txt"
+          xcrun vtool -show-build "$control_app/ImmIOSOnMacControl" \
+            > "$artifact_dir/control-ios-on-mac-build-version.txt"
+
+          open_status=0
+          open -n "$control_app" \
+            > "$artifact_dir/control-ios-on-mac-launch.txt" 2>&1 || open_status=$?
+          marker=''
+          for _second in $(seq 1 20); do
+            marker="$(find "$HOME/Library" -type f -name 'imm-ios-on-mac-control.started' -print -quit 2>/dev/null || true)"
+            if [ -n "$marker" ] && [ -s "$marker" ]; then
+              break
+            fi
+            sleep 1
+          done
+          printf '%s\n' \
+            "IMM_IOS_ON_MAC_PROBE control_open_status=$open_status" \
+            "IMM_IOS_ON_MAC_PROBE control_marker=$marker" \
+            >> "$artifact_dir/ios-on-mac-probe.log"
+          /usr/bin/log show --last 2m --style compact \
+            --predicate 'eventMessage CONTAINS[c] "ImmIOSOnMacControl" OR eventMessage CONTAINS[c] "org.linuxfoundation.imm.iosonmac.control"' \
+            > "$artifact_dir/control-ios-on-mac-system.log" 2>&1 || true
+          pkill -TERM -x ImmIOSOnMacControl 2>/dev/null || true
+          test "$open_status" -eq 0
+          test -n "$marker"
+          test -s "$marker"
+
+      - name: Run Godot iOS Metal application natively on Apple silicon
+        id: godot_ios_runtime
+        if: steps.godot_ios_on_mac_probe.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_ON_MAC_APP:?missing Designed-for-iPad application}"
+          app="$GODOT_IOS_ON_MAC_APP"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          test -n "$executable"
+          artifact_dir="$PWD/artifacts/godot-ios-metal"
+          printf '%s\n' \
+            "runtime=ios-on-mac" \
+            "destination=My Mac (Designed for iPad)" \
+            "host_arch=$(uname -m)" \
+            "executable=$executable" \
+            "renderer=Metal" \
+            > "$artifact_dir/runtime-launch-contract.txt"
+
+          /usr/bin/log stream --style compact --level debug --predicate "process == '$executable'" \
+            > "$artifact_dir/godot-ios-system.log" 2>&1 &
+          system_log_pid=$!
+          trap 'kill "$system_log_pid" 2>/dev/null || true' EXIT
+
+          run_app() {
+            local label="$1"
+            shift
+            local launch_log="$artifact_dir/${label}-launch.log"
+            local launcher_pid=''
+            local status=0
+            open -W -n "$app" --args "$@" > "$launch_log" 2>&1 &
+            launcher_pid=$!
+            for _second in $(seq 1 180); do
+              if ! kill -0 "$launcher_pid" 2>/dev/null; then
+                set +e
+                wait "$launcher_pid"
+                status=$?
+                set -e
+                return "$status"
+              fi
+              sleep 1
+            done
+            echo "Timed out waiting for $label" >> "$launch_log"
+            pkill -TERM -x "$executable" 2>/dev/null || true
+            kill "$launcher_pid" 2>/dev/null || true
+            wait "$launcher_pid" 2>/dev/null || true
+            return 124
+          }
+
+          collect_user_file() {
+            local name="$1"
+            local destination="$2"
+            local source=''
+            source="$(find "$HOME/Library" -type f -name "$name" -print -quit 2>/dev/null || true)"
+            test -n "$source"
+            test -s "$source"
+            cp "$source" "$destination"
+          }
+
+          runtime_status=0
+          run_app godot-ios-full-depth \
+            --scene res://scenes/VisualSmokeScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-render-graph-depth-composition=1 \
+            --imm-godot-visual-smoke-composition-mode=full_depth \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-render.png \
+            --imm-godot-visual-smoke-png=user://godot-ios-metal-full-depth.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-full-depth-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-render.png "$artifact_dir/godot-ios-metal-render.png" || runtime_status=1
+          collect_user_file godot-ios-metal-full-depth.png "$artifact_dir/godot-ios-metal-full-depth.png" || runtime_status=1
+          collect_user_file godot-ios-full-depth-result.log "$artifact_dir/godot-ios-full-depth-result.log" || runtime_status=1
+
+          run_app godot-ios-ordered-overlay \
+            --scene res://scenes/VisualSmokeScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-render-graph-depth-composition=1 \
+            --imm-godot-visual-smoke-composition-mode=ordered_overlay \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-ordered-overlay-render.png \
+            --imm-godot-visual-smoke-png=user://godot-ios-metal-ordered-overlay.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-ordered-overlay-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-ordered-overlay-render.png "$artifact_dir/godot-ios-metal-ordered-overlay-render.png" || runtime_status=1
+          collect_user_file godot-ios-metal-ordered-overlay.png "$artifact_dir/godot-ios-metal-ordered-overlay.png" || runtime_status=1
+          collect_user_file godot-ios-ordered-overlay-result.log "$artifact_dir/godot-ios-ordered-overlay-result.log" || runtime_status=1
+
+          run_app godot-ios-sample-play \
+            --scene res://scenes/SampleScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-sample-play-smoke=1 \
+            --imm-godot-sample-play-capture=user://godot-ios-sample-play.png \
+            --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
+          collect_user_file godot-ios-sample-play.png "$artifact_dir/godot-ios-sample-play.png" || runtime_status=1
+          collect_user_file godot-ios-sample-play.log "$artifact_dir/godot-ios-sample-play.log" || runtime_status=1
+          exit "$runtime_status"
+
       - name: Package Godot iOS application for Firebase Test Lab
         id: godot_ios_package
         continue-on-error: true
@@ -546,6 +772,7 @@ jobs:
           echo "GODOT_IOS_IPA=$ipa" >> "$GITHUB_ENV"
 
       - name: Check Firebase Test Lab configuration
+        if: ${{ false }}
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -555,15 +782,18 @@ jobs:
           test -n "${FTL_SERVICE_ACCOUNT_JSON:-}"
 
       - name: Authenticate to Google Cloud
+        if: ${{ false }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
 
       - name: Set up gcloud
+        if: ${{ false }}
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Run ordinary Godot iOS sample on Firebase Test Lab
         id: godot_ios_ftl
+        if: ${{ false }}
         continue-on-error: true
         timeout-minutes: 15
         run: |
@@ -666,7 +896,7 @@ jobs:
         run: |
           python3 tests/tools/classify_godot_ios_metal.py \
             --artifact-dir artifacts/godot-ios-metal \
-            --runtime-outcome "${{ steps.godot_ios_ftl.outcome }}" \
+            --runtime-outcome "${{ steps.godot_ios_runtime.outcome }}" \
             --output artifacts/godot-ios-metal/godot-ios-metal-status.json \
             --full-depth-status-output artifacts/godot-ios-metal/full-depth-status.json \
             --ordered-overlay-status-output artifacts/godot-ios-metal/ordered-overlay-status.json
@@ -753,6 +983,7 @@ jobs:
           test "${{ steps.godot_ios_export.outcome }}" = success
           test "${{ steps.godot_ios_compile.outcome }}" = success
           test "${{ steps.godot_ios_package.outcome }}" = success
-          test "${{ steps.godot_ios_ftl.outcome }}" = success
+          test "${{ steps.godot_ios_on_mac_probe.outcome }}" = success
+          test "${{ steps.godot_ios_runtime.outcome }}" = success
           test "${{ steps.godot_ios_metrics.outcome }}" = success
           test "${{ steps.godot_ios_classification.outcome }}" = success
