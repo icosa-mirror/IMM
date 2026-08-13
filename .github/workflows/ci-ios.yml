@@ -338,6 +338,7 @@ jobs:
       GODOT_CPP_REF: godot-4.5-stable
       FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
       FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
+      FTL_IOS_DEVICE: ${{ vars.FIREBASE_TEST_LAB_IOS_GODOT_DEVICE || 'model=iphone14pro,version=16.6,locale=en,orientation=landscape' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -537,12 +538,19 @@ jobs:
           : "${GODOT_IOS_IPA:?missing packaged iOS application}"
           results_dir="imm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-godot-ios-metal"
           echo "FTL_IOS_RESULTS_DIR=$results_dir" >> "$GITHUB_ENV"
+          gcloud firebase test ios models list --format=json \
+            > artifacts/godot-ios-metal/firebase-ios-models.json
+          gcloud firebase test ios versions list --format=json \
+            > artifacts/godot-ios-metal/firebase-ios-versions.json
+          printf '%s\n' "$FTL_IOS_DEVICE" \
+            > artifacts/godot-ios-metal/firebase-ios-selected-device.txt
           set +e
           gcloud alpha firebase test ios run \
             --project "$FTL_PROJECT_ID" \
             --type robo \
             --app "$GODOT_IOS_IPA" \
             --robo-script tests/fixtures/firebase/godot_ios_wait.roboscript \
+            --device "$FTL_IOS_DEVICE" \
             --timeout 3m \
             --results-bucket "$FTL_RESULTS_BUCKET" \
             --results-dir "$results_dir" \
