@@ -490,6 +490,25 @@ jobs:
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           test -n "$bundle_id"
           test -n "$executable"
+          python3 - "$app/Info.plist" <<'PY'
+          import plistlib
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          with path.open("rb") as stream:
+              info = plistlib.load(stream)
+          capabilities = info.get("UIRequiredDeviceCapabilities", [])
+          info["UIRequiredDeviceCapabilities"] = [
+              value
+              for value in capabilities
+              if value != "iphone-ipad-minimum-performance-a12"
+          ]
+          if "arm64" not in info["UIRequiredDeviceCapabilities"]:
+              raise SystemExit("Expected arm64 iOS device capability")
+          with path.open("wb") as stream:
+              plistlib.dump(info, stream, fmt=plistlib.FMT_BINARY)
+          PY
           /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' "$app/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0 dict' "$app/Info.plist"
           /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLName string org.linuxfoundation.imm.firebase-game-loop' "$app/Info.plist"

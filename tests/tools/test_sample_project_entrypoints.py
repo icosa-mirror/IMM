@@ -266,6 +266,8 @@ def main() -> int:
         "gcloud firebase test ios run",
         "--type game-loop",
         "firebase-game-loop",
+        'value != "iphone-ipad-minimum-performance-a12"',
+        'if "arm64" not in info["UIRequiredDeviceCapabilities"]',
         "firebase-test-matrix.json",
         "FIREBASE_TEST_LAB_IOS_GODOT_DEVICE",
         "model=iphone14pro,version=16.6,locale=en,orientation=landscape",
