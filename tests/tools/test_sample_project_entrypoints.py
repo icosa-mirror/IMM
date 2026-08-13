@@ -264,6 +264,7 @@ def main() -> int:
         "Package Godot iOS application for Firebase Test Lab",
         "Run ordinary Godot iOS sample on Firebase Test Lab",
         "gcloud alpha firebase test ios run",
+        "install_components: alpha",
         "--type robo",
         "godot_ios_wait.roboscript",
         "runtime=firebase-test-lab-ios-robo",

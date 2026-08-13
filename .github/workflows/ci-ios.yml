@@ -369,23 +369,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/godot-ios-metal
-          if [ ! -d thirdparty/godot-cpp/.git ]; then
-            git clone --depth 1 --branch "$GODOT_CPP_REF" https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
-          fi
-          "$SCONS_PYTHON" -m SCons -C thirdparty/godot-cpp \
-            platform=ios target=template_debug arch=arm64 ios_simulator=no generate_bindings=yes
-          godot_cpp_lib="$(find thirdparty/godot-cpp/bin -maxdepth 1 -type f -name 'libgodot-cpp.ios.template_debug*.a' | head -n 1)"
-          test -n "$godot_cpp_lib"
-          test -s "$godot_cpp_lib"
-          cmake -S code/projects/ios -B build/godot-ios-native \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DIMM_GODOT_CPP_ROOT="$PWD/thirdparty/godot-cpp" \
-            -DIMM_GODOT_CPP_LIBRARY="$PWD/$godot_cpp_lib"
-          cmake --build build/godot-ios-native --target ImmGodotIOSGDExtension --config Debug \
-            2>&1 | tee artifacts/godot-ios-metal/native-build.log
           archive="$PWD/build/godot-ios-native/godot/libimm_godot_extension.a"
+          if [ "${{ steps.godot_ios_native_cache.outputs.cache-hit }}" != true ] || [ ! -s "$archive" ]; then
+            if [ ! -d thirdparty/godot-cpp/.git ]; then
+              git clone --depth 1 --branch "$GODOT_CPP_REF" https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
+            fi
+            "$SCONS_PYTHON" -m SCons -C thirdparty/godot-cpp \
+              platform=ios target=template_debug arch=arm64 ios_simulator=no generate_bindings=yes
+            godot_cpp_lib="$(find thirdparty/godot-cpp/bin -maxdepth 1 -type f -name 'libgodot-cpp.ios.template_debug*.a' | head -n 1)"
+            test -n "$godot_cpp_lib"
+            test -s "$godot_cpp_lib"
+            cmake -S code/projects/ios -B build/godot-ios-native \
+              -DCMAKE_SYSTEM_NAME=iOS \
+              -DCMAKE_OSX_SYSROOT=iphoneos \
+              -DCMAKE_OSX_ARCHITECTURES=arm64 \
+              -DIMM_GODOT_CPP_ROOT="$PWD/thirdparty/godot-cpp" \
+              -DIMM_GODOT_CPP_LIBRARY="$PWD/$godot_cpp_lib"
+            cmake --build build/godot-ios-native --target ImmGodotIOSGDExtension --config Debug \
+              2>&1 | tee artifacts/godot-ios-metal/native-build.log
+          else
+            printf '%s\n' "Reused exact Godot iOS native cache: $archive" \
+              | tee artifacts/godot-ios-metal/native-build.log
+          fi
           framework="$PWD/code/ImmGodotSampleProject/addons/imm_viewer/bin/ios/debug/libimm_godot_extension.ios.template_debug.xcframework"
           test -s "$archive"
           rm -rf "$framework"
@@ -520,6 +525,8 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          install_components: alpha
 
       - name: Run ordinary Godot iOS sample on Firebase Test Lab
         id: godot_ios_ftl
