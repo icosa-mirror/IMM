@@ -100,8 +100,9 @@ result is reported as application-build evidence, not visual evidence.
 
 ## Phase 2: Unity iOS Metal visual validation
 
-Status: focused cloud runtime and visual validation confirmed; aggregate full
-validation confirmation pending.
+Status: complete. Focused and aggregate cloud runtime, Metal rendering, visual
+validation, depth composition, retained evidence, and report integration are
+confirmed.
 
 Focused run `31690240268` at commit `96d71023` built arm64 iOS Simulator native
 archives, exported and linked the Unity 6 player, booted an installed iPhone
@@ -121,8 +122,20 @@ classifies `unity/ios/non-vr/metal` as passed, the main Unity/iOS matrix cell is
 green, and all three authoritative captures are retained in
 `CIValidationEvidence`. The workflow itself was red because of independent
 stale matrix-count, macOS wide-string logging, and Android render-phase video
-timing checks; those do not change the passing iOS evidence and are being
-corrected before the final aggregate-green confirmation.
+timing checks; those did not change the passing iOS evidence and were corrected
+before the final aggregate-green confirmation.
+
+Final aggregate run `31698422979` at commit `5a4f118c` completed successfully.
+The reusable Unity iOS Metal Simulator lane, application-build row, aggregate
+Engine Evidence Report, and final Validation Evidence job all passed. The main
+report records `unity/ios/application-build/metal` as passing non-visual build
+evidence and `unity/ios/non-vr/metal` as passing visual evidence, with the Unity
+iOS matrix cell green. The aggregate artifact retains the render-only,
+full-depth, and ordered-overlay captures plus their supporting diagnostic
+images and typed manifest. Manual review of all six retained iOS images
+confirmed recognizable IMM content at the intended camera position and correct
+probe depth/ordering. The manifest independently records rendering,
+compositing, depth composition, and ordered overlay as successful.
 
 ### Implementation
 
