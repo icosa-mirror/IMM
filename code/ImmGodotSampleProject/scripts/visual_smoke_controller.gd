@@ -27,6 +27,7 @@ const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
 const VISUAL_SMOKE_FRAME_RATE := 30
 const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
+const VISUAL_RESULT_PREFIX := "[IMM_GODOT_VISUAL_RESULT_20260813]"
 const COMPOSITION_MODE_FULL_DEPTH := "full_depth"
 const COMPOSITION_MODE_ORDERED_OVERLAY := "ordered_overlay"
 const COMPOSITION_MODE_RENDER_ONLY := "render_only"
@@ -423,13 +424,30 @@ func _finish_visual_smoke(
 	print("IMM Godot %s visual smoke compositor diagnostics: %s" % [selected_renderer_name, str(compositor_diagnostics)])
 
 	if failures.is_empty():
-		print(SUCCESS_MARKER_VULKAN if selected_renderer_api == IMM_RENDERER_API_VULKAN else SUCCESS_MARKER_METAL)
+		var success_marker := SUCCESS_MARKER_VULKAN if selected_renderer_api == IMM_RENDERER_API_VULKAN else SUCCESS_MARKER_METAL
+		print(success_marker)
+		_write_visual_result("%s passed renderer=%s os=%s" % [VISUAL_RESULT_PREFIX, selected_renderer_name, OS.get_name()])
 		get_tree().quit(0)
 		return
 
 	for failure in failures:
 		push_error(failure)
+	_write_visual_result("%s failed renderer=%s os=%s failures=%s" % [VISUAL_RESULT_PREFIX, selected_renderer_name, OS.get_name(), str(failures)])
 	get_tree().quit(1)
+
+func _write_visual_result(message: String) -> void:
+	var log_path := _get_env_string("IMM_GODOT_VISUAL_SMOKE_RESULT_LOG", "")
+	if log_path.is_empty():
+		return
+	var log_file := FileAccess.open(log_path, FileAccess.WRITE)
+	if log_file == null:
+		push_error("%s could not open result path %s: %s" % [
+			VISUAL_RESULT_PREFIX,
+			log_path,
+			error_string(FileAccess.get_open_error()),
+		])
+		return
+	log_file.store_line(message)
 
 func _queue_active_camera() -> void:
 	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
@@ -963,7 +981,7 @@ func _prepare_embedded_sample_document() -> String:
 func _should_run_visual_smoke() -> bool:
 	if OS.get_environment("IMM_GODOT_VISUAL_SMOKE") == "1":
 		return true
-	return OS.get_cmdline_args().has("--imm-godot-visual-smoke")
+	return _runtime_arguments().has("--imm-godot-visual-smoke")
 
 func _get_env_int(name: String, default_value: int) -> int:
 	var value: String = _get_env_string(name, "")
@@ -976,7 +994,7 @@ func _get_env_int(name: String, default_value: int) -> int:
 func _get_env_string(name: String, default_value: String) -> String:
 	var value: String = OS.get_environment(name)
 	if value.is_empty():
-		for argument in OS.get_cmdline_args():
+		for argument in _runtime_arguments():
 			var prefix: String = "--%s=" % name.to_lower().replace("_", "-")
 			if argument.begins_with(prefix):
 				value = argument.substr(prefix.length())
@@ -984,3 +1002,10 @@ func _get_env_string(name: String, default_value: String) -> String:
 	if value.is_empty():
 		return default_value
 	return value
+
+func _runtime_arguments() -> PackedStringArray:
+	var arguments := OS.get_cmdline_args()
+	for argument in OS.get_cmdline_user_args():
+		if not arguments.has(argument):
+			arguments.append(argument)
+	return arguments

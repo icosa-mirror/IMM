@@ -29,6 +29,9 @@ def main() -> int:
     # editor UID cache. A uid:// main scene can leave Run Project idle forever.
     assert 'run/main_scene="res://scenes/SampleScene.tscn"' in godot_project
     assert 'run/main_scene="uid://' not in godot_project
+    assert 'config/icon="res://icon.svg"' in godot_project
+    godot_uids = [path.read_text(encoding="utf-8").strip() for path in (ROOT / "code/ImmGodotSampleProject").rglob("*.uid")]
+    assert len(godot_uids) == len(set(godot_uids)), "Godot project resource UIDs must be unique"
     assert "load_on_ready = true" not in godot_scene
     warmup = godot_controller.index("for _frame in range(3):")
     load = godot_controller.index("viewer.load_document()", warmup)
@@ -39,7 +42,7 @@ def main() -> int:
         "IMM_GODOT_SAMPLE_PLAY_SMOKE",
         "IMM_GODOT_SAMPLE_PLAY_CAPTURE",
         'SAMPLE_PLAY_SMOKE_PREFIX := "[IMM_GODOT_SAMPLE_PLAY_20260803]"',
-        '"%s passed capture=%s layers=%d camera_ids=%s"',
+        '"%s passed os=%s capture=%s layers=%d camera_ids=%s"',
         "get_viewport().get_texture().get_image()",
         "save_png(capture_path)",
     ]:
@@ -109,6 +112,17 @@ def main() -> int:
         assert token in ios_cmake
     assert 'OS.get_name() in ["Android", "iOS"]' in godot_controller
     assert "_prepare_embedded_sample_document()" in godot_controller
+    assert "OS.get_cmdline_user_args()" in godot_controller
+    assert '_get_runtime_option("IMM_GODOT_SAMPLE_PLAY_SMOKE", "")' in godot_controller
+    assert '_get_runtime_option("IMM_GODOT_SAMPLE_PLAY_CAPTURE", "")' in godot_controller
+
+    godot_visual_controller = (
+        ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
+    ).read_text(encoding="utf-8")
+    assert "OS.get_cmdline_user_args()" in godot_visual_controller
+    assert "_runtime_arguments().has(\"--imm-godot-visual-smoke\")" in godot_visual_controller
+    assert "[IMM_GODOT_VISUAL_RESULT_20260813]" in godot_visual_controller
+    assert 'IMM_GODOT_VISUAL_SMOKE_RESULT_LOG' in godot_visual_controller
 
     vulkan_renderer = (
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
@@ -238,6 +252,7 @@ def main() -> int:
         "SIMCTL_CHILD_IMM_UNITY_SMOKE_CAPTURE_PATH",
         "SIMCTL_CHILD_IMM_UNITY_EXPECT_GRAPHICS_API=Metal",
         "Godot iOS Package and Metal Validation",
+        "Cache Godot iOS native build",
         "Build Godot iOS static GDExtension",
         "libimm_godot_extension.ios.template_debug.xcframework",
         'platform=ios target=template_debug arch=arm64 ios_simulator=no',

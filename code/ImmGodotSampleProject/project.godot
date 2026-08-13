@@ -13,6 +13,7 @@ config_version=5
 config/name="IMM Godot Sample"
 run/main_scene="res://scenes/SampleScene.tscn"
 config/features=PackedStringArray("4.6")
+config/icon="res://icon.svg"
 
 [display]
 
