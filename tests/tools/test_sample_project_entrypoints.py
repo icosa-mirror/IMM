@@ -269,6 +269,8 @@ def main() -> int:
         'value != "iphone-ipad-minimum-performance-a12"',
         'if "arm64" not in info["UIRequiredDeviceCapabilities"]',
         "firebase-test-matrix.json",
+        "embedded-mobileprovision.txt",
+        "mkdir -p artifacts/godot-ios-metal/ftl-results",
         "FIREBASE_TEST_LAB_IOS_GODOT_DEVICE",
         "model=iphonese3,version=18.4,locale=en,orientation=landscape",
         "firebase-ios-models.json",

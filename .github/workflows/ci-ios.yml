@@ -519,6 +519,15 @@ jobs:
           codesign --force --deep --sign - --timestamp=none "$app"
           codesign --verify --deep --strict --verbose=2 "$app" \
             > artifacts/godot-ios-metal/codesign-verify.log 2>&1
+          codesign -d --verbose=4 "$app" \
+            > artifacts/godot-ios-metal/codesign-details.txt 2>&1 || true
+          if [ -f "$app/embedded.mobileprovision" ]; then
+            security cms -D -i "$app/embedded.mobileprovision" \
+              > artifacts/godot-ios-metal/embedded-mobileprovision.plist
+          else
+            printf '%s\n' 'embedded.mobileprovision=absent' \
+              > artifacts/godot-ios-metal/embedded-mobileprovision.txt
+          fi
           plutil -p "$app/Info.plist" > artifacts/godot-ios-metal/application-info-plist.txt
           file "$app/$executable" > artifacts/godot-ios-metal/application-executable-format.txt
           xcrun vtool -show-build "$app/$executable" > artifacts/godot-ios-metal/application-build-version.txt
@@ -612,6 +621,7 @@ jobs:
             fi
           fi
           printf '%s\n' "$status" > artifacts/godot-ios-metal/gcloud-exit-code.txt
+          mkdir -p artifacts/godot-ios-metal/ftl-results
           gcloud storage cp --recursive \
             "gs://${FTL_RESULTS_BUCKET}/${results_dir}" \
             artifacts/godot-ios-metal/ftl-results \
