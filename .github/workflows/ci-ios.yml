@@ -578,6 +578,37 @@ jobs:
             cp "$engine_archive" "$simulator_archive"
             lipo -info "$simulator_archive"
           done <<< "$simulator_archives"
+          python3 - "$GODOT_IOS_XCODE_PROJECT/project.pbxproj" <<'PY'
+          from pathlib import Path
+          import sys
+
+          project_file = Path(sys.argv[1])
+          export_root = project_file.parent.parent
+          dummy_cpp_files = list(export_root.rglob("dummy.cpp"))
+          if len(dummy_cpp_files) != 1:
+              raise SystemExit(f"Expected exactly one exported dummy.cpp, found {len(dummy_cpp_files)}")
+          dummy_cpp = dummy_cpp_files[0]
+          dummy_mm = dummy_cpp.with_suffix(".mm")
+          bootstrap = dummy_cpp.read_text(encoding="utf-8")
+          bootstrap += '''
+
+          #import <TargetConditionals.h>
+          #if TARGET_OS_SIMULATOR
+          #import <Foundation/Foundation.h>
+          #import <Metal/Metal.h>
+          NSErrorDomain const MTLIOErrorDomain = @"MTLIOErrorDomain";
+          NSErrorDomain const MTLTensorDomain = @"MTLTensorDomain";
+          #endif
+          '''
+          dummy_mm.write_text(bootstrap, encoding="utf-8")
+          dummy_cpp.unlink()
+          project = project_file.read_text(encoding="utf-8")
+          occurrences = project.count("dummy.cpp")
+          if occurrences == 0:
+              raise SystemExit("Exported Xcode project does not reference dummy.cpp")
+          project_file.write_text(project.replace("dummy.cpp", "dummy.mm"), encoding="utf-8")
+          print(f"IMM_GODOT_IOS_SIM_METAL shimmed={dummy_mm} project_references={occurrences}")
+          PY
           printf '%s\n' "$simulator_archives" \
             > artifacts/godot-ios-metal/replaced-simulator-engine-archives.txt
 
