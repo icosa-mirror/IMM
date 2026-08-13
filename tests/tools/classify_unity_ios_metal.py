@@ -95,7 +95,16 @@ def classify(root: Path, simulator_outcome: str) -> tuple[dict, dict, dict]:
         for name, path in metric_paths.items()
         if metrics[name] is None
     )
-    logs = sorted(root.glob("unity-ios-*-player.log"))
+    expected_logs = (
+        root / "unity-ios-full-depth-player.log",
+        root / "unity-ios-ordered-overlay-player.log",
+    )
+    logs = [path for path in expected_logs if path.is_file()]
+    missing.extend(
+        f"missing runtime evidence log: {path.name}"
+        for path in expected_logs
+        if not path.is_file()
+    )
     log_text = "\n".join(
         path.read_text(encoding="utf-8", errors="ignore") for path in logs
     ).lower()
@@ -104,8 +113,12 @@ def classify(root: Path, simulator_outcome: str) -> tuple[dict, dict, dict]:
         for marker in RUNTIME_MARKERS
         if marker in log_text
     ]
-    if logs and "[imm_unity_smoke] graphics api expected=metal actual=metal" not in log_text:
-        runtime_failures.append("missing Unity Metal graphics API runtime evidence")
+    for log_path in logs:
+        text = log_path.read_text(encoding="utf-8", errors="ignore").lower()
+        if "[imm_unity_smoke] graphics api expected=metal actual=metal" not in text:
+            runtime_failures.append(f"missing Unity Metal graphics API runtime evidence: {log_path.name}")
+        if "[imm_unity_runtime_smoke_install_20260813]" not in text:
+            missing.append(f"missing runtime smoke installation evidence: {log_path.name}")
 
     full_missing = [item for item in missing if "render" in item or "full-depth" in item]
     overlay_missing = [item for item in missing if "render" in item or "ordered-overlay" in item]
@@ -119,7 +132,15 @@ def classify(root: Path, simulator_outcome: str) -> tuple[dict, dict, dict]:
         if metric is not None and metric.get("passed") is not True:
             composition_failures.extend(metric_failures(f"{name} visual contract", metric))
 
-    warnings: list[str] = []
+    broad_probe_failures = [
+        line.strip()
+        for line in log_text.splitlines()
+        if "[imm_unity_smoke] scene composition" in line and "failed" in line
+    ]
+    warnings = [
+        f"supporting broad probe diagnostic did not override the localized passing visual contract: {failure}"
+        for failure in broad_probe_failures
+    ]
     if simulator_outcome != "success" and not missing:
         warnings.append(f"simulator execution step ended as {simulator_outcome} after complete visual evidence")
     if runtime_failures:
@@ -142,6 +163,10 @@ def classify(root: Path, simulator_outcome: str) -> tuple[dict, dict, dict]:
         "failure_class": failure_class,
         "failures": failures,
         "warnings": warnings,
+        "rendering": "success" if metrics["render"] is not None and metrics["render"].get("passed") is True else "failed",
+        "compositing": "success" if full_status.get("compositing") == "success" and overlay_status.get("compositing") == "success" else "failed",
+        "depth_composition": full_status.get("depth_composition", "failed"),
+        "ordered_overlay": overlay_status.get("ordered_overlay", "failed"),
     }
     return lane, full_status, overlay_status
 

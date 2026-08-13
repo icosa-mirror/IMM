@@ -303,12 +303,11 @@
       "platform": "ios",
       "mode": "non-vr",
       "renderer": "metal",
-      "status": "unsupported",
-      "hosted_gate": null,
+      "status": "supported",
+      "hosted_gate": "CI iOS Iteration / Unity iOS Metal Simulator Validation",
       "hardware_gate": null,
-      "baseline": null,
-      "owner_decision": "Unity iOS remains visually unsupported until the generated player runs on a simulator or device and passes render and depth-composition contracts.",
-      "reason": "The application-build lane proves export and linkage only; no authoritative Unity iOS Metal image is currently captured."
+      "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
+      "reason": "CI runs the Unity iOS application in an Apple-silicon iOS Simulator with Metal and requires retained render-only, full-depth, and ordered-overlay images to pass the localized visual contracts."
     },
     {
       "product": "unity",

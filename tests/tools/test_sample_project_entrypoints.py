@@ -193,6 +193,8 @@ def main() -> int:
         assert token in engine_workflow
     for token in [
         "contains(github.event.head_commit.message, '[CI IOS]')",
+        "run_validation:",
+        "if: inputs.run_validation == true",
         "Build iOS Simulator native libraries",
         "BuildIOSSimulatorCIPlayer",
         'build/unity-ios-player/simulator-xcode',
@@ -208,6 +210,12 @@ def main() -> int:
         assert token in ios_workflow
     assert "simctl create" not in ios_workflow
     assert "!contains(github.event.head_commit.message, '[CI IOS]')" in validation_workflow
+    for token in [
+        "uses: ./.github/workflows/ci-ios.yml",
+        "name: UnityIOSMetalComposition",
+        "path: artifacts/validation-evidence/input/UnityIOSMetalComposition",
+    ]:
+        assert token in validation_workflow
     assert "artifacts/unity-ios-player-build/derived-data" not in engine_workflow
     assert "-project artifacts/unity-ios-player-build/xcode/" not in engine_workflow
     assert "-immIosPlayerPath ${{ github.workspace }}/artifacts/unity-ios-player-build/xcode" not in engine_workflow

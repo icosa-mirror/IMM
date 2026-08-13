@@ -120,6 +120,10 @@ def main() -> int:
                     "failure_class": "runtime",
                     "failures": ["requested Vulkan fell back to Direct3D"],
                     "warnings": ["supporting log marker absent"],
+                    "rendering": "success",
+                    "compositing": "success",
+                    "depth_composition": "success",
+                    "ordered_overlay": "success",
                 }
             ),
             encoding="utf-8",
@@ -154,6 +158,10 @@ def main() -> int:
             "failure_class": "runtime",
             "failures": ["requested Vulkan fell back to Direct3D"],
             "warnings": ["supporting log marker absent"],
+            "rendering": "success",
+            "compositing": "success",
+            "depth_composition": "success",
+            "ordered_overlay": "success",
         }
 
         skipped_status = Path(temp_dir) / "skipped-status.json"

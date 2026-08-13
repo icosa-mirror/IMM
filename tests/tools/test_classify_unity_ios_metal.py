@@ -24,10 +24,12 @@ def prepare(root: Path) -> None:
     for stem in ("render", "full-depth", "ordered-overlay"):
         (root / f"unity-ios-metal-{stem}.png").write_bytes(b"capture")
         write_metric(root / f"unity-ios-metal-{stem}-metrics.json", True)
-    (root / "unity-ios-full-depth-player.log").write_text(
-        "[IMM_UNITY_SMOKE] graphics api expected=Metal actual=Metal\n",
-        encoding="utf-8",
-    )
+    for mode in ("full-depth", "ordered-overlay"):
+        (root / f"unity-ios-{mode}-player.log").write_text(
+            "[IMM_UNITY_RUNTIME_SMOKE_INSTALL_20260813] capture=capture.png renderCapture=render.png\n"
+            "[IMM_UNITY_SMOKE] graphics api expected=Metal actual=Metal\n",
+            encoding="utf-8",
+        )
 
 
 def run(root: Path, outcome: str = "success") -> tuple[subprocess.CompletedProcess[str], dict, dict, dict]:
@@ -58,6 +60,8 @@ def main() -> int:
         completed, lane, full, overlay = run(root)
         assert completed.returncode == 0
         assert lane["result"] == "passed"
+        assert lane["depth_composition"] == "success"
+        assert lane["ordered_overlay"] == "success"
         assert full["depth_composition"] == "success"
         assert overlay["ordered_overlay"] == "success"
 
@@ -96,6 +100,24 @@ def main() -> int:
         completed, lane, _full, _overlay = run(root)
         assert completed.returncode == 1
         assert lane["result"] == "runtime_failed"
+
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        prepare(root)
+        with (root / "unity-ios-full-depth-player.log").open("a", encoding="utf-8") as handle:
+            handle.write("[IMM_UNITY_SMOKE] scene composition rear occlusion probe failed: broad rim diagnostic\n")
+        completed, lane, _full, _overlay = run(root)
+        assert completed.returncode == 0
+        assert lane["result"] == "passed"
+        assert lane["warnings"]
+
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        prepare(root)
+        (root / "unity-ios-ordered-overlay-player.log").unlink()
+        completed, lane, _full, _overlay = run(root)
+        assert completed.returncode == 1
+        assert lane["result"] == "evidence_incomplete"
 
     print("Unity iOS Metal classifier tests passed")
     return 0

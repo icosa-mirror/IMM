@@ -122,6 +122,19 @@ jobs:
       evidence_scope: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'hardware' && 'all-supported' || 'hosted' }}
     secrets: inherit
 
+  ios:
+    name: iOS Visual
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.mode == 'full' || inputs.mode == 'hardware' || inputs.mode == 'release')) ||
+      (github.event_name == 'pull_request' &&
+      (contains(github.event.pull_request.labels.*.name, 'engine-ci') ||
+      contains(github.event.pull_request.labels.*.name, 'device-ci'))) ||
+      contains(github.event.head_commit.message, '[CI VALIDATION]') ||
+      contains(github.event.head_commit.message, '[RELEASE]')
+    uses: ./.github/workflows/ci-ios.yml
+    secrets: inherit
+
   validation-evidence:
     name: Validation Evidence
     if: ${{ always() && !contains(github.event.head_commit.message, '[CI IOS]') }}
@@ -132,6 +145,7 @@ jobs:
       - device
       - engine
       - gpu
+      - ios
       - web
     steps:
       - name: Checkout repository
@@ -170,6 +184,13 @@ jobs:
         with:
           name: WebPlayerValidationEvidence
           path: artifacts/validation-evidence/input/WebPlayerValidationEvidence
+
+      - name: Download Unity iOS Metal evidence
+        if: needs.ios.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: UnityIOSMetalComposition
+          path: artifacts/validation-evidence/input/UnityIOSMetalComposition
 
       - name: Write validation visual evidence report
         env:
@@ -221,6 +242,7 @@ jobs:
           --name EngineValidationEvidence
           --name EngineMatrixDebugArtifacts
           --name GPUMatrixEvidence
+          --name UnityIOSMetalComposition
 
   deploy-pages:
     name: Deploy Web Player Pages
@@ -232,6 +254,7 @@ jobs:
       (needs.device.result == 'success' || needs.device.result == 'skipped') &&
       (needs.engine.result == 'success' || needs.engine.result == 'skipped') &&
       (needs.gpu.result == 'success' || needs.gpu.result == 'skipped') &&
+      (needs.ios.result == 'success' || needs.ios.result == 'skipped') &&
       needs.validation-evidence.result == 'success' &&
       (
         (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
@@ -244,6 +267,7 @@ jobs:
       - device
       - engine
       - gpu
+      - ios
       - validation-evidence
     runs-on: ubuntu-latest
     timeout-minutes: 10

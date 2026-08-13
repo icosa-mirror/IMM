@@ -100,6 +100,21 @@ result is reported as application-build evidence, not visual evidence.
 
 ## Phase 2: Unity iOS Metal visual validation
 
+Status: focused cloud runtime and visual validation confirmed; aggregate full
+validation confirmation pending.
+
+Focused run `31690240268` at commit `96d71023` built arm64 iOS Simulator native
+archives, exported and linked the Unity 6 player, booted an installed iPhone
+simulator on iOS 18.2, and ran the application twice through Metal. It retained
+render-only, full-depth, and ordered-overlay captures. All three localized
+tolerant visual contracts passed. Manual inspection confirmed recognizable IMM
+content and the intended depth ordering: magenta and yellow probes are visible,
+while cyan is absent from the character interior. Cyan portions outside the
+character silhouette are intentionally visible and are not depth leakage. The
+older broad in-player region diagnostic still reports that valid rim, so it is
+retained as a warning rather than allowed to override the localized visual
+contract documented in `VALIDATION_FALSE_FAILURE_CLEANUP_PLAN.md`.
+
 ### Implementation
 
 1. Select a repeatable execution target:

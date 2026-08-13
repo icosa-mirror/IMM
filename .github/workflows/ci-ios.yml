@@ -4,6 +4,12 @@ name: CI iOS Iteration
 
 on:
   workflow_call:
+    inputs:
+      run_validation:
+        description: Run the iOS validation lane when called by the aggregate workflow
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
   push:
     branches:
@@ -43,7 +49,7 @@ env:
 jobs:
   unity-ios-player-build:
     name: Unity iOS Metal Simulator Validation
-    if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS]')
+    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS]')
     runs-on: macos-14
     timeout-minutes: 45
     steps:

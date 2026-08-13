@@ -167,6 +167,18 @@ def main() -> int:
             value = classifier.get(key)
             if isinstance(value, list):
                 classifier_details[key] = [str(item) for item in value if str(item)]
+        for key in (
+            "rendering",
+            "compositing",
+            "composition_mode",
+            "composition_contract",
+            "depth_composition",
+            "depth_interleaving",
+            "ordered_overlay",
+        ):
+            value = classifier.get(key)
+            if value is not None:
+                classifier_details[key] = value
         if classifier_result == "passed" and status == "passed":
             failure_class = ""
         elif classifier_result == "skipped" and status == "passed":
