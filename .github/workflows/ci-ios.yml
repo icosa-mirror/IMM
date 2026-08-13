@@ -360,8 +360,10 @@ jobs:
           path: |
             thirdparty/godot-cpp
             build/godot-ios-native
-          key: godot-ios-native-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
+            build/godot-ios-simulator-native
+          key: godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
           restore-keys: |
+            godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
             godot-ios-native-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
 
       - name: Build Godot iOS static GDExtension
@@ -370,38 +372,63 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/godot-ios-metal
-          archive="$PWD/build/godot-ios-native/godot/libimm_godot_extension.a"
-          if [ "${{ steps.godot_ios_native_cache.outputs.cache-hit }}" != true ] || [ ! -s "$archive" ]; then
-            if [ ! -d thirdparty/godot-cpp/.git ]; then
-              git clone --depth 1 --branch "$GODOT_CPP_REF" https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
-            fi
+          device_archive="$PWD/build/godot-ios-native/godot/libimm_godot_extension.a"
+          simulator_archive="$PWD/build/godot-ios-simulator-native/godot/libimm_godot_extension.a"
+          if [ ! -d thirdparty/godot-cpp/.git ]; then
+            git clone --depth 1 --branch "$GODOT_CPP_REF" https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
+          fi
+          if [ ! -s "$device_archive" ]; then
             "$SCONS_PYTHON" -m SCons -C thirdparty/godot-cpp \
               platform=ios target=template_debug arch=arm64 ios_simulator=no generate_bindings=yes
-            godot_cpp_lib="$(find thirdparty/godot-cpp/bin -maxdepth 1 -type f -name 'libgodot-cpp.ios.template_debug*.a' | head -n 1)"
-            test -n "$godot_cpp_lib"
-            test -s "$godot_cpp_lib"
+            godot_cpp_device_lib="$(find thirdparty/godot-cpp/bin -maxdepth 1 -type f -name 'libgodot-cpp.ios.template_debug.arm64.a' -print -quit)"
+            test -n "$godot_cpp_device_lib"
+            test -s "$godot_cpp_device_lib"
             cmake -S code/projects/ios -B build/godot-ios-native \
               -DCMAKE_SYSTEM_NAME=iOS \
               -DCMAKE_OSX_SYSROOT=iphoneos \
               -DCMAKE_OSX_ARCHITECTURES=arm64 \
               -DIMM_GODOT_CPP_ROOT="$PWD/thirdparty/godot-cpp" \
-              -DIMM_GODOT_CPP_LIBRARY="$PWD/$godot_cpp_lib"
+              -DIMM_GODOT_CPP_LIBRARY="$PWD/$godot_cpp_device_lib"
             cmake --build build/godot-ios-native --target ImmGodotIOSGDExtension --config Debug \
               2>&1 | tee artifacts/godot-ios-metal/native-build.log
           else
-            printf '%s\n' "Reused exact Godot iOS native cache: $archive" \
+            printf '%s\n' "Reused Godot iOS device cache: $device_archive" \
               | tee artifacts/godot-ios-metal/native-build.log
           fi
+          if [ ! -s "$simulator_archive" ]; then
+            "$SCONS_PYTHON" -m SCons -C thirdparty/godot-cpp \
+              platform=ios target=template_debug arch=arm64 ios_simulator=yes generate_bindings=yes
+            godot_cpp_simulator_lib="$(find thirdparty/godot-cpp/bin -maxdepth 1 -type f -name 'libgodot-cpp.ios.template_debug.arm64.simulator.a' -print -quit)"
+            test -n "$godot_cpp_simulator_lib"
+            test -s "$godot_cpp_simulator_lib"
+            cmake -S code/projects/ios -B build/godot-ios-simulator-native \
+              -DCMAKE_SYSTEM_NAME=iOS \
+              -DCMAKE_OSX_SYSROOT=iphonesimulator \
+              -DCMAKE_OSX_ARCHITECTURES=arm64 \
+              -DIMM_GODOT_CPP_ROOT="$PWD/thirdparty/godot-cpp" \
+              -DIMM_GODOT_CPP_LIBRARY="$PWD/$godot_cpp_simulator_lib"
+            cmake --build build/godot-ios-simulator-native --target ImmGodotIOSGDExtension --config Debug \
+              2>&1 | tee artifacts/godot-ios-metal/simulator-native-build.log
+          else
+            printf '%s\n' "Reused Godot iOS simulator cache: $simulator_archive" \
+              | tee artifacts/godot-ios-metal/simulator-native-build.log
+          fi
           framework="$PWD/code/ImmGodotSampleProject/addons/imm_viewer/bin/ios/debug/libimm_godot_extension.ios.template_debug.xcframework"
-          test -s "$archive"
+          test -s "$device_archive"
+          test -s "$simulator_archive"
           rm -rf "$framework"
           mkdir -p "$(dirname "$framework")"
-          xcodebuild -create-xcframework -library "$archive" -output "$framework" \
+          xcodebuild -create-xcframework \
+            -library "$device_archive" \
+            -library "$simulator_archive" \
+            -output "$framework" \
             2>&1 | tee artifacts/godot-ios-metal/xcframework-build.log
           test -d "$framework"
           find "$framework" -type f -maxdepth 3 -print > artifacts/godot-ios-metal/xcframework-layout.txt
           grep -q 'libimm_godot_extension.a' artifacts/godot-ios-metal/xcframework-layout.txt
-          lipo -info "$archive" | tee artifacts/godot-ios-metal/archive-architecture.txt
+          grep -q 'ios-arm64-simulator' artifacts/godot-ios-metal/xcframework-layout.txt
+          lipo -info "$device_archive" | tee artifacts/godot-ios-metal/archive-architecture.txt
+          lipo -info "$simulator_archive" | tee artifacts/godot-ios-metal/simulator-archive-architecture.txt
 
       - name: Save Godot iOS native build cache
         if: steps.godot_ios_extension.outcome == 'success' && steps.godot_ios_native_cache.outputs.cache-hit != 'true'
@@ -410,7 +437,8 @@ jobs:
           path: |
             thirdparty/godot-cpp
             build/godot-ios-native
-          key: godot-ios-native-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
+            build/godot-ios-simulator-native
+          key: godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
 
       - name: Download Godot 4.6 and iOS export templates
         id: godot_ios_tools
@@ -481,6 +509,7 @@ jobs:
 
       - name: Probe Apple-silicon iOS-on-Mac runtime
         id: godot_ios_on_mac_probe
+        if: ${{ false }}
         continue-on-error: true
         timeout-minutes: 5
         run: |
@@ -600,7 +629,7 @@ jobs:
           test -s "$marker"
 
       - name: Run Godot iOS Metal application natively on Apple silicon
-        id: godot_ios_runtime
+        id: godot_ios_on_mac_runtime
         if: steps.godot_ios_on_mac_probe.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 12
@@ -703,6 +732,184 @@ jobs:
             --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
           collect_user_file godot-ios-sample-play.png "$artifact_dir/godot-ios-sample-play.png" || runtime_status=1
           collect_user_file godot-ios-sample-play.log "$artifact_dir/godot-ios-sample-play.log" || runtime_status=1
+          exit "$runtime_status"
+
+      - name: Compile exported Godot iOS Simulator application
+        id: godot_ios_simulator_compile
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_XCODE_PROJECT:?missing exported Xcode project}"
+          : "${GODOT_IOS_SCHEME:?missing exported Xcode scheme}"
+          simulator_data="$RUNNER_TEMP/godot-ios-simulator-derived-data"
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$GODOT_IOS_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$simulator_data" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build \
+            2>&1 | tee artifacts/godot-ios-metal/xcodebuild-simulator.log
+          app="$(find "$simulator_data/Build/Products/Debug-iphonesimulator" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -d "$app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          test -s "$app/$executable"
+          file "$app/$executable" > artifacts/godot-ios-metal/simulator-application-executable.txt
+          xcrun vtool -show-build "$app/$executable" > artifacts/godot-ios-metal/simulator-application-build-version.txt
+          plutil -p "$app/Info.plist" > artifacts/godot-ios-metal/simulator-application-info-plist.txt
+          printf '%s\n' \
+            "app=$app" \
+            "renderer=Metal" \
+            "runtime=iOS Simulator" \
+            > artifacts/godot-ios-metal/simulator-application-build-contract.txt
+          echo "GODOT_IOS_SIMULATOR_APP=$app" >> "$GITHUB_ENV"
+
+      - name: Boot deterministic iOS Simulator for Godot
+        id: godot_ios_simulator_boot
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > artifacts/godot-ios-metal/available-simulators.json
+          python3 tests/tools/select_ios_simulator.py \
+            --input artifacts/godot-ios-metal/available-simulators.json \
+            --output artifacts/godot-ios-metal/simulator-selection.json
+          simulator_udid="$(python3 -c 'import json; print(json.load(open("artifacts/godot-ios-metal/simulator-selection.json"))["udid"])')"
+          runtime_id="$(python3 -c 'import json; print(json.load(open("artifacts/godot-ios-metal/simulator-selection.json"))["runtime_id"])')"
+          device_name="$(python3 -c 'import json; print(json.load(open("artifacts/godot-ios-metal/simulator-selection.json"))["device_name"])')"
+          test -n "$simulator_udid"
+          xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
+          xcrun simctl boot "$simulator_udid"
+          xcrun simctl bootstatus "$simulator_udid" -b
+          printf '%s\n' \
+            "udid=$simulator_udid" \
+            "runtime=$runtime_id" \
+            "device=$device_name" \
+            > artifacts/godot-ios-metal/simulator-runtime-contract.txt
+          echo "GODOT_IOS_SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+
+      - name: Run Godot iOS Metal visual validation in Simulator
+        id: godot_ios_runtime
+        if: steps.godot_ios_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_SIMULATOR_APP:?missing iOS Simulator application}"
+          : "${GODOT_IOS_SIMULATOR_UDID:?missing iOS Simulator destination}"
+          app="$GODOT_IOS_SIMULATOR_APP"
+          simulator_udid="$GODOT_IOS_SIMULATOR_UDID"
+          artifact_dir="$PWD/artifacts/godot-ios-metal"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          test -n "$bundle_id"
+          test -n "$executable"
+          xcrun simctl install "$simulator_udid" "$app"
+          container="$(xcrun simctl get_app_container "$simulator_udid" "$bundle_id" data)"
+          test -d "$container"
+          printf '%s\n' \
+            "runtime=iOS Simulator" \
+            "udid=$simulator_udid" \
+            "bundle_id=$bundle_id" \
+            "executable=$executable" \
+            "renderer=Metal" \
+            > "$artifact_dir/runtime-launch-contract.txt"
+
+          run_app() {
+            local label="$1"
+            shift
+            local log_path="$artifact_dir/${label}-launch.log"
+            local launch_pid=''
+            local status=0
+            xcrun simctl launch --console --terminate-running-process \
+              "$simulator_udid" "$bundle_id" "$@" > "$log_path" 2>&1 &
+            launch_pid=$!
+            for _second in $(seq 1 180); do
+              if ! kill -0 "$launch_pid" 2>/dev/null; then
+                set +e
+                wait "$launch_pid"
+                status=$?
+                set -e
+                return "$status"
+              fi
+              sleep 1
+            done
+            echo "Timed out waiting for $label" >> "$log_path"
+            xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
+            kill "$launch_pid" 2>/dev/null || true
+            wait "$launch_pid" 2>/dev/null || true
+            return 124
+          }
+
+          collect_user_file() {
+            local name="$1"
+            local destination="$2"
+            local source=''
+            source="$(find "$container" -type f -name "$name" -print -quit 2>/dev/null || true)"
+            test -n "$source"
+            test -s "$source"
+            cp "$source" "$destination"
+          }
+
+          runtime_status=0
+          run_app godot-ios-full-depth \
+            --rendering-driver metal \
+            --rendering-method mobile \
+            --scene res://scenes/VisualSmokeScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-renderer-api=5 \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-render-graph-depth-composition=1 \
+            --imm-godot-visual-smoke-composition-mode=full_depth \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-render.png \
+            --imm-godot-visual-smoke-png=user://godot-ios-metal-full-depth.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-full-depth-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-render.png "$artifact_dir/godot-ios-metal-render.png" || runtime_status=1
+          collect_user_file godot-ios-metal-full-depth.png "$artifact_dir/godot-ios-metal-full-depth.png" || runtime_status=1
+          collect_user_file godot-ios-full-depth-result.log "$artifact_dir/godot-ios-full-depth-result.log" || runtime_status=1
+
+          run_app godot-ios-ordered-overlay \
+            --rendering-driver metal \
+            --rendering-method mobile \
+            --scene res://scenes/VisualSmokeScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-renderer-api=5 \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-render-graph-depth-composition=1 \
+            --imm-godot-visual-smoke-composition-mode=ordered_overlay \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-ordered-overlay-render.png \
+            --imm-godot-visual-smoke-png=user://godot-ios-metal-ordered-overlay.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-ordered-overlay-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-ordered-overlay-render.png "$artifact_dir/godot-ios-metal-ordered-overlay-render.png" || runtime_status=1
+          collect_user_file godot-ios-metal-ordered-overlay.png "$artifact_dir/godot-ios-metal-ordered-overlay.png" || runtime_status=1
+          collect_user_file godot-ios-ordered-overlay-result.log "$artifact_dir/godot-ios-ordered-overlay-result.log" || runtime_status=1
+
+          run_app godot-ios-sample-play \
+            --rendering-driver metal \
+            --rendering-method mobile \
+            --scene res://scenes/SampleScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-sample-play-smoke=1 \
+            --imm-godot-sample-play-capture=user://godot-ios-sample-play.png \
+            --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
+          collect_user_file godot-ios-sample-play.png "$artifact_dir/godot-ios-sample-play.png" || runtime_status=1
+          collect_user_file godot-ios-sample-play.log "$artifact_dir/godot-ios-sample-play.log" || runtime_status=1
+          xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
           exit "$runtime_status"
 
       - name: Package Godot iOS application for Firebase Test Lab
@@ -983,7 +1190,8 @@ jobs:
           test "${{ steps.godot_ios_export.outcome }}" = success
           test "${{ steps.godot_ios_compile.outcome }}" = success
           test "${{ steps.godot_ios_package.outcome }}" = success
-          test "${{ steps.godot_ios_on_mac_probe.outcome }}" = success
+          test "${{ steps.godot_ios_simulator_compile.outcome }}" = success
+          test "${{ steps.godot_ios_simulator_boot.outcome }}" = success
           test "${{ steps.godot_ios_runtime.outcome }}" = success
           test "${{ steps.godot_ios_metrics.outcome }}" = success
           test "${{ steps.godot_ios_classification.outcome }}" = success
