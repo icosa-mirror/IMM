@@ -240,6 +240,15 @@ namespace ImmPlayer
             {
                 yield return CaptureSyntheticStereoProbe(_syntheticStereoCapturePath, false);
             }
+
+            if (_compositionProbeEnabled && !string.IsNullOrEmpty(_renderCapturePath))
+            {
+                const float externalRenderHoldSeconds = 5.0f;
+                Debug.Log(
+                    $"[IMM_UNITY_ANDROID_VK_EXTERNAL_RENDER_HOLD_20260813] " +
+                    $"seconds={externalRenderHoldSeconds:F1}");
+                yield return new WaitForSecondsRealtime(externalRenderHoldSeconds);
+            }
 #endif
 
             if (_compositionProbeEnabled)

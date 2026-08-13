@@ -58,6 +58,8 @@ def main() -> int:
             "const float originalRearOccludedDistance = 3.95f;",
             "FindObjectOfType<ImmFeatureExamples>()",
             "FreezeCompositionPlaybackIfRequested();",
+            "[IMM_UNITY_ANDROID_VK_EXTERNAL_RENDER_HOLD_20260813]",
+            "WaitForSecondsRealtime(externalRenderHoldSeconds)",
         ],
         ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmPlayerManager.cs": [
             'Graphics.Blit(source, destination, composite, 0);',

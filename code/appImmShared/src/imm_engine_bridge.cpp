@@ -525,7 +525,7 @@ namespace ImmShared
         }
 
         mSoundInitialized = true;
-        mLog.Printf(LT_DEBUG, L"[IMM_AUDIO_PIPELINE_20260812] requested=%s active=%s", soundBackendName, activeSoundBackendName);
+        mLog.Printf(LT_DEBUG, L"[IMM_AUDIO_PIPELINE_20260812] requested=%ls active=%ls", soundBackendName, activeSoundBackendName);
         mLog.Printf(LT_DEBUG, L"SoundBackend initialized successfully.");
         return true;
     }

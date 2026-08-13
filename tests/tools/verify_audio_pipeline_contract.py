@@ -49,7 +49,7 @@ def main() -> int:
             "Shared Unity/Godot Apple branch must not select the null audio backend")
     require(errors, "API::Null" in fallback_branch,
             "Shared Unity/Godot bridge must retain a null backend for unsupported platforms")
-    require(errors, "[IMM_AUDIO_PIPELINE_20260812]" in bridge and "active=%s" in bridge,
+    require(errors, "[IMM_AUDIO_PIPELINE_20260812]" in bridge and "requested=%ls active=%ls" in bridge,
             "Shared Unity/Godot bridge must report the active audio backend for runtime validation")
 
     macos_cmake = (root / "code/projects/macos/CMakeLists.txt").read_text(encoding="utf-8")

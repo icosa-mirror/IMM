@@ -115,6 +115,15 @@ older broad in-player region diagnostic still reports that valid rim, so it is
 retained as a warning rather than allowed to override the localized visual
 contract documented in `VALIDATION_FALSE_FAILURE_CLEANUP_PLAN.md`.
 
+Aggregate run `31691425995` at commit `607a8f36` then confirmed the reusable
+iOS lane passes inside the full validation workflow, the aggregate report
+classifies `unity/ios/non-vr/metal` as passed, the main Unity/iOS matrix cell is
+green, and all three authoritative captures are retained in
+`CIValidationEvidence`. The workflow itself was red because of independent
+stale matrix-count, macOS wide-string logging, and Android render-phase video
+timing checks; those do not change the passing iOS evidence and are being
+corrected before the final aggregate-green confirmation.
+
 ### Implementation
 
 1. Select a repeatable execution target:

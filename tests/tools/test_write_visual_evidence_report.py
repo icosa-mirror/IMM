@@ -205,6 +205,40 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
+        lane = temp / "unity-ios-metal"
+        lane.mkdir()
+        matrix_row = {
+            "matrix": {
+                "product": "unity",
+                "platform": "ios",
+                "mode": "non-vr",
+                "renderer": "metal",
+            },
+            "status": "supported",
+            "coverage_status": "passed",
+        }
+        manifest = {
+            "classification": {
+                "result": "passed",
+                "rendering": "success",
+                "depth_composition": "success",
+                "ordered_overlay": "success",
+            },
+            "matrix": matrix_row["matrix"],
+            "files": [
+                {"path": "unity-ios-metal-render-metrics.json"},
+                {"path": "unity-ios-metal-full-depth-metrics.json"},
+                {"path": "unity-ios-metal-ordered-overlay-metrics.json"},
+            ],
+        }
+        (lane / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        assert (
+            visual_matrix_cell([matrix_row], temp, "unity", "ios", "metal")
+            == "depth_passed"
+        ), "Passing Unity iOS render and depth evidence must make the matrix cell green"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
         input_root = temp / "input"
         engine = input_root / "EngineValidationEvidence"
         unity_captures = engine / "captures" / "unity-windows-directx-composition"
