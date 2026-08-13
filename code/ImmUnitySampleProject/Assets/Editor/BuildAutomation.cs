@@ -318,6 +318,56 @@ namespace ImmPlayer.Editor
             }
         }
 
+        public static void BuildIOSSimulatorCIPlayer()
+        {
+            EnsureBuildTargetSupported(BuildTargetGroup.iOS, BuildTarget.iOS, "iOS Simulator");
+
+            string outputPath = GetCommandLineValue(IosPlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = Path.Combine("..", "build", "unity-smoke", "ios-metal-simulator");
+            }
+            outputPath = Path.GetFullPath(outputPath);
+            Directory.CreateDirectory(outputPath);
+
+            iOSSdkVersion previousSdkVersion = PlayerSettings.iOS.sdkVersion;
+            bool previousDefaultGraphicsApis = PlayerSettings.GetUseDefaultGraphicsAPIs(BuildTarget.iOS);
+            GraphicsDeviceType[] previousGraphicsApis = PlayerSettings.GetGraphicsAPIs(BuildTarget.iOS);
+            XRGeneralSettings iosXrSettings =
+                XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.iOS);
+            bool previousInitManagerOnStart = iosXrSettings != null && iosXrSettings.InitManagerOnStart;
+            try
+            {
+                PlayerSettings.iOS.sdkVersion = iOSSdkVersion.SimulatorSDK;
+                PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, false);
+                PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, new[] { GraphicsDeviceType.Metal });
+                if (iosXrSettings != null)
+                {
+                    iosXrSettings.InitManagerOnStart = false;
+                }
+
+                Debug.Log($"[IMM_UNITY_IOS_SIM_BUILD_20260813] renderer=Metal sdk=SimulatorSDK scene={SmokeScenes[0]} xrStartup=disabled output={outputPath}");
+                BuildPlayer(
+                    BuildTarget.iOS,
+                    outputPath,
+                    BuildOptions.Development,
+                    "iOS Simulator Metal CI player");
+            }
+            finally
+            {
+                PlayerSettings.iOS.sdkVersion = previousSdkVersion;
+                PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.iOS, previousDefaultGraphicsApis);
+                if (!previousDefaultGraphicsApis && previousGraphicsApis != null && previousGraphicsApis.Length > 0)
+                {
+                    PlayerSettings.SetGraphicsAPIs(BuildTarget.iOS, previousGraphicsApis);
+                }
+                if (iosXrSettings != null)
+                {
+                    iosXrSettings.InitManagerOnStart = previousInitManagerOnStart;
+                }
+            }
+        }
+
         public static void RunMacOSEditorPlayModeSmoke()
         {
             EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneOSX, "macOS");

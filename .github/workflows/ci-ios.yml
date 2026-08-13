@@ -42,7 +42,7 @@ env:
 
 jobs:
   unity-ios-player-build:
-    name: Unity iOS Player Build
+    name: Unity iOS Metal Simulator Validation
     if: github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS]')
     runs-on: macos-14
     timeout-minutes: 45
@@ -54,17 +54,27 @@ jobs:
       - name: Install CMake
         run: brew install cmake
 
-      - name: Build iOS native libraries
+      - name: Build iOS Simulator native libraries
         run: |
           set -euo pipefail
-          cmake -S code/projects/ios -B build/ios-native \
+          case "${RUNNER_ARCH}" in
+            X64) simulator_arch=x86_64 ;;
+            ARM64) simulator_arch=arm64 ;;
+            *) echo "Unsupported macOS runner architecture: ${RUNNER_ARCH}" >&2; exit 1 ;;
+          esac
+          echo "SIMULATOR_ARCH=$simulator_arch" >> "$GITHUB_ENV"
+          cmake -S code/projects/ios -B build/ios-simulator-native \
             -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_SYSROOT=iphoneos \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
-          cmake --build build/ios-native --target ImmStrokeReader --config Release
-          cmake --build build/ios-native --target ImmUnity --config Release
+            -DCMAKE_OSX_SYSROOT=iphonesimulator \
+            -DCMAKE_OSX_ARCHITECTURES="$simulator_arch"
+          cmake --build build/ios-simulator-native --target ImmStrokeReader --config Release
+          cmake --build build/ios-simulator-native --target ImmUnity --config Release
+          cp build/ios-simulator-native/unity/libImmUnityPlugin.a code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/iOS/libImmUnityPlugin.a
+          cp build/ios-simulator-native/stroke-reader/libImmStrokeReader.a code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS/libImmStrokeReader.a
           test -s code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/iOS/libImmUnityPlugin.a
           test -s code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS/libImmStrokeReader.a
+          lipo -info code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Plugins/iOS/libImmUnityPlugin.a
+          lipo -info code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/iOS/libImmStrokeReader.a
 
       - name: Restore Unity iOS Library cache
         id: cache_library
@@ -73,14 +83,16 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-
+            UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-
 
       - name: Prepare compact diagnostic artifact
         run: mkdir -p artifacts/unity-ios-player-build
 
-      - name: Export Unity iOS Metal Xcode project
+      - name: Export Unity iOS Metal Simulator Xcode project
+        id: unity_ios_simulator_export
+        continue-on-error: true
         uses: game-ci/unity-builder@v4
         env:
           UNITY_EMAIL: ${{ vars.UNITY_EMAIL || 'unitytest@mikeage.net' }}
@@ -91,45 +103,194 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           targetPlatform: iOS
           versioning: None
-          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildIOSCIPlayer
+          buildMethod: ImmPlayer.Editor.BuildAutomation.BuildIOSSimulatorCIPlayer
           allowDirtyBuild: true
           cacheUnityInstallationOnMac: true
-          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-ios-player-build/unity-editor.log -immIosPlayerPath ${{ github.workspace }}/build/unity-ios-player/xcode
+          customParameters: -logFile ${{ github.workspace }}/artifacts/unity-ios-player-build/unity-editor.log -immIosPlayerPath ${{ github.workspace }}/build/unity-ios-player/simulator-xcode
 
-      - name: Verify generated Unity iOS project contract
+      - name: Verify generated Unity iOS Simulator project contract
+        continue-on-error: true
         run: |
           set -euo pipefail
-          test -f build/unity-ios-player/xcode/Unity-iPhone.xcodeproj/project.pbxproj
-          grep -R -q 'libImmUnityPlugin.a' build/unity-ios-player/xcode
-          grep -R -q 'libImmStrokeReader.a' build/unity-ios-player/xcode
-          printf '%s\n' 'target=iOS' 'renderer=Metal' 'scene=Assets/Scenes/SampleScene.unity' 'xrStartup=disabled' 'visualEvidence=false' > artifacts/unity-ios-player-build/generated-project-contract.txt
+          test -f build/unity-ios-player/simulator-xcode/Unity-iPhone.xcodeproj/project.pbxproj
+          grep -R -q 'libImmUnityPlugin.a' build/unity-ios-player/simulator-xcode
+          grep -R -q 'libImmStrokeReader.a' build/unity-ios-player/simulator-xcode
+          grep -q 'libz.tbd' build/unity-ios-player/simulator-xcode/Unity-iPhone.xcodeproj/project.pbxproj
+          printf '%s\n' 'target=iOS Simulator' 'renderer=Metal' 'scene=Assets/Scenes/SampleScene.unity' 'xrStartup=disabled' 'visualEvidence=required' > artifacts/unity-ios-player-build/generated-project-contract.txt
 
-      - name: Compile generated Unity iOS application without signing
+      - name: Compile generated Unity iOS Simulator application
+        id: unity_ios_simulator_compile
+        continue-on-error: true
         run: |
           set -euo pipefail
           xcodebuild \
-            -project build/unity-ios-player/xcode/Unity-iPhone.xcodeproj \
+            -project build/unity-ios-player/simulator-xcode/Unity-iPhone.xcodeproj \
             -scheme Unity-iPhone \
             -configuration Debug \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "${{ runner.temp }}/unity-ios-derived-data" \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "${{ runner.temp }}/unity-ios-simulator-derived-data" \
+            ARCHS="$SIMULATOR_ARCH" \
+            ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             build \
             2>&1 | tee artifacts/unity-ios-player-build/xcodebuild.log
 
-      - name: Write Unity iOS application-build manifest
+      - name: Boot deterministic iOS Simulator
+        id: ios_simulator_boot
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          runtime_id="$(xcrun simctl list runtimes available -j | python3 -c 'import json,sys; values=[item for item in json.load(sys.stdin)["runtimes"] if item.get("isAvailable") and item.get("identifier", "").startswith("com.apple.CoreSimulator.SimRuntime.iOS-")]; values.sort(key=lambda item: tuple(int(part) for part in item["version"].split("."))); print(values[-1]["identifier"])')"
+          device_type="$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; values=[item for item in json.load(sys.stdin)["devicetypes"] if item.get("identifier", "").startswith("com.apple.CoreSimulator.SimDeviceType.iPhone-") and "SE" not in item.get("name", "")]; print(values[-1]["identifier"])')"
+          simulator_udid="$(xcrun simctl create 'IMM Unity iOS Metal CI' "$device_type" "$runtime_id")"
+          echo "SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
+          printf '%s\n' "runtime=$runtime_id" "deviceType=$device_type" "udid=$simulator_udid" > artifacts/unity-ios-player-build/simulator-contract.txt
+          xcrun simctl boot "$simulator_udid"
+          xcrun simctl bootstatus "$simulator_udid" -b
+
+      - name: Run Unity iOS Metal visual smokes
+        id: unity_ios_simulator_smoke
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          artifact_dir="$PWD/artifacts/unity-ios-player-build"
+          app="$(find "${{ runner.temp }}/unity-ios-simulator-derived-data/Build/Products" -maxdepth 2 -type d -name '*.app' | head -n 1)"
+          test -n "$app"
+          test -d "$app"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          container="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$bundle_id" data)"
+          capture_dir="$container/Documents/imm-ci"
+          mkdir -p "$capture_dir"
+          printf '%s\n' "app=$app" "bundleId=$bundle_id" "container=$container" >> "$artifact_dir/simulator-contract.txt"
+
+          run_smoke() {
+            local label="$1"
+            local capture_name="$2"
+            local render_name="$3"
+            shift 3
+            local capture_path="$capture_dir/$capture_name"
+            local render_path="$capture_dir/$render_name"
+            local log_path="$artifact_dir/unity-ios-$label-player.log"
+            rm -f "$capture_path"
+            rm -f "$render_path"
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_OVERLAY_FIXTURE="${IMM_IOS_OVERLAY_FIXTURE:-0}" \
+            xcrun simctl launch --console --terminate-running-process \
+              "$SIMULATOR_UDID" "$bundle_id" \
+              -immSmokeCapturePath "$capture_path" \
+              -immSmokeRenderCapturePath "$render_path" \
+              -immSmokeFrames 120 \
+              -immSmokeQuit 1 \
+              -immSmokeExpectedGraphicsApi Metal \
+              "$@" > "$log_path" 2>&1 &
+            local launch_pid=$!
+            local captured=0
+            for _ in $(seq 1 240); do
+              if [ -s "$capture_path" ] && [ -s "$render_path" ]; then
+                captured=1
+                break
+              fi
+              if ! kill -0 "$launch_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            xcrun simctl terminate "$SIMULATOR_UDID" "$bundle_id" >/dev/null 2>&1 || true
+            wait "$launch_pid" || true
+            test "$captured" -eq 1
+            cp "$capture_path" "$artifact_dir/$capture_name"
+            cp "$render_path" "$artifact_dir/$render_name"
+          }
+
+          unset IMM_IOS_OVERLAY_FIXTURE
+          run_smoke full-depth unity-ios-metal-full-depth.png unity-ios-metal-render.png \
+            -immSmokeCompositionProbe 1
+          export IMM_IOS_OVERLAY_FIXTURE=1
+          run_smoke ordered-overlay unity-ios-metal-ordered-overlay.png unity-ios-metal-ordered-overlay-render.png \
+            -immSmokeCompositionProbe 1 \
+            -immSmokeOverlayProbe 1 \
+            -immSmokeMinOrderedOverlayImmUniqueColors 3000
+
+      - name: Shut down iOS Simulator
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -n "${SIMULATOR_UDID:-}" ]; then
+            xcrun simctl shutdown "$SIMULATOR_UDID" || true
+            xcrun simctl delete "$SIMULATOR_UDID" || true
+          fi
+
+      - name: Record Unity iOS Metal render metrics
+        if: always()
+        continue-on-error: true
+        run: |
+          status=0
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/unity-ios-player-build/unity-ios-metal-render.png \
+            --reference tests/baselines/render/unity-windows-directx-sample1.png \
+            --contract tests/baselines/render/unity-macos-metal-sample1.json \
+            --json-output artifacts/unity-ios-player-build/unity-ios-metal-render-metrics.json || status=$?
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/unity-ios-player-build/unity-ios-metal-full-depth.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-full-depth.json \
+            --json-output artifacts/unity-ios-player-build/unity-ios-metal-full-depth-metrics.json \
+            --diagnostic-overlay-output artifacts/unity-ios-player-build/unity-ios-metal-full-depth-diagnostic.png || status=$?
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/unity-ios-player-build/unity-ios-metal-ordered-overlay.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-ordered-overlay.json \
+            --json-output artifacts/unity-ios-player-build/unity-ios-metal-ordered-overlay-metrics.json \
+            --diagnostic-overlay-output artifacts/unity-ios-player-build/unity-ios-metal-ordered-overlay-diagnostic.png || status=$?
+          exit "$status"
+
+      - name: Classify Unity iOS Metal evidence
+        if: always()
+        run: >
+          python3 tests/tools/classify_unity_ios_metal.py
+          --artifact-dir artifacts/unity-ios-player-build
+          --simulator-outcome "${{ steps.unity_ios_simulator_smoke.outcome }}"
+          --output artifacts/unity-ios-player-build/unity-ios-metal-status.json
+          --full-depth-status-output artifacts/unity-ios-player-build/full-depth-status.json
+          --ordered-overlay-status-output artifacts/unity-ios-player-build/ordered-overlay-status.json
+
+      - name: Write Unity iOS Metal render reports
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/unity-ios-player-build/unity-ios-metal-render-metrics.json \
+            --candidate-capture artifacts/unity-ios-player-build/unity-ios-metal-render.png \
+            --output-dir artifacts/unity-ios-player-build/captures/render \
+            --markdown-output artifacts/unity-ios-player-build/render-report.md
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/unity-ios-player-build/unity-ios-metal-full-depth-metrics.json \
+            --candidate-capture artifacts/unity-ios-player-build/unity-ios-metal-full-depth.png \
+            --status-json artifacts/unity-ios-player-build/full-depth-status.json \
+            --output-dir artifacts/unity-ios-player-build/captures/full-depth \
+            --markdown-output artifacts/unity-ios-player-build/full-depth-render-report.md
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/unity-ios-player-build/unity-ios-metal-ordered-overlay-metrics.json \
+            --candidate-capture artifacts/unity-ios-player-build/unity-ios-metal-ordered-overlay.png \
+            --status-json artifacts/unity-ios-player-build/ordered-overlay-status.json \
+            --output-dir artifacts/unity-ios-player-build/captures/ordered-overlay \
+            --markdown-output artifacts/unity-ios-player-build/ordered-overlay-render-report.md
+
+      - name: Write Unity iOS Metal visual manifest
         if: always()
         run: >
           python3 tests/tools/write_ci_manifest.py
           --status "${{ job.status }}"
-          --failure-class packaging
+          --classification-json artifacts/unity-ios-player-build/unity-ios-metal-status.json
           --output artifacts/unity-ios-player-build/manifest.json
           --product unity
           --platform-name ios
-          --mode application-build
+          --mode non-vr
           --renderer metal
           --include artifacts/unity-ios-player-build
 
@@ -145,13 +306,13 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-ios-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-ios-simulator-metal-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload compact Unity iOS diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: UnityIOSPlayerBuildDiagnostics
+          name: UnityIOSMetalComposition
           path: artifacts/unity-ios-player-build
           if-no-files-found: error
           retention-days: 14

@@ -28,7 +28,7 @@ REQUIRED_JOBS = {
         "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report", "Hide per-lane core artifacts"],
     },
     ".github/workflows/ci-ios.yml": {
-        "unity-ios-player-build": ["Build iOS native libraries", "Export Unity iOS Metal Xcode project", "Verify generated Unity iOS project contract", "Compile generated Unity iOS application without signing", "Write Unity iOS application-build manifest", "Collect compact diagnostic summary", "Upload compact Unity iOS diagnostics"],
+        "unity-ios-player-build": ["Build iOS Simulator native libraries", "Export Unity iOS Metal Simulator Xcode project", "Verify generated Unity iOS Simulator project contract", "Compile generated Unity iOS Simulator application", "Boot deterministic iOS Simulator", "Run Unity iOS Metal visual smokes", "Record Unity iOS Metal render metrics", "Classify Unity iOS Metal evidence", "Write Unity iOS Metal render reports", "Write Unity iOS Metal visual manifest", "Collect compact diagnostic summary", "Upload compact Unity iOS diagnostics"],
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Classify Android GLES result", "Write CI manifest", "Collect artifact summary"],

@@ -128,6 +128,19 @@ def main() -> int:
         "[IMM_UNITY_IOS_BUILD_20260812]",
     ]:
         assert token in ios_player_build
+    ios_simulator_build = method_body(
+        unity_automation,
+        "public static void BuildIOSSimulatorCIPlayer()",
+    )
+    for token in [
+        "BuildTarget.iOS",
+        "iOSSdkVersion.SimulatorSDK",
+        "GraphicsDeviceType.Metal",
+        "SmokeScenes[0]",
+        "iosXrSettings.InitManagerOnStart = false",
+        "[IMM_UNITY_IOS_SIM_BUILD_20260813]",
+    ]:
+        assert token in ios_simulator_build
     editor_play = method_body(unity_automation, "public static void RunMacOSEditorPlayModeSmoke()")
     assert 'RunEditorPlayModeSmoke("macOS", SmokeScenes[0]' in editor_play
     assert "featureExamples.IsDocumentRenderReady" in unity_automation
@@ -179,11 +192,13 @@ def main() -> int:
         assert token in engine_workflow
     for token in [
         "contains(github.event.head_commit.message, '[CI IOS]')",
-        "Build iOS native libraries",
-        "BuildIOSCIPlayer",
-        'build/unity-ios-player/xcode',
-        'runner.temp }}/unity-ios-derived-data',
-        "UnityIOSPlayerBuildDiagnostics",
+        "Build iOS Simulator native libraries",
+        "BuildIOSSimulatorCIPlayer",
+        'build/unity-ios-player/simulator-xcode',
+        'runner.temp }}/unity-ios-simulator-derived-data',
+        "Run Unity iOS Metal visual smokes",
+        "classify_unity_ios_metal.py",
+        "UnityIOSMetalComposition",
     ]:
         assert token in ios_workflow
     assert "!contains(github.event.head_commit.message, '[CI IOS]')" in validation_workflow
