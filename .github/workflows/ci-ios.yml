@@ -331,11 +331,12 @@ jobs:
   godot-ios-package:
     name: Godot iOS Package and Metal Validation
     if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS GODOT]')
-    runs-on: macos-15
-    timeout-minutes: 45
+    runs-on: macos-26
+    timeout-minutes: 90
     env:
-      GODOT_VERSION: 4.6-stable
+      GODOT_VERSION: 4.7.1-stable
       GODOT_CPP_REF: godot-4.5-stable
+      GODOT_IOS_METAL_SIMULATOR_ENGINE_REF: 4.7.1-stable
       FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
       FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
       FTL_IOS_DEVICE: ${{ vars.FIREBASE_TEST_LAB_IOS_GODOT_DEVICE || 'model=iphonese3,version=18.4,locale=en,orientation=landscape' }}
@@ -352,6 +353,77 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/imm-godot-ios-scons"
           "$RUNNER_TEMP/imm-godot-ios-scons/bin/python" -m pip install --disable-pip-version-check SCons
           echo "SCONS_PYTHON=$RUNNER_TEMP/imm-godot-ios-scons/bin/python" >> "$GITHUB_ENV"
+
+      - name: Restore Godot iOS Metal Simulator engine cache
+        id: godot_ios_metal_simulator_engine_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/godot-ios-metal-simulator-engine/libgodot.a
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-guard-v1
+
+      - name: Build Godot arm64 iOS Simulator engine with Metal
+        id: godot_ios_metal_simulator_engine
+        run: |
+          set -euo pipefail
+          artifact_dir="$PWD/artifacts/godot-ios-metal"
+          engine_dir="$PWD/build/godot-ios-metal-simulator-engine"
+          engine_archive="$engine_dir/libgodot.a"
+          mkdir -p "$artifact_dir" "$engine_dir"
+          if [ ! -s "$engine_archive" ]; then
+            source_dir="$RUNNER_TEMP/godot-ios-metal-simulator-source"
+            git clone --depth 1 --branch "$GODOT_IOS_METAL_SIMULATOR_ENGINE_REF" \
+              https://github.com/godotengine/godot.git "$source_dir"
+            python3 - "$source_dir/platform/ios/detect.py" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          original = '''    if env["metal"] and env["simulator"]:
+              print_warning("iOS Simulator does not support the Metal rendering driver")
+              env["metal"] = False
+          '''
+          replacement = '''    if env["metal"] and env["simulator"]:
+              print_warning("IMM simulator probe: retaining the Metal rendering driver")
+          '''
+          if source.count(original) != 1:
+              raise SystemExit("Godot iOS Metal Simulator guard did not match exactly once")
+          path.write_text(source.replace(original, replacement), encoding="utf-8")
+          PY
+            "$SCONS_PYTHON" -m SCons -C "$source_dir" \
+              platform=ios \
+              target=template_debug \
+              arch=arm64 \
+              ios_simulator=yes \
+              metal=yes \
+              vulkan=no \
+              opengl3=yes \
+              2>&1 | tee "$artifact_dir/godot-metal-simulator-engine-build.log"
+            built_archive="$(find "$source_dir/bin" -maxdepth 1 -type f -name 'libgodot.ios.template_debug.arm64.simulator.a' -print -quit)"
+            test -n "$built_archive"
+            test -s "$built_archive"
+            cp "$built_archive" "$engine_archive"
+          else
+            printf '%s\n' "Reused Godot Metal Simulator engine cache: $engine_archive" \
+              | tee "$artifact_dir/godot-metal-simulator-engine-build.log"
+          fi
+          test -s "$engine_archive"
+          lipo -info "$engine_archive" | tee "$artifact_dir/godot-metal-simulator-engine-architecture.txt"
+          nm -gU "$engine_archive" > "$artifact_dir/godot-metal-simulator-engine-symbols.txt"
+          grep -Eq '[[:space:]]_main$' "$artifact_dir/godot-metal-simulator-engine-symbols.txt"
+          printf '%s\n' \
+            "godot_ref=$GODOT_IOS_METAL_SIMULATOR_ENGINE_REF" \
+            "architecture=arm64" \
+            "platform=iOS Simulator" \
+            "metal_guard=removed-for-runtime-probe" \
+            > "$artifact_dir/godot-metal-simulator-engine-contract.txt"
+
+      - name: Save Godot iOS Metal Simulator engine cache
+        if: steps.godot_ios_metal_simulator_engine.outcome == 'success' && steps.godot_ios_metal_simulator_engine_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/godot-ios-metal-simulator-engine/libgodot.a
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-guard-v1
 
       - name: Restore Godot iOS native build cache
         id: godot_ios_native_cache
@@ -440,7 +512,7 @@ jobs:
             build/godot-ios-simulator-native
           key: godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
 
-      - name: Download Godot 4.6 and iOS export templates
+      - name: Download Godot and iOS export templates
         id: godot_ios_tools
         continue-on-error: true
         run: |
@@ -455,7 +527,8 @@ jobs:
           unzip -q "$RUNNER_TEMP/$templates_name" -d "$RUNNER_TEMP/godot-ios-templates"
           godot_exe="$(find "$RUNNER_TEMP/godot-ios-editor" -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
           test -n "$godot_exe"
-          template_dir="$HOME/Library/Application Support/Godot/export_templates/4.6.stable"
+          template_version="${GODOT_VERSION/-/.}"
+          template_dir="$HOME/Library/Application Support/Godot/export_templates/$template_version"
           mkdir -p "$template_dir"
           cp -R "$RUNNER_TEMP/godot-ios-templates/templates/." "$template_dir/"
           test -s "$template_dir/ios.zip"
@@ -480,6 +553,25 @@ jobs:
           grep -R -q 'libimm_godot_extension.ios.template_debug.xcframework' build/godot-ios-export
           echo "GODOT_IOS_XCODE_PROJECT=$PWD/$project" >> "$GITHUB_ENV"
           xcodebuild -project "$project" -list -json > artifacts/godot-ios-metal/xcode-project-list.json
+
+      - name: Install Metal-enabled arm64 Godot engine into Simulator export
+        id: godot_ios_metal_simulator_engine_install
+        run: |
+          set -euo pipefail
+          engine_archive="$PWD/build/godot-ios-metal-simulator-engine/libgodot.a"
+          test -s "$engine_archive"
+          simulator_archives="$(find build/godot-ios-export \
+            -type f \
+            -name libgodot.a \
+            -path '*simulator*' \
+            -print)"
+          test -n "$simulator_archives"
+          while IFS= read -r simulator_archive; do
+            cp "$engine_archive" "$simulator_archive"
+            lipo -info "$simulator_archive"
+          done <<< "$simulator_archives"
+          printf '%s\n' "$simulator_archives" \
+            > artifacts/godot-ios-metal/replaced-simulator-engine-archives.txt
 
       - name: Compile exported Godot iOS application without signing
         id: godot_ios_compile
