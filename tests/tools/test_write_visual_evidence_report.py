@@ -24,6 +24,7 @@ def main() -> int:
         effective_status,
         required_depth_gaps_for_scope,
         row_required_for_scope,
+        row_visual_requirement,
         slugify,
         visual_matrix_cell,
     )
@@ -35,6 +36,13 @@ def main() -> int:
     }, "The main visual matrix must retain all three planned iOS targets"
 
     assert VISUAL_MATRIX_SYMBOLS["render_passed"] == "🟨"
+    assert not row_visual_requirement(
+        {
+            "mode": "application-build",
+            "renderer": "metal",
+            "baseline": "tests/baselines/content/sample1.json",
+        }
+    ), "A passing iOS application build is non-visual supporting evidence"
 
     assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"

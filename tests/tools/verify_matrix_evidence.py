@@ -27,8 +27,7 @@ def display_key(key: tuple[str, str, str, str]) -> str:
 
 def is_visual_row(row: dict) -> bool:
     baseline = str(row.get("baseline") or "")
-    renderer = str(row.get("renderer") or "")
-    return baseline.startswith("tests/baselines/render/") or renderer in {"directx", "vulkan", "metal"}
+    return baseline.startswith("tests/baselines/render/")
 
 
 def is_vr_row(row: dict) -> bool:

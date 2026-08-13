@@ -170,6 +170,23 @@ def run_verify(matrix: Path, summary: Path, output_dir: Path, *extra_args: str) 
 
 
 def main() -> int:
+    from verify_matrix_evidence import is_visual_row
+
+    assert not is_visual_row(
+        {
+            "mode": "application-build",
+            "renderer": "metal",
+            "baseline": "tests/baselines/content/sample1.json",
+        }
+    ), "A Metal compile/link row must not be treated as visual evidence"
+    assert is_visual_row(
+        {
+            "mode": "non-vr",
+            "renderer": "metal",
+            "baseline": "tests/baselines/render/unity-macos-metal-sample1.json",
+        }
+    )
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
         matrix_path = temp / "matrix_status.json"

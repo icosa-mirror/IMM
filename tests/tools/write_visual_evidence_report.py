@@ -254,8 +254,7 @@ def matrix_key(row: dict) -> str:
 
 def row_visual_requirement(row: dict) -> bool:
     baseline = str(row.get("baseline") or "")
-    renderer = str(row.get("renderer") or "")
-    return baseline.startswith("tests/baselines/render/") or renderer in {"directx", "vulkan", "metal"}
+    return baseline.startswith("tests/baselines/render/")
 
 
 def row_matches_key(row: dict, observed_key: str) -> bool:
@@ -306,8 +305,10 @@ def observed_matrix_results(input_root: Path, report_keys: set[str]) -> dict[str
                 if str(classification.get("failure_class") or "") == "build":
                     continue
             renderer = str(matrix.get("renderer") or "")
+            mode = str(matrix.get("mode") or "")
             if (
                 renderer in VISUAL_RENDERERS
+                and mode != "application-build"
                 and not find_strict_metrics(manifest_path.parent)
                 and result not in {"failed", "failure", "cancelled", "expected_failed"}
             ):
