@@ -331,7 +331,7 @@ jobs:
   godot-ios-package:
     name: Godot iOS Package and Metal Validation
     if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS GODOT]')
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       GODOT_VERSION: 4.6-stable
@@ -356,9 +356,9 @@ jobs:
           path: |
             thirdparty/godot-cpp
             build/godot-ios-native
-          key: godot-ios-native-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
+          key: godot-ios-native-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
           restore-keys: |
-            godot-ios-native-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
+            godot-ios-native-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
 
       - name: Build Godot iOS static GDExtension
         id: godot_ios_extension
@@ -459,6 +459,7 @@ jobs:
           test -d "$app"
           printf '%s\n' "project=$GODOT_IOS_XCODE_PROJECT" "scheme=$scheme" "app=$app" "renderer=Metal" "mainScene=res://scenes/SampleScene.tscn" > artifacts/godot-ios-metal/application-build-contract.txt
           echo "GODOT_IOS_APP=$app" >> "$GITHUB_ENV"
+          echo "GODOT_IOS_SCHEME=$scheme" >> "$GITHUB_ENV"
 
       - name: Probe Apple-silicon native iOS application destinations
         if: always()
@@ -472,6 +473,206 @@ jobs:
           uname -a > artifacts/godot-ios-metal/runner-platform.txt
           sysctl -n hw.optional.arm64 >> artifacts/godot-ios-metal/runner-platform.txt || true
 
+      - name: Run Godot iOS Metal application natively on Apple silicon
+        id: godot_ios_runtime
+        continue-on-error: true
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_XCODE_PROJECT:?missing exported Xcode project}"
+          : "${GODOT_IOS_SCHEME:?missing exported Xcode scheme}"
+          : "${GODOT_IOS_APP:?missing compiled iOS application}"
+          test "$(uname -m)" = arm64
+          grep -q 'variant:Designed for \[iPad,iPhone\]' artifacts/godot-ios-metal/xcode-destinations.txt
+
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$GODOT_IOS_SCHEME" \
+            -configuration Debug \
+            -destination 'platform=macOS,variant=Designed for [iPad,iPhone]' \
+            -derivedDataPath "$RUNNER_TEMP/godot-ios-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build \
+            2>&1 | tee artifacts/godot-ios-metal/xcodebuild-designed-for-ipad.log
+
+          app="$(find "$RUNNER_TEMP/godot-ios-derived-data/Build/Products" -type d -name '*.app' | head -n 1)"
+          test -n "$app"
+          test -d "$app"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          test -n "$bundle_id"
+          test -n "$executable"
+          xattr -dr com.apple.quarantine "$app" || true
+          codesign --force --deep --sign - --timestamp=none "$app"
+          codesign --verify --deep --strict --verbose=2 "$app" \
+            > artifacts/godot-ios-metal/codesign-verify.log 2>&1
+          plutil -p "$app/Info.plist" > artifacts/godot-ios-metal/application-info-plist.txt
+          printf '%s\n' \
+            "runtime=ios-on-mac" \
+            "destination=Designed for iPad" \
+            "host_arch=$(uname -m)" \
+            "bundle_id=$bundle_id" \
+            "executable=$executable" \
+            "renderer=Metal" \
+            > artifacts/godot-ios-metal/runtime-launch-contract.txt
+
+          /usr/bin/log stream --style compact --level debug --predicate "process == '$executable'" \
+            > artifacts/godot-ios-metal/godot-ios-system.log 2>&1 &
+          system_log_pid=$!
+          trap 'kill "$system_log_pid" 2>/dev/null || true' EXIT
+
+          run_app() {
+            local label="$1"
+            shift
+            local launch_log="artifacts/godot-ios-metal/${label}-launch.log"
+            local launcher_pid=''
+            local status=0
+            open -W -n "$app" --args "$@" > "$launch_log" 2>&1 &
+            launcher_pid=$!
+            for _second in $(seq 1 180); do
+              if ! kill -0 "$launcher_pid" 2>/dev/null; then
+                set +e
+                wait "$launcher_pid"
+                status=$?
+                set -e
+                return "$status"
+              fi
+              sleep 1
+            done
+            echo "Timed out waiting for $label" >> "$launch_log"
+            pkill -TERM -x "$executable" 2>/dev/null || true
+            kill "$launcher_pid" 2>/dev/null || true
+            wait "$launcher_pid" 2>/dev/null || true
+            return 124
+          }
+
+          collect_user_file() {
+            local name="$1"
+            local destination="$2"
+            local source=''
+            source="$(find "$HOME/Library" -type f -name "$name" -print -quit 2>/dev/null || true)"
+            test -n "$source"
+            test -s "$source"
+            cp "$source" "$destination"
+          }
+
+          runtime_status=0
+          run_app godot-ios-full-depth \
+            --scene res://scenes/VisualSmokeScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-render-graph-depth-composition=1 \
+            --imm-godot-visual-smoke-composition-mode=full_depth \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-render.png \
+            --imm-godot-visual-smoke-png=user://godot-ios-metal-full-depth.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-full-depth-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-render.png artifacts/godot-ios-metal/godot-ios-metal-render.png || runtime_status=1
+          collect_user_file godot-ios-metal-full-depth.png artifacts/godot-ios-metal/godot-ios-metal-full-depth.png || runtime_status=1
+          collect_user_file godot-ios-full-depth-result.log artifacts/godot-ios-metal/godot-ios-full-depth-result.log || runtime_status=1
+
+          run_app godot-ios-ordered-overlay \
+            --scene res://scenes/VisualSmokeScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-render-graph-depth-composition=1 \
+            --imm-godot-visual-smoke-composition-mode=ordered_overlay \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-ordered-overlay-render.png \
+            --imm-godot-visual-smoke-png=user://godot-ios-metal-ordered-overlay.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-ordered-overlay-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-ordered-overlay-render.png artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay-render.png || runtime_status=1
+          collect_user_file godot-ios-metal-ordered-overlay.png artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay.png || runtime_status=1
+          collect_user_file godot-ios-ordered-overlay-result.log artifacts/godot-ios-metal/godot-ios-ordered-overlay-result.log || runtime_status=1
+
+          run_app godot-ios-sample-play \
+            --scene res://scenes/SampleScene.tscn \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-sample-play-smoke=1 \
+            --imm-godot-sample-play-capture=user://godot-ios-sample-play.png \
+            --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
+          collect_user_file godot-ios-sample-play.png artifacts/godot-ios-metal/godot-ios-sample-play.png || runtime_status=1
+          collect_user_file godot-ios-sample-play.log artifacts/godot-ios-metal/godot-ios-sample-play.log || runtime_status=1
+          exit "$runtime_status"
+
+      - name: Record Godot iOS Metal render metrics
+        id: godot_ios_metrics
+        if: always()
+        continue-on-error: true
+        run: |
+          status=0
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/godot-ios-metal/godot-ios-metal-render.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/macos-metal-sample1.json \
+            --json-output artifacts/godot-ios-metal/godot-ios-metal-render-metrics.json || status=$?
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/godot-ios-metal/godot-ios-metal-full-depth.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-full-depth.json \
+            --json-output artifacts/godot-ios-metal/godot-ios-metal-full-depth-metrics.json \
+            --diagnostic-overlay-output artifacts/godot-ios-metal/godot-ios-metal-full-depth-diagnostic.png || status=$?
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/sample1-ordered-overlay.json \
+            --json-output artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay-metrics.json \
+            --diagnostic-overlay-output artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay-diagnostic.png || status=$?
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/godot-ios-metal/godot-ios-sample-play.png \
+            --reference tests/baselines/render/godot-windows-vulkan-sample-play.png \
+            --contract tests/baselines/render/godot-windows-vulkan-sample-play.json \
+            --json-output artifacts/godot-ios-metal/godot-ios-sample-play-metrics.json || status=$?
+          exit "$status"
+
+      - name: Classify Godot iOS Metal evidence
+        id: godot_ios_classification
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 tests/tools/classify_godot_ios_metal.py \
+            --artifact-dir artifacts/godot-ios-metal \
+            --runtime-outcome "${{ steps.godot_ios_runtime.outcome }}" \
+            --output artifacts/godot-ios-metal/godot-ios-metal-status.json \
+            --full-depth-status-output artifacts/godot-ios-metal/full-depth-status.json \
+            --ordered-overlay-status-output artifacts/godot-ios-metal/ordered-overlay-status.json
+
+      - name: Write Godot iOS Metal render reports
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/godot-ios-metal/godot-ios-metal-render-metrics.json \
+            --candidate-capture artifacts/godot-ios-metal/godot-ios-metal-render.png \
+            --output-dir artifacts/godot-ios-metal/captures/render \
+            --markdown-output artifacts/godot-ios-metal/render-report.md
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/godot-ios-metal/godot-ios-metal-full-depth-metrics.json \
+            --candidate-capture artifacts/godot-ios-metal/godot-ios-metal-full-depth.png \
+            --status-json artifacts/godot-ios-metal/full-depth-status.json \
+            --output-dir artifacts/godot-ios-metal/captures/full-depth \
+            --markdown-output artifacts/godot-ios-metal/full-depth-render-report.md
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay-metrics.json \
+            --candidate-capture artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay.png \
+            --status-json artifacts/godot-ios-metal/ordered-overlay-status.json \
+            --output-dir artifacts/godot-ios-metal/captures/ordered-overlay \
+            --markdown-output artifacts/godot-ios-metal/ordered-overlay-render-report.md
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/godot-ios-metal/godot-ios-sample-play-metrics.json \
+            --candidate-capture artifacts/godot-ios-metal/godot-ios-sample-play.png \
+            --output-dir artifacts/godot-ios-metal/captures/sample-play \
+            --markdown-output artifacts/godot-ios-metal/sample-play-render-report.md
+
       - name: Write Godot iOS package manifest
         if: always()
         run: |
@@ -484,10 +685,25 @@ jobs:
           python3 tests/tools/write_ci_manifest.py \
             --status "$result" \
             --failure-class "$failure_class" \
-            --output artifacts/godot-ios-metal/manifest.json \
+            --output artifacts/godot-ios-metal/application-build/manifest.json \
             --product godot \
             --platform-name ios \
             --mode application-build \
+            --renderer metal \
+            --include artifacts/godot-ios-metal/application-build-contract.txt \
+            --include artifacts/godot-ios-metal/godot-export.log \
+            --include artifacts/godot-ios-metal/xcodebuild.log
+
+      - name: Write Godot iOS Metal visual manifest
+        if: always()
+        run: |
+          python3 tests/tools/write_ci_manifest.py \
+            --status "${{ steps.godot_ios_classification.outcome }}" \
+            --classification-json artifacts/godot-ios-metal/godot-ios-metal-status.json \
+            --output artifacts/godot-ios-metal/manifest.json \
+            --product godot \
+            --platform-name ios \
+            --mode non-vr \
             --renderer metal \
             --include artifacts/godot-ios-metal
 
@@ -511,3 +727,6 @@ jobs:
           test "${{ steps.godot_ios_tools.outcome }}" = success
           test "${{ steps.godot_ios_export.outcome }}" = success
           test "${{ steps.godot_ios_compile.outcome }}" = success
+          test "${{ steps.godot_ios_runtime.outcome }}" = success
+          test "${{ steps.godot_ios_metrics.outcome }}" = success
+          test "${{ steps.godot_ios_classification.outcome }}" = success

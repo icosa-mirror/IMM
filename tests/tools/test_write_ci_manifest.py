@@ -124,6 +124,7 @@ def main() -> int:
                     "compositing": "success",
                     "depth_composition": "success",
                     "ordered_overlay": "success",
+                    "run_button": "success",
                 }
             ),
             encoding="utf-8",
@@ -162,6 +163,7 @@ def main() -> int:
             "compositing": "success",
             "depth_composition": "success",
             "ordered_overlay": "success",
+            "run_button": "success",
         }
 
         skipped_status = Path(temp_dir) / "skipped-status.json"

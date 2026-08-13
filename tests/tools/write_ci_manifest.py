@@ -175,6 +175,7 @@ def main() -> int:
             "depth_composition",
             "depth_interleaving",
             "ordered_overlay",
+            "run_button",
         ):
             value = classifier.get(key)
             if value is not None:

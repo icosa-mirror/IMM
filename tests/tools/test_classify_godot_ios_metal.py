@@ -21,7 +21,7 @@ def write_metric(path: Path, passed: bool, failure: str = "visual mismatch") -> 
 
 
 def prepare(root: Path) -> None:
-    for stem in ("render", "full-depth", "ordered-overlay", "sample-play"):
+    for stem in ("render", "full-depth", "ordered-overlay"):
         (root / f"godot-ios-metal-{stem}.png").write_bytes(b"capture")
         write_metric(root / f"godot-ios-metal-{stem}-metrics.json", True)
     (root / "godot-ios-sample-play.png").write_bytes(b"capture")

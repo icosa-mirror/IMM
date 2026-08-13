@@ -313,6 +313,9 @@ def verify_godot_scenes() -> None:
     native_resources, native_nodes = parse_tscn(GODOT_NATIVE_SMOKE_SCENE)
     metal_visual_resources, metal_visual_nodes = parse_tscn(GODOT_METAL_VISUAL_SCENE)
     visual_resources, visual_nodes = parse_tscn(GODOT_VISUAL_SCENE)
+    visual_controller = GODOT_VISUAL_CONTROLLER.read_text(encoding="utf-8")
+    compositor_header = COMPOSITOR_EFFECT_HEADER.read_text(encoding="utf-8")
+    compositor_source = COMPOSITOR_EFFECT_SOURCE.read_text(encoding="utf-8")
 
     sample_resource_paths = {resource["path"] for resource in sample_resources}
     script_resource_paths = {resource["path"] for resource in script_resources}
@@ -339,6 +342,19 @@ def verify_godot_scenes() -> None:
         raise RuntimeError("VisualSmokeScene.tscn does not reference visual_smoke_controller.gd")
     if "res://addons/imm_viewer/imm_viewer_node.gd" in visual_resource_paths:
         raise RuntimeError("VisualSmokeScene.tscn must not reference the script stub")
+    for token in [
+        'set("render_graph_depth_composition_enabled"',
+        "COMPOSITION_MODE_RENDER_ONLY",
+    ]:
+        if token not in visual_controller:
+            raise RuntimeError(f"Visual smoke controller is missing depth composition property contract: {token}")
+    for token in [
+        "set_render_graph_depth_composition_enabled",
+        "is_render_graph_depth_composition_enabled",
+        "_render_graph_depth_composition_enabled",
+    ]:
+        if token not in compositor_header or token not in compositor_source:
+            raise RuntimeError(f"Godot compositor is missing depth composition property contract: {token}")
 
     sample_viewer = node_by_name(sample_nodes, "ImmViewer")
     if sample_viewer.get("type") != "ImmViewerNode":

@@ -25,6 +25,8 @@ namespace godot
         static void queue_render_request(int camera_id, int width, int height);
 
         void _render_callback(int32_t effect_callback_type, RenderData *render_data) override;
+        void set_render_graph_depth_composition_enabled(bool enabled);
+        bool is_render_graph_depth_composition_enabled() const;
         Dictionary get_diagnostics() const;
 
     private:
@@ -42,6 +44,7 @@ namespace godot
         int64_t _intermediate_format = -1;
         int64_t _intermediate_depth_format = -1;
         int64_t _depth_composited_format = -1;
+        bool _render_graph_depth_composition_enabled = false;
         int _callback_count = 0;
         int _last_callback_type = -1;
         bool _last_had_render_data = false;

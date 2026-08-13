@@ -260,6 +260,11 @@ def main() -> int:
         'GODOT_CPP_REF: godot-4.5-stable',
         '--export-debug "iOS Development"',
         "Compile exported Godot iOS application without signing",
+        "Run Godot iOS Metal application natively on Apple silicon",
+        "variant=Designed for [iPad,iPhone]",
+        "godot-ios-sample-play.png",
+        "classify_godot_ios_metal.py",
+        "Write Godot iOS Metal visual manifest",
         "CODE_SIGNING_ALLOWED=NO",
         "GodotIOSMetal",
     ]:

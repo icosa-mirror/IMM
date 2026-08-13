@@ -593,7 +593,20 @@ ImmViewerCompositorEffect::~ImmViewerCompositorEffect()
 
 void ImmViewerCompositorEffect::_bind_methods()
 {
+    ClassDB::bind_method(D_METHOD("set_render_graph_depth_composition_enabled", "enabled"), &ImmViewerCompositorEffect::set_render_graph_depth_composition_enabled);
+    ClassDB::bind_method(D_METHOD("is_render_graph_depth_composition_enabled"), &ImmViewerCompositorEffect::is_render_graph_depth_composition_enabled);
     ClassDB::bind_method(D_METHOD("get_diagnostics"), &ImmViewerCompositorEffect::get_diagnostics);
+    ADD_PROPERTY(PropertyInfo(Variant::BOOL, "render_graph_depth_composition_enabled"), "set_render_graph_depth_composition_enabled", "is_render_graph_depth_composition_enabled");
+}
+
+void ImmViewerCompositorEffect::set_render_graph_depth_composition_enabled(bool enabled)
+{
+    _render_graph_depth_composition_enabled = enabled;
+}
+
+bool ImmViewerCompositorEffect::is_render_graph_depth_composition_enabled() const
+{
+    return _render_graph_depth_composition_enabled;
 }
 
 void ImmViewerCompositorEffect::queue_render_request(int camera_id, int width, int height)
@@ -835,7 +848,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         const int render_width = render_request.width > 0 ? render_request.width : target_size.x;
         const int render_height = render_request.height > 0 ? render_request.height : target_size.y;
         const bool direct_vulkan_depth_composition_enabled = std::getenv("IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION") != nullptr;
-        const bool render_graph_depth_composition_enabled =
+        const bool render_graph_depth_composition_enabled = _render_graph_depth_composition_enabled ||
             std::getenv("IMM_GODOT_RENDER_GRAPH_DEPTH_COMPOSITION") != nullptr ||
             std::getenv("IMM_GODOT_RENDER_GRAPH_VULKAN_DEPTH_COMPOSITION") != nullptr;
         const bool can_direct_vulkan_color_target = direct_vulkan_depth_composition_enabled &&
@@ -1040,6 +1053,7 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     std::lock_guard<std::mutex> lock(_diagnostics_mutex);
 
     Dictionary result;
+    result["render_graph_depth_composition_enabled"] = _render_graph_depth_composition_enabled;
     result["callback_count"] = _callback_count;
     result["last_callback_type"] = _last_callback_type;
     result["last_had_render_data"] = _last_had_render_data;

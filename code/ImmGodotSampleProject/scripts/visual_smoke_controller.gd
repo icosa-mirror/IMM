@@ -140,6 +140,7 @@ func _setup_compositor() -> bool:
 
 	var compositor: Compositor = Compositor.new()
 	compositor.compositor_effects = [_compositor_effect]
+	_compositor_effect.set("render_graph_depth_composition_enabled", _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY)
 	if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
 		_compositor_effect.set("effect_callback_type", CompositorEffect.EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
 		_compositor_effect.set("access_resolved_color", true)

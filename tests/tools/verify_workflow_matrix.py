@@ -29,6 +29,7 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-ios.yml": {
         "unity-ios-player-build": ["Build iOS Simulator native libraries", "Export Unity iOS Metal Simulator Xcode project", "Verify generated Unity iOS Simulator project contract", "Compile generated Unity iOS Simulator application", "Boot deterministic iOS Simulator", "Run Unity iOS Metal visual smokes", "Record Unity iOS Metal render metrics", "Classify Unity iOS Metal evidence", "Write Unity iOS Metal render reports", "Write Unity iOS Metal visual manifest", "Collect compact diagnostic summary", "Upload compact Unity iOS diagnostics"],
+        "godot-ios-package": ["Cache Godot iOS native build", "Build Godot iOS static GDExtension", "Download Godot 4.6 and iOS export templates", "Export ordinary Godot sample to iOS Xcode project", "Compile exported Godot iOS application without signing", "Probe Apple-silicon native iOS application destinations", "Run Godot iOS Metal application natively on Apple silicon", "Record Godot iOS Metal render metrics", "Classify Godot iOS Metal evidence", "Write Godot iOS Metal render reports", "Write Godot iOS package manifest", "Write Godot iOS Metal visual manifest", "Collect Godot iOS diagnostics", "Upload Godot iOS diagnostics"],
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Classify Android GLES result", "Write CI manifest", "Collect artifact summary"],
@@ -77,6 +78,7 @@ REQUIRED_JOBS = {
 REQUIRED_RUNS_ON = {
     ".github/workflows/ci-ios.yml": {
         "unity-ios-player-build": {"macos-14"},
+        "godot-ios-package": {"macos-15"},
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": {"ubuntu-latest"},
@@ -114,6 +116,7 @@ REQUIRED_RUNS_ON = {
 REQUIRED_JOB_TIMEOUTS = {
     ".github/workflows/ci-ios.yml": {
         "unity-ios-player-build",
+        "godot-ios-package",
     },
     ".github/workflows/ci-core.yml": {
         "baseline-content",
@@ -160,6 +163,9 @@ REQUIRED_JOB_TIMEOUTS = {
     },
 }
 REQUIRED_STEP_TIMEOUTS = {
+    ".github/workflows/ci-ios.yml": {
+        "godot-ios-package": {"Run Godot iOS Metal application natively on Apple silicon"},
+    },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": {"Run Android GLES smoke in Firebase Test Lab"},
         "android-standalone-vulkan": {"Run Android Vulkan smoke in Firebase Test Lab"},
@@ -189,6 +195,16 @@ REQUIRED_STEP_TIMEOUTS = {
     },
 }
 REQUIRED_ALWAYS_STEPS = {
+    ".github/workflows/ci-ios.yml": {
+        "godot-ios-package": {
+            "Record Godot iOS Metal render metrics",
+            "Classify Godot iOS Metal evidence",
+            "Write Godot iOS Metal render reports",
+            "Write Godot iOS package manifest",
+            "Write Godot iOS Metal visual manifest",
+            "Collect Godot iOS diagnostics",
+        },
+    },
     ".github/workflows/ci-engine.yml": {
         "unity-macos-metal-composition": {
             "Classify Unity macOS Metal visual smokes",
