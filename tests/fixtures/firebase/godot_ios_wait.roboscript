@@ -1,0 +1,13 @@
+[
+  {
+    "eventType": "WAIT",
+    "delayTime": 15000
+  },
+  {
+    "eventType": "TAKE_SCREENSHOT",
+    "screenshotName": "godot-ios-sample-play"
+  },
+  {
+    "eventType": "TERMINATE_CRAWL"
+  }
+]
