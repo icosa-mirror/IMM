@@ -165,6 +165,29 @@ content, passes depth composition, and produces retained evidence in CI.
 
 ## Phase 3: Godot iOS packaging and visual validation
 
+### Current status (2026-08-13)
+
+1. Complete and proven in focused CI: the Godot iOS static GDExtension and
+   XCFramework build, ordinary sample-project export, unsigned arm64 iPhoneOS
+   application compilation, application bundle assembly, and IPA packaging.
+2. The focused lane uses an exact native-build cache, skips the unrelated main
+   build through `[CI IOS] [CI IOS GODOT]`, records the current Firebase iOS
+   device catalogue, and reports the Testing API matrix result directly even
+   when Cloud Tool Results is disabled.
+3. Firebase Game Loop scheduling was proven on both iPhone 14 Pro / iOS 16.6
+   and iPhone SE 3 / iOS 18.4 after removing Godot's Test-Lab-incompatible
+   `iphone-ipad-minimum-performance-a12` metadata token from the validation IPA.
+   The ordinary exported project and render code remain unchanged.
+4. Physical execution is currently blocked before application startup. Firebase
+   makes three infrastructure/install attempts on either device pool and writes
+   no device log, video, or screenshot. Retained signing diagnostics show the
+   uploaded IPA is ad-hoc signed, has no TeamIdentifier, and contains no
+   `embedded.mobileprovision`.
+5. The repository currently has no Apple signing certificate or provisioning
+   profile secrets. A development- or ad-hoc-distribution-signed IPA is therefore
+   the next required input. Until it is available, the Godot iOS visual/depth
+   matrix cell must remain unpromoted and Phase 3 is not complete.
+
 ### Implementation
 
 1. Build the Godot native integration and its dependencies for the required iOS
