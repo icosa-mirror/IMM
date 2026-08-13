@@ -554,7 +554,6 @@ jobs:
             --project "$FTL_PROJECT_ID" \
             --type game-loop \
             --app "$GODOT_IOS_IPA" \
-            --scenario-numbers 1 \
             --device "$FTL_IOS_DEVICE" \
             --timeout 3m \
             --results-bucket "$FTL_RESULTS_BUCKET" \
