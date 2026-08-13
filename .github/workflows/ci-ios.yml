@@ -179,7 +179,6 @@ jobs:
             local label="$1"
             local capture_name="$2"
             local render_name="$3"
-            shift 3
             local capture_path="$capture_dir/$capture_name"
             local render_path="$capture_dir/$render_name"
             local log_path="$artifact_dir/unity-ios-$label-player.log"
@@ -187,14 +186,16 @@ jobs:
             rm -f "$render_path"
             SIMCTL_CHILD_IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
             SIMCTL_CHILD_IMM_UNITY_SMOKE_OVERLAY_FIXTURE="${IMM_IOS_OVERLAY_FIXTURE:-0}" \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_CAPTURE_PATH="$capture_path" \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_RENDER_CAPTURE_PATH="$render_path" \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_FRAMES=120 \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_QUIT=1 \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_COMPOSITION_PROBE=1 \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_OVERLAY_PROBE="${IMM_IOS_OVERLAY_PROBE:-0}" \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_MIN_ORDERED_OVERLAY_IMM_UNIQUE_COLORS=3000 \
+            SIMCTL_CHILD_IMM_UNITY_EXPECT_GRAPHICS_API=Metal \
             xcrun simctl launch --console --terminate-running-process \
-              "$SIMULATOR_UDID" "$bundle_id" \
-              -immSmokeCapturePath "$capture_path" \
-              -immSmokeRenderCapturePath "$render_path" \
-              -immSmokeFrames 120 \
-              -immSmokeQuit 1 \
-              -immSmokeExpectedGraphicsApi Metal \
-              "$@" > "$log_path" 2>&1 &
+              "$SIMULATOR_UDID" "$bundle_id" > "$log_path" 2>&1 &
             local launch_pid=$!
             local captured=0
             for _ in $(seq 1 240); do
@@ -215,13 +216,11 @@ jobs:
           }
 
           unset IMM_IOS_OVERLAY_FIXTURE
-          run_smoke full-depth unity-ios-metal-full-depth.png unity-ios-metal-render.png \
-            -immSmokeCompositionProbe 1
+          unset IMM_IOS_OVERLAY_PROBE
+          run_smoke full-depth unity-ios-metal-full-depth.png unity-ios-metal-render.png
           export IMM_IOS_OVERLAY_FIXTURE=1
-          run_smoke ordered-overlay unity-ios-metal-ordered-overlay.png unity-ios-metal-ordered-overlay-render.png \
-            -immSmokeCompositionProbe 1 \
-            -immSmokeOverlayProbe 1 \
-            -immSmokeMinOrderedOverlayImmUniqueColors 3000
+          export IMM_IOS_OVERLAY_PROBE=1
+          run_smoke ordered-overlay unity-ios-metal-ordered-overlay.png unity-ios-metal-ordered-overlay-render.png
 
       - name: Shut down iOS Simulator
         if: always()

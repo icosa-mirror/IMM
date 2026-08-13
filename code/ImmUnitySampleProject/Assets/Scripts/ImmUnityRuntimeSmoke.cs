@@ -22,6 +22,7 @@ namespace ImmPlayer
         private const string XrProbeEnv = "IMM_UNITY_SMOKE_XR_PROBE";
         private const string SyntheticStereoProbeEnv = "IMM_UNITY_SMOKE_SYNTHETIC_STEREO_PROBE";
         private const string ExpectedGraphicsApiEnv = "IMM_UNITY_EXPECT_GRAPHICS_API";
+        private const string MinOrderedOverlayImmUniqueColorsEnv = "IMM_UNITY_SMOKE_MIN_ORDERED_OVERLAY_IMM_UNIQUE_COLORS";
         private const string DisableMsaaEnv = "IMM_UNITY_SMOKE_DISABLE_MSAA";
         private const string CaptureCameraTextureEnv = "IMM_UNITY_SMOKE_CAPTURE_CAMERA_TEXTURE";
         private const string DisabledEnv = "IMM_UNITY_SMOKE_DISABLED";
@@ -77,6 +78,7 @@ namespace ImmPlayer
             {
                 smoke._renderCapturePath = Environment.GetEnvironmentVariable(RenderCapturePathEnv);
             }
+            Debug.Log($"[IMM_UNITY_RUNTIME_SMOKE_INSTALL_20260813] capture={capturePath} renderCapture={smoke._renderCapturePath}");
 #if IMM_UNITY_ANDROID_VULKAN_CI
             smoke._renderCapturePath = Path.Combine(Application.persistentDataPath, "imm-ci", "unity-android-vulkan-render.png");
             smoke._presentationCapturePath = Path.Combine(
@@ -365,6 +367,7 @@ namespace ImmPlayer
                     OrderedOverlayImmResult immResult = AnalyzeOrderedOverlayImmContent(pixels, width, height);
                     int minOrderedOverlayImmUniqueColors = GetPositiveCommandLineInt(
                         MinOrderedOverlayImmUniqueColorsArg,
+                        MinOrderedOverlayImmUniqueColorsEnv,
                         MinOrderedOverlayImmUniqueColors);
                     Debug.Log($"{Prefix}composition orderedOverlayImm={immResult}");
                     if (immResult.Share < MinOrderedOverlayImmShare || immResult.UniqueColors < minOrderedOverlayImmUniqueColors)
@@ -1412,9 +1415,13 @@ namespace ImmPlayer
             return string.Empty;
         }
 
-        private static int GetPositiveCommandLineInt(string key, int fallback)
+        private static int GetPositiveCommandLineInt(string key, string envName, int fallback)
         {
             string value = GetCommandLineValue(key);
+            if (string.IsNullOrEmpty(value))
+            {
+                value = Environment.GetEnvironmentVariable(envName);
+            }
             return !string.IsNullOrEmpty(value) &&
                 int.TryParse(value, out int parsed) &&
                 parsed > 0

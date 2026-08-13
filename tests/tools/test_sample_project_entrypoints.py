@@ -175,6 +175,7 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     assert "IMM_UNITY_SMOKE_DISABLED" in unity_runtime_smoke
     assert "if (IsTruthyValue(Environment.GetEnvironmentVariable(DisabledEnv)))" in unity_runtime_smoke
+    assert "[IMM_UNITY_RUNTIME_SMOKE_INSTALL_20260813]" in unity_runtime_smoke
     for token in [
         "Build Unity macOS Metal smoke player and run project Play-button smoke",
         "buildMethod: ImmPlayer.Editor.BuildAutomation.BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke",
@@ -201,6 +202,8 @@ def main() -> int:
         "UnityIOSMetalComposition",
         "simctl list devices available",
         "select_ios_simulator.py",
+        "SIMCTL_CHILD_IMM_UNITY_SMOKE_CAPTURE_PATH",
+        "SIMCTL_CHILD_IMM_UNITY_EXPECT_GRAPHICS_API=Metal",
     ]:
         assert token in ios_workflow
     assert "simctl create" not in ios_workflow
