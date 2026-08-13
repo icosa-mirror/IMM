@@ -338,7 +338,7 @@ jobs:
       GODOT_CPP_REF: godot-4.5-stable
       FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
       FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
-      FTL_IOS_DEVICE: ${{ vars.FIREBASE_TEST_LAB_IOS_GODOT_DEVICE || 'model=iphone14pro,version=16.6,locale=en,orientation=landscape' }}
+      FTL_IOS_DEVICE: ${{ vars.FIREBASE_TEST_LAB_IOS_GODOT_DEVICE || 'model=iphonese3,version=18.4,locale=en,orientation=landscape' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

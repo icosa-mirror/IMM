@@ -270,7 +270,7 @@ def main() -> int:
         'if "arm64" not in info["UIRequiredDeviceCapabilities"]',
         "firebase-test-matrix.json",
         "FIREBASE_TEST_LAB_IOS_GODOT_DEVICE",
-        "model=iphone14pro,version=16.6,locale=en,orientation=landscape",
+        "model=iphonese3,version=18.4,locale=en,orientation=landscape",
         "firebase-ios-models.json",
         "runtime=firebase-test-lab-ios-game-loop",
         "godot-ios-sample-play.png",
