@@ -490,6 +490,13 @@ jobs:
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           test -n "$bundle_id"
           test -n "$executable"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0 dict' "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLName string org.linuxfoundation.imm.firebase-game-loop' "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array' "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string firebase-game-loop' "$app/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' "$app/Info.plist" \
+            | grep -qx firebase-game-loop
           codesign --force --deep --sign - --timestamp=none "$app"
           codesign --verify --deep --strict --verbose=2 "$app" \
             > artifacts/godot-ios-metal/codesign-verify.log 2>&1
@@ -503,7 +510,7 @@ jobs:
           (cd "$(dirname "$payload")" && ditto -c -k --sequesterRsrc --keepParent Payload "$ipa")
           test -s "$ipa"
           printf '%s\n' \
-            "runtime=firebase-test-lab-ios-robo" \
+            "runtime=firebase-test-lab-ios-game-loop" \
             "bundle_id=$bundle_id" \
             "executable=$executable" \
             "renderer=Metal" \
@@ -526,8 +533,6 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
-        with:
-          install_components: alpha
 
       - name: Run ordinary Godot iOS sample on Firebase Test Lab
         id: godot_ios_ftl
@@ -545,11 +550,11 @@ jobs:
           printf '%s\n' "$FTL_IOS_DEVICE" \
             > artifacts/godot-ios-metal/firebase-ios-selected-device.txt
           set +e
-          gcloud alpha firebase test ios run \
+          gcloud firebase test ios run \
             --project "$FTL_PROJECT_ID" \
-            --type robo \
+            --type game-loop \
             --app "$GODOT_IOS_IPA" \
-            --robo-script tests/fixtures/firebase/godot_ios_wait.roboscript \
+            --scenario-numbers 1 \
             --device "$FTL_IOS_DEVICE" \
             --timeout 3m \
             --results-bucket "$FTL_RESULTS_BUCKET" \
@@ -560,6 +565,34 @@ jobs:
             2> artifacts/godot-ios-metal/gcloud-firebase-test.stderr.txt
           status=$?
           set -e
+          matrix_id="$(grep -Eo 'matrix-[a-z0-9]+' artifacts/godot-ios-metal/gcloud-firebase-test.stderr.txt | head -n 1 || true)"
+          if [ -n "$matrix_id" ]; then
+            access_token="$(gcloud auth print-access-token)"
+            curl -fsS \
+              -H "Authorization: Bearer $access_token" \
+              "https://testing.googleapis.com/v1/projects/${FTL_PROJECT_ID}/testMatrices/${matrix_id}" \
+              > artifacts/godot-ios-metal/firebase-test-matrix.json || true
+            if python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("artifacts/godot-ios-metal/firebase-test-matrix.json")
+          if not path.is_file():
+              raise SystemExit(1)
+          matrix = json.loads(path.read_text(encoding="utf-8"))
+          executions = matrix.get("testExecutions", [])
+          passed = (
+              matrix.get("state") == "FINISHED"
+              and matrix.get("outcomeSummary") == "SUCCESS"
+              and executions
+              and all(item.get("state") == "FINISHED" for item in executions)
+          )
+          raise SystemExit(0 if passed else 1)
+          PY
+            then
+              status=0
+            fi
+          fi
           printf '%s\n' "$status" > artifacts/godot-ios-metal/gcloud-exit-code.txt
           gcloud storage cp --recursive \
             "gs://${FTL_RESULTS_BUCKET}/${results_dir}" \
