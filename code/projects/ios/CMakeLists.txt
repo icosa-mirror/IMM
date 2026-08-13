@@ -266,6 +266,80 @@ add_custom_command(TARGET ImmUnity POST_BUILD
         "$<TARGET_FILE:turbojpeg-static>"
 )
 
+# -----------------------------------------------------------------------------
+# ImmGodot GDExtension (iOS)
+# -----------------------------------------------------------------------------
+
+# Godot exports native iOS GDExtensions as static XCFrameworks.  The focused
+# iOS workflow builds the matching godot-cpp archive first and passes both
+# paths here.  Keeping this target optional preserves the lower-cost Unity and
+# Stroke Reader archive builds.
+set(IMM_GODOT_CPP_ROOT "" CACHE PATH "Path to a generated godot-cpp checkout for the iOS GDExtension")
+set(IMM_GODOT_CPP_LIBRARY "" CACHE FILEPATH "Path to the matching iOS godot-cpp static library")
+
+if(IMM_GODOT_CPP_ROOT OR IMM_GODOT_CPP_LIBRARY)
+    if(NOT IS_DIRECTORY "${IMM_GODOT_CPP_ROOT}")
+        message(FATAL_ERROR "IMM_GODOT_CPP_ROOT must name a generated godot-cpp checkout")
+    endif()
+    if(NOT EXISTS "${IMM_GODOT_CPP_LIBRARY}")
+        message(FATAL_ERROR "IMM_GODOT_CPP_LIBRARY must name the matching iOS godot-cpp archive")
+    endif()
+
+    add_library(ImmGodotPluginIOS STATIC
+        ${CODE_DIR}/appImmGodot/src/main.cpp
+        ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
+    )
+    target_compile_definitions(ImmGodotPluginIOS PUBLIC IMM_IOS=1)
+    target_include_directories(ImmGodotPluginIOS PUBLIC ${CODE_DIR})
+    target_link_libraries(ImmGodotPluginIOS PRIVATE libImmPlayerUnity libImmImporterUnity libImmCoreUnity)
+    set_target_properties(ImmGodotPluginIOS PROPERTIES
+        OUTPUT_NAME "ImmGodotPlugin"
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot-objects
+    )
+
+    add_library(ImmGodotIOSGDExtension STATIC
+        ${CODE_DIR}/appImmGodotGDExtension/src/imm_viewer_compositor_effect.cpp
+        ${CODE_DIR}/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm
+        ${CODE_DIR}/appImmGodotGDExtension/src/imm_viewer_vulkan_frame.cpp
+        ${CODE_DIR}/appImmGodotGDExtension/src/imm_viewer_node.cpp
+        ${CODE_DIR}/appImmGodotGDExtension/src/register_types.cpp
+    )
+    target_compile_definitions(ImmGodotIOSGDExtension PRIVATE
+        IMM_IOS=1
+        IOS_ENABLED
+        TYPED_METHOD_BIND
+    )
+    target_include_directories(ImmGodotIOSGDExtension PRIVATE
+        ${CODE_DIR}
+        ${IMM_GODOT_CPP_ROOT}/include
+        ${IMM_GODOT_CPP_ROOT}/gen/include
+        ${IMM_GODOT_CPP_ROOT}/gdextension
+    )
+    target_link_libraries(ImmGodotIOSGDExtension PRIVATE ImmGodotPluginIOS)
+    set_target_properties(ImmGodotIOSGDExtension PROPERTIES
+        OUTPUT_NAME "imm_godot_extension_objects"
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/godot-objects
+    )
+
+    add_custom_command(TARGET ImmGodotIOSGDExtension POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/godot"
+        COMMAND xcrun libtool -static -o "${CMAKE_BINARY_DIR}/godot/libimm_godot_extension.a"
+            "$<TARGET_FILE:ImmGodotIOSGDExtension>"
+            "$<TARGET_FILE:ImmGodotPluginIOS>"
+            "${IMM_GODOT_CPP_LIBRARY}"
+            "$<TARGET_FILE:libImmPlayerUnity>"
+            "$<TARGET_FILE:libImmImporterUnity>"
+            "$<TARGET_FILE:libImmCoreUnity>"
+            "$<TARGET_FILE:ogg>"
+            "$<TARGET_FILE:vorbis>"
+            "$<TARGET_FILE:opus>"
+            "$<TARGET_FILE:png_static>"
+            "$<TARGET_FILE:turbojpeg-static>"
+        COMMAND ${CMAKE_COMMAND} -E echo "[IMM_GODOT_IOS_PACKAGE_20260813] archive=${CMAKE_BINARY_DIR}/godot/libimm_godot_extension.a"
+        VERBATIM
+    )
+endif()
+
 if(IMMUNITY_COPY_TO_UPM_IOS)
     add_custom_command(TARGET ImmUnity POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${IMMUNITY_UPM_IOS_DIR}"

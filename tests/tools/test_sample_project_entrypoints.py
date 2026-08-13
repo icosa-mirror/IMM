@@ -18,6 +18,11 @@ def main() -> int:
     godot_scene = (ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn").read_text(encoding="utf-8")
     godot_controller = (ROOT / "code/ImmGodotSampleProject/scripts/sample_scene_controller.gd").read_text(encoding="utf-8")
     godot_helper = (ROOT / "code/projects/windows/run-godot-sample-play-smoke.ps1").read_text(encoding="utf-8")
+    godot_export_presets = (ROOT / "code/ImmGodotSampleProject/export_presets.cfg").read_text(encoding="utf-8")
+    godot_extension_manifest = (
+        ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension"
+    ).read_text(encoding="utf-8")
+    ios_cmake = (ROOT / "code/projects/ios/CMakeLists.txt").read_text(encoding="utf-8")
     gpu_workflow = (ROOT / ".github/workflows/ci-gpu.yml").read_text(encoding="utf-8")
 
     # A res:// path must work in a fresh checkout before Godot has built its
@@ -78,6 +83,32 @@ def main() -> int:
     frame_zero_spawn = smoke_body.index("_jump_to_active_spawn_area()", first_seek)
     settle_loop = smoke_body.index("for _frame in range(SAMPLE_PLAY_SMOKE_SETTLE_FRAMES):")
     assert first_seek < frame_zero_spawn < settle_loop
+    for token in [
+        'name="iOS Development"',
+        'platform="iOS"',
+        'include_filter="sample1.imm"',
+        'application/bundle_identifier="org.linuxfoundation.imm.godot.sample"',
+        'application/export_project_only=true',
+        'application/min_ios_version="15.0"',
+    ]:
+        assert token in godot_export_presets
+    for token in [
+        'ios.debug="res://addons/imm_viewer/bin/ios/debug/libimm_godot_extension.ios.template_debug.xcframework"',
+        'ios.release="res://addons/imm_viewer/bin/ios/release/libimm_godot_extension.ios.template_release.xcframework"',
+    ]:
+        assert token in godot_extension_manifest
+    for token in [
+        "IMM_GODOT_CPP_ROOT",
+        "IMM_GODOT_CPP_LIBRARY",
+        "add_library(ImmGodotIOSGDExtension STATIC",
+        "src/imm_viewer_metal_frame.mm",
+        "xcrun libtool -static",
+        "libimm_godot_extension.a",
+        "[IMM_GODOT_IOS_PACKAGE_20260813]",
+    ]:
+        assert token in ios_cmake
+    assert 'OS.get_name() in ["Android", "iOS"]' in godot_controller
+    assert "_prepare_embedded_sample_document()" in godot_controller
 
     vulkan_renderer = (
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp"
@@ -206,6 +237,16 @@ def main() -> int:
         "select_ios_simulator.py",
         "SIMCTL_CHILD_IMM_UNITY_SMOKE_CAPTURE_PATH",
         "SIMCTL_CHILD_IMM_UNITY_EXPECT_GRAPHICS_API=Metal",
+        "Godot iOS Package and Metal Validation",
+        "Build Godot iOS static GDExtension",
+        "libimm_godot_extension.ios.template_debug.xcframework",
+        'platform=ios target=template_debug arch=arm64 ios_simulator=no',
+        'GODOT_VERSION: 4.6-stable',
+        'GODOT_CPP_REF: godot-4.5-stable',
+        '--export-debug "iOS Development"',
+        "Compile exported Godot iOS application without signing",
+        "CODE_SIGNING_ALLOWED=NO",
+        "GodotIOSMetal",
     ]:
         assert token in ios_workflow
     assert "simctl create" not in ios_workflow

@@ -49,7 +49,7 @@ env:
 jobs:
   unity-ios-player-build:
     name: Unity iOS Metal Simulator Validation
-    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS]')
+    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[CI IOS]') && !contains(github.event.head_commit.message, '[CI IOS GODOT]'))
     runs-on: macos-14
     timeout-minutes: 45
     steps:
@@ -327,3 +327,177 @@ jobs:
           path: artifacts/unity-ios-player-build
           if-no-files-found: error
           retention-days: 14
+
+  godot-ios-package:
+    name: Godot iOS Package and Metal Validation
+    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS GODOT]')
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      GODOT_VERSION: 4.6-stable
+      GODOT_CPP_REF: godot-4.5-stable
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Godot iOS build tools
+        run: |
+          set -euo pipefail
+          brew install cmake
+          python3 -m venv "$RUNNER_TEMP/imm-godot-ios-scons"
+          "$RUNNER_TEMP/imm-godot-ios-scons/bin/python" -m pip install --disable-pip-version-check SCons
+          echo "SCONS_PYTHON=$RUNNER_TEMP/imm-godot-ios-scons/bin/python" >> "$GITHUB_ENV"
+
+      - name: Build Godot iOS static GDExtension
+        id: godot_ios_extension
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/godot-ios-metal
+          if [ ! -d thirdparty/godot-cpp/.git ]; then
+            git clone --depth 1 --branch "$GODOT_CPP_REF" https://github.com/godotengine/godot-cpp.git thirdparty/godot-cpp
+          fi
+          "$SCONS_PYTHON" -m SCons -C thirdparty/godot-cpp \
+            platform=ios target=template_debug arch=arm64 ios_simulator=no generate_bindings=yes
+          godot_cpp_lib="$(find thirdparty/godot-cpp/bin -maxdepth 1 -type f -name 'libgodot-cpp.ios.template_debug*.a' | head -n 1)"
+          test -n "$godot_cpp_lib"
+          test -s "$godot_cpp_lib"
+          cmake -S code/projects/ios -B build/godot-ios-native \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DIMM_GODOT_CPP_ROOT="$PWD/thirdparty/godot-cpp" \
+            -DIMM_GODOT_CPP_LIBRARY="$PWD/$godot_cpp_lib"
+          cmake --build build/godot-ios-native --target ImmGodotIOSGDExtension --config Debug \
+            2>&1 | tee artifacts/godot-ios-metal/native-build.log
+          archive="$PWD/build/godot-ios-native/godot/libimm_godot_extension.a"
+          framework="$PWD/code/ImmGodotSampleProject/addons/imm_viewer/bin/ios/debug/libimm_godot_extension.ios.template_debug.xcframework"
+          test -s "$archive"
+          rm -rf "$framework"
+          mkdir -p "$(dirname "$framework")"
+          xcodebuild -create-xcframework -library "$archive" -output "$framework" \
+            2>&1 | tee artifacts/godot-ios-metal/xcframework-build.log
+          test -d "$framework"
+          find "$framework" -type f -maxdepth 3 -print > artifacts/godot-ios-metal/xcframework-layout.txt
+          grep -q 'libimm_godot_extension.a' artifacts/godot-ios-metal/xcframework-layout.txt
+          lipo -info "$archive" | tee artifacts/godot-ios-metal/archive-architecture.txt
+
+      - name: Download Godot 4.6 and iOS export templates
+        id: godot_ios_tools
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          zip_name="Godot_v${GODOT_VERSION}_macos.universal.zip"
+          templates_name="Godot_v${GODOT_VERSION}_export_templates.tpz"
+          release_url="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$release_url/$zip_name" -o "$RUNNER_TEMP/$zip_name"
+          curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$release_url/$templates_name" -o "$RUNNER_TEMP/$templates_name"
+          mkdir -p "$RUNNER_TEMP/godot-ios-editor" "$RUNNER_TEMP/godot-ios-templates"
+          unzip -q "$RUNNER_TEMP/$zip_name" -d "$RUNNER_TEMP/godot-ios-editor"
+          unzip -q "$RUNNER_TEMP/$templates_name" -d "$RUNNER_TEMP/godot-ios-templates"
+          godot_exe="$(find "$RUNNER_TEMP/godot-ios-editor" -path '*/Godot.app/Contents/MacOS/Godot' -type f | head -n 1)"
+          test -n "$godot_exe"
+          template_dir="$HOME/Library/Application Support/Godot/export_templates/4.6.stable"
+          mkdir -p "$template_dir"
+          cp -R "$RUNNER_TEMP/godot-ios-templates/templates/." "$template_dir/"
+          test -s "$template_dir/ios.zip"
+          echo "GODOT_IOS_EXE=$godot_exe" >> "$GITHUB_ENV"
+          "$godot_exe" --version | tee artifacts/godot-ios-metal/godot-version.txt
+
+      - name: Export ordinary Godot sample to iOS Xcode project
+        id: godot_ios_export
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
+          mkdir -p build/godot-ios-export
+          "$GODOT_IOS_EXE" --headless --path code/ImmGodotSampleProject --import \
+            > artifacts/godot-ios-metal/godot-import.log 2>&1
+          "$GODOT_IOS_EXE" --headless --path code/ImmGodotSampleProject \
+            --export-debug "iOS Development" "$PWD/build/godot-ios-export/ImmGodotSample.xcodeproj" \
+            > artifacts/godot-ios-metal/godot-export.log 2>&1
+          project="$(find build/godot-ios-export -maxdepth 2 -name '*.xcodeproj' -type d | head -n 1)"
+          test -n "$project"
+          test -f "$project/project.pbxproj"
+          grep -R -q 'libimm_godot_extension.ios.template_debug.xcframework' build/godot-ios-export
+          echo "GODOT_IOS_XCODE_PROJECT=$PWD/$project" >> "$GITHUB_ENV"
+          xcodebuild -project "$project" -list -json > artifacts/godot-ios-metal/xcode-project-list.json
+
+      - name: Compile exported Godot iOS application without signing
+        id: godot_ios_compile
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          scheme="$(python3 -c 'import json; d=json.load(open("artifacts/godot-ios-metal/xcode-project-list.json")); print(d["project"]["schemes"][0])')"
+          test -n "$scheme"
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$scheme" \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/godot-ios-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            build \
+            2>&1 | tee artifacts/godot-ios-metal/xcodebuild.log
+          app="$(find "$RUNNER_TEMP/godot-ios-derived-data/Build/Products" -type d -name '*.app' | head -n 1)"
+          test -n "$app"
+          test -d "$app"
+          printf '%s\n' "project=$GODOT_IOS_XCODE_PROJECT" "scheme=$scheme" "app=$app" "renderer=Metal" "mainScene=res://scenes/SampleScene.tscn" > artifacts/godot-ios-metal/application-build-contract.txt
+          echo "GODOT_IOS_APP=$app" >> "$GITHUB_ENV"
+
+      - name: Probe Apple-silicon native iOS application destinations
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -n "${GODOT_IOS_XCODE_PROJECT:-}" ]; then
+            scheme="$(python3 -c 'import json; d=json.load(open("artifacts/godot-ios-metal/xcode-project-list.json")); print(d["project"]["schemes"][0])')"
+            xcodebuild -project "$GODOT_IOS_XCODE_PROJECT" -scheme "$scheme" -showdestinations \
+              > artifacts/godot-ios-metal/xcode-destinations.txt 2>&1 || true
+          fi
+          uname -a > artifacts/godot-ios-metal/runner-platform.txt
+          sysctl -n hw.optional.arm64 >> artifacts/godot-ios-metal/runner-platform.txt || true
+
+      - name: Write Godot iOS package manifest
+        if: always()
+        run: |
+          result=passed
+          failure_class=''
+          if [ "${{ steps.godot_ios_extension.outcome }}" != success ] || [ "${{ steps.godot_ios_tools.outcome }}" != success ] || [ "${{ steps.godot_ios_export.outcome }}" != success ] || [ "${{ steps.godot_ios_compile.outcome }}" != success ]; then
+            result=packaging_failed
+            failure_class=packaging
+          fi
+          python3 tests/tools/write_ci_manifest.py \
+            --status "$result" \
+            --failure-class "$failure_class" \
+            --output artifacts/godot-ios-metal/manifest.json \
+            --product godot \
+            --platform-name ios \
+            --mode application-build \
+            --renderer metal \
+            --include artifacts/godot-ios-metal
+
+      - name: Collect Godot iOS diagnostics
+        if: always()
+        run: python3 tests/tools/collect_ci_artifacts.py --artifact-dir artifacts/godot-ios-metal --require-manifest --output artifacts/godot-ios-metal/artifact-summary.json
+
+      - name: Upload Godot iOS diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GodotIOSMetal
+          path: artifacts/godot-ios-metal
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce Godot iOS package result
+        if: always()
+        run: |
+          test "${{ steps.godot_ios_extension.outcome }}" = success
+          test "${{ steps.godot_ios_tools.outcome }}" = success
+          test "${{ steps.godot_ios_export.outcome }}" = success
+          test "${{ steps.godot_ios_compile.outcome }}" = success

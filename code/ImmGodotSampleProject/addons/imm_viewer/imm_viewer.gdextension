@@ -18,6 +18,8 @@ android.debug.arm64="res://addons/imm_viewer/bin/android/debug/libimm_godot_exte
 android.release.arm64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.arm64.so"
 android.debug.x86_64="res://addons/imm_viewer/bin/android/debug/libimm_godot_extension.x86_64.so"
 android.release.x86_64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.x86_64.so"
+ios.debug="res://addons/imm_viewer/bin/ios/debug/libimm_godot_extension.ios.template_debug.xcframework"
+ios.release="res://addons/imm_viewer/bin/ios/release/libimm_godot_extension.ios.template_release.xcframework"
 
 ; Backend libraries the extension links against. Declaring them here makes Godot
 ; copy them next to the extension when a game is EXPORTED (without this the addon

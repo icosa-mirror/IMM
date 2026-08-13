@@ -8,6 +8,8 @@ const CAMERA_ID := 0
 const SAMPLE_PLAY_SMOKE_PREFIX := "[IMM_GODOT_SAMPLE_PLAY_20260803]"
 const SAMPLE_PLAY_SMOKE_TIMEOUT_SECONDS := 150.0
 const SAMPLE_PLAY_SMOKE_SETTLE_FRAMES := 3
+const EMBEDDED_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
+const EMBEDDED_USER_SAMPLE_DOCUMENT_PATH := "user://sample1.imm"
 
 @onready var viewer := $ImmViewer
 @onready var camera_rig: Node3D = $CameraRig
@@ -117,6 +119,8 @@ func _on_spawn_area_changed(_active_index: int) -> void:
 	_update_status()
 
 func _run_initial_playback() -> void:
+	if OS.get_name() in ["Android", "iOS"]:
+		viewer.document_path = _prepare_embedded_sample_document()
 	await _load_document_after_render_warmup()
 	if OS.get_environment("IMM_GODOT_SAMPLE_PLAY_SMOKE") == "1":
 		await _run_sample_play_smoke()
@@ -242,6 +246,30 @@ func _write_sample_play_smoke_log(message: String) -> void:
 		push_error("%s could not open log path: %s" % [SAMPLE_PLAY_SMOKE_PREFIX, log_path])
 		return
 	log_file.store_line(message)
+
+func _prepare_embedded_sample_document() -> String:
+	var source_file := FileAccess.open(EMBEDDED_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
+	if source_file == null:
+		push_error("Failed to open embedded sample document %s on %s: %s" % [
+			EMBEDDED_SAMPLE_DOCUMENT_PATH,
+			OS.get_name(),
+			error_string(FileAccess.get_open_error()),
+		])
+		return EMBEDDED_SAMPLE_DOCUMENT_PATH
+
+	var data := source_file.get_buffer(source_file.get_length())
+	var target_file := FileAccess.open(EMBEDDED_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
+	if target_file == null:
+		push_error("Failed to create embedded sample document %s on %s: %s" % [
+			EMBEDDED_USER_SAMPLE_DOCUMENT_PATH,
+			OS.get_name(),
+			error_string(FileAccess.get_open_error()),
+		])
+		return EMBEDDED_SAMPLE_DOCUMENT_PATH
+
+	target_file.store_buffer(data)
+	target_file.flush()
+	return OS.get_user_data_dir().path_join("sample1.imm")
 
 func _toggle_first_layer_visibility() -> void:
 	if viewer.get_layer_count() <= 0:

@@ -84,6 +84,8 @@ def verify_manifest() -> str:
     expected_libraries = {
         "windows.debug.x86_64": "res://addons/imm_viewer/bin/windows/debug/imm_godot_extension.dll",
         "windows.release.x86_64": "res://addons/imm_viewer/bin/windows/release/imm_godot_extension.dll",
+        "ios.debug": "res://addons/imm_viewer/bin/ios/debug/libimm_godot_extension.ios.template_debug.xcframework",
+        "ios.release": "res://addons/imm_viewer/bin/ios/release/libimm_godot_extension.ios.template_release.xcframework",
     }
     for key, expected in expected_libraries.items():
         actual = unquote(parser.get("libraries", key, fallback=""))

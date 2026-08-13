@@ -2,8 +2,8 @@ extends Node3D
 
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_DOCUMENT_PATH := "res://../../exampleImmFiles/sample1.imm"
-const ANDROID_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
-const ANDROID_USER_SAMPLE_DOCUMENT_PATH := "user://sample1.imm"
+const EMBEDDED_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
+const EMBEDDED_USER_SAMPLE_DOCUMENT_PATH := "user://sample1.imm"
 const CAMERA_ID := 0
 const IMM_RENDERER_API_METAL := 4
 const IMM_RENDERER_API_VULKAN := 5
@@ -918,7 +918,7 @@ func _selected_renderer_api() -> int:
 	var requested_api: int = _get_env_int("IMM_GODOT_VISUAL_RENDERER_API", -1)
 	if requested_api >= 0:
 		return requested_api
-	return IMM_RENDERER_API_METAL if OS.get_name() == "macOS" else IMM_RENDERER_API_VULKAN
+	return IMM_RENDERER_API_METAL if OS.get_name() in ["macOS", "iOS"] else IMM_RENDERER_API_VULKAN
 
 func _selected_renderer_name(renderer_api: int = -1) -> String:
 	var api: int = renderer_api if renderer_api >= 0 else _selected_renderer_api()
@@ -929,30 +929,32 @@ func _selected_renderer_name(renderer_api: int = -1) -> String:
 	return "API%d" % api
 
 func _sample_document_path() -> String:
-	if OS.get_name() != "Android":
+	if OS.get_name() not in ["Android", "iOS"]:
 		return SAMPLE_DOCUMENT_PATH
-	return _prepare_android_sample_document()
+	return _prepare_embedded_sample_document()
 
 func _max_ready_seconds() -> float:
 	return ANDROID_MAX_READY_SECONDS if OS.get_name() == "Android" else MAX_READY_SECONDS
 
-func _prepare_android_sample_document() -> String:
-	var source_file: FileAccess = FileAccess.open(ANDROID_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
+func _prepare_embedded_sample_document() -> String:
+	var source_file: FileAccess = FileAccess.open(EMBEDDED_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
 	if source_file == null:
-		push_error("Failed to open Android sample document %s: %s" % [
-			ANDROID_SAMPLE_DOCUMENT_PATH,
+		push_error("Failed to open embedded sample document %s on %s: %s" % [
+			EMBEDDED_SAMPLE_DOCUMENT_PATH,
+			OS.get_name(),
 			error_string(FileAccess.get_open_error()),
 		])
-		return ANDROID_SAMPLE_DOCUMENT_PATH
+		return EMBEDDED_SAMPLE_DOCUMENT_PATH
 
 	var data: PackedByteArray = source_file.get_buffer(source_file.get_length())
-	var target_file: FileAccess = FileAccess.open(ANDROID_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
+	var target_file: FileAccess = FileAccess.open(EMBEDDED_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
 	if target_file == null:
-		push_error("Failed to create Android sample document %s: %s" % [
-			ANDROID_USER_SAMPLE_DOCUMENT_PATH,
+		push_error("Failed to create embedded sample document %s on %s: %s" % [
+			EMBEDDED_USER_SAMPLE_DOCUMENT_PATH,
+			OS.get_name(),
 			error_string(FileAccess.get_open_error()),
 		])
-		return ANDROID_SAMPLE_DOCUMENT_PATH
+		return EMBEDDED_SAMPLE_DOCUMENT_PATH
 
 	target_file.store_buffer(data)
 	target_file.flush()
