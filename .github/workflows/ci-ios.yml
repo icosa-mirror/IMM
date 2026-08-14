@@ -433,6 +433,65 @@ jobs:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
           key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-guard-v1
 
+      - name: Restore stock Godot iOS Compatibility Simulator engine cache
+        id: godot_ios_compatibility_simulator_engine_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/godot-ios-compatibility-simulator-engine/libgodot.a
+          key: godot-ios-compatibility-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-v1
+
+      - name: Build stock Godot arm64 iOS Compatibility Simulator engine
+        id: godot_ios_compatibility_simulator_engine
+        run: |
+          set -euo pipefail
+          artifact_dir="$PWD/artifacts/godot-ios-metal"
+          engine_dir="$PWD/build/godot-ios-compatibility-simulator-engine"
+          engine_archive="$engine_dir/libgodot.a"
+          mkdir -p "$artifact_dir" "$engine_dir"
+          if [ ! -s "$engine_archive" ]; then
+            source_dir="$RUNNER_TEMP/godot-ios-compatibility-simulator-source"
+            git clone --depth 1 --branch "$GODOT_IOS_METAL_SIMULATOR_ENGINE_REF" \
+              https://github.com/godotengine/godot.git "$source_dir"
+            "$SCONS_PYTHON" -m SCons -C "$source_dir" \
+              platform=ios \
+              target=template_debug \
+              arch=arm64 \
+              ios_simulator=yes \
+              metal=no \
+              vulkan=no \
+              opengl3=yes \
+              2>&1 | tee "$artifact_dir/godot-compatibility-simulator-engine-build.log"
+            built_archive="$(find "$source_dir/bin" -maxdepth 1 -type f -name 'libgodot.ios.template_debug.arm64.simulator.a' -print -quit)"
+            test -n "$built_archive"
+            test -s "$built_archive"
+            cp "$built_archive" "$engine_archive"
+          else
+            printf '%s\n' "Reused stock Godot Compatibility Simulator engine cache: $engine_archive" \
+              | tee "$artifact_dir/godot-compatibility-simulator-engine-build.log"
+          fi
+          test -s "$engine_archive"
+          lipo -info "$engine_archive" | tee "$artifact_dir/godot-compatibility-simulator-engine-architecture.txt"
+          nm -gU "$engine_archive" > "$artifact_dir/godot-compatibility-simulator-engine-symbols.txt"
+          grep -Eq '[[:space:]]_main$' "$artifact_dir/godot-compatibility-simulator-engine-symbols.txt"
+          if grep -q 'RenderingDeviceDriverMetal' "$artifact_dir/godot-compatibility-simulator-engine-symbols.txt"; then
+            echo "Compatibility-only engine unexpectedly contains the Metal RenderingDevice driver" >&2
+            exit 1
+          fi
+          printf '%s\n' \
+            "godot_ref=$GODOT_IOS_METAL_SIMULATOR_ENGINE_REF" \
+            "architecture=arm64" \
+            "platform=iOS Simulator" \
+            "metal=no" \
+            "opengl3=yes" \
+            > "$artifact_dir/godot-compatibility-simulator-engine-contract.txt"
+
+      - name: Save stock Godot iOS Compatibility Simulator engine cache
+        if: steps.godot_ios_compatibility_simulator_engine.outcome == 'success' && steps.godot_ios_compatibility_simulator_engine_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/godot-ios-compatibility-simulator-engine/libgodot.a
+          key: godot-ios-compatibility-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-v1
+
       - name: Restore Godot iOS native build cache
         id: godot_ios_native_cache
         uses: actions/cache/restore@v4
@@ -893,6 +952,62 @@ jobs:
             > artifacts/godot-ios-metal/simulator-application-build-contract.txt
           echo "GODOT_IOS_SIMULATOR_APP=$app" >> "$GITHUB_ENV"
 
+      - name: Install stock Compatibility engine into Simulator export
+        id: godot_ios_compatibility_simulator_engine_install
+        run: |
+          set -euo pipefail
+          engine_archive="$PWD/build/godot-ios-compatibility-simulator-engine/libgodot.a"
+          test -s "$engine_archive"
+          simulator_archives="$(find build/godot-ios-export \
+            -type f \
+            -name libgodot.a \
+            -path '*simulator*' \
+            -print)"
+          test -n "$simulator_archives"
+          while IFS= read -r simulator_archive; do
+            cp "$engine_archive" "$simulator_archive"
+            lipo -info "$simulator_archive"
+          done <<< "$simulator_archives"
+          printf '%s\n' "$simulator_archives" \
+            > artifacts/godot-ios-metal/replaced-compatibility-simulator-engine-archives.txt
+
+      - name: Compile stock Godot Compatibility Simulator application
+        id: godot_ios_compatibility_simulator_compile
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_XCODE_PROJECT:?missing exported Xcode project}"
+          : "${GODOT_IOS_SCHEME:?missing exported Xcode scheme}"
+          simulator_data="$RUNNER_TEMP/godot-ios-compatibility-simulator-derived-data"
+          xcodebuild \
+            -project "$GODOT_IOS_XCODE_PROJECT" \
+            -scheme "$GODOT_IOS_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$simulator_data" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            OTHER_LDFLAGS='$(inherited) -framework Metal -framework MetalKit -framework QuartzCore -framework AVFoundation -lz' \
+            build \
+            2>&1 | tee artifacts/godot-ios-metal/xcodebuild-compatibility-simulator.log
+          app="$(find "$simulator_data/Build/Products/Debug-iphonesimulator" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app"
+          test -d "$app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          test -s "$app/$executable"
+          file "$app/$executable" > artifacts/godot-ios-metal/compatibility-simulator-application-executable.txt
+          xcrun vtool -show-build "$app/$executable" > artifacts/godot-ios-metal/compatibility-simulator-application-build-version.txt
+          printf '%s\n' \
+            "app=$app" \
+            "renderer=Compatibility" \
+            "runtime=iOS Simulator" \
+            > artifacts/godot-ios-metal/compatibility-simulator-application-build-contract.txt
+          echo "GODOT_IOS_COMPATIBILITY_SIMULATOR_APP=$app" >> "$GITHUB_ENV"
+
       - name: Boot deterministic iOS Simulator for Godot
         id: godot_ios_simulator_boot
         continue-on-error: true
@@ -918,14 +1033,14 @@ jobs:
 
       - name: Run pure Godot Compatibility probe in iOS Simulator
         id: godot_ios_compatibility_probe
-        if: steps.godot_ios_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
+        if: steps.godot_ios_compatibility_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 3
         run: |
           set -euo pipefail
-          : "${GODOT_IOS_SIMULATOR_APP:?missing iOS Simulator application}"
+          : "${GODOT_IOS_COMPATIBILITY_SIMULATOR_APP:?missing Compatibility iOS Simulator application}"
           : "${GODOT_IOS_SIMULATOR_UDID:?missing iOS Simulator destination}"
-          app="$GODOT_IOS_SIMULATOR_APP"
+          app="$GODOT_IOS_COMPATIBILITY_SIMULATOR_APP"
           simulator_udid="$GODOT_IOS_SIMULATOR_UDID"
           artifact_dir="$PWD/artifacts/godot-ios-metal"
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
