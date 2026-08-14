@@ -356,6 +356,7 @@ jobs:
 
       - name: Restore Godot iOS Metal Simulator engine cache
         id: godot_ios_metal_simulator_engine_cache
+        if: ${{ false }} # The Simulator GPU lacks image cube arrays required by Godot Metal.
         uses: actions/cache/restore@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
@@ -363,6 +364,7 @@ jobs:
 
       - name: Build Godot arm64 iOS Simulator engine with Metal
         id: godot_ios_metal_simulator_engine
+        if: ${{ false }} # Real-device Firebase validation owns the Metal result.
         run: |
           set -euo pipefail
           artifact_dir="$PWD/artifacts/godot-ios-metal"
@@ -623,6 +625,7 @@ jobs:
 
       - name: Install Metal-enabled arm64 Godot engine into Simulator export
         id: godot_ios_metal_simulator_engine_install
+        if: ${{ false }} # Godot rejects the Simulator GPU before scene startup.
         run: |
           set -euo pipefail
           engine_archive="$PWD/build/godot-ios-metal-simulator-engine/libgodot.a"
@@ -916,6 +919,7 @@ jobs:
 
       - name: Compile exported Godot iOS Simulator application
         id: godot_ios_simulator_compile
+        if: ${{ false }} # Only the stock Compatibility Simulator control is supported.
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -1099,7 +1103,7 @@ jobs:
 
       - name: Run Godot iOS Metal visual validation in Simulator
         id: godot_ios_runtime
-        if: steps.godot_ios_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
+        if: ${{ false }} # The Simulator GPU reports no image-cube-array support.
         continue-on-error: true
         timeout-minutes: 12
         run: |
@@ -1300,7 +1304,8 @@ jobs:
           echo "GODOT_IOS_IPA=$ipa" >> "$GITHUB_ENV"
 
       - name: Check Firebase Test Lab configuration
-        if: ${{ false }}
+        id: godot_ios_ftl_config
+        if: steps.godot_ios_package.outcome == 'success'
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -1310,18 +1315,18 @@ jobs:
           test -n "${FTL_SERVICE_ACCOUNT_JSON:-}"
 
       - name: Authenticate to Google Cloud
-        if: ${{ false }}
+        if: steps.godot_ios_ftl_config.outcome == 'success'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
 
       - name: Set up gcloud
-        if: ${{ false }}
+        if: steps.godot_ios_ftl_config.outcome == 'success'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Run ordinary Godot iOS sample on Firebase Test Lab
         id: godot_ios_ftl
-        if: ${{ false }}
+        if: steps.godot_ios_ftl_config.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 15
         run: |
@@ -1511,8 +1516,9 @@ jobs:
           test "${{ steps.godot_ios_export.outcome }}" = success
           test "${{ steps.godot_ios_compile.outcome }}" = success
           test "${{ steps.godot_ios_package.outcome }}" = success
-          test "${{ steps.godot_ios_simulator_compile.outcome }}" = success
+          test "${{ steps.godot_ios_compatibility_simulator_compile.outcome }}" = success
           test "${{ steps.godot_ios_simulator_boot.outcome }}" = success
-          test "${{ steps.godot_ios_runtime.outcome }}" = success
+          test "${{ steps.godot_ios_compatibility_probe.outcome }}" = success
+          test "${{ steps.godot_ios_ftl.outcome }}" = success
           test "${{ steps.godot_ios_metrics.outcome }}" = success
           test "${{ steps.godot_ios_classification.outcome }}" = success
