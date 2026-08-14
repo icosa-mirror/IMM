@@ -1129,6 +1129,7 @@ jobs:
             shift
             local log_path="$artifact_dir/${label}-launch.log"
             local launch_pid=''
+            local app_pid=''
             local status=0
             xcrun simctl launch --console --terminate-running-process \
               "$simulator_udid" "$bundle_id" "$@" > "$log_path" 2>&1 &
@@ -1140,6 +1141,18 @@ jobs:
                 status=$?
                 set -e
                 return "$status"
+              fi
+              if [ "$_second" -eq 10 ]; then
+                xcrun simctl io "$simulator_udid" screenshot \
+                  "$artifact_dir/${label}-simulator-screen.png" || true
+                app_pid="$(pgrep -x "$executable" | tail -n 1 || true)"
+                if [ -n "$app_pid" ]; then
+                  sample "$app_pid" 5 -file \
+                    "$artifact_dir/${label}-process-sample.txt" || true
+                fi
+                xcrun simctl spawn "$simulator_udid" log show --style compact --last 1m \
+                  --predicate "process == '$executable'" \
+                  > "$artifact_dir/${label}-system.log" 2>&1 || true
               fi
               sleep 1
             done
