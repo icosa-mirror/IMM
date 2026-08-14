@@ -870,9 +870,9 @@ jobs:
 
           runtime_status=0
           run_app godot-ios-full-depth \
-            --scene res://scenes/VisualSmokeScene.tscn \
             --fixed-fps 30 \
             -- \
+            --imm-godot-ci-scene=visual-smoke \
             --imm-godot-visual-smoke \
             --imm-godot-visual-smoke-width=1024 \
             --imm-godot-visual-smoke-height=576 \
@@ -887,9 +887,9 @@ jobs:
           collect_user_file godot-ios-full-depth-result.log "$artifact_dir/godot-ios-full-depth-result.log" || runtime_status=1
 
           run_app godot-ios-ordered-overlay \
-            --scene res://scenes/VisualSmokeScene.tscn \
             --fixed-fps 30 \
             -- \
+            --imm-godot-ci-scene=visual-smoke \
             --imm-godot-visual-smoke \
             --imm-godot-visual-smoke-width=1024 \
             --imm-godot-visual-smoke-height=576 \
@@ -904,9 +904,9 @@ jobs:
           collect_user_file godot-ios-ordered-overlay-result.log "$artifact_dir/godot-ios-ordered-overlay-result.log" || runtime_status=1
 
           run_app godot-ios-sample-play \
-            --scene res://scenes/SampleScene.tscn \
             --fixed-fps 30 \
             -- \
+            --imm-godot-ci-scene=sample \
             --imm-godot-sample-play-smoke=1 \
             --imm-godot-sample-play-capture=user://godot-ios-sample-play.png \
             --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
@@ -1053,8 +1053,9 @@ jobs:
             "$simulator_udid" "$bundle_id" \
             --rendering-driver opengl3 \
             --rendering-method gl_compatibility \
-            --scene res://scenes/IOSSimulatorCompatibilityProbe.tscn \
             --fixed-fps 30 \
+            -- \
+            --imm-godot-ci-scene=compatibility \
             > "$artifact_dir/godot-ios-compatibility-probe-launch.log" 2>&1 &
           launch_pid=$!
           app_pid=''
@@ -1163,9 +1164,9 @@ jobs:
           run_app godot-ios-full-depth \
             --rendering-driver metal \
             --rendering-method mobile \
-            --scene res://scenes/VisualSmokeScene.tscn \
             --fixed-fps 30 \
             -- \
+            --imm-godot-ci-scene=visual-smoke \
             --imm-godot-visual-smoke \
             --imm-godot-visual-renderer-api=5 \
             --imm-godot-visual-smoke-width=1024 \
@@ -1188,9 +1189,9 @@ jobs:
           run_app godot-ios-ordered-overlay \
             --rendering-driver metal \
             --rendering-method mobile \
-            --scene res://scenes/VisualSmokeScene.tscn \
             --fixed-fps 30 \
             -- \
+            --imm-godot-ci-scene=visual-smoke \
             --imm-godot-visual-smoke \
             --imm-godot-visual-renderer-api=5 \
             --imm-godot-visual-smoke-width=1024 \
@@ -1208,9 +1209,9 @@ jobs:
           run_app godot-ios-sample-play \
             --rendering-driver metal \
             --rendering-method mobile \
-            --scene res://scenes/SampleScene.tscn \
             --fixed-fps 30 \
             -- \
+            --imm-godot-ci-scene=sample \
             --imm-godot-sample-play-smoke=1 \
             --imm-godot-sample-play-capture=user://godot-ios-sample-play.png \
             --imm-godot-sample-play-log=user://godot-ios-sample-play.log || runtime_status=$?
