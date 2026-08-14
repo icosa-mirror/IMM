@@ -916,6 +916,40 @@ jobs:
             > artifacts/godot-ios-metal/simulator-runtime-contract.txt
           echo "GODOT_IOS_SIMULATOR_UDID=$simulator_udid" >> "$GITHUB_ENV"
 
+      - name: Run pure Godot Compatibility probe in iOS Simulator
+        id: godot_ios_compatibility_probe
+        if: steps.godot_ios_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          : "${GODOT_IOS_SIMULATOR_APP:?missing iOS Simulator application}"
+          : "${GODOT_IOS_SIMULATOR_UDID:?missing iOS Simulator destination}"
+          app="$GODOT_IOS_SIMULATOR_APP"
+          simulator_udid="$GODOT_IOS_SIMULATOR_UDID"
+          artifact_dir="$PWD/artifacts/godot-ios-metal"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          xcrun simctl uninstall "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
+          xcrun simctl install "$simulator_udid" "$app"
+          container="$(xcrun simctl get_app_container "$simulator_udid" "$bundle_id" data)"
+          test -d "$container"
+          xcrun simctl launch --console --terminate-running-process \
+            "$simulator_udid" "$bundle_id" \
+            --rendering-driver opengl3 \
+            --rendering-method gl_compatibility \
+            --scene res://scenes/IOSSimulatorCompatibilityProbe.tscn \
+            --fixed-fps 30 \
+            > "$artifact_dir/godot-ios-compatibility-probe-launch.log" 2>&1
+          result_file="$(find "$container" -type f -name godot-ios-compatibility-probe-result.log -print -quit)"
+          png_file="$(find "$container" -type f -name godot-ios-compatibility-probe.png -print -quit)"
+          test -n "$result_file"
+          test -s "$result_file"
+          test -n "$png_file"
+          test -s "$png_file"
+          cp "$result_file" "$artifact_dir/godot-ios-compatibility-probe-result.log"
+          cp "$png_file" "$artifact_dir/godot-ios-compatibility-probe.png"
+          grep -q 'phase=capture status=passed' "$artifact_dir/godot-ios-compatibility-probe-result.log"
+
       - name: Run Godot iOS Metal visual validation in Simulator
         id: godot_ios_runtime
         if: steps.godot_ios_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
@@ -952,7 +986,7 @@ jobs:
             xcrun simctl launch --console --terminate-running-process \
               "$simulator_udid" "$bundle_id" "$@" > "$log_path" 2>&1 &
             launch_pid=$!
-            for _second in $(seq 1 180); do
+            for _second in $(seq 1 60); do
               if ! kill -0 "$launch_pid" 2>/dev/null; then
                 set +e
                 wait "$launch_pid"
@@ -999,6 +1033,11 @@ jobs:
           collect_user_file godot-ios-metal-render.png "$artifact_dir/godot-ios-metal-render.png" || runtime_status=1
           collect_user_file godot-ios-metal-full-depth.png "$artifact_dir/godot-ios-metal-full-depth.png" || runtime_status=1
           collect_user_file godot-ios-full-depth-result.log "$artifact_dir/godot-ios-full-depth-result.log" || runtime_status=1
+
+          if [ "$runtime_status" -ne 0 ]; then
+            xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
+            exit "$runtime_status"
+          fi
 
           run_app godot-ios-ordered-overlay \
             --rendering-driver metal \
