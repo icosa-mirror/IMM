@@ -36,8 +36,8 @@ def main() -> int:
         assert completed.returncode == 0, completed.stderr
         audit = json.loads(json_output.read_text(encoding="utf-8"))
         assert audit["schema"] == "imm-testing-matrix-audit-v1"
-        assert audit["summary"]["row_count"] == 29
-        assert audit["summary"]["supported_count"] == 18
+        assert audit["summary"]["row_count"] == 30
+        assert audit["summary"]["supported_count"] == 19
         assert audit["summary"]["release_blocker_count"] == 8
         assert audit["summary"]["audio_pipeline_count"] == 12
         assert audit["summary"]["actual_audio_pipeline_count"] == 10

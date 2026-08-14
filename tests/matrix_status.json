@@ -369,14 +369,25 @@
     {
       "product": "godot",
       "platform": "ios",
+      "mode": "application-build",
+      "renderer": "metal",
+      "status": "supported",
+      "hosted_gate": "CI iOS Iteration / Godot iOS Package and Metal Validation",
+      "hardware_gate": null,
+      "baseline": "tests/baselines/content/sample1.json",
+      "reason": "CI builds the static Godot iOS GDExtension XCFramework, exports the ordinary sample project, and compiles its unsigned arm64 iOS application. This is application-build evidence, not visual evidence."
+    },
+    {
+      "product": "godot",
+      "platform": "ios",
       "mode": "non-vr",
-      "renderer": "native",
+      "renderer": "metal",
       "status": "unsupported",
       "hosted_gate": null,
       "hardware_gate": null,
-      "baseline": null,
-      "owner_decision": "Godot iOS packaging is not a supported product surface until an iOS GDExtension packaging target exists.",
-      "reason": "No iOS Godot GDExtension packaging target is currently present in the repository."
+      "baseline": "tests/baselines/render/macos-metal-sample1.json",
+      "owner_decision": "Keep the Godot iOS visual cell gray until a properly signed application runs on Firebase iOS hardware and supplies retained Metal render, Run-button, full-depth, and ordered-overlay images.",
+      "reason": "The application and unsigned IPA build successfully, but the current ad-hoc-signed IPA has no provisioning profile or TeamIdentifier and Firebase fails before device startup. The Compatibility Simulator control is not representative Metal evidence."
     },
     {
       "product": "godot",

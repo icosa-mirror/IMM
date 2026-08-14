@@ -65,6 +65,7 @@ def normalize_label(value: str) -> str:
     normalized = value
     replacements = {
         "AndroidGodot": "Android-Godot",
+        "GodotIOSMetal": "iOS-Godot-Metal",
         "AndroidStandalone": "Android-Standalone",
         "MacosGodot": "macOS-Godot",
         "macOSGodot": "macOS-Godot",
@@ -99,6 +100,7 @@ def slugify(value: str) -> str:
             break
     compact_replacements = {
         "androidgodotvulkan": "android-godot-vulkan",
+        "godotiosmetal": "ios-godot-metal",
         "androidstandalonegles": "android-standalone-gles",
         "androidstandalonevulkan": "android-standalone-vulkan",
         "macosgodotmetal": "macos-godot-metal",

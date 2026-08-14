@@ -57,6 +57,7 @@ KNOWN_HOSTED_GATES = {
     "CI Engine Matrix / Unity Android Vulkan",
     "CI Engine Matrix / Unity iOS Player Build",
     "CI iOS Iteration / Unity iOS Metal Simulator Validation",
+    "CI iOS Iteration / Godot iOS Package and Metal Validation",
     "CI Engine Matrix / Unity Windows DirectX Composition",
     "CI Engine Matrix / Unity Windows Vulkan Synthetic Stereo",
     "CI Engine Matrix / Unity macOS Metal Composition",

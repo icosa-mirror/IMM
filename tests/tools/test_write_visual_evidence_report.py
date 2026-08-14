@@ -247,6 +247,42 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
+        lane = temp / "godot-ios-metal"
+        lane.mkdir()
+        matrix_row = {
+            "matrix": {
+                "product": "godot",
+                "platform": "ios",
+                "mode": "non-vr",
+                "renderer": "metal",
+            },
+            "status": "supported",
+            "coverage_status": "passed",
+        }
+        manifest = {
+            "classification": {
+                "result": "passed",
+                "rendering": "success",
+                "depth_composition": "success",
+                "ordered_overlay": "success",
+                "run_button": "success",
+            },
+            "matrix": matrix_row["matrix"],
+            "files": [
+                {"path": "godot-ios-metal-render-metrics.json"},
+                {"path": "godot-ios-metal-full-depth-metrics.json"},
+                {"path": "godot-ios-metal-ordered-overlay-metrics.json"},
+                {"path": "godot-ios-sample-play-metrics.json"},
+            ],
+        }
+        (lane / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        assert (
+            visual_matrix_cell([matrix_row], temp, "godot", "ios", "metal")
+            == "depth_passed"
+        ), "Passing Godot iOS render, Run-button, and depth evidence must make the matrix cell green"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
         input_root = temp / "input"
         engine = input_root / "EngineValidationEvidence"
         unity_captures = engine / "captures" / "unity-windows-directx-composition"

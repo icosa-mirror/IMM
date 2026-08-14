@@ -165,7 +165,7 @@ content, passes depth composition, and produces retained evidence in CI.
 
 ## Phase 3: Godot iOS packaging and visual validation
 
-### Current status (2026-08-13)
+### Current status (2026-08-14)
 
 1. Complete and proven in focused CI: the Godot iOS static GDExtension and
    XCFramework build, ordinary sample-project export, unsigned arm64 iPhoneOS
@@ -187,6 +187,18 @@ content, passes depth composition, and produces retained evidence in CI.
    profile secrets. A development- or ad-hoc-distribution-signed IPA is therefore
    the next required input. Until it is available, the Godot iOS visual/depth
    matrix cell must remain unpromoted and Phase 3 is not complete.
+6. Focused run `31812230272` confirmed that Cloud Tool Results is now enabled:
+   the matrix and Tool Results identifiers were returned without the previous
+   API-disabled error. Firebase still made three infrastructure attempts and
+   reported `Test failed to run`; the results bucket contains only the uploaded
+   IPA, with no device log, video, or screenshot. The retained IPA diagnostics
+   again show an ad-hoc signature, no TeamIdentifier, and no
+   `embedded.mobileprovision`, so this run did not reach application startup.
+7. The aggregate report wiring includes the Godot iOS artifact and a separate
+   supported `application-build` row. The `godot/ios/non-vr/metal` visual row
+   remains unsupported/gray until physical Metal render and depth evidence
+   exists; package success and the Compatibility Simulator control cannot
+   promote it.
 
 ### Implementation
 

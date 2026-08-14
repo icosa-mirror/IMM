@@ -288,6 +288,8 @@ def main() -> int:
         "uses: ./.github/workflows/ci-ios.yml",
         "name: UnityIOSMetalComposition",
         "path: artifacts/validation-evidence/input/UnityIOSMetalComposition",
+        "name: GodotIOSMetal",
+        "path: artifacts/validation-evidence/input/GodotIOSMetal",
     ]:
         assert token in validation_workflow
     assert "artifacts/unity-ios-player-build/derived-data" not in engine_workflow

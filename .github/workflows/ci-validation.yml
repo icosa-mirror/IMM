@@ -192,6 +192,13 @@ jobs:
           name: UnityIOSMetalComposition
           path: artifacts/validation-evidence/input/UnityIOSMetalComposition
 
+      - name: Download Godot iOS Metal evidence
+        if: needs.ios.result != 'skipped'
+        uses: actions/download-artifact@v4
+        with:
+          name: GodotIOSMetal
+          path: artifacts/validation-evidence/input/GodotIOSMetal
+
       - name: Write validation visual evidence report
         env:
           VALIDATION_EVIDENCE_SCOPE: >-
