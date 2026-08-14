@@ -1327,7 +1327,6 @@ jobs:
       - name: Run ordinary Godot iOS sample on Firebase Test Lab
         id: godot_ios_ftl
         if: steps.godot_ios_ftl_config.outcome == 'success'
-        continue-on-error: true
         timeout-minutes: 15
         run: |
           set -euo pipefail
