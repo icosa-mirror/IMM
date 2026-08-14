@@ -10,6 +10,11 @@ const SAMPLE_PLAY_SMOKE_TIMEOUT_SECONDS := 150.0
 const SAMPLE_PLAY_SMOKE_SETTLE_FRAMES := 3
 const EMBEDDED_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
 const EMBEDDED_USER_SAMPLE_DOCUMENT_PATH := "user://sample1.imm"
+const CI_SCENE_ROUTE_PREFIX := "--imm-godot-ci-scene="
+const CI_SCENE_ROUTES := {
+	"compatibility": "res://scenes/IOSSimulatorCompatibilityProbe.tscn",
+	"visual-smoke": "res://scenes/VisualSmokeScene.tscn",
+}
 
 @onready var viewer := $ImmViewer
 @onready var camera_rig: Node3D = $CameraRig
@@ -22,6 +27,10 @@ var _last_background_color := Color.BLACK
 var _initial_camera_framed := false
 
 func _ready() -> void:
+	var ci_scene_path := _get_ci_scene_path()
+	if not ci_scene_path.is_empty():
+		call_deferred("_route_to_ci_scene", ci_scene_path)
+		return
 	var native_log_path := _get_runtime_option("IMM_GODOT_LOG_FILE", "")
 	if not native_log_path.is_empty():
 		viewer.log_file_path = native_log_path
@@ -31,6 +40,29 @@ func _ready() -> void:
 	viewer.spawn_area_changed.connect(_on_spawn_area_changed)
 	_update_status()
 	call_deferred("_run_initial_playback")
+
+func _get_ci_scene_path() -> String:
+	var arguments := OS.get_cmdline_args()
+	for argument in OS.get_cmdline_user_args():
+		if not arguments.has(argument):
+			arguments.append(argument)
+	for argument in arguments:
+		if argument.begins_with(CI_SCENE_ROUTE_PREFIX):
+			var route := argument.substr(CI_SCENE_ROUTE_PREFIX.length())
+			if route == "sample":
+				return ""
+			var scene_path: String = CI_SCENE_ROUTES.get(route, "")
+			if scene_path.is_empty():
+				push_error("Unknown IMM Godot CI scene route: %s" % route)
+				get_tree().quit(2)
+			return scene_path
+	return ""
+
+func _route_to_ci_scene(scene_path: String) -> void:
+	var result := get_tree().change_scene_to_file(scene_path)
+	if result != OK:
+		push_error("Failed to route IMM Godot CI scene to %s: %s" % [scene_path, error_string(result)])
+		get_tree().quit(2)
 
 func _process(delta: float) -> void:
 	_handle_movement(delta)

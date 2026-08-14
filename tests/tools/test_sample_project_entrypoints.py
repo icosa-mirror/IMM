@@ -27,7 +27,7 @@ def main() -> int:
 
     # A res:// path must work in a fresh checkout before Godot has built its
     # editor UID cache. A uid:// main scene can leave Run Project idle forever.
-    assert 'run/main_scene="res://scenes/RuntimeSceneRouter.tscn"' in godot_project
+    assert 'run/main_scene="res://scenes/SampleScene.tscn"' in godot_project
     assert 'run/main_scene="uid://' not in godot_project
     assert 'config/icon="res://icon.svg"' in godot_project
     godot_uids = [path.read_text(encoding="utf-8").strip() for path in (ROOT / "code/ImmGodotSampleProject").rglob("*.uid")]
