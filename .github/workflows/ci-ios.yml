@@ -1035,7 +1035,7 @@ jobs:
         id: godot_ios_compatibility_probe
         if: steps.godot_ios_compatibility_simulator_compile.outcome == 'success' && steps.godot_ios_simulator_boot.outcome == 'success'
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 2
         run: |
           set -euo pipefail
           : "${GODOT_IOS_COMPATIBILITY_SIMULATOR_APP:?missing Compatibility iOS Simulator application}"
@@ -1044,6 +1044,7 @@ jobs:
           simulator_udid="$GODOT_IOS_SIMULATOR_UDID"
           artifact_dir="$PWD/artifacts/godot-ios-metal"
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           xcrun simctl uninstall "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
           xcrun simctl install "$simulator_udid" "$app"
           container="$(xcrun simctl get_app_container "$simulator_udid" "$bundle_id" data)"
@@ -1054,7 +1055,37 @@ jobs:
             --rendering-method gl_compatibility \
             --scene res://scenes/IOSSimulatorCompatibilityProbe.tscn \
             --fixed-fps 30 \
-            > "$artifact_dir/godot-ios-compatibility-probe-launch.log" 2>&1
+            > "$artifact_dir/godot-ios-compatibility-probe-launch.log" 2>&1 &
+          launch_pid=$!
+          app_pid=''
+          for _second in $(seq 1 30); do
+            result_file="$(find "$container" -type f -name godot-ios-compatibility-probe-result.log -print -quit)"
+            png_file="$(find "$container" -type f -name godot-ios-compatibility-probe.png -print -quit)"
+            if [ -n "$result_file" ] && [ -s "$result_file" ] && [ -n "$png_file" ] && [ -s "$png_file" ]; then
+              break
+            fi
+            if [ -z "$app_pid" ]; then
+              app_pid="$(sed -nE 's/.*: ([0-9]+)$/\1/p' "$artifact_dir/godot-ios-compatibility-probe-launch.log" | tail -n 1)"
+            fi
+            if [ "$_second" -eq 10 ]; then
+              xcrun simctl io "$simulator_udid" screenshot \
+                "$artifact_dir/godot-ios-compatibility-simulator-screen.png" || true
+              if [ -n "$app_pid" ]; then
+                sample "$app_pid" 5 -file \
+                  "$artifact_dir/godot-ios-compatibility-process-sample.txt" || true
+              fi
+            fi
+            if ! kill -0 "$launch_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          xcrun simctl spawn "$simulator_udid" log show --style compact --last 2m \
+            --predicate "process == '$executable'" \
+            > "$artifact_dir/godot-ios-compatibility-system.log" 2>&1 || true
+          xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
+          kill "$launch_pid" 2>/dev/null || true
+          wait "$launch_pid" 2>/dev/null || true
           result_file="$(find "$container" -type f -name godot-ios-compatibility-probe-result.log -print -quit)"
           png_file="$(find "$container" -type f -name godot-ios-compatibility-probe.png -print -quit)"
           test -n "$result_file"
