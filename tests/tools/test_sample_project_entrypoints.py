@@ -268,6 +268,7 @@ def main() -> int:
         "vsync=disabled-for-simulator-present-compatibility",
         "--imm-godot-visual-renderer-api=4",
         'local expected_result_name="$2"',
+        'cp "$expected_result" "$artifact_dir/$expected_result_name"',
         "godot-ios-metal-sample1.json",
         "godot-ios-metal-full-depth.json",
         "godot-ios-metal-ordered-overlay.json",

@@ -1217,6 +1217,7 @@ jobs:
             for _second in $(seq 1 60); do
               expected_result="$(find "$container" -type f -name "$expected_result_name" -print -quit 2>/dev/null || true)"
               if [ -n "$expected_result" ] && [ -s "$expected_result" ]; then
+                cp "$expected_result" "$artifact_dir/$expected_result_name"
                 xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
                 kill "$launch_pid" 2>/dev/null || true
                 wait "$launch_pid" 2>/dev/null || true
@@ -1254,6 +1255,9 @@ jobs:
             local name="$1"
             local destination="$2"
             local source=''
+            if [ -s "$destination" ]; then
+              return 0
+            fi
             source="$(find "$container" -type f -name "$name" -print -quit 2>/dev/null || true)"
             test -n "$source"
             test -s "$source"
