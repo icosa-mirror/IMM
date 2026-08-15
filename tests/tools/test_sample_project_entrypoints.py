@@ -265,6 +265,7 @@ def main() -> int:
         "image_cube_array_reporting=unchanged",
         "default_cube_array_fallbacks=omitted-on-simulator",
         "timed_present=ordinary-present-on-simulator",
+        "vsync=disabled-for-simulator-present-compatibility",
         "Compile exported Godot iOS Simulator application",
         "Run Godot iOS Metal visual validation in Simulator",
         "[CI IOS GODOT SIMULATOR]",

@@ -1199,6 +1199,7 @@ jobs:
             "bundle_id=$bundle_id" \
             "executable=$executable" \
             "renderer=Metal" \
+            "vsync=disabled-for-simulator-present-compatibility" \
             > "$artifact_dir/runtime-launch-contract.txt"
 
           run_app() {
@@ -1254,6 +1255,7 @@ jobs:
           run_app godot-ios-full-depth \
             --rendering-driver metal \
             --rendering-method mobile \
+            --disable-vsync \
             --fixed-fps 30 \
             -- \
             --imm-godot-ci-scene=visual-smoke \
@@ -1279,6 +1281,7 @@ jobs:
           run_app godot-ios-ordered-overlay \
             --rendering-driver metal \
             --rendering-method mobile \
+            --disable-vsync \
             --fixed-fps 30 \
             -- \
             --imm-godot-ci-scene=visual-smoke \
@@ -1299,6 +1302,7 @@ jobs:
           run_app godot-ios-sample-play \
             --rendering-driver metal \
             --rendering-method mobile \
+            --disable-vsync \
             --fixed-fps 30 \
             -- \
             --imm-godot-ci-scene=sample \
