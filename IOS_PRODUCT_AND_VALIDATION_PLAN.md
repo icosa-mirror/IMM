@@ -192,6 +192,10 @@ Phase 3 is complete.
    Firebase scheduling but failed installation before application startup. That
    is a future physical-device coverage item, not a blocker for the completed
    Simulator Metal validation criterion.
+7. The stock Compatibility Simulator control is diagnostic rather than an
+   acceptance gate. It runs only when `[CI IOS GODOT COMPAT]` is requested, so
+   routine Metal iterations do not rebuild a second Godot engine. Physical
+   Firebase execution is similarly explicit through `[CI IOS GODOT DEVICE]`.
 
 ### Implementation
 

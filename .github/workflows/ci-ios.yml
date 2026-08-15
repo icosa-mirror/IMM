@@ -513,6 +513,7 @@ jobs:
 
       - name: Restore stock Godot iOS Compatibility Simulator engine cache
         id: godot_ios_compatibility_simulator_engine_cache
+        if: contains(github.event.head_commit.message, '[CI IOS GODOT COMPAT]')
         uses: actions/cache/restore@v4
         with:
           path: build/godot-ios-compatibility-simulator-engine/libgodot.a
@@ -520,6 +521,7 @@ jobs:
 
       - name: Build stock Godot arm64 iOS Compatibility Simulator engine
         id: godot_ios_compatibility_simulator_engine
+        if: contains(github.event.head_commit.message, '[CI IOS GODOT COMPAT]')
         run: |
           set -euo pipefail
           artifact_dir="$PWD/artifacts/godot-ios-metal"
@@ -564,7 +566,7 @@ jobs:
             > "$artifact_dir/godot-compatibility-simulator-engine-contract.txt"
 
       - name: Save stock Godot iOS Compatibility Simulator engine cache
-        if: steps.godot_ios_compatibility_simulator_engine.outcome == 'success' && steps.godot_ios_compatibility_simulator_engine_cache.outputs.cache-hit != 'true'
+        if: contains(github.event.head_commit.message, '[CI IOS GODOT COMPAT]') && steps.godot_ios_compatibility_simulator_engine.outcome == 'success' && steps.godot_ios_compatibility_simulator_engine_cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: build/godot-ios-compatibility-simulator-engine/libgodot.a
@@ -1032,6 +1034,7 @@ jobs:
 
       - name: Install stock Compatibility engine into Simulator export
         id: godot_ios_compatibility_simulator_engine_install
+        if: contains(github.event.head_commit.message, '[CI IOS GODOT COMPAT]')
         run: |
           set -euo pipefail
           engine_archive="$PWD/build/godot-ios-compatibility-simulator-engine/libgodot.a"
@@ -1051,6 +1054,7 @@ jobs:
 
       - name: Compile stock Godot Compatibility Simulator application
         id: godot_ios_compatibility_simulator_compile
+        if: contains(github.event.head_commit.message, '[CI IOS GODOT COMPAT]')
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -1608,7 +1612,6 @@ jobs:
           test "${{ steps.godot_ios_metal_simulator_engine.outcome }}" = success
           test "${{ steps.godot_ios_metal_simulator_engine_install.outcome }}" = success
           test "${{ steps.godot_ios_simulator_compile.outcome }}" = success
-          test "${{ steps.godot_ios_compatibility_simulator_compile.outcome }}" = success
           test "${{ steps.godot_ios_simulator_boot.outcome }}" = success
           # The stock Compatibility probe is a diagnostic control. The custom
           # Metal Simulator runtime and its retained visual contracts are the

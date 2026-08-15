@@ -279,6 +279,8 @@ def main() -> int:
         "contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]')",
         "[CI IOS GODOT DEVICE]",
         "contains(github.event.head_commit.message, '[CI IOS GODOT DEVICE]')",
+        "[CI IOS GODOT COMPAT]",
+        "contains(github.event.head_commit.message, '[CI IOS GODOT COMPAT]')",
         '--export-debug "iOS Development"',
         "Compile exported Godot iOS application without signing",
         "Package Godot iOS application for Firebase Test Lab",
@@ -304,6 +306,7 @@ def main() -> int:
         assert token in ios_workflow
     assert ios_workflow.count("--imm-godot-visual-renderer-api=4") == 2
     assert "--imm-godot-visual-renderer-api=5" not in ios_workflow
+    assert 'test "${{ steps.godot_ios_compatibility_simulator_compile.outcome }}" = success' not in ios_workflow
     for obsolete in [
         "The Simulator GPU lacks image cube arrays required by Godot Metal.",
         "Real-device Firebase validation owns the Metal result.",
