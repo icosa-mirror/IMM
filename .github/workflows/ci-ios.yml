@@ -1260,7 +1260,7 @@ jobs:
             -- \
             --imm-godot-ci-scene=visual-smoke \
             --imm-godot-visual-smoke \
-            --imm-godot-visual-renderer-api=5 \
+            --imm-godot-visual-renderer-api=4 \
             --imm-godot-visual-smoke-width=1024 \
             --imm-godot-visual-smoke-height=576 \
             --imm-godot-visual-smoke-use-spawn-area=1 \
@@ -1286,7 +1286,7 @@ jobs:
             -- \
             --imm-godot-ci-scene=visual-smoke \
             --imm-godot-visual-smoke \
-            --imm-godot-visual-renderer-api=5 \
+            --imm-godot-visual-renderer-api=4 \
             --imm-godot-visual-smoke-width=1024 \
             --imm-godot-visual-smoke-height=576 \
             --imm-godot-visual-smoke-use-spawn-area=1 \

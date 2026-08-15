@@ -266,6 +266,7 @@ def main() -> int:
         "default_cube_array_fallbacks=omitted-on-simulator",
         "timed_present=ordinary-present-on-simulator",
         "vsync=disabled-for-simulator-present-compatibility",
+        "--imm-godot-visual-renderer-api=4",
         "Compile exported Godot iOS Simulator application",
         "Run Godot iOS Metal visual validation in Simulator",
         "[CI IOS GODOT SIMULATOR]",
@@ -293,6 +294,8 @@ def main() -> int:
         "GodotIOSMetal",
     ]:
         assert token in ios_workflow
+    assert ios_workflow.count("--imm-godot-visual-renderer-api=4") == 2
+    assert "--imm-godot-visual-renderer-api=5" not in ios_workflow
     for obsolete in [
         "The Simulator GPU lacks image cube arrays required by Godot Metal.",
         "Real-device Firebase validation owns the Metal result.",
