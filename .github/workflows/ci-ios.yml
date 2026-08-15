@@ -1204,15 +1204,24 @@ jobs:
 
           run_app() {
             local label="$1"
-            shift
+            local expected_result_name="$2"
+            shift 2
             local log_path="$artifact_dir/${label}-launch.log"
             local launch_pid=''
             local app_pid=''
+            local expected_result=''
             local status=0
             xcrun simctl launch --console --terminate-running-process \
               "$simulator_udid" "$bundle_id" "$@" > "$log_path" 2>&1 &
             launch_pid=$!
             for _second in $(seq 1 60); do
+              expected_result="$(find "$container" -type f -name "$expected_result_name" -print -quit 2>/dev/null || true)"
+              if [ -n "$expected_result" ] && [ -s "$expected_result" ]; then
+                xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
+                kill "$launch_pid" 2>/dev/null || true
+                wait "$launch_pid" 2>/dev/null || true
+                return 0
+              fi
               if ! kill -0 "$launch_pid" 2>/dev/null; then
                 set +e
                 wait "$launch_pid"
@@ -1252,7 +1261,7 @@ jobs:
           }
 
           runtime_status=0
-          run_app godot-ios-full-depth \
+          run_app godot-ios-full-depth godot-ios-full-depth-result.log \
             --rendering-driver metal \
             --rendering-method mobile \
             --disable-vsync \
@@ -1278,7 +1287,7 @@ jobs:
             exit "$runtime_status"
           fi
 
-          run_app godot-ios-ordered-overlay \
+          run_app godot-ios-ordered-overlay godot-ios-ordered-overlay-result.log \
             --rendering-driver metal \
             --rendering-method mobile \
             --disable-vsync \
@@ -1299,7 +1308,7 @@ jobs:
           collect_user_file godot-ios-metal-ordered-overlay.png "$artifact_dir/godot-ios-metal-ordered-overlay.png" || runtime_status=1
           collect_user_file godot-ios-ordered-overlay-result.log "$artifact_dir/godot-ios-ordered-overlay-result.log" || runtime_status=1
 
-          run_app godot-ios-sample-play \
+          run_app godot-ios-sample-play godot-ios-sample-play.log \
             --rendering-driver metal \
             --rendering-method mobile \
             --disable-vsync \

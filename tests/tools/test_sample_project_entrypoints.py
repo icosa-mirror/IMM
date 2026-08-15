@@ -267,6 +267,7 @@ def main() -> int:
         "timed_present=ordinary-present-on-simulator",
         "vsync=disabled-for-simulator-present-compatibility",
         "--imm-godot-visual-renderer-api=4",
+        'local expected_result_name="$2"',
         "Compile exported Godot iOS Simulator application",
         "Run Godot iOS Metal visual validation in Simulator",
         "[CI IOS GODOT SIMULATOR]",
