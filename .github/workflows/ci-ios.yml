@@ -359,7 +359,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
-          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-apple4-bypass-v1
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-cube-array-fallback-v2
 
       - name: Build Godot arm64 iOS Simulator engine with Metal
         id: godot_ios_metal_simulator_engine
@@ -413,6 +413,36 @@ jobs:
               raise SystemExit("Godot Metal Simulator Apple4 bypass was not applied exactly once")
           path.write_text(patched, encoding="utf-8")
           PY
+            python3 - "$source_dir/servers/rendering/renderer_rd/storage_rd/texture_storage.cpp" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          include_needle = '#include "core/config/engine.h"\n'
+          include_replacement = (
+              '#include "core/config/engine.h"\n'
+              '#if defined(IOS_ENABLED)\n'
+              '#include <TargetConditionals.h>\n'
+              '#endif\n'
+          )
+          block_start = '\t{ //create default black cubemap array\n'
+          next_block = '\t{ //create default black cubemap\n'
+          if source.count(include_needle) != 1:
+              raise SystemExit("Godot TextureStorage Engine include did not match exactly once")
+          if source.count(block_start) != 1 or source.count(next_block) != 1:
+              raise SystemExit("Godot default cube-array texture block boundaries did not match exactly once")
+          patched = source.replace(include_needle, include_replacement, 1)
+          patched = patched.replace(
+              block_start,
+              '#if !defined(IOS_ENABLED) || !TARGET_OS_SIMULATOR\n' + block_start,
+              1,
+          )
+          patched = patched.replace(next_block, '#endif\n' + next_block, 1)
+          if patched.count('#if !defined(IOS_ENABLED) || !TARGET_OS_SIMULATOR') != 1:
+              raise SystemExit("Godot Simulator cube-array fallback omission was not applied exactly once")
+          path.write_text(patched, encoding="utf-8")
+          PY
             "$SCONS_PYTHON" -m SCons -C "$source_dir" \
               platform=ios \
               target=template_debug \
@@ -441,6 +471,7 @@ jobs:
             "metal_guard=removed-for-runtime-probe" \
             "apple4_startup_guard=physical-only" \
             "image_cube_array_reporting=unchanged" \
+            "default_cube_array_fallbacks=omitted-on-simulator" \
             > "$artifact_dir/godot-metal-simulator-engine-contract.txt"
 
       - name: Save Godot iOS Metal Simulator engine cache
@@ -448,7 +479,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
-          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-apple4-bypass-v1
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-cube-array-fallback-v2
 
       - name: Restore stock Godot iOS Compatibility Simulator engine cache
         id: godot_ios_compatibility_simulator_engine_cache

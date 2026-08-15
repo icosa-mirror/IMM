@@ -263,6 +263,7 @@ def main() -> int:
         "!TARGET_OS_SIMULATOR",
         "apple4_startup_guard=physical-only",
         "image_cube_array_reporting=unchanged",
+        "default_cube_array_fallbacks=omitted-on-simulator",
         "Compile exported Godot iOS Simulator application",
         "Run Godot iOS Metal visual validation in Simulator",
         "[CI IOS GODOT SIMULATOR]",
