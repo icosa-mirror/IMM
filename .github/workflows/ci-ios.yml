@@ -356,15 +356,13 @@ jobs:
 
       - name: Restore Godot iOS Metal Simulator engine cache
         id: godot_ios_metal_simulator_engine_cache
-        if: ${{ false }} # The Simulator GPU lacks image cube arrays required by Godot Metal.
         uses: actions/cache/restore@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
-          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-guard-v1
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-apple4-bypass-v1
 
       - name: Build Godot arm64 iOS Simulator engine with Metal
         id: godot_ios_metal_simulator_engine
-        if: ${{ false }} # Real-device Firebase validation owns the Metal result.
         run: |
           set -euo pipefail
           artifact_dir="$PWD/artifacts/godot-ios-metal"
@@ -400,6 +398,21 @@ jobs:
               raise SystemExit("Godot iOS Metal disable assignment remains after patch")
           path.write_text(patched, encoding="utf-8")
           PY
+            python3 - "$source_dir/drivers/metal/rendering_device_driver_metal.cpp" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          needle = "\tif (device_properties->features.highestFamily < MTL::GPUFamilyApple4) {"
+          replacement = "\tif (!TARGET_OS_SIMULATOR && device_properties->features.highestFamily < MTL::GPUFamilyApple4) {"
+          if source.count(needle) != 1:
+              raise SystemExit("Godot Metal Apple4 startup guard did not match exactly once")
+          patched = source.replace(needle, replacement, 1)
+          if patched.count(replacement) != 1:
+              raise SystemExit("Godot Metal Simulator Apple4 bypass was not applied exactly once")
+          path.write_text(patched, encoding="utf-8")
+          PY
             "$SCONS_PYTHON" -m SCons -C "$source_dir" \
               platform=ios \
               target=template_debug \
@@ -426,6 +439,8 @@ jobs:
             "architecture=arm64" \
             "platform=iOS Simulator" \
             "metal_guard=removed-for-runtime-probe" \
+            "apple4_startup_guard=physical-only" \
+            "image_cube_array_reporting=unchanged" \
             > "$artifact_dir/godot-metal-simulator-engine-contract.txt"
 
       - name: Save Godot iOS Metal Simulator engine cache
@@ -433,7 +448,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
-          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-guard-v1
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-apple4-bypass-v1
 
       - name: Restore stock Godot iOS Compatibility Simulator engine cache
         id: godot_ios_compatibility_simulator_engine_cache
@@ -625,7 +640,6 @@ jobs:
 
       - name: Install Metal-enabled arm64 Godot engine into Simulator export
         id: godot_ios_metal_simulator_engine_install
-        if: ${{ false }} # Godot rejects the Simulator GPU before scene startup.
         run: |
           set -euo pipefail
           engine_archive="$PWD/build/godot-ios-metal-simulator-engine/libgodot.a"
@@ -919,7 +933,6 @@ jobs:
 
       - name: Compile exported Godot iOS Simulator application
         id: godot_ios_simulator_compile
-        if: ${{ false }} # Only the stock Compatibility Simulator control is supported.
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -1103,7 +1116,6 @@ jobs:
 
       - name: Run Godot iOS Metal visual validation in Simulator
         id: godot_ios_runtime
-        if: ${{ false }} # The Simulator GPU reports no image-cube-array support.
         continue-on-error: true
         timeout-minutes: 12
         run: |
@@ -1305,7 +1317,7 @@ jobs:
 
       - name: Check Firebase Test Lab configuration
         id: godot_ios_ftl_config
-        if: steps.godot_ios_package.outcome == 'success'
+        if: steps.godot_ios_package.outcome == 'success' && !contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]')
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -1515,9 +1527,15 @@ jobs:
           test "${{ steps.godot_ios_export.outcome }}" = success
           test "${{ steps.godot_ios_compile.outcome }}" = success
           test "${{ steps.godot_ios_package.outcome }}" = success
+          test "${{ steps.godot_ios_metal_simulator_engine.outcome }}" = success
+          test "${{ steps.godot_ios_metal_simulator_engine_install.outcome }}" = success
+          test "${{ steps.godot_ios_simulator_compile.outcome }}" = success
           test "${{ steps.godot_ios_compatibility_simulator_compile.outcome }}" = success
           test "${{ steps.godot_ios_simulator_boot.outcome }}" = success
           test "${{ steps.godot_ios_compatibility_probe.outcome }}" = success
-          test "${{ steps.godot_ios_ftl.outcome }}" = success
+          if [ "${{ contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]') }}" != true ]; then
+            test "${{ steps.godot_ios_ftl.outcome }}" = success
+          fi
+          test "${{ steps.godot_ios_runtime.outcome }}" = success
           test "${{ steps.godot_ios_metrics.outcome }}" = success
           test "${{ steps.godot_ios_classification.outcome }}" = success

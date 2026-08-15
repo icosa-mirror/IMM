@@ -259,6 +259,13 @@ def main() -> int:
         'platform=ios target=template_debug arch=arm64 ios_simulator=no',
         'GODOT_VERSION: 4.7.1-stable',
         'GODOT_CPP_REF: godot-4.5-stable',
+        "Build Godot arm64 iOS Simulator engine with Metal",
+        "!TARGET_OS_SIMULATOR",
+        "apple4_startup_guard=physical-only",
+        "image_cube_array_reporting=unchanged",
+        "Compile exported Godot iOS Simulator application",
+        "Run Godot iOS Metal visual validation in Simulator",
+        "[CI IOS GODOT SIMULATOR]",
         '--export-debug "iOS Development"',
         "Compile exported Godot iOS application without signing",
         "Package Godot iOS application for Firebase Test Lab",
@@ -282,6 +289,14 @@ def main() -> int:
         "GodotIOSMetal",
     ]:
         assert token in ios_workflow
+    for obsolete in [
+        "The Simulator GPU lacks image cube arrays required by Godot Metal.",
+        "Real-device Firebase validation owns the Metal result.",
+        "Godot rejects the Simulator GPU before scene startup.",
+        "Only the stock Compatibility Simulator control is supported.",
+        "The Simulator GPU reports no image-cube-array support.",
+    ]:
+        assert obsolete not in ios_workflow
     assert "simctl create" not in ios_workflow
     assert "!contains(github.event.head_commit.message, '[CI IOS]')" in validation_workflow
     for token in [
