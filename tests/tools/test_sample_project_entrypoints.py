@@ -266,6 +266,7 @@ def main() -> int:
         "Compile exported Godot iOS Simulator application",
         "Run Godot iOS Metal visual validation in Simulator",
         "[CI IOS GODOT SIMULATOR]",
+        "contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]')",
         '--export-debug "iOS Development"',
         "Compile exported Godot iOS application without signing",
         "Package Godot iOS application for Firebase Test Lab",
