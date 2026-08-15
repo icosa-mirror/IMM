@@ -103,6 +103,12 @@ def main() -> int:
             "unproject_position",
             'return configured_value != "0"',
         ],
+        ROOT / "tests/baselines/render/godot-ios-metal-sample-play.json": [
+            '"min_correlation": 0.50',
+            '"max_mean_abs_delta": 0.20',
+            '"sample1-lower-red-brush-content"',
+            '"minimum_matched_pixel_share_of_crop": 0.01',
+        ],
         ROOT / "code/projects/windows/run-godot-vulkan-visual-baseline-smoke.ps1": [
             "CompositionMode",
             "ordered_overlay",
