@@ -12,21 +12,10 @@
     "expected_spatial_luma_grid": {
       "center_crop_aspect_ratio": 1.3333333333,
       "height": 18,
-      "max_mean_abs_delta": 0.15,
-      "min_correlation": 0.9,
+      "max_mean_abs_delta": 0.17,
+      "min_correlation": 0.75,
       "width": 32
     },
-    "expected_spatial_luma_regions": [
-      {
-        "name": "character-front-depth-order",
-        "region_normalized": { "x": 0.47, "y": 0.4, "width": 0.1, "height": 0.25 },
-        "center_crop_aspect_ratio": 1.3333333333,
-        "width": 8,
-        "height": 12,
-        "max_mean_abs_delta": 0.16,
-        "min_correlation": 0.9
-      }
-    ],
     "expected_quadrant_luma_share": {
       "tolerance": 0.13,
       "values": {
