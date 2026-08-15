@@ -1197,6 +1197,7 @@ jobs:
           xcrun simctl install "$simulator_udid" "$app"
           container="$(xcrun simctl get_app_container "$simulator_udid" "$bundle_id" data)"
           test -d "$container"
+          find "$container" -type f -name 'godot-ios-*' -delete
           printf '%s\n' \
             "runtime=iOS Simulator" \
             "udid=$simulator_udid" \
@@ -1215,44 +1216,69 @@ jobs:
             local app_pid=''
             local expected_result=''
             local status=0
-            xcrun simctl launch --console --terminate-running-process \
-              "$simulator_udid" "$bundle_id" "$@" > "$log_path" 2>&1 &
-            launch_pid=$!
-            for _second in $(seq 1 60); do
+            local attempt=0
+            for attempt in 1 2; do
               expected_result="$(find "$container" -type f -name "$expected_result_name" -print -quit 2>/dev/null || true)"
-              if [ -n "$expected_result" ] && [ -s "$expected_result" ]; then
-                cp "$expected_result" "$artifact_dir/$expected_result_name"
-                xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
-                kill "$launch_pid" 2>/dev/null || true
-                wait "$launch_pid" 2>/dev/null || true
-                return 0
+              if [ -n "$expected_result" ]; then
+                rm -f "$expected_result"
               fi
-              if ! kill -0 "$launch_pid" 2>/dev/null; then
-                set +e
-                wait "$launch_pid"
-                status=$?
-                set -e
-                return "$status"
+              if [ "$attempt" -eq 2 ]; then
+                log_path="$artifact_dir/${label}-retry-launch.log"
               fi
-              if [ "$_second" -eq 10 ]; then
-                xcrun simctl io "$simulator_udid" screenshot \
-                  "$artifact_dir/${label}-simulator-screen.png" || true
-                app_pid="$(pgrep -x "$executable" | tail -n 1 || true)"
-                if [ -n "$app_pid" ]; then
-                  sample "$app_pid" 5 -file \
-                    "$artifact_dir/${label}-process-sample.txt" || true
+              xcrun simctl launch --console --terminate-running-process \
+                "$simulator_udid" "$bundle_id" "$@" > "$log_path" 2>&1 &
+              launch_pid=$!
+              status=0
+              for _second in $(seq 1 60); do
+                expected_result="$(find "$container" -type f -name "$expected_result_name" -print -quit 2>/dev/null || true)"
+                if [ -n "$expected_result" ] && [ -s "$expected_result" ]; then
+                  cp "$expected_result" "$artifact_dir/$expected_result_name"
+                  xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
+                  kill "$launch_pid" 2>/dev/null || true
+                  wait "$launch_pid" 2>/dev/null || true
+                  return 0
                 fi
-                xcrun simctl spawn "$simulator_udid" log show --style compact --last 1m \
-                  --predicate "process == '$executable'" \
-                  > "$artifact_dir/${label}-system.log" 2>&1 || true
+                if ! kill -0 "$launch_pid" 2>/dev/null; then
+                  set +e
+                  wait "$launch_pid"
+                  status=$?
+                  set -e
+                  if [ "$status" -eq 0 ]; then
+                    status=1
+                  fi
+                  xcrun simctl io "$simulator_udid" screenshot \
+                    "$artifact_dir/${label}-early-exit-attempt-${attempt}-screen.png" || true
+                  xcrun simctl spawn "$simulator_udid" log show --style compact --last 1m \
+                    --predicate "process == '$executable'" \
+                    > "$artifact_dir/${label}-early-exit-attempt-${attempt}-system.log" 2>&1 || true
+                  break
+                fi
+                if [ "$_second" -eq 10 ]; then
+                  xcrun simctl io "$simulator_udid" screenshot \
+                    "$artifact_dir/${label}-simulator-screen.png" || true
+                  app_pid="$(pgrep -x "$executable" | tail -n 1 || true)"
+                  if [ -n "$app_pid" ]; then
+                    sample "$app_pid" 5 -file \
+                      "$artifact_dir/${label}-process-sample.txt" || true
+                  fi
+                  xcrun simctl spawn "$simulator_udid" log show --style compact --last 1m \
+                    --predicate "process == '$executable'" \
+                    > "$artifact_dir/${label}-system.log" 2>&1 || true
+                fi
+                sleep 1
+              done
+              if kill -0 "$launch_pid" 2>/dev/null; then
+                echo "Timed out waiting for $label (attempt $attempt)" >> "$log_path"
+                status=124
               fi
-              sleep 1
+              xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
+              kill "$launch_pid" 2>/dev/null || true
+              wait "$launch_pid" 2>/dev/null || true
+              if [ "$attempt" -eq 1 ]; then
+                sleep 2
+              fi
             done
-            echo "Timed out waiting for $label" >> "$log_path"
-            xcrun simctl terminate "$simulator_udid" "$bundle_id" >/dev/null 2>&1 || true
-            kill "$launch_pid" 2>/dev/null || true
-            wait "$launch_pid" 2>/dev/null || true
-            return 124
+            return "$status"
           }
 
           collect_user_file() {
