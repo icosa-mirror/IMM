@@ -368,6 +368,14 @@ def main() -> int:
         )
         assert any("vertical luma profile" in error or "centroid" in error for error in compare_render_metrics.compare_metrics(reference, flipped))
         assert any("visible luma mean" in error for error in compare_render_metrics.compare_metrics(reference, dark))
+        assert not any(
+            "visible luma mean" in error
+            for error in compare_render_metrics.compare_metrics(
+                reference,
+                dark,
+                reference_visible_luma_ratio={"min": 0.2, "max": 1.5},
+            )
+        )
 
         # Each required known-bad visual class must be rejected by pixels, not
         # merely by an application log or capture-existence check.

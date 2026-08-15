@@ -1,0 +1,52 @@
+{
+  "baseline": "godot-ios-metal-ordered-overlay",
+  "capture_source": "Godot iOS Simulator Metal ordered-overlay composition",
+  "fixture": "exampleImmFiles/sample1.imm with ordered-overlay probes",
+  "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
+  "schema": "imm-render-baseline-contract-v1",
+  "validation": {
+    "allow_reference_dimension_mismatch": true,
+    "format": "png",
+    "minimum_dimensions": { "height": 540, "width": 960 },
+    "reference_visible_luma_ratio": { "min": 0.55, "max": 1.7 },
+    "requires_nonblank_capture": true,
+    "expected_spatial_luma_grid": {
+      "height": 9,
+      "max_mean_abs_delta": 0.22,
+      "min_correlation": 0.1,
+      "width": 16
+    },
+    "expected_color_components": {
+      "probes": [
+        {
+          "name": "sample1-lower-red-brush-content",
+          "target_rgb": [90, 25, 25],
+          "channel_tolerance": 25,
+          "region_normalized": { "x": 0.0, "y": 0.5, "width": 0.9, "height": 0.5 },
+          "minimum_matched_pixel_share_of_crop": 0.001
+        },
+        {
+          "name": "front-visible-magenta",
+          "target_rgb": [255, 0, 255],
+          "channel_tolerance": 32,
+          "region_normalized": { "x": 0.2, "y": 0.35, "width": 0.3, "height": 0.45 },
+          "minimum_largest_component_share_of_crop": 0.005
+        },
+        {
+          "name": "rear-visible-yellow",
+          "target_rgb": [255, 255, 0],
+          "channel_tolerance": 32,
+          "region_normalized": { "x": 0.55, "y": 0.1, "width": 0.25, "height": 0.35 },
+          "minimum_largest_component_share_of_crop": 0.003
+        },
+        {
+          "name": "character-occluded-cyan",
+          "target_rgb": [0, 255, 255],
+          "channel_tolerance": 48,
+          "region_normalized": { "x": 0.50, "y": 0.46, "width": 0.04, "height": 0.09 },
+          "maximum_largest_component_share_of_crop": 0.0005
+        }
+      ]
+    }
+  }
+}

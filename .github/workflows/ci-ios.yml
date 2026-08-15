@@ -1486,24 +1486,24 @@ jobs:
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-ios-metal/godot-ios-metal-render.png \
             --reference tests/baselines/render/windows-directx-sample1.ppm \
-            --contract tests/baselines/render/macos-metal-sample1.json \
+            --contract tests/baselines/render/godot-ios-metal-sample1.json \
             --json-output artifacts/godot-ios-metal/godot-ios-metal-render-metrics.json || status=$?
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-ios-metal/godot-ios-metal-full-depth.png \
             --reference tests/baselines/render/windows-directx-sample1.ppm \
-            --contract tests/baselines/render/sample1-full-depth.json \
+            --contract tests/baselines/render/godot-ios-metal-full-depth.json \
             --json-output artifacts/godot-ios-metal/godot-ios-metal-full-depth-metrics.json \
             --diagnostic-overlay-output artifacts/godot-ios-metal/godot-ios-metal-full-depth-diagnostic.png || status=$?
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay.png \
             --reference tests/baselines/render/windows-directx-sample1.ppm \
-            --contract tests/baselines/render/sample1-ordered-overlay.json \
+            --contract tests/baselines/render/godot-ios-metal-ordered-overlay.json \
             --json-output artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay-metrics.json \
             --diagnostic-overlay-output artifacts/godot-ios-metal/godot-ios-metal-ordered-overlay-diagnostic.png || status=$?
           python3 tests/tools/compare_render_metrics.py \
             artifacts/godot-ios-metal/godot-ios-sample-play.png \
             --reference tests/baselines/render/godot-windows-vulkan-sample-play.png \
-            --contract tests/baselines/render/godot-windows-vulkan-sample-play.json \
+            --contract tests/baselines/render/godot-ios-metal-sample-play.json \
             --json-output artifacts/godot-ios-metal/godot-ios-sample-play-metrics.json || status=$?
           exit "$status"
 

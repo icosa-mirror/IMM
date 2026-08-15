@@ -501,7 +501,12 @@ def collect_metrics(path: Path) -> dict:
     return data
 
 
-def compare_metrics(reference: dict, candidate: dict, allow_dimension_mismatch: bool = False) -> list[str]:
+def compare_metrics(
+    reference: dict,
+    candidate: dict,
+    allow_dimension_mismatch: bool = False,
+    reference_visible_luma_ratio: dict | None = None,
+) -> list[str]:
     errors = []
     if not allow_dimension_mismatch:
         for key in ["width", "height"]:
@@ -545,7 +550,12 @@ def compare_metrics(reference: dict, candidate: dict, allow_dimension_mismatch: 
         cand_luma = candidate.get("visible_luma_mean", 0)
         if ref_luma > 0 and cand_luma > 0:
             gamma_ratio = cand_luma / ref_luma
-            if gamma_ratio < 0.65 or gamma_ratio > 1.45:
+            minimum_luma_ratio = 0.65
+            maximum_luma_ratio = 1.45
+            if isinstance(reference_visible_luma_ratio, dict):
+                minimum_luma_ratio = float(reference_visible_luma_ratio.get("min", minimum_luma_ratio))
+                maximum_luma_ratio = float(reference_visible_luma_ratio.get("max", maximum_luma_ratio))
+            if gamma_ratio < minimum_luma_ratio or gamma_ratio > maximum_luma_ratio:
                 errors.append(f"visible luma mean drifted: reference={ref_luma:.3f} candidate={cand_luma:.3f} ratio={gamma_ratio:.3f}")
 
         ref_channels = reference.get("visible_channel_means") or {}
@@ -1058,7 +1068,15 @@ def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract
     if reference_path:
         reference = collect_metrics(reference_path)
         output["reference"] = reference
-        errors = compare_metrics(reference, candidate, allow_dimension_mismatch)
+        reference_visible_luma_ratio = (
+            validation.get("reference_visible_luma_ratio") if isinstance(validation, dict) else None
+        )
+        errors = compare_metrics(
+            reference,
+            candidate,
+            allow_dimension_mismatch,
+            reference_visible_luma_ratio,
+        )
     if contract_path:
         output["contract"] = {
             "path": contract_path.as_posix(),
