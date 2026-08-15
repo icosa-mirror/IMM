@@ -22,6 +22,7 @@ def main() -> int:
         VISUAL_MATRIX_SYMBOLS,
         add_color_component_table,
         effective_status,
+        find_images_for_report,
         required_depth_gaps_for_scope,
         row_required_for_scope,
         row_visual_requirement,
@@ -47,6 +48,23 @@ def main() -> int:
     assert slugify("Unity macOS Metal Composition") == "unity-macos-metal-composition"
     assert slugify("unity-mac-os-metal-composition") == "unity-macos-metal-composition"
     assert slugify("UnityAndroidVulkan") == "unity-android-vulkan"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        lane = Path(temp_dir) / "godot-ios-metal"
+        captures = lane / "captures"
+        captures.mkdir(parents=True)
+        report = lane / "render-report.md"
+        report.write_text("# Godot iOS Metal\n", encoding="utf-8")
+        (captures / "godot-ios-metal-full-depth.png").write_bytes(PNG_1X1)
+        (captures / "godot-ios-full-depth-simulator-screen.png").write_bytes(PNG_1X1)
+        (captures / "godot-ios-full-depth-early-exit-attempt-1-screen.png").write_bytes(PNG_1X1)
+        image_names = {
+            path.name for path in find_images_for_report(report, "godot-ios-metal")
+        }
+        assert image_names == {"godot-ios-metal-full-depth.png"}, (
+            "Simulator screenshots must remain diagnostic artifacts rather than "
+            "visual-report evidence"
+        )
 
     missing_firebase_capture = {
         "passed": False,

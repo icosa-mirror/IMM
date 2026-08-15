@@ -12,6 +12,10 @@ from pathlib import Path
 
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+NON_AUTHORITATIVE_IMAGE_NAME_PARTS = {
+    "-early-exit-attempt-",
+    "-simulator-screen",
+}
 VISUAL_RENDERERS = {"directx", "gles", "metal", "opengl", "vulkan", "webgl"}
 REPORT_SUFFIX = "-render-report.md"
 AGGREGATE_REPORT_NAMES = {
@@ -718,7 +722,14 @@ def find_images_for_report(report: Path, key: str) -> list[Path]:
         path
         for root in image_roots_for_report(report, key)
         for path in root.rglob("*")
-        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        if (
+            path.is_file()
+            and path.suffix.lower() in IMAGE_SUFFIXES
+            and not any(
+                part in path.name.lower()
+                for part in NON_AUTHORITATIVE_IMAGE_NAME_PARTS
+            )
+        )
     ]
     seen: set[tuple[str, str]] = set()
     unique: list[Path] = []
