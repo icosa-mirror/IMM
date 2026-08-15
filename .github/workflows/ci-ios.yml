@@ -359,7 +359,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
-          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-cube-array-fallback-v2
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-present-fallback-v3
 
       - name: Build Godot arm64 iOS Simulator engine with Metal
         id: godot_ios_metal_simulator_engine
@@ -443,6 +443,35 @@ jobs:
               raise SystemExit("Godot Simulator cube-array fallback omission was not applied exactly once")
           path.write_text(patched, encoding="utf-8")
           PY
+            python3 - "$source_dir/drivers/metal/rendering_device_driver_metal3.cpp" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text(encoding="utf-8")
+          include_needle = '#include "drivers/metal/rendering_context_driver_metal.h"\n'
+          include_replacement = (
+              '#include "drivers/metal/rendering_context_driver_metal.h"\n'
+              '#include <TargetConditionals.h>\n'
+          )
+          present_needle = '\t\t\t\t\t\tdr.drawable->presentAfterMinimumDuration(dr.duration);\n'
+          present_replacement = (
+              '#if TARGET_OS_SIMULATOR\n'
+              '\t\t\t\t\t\tdr.drawable->present();\n'
+              '#else\n'
+              '\t\t\t\t\t\tdr.drawable->presentAfterMinimumDuration(dr.duration);\n'
+              '#endif\n'
+          )
+          if source.count(include_needle) != 1:
+              raise SystemExit("Godot Metal3 context include did not match exactly once")
+          if source.count(present_needle) != 1:
+              raise SystemExit("Godot Metal3 timed-present call did not match exactly once")
+          patched = source.replace(include_needle, include_replacement, 1)
+          patched = patched.replace(present_needle, present_replacement, 1)
+          if patched.count('#if TARGET_OS_SIMULATOR') != 1:
+              raise SystemExit("Godot Simulator untimed-present fallback was not applied exactly once")
+          path.write_text(patched, encoding="utf-8")
+          PY
             "$SCONS_PYTHON" -m SCons -C "$source_dir" \
               platform=ios \
               target=template_debug \
@@ -472,6 +501,7 @@ jobs:
             "apple4_startup_guard=physical-only" \
             "image_cube_array_reporting=unchanged" \
             "default_cube_array_fallbacks=omitted-on-simulator" \
+            "timed_present=ordinary-present-on-simulator" \
             > "$artifact_dir/godot-metal-simulator-engine-contract.txt"
 
       - name: Save Godot iOS Metal Simulator engine cache
@@ -479,7 +509,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/godot-ios-metal-simulator-engine/libgodot.a
-          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-cube-array-fallback-v2
+          key: godot-ios-metal-simulator-engine-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_IOS_METAL_SIMULATOR_ENGINE_REF }}-simulator-present-fallback-v3
 
       - name: Restore stock Godot iOS Compatibility Simulator engine cache
         id: godot_ios_compatibility_simulator_engine_cache
