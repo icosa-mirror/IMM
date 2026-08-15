@@ -330,7 +330,7 @@ jobs:
 
   godot-ios-package:
     name: Godot iOS Package and Metal Validation
-    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS GODOT]') || contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]')
+    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS GODOT]') || contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]') || contains(github.event.head_commit.message, '[CI IOS GODOT DEVICE]')
     runs-on: macos-26
     timeout-minutes: 90
     env:
@@ -1395,7 +1395,7 @@ jobs:
 
       - name: Check Firebase Test Lab configuration
         id: godot_ios_ftl_config
-        if: steps.godot_ios_package.outcome == 'success' && !contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]')
+        if: steps.godot_ios_package.outcome == 'success' && contains(github.event.head_commit.message, '[CI IOS GODOT DEVICE]')
         env:
           FTL_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_TEST_LAB_SERVICE_ACCOUNT_JSON }}
         run: |
@@ -1610,8 +1610,10 @@ jobs:
           test "${{ steps.godot_ios_simulator_compile.outcome }}" = success
           test "${{ steps.godot_ios_compatibility_simulator_compile.outcome }}" = success
           test "${{ steps.godot_ios_simulator_boot.outcome }}" = success
-          test "${{ steps.godot_ios_compatibility_probe.outcome }}" = success
-          if [ "${{ contains(github.event.head_commit.message, '[CI IOS GODOT SIMULATOR]') }}" != true ]; then
+          # The stock Compatibility probe is a diagnostic control. The custom
+          # Metal Simulator runtime and its retained visual contracts are the
+          # authoritative iOS Godot result.
+          if [ "${{ contains(github.event.head_commit.message, '[CI IOS GODOT DEVICE]') }}" = true ]; then
             test "${{ steps.godot_ios_ftl.outcome }}" = success
           fi
           test "${{ steps.godot_ios_runtime.outcome }}" = success

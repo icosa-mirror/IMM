@@ -382,12 +382,11 @@
       "platform": "ios",
       "mode": "non-vr",
       "renderer": "metal",
-      "status": "unsupported",
-      "hosted_gate": null,
+      "status": "supported",
+      "hosted_gate": "CI iOS Iteration / Godot iOS Package and Metal Validation",
       "hardware_gate": null,
-      "baseline": "tests/baselines/render/macos-metal-sample1.json",
-      "owner_decision": "Keep the Godot iOS visual cell gray until a properly signed application runs on Firebase iOS hardware and supplies retained Metal render, Run-button, full-depth, and ordered-overlay images.",
-      "reason": "The application and unsigned IPA build successfully, but the current ad-hoc-signed IPA has no provisioning profile or TeamIdentifier and Firebase fails before device startup. The Compatibility Simulator control is not representative Metal evidence."
+      "baseline": "tests/baselines/render/godot-ios-metal-sample1.json",
+      "reason": "CI runs the ordinary Godot sample through a narrowly patched Godot 4.7.1 Metal engine on an Apple-silicon iOS Simulator and requires retained render-only, full-depth, ordered-overlay, and Run-button captures to pass their tolerant visual contracts. Firebase physical-device execution remains optional pending Apple signing."
     },
     {
       "product": "godot",

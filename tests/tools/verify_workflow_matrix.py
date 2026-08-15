@@ -29,7 +29,7 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-ios.yml": {
         "unity-ios-player-build": ["Build iOS Simulator native libraries", "Export Unity iOS Metal Simulator Xcode project", "Verify generated Unity iOS Simulator project contract", "Compile generated Unity iOS Simulator application", "Boot deterministic iOS Simulator", "Run Unity iOS Metal visual smokes", "Record Unity iOS Metal render metrics", "Classify Unity iOS Metal evidence", "Write Unity iOS Metal render reports", "Write Unity iOS Metal visual manifest", "Collect compact diagnostic summary", "Upload compact Unity iOS diagnostics"],
-        "godot-ios-package": ["Restore Godot iOS native build cache", "Build Godot iOS static GDExtension", "Save Godot iOS native build cache", "Download Godot 4.6 and iOS export templates", "Export ordinary Godot sample to iOS Xcode project", "Compile exported Godot iOS application without signing", "Package Godot iOS application for Firebase Test Lab", "Check Firebase Test Lab configuration", "Authenticate to Google Cloud", "Set up gcloud", "Run ordinary Godot iOS sample on Firebase Test Lab", "Record Godot iOS Metal render metrics", "Classify Godot iOS Metal evidence", "Write Godot iOS Metal render reports", "Write Godot iOS package manifest", "Write Godot iOS Metal visual manifest", "Collect Godot iOS diagnostics", "Upload Godot iOS diagnostics"],
+        "godot-ios-package": ["Restore Godot iOS native build cache", "Build Godot iOS static GDExtension", "Save Godot iOS native build cache", "Download Godot and iOS export templates", "Export ordinary Godot sample to iOS Xcode project", "Compile exported Godot iOS application without signing", "Package Godot iOS application for Firebase Test Lab", "Check Firebase Test Lab configuration", "Authenticate to Google Cloud", "Set up gcloud", "Run ordinary Godot iOS sample on Firebase Test Lab", "Record Godot iOS Metal render metrics", "Classify Godot iOS Metal evidence", "Write Godot iOS Metal render reports", "Write Godot iOS package manifest", "Write Godot iOS Metal visual manifest", "Collect Godot iOS diagnostics", "Upload Godot iOS diagnostics"],
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": ["Check Firebase Test Lab configuration", "Build Android GLES APKs", "Run Android GLES smoke in Firebase Test Lab", "Record Android GLES screenshot metrics", "Write Android GLES screenshot report", "Classify Android GLES result", "Write CI manifest", "Collect artifact summary"],
@@ -78,7 +78,7 @@ REQUIRED_JOBS = {
 REQUIRED_RUNS_ON = {
     ".github/workflows/ci-ios.yml": {
         "unity-ios-player-build": {"macos-14"},
-        "godot-ios-package": {"macos-15"},
+        "godot-ios-package": {"macos-26"},
     },
     ".github/workflows/ci-device.yml": {
         "android-standalone-gles": {"ubuntu-latest"},

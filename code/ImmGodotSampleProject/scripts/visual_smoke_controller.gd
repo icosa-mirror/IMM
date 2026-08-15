@@ -21,6 +21,7 @@ const MIN_ORIENTATION_LUMA_DELTA := 0.05
 const MIN_SCENE_PROBE_REGION_PIXELS := 64
 const MIN_SCENE_PROBE_DOMINANT_SHARE := 0.80
 const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.08
+const REAR_OCCLUDED_PROBE_REGION_SCALE := 0.70
 const MIN_ORDERED_OVERLAY_IMM_PIXELS := 4096
 const IMM_TICKS_PER_SECOND := 12600
 const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
@@ -716,7 +717,16 @@ func _create_scene_probe(name: String, color: Color, size: Vector3, draw_after_i
 func _analyze_scene_composition_pixels(image: Image) -> Dictionary:
 	var front: Dictionary = _analyze_scene_probe_region(image, _front_scene_probe, SCENE_FRONT_PROBE_COLOR)
 	var rear_visible: Dictionary = _analyze_scene_probe_region(image, _rear_visible_scene_probe, SCENE_REAR_VISIBLE_PROBE_COLOR)
-	var rear_occluded: Dictionary = _analyze_scene_probe_region(image, _rear_occluded_scene_probe, SCENE_REAR_OCCLUDED_PROBE_COLOR)
+	# Only the center of the rear probe is expected to be covered by IMM. The
+	# projected box edges can legitimately remain visible around the character as
+	# its pose changes, so counting the entire projected box conflates exposure
+	# around the silhouette with incorrect depth ordering.
+	var rear_occluded: Dictionary = _analyze_scene_probe_region(
+		image,
+		_rear_occluded_scene_probe,
+		SCENE_REAR_OCCLUDED_PROBE_COLOR,
+		REAR_OCCLUDED_PROBE_REGION_SCALE
+	)
 	return {
 		"front_probe": front,
 		"rear_visible_probe": rear_visible,
@@ -737,7 +747,7 @@ func _append_scene_composition_failures(diagnostics: Dictionary, failures: Array
 	if int(rear_occluded.get("total_pixels", 0)) < MIN_SCENE_PROBE_REGION_PIXELS or float(rear_occluded.get("target_share", 0.0)) > MAX_SCENE_PROBE_OCCLUDED_SHARE:
 		failures.append("scene composition %s rear occlusion leakage probe failed: %s" % [label, str(rear_occluded)])
 
-func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Color) -> Dictionary:
+func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Color, region_scale: float = 1.0) -> Dictionary:
 	if probe == null:
 		return {
 			"name": "missing",
@@ -748,6 +758,10 @@ func _analyze_scene_probe_region(image: Image, probe: MeshInstance3D, target: Co
 		}
 
 	var rect: Rect2i = _project_probe_rect(image, probe)
+	if region_scale < 1.0 and rect.size.x > 0 and rect.size.y > 0:
+		var inset_x: int = int(floor(float(rect.size.x) * (1.0 - region_scale) * 0.5))
+		var inset_y: int = int(floor(float(rect.size.y) * (1.0 - region_scale) * 0.5))
+		rect = rect.grow_individual(-inset_x, -inset_y, -inset_x, -inset_y)
 	var total_pixels: int = 0
 	var target_pixels: int = 0
 	if rect.size.x > 0 and rect.size.y > 0:

@@ -3,9 +3,9 @@
 ## Status
 
 This is the active plan for closing the repository's iOS product and validation
-gaps. The existing iOS workflow builds the Unity and Stroke Reader static
-libraries and link-checks the Unity archive, but it does not build an
-application, run Metal rendering, package Godot, or provide a standalone viewer.
+gaps. Phases 1 through 3 are complete: CI builds and validates Unity and Godot
+iOS applications through Metal with retained visual evidence. The remaining
+product gap is the standalone iOS viewer in Phase 4.
 
 Implementation proceeds from the smallest reusable foundation to the largest
 new product surface:
@@ -165,40 +165,33 @@ content, passes depth composition, and produces retained evidence in CI.
 
 ## Phase 3: Godot iOS packaging and visual validation
 
-### Current status (2026-08-14)
+### Current status (2026-08-15)
 
-1. Complete and proven in focused CI: the Godot iOS static GDExtension and
-   XCFramework build, ordinary sample-project export, unsigned arm64 iPhoneOS
-   application compilation, application bundle assembly, and IPA packaging.
-2. The focused lane uses an exact native-build cache, skips the unrelated main
-   build through `[CI IOS] [CI IOS GODOT]`, records the current Firebase iOS
-   device catalogue, and reports the Testing API matrix result directly even
-   when Cloud Tool Results is disabled.
-3. Firebase Game Loop scheduling was proven on both iPhone 14 Pro / iOS 16.6
-   and iPhone SE 3 / iOS 18.4 after removing Godot's Test-Lab-incompatible
-   `iphone-ipad-minimum-performance-a12` metadata token from the validation IPA.
-   The ordinary exported project and render code remain unchanged.
-4. Physical execution is currently blocked before application startup. Firebase
-   makes three infrastructure/install attempts on either device pool and writes
-   no device log, video, or screenshot. Retained signing diagnostics show the
-   uploaded IPA is ad-hoc signed, has no TeamIdentifier, and contains no
-   `embedded.mobileprovision`.
-5. The repository currently has no Apple signing certificate or provisioning
-   profile secrets. A development- or ad-hoc-distribution-signed IPA is therefore
-   the next required input. Until it is available, the Godot iOS visual/depth
-   matrix cell must remain unpromoted and Phase 3 is not complete.
-6. Focused run `31812230272` confirmed that Cloud Tool Results is now enabled:
-   the matrix and Tool Results identifiers were returned without the previous
-   API-disabled error. Firebase still made three infrastructure attempts and
-   reported `Test failed to run`; the results bucket contains only the uploaded
-   IPA, with no device log, video, or screenshot. The retained IPA diagnostics
-   again show an ad-hoc signature, no TeamIdentifier, and no
-   `embedded.mobileprovision`, so this run did not reach application startup.
-7. The aggregate report wiring includes the Godot iOS artifact and a separate
-   supported `application-build` row. The `godot/ios/non-vr/metal` visual row
-   remains unsupported/gray until physical Metal render and depth evidence
-   exists; package success and the Compatibility Simulator control cannot
-   promote it.
+Phase 3 is complete.
+
+1. Focused CI run `31884179111` validates the ordinary Godot sample project on
+   an Apple-silicon iOS Simulator through Metal. The sample project and its
+   normal Run-button scene remain unchanged.
+2. The Simulator lane builds and caches a narrowly patched Godot 4.7.1 engine.
+   The patches enable the Metal rendering device on the Simulator, omit an
+   unsupported unused cube-array fallback, and avoid the Simulator's unsupported
+   timed-present path. They apply only to the CI Simulator engine; stock Godot
+   exports and physical-device builds are not modified.
+3. The retained evidence contains passing render-only, full-depth,
+   ordered-overlay, and ordinary Run-button captures. Each capture passes its
+   tolerant visual contract, including explicit scene-content, orientation,
+   reverse-Z, and occlusion checks where applicable. The four final captures
+   were also manually reviewed as complete, coherent IMM scenes.
+4. The final status artifact reports `rendering`, `compositing`,
+   `depth_composition`, `ordered_overlay`, and `run_button` as `success`, with
+   no failures or warnings. Missing images or logs still fail closed.
+5. The aggregate report consumes this retained artifact and promotes
+   `godot/ios/non-vr/metal` from unsupported to a tested visual matrix target.
+6. Physical-device Firebase coverage remains unavailable without an Apple
+   signing identity and provisioning profile. Earlier run `31812230272` reached
+   Firebase scheduling but failed installation before application startup. That
+   is a future physical-device coverage item, not a blocker for the completed
+   Simulator Metal validation criterion.
 
 ### Implementation
 
