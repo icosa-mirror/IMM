@@ -127,14 +127,27 @@ static BOOL ImmHasArgument(NSString *argument)
 
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
 {
-    if (_player.Resize((int)size.width, (int)size.height))
-        NSLog(@"IMM_IOS_STANDALONE phase=resize status=passed width=%d height=%d", (int)size.width, (int)size.height);
+    const CGSize targetSize = _validationRequested ? CGSizeMake(1280, 720) : size;
+    if (_player.Resize((int)targetSize.width, (int)targetSize.height))
+        NSLog(@"IMM_IOS_STANDALONE phase=resize status=passed width=%d height=%d", (int)targetSize.width, (int)targetSize.height);
+    if (_validationRequested && !CGSizeEqualToSize(size, targetSize))
+    {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            view.drawableSize = targetSize;
+        });
+    }
 }
 
 - (void)drawInMTKView:(MTKView *)view
 {
     if (!_player.IsReady())
         return;
+    if (_validationRequested && !CGSizeEqualToSize(view.drawableSize, CGSizeMake(1280, 720)))
+    {
+        view.drawableSize = CGSizeMake(1280, 720);
+        _player.Resize(1280, 720);
+        return;
+    }
     if (_player.RenderSize().x == 0)
         _player.Resize((int)view.drawableSize.width, (int)view.drawableSize.height);
     MTLRenderPassDescriptor *pass = view.currentRenderPassDescriptor;
