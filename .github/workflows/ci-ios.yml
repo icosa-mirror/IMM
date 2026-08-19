@@ -71,7 +71,7 @@ jobs:
             *) echo "Unsupported macOS runner architecture: ${RUNNER_ARCH}" >&2; exit 1 ;;
           esac
           echo "STANDALONE_IOS_ARCH=$simulator_arch" >> "$GITHUB_ENV"
-          cmake -G Xcode -S code/projects/ios -B build/standalone-ios-simulator \
+          cmake -S code/projects/ios -B build/standalone-ios-simulator \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_SYSROOT=iphonesimulator \
             -DCMAKE_OSX_ARCHITECTURES="$simulator_arch" \
@@ -86,9 +86,6 @@ jobs:
           cmake --build build/standalone-ios-simulator \
             --target appImmViewerIOS \
             --config Release \
-            -- \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
             2>&1 | tee artifacts/standalone-ios-metal/xcodebuild.log
           app="$(find build/standalone-ios-simulator -type d -path '*Release-iphonesimulator/appImmViewerIOS.app' -print -quit)"
           test -n "$app"
