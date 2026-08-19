@@ -1075,7 +1075,7 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
 bool piRendererMetal::CopyNativeDrawableToTexture(void *destinationTexture)
 {
     id<MTLTexture> destination = (__bridge id<MTLTexture>)destinationTexture;
-    id<MTLTexture> source = mState->nativeDrawable.texture;
+    id<MTLTexture> source = mState->nativeRenderPass.colorAttachments[0].texture;
     if (!mState->frameActive || !mState->commandBuffer || !source || !destination ||
         source.width != destination.width || source.height != destination.height ||
         source.pixelFormat != destination.pixelFormat)

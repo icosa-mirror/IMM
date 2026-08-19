@@ -170,8 +170,11 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
     }
     if (_player.RenderSize().x == 0)
         _player.Resize((int)view.drawableSize.width, (int)view.drawableSize.height);
-    MTLRenderPassDescriptor *pass = view.currentRenderPassDescriptor;
     id<CAMetalDrawable> drawable = view.currentDrawable;
+    MTLRenderPassDescriptor *pass = view.currentRenderPassDescriptor;
+    if (!drawable || !pass)
+        return;
+    pass.colorAttachments[0].texture = drawable.texture;
     const BOOL captureRequested = _validationRequested && !_validationFinished && _player.FrameIndex() >= 119 &&
         (!_lifecycleSmokeRequested || _lifecycleResumed);
     id<MTLTexture> presentedCopy = nil;
