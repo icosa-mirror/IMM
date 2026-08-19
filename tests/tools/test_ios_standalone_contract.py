@@ -32,7 +32,7 @@ def main() -> int:
 
     assert "UIKit" not in core_header and "AppKit" not in core_header
     assert "UIKit" not in core and "AppKit" not in core
-    for token in ["BeginNativeFrame", "GlobalWork", "GlobalRender", "RenderMono", "WriteCapture", "API::AVFoundation"]:
+    for token in ["BeginNativeFrame", "CopyNativeDrawableToTexture", "GlobalWork", "GlobalRender", "RenderMono", "WriteCapture", "API::AVFoundation"]:
         assert token in core, token
 
     for token in [
@@ -43,6 +43,7 @@ def main() -> int:
         "UIApplicationDidBecomeActiveNotification",
         "UIPanGestureRecognizer",
         "UIPinchGestureRecognizer",
+        "presentedCopy",
         "IMM_IOS_STANDALONE phase=lifecycle status=passed",
     ]:
         assert token in shell, token

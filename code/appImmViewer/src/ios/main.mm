@@ -172,7 +172,22 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
         _player.Resize((int)view.drawableSize.width, (int)view.drawableSize.height);
     MTLRenderPassDescriptor *pass = view.currentRenderPassDescriptor;
     id<CAMetalDrawable> drawable = view.currentDrawable;
-    if (!_player.Draw((__bridge void *)pass, (__bridge void *)drawable))
+    const BOOL captureRequested = _validationRequested && !_validationFinished && _player.FrameIndex() >= 119 &&
+        (!_lifecycleSmokeRequested || _lifecycleResumed);
+    id<MTLTexture> presentedCopy = nil;
+    if (captureRequested)
+    {
+        MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:drawable.texture.pixelFormat
+                                                                                             width:drawable.texture.width
+                                                                                            height:drawable.texture.height
+                                                                                         mipmapped:NO];
+        descriptor.storageMode = MTLStorageModeShared;
+        descriptor.usage = MTLTextureUsageShaderRead;
+        presentedCopy = [view.device newTextureWithDescriptor:descriptor];
+    }
+    if (!_player.Draw((__bridge void *)pass,
+                      (__bridge void *)drawable,
+                      (__bridge void *)presentedCopy))
         return;
 
     if (_lifecycleSmokeRequested && !_lifecycleSuspended && _player.FrameIndex() >= 45)
@@ -187,15 +202,14 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
         return;
     }
 
-    if (_validationRequested && !_validationFinished && _player.FrameIndex() >= 120 &&
-        (!_lifecycleSmokeRequested || _lifecycleResumed))
+    if (captureRequested && _player.FrameIndex() >= 120)
     {
         NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
         NSString *capturePath = [documents stringByAppendingPathComponent:@"standalone-ios-metal-render.png"];
         NSString *offscreenPath = [documents stringByAppendingPathComponent:@"standalone-ios-metal-offscreen.png"];
         NSString *resultPath = [documents stringByAppendingPathComponent:@"standalone-ios-result.log"];
         wchar_t offscreenWide[PATH_MAX] = {};
-        const BOOL presented = ImmWritePresentedDrawable(drawable.texture, capturePath);
+        const BOOL presented = ImmWritePresentedDrawable(presentedCopy, capturePath);
         const BOOL offscreen = ImmToWide(offscreenPath, offscreenWide, PATH_MAX) && _player.WriteCapture(offscreenWide);
         const BOOL captured = presented && offscreen;
         const BOOL loaded = _player.IsDocumentLoaded();

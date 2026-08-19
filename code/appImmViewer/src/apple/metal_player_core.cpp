@@ -160,7 +160,7 @@ bool MetalPlayerCore::Resize(int width, int height)
     return mColorTexture && mDepthTexture && mRenderTarget;
 }
 
-bool MetalPlayerCore::Draw(void *renderPassDescriptor, void *drawable)
+bool MetalPlayerCore::Draw(void *renderPassDescriptor, void *drawable, void *captureTexture)
 {
     if (!mReady || mSuspended || !mRenderTarget || !renderPassDescriptor || !drawable)
         return false;
@@ -184,7 +184,12 @@ bool MetalPlayerCore::Draw(void *renderPassDescriptor, void *drawable)
     mViewer.RenderMono(mRenderSize, head, 0);
     mResolve.Do(mRenderer, nullptr, viewport, 0, 1.0f, mColorTexture);
     mSoundBackend->Tick();
-    mRenderer->EndNativeFrame();
+    if (captureTexture && !mRenderer->CopyNativeDrawableToTexture(captureTexture))
+    {
+        mRenderer->EndNativeFrame();
+        return false;
+    }
+    mRenderer->EndNativeFrame(captureTexture != nullptr);
     ++mFrameIndex;
     return true;
 }

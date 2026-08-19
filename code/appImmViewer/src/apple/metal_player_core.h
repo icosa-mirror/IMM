@@ -34,7 +34,7 @@ public:
     void Shutdown();
 
     bool Resize(int width, int height);
-    bool Draw(void *renderPassDescriptor, void *drawable);
+    bool Draw(void *renderPassDescriptor, void *drawable, void *captureTexture = nullptr);
     bool LoadDocument(const wchar_t *contentPath);
     bool WriteCapture(const wchar_t *path);
 

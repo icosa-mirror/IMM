@@ -1072,7 +1072,35 @@ bool piRendererMetal::BeginExternalCommandQueueRenderPassFrame(void *commandQueu
     return true;
 }
 
-void piRendererMetal::EndNativeFrame(void)
+bool piRendererMetal::CopyNativeDrawableToTexture(void *destinationTexture)
+{
+    id<MTLTexture> destination = (__bridge id<MTLTexture>)destinationTexture;
+    id<MTLTexture> source = mState->nativeDrawable.texture;
+    if (!mState->frameActive || !mState->commandBuffer || !source || !destination ||
+        source.width != destination.width || source.height != destination.height ||
+        source.pixelFormat != destination.pixelFormat)
+    {
+        return false;
+    }
+
+    iEndEncoder(mState);
+    id<MTLBlitCommandEncoder> blit = [mState->commandBuffer blitCommandEncoder];
+    if (!blit)
+        return false;
+    [blit copyFromTexture:source
+              sourceSlice:0
+              sourceLevel:0
+             sourceOrigin:MTLOriginMake(0, 0, 0)
+               sourceSize:MTLSizeMake(source.width, source.height, 1)
+                toTexture:destination
+         destinationSlice:0
+         destinationLevel:0
+        destinationOrigin:MTLOriginMake(0, 0, 0)];
+    [blit endEncoding];
+    return true;
+}
+
+void piRendererMetal::EndNativeFrame(bool waitForCompletion)
 {
     if (!mState->frameActive)
     {
@@ -1108,7 +1136,7 @@ void piRendererMetal::EndNativeFrame(void)
     {
         id<MTLCommandBuffer> commandBuffer = mState->commandBuffer;
         const bool logCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_LOG_COMMAND_BUFFER");
-        const bool waitCommandBuffer = iMetalEnvFlagEnabled("IMM_METAL_WAIT_COMMAND_BUFFER") || mState->nativeDrawable == nil;
+        const bool waitCommandBuffer = waitForCompletion || iMetalEnvFlagEnabled("IMM_METAL_WAIT_COMMAND_BUFFER") || mState->nativeDrawable == nil;
         if (logCommandBuffer)
         {
             [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> completedCommandBuffer) {
