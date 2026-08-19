@@ -416,6 +416,7 @@ if(IMM_BUILD_VIEWER)
 
     add_executable(appImmViewerMetal MACOSX_BUNDLE
         ${CODE_DIR}/appImmViewer/src/macos/metal_player.mm
+        ${CODE_DIR}/appImmViewer/src/apple/metal_player_core.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerMetal-settings.json
         ${CODE_DIR}/../exampleImmFiles/sample1.imm
         ${CODE_DIR}/appImmViewer/src/resolve.cpp

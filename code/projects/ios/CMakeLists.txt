@@ -233,6 +233,62 @@ add_custom_target(
 )
 add_dependencies(libImmPlayerUnity ShadersModel ShadersPretessellated)
 
+# -----------------------------------------------------------------------------
+# Standalone UIKit / Metal viewer
+# -----------------------------------------------------------------------------
+
+set(IMM_IOS_VIEWER_RESOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerIOS-settings.json
+    ${CODE_DIR}/../exampleImmFiles/sample1.imm
+)
+
+add_executable(appImmViewerIOS MACOSX_BUNDLE
+    ${CODE_DIR}/appImmViewer/src/ios/main.mm
+    ${CODE_DIR}/appImmViewer/src/apple/metal_player_core.cpp
+    ${CODE_DIR}/appImmViewer/src/resolve.cpp
+    ${CODE_DIR}/appImmViewer/src/settings.cpp
+    ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
+    ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
+    ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
+    ${CODE_DIR}/appImmViewer/src/simpleJSON/JSONValue.cpp
+    ${IMM_IOS_VIEWER_RESOURCES}
+)
+target_compile_definitions(appImmViewerIOS PRIVATE DISABLE_VR=1 IMM_IOS=1)
+target_include_directories(appImmViewerIOS PRIVATE ${CODE_DIR})
+target_link_libraries(appImmViewerIOS PRIVATE
+    libImmPlayerUnity
+    libImmImporterUnity
+    libImmCoreUnity
+    "-framework UIKit"
+    "-framework Metal"
+    "-framework MetalKit"
+    "-framework QuartzCore"
+    "-framework Foundation"
+    "-framework AVFoundation"
+    "-framework UniformTypeIdentifiers"
+    ZLIB::ZLIB
+)
+add_dependencies(appImmViewerIOS ShadersModel ShadersPretessellated)
+set_target_properties(appImmViewerIOS PROPERTIES
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerIOS-Info.plist.in"
+    MACOSX_BUNDLE_BUNDLE_NAME "IMM Viewer"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.immersivefoundation.imm.viewer.ios"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1.0"
+    MACOSX_BUNDLE_BUNDLE_VERSION "1"
+    XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
+    XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
+    XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "15.0"
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.immersivefoundation.imm.viewer.ios"
+)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerIOS-settings.json PROPERTIES
+    MACOSX_PACKAGE_LOCATION Resources
+)
+set_source_files_properties(${CODE_DIR}/../exampleImmFiles/sample1.imm PROPERTIES
+    MACOSX_PACKAGE_LOCATION Resources
+)
+
 set_source_files_properties(${CODE_DIR}/appImmUnity/src/main.cpp PROPERTIES LANGUAGE OBJCXX)
 add_library(ImmUnity STATIC
     ${CODE_DIR}/appImmUnity/src/main.cpp

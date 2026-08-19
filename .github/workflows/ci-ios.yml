@@ -47,6 +47,209 @@ env:
         </License><Signature xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/2001/REC-xml-c14n-20010315#WithComments"/><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><Reference URI="#Terms"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><DigestValue>9DZF11miRAzx7TIuCxih78B6CXU=</DigestValue></Reference></SignedInfo><SignatureValue>weRQubqMNN61lSZtm/e7S+UDzTPNQjM5aQl/c4aKLH/b2khefpgLfdWneoxdnNopA6+rW6kBqxWthMLdHY+oAOfDsfmMQRTnmQG0Y3G3xh6gjGP1RAIHoLDfFHf+0LQ3FakA2WehcFWPSYeVDrdxm3HWqMmdKWooD9i+J4s4rQFTDx9+/G6yjc5KGTyGxIz3c5kxTEkV2qsFPXsauomY9Z8YPKy+cZK7g+OlpO+LhtzetgTIlIN/qG8eByjlp6nOuVGdDOIrhNJW+vllNyx0qNWPREadVrhFViI4UXegMFRl5gJcrgcrlr/fD+NorDVLfcu7D863QXkkuriILUIq2Q==</SignatureValue></Signature></root>
 
 jobs:
+  standalone-ios-metal:
+    name: Standalone iOS Metal Validation
+    if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[CI IOS STANDALONE]')
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Prepare standalone iOS artifact directory
+        run: mkdir -p artifacts/standalone-ios-metal
+
+      - name: Configure standalone iOS Simulator application
+        id: standalone_ios_configure
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          case "${RUNNER_ARCH}" in
+            X64) simulator_arch=x86_64 ;;
+            ARM64) simulator_arch=arm64 ;;
+            *) echo "Unsupported macOS runner architecture: ${RUNNER_ARCH}" >&2; exit 1 ;;
+          esac
+          echo "STANDALONE_IOS_ARCH=$simulator_arch" >> "$GITHUB_ENV"
+          cmake -G Xcode -S code/projects/ios -B build/standalone-ios-simulator \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphonesimulator \
+            -DCMAKE_OSX_ARCHITECTURES="$simulator_arch" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            2>&1 | tee artifacts/standalone-ios-metal/cmake-configure.log
+
+      - name: Compile standalone iOS application without signing
+        id: standalone_ios_compile
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cmake --build build/standalone-ios-simulator \
+            --target appImmViewerIOS \
+            --config Release \
+            -- \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee artifacts/standalone-ios-metal/xcodebuild.log
+          app="$(find build/standalone-ios-simulator -type d -path '*Release-iphonesimulator/appImmViewerIOS.app' -print -quit)"
+          test -n "$app"
+          test -d "$app"
+          test -s "$app/sample1.imm"
+          test -s "$app/appImmViewerIOS-settings.json"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test -s "$app/$executable"
+          test "$bundle_id" = com.immersivefoundation.imm.viewer.ios
+          plutil -p "$app/Info.plist" > artifacts/standalone-ios-metal/application-info-plist.txt
+          file "$app/$executable" > artifacts/standalone-ios-metal/application-executable.txt
+          printf '%s\n' \
+            "app=$app" \
+            "bundle_id=$bundle_id" \
+            "minimum_ios=15.0" \
+            "renderer=Metal" \
+            "signing=disabled" \
+            > artifacts/standalone-ios-metal/application-build-contract.txt
+          echo "STANDALONE_IOS_APP=$app" >> "$GITHUB_ENV"
+          echo "STANDALONE_IOS_BUNDLE_ID=$bundle_id" >> "$GITHUB_ENV"
+
+      - name: Boot deterministic iOS Simulator for standalone viewer
+        id: standalone_ios_boot
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          xcrun simctl list devices available -j > artifacts/standalone-ios-metal/available-simulators.json
+          python3 tests/tools/select_ios_simulator.py \
+            --input artifacts/standalone-ios-metal/available-simulators.json \
+            --output artifacts/standalone-ios-metal/simulator-selection.json
+          simulator_udid="$(python3 -c 'import json; print(json.load(open("artifacts/standalone-ios-metal/simulator-selection.json"))["udid"])')"
+          test -n "$simulator_udid"
+          xcrun simctl shutdown "$simulator_udid" >/dev/null 2>&1 || true
+          xcrun simctl boot "$simulator_udid"
+          xcrun simctl bootstatus "$simulator_udid" -b
+          echo "STANDALONE_IOS_UDID=$simulator_udid" >> "$GITHUB_ENV"
+
+      - name: Run standalone iOS Metal visual and lifecycle validation
+        id: standalone_ios_runtime
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          : "${STANDALONE_IOS_APP:?missing standalone iOS app}"
+          : "${STANDALONE_IOS_BUNDLE_ID:?missing standalone iOS bundle identifier}"
+          : "${STANDALONE_IOS_UDID:?missing iOS Simulator destination}"
+          artifact_dir="$PWD/artifacts/standalone-ios-metal"
+          xcrun simctl install "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_APP"
+          container="$(xcrun simctl get_app_container "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" data)"
+          test -d "$container"
+          xcrun simctl launch --console --terminate-running-process \
+            "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" \
+            --imm-ios-validation --imm-ios-lifecycle-smoke \
+            > "$artifact_dir/runtime-launch.log" 2>&1 &
+          launch_pid=$!
+          result_file=''
+          for _second in $(seq 1 120); do
+            result_file="$(find "$container" -type f -name standalone-ios-result.log -print -quit 2>/dev/null || true)"
+            if [ -n "$result_file" ] && [ -s "$result_file" ]; then
+              break
+            fi
+            if ! kill -0 "$launch_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          xcrun simctl spawn "$STANDALONE_IOS_UDID" log show --style compact --last 3m \
+            --predicate 'process == "appImmViewerIOS"' \
+            > "$artifact_dir/system.log" 2>&1 || true
+          xcrun simctl io "$STANDALONE_IOS_UDID" screenshot "$artifact_dir/simulator-screen.png" || true
+          capture_file="$(find "$container" -type f -name standalone-ios-metal-render.png -print -quit 2>/dev/null || true)"
+          test -n "$result_file"
+          test -s "$result_file"
+          test -n "$capture_file"
+          test -s "$capture_file"
+          cp "$result_file" "$artifact_dir/standalone-ios-result.log"
+          cp "$capture_file" "$artifact_dir/standalone-ios-metal-render.png"
+          grep -q '^phase=render status=passed$' "$artifact_dir/standalone-ios-result.log"
+          grep -q '^phase=document status=passed path=sample1.imm$' "$artifact_dir/standalone-ios-result.log"
+          grep -q '^phase=lifecycle status=passed$' "$artifact_dir/standalone-ios-result.log"
+          grep -q 'IMM_IOS_STANDALONE phase=lifecycle status=passed' "$artifact_dir/system.log"
+          xcrun simctl terminate "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" >/dev/null 2>&1 || true
+          kill "$launch_pid" 2>/dev/null || true
+          wait "$launch_pid" 2>/dev/null || true
+          xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
+
+      - name: Compare standalone iOS Metal render evidence
+        id: standalone_ios_metrics
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 tests/tools/compare_render_metrics.py \
+            artifacts/standalone-ios-metal/standalone-ios-metal-render.png \
+            --reference tests/baselines/render/windows-directx-sample1.ppm \
+            --contract tests/baselines/render/ios-standalone-metal-sample1.json \
+            --json-output artifacts/standalone-ios-metal/standalone-ios-metal-render-metrics.json
+
+      - name: Write standalone iOS Metal render report
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 tests/tools/write_render_report.py \
+            --metrics-json artifacts/standalone-ios-metal/standalone-ios-metal-render-metrics.json \
+            --candidate-capture artifacts/standalone-ios-metal/standalone-ios-metal-render.png \
+            --output-dir artifacts/standalone-ios-metal/captures/render \
+            --markdown-output artifacts/standalone-ios-metal/render-report.md
+
+      - name: Write standalone iOS Metal visual manifest
+        if: always()
+        run: |
+          result=passed
+          failure_class=''
+          if [ "${{ steps.standalone_ios_configure.outcome }}" != success ] || [ "${{ steps.standalone_ios_compile.outcome }}" != success ]; then
+            result=failed
+            failure_class=packaging
+          elif [ "${{ steps.standalone_ios_boot.outcome }}" != success ]; then
+            result=failed
+            failure_class=infrastructure
+          elif [ "${{ steps.standalone_ios_runtime.outcome }}" != success ]; then
+            result=failed
+            failure_class=runtime
+          elif [ "${{ steps.standalone_ios_metrics.outcome }}" != success ]; then
+            result=failed
+            failure_class=visual
+          fi
+          python3 tests/tools/write_ci_manifest.py \
+            --status "$result" \
+            --failure-class "$failure_class" \
+            --output artifacts/standalone-ios-metal/manifest.json \
+            --product standalone \
+            --platform-name ios \
+            --mode non-vr \
+            --renderer metal \
+            --include artifacts/standalone-ios-metal
+
+      - name: Collect standalone iOS Metal evidence
+        if: always()
+        run: |
+          python3 tests/tools/collect_ci_artifacts.py \
+            --artifact-dir artifacts/standalone-ios-metal \
+            --require-manifest \
+            --output artifacts/standalone-ios-metal/artifact-summary.json
+
+      - name: Upload standalone iOS Metal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOSStandaloneMetal
+          path: artifacts/standalone-ios-metal
+          if-no-files-found: error
+
+      - name: Enforce standalone iOS Metal result
+        if: always()
+        run: |
+          test "${{ steps.standalone_ios_configure.outcome }}" = success
+          test "${{ steps.standalone_ios_compile.outcome }}" = success
+          test "${{ steps.standalone_ios_boot.outcome }}" = success
+          test "${{ steps.standalone_ios_runtime.outcome }}" = success
+          test "${{ steps.standalone_ios_metrics.outcome }}" = success
+
   unity-ios-player-build:
     name: Unity iOS Metal Simulator Validation
     if: inputs.run_validation == true || github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[CI IOS]') && !contains(github.event.head_commit.message, '[CI IOS GODOT]'))

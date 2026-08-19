@@ -26,9 +26,9 @@
     {
       "product": "standalone",
       "platform": "ios",
-      "status": "unsupported",
-      "backend": null,
-      "validation_gate": null
+      "status": "actual",
+      "backend": "AVFoundation",
+      "validation_gate": "CI iOS Iteration / Standalone iOS Metal Validation"
     },
     {
       "product": "unity",
@@ -199,13 +199,12 @@
       "product": "standalone",
       "platform": "ios",
       "mode": "non-vr",
-      "renderer": "native",
-      "status": "unsupported",
-      "hosted_gate": null,
+      "renderer": "metal",
+      "status": "supported",
+      "hosted_gate": "CI iOS Iteration / Standalone iOS Metal Validation",
       "hardware_gate": null,
-      "baseline": null,
-      "owner_decision": "Standalone iOS is not a supported product surface until a viewer target is added.",
-      "reason": "No standalone iOS viewer target is currently present in the repository."
+      "baseline": "tests/baselines/render/ios-standalone-metal-sample1.json",
+      "reason": "CI builds the UIKit application without signing, runs it in iOS Simulator through Metal, loads bundled sample1.imm, exercises suspend/resume, and retains a capture that must pass the standalone iOS visual contract."
     },
     {
       "product": "standalone",

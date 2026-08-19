@@ -28,6 +28,7 @@ REQUIRED_JOBS = {
         "core-evidence-report": ["Download core artifacts", "Verify core matrix evidence", "Upload core evidence report", "Hide per-lane core artifacts"],
     },
     ".github/workflows/ci-ios.yml": {
+        "standalone-ios-metal": ["Prepare standalone iOS artifact directory", "Configure standalone iOS Simulator application", "Compile standalone iOS application without signing", "Boot deterministic iOS Simulator for standalone viewer", "Run standalone iOS Metal visual and lifecycle validation", "Compare standalone iOS Metal render evidence", "Write standalone iOS Metal render report", "Write standalone iOS Metal visual manifest", "Collect standalone iOS Metal evidence", "Upload standalone iOS Metal evidence", "Enforce standalone iOS Metal result"],
         "unity-ios-player-build": ["Build iOS Simulator native libraries", "Export Unity iOS Metal Simulator Xcode project", "Verify generated Unity iOS Simulator project contract", "Compile generated Unity iOS Simulator application", "Boot deterministic iOS Simulator", "Run Unity iOS Metal visual smokes", "Record Unity iOS Metal render metrics", "Classify Unity iOS Metal evidence", "Write Unity iOS Metal render reports", "Write Unity iOS Metal visual manifest", "Collect compact diagnostic summary", "Upload compact Unity iOS diagnostics"],
         "godot-ios-package": ["Restore Godot iOS native build cache", "Build Godot iOS static GDExtension", "Save Godot iOS native build cache", "Download Godot and iOS export templates", "Export ordinary Godot sample to iOS Xcode project", "Compile exported Godot iOS application without signing", "Package Godot iOS application for Firebase Test Lab", "Check Firebase Test Lab configuration", "Authenticate to Google Cloud", "Set up gcloud", "Run ordinary Godot iOS sample on Firebase Test Lab", "Record Godot iOS Metal render metrics", "Classify Godot iOS Metal evidence", "Write Godot iOS Metal render reports", "Write Godot iOS package manifest", "Write Godot iOS Metal visual manifest", "Collect Godot iOS diagnostics", "Upload Godot iOS diagnostics"],
     },
@@ -77,6 +78,7 @@ REQUIRED_JOBS = {
 
 REQUIRED_RUNS_ON = {
     ".github/workflows/ci-ios.yml": {
+        "standalone-ios-metal": {"macos-14"},
         "unity-ios-player-build": {"macos-14"},
         "godot-ios-package": {"macos-26"},
     },
@@ -115,6 +117,7 @@ REQUIRED_RUNS_ON = {
 }
 REQUIRED_JOB_TIMEOUTS = {
     ".github/workflows/ci-ios.yml": {
+        "standalone-ios-metal",
         "unity-ios-player-build",
         "godot-ios-package",
     },

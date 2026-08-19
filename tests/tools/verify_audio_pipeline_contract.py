@@ -68,16 +68,22 @@ def main() -> int:
     windows_viewer = (root / "code/appImmViewer/src/mymain.cpp").read_text(encoding="utf-8")
     android_viewer = (root / "code/appImmViewer/src/android/cpp/NonVrApp.cpp").read_text(encoding="utf-8")
     macos_viewer = (root / "code/appImmViewer/src/macos/metal_player.mm").read_text(encoding="utf-8")
+    apple_viewer_core = (root / "code/appImmViewer/src/apple/metal_player_core.cpp").read_text(encoding="utf-8")
+    ios_viewer = (root / "code/appImmViewer/src/ios/main.mm").read_text(encoding="utf-8")
     require(errors, "API::DirectSoundOVR" in windows_viewer, "Windows standalone must select Audio360")
     require(errors, "API::Android" in android_viewer, "Android standalone must select the Android backend")
     require(errors, "API::AVFoundation" in macos_viewer, "macOS standalone must select AVFoundation")
+    require(errors, "API::AVFoundation" in apple_viewer_core,
+            "iOS standalone shared player core must select AVFoundation")
+    require(errors, "AVAudioSessionCategoryPlayback" in ios_viewer and "AVAudioSessionInterruptionNotification" in ios_viewer,
+            "iOS standalone must configure playback audio and handle interruptions")
 
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
 
-    print("Audio pipeline contract verified: 10 shipped product/platform combinations use real backends")
+    print("Audio pipeline contract verified: 11 shipped product/platform combinations use real backends")
     return 0
 
 

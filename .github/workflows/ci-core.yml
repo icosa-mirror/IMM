@@ -208,6 +208,7 @@ jobs:
           python tests/tools/test_classify_unity_synthetic_stereo.py
           python tests/tools/test_stereo_multipass_matrix_contract.py
           python tests/tools/test_sample_project_entrypoints.py
+          python tests/tools/test_ios_standalone_contract.py
 
       - name: Write CI manifest
         if: always()
