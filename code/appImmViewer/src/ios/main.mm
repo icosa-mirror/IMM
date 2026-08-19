@@ -64,9 +64,10 @@ static BOOL ImmHasArgument(NSString *argument)
     [_metalView addGestureRecognizer:pinch];
     [_metalView addGestureRecognizer:tap];
 
-    UIBarButtonItem *open = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFolder
-                                                                         target:self
-                                                                         action:@selector(openDocumentPicker:)];
+    UIBarButtonItem *open = [[UIBarButtonItem alloc] initWithTitle:@"Open"
+                                                             style:UIBarButtonItemStylePlain
+                                                            target:self
+                                                            action:@selector(openDocumentPicker:)];
     self.navigationItem.rightBarButtonItem = open;
     self.navigationItem.title = @"IMM Viewer";
 
@@ -115,7 +116,8 @@ static BOOL ImmHasArgument(NSString *argument)
 - (void)viewDidAppear:(BOOL)animated
 {
     [super viewDidAppear:animated];
-    [self setNeedsUpdateOfSupportedInterfaceOrientations];
+    if (@available(iOS 16.0, *))
+        [self setNeedsUpdateOfSupportedInterfaceOrientations];
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations

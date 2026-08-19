@@ -254,6 +254,7 @@ add_executable(appImmViewerIOS MACOSX_BUNDLE
     ${IMM_IOS_VIEWER_RESOURCES}
 )
 target_compile_definitions(appImmViewerIOS PRIVATE DISABLE_VR=1 IMM_IOS=1)
+target_compile_options(appImmViewerIOS PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
 target_include_directories(appImmViewerIOS PRIVATE ${CODE_DIR})
 target_link_libraries(appImmViewerIOS PRIVATE
     libImmPlayerUnity
