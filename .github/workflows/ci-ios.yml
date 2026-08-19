@@ -87,7 +87,7 @@ jobs:
             --target appImmViewerIOS \
             --config Release \
             2>&1 | tee artifacts/standalone-ios-metal/xcodebuild.log
-          app="$(find build/standalone-ios-simulator -type d -path '*Release-iphonesimulator/appImmViewerIOS.app' -print -quit)"
+          app="$(find build/standalone-ios-simulator -type d -name appImmViewerIOS.app -print -quit)"
           test -n "$app"
           test -d "$app"
           test -s "$app/sample1.imm"
