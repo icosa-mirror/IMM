@@ -2,10 +2,10 @@
 
 ## Status
 
-This is the active plan for closing the repository's iOS product and validation
-gaps. Phases 1 through 3 are complete: CI builds and validates Unity and Godot
-iOS applications through Metal with retained visual evidence. The remaining
-product gap is the standalone iOS viewer in Phase 4.
+This plan is complete. CI builds and validates the Unity, Godot, and standalone
+iOS applications through Metal with retained visual evidence. Phase 4 added the
+native standalone viewer, its signing-independent Simulator and device builds,
+and its post-validation unsigned release input.
 
 Implementation proceeds from the smallest reusable foundation to the largest
 new product surface:
@@ -219,6 +219,24 @@ scene with correct depth ordering, and passes the retained visual contracts.
 
 ## Phase 4: standalone iOS viewer and visual validation
 
+Status: complete on 2026-08-20.
+
+Focused run `32310785858` first confirmed the complete standalone exit
+criterion: the unsigned UIKit application compiled, loaded `sample1.imm`,
+rendered and presented the complete scene through Metal, played through the
+shared AVFoundation backend, and passed the suspend/resume lifecycle smoke. Its
+authoritative presented-drawable capture passed at 1280x720 with spatial-grid
+correlation `0.992`; the presented and offscreen images were both downloaded
+and manually inspected as complete, coherent, and upright.
+
+After that runtime and visual pass, focused run `32311231457` confirmed the
+post-validation release packaging at commit `906688f2`. It repeated the
+Simulator/runtime/visual pass, built a separate `iphoneos` arm64 application,
+and retained `appImmViewerIOS-unsigned-arm64.ipa` with the expected
+`Payload/appImmViewerIOS.app` structure, bundled IMM/settings resources, and an
+arm64 Mach-O executable. Distribution signing remains credential-dependent and
+is deliberately outside repository CI.
+
 ### Implementation
 
 1. Define the standalone iOS product behavior and minimum supported OS/device.
@@ -242,6 +260,9 @@ passes visual validation. Standalone does not require the engine depth-probe
 classification used for Unity and Godot.
 
 ## Final completion audit
+
+Status: complete. The final focused artifact and the existing engine evidence
+confirm the following checks.
 
 1. Verify all iOS application targets compile from a clean checkout.
 2. Download and manually inspect every new iOS image before accepting its

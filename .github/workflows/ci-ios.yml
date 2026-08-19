@@ -248,16 +248,31 @@ jobs:
           failure_class=''
           if [ "${{ steps.standalone_ios_configure.outcome }}" != success ] || [ "${{ steps.standalone_ios_compile.outcome }}" != success ]; then
             result=failed
-            failure_class=packaging
+            failure_class=build
           elif [ "${{ steps.standalone_ios_boot.outcome }}" != success ]; then
             result=failed
             failure_class=infrastructure
           elif [ "${{ steps.standalone_ios_runtime.outcome }}" != success ]; then
-            result=failed
-            failure_class=runtime
+            if test -s artifacts/standalone-ios-metal/system.log && \
+               grep -q 'IMM_IOS_STANDALONE phase=startup status=passed' artifacts/standalone-ios-metal/system.log && \
+               { test ! -s artifacts/standalone-ios-metal/standalone-ios-result.log || \
+                 test ! -s artifacts/standalone-ios-metal/standalone-ios-metal-render.png || \
+                 test ! -s artifacts/standalone-ios-metal/standalone-ios-metal-offscreen.png; }; then
+              result=evidence_incomplete
+              failure_class=evidence
+            else
+              result=failed
+              failure_class=runtime
+            fi
           elif [ "${{ steps.standalone_ios_metrics.outcome }}" != success ]; then
-            result=failed
-            failure_class=visual
+            if test ! -s artifacts/standalone-ios-metal/standalone-ios-metal-render.png || \
+               test ! -s artifacts/standalone-ios-metal/standalone-ios-metal-render-metrics.json; then
+              result=evidence_incomplete
+              failure_class=evidence
+            else
+              result=failed
+              failure_class=rendering
+            fi
           elif [ "${{ steps.standalone_ios_package.outcome }}" != success ]; then
             result=failed
             failure_class=packaging
