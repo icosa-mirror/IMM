@@ -2544,7 +2544,7 @@ piShader piRendererMetal::CreateShaderBinary(const piShaderOptions *, const uint
              "    VSOut out;\n"
              "    float2 p = vertices[vid].position;\n"
              "    out.position = float4(p, 0.0, 1.0);\n"
-             "    out.uv = float2(0.5 + 0.5 * p.x, 0.5 - 0.5 * p.y);\n"
+             "    out.uv = float2(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y);\n"
              "    return out;\n"
              "}\n"
              "struct ResolveConstants { float4 fade; };\n"

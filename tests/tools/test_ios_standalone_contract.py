@@ -36,6 +36,7 @@ def main() -> int:
     for token in ["BeginNativeFrame", "CopyNativeDrawableToTexture", "GlobalWork", "GlobalRender", "RenderMono", "WriteCapture", "API::AVFoundation"]:
         assert token in core, token
     assert "ResolveConstants &c [[buffer(17)]]" in metal_renderer
+    assert "out.uv = float2(0.5 + 0.5 * p.x, 0.5 + 0.5 * p.y)" in metal_renderer
 
     for token in [
         "MTKViewDelegate",
