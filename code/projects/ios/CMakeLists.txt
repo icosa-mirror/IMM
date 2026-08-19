@@ -267,6 +267,7 @@ target_link_libraries(appImmViewerIOS PRIVATE
     "-framework Foundation"
     "-framework AVFoundation"
     "-framework CoreImage"
+    "-framework CoreGraphics"
     "-framework UniformTypeIdentifiers"
     ZLIB::ZLIB
 )

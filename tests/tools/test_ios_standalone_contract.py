@@ -24,6 +24,7 @@ def main() -> int:
         '"-framework UIKit"',
         '"-framework MetalKit"',
         '"-framework AVFoundation"',
+        '"-framework CoreGraphics"',
         'XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"',
         'XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "15.0"',
     ]:
