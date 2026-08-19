@@ -60,6 +60,8 @@ def main() -> int:
         "Compile standalone iOS application without signing",
         "Run standalone iOS Metal visual and lifecycle validation",
         "standalone-ios-metal-render.png",
+        "Package standalone iOS arm64 release input after visual validation",
+        "appImmViewerIOS-unsigned-arm64.ipa",
         "ios-standalone-metal-sample1.json",
         "--product standalone",
         "--platform-name ios",

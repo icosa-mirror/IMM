@@ -11,5 +11,8 @@ background, and audio-interruption notifications. The reusable
 `MetalPlayerCore` owns IMM loading, rendering, playback timing, and AVFoundation
 audio without depending on AppKit or UIKit.
 
-Release packaging is intentionally not configured until the unsigned Simulator
-runtime and visual lane passes, as required by the iOS product plan.
+After the unsigned Simulator runtime and presented-drawable visual lane passes,
+CI also builds the `iphoneos` arm64 application and packages
+`appImmViewerIOS-unsigned-arm64.ipa`. This unsigned IPA is the signing-ready
+release input; App Store or ad hoc distribution still requires an Apple
+distribution identity and provisioning profile outside repository CI.

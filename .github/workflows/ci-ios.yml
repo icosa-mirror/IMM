@@ -200,6 +200,47 @@ jobs:
             --output-dir artifacts/standalone-ios-metal/captures/render \
             --markdown-output artifacts/standalone-ios-metal/render-report.md
 
+      - name: Package standalone iOS arm64 release input after visual validation
+        id: standalone_ios_package
+        if: steps.standalone_ios_runtime.outcome == 'success' && steps.standalone_ios_metrics.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          artifact_dir="$PWD/artifacts/standalone-ios-metal"
+          cmake -S code/projects/ios -B build/standalone-ios-device \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            2>&1 | tee "$artifact_dir/device-cmake-configure.log"
+          cmake --build build/standalone-ios-device \
+            --target appImmViewerIOS \
+            --config Release \
+            2>&1 | tee "$artifact_dir/device-build.log"
+          app="$(find build/standalone-ios-device -type d -name appImmViewerIOS.app -print -quit)"
+          test -n "$app"
+          test -d "$app"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+          test -s "$app/$executable"
+          file "$app/$executable" | tee "$artifact_dir/device-application-executable.txt"
+          grep -q 'arm64' "$artifact_dir/device-application-executable.txt"
+          staging="$PWD/build/standalone-ios-device-package"
+          rm -rf "$staging"
+          mkdir -p "$staging/Payload"
+          /usr/bin/ditto "$app" "$staging/Payload/appImmViewerIOS.app"
+          ipa="$artifact_dir/appImmViewerIOS-unsigned-arm64.ipa"
+          (cd "$staging" && /usr/bin/zip -qry "$ipa" Payload)
+          test -s "$ipa"
+          unzip -Z1 "$ipa" > "$artifact_dir/device-ipa-contents.txt"
+          grep -q '^Payload/appImmViewerIOS.app/Info.plist$' "$artifact_dir/device-ipa-contents.txt"
+          printf '%s\n' \
+            'platform=iphoneos' \
+            'architecture=arm64' \
+            'minimum_ios=15.0' \
+            'format=ipa' \
+            'signing=unsigned-release-input' \
+            > "$artifact_dir/device-release-package-contract.txt"
+
       - name: Write standalone iOS Metal visual manifest
         if: always()
         run: |
@@ -217,6 +258,9 @@ jobs:
           elif [ "${{ steps.standalone_ios_metrics.outcome }}" != success ]; then
             result=failed
             failure_class=visual
+          elif [ "${{ steps.standalone_ios_package.outcome }}" != success ]; then
+            result=failed
+            failure_class=packaging
           fi
           python3 tests/tools/write_ci_manifest.py \
             --status "$result" \
@@ -252,6 +296,7 @@ jobs:
           test "${{ steps.standalone_ios_boot.outcome }}" = success
           test "${{ steps.standalone_ios_runtime.outcome }}" = success
           test "${{ steps.standalone_ios_metrics.outcome }}" = success
+          test "${{ steps.standalone_ios_package.outcome }}" = success
 
   unity-ios-player-build:
     name: Unity iOS Metal Simulator Validation
