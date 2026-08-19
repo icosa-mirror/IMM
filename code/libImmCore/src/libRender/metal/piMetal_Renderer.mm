@@ -2550,7 +2550,7 @@ piShader piRendererMetal::CreateShaderBinary(const piShaderOptions *, const uint
              "struct ResolveConstants { float4 fade; };\n"
              "fragment float4 imm_resolve_fragment(VSOut in [[stage_in]],\n"
              "                                     texture2d<float> tex [[texture(0)]],\n"
-             "                                     constant ResolveConstants &c [[buffer(16)]]) {\n"
+             "                                     constant ResolveConstants &c [[buffer(17)]]) {\n"
              "    constexpr sampler s(address::clamp_to_edge, filter::linear);\n"
              "    float3 col = tex.sample(s, in.uv).rgb;\n"
              "    col = select(1.055 * pow(col, float3(1.0 / 2.4)) - 0.055, 12.92 * col, col < float3(0.0031308));\n"

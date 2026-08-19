@@ -12,6 +12,7 @@ def main() -> int:
     shell = (ROOT / "code/appImmViewer/src/ios/main.mm").read_text(encoding="utf-8")
     core_header = (ROOT / "code/appImmViewer/src/apple/metal_player_core.h").read_text(encoding="utf-8")
     core = (ROOT / "code/appImmViewer/src/apple/metal_player_core.cpp").read_text(encoding="utf-8")
+    metal_renderer = (ROOT / "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm").read_text(encoding="utf-8")
     plist = (ROOT / "code/projects/ios/appImmViewerIOS-Info.plist.in").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/ci-ios.yml").read_text(encoding="utf-8")
 
@@ -34,6 +35,7 @@ def main() -> int:
     assert "UIKit" not in core and "AppKit" not in core
     for token in ["BeginNativeFrame", "CopyNativeDrawableToTexture", "GlobalWork", "GlobalRender", "RenderMono", "WriteCapture", "API::AVFoundation"]:
         assert token in core, token
+    assert "ResolveConstants &c [[buffer(17)]]" in metal_renderer
 
     for token in [
         "MTKViewDelegate",
