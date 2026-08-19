@@ -156,14 +156,20 @@ jobs:
           xcrun simctl spawn "$STANDALONE_IOS_UDID" log show --style compact --last 3m \
             --predicate 'process == "appImmViewerIOS"' \
             > "$artifact_dir/system.log" 2>&1 || true
-          xcrun simctl io "$STANDALONE_IOS_UDID" screenshot "$artifact_dir/simulator-screen.png" || true
           capture_file="$(find "$container" -type f -name standalone-ios-metal-render.png -print -quit 2>/dev/null || true)"
+          offscreen_file="$(find "$container" -type f -name standalone-ios-metal-offscreen.png -print -quit 2>/dev/null || true)"
+          if [ -z "$result_file" ] || [ -z "$capture_file" ] || [ -z "$offscreen_file" ]; then
+            xcrun simctl io "$STANDALONE_IOS_UDID" screenshot "$artifact_dir/standalone-ios-simulator-screen.png" || true
+          fi
           test -n "$result_file"
           test -s "$result_file"
           test -n "$capture_file"
           test -s "$capture_file"
+          test -n "$offscreen_file"
+          test -s "$offscreen_file"
           cp "$result_file" "$artifact_dir/standalone-ios-result.log"
           cp "$capture_file" "$artifact_dir/standalone-ios-metal-render.png"
+          cp "$offscreen_file" "$artifact_dir/standalone-ios-metal-offscreen.png"
           grep -q '^phase=render status=passed$' "$artifact_dir/standalone-ios-result.log"
           grep -q '^phase=document status=passed path=sample1.imm$' "$artifact_dir/standalone-ios-result.log"
           grep -q '^phase=lifecycle status=passed$' "$artifact_dir/standalone-ios-result.log"

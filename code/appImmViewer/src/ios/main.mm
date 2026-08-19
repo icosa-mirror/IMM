@@ -1,4 +1,5 @@
 #import <AVFoundation/AVFoundation.h>
+#import <CoreImage/CoreImage.h>
 #import <MetalKit/MetalKit.h>
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -28,6 +29,24 @@ static BOOL ImmHasArgument(NSString *argument)
     return [NSProcessInfo.processInfo.arguments containsObject:argument];
 }
 
+static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
+{
+    if (!texture || !path)
+        return NO;
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CIImage *image = [CIImage imageWithMTLTexture:texture
+                                         options:@{kCIImageColorSpace: (__bridge id)colorSpace}];
+    CIContext *context = [CIContext contextWithMTLDevice:texture.device];
+    CGImageRef cgImage = image ? [context createCGImage:image fromRect:image.extent] : nullptr;
+    CGColorSpaceRelease(colorSpace);
+    if (!cgImage)
+        return NO;
+    UIImage *uiImage = [UIImage imageWithCGImage:cgImage];
+    CGImageRelease(cgImage);
+    NSData *png = UIImagePNGRepresentation(uiImage);
+    return png && [png writeToFile:path atomically:YES];
+}
+
 @interface ImmIOSViewController : UIViewController <MTKViewDelegate, UIDocumentPickerDelegate>
 - (BOOL)openDocumentURL:(NSURL *)url;
 @end
@@ -51,6 +70,7 @@ static BOOL ImmHasArgument(NSString *argument)
     _metalView = [[MTKView alloc] initWithFrame:UIScreen.mainScreen.bounds device:device];
     _metalView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
     _metalView.depthStencilPixelFormat = MTLPixelFormatDepth32Float;
+    _metalView.framebufferOnly = NO;
     _metalView.clearColor = MTLClearColorMake(0.08, 0.10, 0.13, 1.0);
     _metalView.preferredFramesPerSecond = 60;
     _metalView.autoResizeDrawable = YES;
@@ -172,9 +192,12 @@ static BOOL ImmHasArgument(NSString *argument)
     {
         NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
         NSString *capturePath = [documents stringByAppendingPathComponent:@"standalone-ios-metal-render.png"];
+        NSString *offscreenPath = [documents stringByAppendingPathComponent:@"standalone-ios-metal-offscreen.png"];
         NSString *resultPath = [documents stringByAppendingPathComponent:@"standalone-ios-result.log"];
-        wchar_t captureWide[PATH_MAX] = {};
-        const BOOL captured = ImmToWide(capturePath, captureWide, PATH_MAX) && _player.WriteCapture(captureWide);
+        wchar_t offscreenWide[PATH_MAX] = {};
+        const BOOL presented = ImmWritePresentedDrawable(drawable.texture, capturePath);
+        const BOOL offscreen = ImmToWide(offscreenPath, offscreenWide, PATH_MAX) && _player.WriteCapture(offscreenWide);
+        const BOOL captured = presented && offscreen;
         const BOOL loaded = _player.IsDocumentLoaded();
         NSString *result = [NSString stringWithFormat:@"phase=render status=%@\nphase=document status=%@ path=sample1.imm\nphase=lifecycle status=%@\nframes=%llu\n",
                             captured ? @"passed" : @"failed",
@@ -183,7 +206,8 @@ static BOOL ImmHasArgument(NSString *argument)
                             (unsigned long long)_player.FrameIndex()];
         [result writeToFile:resultPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
         _validationFinished = YES;
-        NSLog(@"IMM_IOS_STANDALONE phase=validation status=%@", captured && loaded ? @"passed" : @"failed");
+        NSLog(@"IMM_IOS_STANDALONE phase=validation status=%@ presented=%d offscreen=%d",
+              captured && loaded ? @"passed" : @"failed", presented ? 1 : 0, offscreen ? 1 : 0);
     }
 }
 

@@ -266,6 +266,7 @@ target_link_libraries(appImmViewerIOS PRIVATE
     "-framework QuartzCore"
     "-framework Foundation"
     "-framework AVFoundation"
+    "-framework CoreImage"
     "-framework UniformTypeIdentifiers"
     ZLIB::ZLIB
 )
