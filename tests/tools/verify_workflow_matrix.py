@@ -909,6 +909,8 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
         ],
         ".github/workflows/ci-validation.yml": [
             "WebPlayerValidationEvidence",
+            "iOSStandaloneMetal",
+            "artifacts/validation-evidence/input/iOSStandaloneMetal",
             "needs.web.result",
             "--required-evidence-scope",
         ],

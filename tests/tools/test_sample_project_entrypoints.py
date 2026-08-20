@@ -322,6 +322,8 @@ def main() -> int:
     assert "!contains(github.event.head_commit.message, '[CI IOS]')" in validation_workflow
     for token in [
         "uses: ./.github/workflows/ci-ios.yml",
+        "name: iOSStandaloneMetal",
+        "path: artifacts/validation-evidence/input/iOSStandaloneMetal",
         "name: UnityIOSMetalComposition",
         "path: artifacts/validation-evidence/input/UnityIOSMetalComposition",
         "name: GodotIOSMetal",
