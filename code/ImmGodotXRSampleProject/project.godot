@@ -1,0 +1,28 @@
+; Windows PC OpenXR onboarding project for the IMM Godot extension.
+
+config_version=5
+
+[application]
+
+config/name="IMM Godot XR Sample"
+run/main_scene="res://scenes/XRSampleScene.tscn"
+config/features=PackedStringArray("4.6")
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
+[native_extensions]
+
+paths=["res://addons/imm_viewer/imm_viewer.gdextension"]
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.04, 0.05, 0.08, 1)
+
+[xr]
+
+openxr/enabled=true
+shaders/enabled=true

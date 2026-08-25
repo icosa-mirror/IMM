@@ -287,6 +287,7 @@ Invoke-Tool $scons $extensionArgs $extensionDir
 
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
 $outputDir = Join-Path $repoRoot "code\ImmGodotSampleProject\addons\imm_viewer\bin\windows\$variant"
+$xrOutputDir = Join-Path $repoRoot "code\ImmGodotXRSampleProject\addons\imm_viewer\bin\windows\$variant"
 $requiredOutputDlls = @(
     "imm_godot_extension.dll",
     "ImmGodotPlugin.dll",
@@ -300,34 +301,44 @@ $requiredOutputDlls = @(
     "ogg.dll",
     "vorbis.dll"
 )
-$missingOutputDlls = @()
+New-Item -ItemType Directory -Force $xrOutputDir | Out-Null
 foreach ($dll in $requiredOutputDlls) {
-    $candidate = Join-Path $outputDir $dll
-    if (-not (Test-Path $candidate)) {
-        $missingOutputDlls += $candidate
-    }
-}
-if ($missingOutputDlls.Count -gt 0) {
-    throw "Godot staged output DLLs are missing:`n  $($missingOutputDlls -join "`n  ")"
+    Copy-Item -LiteralPath (Join-Path $outputDir $dll) -Destination (Join-Path $xrOutputDir $dll) -Force
 }
 
-$manifest = @(
-    "Configuration=$Configuration",
-    "OutputDir=$outputDir",
-    "ExpectedDllCount=$($requiredOutputDlls.Count)",
-    "GeneratedUtc=$((Get-Date).ToUniversalTime().ToString("o"))",
-    "DLLs:"
-)
-foreach ($dll in $requiredOutputDlls) {
-    $candidate = Join-Path $outputDir $dll
-    $item = Get-Item $candidate
-    $manifest += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
+$outputDirs = @($outputDir, $xrOutputDir)
+foreach ($stagedOutputDir in $outputDirs) {
+    $missingOutputDlls = @()
+    foreach ($dll in $requiredOutputDlls) {
+        $candidate = Join-Path $stagedOutputDir $dll
+        if (-not (Test-Path $candidate)) {
+            $missingOutputDlls += $candidate
+        }
+    }
+    if ($missingOutputDlls.Count -gt 0) {
+        throw "Godot staged output DLLs are missing:`n  $($missingOutputDlls -join "`n  ")"
+    }
+
+    $manifest = @(
+        "Configuration=$Configuration",
+        "OutputDir=$stagedOutputDir",
+        "ExpectedDllCount=$($requiredOutputDlls.Count)",
+        "GeneratedUtc=$((Get-Date).ToUniversalTime().ToString("o"))",
+        "DLLs:"
+    )
+    foreach ($dll in $requiredOutputDlls) {
+        $candidate = Join-Path $stagedOutputDir $dll
+        $item = Get-Item $candidate
+        $manifest += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
+    }
+    $manifest | Out-File -FilePath (Join-Path $stagedOutputDir "godot-extension-dlls.txt") -Encoding utf8
 }
-$manifest | Out-File -FilePath (Join-Path $outputDir "godot-extension-dlls.txt") -Encoding utf8
 
 Write-Host "Updated Godot sample binaries:"
-Write-Host "  $outputDir"
-Write-Host "Verified staged Godot DLL set: $($requiredOutputDlls.Count) files"
+foreach ($stagedOutputDir in $outputDirs) {
+    Write-Host "  $stagedOutputDir"
+}
+Write-Host "Verified staged Godot DLL sets: $($requiredOutputDlls.Count) files each"
 
 if ($RunSmoke) {
     $smokeArgs = @("-Configuration", $Configuration, "-RequireExtension", "-RendererApi", $SmokeRendererApi)

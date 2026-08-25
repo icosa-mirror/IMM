@@ -17,6 +17,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer.gdextension"
 PROJECT = ROOT / "code/ImmGodotSampleProject/project.godot"
+XR_PROJECT = ROOT / "code/ImmGodotXRSampleProject/project.godot"
+XR_MANIFEST = ROOT / "code/ImmGodotXRSampleProject/addons/imm_viewer/imm_viewer.gdextension"
+XR_SAMPLE_SCENE = ROOT / "code/ImmGodotXRSampleProject/scenes/XRSampleScene.tscn"
+XR_SAMPLE_CONTROLLER = ROOT / "code/ImmGodotXRSampleProject/scripts/xr_sample_controller.gd"
 ABI_HEADER = ROOT / "code/appImmGodot/src/imm_godot_plugin.h"
 ABI_SOURCE = ROOT / "code/appImmGodot/src/main.cpp"
 REGISTER_TYPES = ROOT / "code/appImmGodotGDExtension/src/register_types.cpp"
@@ -111,6 +115,29 @@ def verify_project_renderer() -> None:
         raise RuntimeError("Godot sample project Run button must launch SampleScene.tscn")
 
     print("Godot sample renderer path ok", flush=True)
+
+
+def verify_xr_sample_project() -> None:
+    project = XR_PROJECT.read_text(encoding="utf-8")
+    if 'run/main_scene="res://scenes/XRSampleScene.tscn"' not in project:
+        raise RuntimeError("Godot XR sample project must launch XRSampleScene.tscn")
+    if 'openxr/enabled=true' not in project or 'shaders/enabled=true' not in project:
+        raise RuntimeError("Godot XR sample project must enable OpenXR and XR shaders at startup")
+    if 'paths=["res://addons/imm_viewer/imm_viewer.gdextension"]' not in project:
+        raise RuntimeError("Godot XR sample project does not list the IMM GDExtension")
+
+    manifest = XR_MANIFEST.read_text(encoding="utf-8")
+    if 'windows.release.x86_64="res://addons/imm_viewer/bin/windows/release/imm_godot_extension.dll"' not in manifest:
+        raise RuntimeError("Godot XR sample project release extension path is missing")
+
+    scene = XR_SAMPLE_SCENE.read_text(encoding="utf-8")
+    controller = XR_SAMPLE_CONTROLLER.read_text(encoding="utf-8")
+    if 'type="XROrigin3D"' not in scene or 'type="XRCamera3D"' not in scene:
+        raise RuntimeError("Godot XR sample scene must contain an XR origin and camera")
+    if "--xr-mode" in controller or "OS.create_process" in controller:
+        raise RuntimeError("Godot XR sample must not use the former self-relaunch workaround")
+
+    print("Godot XR sample project startup configuration ok", flush=True)
 
 
 def verify_registration(entry_symbol: str) -> None:
@@ -810,6 +837,7 @@ def main() -> int:
     extension_dir = ROOT / "code/appImmGodotGDExtension"
     entry_symbol = verify_manifest()
     verify_project_renderer()
+    verify_xr_sample_project()
     verify_registration(entry_symbol)
     verify_c_abi_exports()
     verify_native_method_bindings()
