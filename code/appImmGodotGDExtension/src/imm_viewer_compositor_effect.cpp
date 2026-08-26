@@ -5,6 +5,7 @@
 #include "imm_viewer_vulkan_frame.h"
 
 #include <godot_cpp/classes/render_data.hpp>
+#include <godot_cpp/classes/render_scene_data.hpp>
 #include <godot_cpp/classes/render_scene_buffers.hpp>
 #include <godot_cpp/classes/render_scene_buffers_rd.hpp>
 #include <godot_cpp/classes/rd_pipeline_color_blend_state.hpp>
@@ -27,11 +28,75 @@
 #include <godot_cpp/variant/typed_array.hpp>
 
 #include <cstdlib>
+#include <array>
 
 using namespace godot;
 
 namespace
 {
+    template <size_t Size>
+    PackedFloat32Array native_array_to_packed(const std::array<float, Size> &values)
+    {
+        PackedFloat32Array result;
+        result.resize(static_cast<int64_t>(Size));
+        for (size_t index = 0; index < Size; ++index)
+        {
+            result.set(static_cast<int64_t>(index), values[index]);
+        }
+        return result;
+    }
+
+    bool packed_to_native_matrix(const PackedFloat32Array &values, std::array<float, 16> &result)
+    {
+        if (values.size() != 16)
+        {
+            return false;
+        }
+        for (int index = 0; index < 16; ++index)
+        {
+            result[index] = values[index];
+        }
+        return true;
+    }
+
+    std::array<float, 16> transform_to_native_matrix(const Transform3D &transform)
+    {
+        return {
+            static_cast<float>(transform.basis.rows[0].x), static_cast<float>(transform.basis.rows[1].x), static_cast<float>(transform.basis.rows[2].x), 0.0f,
+            static_cast<float>(transform.basis.rows[0].y), static_cast<float>(transform.basis.rows[1].y), static_cast<float>(transform.basis.rows[2].y), 0.0f,
+            static_cast<float>(transform.basis.rows[0].z), static_cast<float>(transform.basis.rows[1].z), static_cast<float>(transform.basis.rows[2].z), 0.0f,
+            static_cast<float>(transform.origin.x), static_cast<float>(transform.origin.y), static_cast<float>(transform.origin.z), 1.0f,
+        };
+    }
+
+    std::array<float, 16> projection_to_native_matrix(const Projection &projection)
+    {
+        std::array<float, 16> result{};
+        for (int column = 0; column < 4; ++column)
+        {
+            for (int row = 0; row < 4; ++row)
+            {
+                result[column * 4 + row] = static_cast<float>(projection.columns[column][row]);
+            }
+        }
+        return result;
+    }
+
+    Projection xr_projection_to_imm_projection(const Projection &render_projection)
+    {
+        // RenderSceneDataRD exposes the projection after Godot's Vulkan
+        // reverse-Z and optional render-target Y correction. IMM's Godot
+        // Vulkan bridge uses the upright, normal zero-to-one convention also
+        // produced by ImmViewerNode's mono camera path, so replace Godot's
+        // correction before submission.
+        const bool godot_flipped_y = render_projection.columns[1][1] < 0.0;
+        Projection reverse_depth_correction;
+        reverse_depth_correction.set_depth_correction(godot_flipped_y, true, true);
+        Projection normal_depth_correction;
+        normal_depth_correction.set_depth_correction(false, false, true);
+        return normal_depth_correction * reverse_depth_correction.inverse() * render_projection;
+    }
+
     struct QueuedRenderRequest
     {
         bool queued = false;
@@ -88,7 +153,7 @@ namespace
         g_composite_resources = nullptr;
     }
 
-    bool ensure_composite_resources(RenderingDevice *rendering_device, int64_t framebuffer_format)
+    bool ensure_composite_resources(RenderingDevice *rendering_device, int64_t framebuffer_format, bool mirror_x)
     {
         if (rendering_device == nullptr || framebuffer_format == RenderingDevice::INVALID_FORMAT_ID)
         {
@@ -105,7 +170,7 @@ namespace
             Ref<RDShaderSource> shader_source;
             shader_source.instantiate();
             shader_source->set_language(RenderingDevice::SHADER_LANGUAGE_GLSL);
-            shader_source->set_stage_source(RenderingDevice::SHADER_STAGE_VERTEX, R"(
+            const char *vertex_shader_source = mirror_x ? R"(
 #version 450
 
 layout(location = 0) out vec2 uv_interp;
@@ -116,8 +181,20 @@ void main() {
     uv_interp = vec2((1.0 - pos.x) * 0.5, (pos.y + 1.0) * 0.5);
     gl_Position = vec4(pos, 0.0, 1.0);
 }
-)");
-            shader_source->set_stage_source(RenderingDevice::SHADER_STAGE_FRAGMENT, R"(
+)" : R"(
+#version 450
+
+layout(location = 0) out vec2 uv_interp;
+
+void main() {
+    vec2 positions[4] = vec2[](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
+    vec2 pos = positions[gl_VertexIndex];
+    uv_interp = vec2((pos.x + 1.0) * 0.5, (pos.y + 1.0) * 0.5);
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)";
+            shader_source->set_stage_source(RenderingDevice::SHADER_STAGE_VERTEX, vertex_shader_source);
+            const char *fragment_shader_source = R"(
 #version 450
 
 layout(location = 0) in vec2 uv_interp;
@@ -127,7 +204,8 @@ layout(location = 0) out vec4 frag_color;
 void main() {
     frag_color = texture(source_color, uv_interp);
 }
-)");
+)";
+            shader_source->set_stage_source(RenderingDevice::SHADER_STAGE_FRAGMENT, fragment_shader_source);
 
             Ref<RDShaderSPIRV> spirv = rendering_device->shader_compile_spirv_from_source(shader_source, false);
             if (!spirv.is_valid() ||
@@ -406,7 +484,7 @@ void main() {
         return rendering_device->texture_create(texture_format, texture_view);
     }
 
-    bool composite_texture_to_color(RenderingDevice *rendering_device, const RID &source_texture, const RID &color_texture)
+    bool composite_texture_to_color(RenderingDevice *rendering_device, const RID &source_texture, const RID &color_texture, bool mirror_x = true)
     {
         if (rendering_device == nullptr || !source_texture.is_valid() || !color_texture.is_valid())
         {
@@ -427,7 +505,7 @@ void main() {
         }
 
         const int64_t framebuffer_format = rendering_device->framebuffer_get_format(framebuffer);
-        if (!ensure_composite_resources(rendering_device, framebuffer_format))
+        if (!ensure_composite_resources(rendering_device, framebuffer_format, mirror_x))
         {
             release_composite_resources(rendering_device);
             rendering_device->free_rid(framebuffer);
@@ -577,17 +655,23 @@ ImmViewerCompositorEffect::~ImmViewerCompositorEffect()
 {
     RenderingServer *rendering_server = RenderingServer::get_singleton();
     RenderingDevice *rendering_device = rendering_server != nullptr ? rendering_server->get_rendering_device() : nullptr;
-    if (rendering_device != nullptr && _intermediate_texture.is_valid())
+    if (rendering_device != nullptr)
     {
-        rendering_device->free_rid(_intermediate_texture);
-    }
-    if (rendering_device != nullptr && _intermediate_depth_texture.is_valid())
-    {
-        rendering_device->free_rid(_intermediate_depth_texture);
-    }
-    if (rendering_device != nullptr && _depth_composited_texture.is_valid())
-    {
-        rendering_device->free_rid(_depth_composited_texture);
+        for (int view_index = 0; view_index < 2; ++view_index)
+        {
+            if (_intermediate_textures[view_index].is_valid())
+            {
+                rendering_device->free_rid(_intermediate_textures[view_index]);
+            }
+            if (_intermediate_depth_textures[view_index].is_valid())
+            {
+                rendering_device->free_rid(_intermediate_depth_textures[view_index]);
+            }
+            if (_depth_composited_textures[view_index].is_valid())
+            {
+                rendering_device->free_rid(_depth_composited_textures[view_index]);
+            }
+        }
     }
 }
 
@@ -595,8 +679,15 @@ void ImmViewerCompositorEffect::_bind_methods()
 {
     ClassDB::bind_method(D_METHOD("set_render_graph_depth_composition_enabled", "enabled"), &ImmViewerCompositorEffect::set_render_graph_depth_composition_enabled);
     ClassDB::bind_method(D_METHOD("is_render_graph_depth_composition_enabled"), &ImmViewerCompositorEffect::is_render_graph_depth_composition_enabled);
+    ClassDB::bind_method(D_METHOD("set_stereo_simulation_eye", "eye_index"), &ImmViewerCompositorEffect::set_stereo_simulation_eye);
+    ClassDB::bind_method(D_METHOD("get_stereo_simulation_eye"), &ImmViewerCompositorEffect::get_stereo_simulation_eye);
+    ClassDB::bind_method(D_METHOD("set_stereo_replay_matrices", "world_to_head", "head_projection", "world_to_left_eye", "left_eye_projection", "world_to_right_eye", "right_eye_projection"), &ImmViewerCompositorEffect::set_stereo_replay_matrices);
+    ClassDB::bind_method(D_METHOD("clear_stereo_replay_matrices"), &ImmViewerCompositorEffect::clear_stereo_replay_matrices);
+    ClassDB::bind_method(D_METHOD("has_stereo_replay_matrices"), &ImmViewerCompositorEffect::has_stereo_replay_matrices);
+    ClassDB::bind_method(D_METHOD("get_last_xr_frame_capture"), &ImmViewerCompositorEffect::get_last_xr_frame_capture);
     ClassDB::bind_method(D_METHOD("get_diagnostics"), &ImmViewerCompositorEffect::get_diagnostics);
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "render_graph_depth_composition_enabled"), "set_render_graph_depth_composition_enabled", "is_render_graph_depth_composition_enabled");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "stereo_simulation_eye", PROPERTY_HINT_RANGE, "-1,1,1"), "set_stereo_simulation_eye", "get_stereo_simulation_eye");
 }
 
 void ImmViewerCompositorEffect::set_render_graph_depth_composition_enabled(bool enabled)
@@ -609,6 +700,62 @@ bool ImmViewerCompositorEffect::is_render_graph_depth_composition_enabled() cons
     return _render_graph_depth_composition_enabled;
 }
 
+void ImmViewerCompositorEffect::set_stereo_simulation_eye(int eye_index)
+{
+    _stereo_simulation_eye.store(eye_index < -1 ? -1 : (eye_index > 1 ? 1 : eye_index));
+}
+
+int ImmViewerCompositorEffect::get_stereo_simulation_eye() const
+{
+    return _stereo_simulation_eye.load();
+}
+
+bool ImmViewerCompositorEffect::set_stereo_replay_matrices(const PackedFloat32Array &world_to_head,
+                                                           const PackedFloat32Array &head_projection,
+                                                           const PackedFloat32Array &world_to_left_eye,
+                                                           const PackedFloat32Array &left_eye_projection,
+                                                           const PackedFloat32Array &world_to_right_eye,
+                                                           const PackedFloat32Array &right_eye_projection)
+{
+    std::array<float, 16> replay_world_to_head;
+    std::array<float, 16> replay_head_projection;
+    std::array<float, 16> replay_world_to_left_eye;
+    std::array<float, 16> replay_left_eye_projection;
+    std::array<float, 16> replay_world_to_right_eye;
+    std::array<float, 16> replay_right_eye_projection;
+    if (!packed_to_native_matrix(world_to_head, replay_world_to_head) ||
+        !packed_to_native_matrix(head_projection, replay_head_projection) ||
+        !packed_to_native_matrix(world_to_left_eye, replay_world_to_left_eye) ||
+        !packed_to_native_matrix(left_eye_projection, replay_left_eye_projection) ||
+        !packed_to_native_matrix(world_to_right_eye, replay_world_to_right_eye) ||
+        !packed_to_native_matrix(right_eye_projection, replay_right_eye_projection))
+    {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(_stereo_replay_mutex);
+    _replay_world_to_head = replay_world_to_head;
+    _replay_head_projection = replay_head_projection;
+    _replay_world_to_left_eye = replay_world_to_left_eye;
+    _replay_left_eye_projection = replay_left_eye_projection;
+    _replay_world_to_right_eye = replay_world_to_right_eye;
+    _replay_right_eye_projection = replay_right_eye_projection;
+    _has_stereo_replay_matrices = true;
+    return true;
+}
+
+void ImmViewerCompositorEffect::clear_stereo_replay_matrices()
+{
+    std::lock_guard<std::mutex> lock(_stereo_replay_mutex);
+    _has_stereo_replay_matrices = false;
+}
+
+bool ImmViewerCompositorEffect::has_stereo_replay_matrices() const
+{
+    std::lock_guard<std::mutex> lock(_stereo_replay_mutex);
+    return _has_stereo_replay_matrices;
+}
+
 void ImmViewerCompositorEffect::queue_render_request(int camera_id, int width, int height)
 {
     std::lock_guard<std::mutex> lock(g_queued_render_mutex);
@@ -618,9 +765,9 @@ void ImmViewerCompositorEffect::queue_render_request(int camera_id, int width, i
     g_queued_render_request.height = height;
 }
 
-RID ImmViewerCompositorEffect::ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height)
+RID ImmViewerCompositorEffect::ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height, int view_index)
 {
-    if (rendering_device == nullptr || !color_texture.is_valid() || width <= 0 || height <= 0)
+    if (rendering_device == nullptr || !color_texture.is_valid() || width <= 0 || height <= 0 || view_index < 0 || view_index >= 2)
     {
         return RID();
     }
@@ -633,52 +780,52 @@ RID ImmViewerCompositorEffect::ensure_intermediate_texture(RenderingDevice *rend
 
     const int64_t format = static_cast<int64_t>(color_format->get_format());
     const Vector2i size(width, height);
-    if (_intermediate_texture.is_valid() && _intermediate_size == size && _intermediate_format == format)
+    if (_intermediate_textures[view_index].is_valid() && _intermediate_sizes[view_index] == size && _intermediate_formats[view_index] == format)
     {
-        return _intermediate_texture;
+        return _intermediate_textures[view_index];
     }
 
-    if (_intermediate_texture.is_valid())
+    if (_intermediate_textures[view_index].is_valid())
     {
-        rendering_device->free_rid(_intermediate_texture);
-        _intermediate_texture = RID();
+        rendering_device->free_rid(_intermediate_textures[view_index]);
+        _intermediate_textures[view_index] = RID();
     }
 
-    _intermediate_texture = create_intermediate_texture(rendering_device, color_texture, width, height);
-    _intermediate_size = _intermediate_texture.is_valid() ? size : Vector2i();
-    _intermediate_format = _intermediate_texture.is_valid() ? format : -1;
-    return _intermediate_texture;
+    _intermediate_textures[view_index] = create_intermediate_texture(rendering_device, color_texture, width, height);
+    _intermediate_sizes[view_index] = _intermediate_textures[view_index].is_valid() ? size : Vector2i();
+    _intermediate_formats[view_index] = _intermediate_textures[view_index].is_valid() ? format : -1;
+    return _intermediate_textures[view_index];
 }
 
-RID ImmViewerCompositorEffect::ensure_intermediate_depth_texture(RenderingDevice *rendering_device, int width, int height)
+RID ImmViewerCompositorEffect::ensure_intermediate_depth_texture(RenderingDevice *rendering_device, int width, int height, int view_index)
 {
-    if (rendering_device == nullptr || width <= 0 || height <= 0)
+    if (rendering_device == nullptr || width <= 0 || height <= 0 || view_index < 0 || view_index >= 2)
     {
         return RID();
     }
 
     const int64_t format = static_cast<int64_t>(RenderingDevice::DATA_FORMAT_D32_SFLOAT);
     const Vector2i size(width, height);
-    if (_intermediate_depth_texture.is_valid() && _intermediate_depth_size == size && _intermediate_depth_format == format)
+    if (_intermediate_depth_textures[view_index].is_valid() && _intermediate_depth_sizes[view_index] == size && _intermediate_depth_formats[view_index] == format)
     {
-        return _intermediate_depth_texture;
+        return _intermediate_depth_textures[view_index];
     }
 
-    if (_intermediate_depth_texture.is_valid())
+    if (_intermediate_depth_textures[view_index].is_valid())
     {
-        rendering_device->free_rid(_intermediate_depth_texture);
-        _intermediate_depth_texture = RID();
+        rendering_device->free_rid(_intermediate_depth_textures[view_index]);
+        _intermediate_depth_textures[view_index] = RID();
     }
 
-    _intermediate_depth_texture = create_intermediate_depth_texture(rendering_device, width, height);
-    _intermediate_depth_size = _intermediate_depth_texture.is_valid() ? size : Vector2i();
-    _intermediate_depth_format = _intermediate_depth_texture.is_valid() ? format : -1;
-    return _intermediate_depth_texture;
+    _intermediate_depth_textures[view_index] = create_intermediate_depth_texture(rendering_device, width, height);
+    _intermediate_depth_sizes[view_index] = _intermediate_depth_textures[view_index].is_valid() ? size : Vector2i();
+    _intermediate_depth_formats[view_index] = _intermediate_depth_textures[view_index].is_valid() ? format : -1;
+    return _intermediate_depth_textures[view_index];
 }
 
-RID ImmViewerCompositorEffect::ensure_depth_composited_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height)
+RID ImmViewerCompositorEffect::ensure_depth_composited_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height, int view_index)
 {
-    if (rendering_device == nullptr || !color_texture.is_valid() || width <= 0 || height <= 0)
+    if (rendering_device == nullptr || !color_texture.is_valid() || width <= 0 || height <= 0 || view_index < 0 || view_index >= 2)
     {
         return RID();
     }
@@ -691,21 +838,21 @@ RID ImmViewerCompositorEffect::ensure_depth_composited_texture(RenderingDevice *
 
     const int64_t format = static_cast<int64_t>(color_format->get_format());
     const Vector2i size(width, height);
-    if (_depth_composited_texture.is_valid() && _depth_composited_size == size && _depth_composited_format == format)
+    if (_depth_composited_textures[view_index].is_valid() && _depth_composited_sizes[view_index] == size && _depth_composited_formats[view_index] == format)
     {
-        return _depth_composited_texture;
+        return _depth_composited_textures[view_index];
     }
 
-    if (_depth_composited_texture.is_valid())
+    if (_depth_composited_textures[view_index].is_valid())
     {
-        rendering_device->free_rid(_depth_composited_texture);
-        _depth_composited_texture = RID();
+        rendering_device->free_rid(_depth_composited_textures[view_index]);
+        _depth_composited_textures[view_index] = RID();
     }
 
-    _depth_composited_texture = create_intermediate_texture(rendering_device, color_texture, width, height);
-    _depth_composited_size = _depth_composited_texture.is_valid() ? size : Vector2i();
-    _depth_composited_format = _depth_composited_texture.is_valid() ? format : -1;
-    return _depth_composited_texture;
+    _depth_composited_textures[view_index] = create_intermediate_texture(rendering_device, color_texture, width, height);
+    _depth_composited_sizes[view_index] = _depth_composited_textures[view_index].is_valid() ? size : Vector2i();
+    _depth_composited_formats[view_index] = _depth_composited_textures[view_index].is_valid() ? format : -1;
+    return _depth_composited_textures[view_index];
 }
 
 void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, RenderData *render_data)
@@ -714,9 +861,11 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     RenderingDevice *rendering_device = rendering_server != nullptr ? rendering_server->get_rendering_device() : nullptr;
 
     Ref<RenderSceneBuffers> scene_buffers;
+    RenderSceneData *scene_data = nullptr;
     if (render_data != nullptr)
     {
         scene_buffers = render_data->get_render_scene_buffers();
+        scene_data = render_data->get_render_scene_data();
     }
 
     RenderSceneBuffersRD *rd_scene_buffers = scene_buffers.is_valid() ? Object::cast_to<RenderSceneBuffersRD>(scene_buffers.ptr()) : nullptr;
@@ -830,6 +979,121 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         render_request = g_queued_render_request;
     }
 
+    const int stereo_simulation_eye = _stereo_simulation_eye.load();
+    bool stereo_replay_available = false;
+    std::array<float, 16> submitted_world_to_head{};
+    std::array<float, 16> submitted_head_projection{};
+    std::array<float, 16> submitted_world_to_left_eye{};
+    std::array<float, 16> submitted_left_eye_projection{};
+    std::array<float, 16> submitted_world_to_right_eye{};
+    std::array<float, 16> submitted_right_eye_projection{};
+    {
+        std::lock_guard<std::mutex> lock(_stereo_replay_mutex);
+        stereo_replay_available = _has_stereo_replay_matrices;
+        if (stereo_replay_available)
+        {
+            submitted_world_to_head = _replay_world_to_head;
+            submitted_head_projection = _replay_head_projection;
+            submitted_world_to_left_eye = _replay_world_to_left_eye;
+            submitted_left_eye_projection = _replay_left_eye_projection;
+            submitted_world_to_right_eye = _replay_world_to_right_eye;
+            submitted_right_eye_projection = _replay_right_eye_projection;
+        }
+    }
+    bool used_xr_render_data = false;
+    bool used_stereo_simulation = false;
+    bool used_stereo_replay = false;
+    bool submitted_stereo_matrices = false;
+    bool captured_xr_frame = false;
+    std::array<float, 16> captured_xr_head_transform{};
+    std::array<float, 16> captured_xr_raw_head_projection{};
+    std::array<float, 16> captured_xr_raw_left_eye_projection{};
+    std::array<float, 16> captured_xr_raw_right_eye_projection{};
+    std::array<float, 3> captured_xr_left_eye_offset{};
+    std::array<float, 3> captured_xr_right_eye_offset{};
+    static bool xr_view_configuration_logged = false;
+    if (render_request.queued && !xr_view_configuration_logged)
+    {
+        const int scene_view_count = scene_data != nullptr ? static_cast<int>(scene_data->get_view_count()) : 0;
+        const bool color_layer_0_valid = rd_scene_buffers != nullptr && rd_scene_buffers->get_color_layer(0, false).is_valid();
+        const bool color_layer_1_valid = rd_scene_buffers != nullptr && view_count >= 2 && rd_scene_buffers->get_color_layer(1, false).is_valid();
+        UtilityFunctions::print("[IMM_GODOT_XR_STEREO_DIAG_20260825] buffer_views=", view_count,
+                                " scene_views=", scene_view_count,
+                                " color_layer_0=", color_layer_0_valid,
+                                " color_layer_1=", color_layer_1_valid,
+                                " target_size=", target_size);
+        xr_view_configuration_logged = true;
+    }
+    if (render_request.queued && scene_data != nullptr && stereo_simulation_eye >= 0)
+    {
+        if (!stereo_replay_available)
+        {
+            constexpr float simulated_half_ipd = 0.032f;
+            const Transform3D head_transform = scene_data->get_cam_transform();
+            const Transform3D left_eye_offset(Basis(), Vector3(-simulated_half_ipd, 0.0f, 0.0f));
+            const Transform3D right_eye_offset(Basis(), Vector3(simulated_half_ipd, 0.0f, 0.0f));
+            const Transform3D left_eye_transform = head_transform * left_eye_offset;
+            const Transform3D right_eye_transform = head_transform * right_eye_offset;
+            const Projection simulation_projection = xr_projection_to_imm_projection(scene_data->get_cam_projection());
+            submitted_world_to_head = transform_to_native_matrix(head_transform.affine_inverse());
+            submitted_head_projection = projection_to_native_matrix(simulation_projection);
+            submitted_world_to_left_eye = transform_to_native_matrix(left_eye_transform.affine_inverse());
+            submitted_left_eye_projection = projection_to_native_matrix(simulation_projection);
+            submitted_world_to_right_eye = transform_to_native_matrix(right_eye_transform.affine_inverse());
+            submitted_right_eye_projection = projection_to_native_matrix(simulation_projection);
+        }
+        ImmGodot_SetCameraMatrices(render_request.camera_id,
+                                   1,
+                                   submitted_world_to_head.data(),
+                                   submitted_head_projection.data(),
+                                   submitted_world_to_left_eye.data(),
+                                   submitted_left_eye_projection.data(),
+                                   submitted_world_to_right_eye.data(),
+                                   submitted_right_eye_projection.data());
+        used_stereo_simulation = true;
+        used_stereo_replay = stereo_replay_available;
+        submitted_stereo_matrices = true;
+    }
+    else if (render_request.queued && scene_data != nullptr && view_count >= 2 && scene_data->get_view_count() >= 2)
+    {
+        const Transform3D head_transform = scene_data->get_cam_transform();
+        const Transform3D left_eye_offset(Basis(), scene_data->get_view_eye_offset(0));
+        const Transform3D right_eye_offset(Basis(), scene_data->get_view_eye_offset(1));
+        const Transform3D left_eye_transform = head_transform * left_eye_offset;
+        const Transform3D right_eye_transform = head_transform * right_eye_offset;
+        submitted_world_to_head = transform_to_native_matrix(head_transform.affine_inverse());
+        submitted_head_projection = projection_to_native_matrix(
+            xr_projection_to_imm_projection(scene_data->get_cam_projection()));
+        submitted_world_to_left_eye = transform_to_native_matrix(left_eye_transform.affine_inverse());
+        // RenderSceneData stores P * inverse(eye_offset), while IMM's multipass
+        // contract accepts P and head_to_eye separately. Remove the embedded
+        // eye offset here so the native renderer does not apply it twice.
+        const Projection left_projection = xr_projection_to_imm_projection(scene_data->get_view_projection(0)) * Projection(left_eye_offset);
+        submitted_left_eye_projection = projection_to_native_matrix(left_projection);
+        submitted_world_to_right_eye = transform_to_native_matrix(right_eye_transform.affine_inverse());
+        const Projection right_projection = xr_projection_to_imm_projection(scene_data->get_view_projection(1)) * Projection(right_eye_offset);
+        submitted_right_eye_projection = projection_to_native_matrix(right_projection);
+        ImmGodot_SetCameraMatrices(render_request.camera_id,
+                                   1,
+                                   submitted_world_to_head.data(),
+                                   submitted_head_projection.data(),
+                                   submitted_world_to_left_eye.data(),
+                                   submitted_left_eye_projection.data(),
+                                   submitted_world_to_right_eye.data(),
+                                   submitted_right_eye_projection.data());
+        const Vector3 left_eye_offset_vector = scene_data->get_view_eye_offset(0);
+        const Vector3 right_eye_offset_vector = scene_data->get_view_eye_offset(1);
+        captured_xr_head_transform = transform_to_native_matrix(head_transform);
+        captured_xr_raw_head_projection = projection_to_native_matrix(scene_data->get_cam_projection());
+        captured_xr_raw_left_eye_projection = projection_to_native_matrix(scene_data->get_view_projection(0));
+        captured_xr_raw_right_eye_projection = projection_to_native_matrix(scene_data->get_view_projection(1));
+        captured_xr_left_eye_offset = {static_cast<float>(left_eye_offset_vector.x), static_cast<float>(left_eye_offset_vector.y), static_cast<float>(left_eye_offset_vector.z)};
+        captured_xr_right_eye_offset = {static_cast<float>(right_eye_offset_vector.x), static_cast<float>(right_eye_offset_vector.y), static_cast<float>(right_eye_offset_vector.z)};
+        captured_xr_frame = true;
+        used_xr_render_data = true;
+        submitted_stereo_matrices = true;
+    }
+
     bool metal_frame_started = false;
     bool vulkan_frame_started = false;
     bool composite_result = false;
@@ -843,10 +1107,58 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
     int intermediate_nonzero_bytes = -1;
     int intermediate_total_bytes = 0;
     int render_result = 0;
+    int rendered_eye_mask = 0;
+    int rendered_eye_count = 0;
     if (render_request.queued && command_queue_handle != 0 && color_texture_handle != 0 && target_size.x > 0 && target_size.y > 0)
     {
-        const int render_width = render_request.width > 0 ? render_request.width : target_size.x;
-        const int render_height = render_request.height > 0 ? render_request.height : target_size.y;
+        const int render_width = submitted_stereo_matrices
+                                     ? target_size.x
+                                     : (render_request.width > 0 ? render_request.width : target_size.x);
+        const int render_height = submitted_stereo_matrices
+                                      ? target_size.y
+                                      : (render_request.height > 0 ? render_request.height : target_size.y);
+        const int render_view_count = used_stereo_simulation ? 1 : (submitted_stereo_matrices ? 2 : 1);
+        for (int view_index = 0; view_index < render_view_count; ++view_index)
+        {
+        const int native_eye_index = used_stereo_simulation ? stereo_simulation_eye : view_index;
+        if (rd_scene_buffers != nullptr)
+        {
+            color_texture = rd_scene_buffers->get_color_layer(view_index, false);
+            if (!color_texture.is_valid() && view_index == 0)
+            {
+                color_texture = rd_scene_buffers->get_color_texture(false);
+            }
+            depth_texture = rd_scene_buffers->get_depth_layer(view_index, false);
+            if (!depth_texture.is_valid() && view_index == 0)
+            {
+                depth_texture = rd_scene_buffers->get_depth_texture(false);
+            }
+            color_texture_handle = color_texture.is_valid()
+                                       ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_TEXTURE, color_texture, 0)
+                                       : 0;
+            vulkan_image_handle = color_texture.is_valid()
+                                      ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE, color_texture, 0)
+                                      : 0;
+            vulkan_image_view_handle = color_texture.is_valid()
+                                           ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, color_texture, 0)
+                                           : 0;
+            vulkan_image_format = color_texture.is_valid()
+                                      ? static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, color_texture, 0))
+                                      : 0;
+            vulkan_depth_image_handle = depth_texture.is_valid()
+                                            ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE, depth_texture, 0)
+                                            : 0;
+            vulkan_depth_image_view_handle = depth_texture.is_valid()
+                                                 ? rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_VIEW, depth_texture, 0)
+                                                 : 0;
+            vulkan_depth_image_format = depth_texture.is_valid()
+                                            ? static_cast<uint32_t>(rendering_device->get_driver_resource(RenderingDevice::DRIVER_RESOURCE_VULKAN_IMAGE_NATIVE_TEXTURE_FORMAT, depth_texture, 0))
+                                            : 0;
+        }
+        bool eye_metal_frame_started = false;
+        bool eye_vulkan_frame_started = false;
+        bool eye_composite_result = false;
+        bool eye_direct_vulkan_color_target = false;
         const bool direct_vulkan_depth_composition_enabled = std::getenv("IMM_GODOT_DIRECT_VULKAN_DEPTH_COMPOSITION") != nullptr;
         const bool render_graph_depth_composition_enabled = _render_graph_depth_composition_enabled ||
             std::getenv("IMM_GODOT_RENDER_GRAPH_DEPTH_COMPOSITION") != nullptr ||
@@ -869,10 +1181,10 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         RID intermediate_depth_texture;
         if (!direct_vulkan_color_path)
         {
-            intermediate_texture = ensure_intermediate_texture(rendering_device, color_texture, render_width, render_height);
+            intermediate_texture = ensure_intermediate_texture(rendering_device, color_texture, render_width, render_height, view_index);
             if (render_graph_depth_composition_enabled && depth_texture.is_valid())
             {
-                intermediate_depth_texture = ensure_intermediate_depth_texture(rendering_device, render_width, render_height);
+                intermediate_depth_texture = ensure_intermediate_depth_texture(rendering_device, render_width, render_height, view_index);
             }
         }
         had_intermediate_texture = intermediate_texture.is_valid();
@@ -915,7 +1227,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         intermediate_depth_image_format = render_depth_texture_format;
         if (vulkan_instance_handle != 0 && vulkan_physical_device_handle != 0 && vulkan_device_handle != 0 && vulkan_queue_handle != 0)
         {
-            vulkan_frame_started = ImmViewerGodotBeginVulkanTextureFrame(vulkan_instance_handle,
+            eye_vulkan_frame_started = ImmViewerGodotBeginVulkanTextureFrame(vulkan_instance_handle,
                                                                          vulkan_physical_device_handle,
                                                                          vulkan_device_handle,
                                                                          vulkan_queue_handle,
@@ -929,27 +1241,27 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
                                                                          render_width,
                                                                          render_height,
                                                                          use_intermediate_depth);
-            direct_vulkan_color_target = vulkan_frame_started && can_direct_vulkan_color_target;
+            eye_direct_vulkan_color_target = eye_vulkan_frame_started && can_direct_vulkan_color_target;
         }
-        if (!vulkan_frame_started)
+        if (!eye_vulkan_frame_started)
         {
-            metal_frame_started = ImmViewerGodotBeginMetalTextureFrame(command_queue_handle,
+            eye_metal_frame_started = ImmViewerGodotBeginMetalTextureFrame(command_queue_handle,
                                                                        render_texture_handle,
                                                                        render_depth_texture_handle,
                                                                        render_width,
                                                                        render_height);
         }
-        if (vulkan_frame_started || metal_frame_started)
+        if (eye_vulkan_frame_started || eye_metal_frame_started)
         {
             render_result = ImmGodot_RenderCamera(render_request.camera_id,
-                                                  0,
+                                                  native_eye_index,
                                                   0.0f,
                                                   0.0f,
                                                   static_cast<float>(render_width),
                                                   static_cast<float>(render_height),
                                                   0.0f,
                                                   1.0f);
-            if (vulkan_frame_started)
+            if (eye_vulkan_frame_started)
             {
                 ImmViewerGodotEndVulkanTextureFrame();
             }
@@ -972,7 +1284,7 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
             }
             if (use_intermediate_depth)
             {
-                RID depth_composited_texture = ensure_depth_composited_texture(rendering_device, color_texture, render_width, render_height);
+                RID depth_composited_texture = ensure_depth_composited_texture(rendering_device, color_texture, render_width, render_height, view_index);
                 had_depth_composited_texture = depth_composited_texture.is_valid();
                 depth_aware_vulkan_composite = true;
                 depth_color_merge_result =
@@ -980,17 +1292,27 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
                     composite_texture_to_color_with_depth(rendering_device, intermediate_texture, intermediate_depth_texture, depth_texture, color_texture, depth_composited_texture);
                 depth_aware_vulkan_composite_result =
                     depth_color_merge_result &&
-                    composite_texture_to_color(rendering_device, depth_composited_texture, color_texture);
-                composite_result = depth_aware_vulkan_composite_result;
+                    composite_texture_to_color(rendering_device, depth_composited_texture, color_texture, !used_xr_render_data);
+                eye_composite_result = depth_aware_vulkan_composite_result;
             }
             else
             {
-                composite_result = direct_vulkan_color_target || composite_texture_to_color(rendering_device, intermediate_texture, color_texture);
+                eye_composite_result = eye_direct_vulkan_color_target || composite_texture_to_color(rendering_device, intermediate_texture, color_texture, !used_xr_render_data);
+            }
+            if (render_result == 0 && eye_composite_result)
+            {
+                rendered_eye_mask |= 1 << native_eye_index;
+                ++rendered_eye_count;
             }
         }
         else
         {
             render_result = -1;
+        }
+        metal_frame_started = metal_frame_started || eye_metal_frame_started;
+        vulkan_frame_started = vulkan_frame_started || eye_vulkan_frame_started;
+        composite_result = composite_result || eye_composite_result;
+        direct_vulkan_color_target = direct_vulkan_color_target || eye_direct_vulkan_color_target;
         }
     }
 
@@ -1045,11 +1367,61 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
         _last_internal_size = internal_size;
         _last_target_size = target_size;
         _last_view_count = view_count;
+        _last_used_xr_render_data = used_xr_render_data;
+        _last_used_stereo_simulation = used_stereo_simulation;
+        _last_used_stereo_replay = used_stereo_replay;
+        _last_simulated_eye_index = used_stereo_simulation ? stereo_simulation_eye : -1;
+        _last_submitted_stereo_matrices = submitted_stereo_matrices;
+        _last_rendered_eye_mask = rendered_eye_mask;
+        _last_rendered_eye_count = rendered_eye_count;
+        if (captured_xr_frame)
+        {
+            _last_xr_frame_capture_available = true;
+            _last_xr_head_transform = captured_xr_head_transform;
+            _last_xr_raw_head_projection = captured_xr_raw_head_projection;
+            _last_xr_raw_left_eye_projection = captured_xr_raw_left_eye_projection;
+            _last_xr_raw_right_eye_projection = captured_xr_raw_right_eye_projection;
+            _last_xr_left_eye_offset = captured_xr_left_eye_offset;
+            _last_xr_right_eye_offset = captured_xr_right_eye_offset;
+            _last_xr_world_to_head = submitted_world_to_head;
+            _last_xr_head_projection = submitted_head_projection;
+            _last_xr_world_to_left_eye = submitted_world_to_left_eye;
+            _last_xr_left_eye_projection = submitted_left_eye_projection;
+            _last_xr_world_to_right_eye = submitted_world_to_right_eye;
+            _last_xr_right_eye_projection = submitted_right_eye_projection;
+        }
     }
+}
+
+Dictionary ImmViewerCompositorEffect::get_last_xr_frame_capture() const
+{
+    std::lock_guard<std::mutex> lock(_diagnostics_mutex);
+
+    Dictionary result;
+    result["version"] = 1;
+    result["available"] = _last_xr_frame_capture_available;
+    if (!_last_xr_frame_capture_available)
+    {
+        return result;
+    }
+    result["head_transform"] = native_array_to_packed(_last_xr_head_transform);
+    result["raw_head_projection"] = native_array_to_packed(_last_xr_raw_head_projection);
+    result["raw_left_eye_projection"] = native_array_to_packed(_last_xr_raw_left_eye_projection);
+    result["raw_right_eye_projection"] = native_array_to_packed(_last_xr_raw_right_eye_projection);
+    result["left_eye_offset"] = native_array_to_packed(_last_xr_left_eye_offset);
+    result["right_eye_offset"] = native_array_to_packed(_last_xr_right_eye_offset);
+    result["world_to_head"] = native_array_to_packed(_last_xr_world_to_head);
+    result["head_projection"] = native_array_to_packed(_last_xr_head_projection);
+    result["world_to_left_eye"] = native_array_to_packed(_last_xr_world_to_left_eye);
+    result["left_eye_projection"] = native_array_to_packed(_last_xr_left_eye_projection);
+    result["world_to_right_eye"] = native_array_to_packed(_last_xr_world_to_right_eye);
+    result["right_eye_projection"] = native_array_to_packed(_last_xr_right_eye_projection);
+    return result;
 }
 
 Dictionary ImmViewerCompositorEffect::get_diagnostics() const
 {
+    const bool stereo_replay_available = has_stereo_replay_matrices();
     std::lock_guard<std::mutex> lock(_diagnostics_mutex);
 
     Dictionary result;
@@ -1103,5 +1475,14 @@ Dictionary ImmViewerCompositorEffect::get_diagnostics() const
     result["last_internal_size"] = _last_internal_size;
     result["last_target_size"] = _last_target_size;
     result["last_view_count"] = _last_view_count;
+    result["last_used_xr_render_data"] = _last_used_xr_render_data;
+    result["last_used_stereo_simulation"] = _last_used_stereo_simulation;
+    result["last_used_stereo_replay"] = _last_used_stereo_replay;
+    result["last_simulated_eye_index"] = _last_simulated_eye_index;
+    result["last_submitted_stereo_matrices"] = _last_submitted_stereo_matrices;
+    result["last_rendered_eye_mask"] = _last_rendered_eye_mask;
+    result["last_rendered_eye_count"] = _last_rendered_eye_count;
+    result["last_xr_frame_capture_available"] = _last_xr_frame_capture_available;
+    result["stereo_replay_available"] = stereo_replay_available;
     return result;
 }

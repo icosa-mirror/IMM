@@ -90,6 +90,33 @@ Build the GDExtension with `godot-cpp`, run the native smoke, and run the visual
 
 For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native `SampleScene.tscn` smoke immediately after the build. For visible validation, run the `VisualSmokeScene.tscn` harness with `IMM_GODOT_VISUAL_SMOKE=1`; on Windows it selects Vulkan by default.
 
+### Offline stereo simulation
+
+Windows renderer work can exercise the native two-eye matrix/render path without OpenXR, SteamVR, or a headset:
+
+```powershell
+.\code\projects\windows\run-godot-stereo-simulation-smoke.ps1 `
+    -GodotExe "C:\path\to\Godot_v4.6.1-stable_mono_win64.exe"
+```
+
+The helper explicitly launches Godot with `--xr-mode off`. `StereoSimulationSmokeScene.tscn` captures an upright mono reference, then supplies a synthetic 64 mm IPD through the same native stereo camera contract used by the OpenXR path and renders eye 0 and eye 1 separately. It writes `mono.png`, `left.png`, `right.png`, and `result.json` under `artifacts/godot-stereo-simulation/`.
+
+The test fails when either eye is closer to a vertically flipped reference than the upright reference, when native/compositor diagnostics do not confirm the requested eye, or when the left and right captures are effectively identical. It validates matrix conversion, native per-eye selection, intermediate rendering, and Godot composition deterministically. It does not validate OpenXR swapchain acquisition, headset tracking, runtime-specific projection data, or headset presentation.
+
+To capture one real OpenXR frame and replay its exact submitted stereo matrices without XR:
+
+```powershell
+.\code\projects\windows\capture-godot-openxr-frame.ps1 `
+    -GodotExe "C:\path\to\Godot_v4.6.1-stable_mono_win64.exe"
+
+.\code\projects\windows\run-godot-stereo-simulation-smoke.ps1 `
+    -GodotExe "C:\path\to\Godot_v4.6.1-stable_mono_win64.exe" `
+    -ReplayPath "artifacts\godot-xr-matrix-replay\xr-frame.json" `
+    -OutputDirectory "artifacts\godot-xr-matrix-replay\replay"
+```
+
+The first command requests XR only until one valid stereo frame has been recorded, then exits automatically. The capture contains Godot's raw head/per-eye projections and eye offsets together with the six final matrices submitted to `ImmGodot_SetCameraMatrices`. The second command uses those final matrices while keeping XR disabled.
+
 The native build scaffold writes the GDExtension DLL to `addons/imm_viewer/bin/windows/{debug,release}/`, which matches `addons/imm_viewer/imm_viewer.gdextension`, stages `ImmGodotPlugin.dll` plus the IMM runtime dependency DLLs beside it for Godot's extension loader, verifies the complete staged DLL set before reporting build success, and writes `godot-extension-dlls.txt` beside the DLLs for CI artifact diagnostics. On Windows, the GDExtension registers its own binary directory with the process DLL search path during library initialization so editor Play can resolve delayed IMM dependencies without a wrapper-modified `PATH`. The addon is self-contained, so distributing it is just a matter of copying the `addons/imm_viewer/` folder.
 
 Android native addon packaging is built from `code/projects/android`:

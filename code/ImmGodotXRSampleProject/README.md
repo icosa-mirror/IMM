@@ -3,7 +3,7 @@
 This project is intentionally separate from `ImmGodotSampleProject`: it enables OpenXR at Godot startup, while the desktop sample and its CI remain non-XR.
 
 1. Start the PC OpenXR runtime and connect the headset.
-2. Build the Windows Godot extension from the repository root with `code/projects/windows/build-godot-extension.ps1 -Configuration Release`.
+2. Build the Windows Godot extension from the repository root with `code/projects/windows/build-godot-extension.ps1 -Configuration Debug` for Editor play, or `-Configuration Release` for an exported release build.
 3. Import this directory as a Godot 4.6 project.
 4. Run the project.
 

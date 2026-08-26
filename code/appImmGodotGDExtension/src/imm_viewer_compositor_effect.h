@@ -3,9 +3,12 @@
 #include <godot_cpp/classes/render_data.hpp>
 #include <godot_cpp/classes/compositor_effect.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/vector2i.hpp>
 
+#include <array>
+#include <atomic>
 #include <mutex>
 
 namespace godot
@@ -27,24 +30,44 @@ namespace godot
         void _render_callback(int32_t effect_callback_type, RenderData *render_data) override;
         void set_render_graph_depth_composition_enabled(bool enabled);
         bool is_render_graph_depth_composition_enabled() const;
+        void set_stereo_simulation_eye(int eye_index);
+        int get_stereo_simulation_eye() const;
+        bool set_stereo_replay_matrices(const PackedFloat32Array &world_to_head,
+                                        const PackedFloat32Array &head_projection,
+                                        const PackedFloat32Array &world_to_left_eye,
+                                        const PackedFloat32Array &left_eye_projection,
+                                        const PackedFloat32Array &world_to_right_eye,
+                                        const PackedFloat32Array &right_eye_projection);
+        void clear_stereo_replay_matrices();
+        bool has_stereo_replay_matrices() const;
+        Dictionary get_last_xr_frame_capture() const;
         Dictionary get_diagnostics() const;
 
     private:
-        RID ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height);
-        RID ensure_intermediate_depth_texture(RenderingDevice *rendering_device, int width, int height);
-        RID ensure_depth_composited_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height);
+        RID ensure_intermediate_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height, int view_index);
+        RID ensure_intermediate_depth_texture(RenderingDevice *rendering_device, int width, int height, int view_index);
+        RID ensure_depth_composited_texture(RenderingDevice *rendering_device, const RID &color_texture, int width, int height, int view_index);
 
         mutable std::mutex _diagnostics_mutex;
-        RID _intermediate_texture;
-        RID _intermediate_depth_texture;
-        RID _depth_composited_texture;
-        Vector2i _intermediate_size;
-        Vector2i _intermediate_depth_size;
-        Vector2i _depth_composited_size;
-        int64_t _intermediate_format = -1;
-        int64_t _intermediate_depth_format = -1;
-        int64_t _depth_composited_format = -1;
+        std::array<RID, 2> _intermediate_textures;
+        std::array<RID, 2> _intermediate_depth_textures;
+        std::array<RID, 2> _depth_composited_textures;
+        std::array<Vector2i, 2> _intermediate_sizes;
+        std::array<Vector2i, 2> _intermediate_depth_sizes;
+        std::array<Vector2i, 2> _depth_composited_sizes;
+        std::array<int64_t, 2> _intermediate_formats = {-1, -1};
+        std::array<int64_t, 2> _intermediate_depth_formats = {-1, -1};
+        std::array<int64_t, 2> _depth_composited_formats = {-1, -1};
         bool _render_graph_depth_composition_enabled = false;
+        std::atomic<int> _stereo_simulation_eye = -1;
+        mutable std::mutex _stereo_replay_mutex;
+        bool _has_stereo_replay_matrices = false;
+        std::array<float, 16> _replay_world_to_head{};
+        std::array<float, 16> _replay_head_projection{};
+        std::array<float, 16> _replay_world_to_left_eye{};
+        std::array<float, 16> _replay_left_eye_projection{};
+        std::array<float, 16> _replay_world_to_right_eye{};
+        std::array<float, 16> _replay_right_eye_projection{};
         int _callback_count = 0;
         int _last_callback_type = -1;
         bool _last_had_render_data = false;
@@ -94,5 +117,25 @@ namespace godot
         Vector2i _last_internal_size;
         Vector2i _last_target_size;
         int _last_view_count = 0;
+        bool _last_used_xr_render_data = false;
+        bool _last_used_stereo_simulation = false;
+        bool _last_used_stereo_replay = false;
+        int _last_simulated_eye_index = -1;
+        bool _last_submitted_stereo_matrices = false;
+        int _last_rendered_eye_mask = 0;
+        int _last_rendered_eye_count = 0;
+        bool _last_xr_frame_capture_available = false;
+        std::array<float, 16> _last_xr_head_transform{};
+        std::array<float, 16> _last_xr_raw_head_projection{};
+        std::array<float, 16> _last_xr_raw_left_eye_projection{};
+        std::array<float, 16> _last_xr_raw_right_eye_projection{};
+        std::array<float, 3> _last_xr_left_eye_offset{};
+        std::array<float, 3> _last_xr_right_eye_offset{};
+        std::array<float, 16> _last_xr_world_to_head{};
+        std::array<float, 16> _last_xr_head_projection{};
+        std::array<float, 16> _last_xr_world_to_left_eye{};
+        std::array<float, 16> _last_xr_left_eye_projection{};
+        std::array<float, 16> _last_xr_world_to_right_eye{};
+        std::array<float, 16> _last_xr_right_eye_projection{};
     };
 }

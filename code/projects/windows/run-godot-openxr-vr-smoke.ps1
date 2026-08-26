@@ -88,6 +88,7 @@ try {
         "--path", $sampleProject,
         "--rendering-driver", "vulkan",
         "--rendering-method", "forward_plus",
+        "--xr-mode", "on",
         "--scene", "res://scenes/OpenXRSmokeScene.tscn",
         "--fixed-fps", "30"
     )
@@ -152,4 +153,3 @@ foreach ($marker in @(
 
 Write-Host "Godot OpenXR VR smoke passed"
 Write-Host "Log: $outputPath"
-

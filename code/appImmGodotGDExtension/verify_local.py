@@ -31,6 +31,8 @@ COMPOSITOR_EFFECT_SOURCE = ROOT / "code/appImmGodotGDExtension/src/imm_viewer_co
 WINDOWS_BUILD_HELPER = ROOT / "code/projects/windows/build-godot-extension.ps1"
 WINDOWS_SMOKE_HELPER = ROOT / "code/projects/windows/run-godot-smoke.ps1"
 WINDOWS_SAMPLE_PLAY_HELPER = ROOT / "code/projects/windows/run-godot-sample-play-smoke.ps1"
+WINDOWS_STEREO_SIMULATION_HELPER = ROOT / "code/projects/windows/run-godot-stereo-simulation-smoke.ps1"
+WINDOWS_XR_FRAME_CAPTURE_HELPER = ROOT / "code/projects/windows/capture-godot-openxr-frame.ps1"
 WORKFLOW = ROOT / ".github/workflows/build.yml"
 CI_ORCHESTRATOR = ROOT / ".github/workflows/ci-validation.yml"
 CI_GPU_WORKFLOW = ROOT / ".github/workflows/ci-gpu.yml"
@@ -39,7 +41,9 @@ GODOT_SMOKE_RUNNER = ROOT / "code/ImmGodotSampleProject/scripts/smoke_test_runne
 GODOT_SCRIPT_STUB = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/imm_viewer_node.gd"
 GODOT_ADDON_README = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/README.md"
 GODOT_VISUAL_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd"
+GODOT_STEREO_SIMULATION_CONTROLLER = ROOT / "code/ImmGodotSampleProject/scripts/stereo_simulation_smoke.gd"
 GODOT_SAMPLE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/SampleScene.tscn"
+GODOT_STEREO_SIMULATION_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/StereoSimulationSmokeScene.tscn"
 GODOT_SCRIPT_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/ScriptSmokeScene.tscn"
 GODOT_NATIVE_SMOKE_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/NativeSmokeScene.tscn"
 GODOT_METAL_VISUAL_SCENE = ROOT / "code/ImmGodotSampleProject/scenes/MetalVisualSmokeScene.tscn"
@@ -270,6 +274,9 @@ def verify_render_thread_queue() -> None:
     for token in ["ImmViewerCompositorEffect", "CompositorEffect", "_render_callback", "RenderSceneBuffersRD", "get_color_texture", "DRIVER_RESOURCE_COMMAND_QUEUE", "DRIVER_RESOURCE_TEXTURE", "DRIVER_RESOURCE_VULKAN_INSTANCE", "DRIVER_RESOURCE_VULKAN_IMAGE", "get_driver_resource", "queue_render_request", "ImmGodot_RenderCamera", "ImmViewerGodotBeginMetalTextureFrame", "ImmViewerGodotBeginVulkanTextureFrame", "last_metal_frame_started", "last_vulkan_frame_started", "last_command_queue_handle", "last_color_texture_handle"]:
         if token not in compositor_source and token not in compositor_header:
             raise RuntimeError(f"ImmViewerCompositorEffect token is missing: {token}")
+    for token in ["stereo_simulation_eye", "used_stereo_simulation", "last_used_stereo_simulation", "last_simulated_eye_index", "native_eye_index", "set_stereo_replay_matrices", "clear_stereo_replay_matrices", "has_stereo_replay_matrices", "get_last_xr_frame_capture", "last_used_stereo_replay"]:
+        if token not in compositor_source and token not in compositor_header:
+            raise RuntimeError(f"ImmViewerCompositorEffect stereo simulation token is missing: {token}")
     if "g_queued_render_request.queued = false" in compositor_source:
         raise RuntimeError("ImmViewerCompositorEffect should keep the latest render request for continuous editor playback")
     for token in ["ensure_intermediate_texture", "_intermediate_texture", "_intermediate_size", "_intermediate_format"]:
@@ -299,6 +306,26 @@ def verify_render_thread_queue() -> None:
     for token in ["IMM_GODOT_VISUAL_SMOKE", "IMM_GODOT_VISUAL_RENDERER_API", "IMM_GODOT_VISUAL_SMOKE_PNG", "IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES", "_exercise_reload_cycles", "ClassDB.instantiate(\"ImmViewerNode\")", "ClassDB.instantiate(\"ImmViewerCompositorEffect\")", "Compositor.new", "camera.compositor", "_selected_renderer_api", "IMM_RENDERER_API_METAL", "IMM_RENDERER_API_VULKAN", "SAMPLE_DOCUMENT_PATH", "callback_count", "last_command_queue_handle", "last_color_texture_handle", "last_metal_frame_started", "last_vulkan_frame_started", "last_render_result", "MIN_ORIENTATION_LUMA_DELTA", "orientation_luma_delta", "visual smoke PNG orientation check failed", "IMM Godot Metal visual smoke passed", "IMM Godot Vulkan visual smoke passed"]:
         if token not in visual_controller:
             raise RuntimeError(f"Visual smoke controller token is missing: {token}")
+    stereo_simulation_controller = GODOT_STEREO_SIMULATION_CONTROLLER.read_text(encoding="utf-8")
+    stereo_simulation_scene = GODOT_STEREO_SIMULATION_SCENE.read_text(encoding="utf-8")
+    stereo_simulation_helper = WINDOWS_STEREO_SIMULATION_HELPER.read_text(encoding="utf-8")
+    for token in ["set_stereo_simulation_eye", "set_stereo_replay_matrices", "IMM_GODOT_STEREO_REPLAY_PATH", "last_used_stereo_simulation", "last_used_stereo_replay", "last_simulated_eye_index", "last_rendered_eye_mask", "mono.png", "left.png", "right.png", "normal_to_flipped_ratio", "stereo_mean_difference"]:
+        if token not in stereo_simulation_controller:
+            raise RuntimeError(f"Stereo simulation controller token is missing: {token}")
+    for token in ["StereoSimulationSmokeScene", "ImmViewerCompositorEffect", "auto_queue_render = false", "renderer_api = 5"]:
+        if token not in stereo_simulation_scene:
+            raise RuntimeError(f"Stereo simulation scene token is missing: {token}")
+    for token in ["--xr-mode", '"off"', "StereoSimulationSmokeScene.tscn", "IMM_GODOT_STEREO_SIM_OUTPUT_DIR", "IMM_GODOT_STEREO_REPLAY_PATH", "IMM_GODOT_LOG_FILE"]:
+        if token not in stereo_simulation_helper:
+            raise RuntimeError(f"Stereo simulation helper token is missing: {token}")
+    xr_sample_controller = XR_SAMPLE_CONTROLLER.read_text(encoding="utf-8")
+    xr_capture_helper = WINDOWS_XR_FRAME_CAPTURE_HELPER.read_text(encoding="utf-8")
+    for token in ["IMM_GODOT_XR_FRAME_CAPTURE_PATH", "get_last_xr_frame_capture", "captured_xr_frame"]:
+        if token not in xr_sample_controller:
+            raise RuntimeError(f"XR frame capture controller token is missing: {token}")
+    for token in ["--xr-mode", '"on"', "XRSampleScene.tscn", "IMM_GODOT_XR_FRAME_CAPTURE_PATH", "xr-frame.json"]:
+        if token not in xr_capture_helper:
+            raise RuntimeError(f"XR frame capture helper token is missing: {token}")
 
     print("ImmViewerNode camera/viewport render queue ownership ok", flush=True)
 
@@ -686,6 +713,8 @@ def verify_powershell_syntax() -> None:
         WINDOWS_BUILD_HELPER,
         WINDOWS_SMOKE_HELPER,
         WINDOWS_SAMPLE_PLAY_HELPER,
+        WINDOWS_STEREO_SIMULATION_HELPER,
+        WINDOWS_XR_FRAME_CAPTURE_HELPER,
     ]
     script_literals = "\n".join(f"    '{str(script).replace(chr(39), chr(39) + chr(39))}'" for script in scripts)
     command = [

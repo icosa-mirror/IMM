@@ -1,6 +1,7 @@
 extends Node3D
 
 const LOG_PREFIX := "[IMM_GODOT_WINDOWS_XR_SAMPLE_20260825]"
+const DEBUG_LOG_PATH := "user://xr_debug.log"
 const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const REPOSITORY_SAMPLE_PATH := "res://../../exampleImmFiles/sample1.imm"
 const PROJECT_SAMPLE_PATH := "res://sample1.imm"
@@ -8,6 +9,8 @@ const CAMERA_ID := 0
 const IMM_RENDERER_API_VULKAN := 5
 const WARMUP_FRAMES := 12
 const READY_TIMEOUT_SECONDS := 30.0
+const XR_CAPTURE_ENV := "IMM_GODOT_XR_FRAME_CAPTURE_PATH"
+const XR_MIRROR_CAPTURE_ENV := "IMM_GODOT_XR_MIRROR_CAPTURE_PATH"
 
 @onready var xr_origin: XROrigin3D = $XROrigin3D
 @onready var xr_camera: XRCamera3D = $XROrigin3D/XRCamera3D
@@ -20,6 +23,10 @@ var _last_status := ""
 var _startup_failed := false
 
 func _ready() -> void:
+	var debug_log := FileAccess.open(DEBUG_LOG_PATH, FileAccess.WRITE)
+	if debug_log != null:
+		debug_log.store_line("%s started_unix=%d" % [LOG_PREFIX, Time.get_unix_time_from_system()])
+		debug_log.close()
 	_set_status("Starting Windows OpenXR…")
 	call_deferred("_start_xr_sample")
 
@@ -72,8 +79,16 @@ func _start_xr_sample() -> void:
 		if _viewer.is_loaded() and _viewer.is_sequence_ready() and _xr_stereo_rendering_is_ready():
 			_spawn_applied = _move_origin_to_active_spawn()
 			RenderingServer.set_default_clear_color(_viewer.get_background_color())
+			if not OS.get_environment(XR_CAPTURE_ENV).is_empty():
+				for _frame in range(3):
+					_queue_xr_camera()
+					await get_tree().process_frame
+				await RenderingServer.frame_post_draw
+				var capture_succeeded := _write_xr_frame_capture()
+				get_tree().quit(0 if capture_succeeded else 1)
+				return
 			_set_status("IMM is playing in OpenXR\nR: recenter  Space: pause/play  [ / ]: spawn area")
-			print("%s ready document=%s stereo_multipass=1 rendered_eye_mask=3" % [LOG_PREFIX, document_path])
+			_log("ready document=%s stereo_multipass=1 rendered_eye_mask=3" % document_path)
 			return
 		await get_tree().create_timer(0.05).timeout
 
@@ -102,7 +117,7 @@ func _initialize_openxr() -> bool:
 	XRServer.primary_interface = xr_interface
 	get_viewport().use_xr = true
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	print("%s openxr_initialized interface=%s" % [LOG_PREFIX, xr_interface.get_name()])
+	_log("openxr_initialized interface=%s" % xr_interface.get_name())
 	return true
 
 func _create_viewer_and_compositor() -> bool:
@@ -115,6 +130,12 @@ func _create_viewer_and_compositor() -> bool:
 	_viewer.auto_play = true
 	_viewer.auto_queue_render = true
 	_viewer.renderer_api = IMM_RENDERER_API_VULKAN
+	# Keep the authored world correction in document space. A final image-space
+	# X mirror would reverse headset yaw and stereo disparity.
+	_viewer.document_transform = Transform3D(
+		Basis(Vector3.LEFT, Vector3.UP, Vector3.BACK),
+		Vector3.ZERO
+	)
 	_viewer.render_camera_path = NodePath("../XROrigin3D/XRCamera3D")
 	_viewer.log_file_path = "user://imm_windows_xr_sample.log"
 	add_child(_viewer)
@@ -138,6 +159,40 @@ func _xr_stereo_rendering_is_ready() -> bool:
 		and bool(diagnostics.get("last_submitted_stereo_matrices", false))
 		and int(diagnostics.get("last_rendered_eye_mask", 0)) == 3
 	)
+
+func _write_xr_frame_capture() -> bool:
+	var capture_path := OS.get_environment(XR_CAPTURE_ENV).replace("\\", "/")
+	var capture: Dictionary = _compositor_effect.get_last_xr_frame_capture()
+	if not bool(capture.get("available", false)):
+		_fail("XR frame capture was requested but no XR matrices were available.")
+		return false
+	var serializable := {
+		"status": "captured",
+		"captured_unix": Time.get_unix_time_from_system(),
+		"source": "Godot RenderSceneData OpenXR frame",
+	}
+	for key in capture.keys():
+		var value: Variant = capture[key]
+		serializable[key] = Array(value) if value is PackedFloat32Array else value
+	var capture_directory := capture_path.get_base_dir()
+	if not capture_directory.is_empty() and DirAccess.make_dir_recursive_absolute(capture_directory) != OK:
+		_fail("Could not create XR capture directory: %s" % capture_directory)
+		return false
+	var capture_file := FileAccess.open(capture_path, FileAccess.WRITE)
+	if capture_file == null:
+		_fail("Could not write XR frame capture: %s" % capture_path)
+		return false
+	capture_file.store_string(JSON.stringify(serializable, "\t"))
+	capture_file.close()
+	var mirror_path := OS.get_environment(XR_MIRROR_CAPTURE_ENV).replace("\\", "/")
+	if not mirror_path.is_empty():
+		var mirror_image := get_viewport().get_texture().get_image()
+		if mirror_image == null or mirror_image.is_empty() or mirror_image.save_png(mirror_path) != OK:
+			_fail("Could not write XR mirror capture: %s" % mirror_path)
+			return false
+	_log("captured_xr_frame path=%s" % capture_path)
+	_set_status("Captured one OpenXR frame for offline replay")
+	return true
 
 func _find_sample_document() -> String:
 	for candidate in [PROJECT_SAMPLE_PATH, REPOSITORY_SAMPLE_PATH]:
@@ -176,7 +231,7 @@ func _move_origin_to_active_spawn() -> bool:
 		head_local_position.y = 0.0
 	var desired_position: Vector3 = transform.get("position", Vector3.ZERO)
 	xr_origin.global_transform = Transform3D(target_basis, desired_position - target_basis * head_local_position)
-	print("%s applied_spawn_area id=%s" % [LOG_PREFIX, str(info.get("id", -1))])
+	_log("applied_spawn_area id=%s" % str(info.get("id", -1)))
 	return true
 
 func _fail(message: String) -> void:
@@ -189,7 +244,15 @@ func _set_status(message: String, is_error := false) -> void:
 	if message == _last_status:
 		return
 	_last_status = message
+	_log(message.replace("\n", " "))
 	if is_error:
 		push_error("%s %s" % [LOG_PREFIX, message.replace("\n", " ")])
-	else:
-		print("%s %s" % [LOG_PREFIX, message.replace("\n", " ")])
+
+func _log(message: String) -> void:
+	var line := "%s %s" % [LOG_PREFIX, message]
+	print(line)
+	var debug_log := FileAccess.open(DEBUG_LOG_PATH, FileAccess.READ_WRITE)
+	if debug_log == null:
+		return
+	debug_log.seek_end()
+	debug_log.store_line(line)
