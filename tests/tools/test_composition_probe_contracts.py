@@ -340,9 +340,14 @@ def main() -> int:
             "info.VulkanStereoCommandBufferFrame == Time.frameCount",
             "[IMM_UNITY_VK_STEREO_FRAME_20260811]",
             "EnsureCompositeQuad(cam, info)",
-            "public int LastMatrixSetFrame = -1;",
-            "info.LastMatrixSetFrame != Time.frameCount",
-            "info.LastMatrixSetFrame = Time.frameCount;",
+            "public readonly ImmCameraMatrixFrameGate MatrixFrameGate",
+            "info.MatrixFrameGate.TryBeginSubmission(",
+            "info.MatrixFrameGate.Reset();",
+        ],
+        ROOT / "code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Tests/Runtime/ImmCameraMatrixFrameGateTests.cs": [
+            "TwoCamerasCanSubmitInTheSameFrameWhileEachReusesItsMultipassPose",
+            "XrCameraAcceptsTheNextFramesChangedPose",
+            "MonoAndDiagnosticModesCanSubmitEveryCallback",
         ],
         ROOT / "code/ImmUnitySampleProject/Assets/Resources/ImmVulkanCompositeQuad.shader": [
             "sampler2D _EyeTex0;",

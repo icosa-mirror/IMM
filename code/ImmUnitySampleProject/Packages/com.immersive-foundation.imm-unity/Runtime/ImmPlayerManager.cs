@@ -11,6 +11,25 @@ using UnityEngine.Rendering;
 
 namespace ImmPlayer
 {
+    internal sealed class ImmCameraMatrixFrameGate
+    {
+        private int _lastSubmittedFrame = -1;
+
+        internal bool TryBeginSubmission(int frameCount, bool stereoEnabled, bool forceEveryCallback)
+        {
+            if (stereoEnabled && !forceEveryCallback && _lastSubmittedFrame == frameCount)
+                return false;
+
+            _lastSubmittedFrame = frameCount;
+            return true;
+        }
+
+        internal void Reset()
+        {
+            _lastSubmittedFrame = -1;
+        }
+    }
+
     [DisallowMultipleComponent]
     internal sealed class ImmAndroidVulkanPresenter : MonoBehaviour
     {
@@ -677,10 +696,10 @@ namespace ImmPlayer
             public readonly float[] LeftProj = new float[16];
             public readonly float[] WorldToRight = new float[16];
             public readonly float[] RightProj = new float[16];
-            // MultiPass invokes pre-cull once per eye. Keep one pose sample for both
-            // eyes of this camera, without allowing another camera (notably the
-            // Editor SceneCamera) to consume the frame's matrix update.
-            public int LastMatrixSetFrame = -1;
+            // MultiPass invokes pre-cull once per eye. Each camera owns its gate so
+            // another camera (notably the Editor SceneCamera) cannot consume this
+            // camera's frame update.
+            public readonly ImmCameraMatrixFrameGate MatrixFrameGate = new ImmCameraMatrixFrameGate();
             // Quest Vulkan: IMM renders each eye into its own offscreen texture on its
             // dedicated queue; Unity composites it back with a material blit.
             // SINGLE-buffered per eye (write==read, same frame): the native composite
@@ -1207,7 +1226,7 @@ namespace ImmPlayer
             _syntheticStereoCameraForValidation = eye >= 0 ? camera : null;
             _syntheticStereoEyeForValidation = eye;
             if (camera != null && _cameras.TryGetValue(camera, out PerCameraInfo info))
-                info.LastMatrixSetFrame = -1;
+                info.MatrixFrameGate.Reset();
             Debug.Log(
                 $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] select eye={eye} " +
                 $"camera={(camera != null ? camera.name : "none")} frame={Time.frameCount}");
@@ -1511,9 +1530,10 @@ namespace ImmPlayer
             // different position", left-eye judder). Upload matrices only on the
             // frame's first eye pass so both eyes share one pose sample.
             // Kill: IMM_UNITY_VK_NO_SINGLE_POSE.
-            bool updateMatrices = info.LastMatrixSetFrame != Time.frameCount ||
-                                  !cam.stereoEnabled ||
-                                  IsEnvFlagEnabled("IMM_UNITY_VK_NO_SINGLE_POSE");
+            bool updateMatrices = info.MatrixFrameGate.TryBeginSubmission(
+                Time.frameCount,
+                cam.stereoEnabled,
+                IsEnvFlagEnabled("IMM_UNITY_VK_NO_SINGLE_POSE"));
             if (updateMatrices)
             {
             ConvertMatrixToArray(info.WorldToHead, cam.worldToCameraMatrix);
@@ -1615,7 +1635,6 @@ namespace ImmPlayer
                 hasStereoMatrices ? info.WorldToRight : null,
                 hasStereoMatrices ? info.RightProj : null);
             ImmNativePlugin.SetCameraViewport(info.CameraId, cam.pixelWidth, cam.pixelHeight);
-            info.LastMatrixSetFrame = Time.frameCount;
             }
             if (IsVulkanRuntime())
             {
