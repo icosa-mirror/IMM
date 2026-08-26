@@ -48,6 +48,13 @@ def main() -> int:
         project = write_unity_harness(temp / "harness", stroke_package, player_package, baseline)
         manifest = json.loads((project / "Packages" / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["testables"] == [UNITY_PACKAGE_NAMES["player"]]
+        consumer = project / "Assets" / "Phase6PackageConsumer"
+        consumer_manifest = json.loads((consumer / "ImmPhase6PackageConsumer.asmdef").read_text(encoding="utf-8"))
+        assert consumer_manifest["name"] == "ImmPhase6PackageConsumer"
+        assert consumer_manifest["references"] == ["ImmUnity.Runtime"]
+        consumer_source = (consumer / "ImmPackageConsumerSmoke.cs").read_text(encoding="utf-8")
+        assert "ImmAuthoringRuntime.Capabilities" in consumer_source
+        assert "ImmAuthoringDocument.Create" in consumer_source
 
         passing = temp / "passing.xml"
         passing.write_text(

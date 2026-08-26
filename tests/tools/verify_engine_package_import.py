@@ -63,8 +63,10 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
     project = workspace / "unity-package-import"
     packages = project / "Packages"
     assets = project / "Assets" / "Tests" / "Editor"
+    consumer = project / "Assets" / "Phase6PackageConsumer"
     packages.mkdir(parents=True, exist_ok=True)
     assets.mkdir(parents=True, exist_ok=True)
+    consumer.mkdir(parents=True, exist_ok=True)
     shutil.copytree(stroke_package, packages / UNITY_PACKAGE_NAMES["stroke"])
     shutil.copytree(player_package, packages / UNITY_PACKAGE_NAMES["player"])
 
@@ -126,6 +128,58 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
         + "\n",
         encoding="utf-8",
     )
+    (consumer / "ImmPhase6PackageConsumer.asmdef").write_text(
+        json.dumps(
+            {
+                "name": "ImmPhase6PackageConsumer",
+                "rootNamespace": "ImmPackageConsumer",
+                "references": ["ImmUnity.Runtime"],
+                "includePlatforms": [],
+                "excludePlatforms": [],
+                "allowUnsafeCode": False,
+                "autoReferenced": True,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (consumer / "ImmPackageConsumerSmoke.cs").write_text(
+        "\n".join(
+            [
+                "using ImmPlayer.Authoring;",
+                "using ImmPlayer.Exporter;",
+                "using UnityEngine;",
+                "",
+                "namespace ImmPackageConsumer",
+                "{",
+                "    public static class ImmPackageConsumerSmoke",
+                "    {",
+                "        public static string DescribeRuntime()",
+                "        {",
+                "            ImmAuthoringCapabilities capabilities = ImmAuthoringRuntime.Capabilities;",
+                '            return $"{capabilities.Platform} {capabilities.Architecture}: {capabilities.Features}";',
+                "        }",
+                "",
+                "        public static ImmAuthoringResult CreateAndDisposeDocument()",
+                "        {",
+                "            ImmAuthoringResult<ImmAuthoringDocument> create = ImmAuthoringDocument.Create(",
+                "                ExportSequenceType.Animated,",
+                "                30,",
+                "                Color.black);",
+                "            if (!create.Succeeded)",
+                "                return create.WithoutValue();",
+                "            create.Value.Dispose();",
+                "            return ImmAuthoringResult.Success();",
+                "        }",
+                "    }",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     return project
 
 
@@ -170,6 +224,8 @@ def verify_unity(args: argparse.Namespace) -> int:
         ensure_file(project / "Packages" / "manifest.json", errors)
         ensure_file(project / "Assets" / "Tests" / "Editor" / "PackageImportHarness.cs", errors)
         ensure_file(project / "Assets" / "Tests" / "Editor" / "PackageImportHarness.asmdef", errors)
+        ensure_file(project / "Assets" / "Phase6PackageConsumer" / "ImmPackageConsumerSmoke.cs", errors)
+        ensure_file(project / "Assets" / "Phase6PackageConsumer" / "ImmPhase6PackageConsumer.asmdef", errors)
 
     if errors:
         for error in errors:
