@@ -319,9 +319,10 @@ foreach ($stagedOutputDir in $outputDirs) {
         throw "Godot staged output DLLs are missing:`n  $($missingOutputDlls -join "`n  ")"
     }
 
+    $relativeOutputDir = [System.IO.Path]::GetRelativePath($repoRoot, $stagedOutputDir).Replace("\", "/")
     $manifest = @(
         "Configuration=$Configuration",
-        "OutputDir=$stagedOutputDir",
+        "OutputDir=$relativeOutputDir",
         "ExpectedDllCount=$($requiredOutputDlls.Count)",
         "GeneratedUtc=$((Get-Date).ToUniversalTime().ToString("o"))",
         "DLLs:"
@@ -331,7 +332,9 @@ foreach ($stagedOutputDir in $outputDirs) {
         $item = Get-Item $candidate
         $manifest += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
     }
-    $manifest | Out-File -FilePath (Join-Path $stagedOutputDir "godot-extension-dlls.txt") -Encoding utf8
+    $manifestPath = Join-Path $stagedOutputDir "godot-extension-dlls.txt"
+    $manifestText = ($manifest -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($manifestPath, $manifestText, [System.Text.UTF8Encoding]::new($false))
 }
 
 Write-Host "Updated Godot sample binaries:"
