@@ -677,6 +677,10 @@ namespace ImmPlayer
             public readonly float[] LeftProj = new float[16];
             public readonly float[] WorldToRight = new float[16];
             public readonly float[] RightProj = new float[16];
+            // MultiPass invokes pre-cull once per eye. Keep one pose sample for both
+            // eyes of this camera, without allowing another camera (notably the
+            // Editor SceneCamera) to consume the frame's matrix update.
+            public int LastMatrixSetFrame = -1;
             // Quest Vulkan: IMM renders each eye into its own offscreen texture on its
             // dedicated queue; Unity composites it back with a material blit.
             // SINGLE-buffered per eye (write==read, same frame): the native composite
@@ -879,8 +883,6 @@ namespace ImmPlayer
         private GameObject _compositeQuad;
         private Material _compositeQuadMaterial;
         private bool _compositeQuadFailed;
-        private int _lastMatrixSetFrame = -1;
-
         // In-pass composite: a fullscreen quad in Unity's own camera pass
         // replaces the per-eye CommandBuffer.Blit (the blit's render-target
         // switch broke Unity's pass and measured ~9ms/frame on Quest 3).
@@ -1204,7 +1206,8 @@ namespace ImmPlayer
 
             _syntheticStereoCameraForValidation = eye >= 0 ? camera : null;
             _syntheticStereoEyeForValidation = eye;
-            _lastMatrixSetFrame = -1;
+            if (camera != null && _cameras.TryGetValue(camera, out PerCameraInfo info))
+                info.LastMatrixSetFrame = -1;
             Debug.Log(
                 $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] select eye={eye} " +
                 $"camera={(camera != null ? camera.name : "none")} frame={Time.frameCount}");
@@ -1508,7 +1511,7 @@ namespace ImmPlayer
             // different position", left-eye judder). Upload matrices only on the
             // frame's first eye pass so both eyes share one pose sample.
             // Kill: IMM_UNITY_VK_NO_SINGLE_POSE.
-            bool updateMatrices = _lastMatrixSetFrame != Time.frameCount ||
+            bool updateMatrices = info.LastMatrixSetFrame != Time.frameCount ||
                                   !cam.stereoEnabled ||
                                   IsEnvFlagEnabled("IMM_UNITY_VK_NO_SINGLE_POSE");
             if (updateMatrices)
@@ -1612,7 +1615,7 @@ namespace ImmPlayer
                 hasStereoMatrices ? info.WorldToRight : null,
                 hasStereoMatrices ? info.RightProj : null);
             ImmNativePlugin.SetCameraViewport(info.CameraId, cam.pixelWidth, cam.pixelHeight);
-            _lastMatrixSetFrame = Time.frameCount;
+            info.LastMatrixSetFrame = Time.frameCount;
             }
             if (IsVulkanRuntime())
             {
