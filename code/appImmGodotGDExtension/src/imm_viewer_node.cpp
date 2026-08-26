@@ -139,6 +139,7 @@ void ImmViewerNode::_bind_methods()
     ADD_PROPERTY(PropertyInfo(Variant::INT, "smoke_viewport_height", PROPERTY_HINT_RANGE, "1,8192,1"), "set_smoke_viewport_height", "get_smoke_viewport_height");
     ADD_PROPERTY(PropertyInfo(Variant::BOOL, "auto_queue_render"), "set_auto_queue_render", "get_auto_queue_render");
     ADD_PROPERTY(PropertyInfo(Variant::NODE_PATH, "render_camera_path", PROPERTY_HINT_NODE_PATH_VALID_TYPES, "Camera3D"), "set_render_camera_path", "get_render_camera_path");
+    ADD_PROPERTY(PropertyInfo(Variant::TRANSFORM3D, "document_transform"), "set_document_transform", "get_document_transform");
 
     ADD_SIGNAL(MethodInfo("document_loaded", PropertyInfo(Variant::STRING, "path")));
     ADD_SIGNAL(MethodInfo("document_unloaded"));

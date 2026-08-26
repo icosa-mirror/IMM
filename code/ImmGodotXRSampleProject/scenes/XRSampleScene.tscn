@@ -1,13 +1,29 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/xr_sample_controller.gd" id="1"]
+
+[sub_resource type="ImmViewerCompositorEffect" id="ImmViewerCompositorEffect_xr"]
+
+[sub_resource type="Compositor" id="Compositor_xr"]
+compositor_effects = Array[CompositorEffect]([SubResource("ImmViewerCompositorEffect_xr")])
 
 [node name="XRSampleScene" type="Node3D"]
 script = ExtResource("1")
 
+[node name="ImmViewer" type="ImmViewerNode" parent="."]
+document_path = "../../exampleImmFiles/sample1.imm"
+load_on_ready = false
+auto_play = true
+renderer_api = 5
+log_file_path = "user://imm_windows_xr_sample.log"
+auto_queue_render = true
+render_camera_path = NodePath("../XROrigin3D/XRCamera3D")
+document_transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+
 [node name="XROrigin3D" type="XROrigin3D" parent="."]
 
 [node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
+compositor = SubResource("Compositor_xr")
 current = true
 
 [node name="StatusLayer" type="CanvasLayer" parent="."]

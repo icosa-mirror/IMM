@@ -24,6 +24,72 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     ios_cmake = (ROOT / "code/projects/ios/CMakeLists.txt").read_text(encoding="utf-8")
     gpu_workflow = (ROOT / ".github/workflows/ci-gpu.yml").read_text(encoding="utf-8")
+    build_workflow = (ROOT / ".github/workflows/build.yml").read_text(encoding="utf-8")
+    godot_windows_build = (
+        ROOT / "code/projects/windows/build-godot-extension.ps1"
+    ).read_text(encoding="utf-8")
+    godot_xr_scene = (
+        ROOT / "code/ImmGodotXRSampleProject/scenes/XRSampleScene.tscn"
+    ).read_text(encoding="utf-8")
+    godot_xr_controller = (
+        ROOT / "code/ImmGodotXRSampleProject/scripts/xr_sample_controller.gd"
+    ).read_text(encoding="utf-8")
+    godot_viewer_node = (
+        ROOT / "code/appImmGodotGDExtension/src/imm_viewer_node.cpp"
+    ).read_text(encoding="utf-8")
+
+    # Both sample projects must be runnable from a clean checkout. The desktop
+    # addon is canonical, while local and CI builds mirror the complete Windows
+    # DLL set into the Windows-only XR sample.
+    godot_windows_dlls = [
+        "imm_godot_extension.dll",
+        "ImmGodotPlugin.dll",
+        "Audio360.dll",
+        "opus.dll",
+        "opusenc.dll",
+        "vorbisenc.dll",
+        "zlib1.dll",
+        "jpeg62.dll",
+        "libpng16.dll",
+        "ogg.dll",
+        "vorbis.dll",
+    ]
+    for variant in ["debug", "release"]:
+        desktop_bin = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/bin/windows" / variant
+        xr_bin = ROOT / "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows" / variant
+        for dll_name in godot_windows_dlls:
+            desktop_dll = desktop_bin / dll_name
+            xr_dll = xr_bin / dll_name
+            assert desktop_dll.is_file(), f"Missing committed desktop Godot DLL: {desktop_dll}"
+            assert xr_dll.is_file(), f"Missing committed XR Godot DLL: {xr_dll}"
+            desktop_bytes = desktop_dll.read_bytes()
+            xr_bytes = xr_dll.read_bytes()
+            assert desktop_bytes[:2] == b"MZ", f"Invalid PE header: {desktop_dll}"
+            assert xr_bytes == desktop_bytes, f"XR Godot DLL is stale or mismatched: {xr_dll}"
+    assert 'code\\ImmGodotXRSampleProject\\addons\\imm_viewer\\bin\\windows\\$variant' in godot_windows_build
+    assert (
+        "cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/windows/. "
+        "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/"
+    ) in build_workflow
+    assert (
+        "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/"
+    ) in build_workflow.split("git add", 1)[1]
+    assert 'rm -rf "${plat}debug"' in build_workflow
+    assert 'cp -R "${plat}release" "${plat}debug"' in build_workflow
+    for token in [
+        '[node name="ImmViewer" type="ImmViewerNode" parent="."]',
+        '[sub_resource type="ImmViewerCompositorEffect"',
+        'compositor = SubResource("Compositor_xr")',
+        'renderer_api = 5',
+        'render_camera_path = NodePath("../XROrigin3D/XRCamera3D")',
+        'document_transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)',
+    ]:
+        assert token in godot_xr_scene
+    assert 'get_node_or_null("ImmViewer")' in godot_xr_controller
+    assert "_bind_authored_imm_resources()" in godot_xr_controller
+    assert 'ClassDB.instantiate("ImmViewerNode")' not in godot_xr_controller
+    assert 'ClassDB.instantiate("ImmViewerCompositorEffect")' not in godot_xr_controller
+    assert 'Variant::TRANSFORM3D, "document_transform"' in godot_viewer_node
 
     # A res:// path must work in a fresh checkout before Godot has built its
     # editor UID cache. A uid:// main scene can leave Run Project idle forever.

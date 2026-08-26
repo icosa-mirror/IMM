@@ -981,10 +981,11 @@ jobs:
           [ ! -f artifacts/platform-bins/libImmGodotPlugin.so ] || cp artifacts/platform-bins/libImmGodotPlugin.so "$addon/bin/android/debug/"
           [ ! -f artifacts/platform-bins/godot-extension-android-libs.txt ] || cp artifacts/platform-bins/godot-extension-android-libs.txt "$addon/bin/android/debug/"
         fi
-        # Mirror release -> debug for any platform that only built a release binary
-        # so the editor (which selects the debug feature tag) can load the extension.
+        # Mirror every freshly built release set into debug so the editor (which
+        # selects the debug feature tag) cannot retain stale committed binaries.
         for plat in "$addon"/bin/*/; do
-          if [ -d "${plat}release" ] && [ ! -d "${plat}debug" ]; then
+          if [ -d "${plat}release" ]; then
+            rm -rf "${plat}debug"
             cp -R "${plat}release" "${plat}debug"
           fi
         done
@@ -1104,15 +1105,19 @@ jobs:
       run: |
         set -euo pipefail
         # Copy the freshly built platform binaries into the committed addon so the
-        # sample project runs out of the box from a clean clone.
+        # sample projects run out of the box from a clean clone. The XR sample is
+        # Windows-only, so keep its complete Windows DLL set identical to the
+        # canonical addon assembled above.
         cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/. code/ImmGodotSampleProject/addons/imm_viewer/bin/
+        mkdir -p code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows
+        cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/windows/. code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/
 
     - name: Commit and push if changed
       shell: bash
       run: |
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add code/ImmUnitySampleProject/Packages/*/Plugins/ code/ImmGodotSampleProject/addons/imm_viewer/bin/
+        git add code/ImmUnitySampleProject/Packages/*/Plugins/ code/ImmGodotSampleProject/addons/imm_viewer/bin/ code/ImmGodotXRSampleProject/addons/imm_viewer/bin/
         if git diff --cached --quiet; then
           echo "No binary changes — nothing to commit"
         else

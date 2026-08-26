@@ -6,7 +6,6 @@ const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const REPOSITORY_SAMPLE_PATH := "res://../../exampleImmFiles/sample1.imm"
 const PROJECT_SAMPLE_PATH := "res://sample1.imm"
 const CAMERA_ID := 0
-const IMM_RENDERER_API_VULKAN := 5
 const WARMUP_FRAMES := 12
 const READY_TIMEOUT_SECONDS := 30.0
 const XR_CAPTURE_ENV := "IMM_GODOT_XR_FRAME_CAPTURE_PATH"
@@ -15,8 +14,8 @@ const XR_MIRROR_CAPTURE_ENV := "IMM_GODOT_XR_MIRROR_CAPTURE_PATH"
 @onready var xr_origin: XROrigin3D = $XROrigin3D
 @onready var xr_camera: XRCamera3D = $XROrigin3D/XRCamera3D
 @onready var status_label: Label = $StatusLayer/StatusPanel/StatusLabel
+@onready var _viewer: Node = get_node_or_null("ImmViewer")
 
-var _viewer: Node
 var _compositor_effect: Resource
 var _spawn_applied := false
 var _last_status := ""
@@ -55,7 +54,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_spawn_applied = _move_origin_to_active_spawn()
 
 func _start_xr_sample() -> void:
-	if not _load_extension() or not _initialize_openxr() or not _create_viewer_and_compositor():
+	if not _load_extension() or not _bind_authored_imm_resources() or not _initialize_openxr():
 		return
 
 	for _frame in range(WARMUP_FRAMES):
@@ -120,33 +119,20 @@ func _initialize_openxr() -> bool:
 	_log("openxr_initialized interface=%s" % xr_interface.get_name())
 	return true
 
-func _create_viewer_and_compositor() -> bool:
-	_viewer = ClassDB.instantiate("ImmViewerNode")
-	if _viewer == null:
-		_fail("Could not create ImmViewerNode.")
+func _bind_authored_imm_resources() -> bool:
+	if _viewer == null or not _viewer.is_class("ImmViewerNode"):
+		_fail("XRSampleScene must contain an ImmViewerNode named ImmViewer.")
 		return false
-	_viewer.name = "ImmViewer"
-	_viewer.load_on_ready = false
-	_viewer.auto_play = true
-	_viewer.auto_queue_render = true
-	_viewer.renderer_api = IMM_RENDERER_API_VULKAN
-	# Keep the authored world correction in document space. A final image-space
-	# X mirror would reverse headset yaw and stereo disparity.
-	_viewer.set_document_transform(Transform3D(
-		Basis(Vector3.LEFT, Vector3.UP, Vector3.BACK),
-		Vector3.ZERO
-	))
-	_viewer.render_camera_path = NodePath("../XROrigin3D/XRCamera3D")
-	_viewer.log_file_path = "user://imm_windows_xr_sample.log"
-	add_child(_viewer)
-
-	_compositor_effect = ClassDB.instantiate("ImmViewerCompositorEffect")
+	if xr_camera.compositor == null:
+		_fail("XRCamera3D must have a Compositor resource.")
+		return false
+	for effect in xr_camera.compositor.compositor_effects:
+		if effect != null and effect.is_class("ImmViewerCompositorEffect"):
+			_compositor_effect = effect
+			break
 	if _compositor_effect == null:
-		_fail("Could not create ImmViewerCompositorEffect.")
+		_fail("XRCamera3D's Compositor must contain an ImmViewerCompositorEffect.")
 		return false
-	var compositor := Compositor.new()
-	compositor.compositor_effects = [_compositor_effect]
-	xr_camera.compositor = compositor
 	return true
 
 func _xr_stereo_rendering_is_ready() -> bool:
@@ -195,7 +181,10 @@ func _write_xr_frame_capture() -> bool:
 	return true
 
 func _find_sample_document() -> String:
-	for candidate in [PROJECT_SAMPLE_PATH, REPOSITORY_SAMPLE_PATH]:
+	var configured_path: String = str(_viewer.document_path) if _viewer != null else ""
+	for candidate in [configured_path, PROJECT_SAMPLE_PATH, REPOSITORY_SAMPLE_PATH]:
+		if candidate.is_empty():
+			continue
 		if FileAccess.file_exists(candidate):
 			return candidate
 	return ""
