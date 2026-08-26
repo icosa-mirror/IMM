@@ -31,6 +31,12 @@ def run_verifier(path: Path, required: str) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
+    workflow = Path(".github/workflows/ci-engine.yml").read_text(encoding="utf-8")
+    assert "testMode: all" in workflow
+    assert "artifacts/unity-package-import/test-runner/editmode-results.xml" in workflow
+    assert "artifacts/unity-package-import/test-runner/playmode-results.xml" in workflow
+    assert "customParameters: -testResults artifacts/unity-editmode-results.xml" not in workflow
+
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
         stroke_package = temp / "stroke"
