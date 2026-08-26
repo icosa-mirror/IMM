@@ -132,10 +132,10 @@ func _create_viewer_and_compositor() -> bool:
 	_viewer.renderer_api = IMM_RENDERER_API_VULKAN
 	# Keep the authored world correction in document space. A final image-space
 	# X mirror would reverse headset yaw and stereo disparity.
-	_viewer.document_transform = Transform3D(
+	_viewer.set_document_transform(Transform3D(
 		Basis(Vector3.LEFT, Vector3.UP, Vector3.BACK),
 		Vector3.ZERO
-	)
+	))
 	_viewer.render_camera_path = NodePath("../XROrigin3D/XRCamera3D")
 	_viewer.log_file_path = "user://imm_windows_xr_sample.log"
 	add_child(_viewer)
@@ -225,14 +225,46 @@ func _move_origin_to_active_spawn() -> bool:
 		transform.get("basis_z", Vector3.BACK)
 	).orthonormalized()
 	var head_local_basis := xr_origin.global_transform.basis.inverse() * xr_camera.global_transform.basis
-	var target_basis := desired_basis * head_local_basis.inverse()
+	var is_floor_spawn := int(info.get("type", 0)) == 1
+	# Recenter only around Godot's vertical axis. Applying the headset's current
+	# pitch or roll to XROrigin3D tilts the world whenever recentering occurs while
+	# the user is not looking exactly level.
+	var target_basis := _yaw_basis(desired_basis) * _yaw_basis(head_local_basis).inverse()
 	var head_local_position := xr_origin.to_local(xr_camera.global_position)
-	if int(info.get("type", 0)) == 1:
+	if is_floor_spawn:
 		head_local_position.y = 0.0
-	var desired_position: Vector3 = transform.get("position", Vector3.ZERO)
-	xr_origin.global_transform = Transform3D(target_basis, desired_position - target_basis * head_local_position)
-	_log("applied_spawn_area id=%s" % str(info.get("id", -1)))
+	var local_spawn_position: Vector3 = transform.get("position", Vector3.ZERO)
+	# Spawn-area info is document-local. Rendering applies document_transform to
+	# the IMM world, so recentering must resolve the spawn position through it too.
+	var desired_position: Vector3 = _viewer.get_document_transform() * local_spawn_position
+	var target_transform := Transform3D(
+		target_basis,
+		desired_position - target_basis * head_local_position
+	)
+	xr_origin.global_transform = target_transform
+	var resulting_head_position := target_transform * head_local_position
+	var residual_millimetres := (resulting_head_position - desired_position) * 1000.0
+	_log(
+		"applied_spawn_area id=%s rotation_mode=%s local_position=%s world_position=%s head_local_position=%s residual_mm=%s"
+		% [
+			str(info.get("id", -1)),
+			"yaw_only",
+			str(local_spawn_position),
+			str(desired_position),
+			str(head_local_position),
+			str(residual_millimetres),
+		]
+	)
 	return true
+
+func _yaw_basis(source: Basis) -> Basis:
+	var back := Vector3(source.z.x, 0.0, source.z.z)
+	if back.length_squared() < 0.000001:
+		back = Vector3.BACK
+	else:
+		back = back.normalized()
+	var right := Vector3.UP.cross(back).normalized()
+	return Basis(right, Vector3.UP, back)
 
 func _fail(message: String) -> void:
 	_startup_failed = true
