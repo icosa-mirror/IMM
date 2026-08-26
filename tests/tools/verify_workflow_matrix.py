@@ -43,7 +43,7 @@ REQUIRED_JOBS = {
     },
     ".github/workflows/ci-engine.yml": {
         "unity-windows-native-plugin-build": ["Download same-commit Unity native plugin build artifact", "Stage same-commit Unity native plugin", "Verify Unity native plugin exports", "Upload same-commit Unity native plugin"],
-        "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Write CI manifest", "Collect artifact summary"],
+        "unity-package-import": ["Verify Unity package import harness", "Preflight Unity runner", "Run Unity batchmode package import tests", "Verify Unity XR matrix regression tests ran", "Write CI manifest", "Collect artifact summary"],
         "unity-macos-metal-composition": ["Download same-commit macOS Unity package", "Stage same-commit macOS Unity native plugin", "Preflight Unity macOS Metal runner", "Build Unity macOS Metal smoke player and run project Play-button smoke", "Confirm Unity project Play-button smoke capture", "Record Unity project Play-button render metrics", "Write Unity project Play-button render report", "Run Unity macOS Metal visual smokes", "Classify Unity macOS Metal visual smokes", "Record Unity macOS Metal render metrics", "Classify Unity macOS Metal evidence", "Write Unity macOS Metal render reports", "Verify Unity macOS Metal log contract", "Write CI manifest", "Collect artifact summary", "Upload Unity macOS Metal artifacts"],
         "unity-ios-player-build": ["Download same-commit Unity package", "Download same-commit Stroke Reader package", "Stage same-commit iOS native libraries", "Prepare Unity iOS artifact directory", "Export Unity iOS Metal Xcode project", "Verify generated Unity iOS project contract", "Compile generated Unity iOS application without signing", "Write Unity iOS application-build manifest", "Collect Unity iOS application-build summary", "Upload Unity iOS player-build artifacts"],
         "unity-windows-directx-player-build": ["Download same-commit Unity native plugin", "Preflight Unity DirectX runner", "Build Unity DirectX smoke player", "Write CI manifest", "Collect artifact summary", "Upload Unity DirectX smoke player", "Upload Unity DirectX build artifacts"],
@@ -841,6 +841,7 @@ def verify_ci_core_self_test_contract(path: Path, workflow_rel: str, errors: lis
         "python tests/tools/test_classify_android_unity_vulkan.py",
         "python tests/tools/test_classify_android_godot_vulkan.py",
         "python tests/tools/test_classify_android_standalone.py",
+        "python tests/tools/test_verify_unity_test_results.py",
     ]
     for token in required_tokens:
         if token not in text:

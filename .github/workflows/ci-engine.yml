@@ -192,7 +192,14 @@ jobs:
           unityVersion: ${{ env.UNITY_VERSION }}
           testMode: editmode
           artifactsPath: artifacts/unity-package-import/test-runner
-          customParameters: -testResults artifacts/unity-editmode-results.xml
+
+      - name: Verify Unity XR matrix regression tests ran
+        run: >
+          python tests/tools/verify_unity_test_results.py
+          artifacts/unity-package-import/test-runner/editmode-results.xml
+          --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.TwoCamerasCanSubmitInTheSameFrameWhileEachReusesItsMultipassPose
+          --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.XrCameraAcceptsTheNextFramesChangedPose
+          --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.MonoAndDiagnosticModesCanSubmitEveryCallback
 
       - name: Write CI manifest
         if: always()

@@ -74,7 +74,8 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
             UNITY_PACKAGE_NAMES["player"]: f"file:{UNITY_PACKAGE_NAMES['player']}",
             "com.unity.test-framework": "1.1.33",
             "com.unity.modules.jsonserialize": "1.0.0",
-        }
+        },
+        "testables": [UNITY_PACKAGE_NAMES["player"]],
     }
     (packages / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
