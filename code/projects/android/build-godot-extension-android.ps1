@@ -247,36 +247,55 @@ finally {
 }
 
 $outputDir = Join-Path $repoRoot "code\ImmGodotSampleProject\addons\imm_viewer\bin\android\$variant"
+$xrOutputDir = Join-Path $repoRoot "code\ImmGodotXRSampleProject\addons\imm_viewer\bin\android\$variant"
 $requiredOutputs = @(
     "libimm_godot_extension.arm64.so",
     "libImmGodotPlugin.so"
 )
-$missingOutputs = @()
+
+New-Item -ItemType Directory -Force $xrOutputDir | Out-Null
 foreach ($name in $requiredOutputs) {
-    $candidate = Join-Path $outputDir $name
-    if (-not (Test-Path $candidate)) {
-        $missingOutputs += $candidate
-    }
-}
-if ($missingOutputs.Count -gt 0) {
-    throw "Android Godot staged output libraries are missing:`n  $($missingOutputs -join "`n  ")"
+    Copy-Item -LiteralPath (Join-Path $outputDir $name) -Destination (Join-Path $xrOutputDir $name) -Force
 }
 
-$manifest = @(
-    "Configuration=$Configuration",
-    "OutputDir=$outputDir",
-    "ExpectedLibraryCount=$($requiredOutputs.Count)",
-    "GodotCppLib=$GodotCppLib",
-    "GeneratedUtc=$((Get-Date).ToUniversalTime().ToString("o"))",
-    "Libraries:"
-)
-foreach ($name in $requiredOutputs) {
-    $candidate = Join-Path $outputDir $name
-    $item = Get-Item $candidate
-    $manifest += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
+$outputDirs = @($outputDir, $xrOutputDir)
+$relativeGodotCppLib = [System.IO.Path]::GetRelativePath(
+    $repoRoot,
+    (Resolve-Path -LiteralPath $GodotCppLib).Path
+).Replace("\", "/")
+foreach ($stagedOutputDir in $outputDirs) {
+    $missingOutputs = @()
+    foreach ($name in $requiredOutputs) {
+        $candidate = Join-Path $stagedOutputDir $name
+        if (-not (Test-Path $candidate)) {
+            $missingOutputs += $candidate
+        }
+    }
+    if ($missingOutputs.Count -gt 0) {
+        throw "Android Godot staged output libraries are missing:`n  $($missingOutputs -join "`n  ")"
+    }
+
+    $relativeOutputDir = [System.IO.Path]::GetRelativePath($repoRoot, $stagedOutputDir).Replace("\", "/")
+    $manifest = @(
+        "Configuration=$Configuration",
+        "OutputDir=$relativeOutputDir",
+        "ExpectedLibraryCount=$($requiredOutputs.Count)",
+        "GodotCppLib=$relativeGodotCppLib",
+        "GeneratedUtc=$((Get-Date).ToUniversalTime().ToString("o"))",
+        "Libraries:"
+    )
+    foreach ($name in $requiredOutputs) {
+        $candidate = Join-Path $stagedOutputDir $name
+        $item = Get-Item $candidate
+        $manifest += ("FOUND`t{0}`t{1}`t{2:o}" -f $item.Name, $item.Length, $item.LastWriteTimeUtc)
+    }
+    $manifestPath = Join-Path $stagedOutputDir "godot-extension-android-libs.txt"
+    $manifestText = ($manifest -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($manifestPath, $manifestText, [System.Text.UTF8Encoding]::new($false))
 }
-$manifest | Out-File -FilePath (Join-Path $outputDir "godot-extension-android-libs.txt") -Encoding utf8
 
 Write-Host "Updated Android Godot sample binaries:"
-Write-Host "  $outputDir"
-Write-Host "Verified staged Android Godot library set: $($requiredOutputs.Count) files"
+foreach ($stagedOutputDir in $outputDirs) {
+    Write-Host "  $stagedOutputDir"
+}
+Write-Host "Verified staged Android Godot library sets: $($requiredOutputs.Count) files each"

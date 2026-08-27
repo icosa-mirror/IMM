@@ -1105,12 +1105,13 @@ jobs:
       run: |
         set -euo pipefail
         # Copy the freshly built platform binaries into the committed addon so the
-        # sample projects run out of the box from a clean clone. The XR sample is
-        # Windows-only, so keep its complete Windows DLL set identical to the
-        # canonical addon assembled above.
+        # sample projects run out of the box from a clean clone. Keep every XR-
+        # capable platform identical to the canonical addon assembled above.
         cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/. code/ImmGodotSampleProject/addons/imm_viewer/bin/
-        mkdir -p code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows
-        cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/windows/. code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/
+        for platform in windows android; do
+          mkdir -p "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/$platform"
+          cp -R "artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/$platform/." "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/$platform/"
+        done
 
     - name: Commit and push if changed
       shell: bash

@@ -28,6 +28,12 @@ def main() -> int:
     godot_windows_build = (
         ROOT / "code/projects/windows/build-godot-extension.ps1"
     ).read_text(encoding="utf-8")
+    godot_android_build = (
+        ROOT / "code/projects/android/build-godot-extension-android.ps1"
+    ).read_text(encoding="utf-8")
+    godot_xr_extension_manifest = (
+        ROOT / "code/ImmGodotXRSampleProject/addons/imm_viewer/imm_viewer.gdextension"
+    ).read_text(encoding="utf-8")
     godot_xr_scene = (
         ROOT / "code/ImmGodotXRSampleProject/scenes/XRSampleScene.tscn"
     ).read_text(encoding="utf-8")
@@ -39,8 +45,8 @@ def main() -> int:
     ).read_text(encoding="utf-8")
 
     # Both sample projects must be runnable from a clean checkout. The desktop
-    # addon is canonical, while local and CI builds mirror the complete Windows
-    # DLL set into the Windows-only XR sample.
+    # addon is canonical, while local and CI builds mirror every XR-capable
+    # platform into the XR sample.
     godot_windows_dlls = [
         "imm_godot_extension.dll",
         "ImmGodotPlugin.dll",
@@ -67,10 +73,34 @@ def main() -> int:
             assert desktop_bytes[:2] == b"MZ", f"Invalid PE header: {desktop_dll}"
             assert xr_bytes == desktop_bytes, f"XR Godot DLL is stale or mismatched: {xr_dll}"
     assert 'code\\ImmGodotXRSampleProject\\addons\\imm_viewer\\bin\\windows\\$variant' in godot_windows_build
-    assert (
-        "cp -R artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/windows/. "
-        "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/"
-    ) in build_workflow
+    godot_android_libraries = [
+        "libimm_godot_extension.arm64.so",
+        "libImmGodotPlugin.so",
+    ]
+    desktop_android_bin = ROOT / "code/ImmGodotSampleProject/addons/imm_viewer/bin/android/debug"
+    xr_android_bin = ROOT / "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/android/debug"
+    for library_name in godot_android_libraries:
+        desktop_library = desktop_android_bin / library_name
+        xr_library = xr_android_bin / library_name
+        assert desktop_library.is_file(), f"Missing committed desktop Godot Android library: {desktop_library}"
+        assert xr_library.is_file(), f"Missing committed XR Godot Android library: {xr_library}"
+        desktop_bytes = desktop_library.read_bytes()
+        xr_bytes = xr_library.read_bytes()
+        assert desktop_bytes[:4] == b"\x7fELF", f"Invalid ELF header: {desktop_library}"
+        assert int.from_bytes(desktop_bytes[18:20], "little") == 183, f"Expected ARM64 ELF: {desktop_library}"
+        assert xr_bytes == desktop_bytes, f"XR Godot Android library is stale or mismatched: {xr_library}"
+    for token in [
+        'android.debug.arm64="res://addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so"',
+        'android.release.arm64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.arm64.so"',
+        'android.debug.arm64={"res://addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so":""}',
+        'android.release.arm64={"res://addons/imm_viewer/bin/android/release/libImmGodotPlugin.so":""}',
+    ]:
+        assert token in godot_xr_extension_manifest
+    assert "macos." not in godot_xr_extension_manifest
+    assert 'code\\ImmGodotXRSampleProject\\addons\\imm_viewer\\bin\\android\\$variant' in godot_android_build
+    assert '"GodotCppLib=$relativeGodotCppLib"' in godot_android_build
+    assert "for platform in windows android; do" in build_workflow
+    assert 'bin/$platform/." "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/$platform/' in build_workflow
     assert (
         "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/"
     ) in build_workflow.split("git add", 1)[1]

@@ -5,7 +5,15 @@ compatibility_minimum="4.5"
 [libraries]
 windows.debug.x86_64="res://addons/imm_viewer/bin/windows/debug/imm_godot_extension.dll"
 windows.release.x86_64="res://addons/imm_viewer/bin/windows/release/imm_godot_extension.dll"
+android.debug.arm64="res://addons/imm_viewer/bin/android/debug/libimm_godot_extension.arm64.so"
+android.release.arm64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.arm64.so"
+android.debug.x86_64="res://addons/imm_viewer/bin/android/debug/libimm_godot_extension.x86_64.so"
+android.release.x86_64="res://addons/imm_viewer/bin/android/release/libimm_godot_extension.x86_64.so"
 
 [dependencies]
 windows.debug.x86_64={"res://addons/imm_viewer/bin/windows/debug/ImmGodotPlugin.dll":"","res://addons/imm_viewer/bin/windows/debug/Audio360.dll":"","res://addons/imm_viewer/bin/windows/debug/opus.dll":"","res://addons/imm_viewer/bin/windows/debug/opusenc.dll":"","res://addons/imm_viewer/bin/windows/debug/vorbisenc.dll":"","res://addons/imm_viewer/bin/windows/debug/zlib1.dll":"","res://addons/imm_viewer/bin/windows/debug/jpeg62.dll":"","res://addons/imm_viewer/bin/windows/debug/libpng16.dll":"","res://addons/imm_viewer/bin/windows/debug/ogg.dll":"","res://addons/imm_viewer/bin/windows/debug/vorbis.dll":""}
 windows.release.x86_64={"res://addons/imm_viewer/bin/windows/release/ImmGodotPlugin.dll":"","res://addons/imm_viewer/bin/windows/release/Audio360.dll":"","res://addons/imm_viewer/bin/windows/release/opus.dll":"","res://addons/imm_viewer/bin/windows/release/opusenc.dll":"","res://addons/imm_viewer/bin/windows/release/vorbisenc.dll":"","res://addons/imm_viewer/bin/windows/release/zlib1.dll":"","res://addons/imm_viewer/bin/windows/release/jpeg62.dll":"","res://addons/imm_viewer/bin/windows/release/libpng16.dll":"","res://addons/imm_viewer/bin/windows/release/ogg.dll":"","res://addons/imm_viewer/bin/windows/release/vorbis.dll":""}
+android.debug.arm64={"res://addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so":""}
+android.release.arm64={"res://addons/imm_viewer/bin/android/release/libImmGodotPlugin.so":""}
+android.debug.x86_64={"res://addons/imm_viewer/bin/android/debug/libImmGodotPlugin.so":""}
+android.release.x86_64={"res://addons/imm_viewer/bin/android/release/libImmGodotPlugin.so":""}
