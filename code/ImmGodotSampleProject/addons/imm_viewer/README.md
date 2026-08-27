@@ -19,6 +19,8 @@ This addon provides the native `ImmViewerNode` and `ImmViewerCompositorEffect` u
    - `Camera3D > Compositor > New Compositor`
    - Open the compositor resource.
    - Add one effect: `ImmViewerCompositorEffect`.
+   - Set `Effect Callback Type` to `Pre Transparent`.
+   - Enable `Access Resolved Color`, `Access Resolved Depth`, and `Render Graph Depth Composition Enabled` so Godot geometry and IMM content share depth correctly.
 4. Add an `ImmViewerNode` to the scene.
 5. Set the `ImmViewerNode` properties:
    - `document_path`: `res://sample1.imm`

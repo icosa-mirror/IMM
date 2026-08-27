@@ -121,6 +121,19 @@ def main() -> int:
     assert 'ClassDB.instantiate("ImmViewerCompositorEffect")' not in godot_xr_controller
     assert 'Variant::TRANSFORM3D, "document_transform"' in godot_viewer_node
 
+    # The user-facing scenes must use the same full-depth composition contract
+    # as the visual-smoke scene. Otherwise the default post-transparent effect
+    # can cover ordinary Godot geometry even though CI composition probes pass.
+    full_depth_compositor_tokens = [
+        "effect_callback_type = 3",
+        "access_resolved_color = true",
+        "access_resolved_depth = true",
+        "render_graph_depth_composition_enabled = true",
+    ]
+    for token in full_depth_compositor_tokens:
+        assert token in godot_scene
+        assert token in godot_xr_scene
+
     # A res:// path must work in a fresh checkout before Godot has built its
     # editor UID cache. A uid:// main scene can leave Run Project idle forever.
     assert 'run/main_scene="res://scenes/SampleScene.tscn"' in godot_project

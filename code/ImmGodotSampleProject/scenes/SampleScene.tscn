@@ -3,6 +3,10 @@
 [ext_resource type="Script" uid="uid://bhunfscvj5yb7" path="res://scripts/sample_scene_controller.gd" id="1"]
 
 [sub_resource type="ImmViewerCompositorEffect" id="ImmViewerCompositorEffect_xc5g8"]
+render_graph_depth_composition_enabled = true
+effect_callback_type = 3
+access_resolved_color = true
+access_resolved_depth = true
 
 [sub_resource type="Compositor" id="Compositor_bt3ie"]
 compositor_effects = Array[CompositorEffect]([SubResource("ImmViewerCompositorEffect_xc5g8")])
