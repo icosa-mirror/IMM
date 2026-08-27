@@ -1220,6 +1220,10 @@ jobs:
 
   unity-windows-vulkan-ordered-overlay:
     name: Unity Windows Vulkan Ordered Overlay
+    # Windows Direct3D 11 is the recommended and hosted-tested Unity path. Unity
+    # rejects Mesa Lavapipe on windows-latest and falls back to Direct3D 11, so
+    # this Vulkan-specific parity check needs a Windows runner with a real GPU.
+    # It may move to a GitHub-hosted GPU larger runner if one is provisioned.
     if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: [self-hosted, windows]
     timeout-minutes: 25
@@ -1480,6 +1484,9 @@ jobs:
 
   unity-windows-vulkan-full-depth:
     name: Unity Windows Vulkan Full Depth
+    # Keep this consistent with the ordered-overlay lane above: it is optional
+    # Vulkan backend coverage, not the normal Windows Unity compatibility gate.
+    # The equivalent Direct3D 11 composition coverage runs on hosted CI.
     if: inputs.hardware && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'engine-ci')) && vars.CI_ENABLE_UNITY_EDITOR_CHECKS == 'true'
     runs-on: [self-hosted, windows]
     timeout-minutes: 25

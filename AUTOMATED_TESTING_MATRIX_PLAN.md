@@ -90,6 +90,14 @@ All tiers are still GitHub CI because self-hosted runners are invoked by GitHub 
 
 Self-hosted jobs run `tests/tools/preflight_runner.py` before the expensive smoke steps. The preflight writes `preflight.json` into the job artifact, checks required commands such as `adb`, `msbuild`, `cmake`, `glslangValidator`, and `spirv-val`, checks required environment variables such as `GODOT_EXE` or `UNITY_EXE`, and records `adb devices -l` for Android/Quest lanes. This keeps infrastructure failures distinct from product regressions.
 
+### Windows Unity renderer policy
+
+Direct3D 11 is the recommended Windows Unity renderer and the normal hosted-CI compatibility path. The hosted Direct3D 11 composition lane covers ordinary non-VR rendering, including ordered-overlay and full-depth scene composition.
+
+Windows Unity Vulkan remains useful as optional backend-specific coverage and for finding portability problems shared with Vulkan platforms such as Android. It is not required for the normal Windows recommendation. GitHub's standard `windows-latest` runner does not provide a Vulkan device that Unity accepts: the previous Mesa Lavapipe attempt was rejected by Unity, which then fell back to Direct3D 11. A Vulkan result from that fallback would be misleading.
+
+Consequently, the Windows Unity Vulkan ordered-overlay and full-depth jobs run only in explicit `hardware` mode on a Windows runner that passes the Vulkan preflight. They may use a self-hosted GPU runner or, if one is provisioned for the organization, a GitHub-hosted Windows GPU larger runner. Their absence from a normal `full` run means that optional Vulkan backend coverage was not executed; it does not mean non-VR Windows composition was left untested.
+
 ## Product Matrix
 
 | Product surface | Windows | Android | iOS | macOS |
