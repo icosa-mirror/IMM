@@ -147,9 +147,14 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolderName;
     config.rendererApi = iResolveRendererApi(rendererApi);
-    // Godot's native texture and projection contract already accounts for its
-    // render-target orientation. Do not infer face winding from the Vulkan
-    // backend's negative-height viewport or override it per mobile platform.
+    // Godot's Metal projection is already adjusted for its render target. The
+    // resulting Y reflection reverses window-space winding relative to the
+    // standalone Metal viewer. Vulkan retains its existing host convention.
+    if (config.rendererApi == piRenderer::API::Metal)
+    {
+        config.overrideFrontIsCCW = true;
+        config.frontIsCCW = false;
+    }
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
     if (config.rendererApi == piRenderer::API::Vulkan)

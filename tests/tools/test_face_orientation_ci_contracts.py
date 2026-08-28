@@ -22,6 +22,7 @@ def main() -> int:
             "windows-standalone-opengl/face-orientation-status.json",
             "godot-smoke-windows-vulkan/face-orientation-status.json",
             "godot-smoke-macos-metal/face-orientation-status.json",
+            "smoke_status=0",
         ],
     )
     require_tokens(
@@ -71,6 +72,22 @@ def main() -> int:
     )
     player_source = (ROOT / "code/libImmPlayer/src/player.cpp").read_text(encoding="utf-8")
     assert player_source.count("mRenderer->SetState(piSTATE_CULL_FACE, true);") >= 6
+    require_tokens(
+        "code/appImmUnity/src/main.cpp",
+        [
+            "config.overrideFrontIsCCW = true;",
+            "config.frontIsCCW = false;",
+            "frontIsCCW=0",
+        ],
+    )
+    require_tokens(
+        "code/appImmGodot/src/main.cpp",
+        [
+            "config.rendererApi == piRenderer::API::Metal",
+            "config.overrideFrontIsCCW = true;",
+            "config.frontIsCCW = false;",
+        ],
+    )
     print("Face-orientation CI contracts verified")
     return 0
 

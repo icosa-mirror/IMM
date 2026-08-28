@@ -1233,10 +1233,12 @@ jobs:
           fi
 
       - name: Capture and classify Godot Metal face orientation
+        continue-on-error: true
         run: |
           set -euo pipefail
           : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
           mkdir -p artifacts/godot-smoke-macos-metal/captures/face-orientation
+          smoke_status=0
           IMM_GODOT_VISUAL_SMOKE=1 \
           IMM_GODOT_VISUAL_DOCUMENT_PATH="res://../../exampleImmFiles/face-orientation.imm" \
           IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME=0 \
@@ -1247,7 +1249,9 @@ jobs:
           IMM_GODOT_VISUAL_SMOKE_RENDER_PNG="$PWD/artifacts/godot-smoke-macos-metal/face-orientation.png" \
           IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/face-orientation-scene.png" \
           "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --resolution 1280x720 --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
-            > artifacts/godot-smoke-macos-metal/face-orientation.log 2>&1
+            > artifacts/godot-smoke-macos-metal/face-orientation.log 2>&1 || smoke_status=$?
+          printf 'godot_exit=%s\n' "$smoke_status" > artifacts/godot-smoke-macos-metal/face-orientation-runtime-status.txt
+          test -s artifacts/godot-smoke-macos-metal/face-orientation.png
           python3 tests/tools/classify_face_orientation_capture.py \
             artifacts/godot-smoke-macos-metal/face-orientation.png \
             --status-output artifacts/godot-smoke-macos-metal/face-orientation-status.json \

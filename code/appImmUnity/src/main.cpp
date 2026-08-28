@@ -1722,9 +1722,14 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
         config.graphicsDevice = gImmUnityPlugin.UnityAPI.mDevice;
         config.metalUnityProjectionAdjusted = true;
         config.reverseDepthBuffer = true;
+        // Unity supplies a render-target-adjusted Metal projection. Its Y
+        // reflection reverses window-space winding relative to standalone
+        // Metal, so Unity Metal must classify clockwise faces as front-facing.
+        config.overrideFrontIsCCW = true;
+        config.frontIsCCW = false;
         std::fprintf(
             stderr,
-            "[IMM_UNITY_METAL_CONFIG_20260802] projectionAdjusted=1 reverseDepth=1\n");
+            "[IMM_UNITY_METAL_CONFIG_20260802] projectionAdjusted=1 reverseDepth=1 frontIsCCW=0\n");
         std::fflush(stderr);
     }
     else if (gfx == kUnityGfxRendererOpenGLCore)
