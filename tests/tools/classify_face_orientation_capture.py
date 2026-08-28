@@ -25,9 +25,14 @@ REGIONS = (
     Region("green_layout_marker", (0.55, 0.25, 0.72, 0.75), (55, 240, 105)),
 )
 
+LAYOUT_NORMAL = "normal"
+LAYOUT_REVERSED_HORIZONTAL = "reversed_horizontal"
+
 
 def is_cyan(r: int, g: int, b: int) -> bool:
-    return b >= 100 and b > r * 1.35 and b > g * 1.05
+    # Some mobile display paths clamp both cyan channels to 255. Keep cyan
+    # distinct from green while accepting that loss of blue-over-green headroom.
+    return g >= 100 and b >= 100 and g > r * 1.35 and b > r * 1.35 and b >= g * 0.92
 
 
 def is_green(r: int, g: int, b: int) -> bool:
@@ -45,6 +50,17 @@ def pixel_bounds(region: Region, width: int, height: int) -> tuple[int, int, int
         int(y0 * height),
         max(int(x0 * width) + 1, int(x1 * width)),
         max(int(y0 * height) + 1, int(y1 * height)),
+    )
+
+
+def regions_for_layout(layout: str) -> tuple[Region, ...]:
+    if layout == LAYOUT_NORMAL:
+        return REGIONS
+    if layout != LAYOUT_REVERSED_HORIZONTAL:
+        raise ValueError(f"Unknown face-orientation capture layout: {layout}")
+    return tuple(
+        Region(region.name, (1.0 - region.bounds[2], region.bounds[1], 1.0 - region.bounds[0], region.bounds[3]), region.color)
+        for region in REGIONS
     )
 
 
@@ -86,10 +102,26 @@ def draw_outline(
                 output[offset : offset + 3] = bytes(color)
 
 
+def measure_layout(width: int, height: int, pixels: bytes, layout: str) -> tuple[dict, dict, dict]:
+    regions = regions_for_layout(layout)
+    return (
+        count_region(pixels, width, height, regions[0], is_cyan),
+        count_region(pixels, width, height, regions[1], is_orange),
+        count_region(pixels, width, height, regions[2], is_green),
+    )
+
+
 def classify(width: int, height: int, pixels: bytes) -> dict:
-    cyan = count_region(pixels, width, height, REGIONS[0], is_cyan)
-    orange = count_region(pixels, width, height, REGIONS[1], is_orange)
-    green = count_region(pixels, width, height, REGIONS[2], is_green)
+    normal = measure_layout(width, height, pixels, LAYOUT_NORMAL)
+    reversed_horizontal = measure_layout(width, height, pixels, LAYOUT_REVERSED_HORIZONTAL)
+    normal_layout_score = normal[0]["matched_share"] + normal[2]["matched_share"]
+    reversed_layout_score = reversed_horizontal[0]["matched_share"] + reversed_horizontal[2]["matched_share"]
+    capture_layout = (
+        LAYOUT_REVERSED_HORIZONTAL
+        if reversed_layout_score > normal_layout_score
+        else LAYOUT_NORMAL
+    )
+    cyan, orange, green = normal if capture_layout == LAYOUT_NORMAL else reversed_horizontal
     checks = {
         "cyan_exterior_visible": {
             "passed": cyan["matched_share"] >= 0.02,
@@ -113,6 +145,7 @@ def classify(width: int, height: int, pixels: bytes) -> dict:
         "result": "passed" if not failures else "render_failed",
         "failure_class": "" if not failures else "face_orientation",
         "failures": failures,
+        "capture_layout": capture_layout,
         "image": {"width": width, "height": height},
         "measurements": {
             "cyan_exterior": cyan,
@@ -132,7 +165,7 @@ def write_overlay(path: Path, width: int, height: int, pixels: bytes, status: di
         "backface_interior_hidden",
         "layout_marker_visible",
     )
-    for region, check_name in zip(REGIONS, region_checks):
+    for region, check_name in zip(regions_for_layout(status["capture_layout"]), region_checks):
         color = passed_color if status["checks"][check_name]["passed"] else failed_color
         draw_outline(output, width, height, region, color)
     band_color = passed_color if status["result"] == "passed" else failed_color
