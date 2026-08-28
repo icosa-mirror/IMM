@@ -409,9 +409,21 @@ def main() -> int:
         ],
         ROOT / "code/appImmShared/src/imm_engine_bridge.cpp": [
             "mConfig.reverseDepthBuffer",
+            "mConfig.overrideFrontIsCCW",
             "conf.projectionMatrix = usesZeroToOneDepth",
             "DepthBuffer::Linear10",
             "SetUnityProjectionAdjusted(true)",
+        ],
+        ROOT / "code/appImmGodot/src/main.cpp": [
+            "#if defined(ANDROID)",
+            "#elif defined(IMM_IOS)",
+            "config.overrideFrontIsCCW = true;",
+            "config.frontIsCCW = false;",
+        ],
+        ROOT / "code/appImmViewer/src/viewer/viewer.cpp": [
+            "Settings::Rendering::API::Vulkan",
+            "conf.frontIsCCW =",
+            "negative-height viewport",
         ],
         ROOT / "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp": [
             "bool ownsDedicatedQueue = false;",

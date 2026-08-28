@@ -147,6 +147,26 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolderName;
     config.rendererApi = iResolveRendererApi(rendererApi);
+#if defined(ANDROID)
+    if (config.rendererApi == piRenderer::API::Vulkan)
+    {
+        // Godot's Android Vulkan projection reaches IMM without the host-side
+        // Y reflection used by the desktop Godot and Unity Vulkan paths. The
+        // Vulkan backend's negative-height viewport supplies that reflection,
+        // so window-space face winding must be classified as clockwise.
+        config.overrideFrontIsCCW = true;
+        config.frontIsCCW = false;
+    }
+#elif defined(IMM_IOS)
+    if (config.rendererApi == piRenderer::API::Metal)
+    {
+        // Godot iOS Metal and Godot macOS Metal use different render-target
+        // projection conventions. The iOS path presents authored front faces
+        // as clockwise in Metal window space.
+        config.overrideFrontIsCCW = true;
+        config.frontIsCCW = false;
+    }
+#endif
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
     if (config.rendererApi == piRenderer::API::Vulkan)

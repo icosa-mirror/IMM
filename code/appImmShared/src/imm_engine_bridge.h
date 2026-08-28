@@ -19,6 +19,8 @@ namespace ImmShared
             void *graphicsDevice = nullptr;
             bool metalUnityProjectionAdjusted = false;
             bool reverseDepthBuffer = false;
+            bool overrideFrontIsCCW = false;
+            bool frontIsCCW = true;
             bool initializeRendererOnInit = true;
             int initializeWindow = 0;
             int initializeDisplay = 0;

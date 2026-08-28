@@ -611,7 +611,9 @@ namespace ImmShared
         conf.projectionMatrix = usesZeroToOneDepth
             ? ClipSpaceDepth::FromZeroToOne
             : ClipSpaceDepth::FromNegativeOneToOne;
-        conf.frontIsCCW = (mConfig.rendererApi == piRenderer::API::DX) ? false : true;
+        conf.frontIsCCW = mConfig.overrideFrontIsCCW
+            ? mConfig.frontIsCCW
+            : (mConfig.rendererApi != piRenderer::API::DX);
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
 #if defined(ANDROID) || defined(__ANDROID__)
         if (mConfig.rendererApi == piRenderer::API::GLES)

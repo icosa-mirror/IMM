@@ -51,7 +51,12 @@ bool Viewer::Init(const char *appID_DELETE_ME_THIS_IS_A_HACK, piRenderer* render
                              mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::Metal ||
                              mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::Vulkan) ?
         ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
-    conf.frontIsCCW = true;
+    // The Vulkan backend uses a negative-height viewport to preserve the
+    // viewer's existing top-left screen-space convention. That reflection
+    // reverses window-space winding, so standalone Vulkan must classify the
+    // authored clockwise faces as front-facing. Host-engine integrations
+    // configure their own projection conventions through ImmEngineBridge.
+    conf.frontIsCCW = mPlayerSettings->mRendering.mRenderingAPI != Settings::Rendering::API::Vulkan;
     conf.paintRenderingTechnique = static_cast<Drawing::PaintRenderingTechnique>(mPlayerSettings->mRendering.mRenderingTechnique);
 
     if (!mPlayer.Init(mRenderer, mSoundEngine, mLog, timer, &conf))
