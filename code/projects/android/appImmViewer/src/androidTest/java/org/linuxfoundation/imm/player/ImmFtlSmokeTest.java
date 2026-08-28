@@ -89,10 +89,10 @@ public final class ImmFtlSmokeTest {
         File sampleCapture = new File(artifactDir, "sample-native-render-after.ppm");
         Files.copy(nativeCapture.toPath(), sampleCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-        // MainActivity is singleTask, so launching it again delivers this intent through
-        // onNewIntent(). Do not force-stop the target package here: Android instrumentation
-        // runs inside that package, so force-stop also kills this test before it can save
-        // the face-orientation capture.
+        // MainActivity is singleTask, so launching it again with SINGLE_TOP delivers this
+        // intent through onNewIntent() and lets the existing render thread reload safely.
+        // CLEAR_TASK would destroy and recreate NativeActivity while its render thread is
+        // still shutting down. Do not force-stop either: instrumentation runs in this package.
         runShell(device, "logcat -c");
         assertTrue("Could not remove stale native capture", !nativeCapture.exists() || nativeCapture.delete());
 
@@ -100,7 +100,7 @@ public final class ImmFtlSmokeTest {
         assertTrue("Face-orientation fixture was not extracted: " + faceDocument, faceDocument.isFile());
         Intent faceIntent = targetContext.getPackageManager().getLaunchIntentForPackage(PACKAGE_NAME);
         assertTrue("Face-orientation launch intent not found for " + PACKAGE_NAME, faceIntent != null);
-        faceIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        faceIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         faceIntent.putExtra("RenderingAPI", renderer);
         faceIntent.putExtra("ValidationRenderWidth", VALIDATION_RENDER_WIDTH);
         faceIntent.putExtra("ValidationRenderHeight", VALIDATION_RENDER_HEIGHT);

@@ -93,6 +93,11 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     assert 'runShell(device, "am force-stop " + PACKAGE_NAME)' not in android_test_source
     assert android_test_source.count("targetContext.startActivity(") == 2
+    assert android_test_source.count("Intent.FLAG_ACTIVITY_CLEAR_TASK") == 1
+    assert (
+        "faceIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);"
+        in android_test_source
+    )
     assert 'faceIntent.putExtra("QUILL_PATH", faceDocument.getAbsolutePath())' in android_test_source
     player_source = (ROOT / "code/libImmPlayer/src/player.cpp").read_text(encoding="utf-8")
     assert player_source.count("mRenderer->SetState(piSTATE_CULL_FACE, true);") >= 6
