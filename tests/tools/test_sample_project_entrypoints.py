@@ -203,7 +203,7 @@ def main() -> int:
     for token in [
         'name="iOS Development"',
         'platform="iOS"',
-        'include_filter="sample1.imm"',
+        'include_filter="sample1.imm,face-orientation.imm"',
         'application/bundle_identifier="org.linuxfoundation.imm.godot.sample"',
         'application/export_project_only=true',
         'application/min_ios_version="15.0"',
@@ -421,7 +421,7 @@ def main() -> int:
         "GodotIOSMetal",
     ]:
         assert token in ios_workflow
-    assert ios_workflow.count("--imm-godot-visual-renderer-api=4") == 2
+    assert ios_workflow.count("--imm-godot-visual-renderer-api=4") == 3
     assert "--imm-godot-visual-renderer-api=5" not in ios_workflow
     assert 'test "${{ steps.godot_ios_compatibility_simulator_compile.outcome }}" = success' not in ios_workflow
     for obsolete in [

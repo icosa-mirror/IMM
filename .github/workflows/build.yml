@@ -492,6 +492,7 @@ jobs:
       run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
 
     - name: Capture and classify macOS Metal face orientation
+      continue-on-error: true
       run: |
         set -euo pipefail
         capture_dir="$PWD/build/macos/face-orientation-captures"

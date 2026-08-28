@@ -68,6 +68,13 @@ def main() -> int:
         "code/ImmGodotSampleProject/export_presets.cfg",
         ["sample1.imm,face-orientation.imm", "--imm-godot-face-orientation-capture-path="],
     )
+    require_tokens(
+        "code/appImmViewer/src/viewer/viewer.cpp",
+        [
+            "renderingAPI != Settings::Rendering::API::Vulkan",
+            "renderingAPI != Settings::Rendering::API::Metal",
+        ],
+    )
     print("Face-orientation CI contracts verified")
     return 0
 
