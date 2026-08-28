@@ -98,6 +98,8 @@ def main() -> int:
             "did not merge IMM depth with Godot host color in a separate render-graph target",
             "last_vulkan_depth_image_handle",
             "MIN_ORDERED_OVERLAY_IMM_PIXELS",
+            "const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := 60",
+            "platform load time cannot choose",
             "target_share",
             "scene composition %s rear occlusion leakage probe failed",
             "unproject_position",

@@ -24,7 +24,9 @@ const MAX_SCENE_PROBE_OCCLUDED_SHARE := 0.08
 const REAR_OCCLUDED_PROBE_REGION_SCALE := 0.70
 const MIN_ORDERED_OVERLAY_IMM_PIXELS := 4096
 const IMM_TICKS_PER_SECOND := 12600
-const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := -1
+# Match the committed Windows reference frame so platform load time cannot choose
+# different scene content and invalidate cross-platform visual comparisons.
+const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := 60
 const VISUAL_SMOKE_FRAME_RATE := 30
 const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
