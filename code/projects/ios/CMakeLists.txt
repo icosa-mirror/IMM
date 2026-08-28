@@ -240,6 +240,7 @@ add_dependencies(libImmPlayerUnity ShadersModel ShadersPretessellated)
 set(IMM_IOS_VIEWER_RESOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerIOS-settings.json
     ${CODE_DIR}/../exampleImmFiles/sample1.imm
+    ${CODE_DIR}/../exampleImmFiles/face-orientation.imm
 )
 
 add_executable(appImmViewerIOS MACOSX_BUNDLE
@@ -289,6 +290,9 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/appImmViewerIOS-settings
     MACOSX_PACKAGE_LOCATION Resources
 )
 set_source_files_properties(${CODE_DIR}/../exampleImmFiles/sample1.imm PROPERTIES
+    MACOSX_PACKAGE_LOCATION Resources
+)
+set_source_files_properties(${CODE_DIR}/../exampleImmFiles/face-orientation.imm PROPERTIES
     MACOSX_PACKAGE_LOCATION Resources
 )
 

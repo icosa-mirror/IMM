@@ -107,7 +107,18 @@ jobs:
           --required-marker "Loaded in CPU"
           --required-marker "Loaded in GPU"
           --required-capture-name native-render-after.ppm
+          --required-capture-name face-orientation.ppm
           --client-label "IMM Android Standalone GLES"
+      - name: Classify Android GLES face orientation
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-gles/ftl-results -Recurse -Filter face-orientation.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) { throw "Missing Firebase face-orientation capture" }
+          python tests/tools/classify_face_orientation_capture.py $capture.FullName `
+            --status-output artifacts/android-standalone-gles/face-orientation-status.json `
+            --capture-output artifacts/android-standalone-gles/captures/face-orientation/android-gles.png `
+            --overlay-output artifacts/android-standalone-gles/captures/face-orientation/android-gles-overlay.png
       - name: Record Android GLES screenshot metrics
         if: always()
         shell: pwsh
@@ -238,7 +249,18 @@ jobs:
           --required-marker "Vulkan renderer submitted picture draw commands"
           --required-marker "Vulkan renderer submitted static paint draw commands"
           --required-capture-name native-render-after.ppm
+          --required-capture-name face-orientation.ppm
           --client-label "IMM Android Standalone Vulkan"
+      - name: Classify Android Vulkan face orientation
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-standalone-vulkan/ftl-results -Recurse -Filter face-orientation.ppm -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) { throw "Missing Firebase face-orientation capture" }
+          python tests/tools/classify_face_orientation_capture.py $capture.FullName `
+            --status-output artifacts/android-standalone-vulkan/face-orientation-status.json `
+            --capture-output artifacts/android-standalone-vulkan/captures/face-orientation/android-vulkan.png `
+            --overlay-output artifacts/android-standalone-vulkan/captures/face-orientation/android-vulkan-overlay.png
       - name: Record Android Vulkan screenshot metrics
         if: always()
         shell: pwsh
@@ -422,6 +444,7 @@ jobs:
           rm -rf "$project_dir"
           cp -R code/ImmGodotSampleProject "$project_dir"
           cp exampleImmFiles/sample1.imm "$project_dir/sample1.imm"
+          cp exampleImmFiles/face-orientation.imm "$project_dir/face-orientation.imm"
           rm -f "$project_dir/scenes/SampleScene.tscn"
           extension_path="$project_dir/addons/imm_viewer/imm_viewer.gdextension"
           grep -Ev '^(windows|macos)\.' "$extension_path" > "$extension_path.tmp"
@@ -482,9 +505,21 @@ jobs:
             --required-marker "Vulkan renderer submitted static paint draw commands" \
             --required-marker "last_vulkan_frame_started" \
             --required-marker "render candidate PNG:" \
+            --required-marker "face-orientation PNG:" \
             --required-capture-name vulkan_render_candidate.png \
             --required-capture-name vulkan_visual_smoke.png \
+            --required-capture-name godot-android-vulkan-face-orientation.png \
             --client-label "IMM Android Godot Vulkan"
+      - name: Classify Android Godot Vulkan face orientation
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/android-godot-vulkan/ftl-results -Recurse -Filter godot-android-vulkan-face-orientation.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) { throw "Missing Firebase face-orientation capture" }
+          python tests/tools/classify_face_orientation_capture.py $capture.FullName `
+            --status-output artifacts/android-godot-vulkan/face-orientation-status.json `
+            --capture-output artifacts/android-godot-vulkan/captures/face-orientation/godot-android-vulkan.png `
+            --overlay-output artifacts/android-godot-vulkan/captures/face-orientation/godot-android-vulkan-overlay.png
       - name: Record Android Godot Vulkan screenshot metrics
         if: always()
         continue-on-error: true

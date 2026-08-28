@@ -2,7 +2,11 @@ param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
     [string]$OutputPath = "",
+    [string]$SamplePath = "",
     [int]$PlayerFrame = 60,
+    [int]$MinPictureDrawCalls = 1,
+    [int]$MinPicture360DrawCalls = 1,
+    [int]$MinPicture360EquirectDrawCalls = 1,
     [int]$TimeoutSeconds = 90,
     [switch]$SkipBuild
 )
@@ -23,6 +27,12 @@ $baselineArgs = @{
     OutputPath = $OutputPath
     PlayerFrame = $PlayerFrame
     TimeoutSeconds = $TimeoutSeconds
+    MinPictureDrawCalls = $MinPictureDrawCalls
+    MinPicture360DrawCalls = $MinPicture360DrawCalls
+    MinPicture360EquirectDrawCalls = $MinPicture360EquirectDrawCalls
+}
+if ($SamplePath) {
+    $baselineArgs.SamplePath = $SamplePath
 }
 if ($SkipBuild) {
     $baselineArgs.SkipBuild = $true

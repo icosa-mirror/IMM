@@ -11,6 +11,7 @@
 
 static NSString *const ImmIOSValidationArgument = @"--imm-ios-validation";
 static NSString *const ImmIOSLifecycleArgument = @"--imm-ios-lifecycle-smoke";
+static NSString *const ImmIOSFaceOrientationArgument = @"--imm-ios-face-orientation-validation";
 
 static bool ImmToWide(NSString *value, wchar_t *destination, size_t capacity)
 {
@@ -62,6 +63,8 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
     BOOL _lifecycleSuspended;
     BOOL _lifecycleResumed;
     BOOL _validationFinished;
+    BOOL _faceOrientationValidationRequested;
+    NSString *_validationDocumentName;
 }
 
 - (void)loadView
@@ -92,7 +95,9 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
     self.navigationItem.title = @"IMM Viewer";
 
     NSString *settingsPath = [NSBundle.mainBundle pathForResource:@"appImmViewerIOS-settings" ofType:@"json"];
-    NSString *contentPath = [NSBundle.mainBundle pathForResource:@"sample1" ofType:@"imm"];
+    _faceOrientationValidationRequested = ImmHasArgument(ImmIOSFaceOrientationArgument);
+    _validationDocumentName = _faceOrientationValidationRequested ? @"face-orientation" : @"sample1";
+    NSString *contentPath = [NSBundle.mainBundle pathForResource:_validationDocumentName ofType:@"imm"];
     NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     NSString *logPath = [documents stringByAppendingPathComponent:@"standalone-ios.log"];
     wchar_t settingsWide[PATH_MAX] = {};
@@ -119,7 +124,7 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
         _metalView.drawableSize = CGSizeMake(1280, 720);
         _player.Resize(1280, 720);
     }
-    NSLog(@"IMM_IOS_STANDALONE phase=startup status=passed document=sample1.imm renderer=Metal");
+    NSLog(@"IMM_IOS_STANDALONE phase=startup status=passed document=%@.imm renderer=Metal", _validationDocumentName);
 
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     [center addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
@@ -208,17 +213,21 @@ static BOOL ImmWritePresentedDrawable(id<MTLTexture> texture, NSString *path)
     if (captureRequested && _player.FrameIndex() >= 120)
     {
         NSString *documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
-        NSString *capturePath = [documents stringByAppendingPathComponent:@"standalone-ios-metal-render.png"];
-        NSString *offscreenPath = [documents stringByAppendingPathComponent:@"standalone-ios-metal-offscreen.png"];
-        NSString *resultPath = [documents stringByAppendingPathComponent:@"standalone-ios-result.log"];
+        NSString *captureName = _faceOrientationValidationRequested ? @"standalone-ios-metal-face-orientation.png" : @"standalone-ios-metal-render.png";
+        NSString *offscreenName = _faceOrientationValidationRequested ? @"standalone-ios-metal-face-orientation-offscreen.png" : @"standalone-ios-metal-offscreen.png";
+        NSString *resultName = _faceOrientationValidationRequested ? @"standalone-ios-face-orientation-result.log" : @"standalone-ios-result.log";
+        NSString *capturePath = [documents stringByAppendingPathComponent:captureName];
+        NSString *offscreenPath = [documents stringByAppendingPathComponent:offscreenName];
+        NSString *resultPath = [documents stringByAppendingPathComponent:resultName];
         wchar_t offscreenWide[PATH_MAX] = {};
         const BOOL presented = ImmWritePresentedDrawable(presentedCopy, capturePath);
         const BOOL offscreen = ImmToWide(offscreenPath, offscreenWide, PATH_MAX) && _player.WriteCapture(offscreenWide);
         const BOOL captured = presented && offscreen;
         const BOOL loaded = _player.IsDocumentLoaded();
-        NSString *result = [NSString stringWithFormat:@"phase=render status=%@\nphase=document status=%@ path=sample1.imm\nphase=lifecycle status=%@\nframes=%llu\n",
+        NSString *result = [NSString stringWithFormat:@"phase=render status=%@\nphase=document status=%@ path=%@.imm\nphase=lifecycle status=%@\nframes=%llu\n",
                             captured ? @"passed" : @"failed",
                             loaded ? @"passed" : @"failed",
+                            _validationDocumentName,
                             (!_lifecycleSmokeRequested || _lifecycleResumed) ? @"passed" : @"failed",
                             (unsigned long long)_player.FrameIndex()];
         [result writeToFile:resultPath atomically:YES encoding:NSUTF8StringEncoding error:nil];

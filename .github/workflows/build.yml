@@ -491,6 +491,24 @@ jobs:
     - name: Smoke macOS Metal standalone viewer
       run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
 
+    - name: Capture and classify macOS Metal face orientation
+      run: |
+        set -euo pipefail
+        capture_dir="$PWD/build/macos/face-orientation-captures"
+        IMM_METAL_VALIDATE_EXPECTED_VALUES=0 \
+        IMM_METAL_VALIDATE_CAPTURE_DIR="$capture_dir" \
+        IMM_METAL_VALIDATE_MIN_PICTURE_DRAWCALLS=0 \
+        IMM_METAL_VALIDATE_MIN_PICTURE360_DRAWCALLS=0 \
+        IMM_METAL_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS=0 \
+        code/appImmViewer/scripts/validate_metal_standalone.sh \
+          build/macos/viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal \
+          exampleImmFiles/face-orientation.imm
+        python3 tests/tools/classify_face_orientation_capture.py \
+          "$capture_dir/static.ppm" \
+          --status-output "$capture_dir/face-orientation-status.json" \
+          --capture-output "$capture_dir/metal.png" \
+          --overlay-output "$capture_dir/metal-overlay.png"
+
     - name: Validate macOS Metal standalone audio
       run: cmake --build build/macos --target validateAppImmViewerMetalAudio --config Release
 
@@ -611,9 +629,14 @@ jobs:
         ditto "$app" "$staging/appImmViewerMetal.app"
         mkdir -p "$staging/validation"
         cp build/macos/metal-validation-captures/static.ppm "$staging/validation/macos-metal-static.ppm"
+        cp build/macos/face-orientation-captures/face-orientation-status.json "$staging/validation/face-orientation-status.json"
+        mkdir -p "$staging/validation/captures/face-orientation"
+        cp build/macos/face-orientation-captures/metal.png "$staging/validation/captures/face-orientation/metal.png"
+        cp build/macos/face-orientation-captures/metal-overlay.png "$staging/validation/captures/face-orientation/metal-overlay.png"
         test -f "$staging/appImmViewerMetal.app/Contents/Info.plist"
         test -x "$staging/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal"
         test -f "$staging/validation/macos-metal-static.ppm"
+        test -f "$staging/validation/face-orientation-status.json"
 
     - name: Record macOS Metal render metrics
       run: >

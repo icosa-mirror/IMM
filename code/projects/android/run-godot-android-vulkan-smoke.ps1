@@ -85,7 +85,9 @@ $apk = Join-Path $project (Join-Path "build" "android" "imm-godot-sample-debug.a
 $logDirectory = (New-Item -ItemType Directory -Force $LogDir).FullName
 $logPath = Join-Path $logDirectory "logcat.txt"
 $pngPath = Join-Path $logDirectory "vulkan_visual_smoke.png"
+$faceOrientationPngPath = Join-Path $logDirectory "godot-android-vulkan-face-orientation.png"
 $devicePngPath = "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl/vulkan_visual_smoke.png"
+$deviceFaceOrientationPngPath = "/sdcard/Android/data/org.linuxfoundation.imm.godot.sample/files/imm-ftl/godot-android-vulkan-face-orientation.png"
 
 $godotPath = Resolve-Tool $GodotExe "godot" "Godot"
 $adbPath = Resolve-Adb $Adb
@@ -134,6 +136,7 @@ Start-Sleep -Seconds $WaitSeconds
 
 & $adbPath logcat -d | Out-File -FilePath $logPath -Encoding utf8
 & $adbPath pull $devicePngPath $pngPath | Out-Null
+& $adbPath pull $deviceFaceOrientationPngPath $faceOrientationPngPath | Out-Null
 & $adbPath shell am force-stop org.linuxfoundation.imm.godot.sample | Out-Null
 
 $log = Get-Content $logPath -Raw
@@ -157,7 +160,11 @@ foreach ($marker in @("Fatal signal", "F DEBUG", "piFile::Open failed", "Could n
 if (-not (Test-Path $pngPath) -or (Get-Item $pngPath).Length -le 0) {
     throw "Android Godot Vulkan smoke PNG was not captured: $pngPath"
 }
+if (-not (Test-Path $faceOrientationPngPath) -or (Get-Item $faceOrientationPngPath).Length -le 0) {
+    throw "Android Godot Vulkan face-orientation PNG was not captured: $faceOrientationPngPath"
+}
 
 Write-Host "Android Godot Vulkan smoke passed"
 Write-Host "Log: $logPath"
 Write-Host "PNG: $pngPath"
+Write-Host "Face orientation PNG: $faceOrientationPngPath"

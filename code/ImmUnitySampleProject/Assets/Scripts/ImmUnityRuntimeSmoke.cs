@@ -12,6 +12,7 @@ namespace ImmPlayer
     {
         private const string CapturePathEnv = "IMM_UNITY_SMOKE_CAPTURE_PATH";
         private const string RenderCapturePathEnv = "IMM_UNITY_SMOKE_RENDER_CAPTURE_PATH";
+        private const string FaceOrientationCapturePathEnv = "IMM_UNITY_SMOKE_FACE_ORIENTATION_CAPTURE_PATH";
         private const string FramesEnv = "IMM_UNITY_SMOKE_FRAMES";
         private const string QuitEnv = "IMM_UNITY_SMOKE_QUIT";
         private const string CompositionProbeEnv = "IMM_UNITY_SMOKE_COMPOSITION_PROBE";
@@ -28,6 +29,7 @@ namespace ImmPlayer
         private const string DisabledEnv = "IMM_UNITY_SMOKE_DISABLED";
         private const string CapturePathArg = "-immSmokeCapturePath";
         private const string RenderCapturePathArg = "-immSmokeRenderCapturePath";
+        private const string FaceOrientationCapturePathArg = "-immSmokeFaceOrientationCapturePath";
         private const string FramesArg = "-immSmokeFrames";
         private const string QuitArg = "-immSmokeQuit";
         private const string CompositionProbeArg = "-immSmokeCompositionProbe";
@@ -78,6 +80,11 @@ namespace ImmPlayer
             {
                 smoke._renderCapturePath = Environment.GetEnvironmentVariable(RenderCapturePathEnv);
             }
+            smoke._faceOrientationCapturePath = GetCommandLineValue(FaceOrientationCapturePathArg);
+            if (string.IsNullOrEmpty(smoke._faceOrientationCapturePath))
+            {
+                smoke._faceOrientationCapturePath = Environment.GetEnvironmentVariable(FaceOrientationCapturePathEnv);
+            }
             Debug.Log($"[IMM_UNITY_RUNTIME_SMOKE_INSTALL_20260813] capture={capturePath} renderCapture={smoke._renderCapturePath}");
 #if IMM_UNITY_ANDROID_VULKAN_CI
             smoke._renderCapturePath = Path.Combine(Application.persistentDataPath, "imm-ci", "unity-android-vulkan-render.png");
@@ -89,6 +96,10 @@ namespace ImmPlayer
                 Application.persistentDataPath,
                 "imm-ci",
                 "unity-android-vulkan-synthetic-stereo.png");
+            smoke._faceOrientationCapturePath = Path.Combine(
+                Application.persistentDataPath,
+                "imm-ci",
+                "unity-android-vulkan-face-orientation.png");
             Debug.Log("[IMM_UNITY_ANDROID_VK_CI_FRAME_PACING_20260803] optimizedFramePacing=0");
             Debug.Log($"{Prefix}Android Vulkan CI smoke installed capture={capturePath}");
 #endif
@@ -98,6 +109,8 @@ namespace ImmPlayer
         private string _renderCapturePath;
         private string _presentationCapturePath;
         private string _syntheticStereoCapturePath;
+        private string _faceOrientationCapturePath;
+        private bool _faceOrientationCaptureFailed;
         private bool _compositionProbeEnabled;
         private bool _overlayProbeEnabled;
         private bool _xrProbeEnabled;
@@ -174,6 +187,16 @@ namespace ImmPlayer
             }
 
             yield return StabilizeSampleViewpoint();
+
+            if (!string.IsNullOrEmpty(_faceOrientationCapturePath))
+            {
+                yield return CaptureFaceOrientationDocument();
+                if (_faceOrientationCaptureFailed)
+                {
+                    QuitIfRequested(9);
+                    yield break;
+                }
+            }
 
             if (_syntheticStereoProbeEnabled)
             {
@@ -441,6 +464,60 @@ namespace ImmPlayer
             File.WriteAllBytes(fullPath, texture.EncodeToPNG());
             Debug.Log($"{Prefix}{label} capture={fullPath} width={texture.width} height={texture.height}");
             UnityEngine.Object.Destroy(texture);
+        }
+
+        private IEnumerator CaptureFaceOrientationDocument()
+        {
+            ImmFeatureExamples featureExamples = FindObjectOfType<ImmFeatureExamples>();
+            if (featureExamples == null)
+            {
+                Debug.LogError($"{Prefix}face orientation capture could not find ImmFeatureExamples");
+                _faceOrientationCaptureFailed = true;
+                yield break;
+            }
+
+            yield return featureExamples.LoadStreamingAssetForValidation("face-orientation.imm");
+            for (int frame = 0; frame < 360 && !featureExamples.IsDocumentRenderReady; ++frame)
+                yield return null;
+            if (!featureExamples.IsDocumentRenderReady)
+            {
+                Debug.LogError($"{Prefix}face orientation document did not become render ready");
+                _faceOrientationCaptureFailed = true;
+                yield break;
+            }
+
+            yield return StabilizeSampleViewpoint();
+            for (int frame = 0; frame < 12; ++frame)
+                yield return null;
+            yield return new WaitForEndOfFrame();
+            Camera camera = Camera.main != null ? Camera.main : FindObjectOfType<Camera>();
+            if (camera == null)
+            {
+                Debug.LogError($"{Prefix}face orientation capture camera is missing");
+                _faceOrientationCaptureFailed = true;
+                yield break;
+            }
+
+#if IMM_UNITY_ANDROID_VULKAN_CI
+            Texture2D capture = CaptureScreenTexture();
+#else
+            Texture2D capture = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Vulkan
+                ? CaptureScreenTexture()
+                : CaptureCameraTexture(camera);
+#endif
+            WriteCapture(capture, _faceOrientationCapturePath, "face orientation");
+
+            yield return featureExamples.LoadStreamingAssetForValidation("sample1.imm");
+            for (int frame = 0; frame < 360 && !featureExamples.IsDocumentRenderReady; ++frame)
+                yield return null;
+            if (!featureExamples.IsDocumentRenderReady)
+            {
+                Debug.LogError($"{Prefix}sample1 restore after face orientation capture did not become render ready");
+                _faceOrientationCaptureFailed = true;
+                yield break;
+            }
+            yield return StabilizeSampleViewpoint();
+            Debug.Log($"{Prefix}face orientation capture completed and sample1 restored");
         }
 
         private IEnumerator CaptureSyntheticStereoProbe(string capturePath, bool quitAfterCapture)

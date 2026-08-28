@@ -91,6 +91,7 @@ jobs:
           test -n "$app"
           test -d "$app"
           test -s "$app/sample1.imm"
+          test -s "$app/face-orientation.imm"
           test -s "$app/appImmViewerIOS-settings.json"
           executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
@@ -177,7 +178,43 @@ jobs:
           xcrun simctl terminate "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" >/dev/null 2>&1 || true
           kill "$launch_pid" 2>/dev/null || true
           wait "$launch_pid" 2>/dev/null || true
+
+          xcrun simctl launch --console --terminate-running-process \
+            "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" \
+            --imm-ios-validation --imm-ios-face-orientation-validation \
+            > "$artifact_dir/face-orientation-runtime-launch.log" 2>&1 &
+          face_launch_pid=$!
+          face_result=''
+          for _second in $(seq 1 120); do
+            face_result="$(find "$container" -type f -name standalone-ios-face-orientation-result.log -print -quit 2>/dev/null || true)"
+            if [ -n "$face_result" ] && [ -s "$face_result" ]; then
+              break
+            fi
+            if ! kill -0 "$face_launch_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          face_capture="$(find "$container" -type f -name standalone-ios-metal-face-orientation.png -print -quit 2>/dev/null || true)"
+          test -n "$face_result"
+          test -s "$face_result"
+          test -n "$face_capture"
+          test -s "$face_capture"
+          grep -q '^phase=document status=passed path=face-orientation.imm$' "$face_result"
+          cp "$face_result" "$artifact_dir/standalone-ios-face-orientation-result.log"
+          cp "$face_capture" "$artifact_dir/standalone-ios-metal-face-orientation.png"
+          xcrun simctl terminate "$STANDALONE_IOS_UDID" "$STANDALONE_IOS_BUNDLE_ID" >/dev/null 2>&1 || true
+          kill "$face_launch_pid" 2>/dev/null || true
+          wait "$face_launch_pid" 2>/dev/null || true
           xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
+
+      - name: Classify standalone iOS Metal face orientation
+        run: |
+          python3 tests/tools/classify_face_orientation_capture.py \
+            artifacts/standalone-ios-metal/standalone-ios-metal-face-orientation.png \
+            --status-output artifacts/standalone-ios-metal/face-orientation-status.json \
+            --capture-output artifacts/standalone-ios-metal/captures/face-orientation/standalone-ios-metal.png \
+            --overlay-output artifacts/standalone-ios-metal/captures/face-orientation/standalone-ios-metal-overlay.png
 
       - name: Compare standalone iOS Metal render evidence
         id: standalone_ios_metrics
@@ -444,6 +481,7 @@ jobs:
           xcrun simctl install "$SIMULATOR_UDID" "$app"
           container="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$bundle_id" data)"
           capture_dir="$container/Documents/imm-ci"
+          face_orientation_path="$capture_dir/unity-ios-metal-face-orientation.png"
           mkdir -p "$capture_dir"
           printf '%s\n' "app=$app" "bundleId=$bundle_id" "container=$container" >> "$artifact_dir/simulator-contract.txt"
 
@@ -460,6 +498,7 @@ jobs:
             SIMCTL_CHILD_IMM_UNITY_SMOKE_OVERLAY_FIXTURE="${IMM_IOS_OVERLAY_FIXTURE:-0}" \
             SIMCTL_CHILD_IMM_UNITY_SMOKE_CAPTURE_PATH="$capture_path" \
             SIMCTL_CHILD_IMM_UNITY_SMOKE_RENDER_CAPTURE_PATH="$render_path" \
+            SIMCTL_CHILD_IMM_UNITY_SMOKE_FACE_ORIENTATION_CAPTURE_PATH="$face_orientation_path" \
             SIMCTL_CHILD_IMM_UNITY_SMOKE_FRAMES=120 \
             SIMCTL_CHILD_IMM_UNITY_SMOKE_QUIT=1 \
             SIMCTL_CHILD_IMM_UNITY_SMOKE_COMPOSITION_PROBE=1 \
@@ -471,7 +510,7 @@ jobs:
             local launch_pid=$!
             local captured=0
             for _ in $(seq 1 240); do
-              if [ -s "$capture_path" ] && [ -s "$render_path" ]; then
+              if [ -s "$capture_path" ] && [ -s "$render_path" ] && [ -s "$face_orientation_path" ]; then
                 captured=1
                 break
               fi
@@ -493,6 +532,15 @@ jobs:
           export IMM_IOS_OVERLAY_FIXTURE=1
           export IMM_IOS_OVERLAY_PROBE=1
           run_smoke ordered-overlay unity-ios-metal-ordered-overlay.png unity-ios-metal-ordered-overlay-render.png
+          cp "$face_orientation_path" "$artifact_dir/unity-ios-metal-face-orientation.png"
+
+      - name: Classify Unity iOS Metal face orientation
+        run: |
+          python3 tests/tools/classify_face_orientation_capture.py \
+            artifacts/unity-ios-player-build/unity-ios-metal-face-orientation.png \
+            --status-output artifacts/unity-ios-player-build/face-orientation-status.json \
+            --capture-output artifacts/unity-ios-player-build/captures/face-orientation/unity-ios-metal.png \
+            --overlay-output artifacts/unity-ios-player-build/captures/face-orientation/unity-ios-metal-overlay.png
 
       - name: Shut down iOS Simulator
         if: always()
@@ -954,6 +1002,7 @@ jobs:
         run: |
           set -euo pipefail
           cp exampleImmFiles/sample1.imm code/ImmGodotSampleProject/sample1.imm
+          cp exampleImmFiles/face-orientation.imm code/ImmGodotSampleProject/face-orientation.imm
           mkdir -p build/godot-ios-export
           "$GODOT_IOS_EXE" --headless --path code/ImmGodotSampleProject --import \
             > artifacts/godot-ios-metal/godot-import.log 2>&1
@@ -1587,6 +1636,25 @@ jobs:
             exit "$runtime_status"
           fi
 
+          run_app godot-ios-face-orientation godot-ios-face-orientation-result.log \
+            --rendering-driver metal \
+            --rendering-method mobile \
+            --disable-vsync \
+            --fixed-fps 30 \
+            -- \
+            --imm-godot-ci-scene=visual-smoke \
+            --imm-godot-visual-smoke \
+            --imm-godot-visual-renderer-api=4 \
+            --imm-godot-visual-document-path=res://face-orientation.imm \
+            --imm-godot-visual-smoke-width=1024 \
+            --imm-godot-visual-smoke-height=576 \
+            --imm-godot-visual-smoke-use-spawn-area=1 \
+            --imm-godot-visual-smoke-composition-mode=render_only \
+            --imm-godot-visual-smoke-render-png=user://godot-ios-metal-face-orientation.png \
+            --imm-godot-visual-smoke-result-log=user://godot-ios-face-orientation-result.log || runtime_status=$?
+          collect_user_file godot-ios-metal-face-orientation.png "$artifact_dir/godot-ios-metal-face-orientation.png" || runtime_status=1
+          collect_user_file godot-ios-face-orientation-result.log "$artifact_dir/godot-ios-face-orientation-result.log" || runtime_status=1
+
           run_app godot-ios-ordered-overlay godot-ios-ordered-overlay-result.log \
             --rendering-driver metal \
             --rendering-method mobile \
@@ -1806,6 +1874,15 @@ jobs:
             --contract tests/baselines/render/godot-ios-metal-sample-play.json \
             --json-output artifacts/godot-ios-metal/godot-ios-sample-play-metrics.json || status=$?
           exit "$status"
+
+      - name: Classify Godot iOS Metal face orientation
+        if: always()
+        run: |
+          python3 tests/tools/classify_face_orientation_capture.py \
+            artifacts/godot-ios-metal/godot-ios-metal-face-orientation.png \
+            --status-output artifacts/godot-ios-metal/face-orientation-status.json \
+            --capture-output artifacts/godot-ios-metal/captures/face-orientation/godot-ios-metal.png \
+            --overlay-output artifacts/godot-ios-metal/captures/face-orientation/godot-ios-metal-overlay.png
 
       - name: Classify Godot iOS Metal evidence
         id: godot_ios_classification

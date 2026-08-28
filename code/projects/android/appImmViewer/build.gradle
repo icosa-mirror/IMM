@@ -91,15 +91,16 @@ dependencies {
 
 def generatedAssetsDir = "${buildDir}/generated/assets"
 def sampleImmSrc = "${projectDir}/../../../../exampleImmFiles/sample1.imm"
+def faceOrientationImmSrc = "${projectDir}/../../../../exampleImmFiles/face-orientation.imm"
 
 tasks.register('copySampleImm') {
-    inputs.file(sampleImmSrc)
+    inputs.files(sampleImmSrc, faceOrientationImmSrc)
     outputs.dir(generatedAssetsDir)
     doLast {
         def destDir = file(generatedAssetsDir)
         destDir.mkdirs()
         copy {
-            from sampleImmSrc
+            from sampleImmSrc, faceOrientationImmSrc
             into destDir
         }
     }

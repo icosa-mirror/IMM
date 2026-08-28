@@ -10,6 +10,8 @@ param(
 
     [string]$RenderCapturePath = "",
 
+    [string]$DocumentPath = "",
+
     [string]$LogDir = "",
 
     [ValidateSet("render_only", "full_depth", "ordered_overlay")]
@@ -129,6 +131,7 @@ $previousEnv = @{
     IMM_GODOT_VISUAL_RENDERER_API = $env:IMM_GODOT_VISUAL_RENDERER_API
     IMM_GODOT_VISUAL_SMOKE_PPM = $env:IMM_GODOT_VISUAL_SMOKE_PPM
     IMM_GODOT_VISUAL_SMOKE_RENDER_PPM = $env:IMM_GODOT_VISUAL_SMOKE_RENDER_PPM
+    IMM_GODOT_VISUAL_DOCUMENT_PATH = $env:IMM_GODOT_VISUAL_DOCUMENT_PATH
     IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME
     IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA
     IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE
@@ -145,6 +148,12 @@ try {
     $env:IMM_GODOT_VISUAL_RENDERER_API = "5"
     $env:IMM_GODOT_VISUAL_SMOKE_PPM = $CapturePath
     $env:IMM_GODOT_VISUAL_SMOKE_RENDER_PPM = $RenderCapturePath
+    if ($DocumentPath) {
+        $env:IMM_GODOT_VISUAL_DOCUMENT_PATH = $DocumentPath
+    }
+    else {
+        Remove-Item -Path "env:IMM_GODOT_VISUAL_DOCUMENT_PATH" -ErrorAction SilentlyContinue
+    }
     $env:IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME = "$PlayerFrame"
     $env:IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA = "1"
     $env:IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE = $CompositionMode

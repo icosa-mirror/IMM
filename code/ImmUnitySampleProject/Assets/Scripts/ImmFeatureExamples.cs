@@ -19,6 +19,20 @@ namespace ImmPlayer
         }
 
         private const string DiagPrefix = "[IMM_DIAG] ";
+        private const string DocumentNameEnv = "IMM_UNITY_DOCUMENT_NAME";
+        private const string DocumentNameArg = "-immDocumentName";
+
+        private static string GetCommandLineValue(string key)
+        {
+            string[] arguments = System.Environment.GetCommandLineArgs();
+            for (int index = 0; index + 1 < arguments.Length; ++index)
+            {
+                if (string.Equals(arguments[index], key, System.StringComparison.OrdinalIgnoreCase))
+                    return arguments[index + 1];
+            }
+            return string.Empty;
+        }
+
         private static bool IsEnvFlagEnabled(string name)
         {
             string value = System.Environment.GetEnvironmentVariable(name);
@@ -143,6 +157,17 @@ namespace ImmPlayer
         private void Start()
         {
             Debug.Log($"{DiagPrefix}ImmFeatureExamples Start()");
+            string requestedDocumentName = GetCommandLineValue(DocumentNameArg);
+            if (string.IsNullOrEmpty(requestedDocumentName))
+            {
+                requestedDocumentName = System.Environment.GetEnvironmentVariable(DocumentNameEnv);
+            }
+            if (!string.IsNullOrEmpty(requestedDocumentName))
+            {
+                selectedFileName = Path.GetFileName(requestedDocumentName);
+                loadSource = LoadSource.StreamingAssets;
+                Debug.Log($"{DiagPrefix}Validation document override: {selectedFileName}");
+            }
             CacheLayerTransform();
             CacheLayerVisuals();
             if (loadOnStart)
@@ -211,6 +236,15 @@ namespace ImmPlayer
         public void LoadDocument()
         {
             StartCoroutine(LoadDocumentCoroutine());
+        }
+
+        public IEnumerator LoadStreamingAssetForValidation(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+                yield break;
+            selectedFileName = Path.GetFileName(fileName);
+            loadSource = LoadSource.StreamingAssets;
+            yield return LoadDocumentCoroutine();
         }
 
         public bool PickRandomStreamingAssetsFile()

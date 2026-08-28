@@ -6,6 +6,9 @@ param(
     [string]$SamplePath = "",
     [string]$OutputPath = "",
     [int]$PlayerFrame = 60,
+    [int]$MinPictureDrawCalls = 1,
+    [int]$MinPicture360DrawCalls = 1,
+    [int]$MinPicture360EquirectDrawCalls = 1,
     [int]$TimeoutSeconds = 45,
     [switch]$SkipBuild
 )
@@ -130,7 +133,7 @@ if (-not $OutputPath) {
 
 $ViewerExe = Resolve-RequiredFile $ViewerExe "Viewer executable"
 $SettingsPath = Resolve-RequiredFile $SettingsPath "DirectX baseline settings"
-$SamplePath = Resolve-RequiredFile $SamplePath "sample1.imm"
+$SamplePath = Resolve-RequiredFile $SamplePath "IMM document"
 
 $outputFullPath = [System.IO.Path]::GetFullPath($OutputPath)
 $outputDir = Split-Path -Parent $outputFullPath
@@ -198,9 +201,9 @@ $env:IMM_VIEWER_VALIDATE_FIXED_DT = "0.0333333333333333"
 $env:IMM_VIEWER_VALIDATE_PLAYER_FRAME = "$PlayerFrame"
 $env:IMM_VIEWER_VALIDATE_MIN_NONZERO = "16"
 $env:IMM_VIEWER_VALIDATE_MIN_DRAWCALLS = "1"
-$env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "1"
-$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = "1"
-$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = "1"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE_DRAWCALLS = "$MinPictureDrawCalls"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_DRAWCALLS = "$MinPicture360DrawCalls"
+$env:IMM_VIEWER_VALIDATE_MIN_PICTURE360_EQUIRECT_DRAWCALLS = "$MinPicture360EquirectDrawCalls"
 $env:IMM_VIEWER_VALIDATE_MIN_TRIANGLES = "1"
 $env:IMM_VIEWER_VALIDATE_CAPTURE_PATH = $outputFullPath
 $env:IMM_VIEWER_VALIDATE_DISABLE_AUDIO = "1"

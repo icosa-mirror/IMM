@@ -119,6 +119,7 @@ class MainActivity : NativeActivity(), CoroutineScope by CoroutineScope(Dispatch
     val shouldReload = Utils.shouldReloadAssets()
     extractAssetSync(Utils.quillDemoPath, shouldReload)
     extractAssetSync(Utils.quillErrorPath, shouldReload)
+    extractAssetSync(Utils.faceOrientationPath, shouldReload)
     
     // Verify the demo file exists
     val demoFile = File(Utils.assetsDirectory, Utils.quillDemoPath)

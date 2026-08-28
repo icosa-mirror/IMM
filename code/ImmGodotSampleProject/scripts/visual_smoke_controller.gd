@@ -4,6 +4,8 @@ const EXTENSION_PATH := "res://addons/imm_viewer/imm_viewer.gdextension"
 const SAMPLE_DOCUMENT_PATH := "res://../../exampleImmFiles/sample1.imm"
 const EMBEDDED_SAMPLE_DOCUMENT_PATH := "res://sample1.imm"
 const EMBEDDED_USER_SAMPLE_DOCUMENT_PATH := "user://sample1.imm"
+const EMBEDDED_FACE_ORIENTATION_DOCUMENT_PATH := "res://face-orientation.imm"
+const EMBEDDED_USER_FACE_ORIENTATION_DOCUMENT_PATH := "user://face-orientation.imm"
 const CAMERA_ID := 0
 const IMM_RENDERER_API_METAL := 4
 const IMM_RENDERER_API_VULKAN := 5
@@ -247,6 +249,7 @@ func _run_visual_smoke() -> void:
 		if not reached_forced_player_frame:
 			failures.append("native validation clock did not reach player frame %d" % forced_player_frame)
 		await _capture_render_baseline(failures, selected_renderer_name)
+		await _capture_face_orientation_validation(failures, forced_player_frame, prefer_spawn_area)
 		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
 			_setup_scene_composition_probe()
 		for _frame in range(6):
@@ -340,7 +343,7 @@ func _run_visual_smoke() -> void:
 				str(content_diagnostics.get("content_bounds_height", 0)),
 			])
 		var orientation_luma_delta: float = float(content_diagnostics.get("orientation_luma_delta", 0.0))
-		if selected_renderer_api == IMM_RENDERER_API_METAL and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
+		if selected_renderer_api == IMM_RENDERER_API_METAL and _get_env_string("IMM_GODOT_VISUAL_DOCUMENT_PATH", "").is_empty() and orientation_luma_delta < MIN_ORIENTATION_LUMA_DELTA:
 			failures.append("visual smoke PNG orientation check failed: upper/lower luma delta %.5f" % orientation_luma_delta)
 		_append_imm_visibility_failures(ordered_overlay_imm_diagnostics, failures, "PNG")
 		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
@@ -414,6 +417,61 @@ func _capture_render_baseline(failures: Array[String], selected_renderer_name: S
 			failures.append("Failed to save render candidate PPM %s: %d" % [ppm_path, int(ppm_result)])
 		else:
 			print("IMM Godot %s render candidate PPM: %s" % [selected_renderer_name, ppm_path])
+
+func _capture_face_orientation_validation(
+	failures: Array[String],
+	forced_player_frame: int,
+	prefer_spawn_area: bool
+) -> void:
+	var capture_path: String = _get_env_string("IMM_GODOT_FACE_ORIENTATION_CAPTURE_PATH", "")
+	if capture_path.is_empty():
+		return
+
+	var original_document_path: String = str(viewer.get("document_path"))
+	var face_document_path: String = _prepare_embedded_document(
+		EMBEDDED_FACE_ORIENTATION_DOCUMENT_PATH,
+		EMBEDDED_USER_FACE_ORIENTATION_DOCUMENT_PATH,
+		"face-orientation.imm"
+	)
+	if not await _load_visual_smoke_document(face_document_path, false, forced_player_frame):
+		failures.append("face-orientation diagnostic document did not become ready")
+	else:
+		for _frame in range(RENDER_SETTLE_FRAMES):
+			_apply_forced_player_frame(forced_player_frame)
+			_queue_active_camera()
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var image: Image = get_viewport().get_texture().get_image()
+		DirAccess.make_dir_recursive_absolute(capture_path.get_base_dir())
+		var save_result: int = image.save_png(capture_path)
+		if save_result != OK:
+			failures.append("Failed to save face-orientation PNG %s: %d" % [capture_path, save_result])
+		else:
+			print("IMM Godot %s face-orientation PNG: %s" % [_selected_renderer_name(), capture_path])
+
+	if not await _load_visual_smoke_document(original_document_path, prefer_spawn_area, forced_player_frame):
+		failures.append("sample document did not recover after face-orientation diagnostic")
+
+func _load_visual_smoke_document(document_path: String, prefer_spawn_area: bool, forced_player_frame: int) -> bool:
+	viewer.unload_document()
+	await get_tree().process_frame
+	viewer.document_path = document_path
+	var load_result: int = int(viewer.load_document())
+	if load_result < 0:
+		return false
+
+	var ready_deadline_msec: int = Time.get_ticks_msec() + int(_max_ready_seconds() * 1000.0)
+	while Time.get_ticks_msec() < ready_deadline_msec:
+		if viewer.is_loaded() and viewer.is_sequence_ready():
+			_apply_background_color()
+			_apply_forced_player_frame(forced_player_frame)
+			_select_visual_smoke_spawn_area()
+			_frame_camera_from_document(prefer_spawn_area)
+			_queue_active_camera()
+			return true
+		_queue_active_camera()
+		await get_tree().create_timer(0.05).timeout
+	return false
 
 func _finish_visual_smoke(
 	failures: Array[String],
@@ -978,6 +1036,9 @@ func _selected_renderer_name(renderer_api: int = -1) -> String:
 	return "API%d" % api
 
 func _sample_document_path() -> String:
+	var requested_path: String = _get_env_string("IMM_GODOT_VISUAL_DOCUMENT_PATH", "")
+	if not requested_path.is_empty():
+		return requested_path
 	if OS.get_name() not in ["Android", "iOS"]:
 		return SAMPLE_DOCUMENT_PATH
 	return _prepare_embedded_sample_document()
@@ -986,28 +1047,35 @@ func _max_ready_seconds() -> float:
 	return ANDROID_MAX_READY_SECONDS if OS.get_name() == "Android" else MAX_READY_SECONDS
 
 func _prepare_embedded_sample_document() -> String:
-	var source_file: FileAccess = FileAccess.open(EMBEDDED_SAMPLE_DOCUMENT_PATH, FileAccess.READ)
+	return _prepare_embedded_document(
+		EMBEDDED_SAMPLE_DOCUMENT_PATH,
+		EMBEDDED_USER_SAMPLE_DOCUMENT_PATH,
+		"sample1.imm"
+	)
+
+func _prepare_embedded_document(source_path: String, target_path: String, file_name: String) -> String:
+	var source_file: FileAccess = FileAccess.open(source_path, FileAccess.READ)
 	if source_file == null:
 		push_error("Failed to open embedded sample document %s on %s: %s" % [
-			EMBEDDED_SAMPLE_DOCUMENT_PATH,
+			source_path,
 			OS.get_name(),
 			error_string(FileAccess.get_open_error()),
 		])
-		return EMBEDDED_SAMPLE_DOCUMENT_PATH
+		return source_path
 
 	var data: PackedByteArray = source_file.get_buffer(source_file.get_length())
-	var target_file: FileAccess = FileAccess.open(EMBEDDED_USER_SAMPLE_DOCUMENT_PATH, FileAccess.WRITE)
+	var target_file: FileAccess = FileAccess.open(target_path, FileAccess.WRITE)
 	if target_file == null:
 		push_error("Failed to create embedded sample document %s on %s: %s" % [
-			EMBEDDED_USER_SAMPLE_DOCUMENT_PATH,
+			target_path,
 			OS.get_name(),
 			error_string(FileAccess.get_open_error()),
 		])
-		return EMBEDDED_SAMPLE_DOCUMENT_PATH
+		return source_path
 
 	target_file.store_buffer(data)
 	target_file.flush()
-	return OS.get_user_data_dir().path_join("sample1.imm")
+	return OS.get_user_data_dir().path_join(file_name)
 
 func _should_run_visual_smoke() -> bool:
 	if OS.get_environment("IMM_GODOT_VISUAL_SMOKE") == "1":

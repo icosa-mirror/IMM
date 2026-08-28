@@ -17,6 +17,8 @@ import org.junit.runner.RunWith;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 @RunWith(AndroidJUnit4.class)
 public final class ImmFtlSmokeTest {
@@ -83,6 +85,37 @@ public final class ImmFtlSmokeTest {
         forbidMarker(logcat, "Could not initialize piRenderer");
         forbidMarker(logcat, "Failed to load IMM");
         forbidMarker(logcat, "Fatal signal");
+
+        File sampleCapture = new File(artifactDir, "sample-native-render-after.ppm");
+        Files.copy(nativeCapture.toPath(), sampleCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+        runShell(device, "am force-stop " + PACKAGE_NAME);
+        runShell(device, "logcat -c");
+        assertTrue("Could not remove stale native capture", !nativeCapture.exists() || nativeCapture.delete());
+
+        File faceDocument = new File(targetContext.getFilesDir(), "face-orientation.imm");
+        assertTrue("Face-orientation fixture was not extracted: " + faceDocument, faceDocument.isFile());
+        Intent faceIntent = targetContext.getPackageManager().getLaunchIntentForPackage(PACKAGE_NAME);
+        assertTrue("Face-orientation launch intent not found for " + PACKAGE_NAME, faceIntent != null);
+        faceIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        faceIntent.putExtra("RenderingAPI", renderer);
+        faceIntent.putExtra("ValidationRenderWidth", VALIDATION_RENDER_WIDTH);
+        faceIntent.putExtra("ValidationRenderHeight", VALIDATION_RENDER_HEIGHT);
+        faceIntent.putExtra("ValidationFixedDt", validationFixedDt);
+        faceIntent.putExtra("ValidationPlayerFrame", validationPlayerFrame);
+        faceIntent.putExtra("QUILL_PATH", faceDocument.getAbsolutePath());
+        targetContext.startActivity(faceIntent);
+
+        String faceLogcat = waitForNativeCapture(device, nativeCapture, waitSeconds);
+        File faceCapture = new File(artifactDir, "face-orientation.ppm");
+        Files.copy(nativeCapture.toPath(), faceCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        writeText(new File(artifactDir, "face-orientation-logcat.txt"), faceLogcat);
+        requireMarker(faceLogcat, "IMMAVAL loadPath result=1");
+        requireMarker(faceLogcat, "IMMAVAL native render capture written");
+        forbidMarker(faceLogcat, "Failed to load IMM");
+        forbidMarker(faceLogcat, "Fatal signal");
+
+        Files.copy(sampleCapture.toPath(), nativeCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
     }
 
     private static String runShell(UiDevice device, String command) throws Exception {

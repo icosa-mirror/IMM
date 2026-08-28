@@ -57,6 +57,20 @@ jobs:
         shell: pwsh
         run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\artifacts\windows-standalone-directx\windows-directx-sample1.ppm
 
+      - name: Capture and classify DirectX face orientation
+        shell: pwsh
+        run: |
+          .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 `
+            -Configuration Release -SkipBuild -PlayerFrame 0 `
+            -SamplePath .\exampleImmFiles\face-orientation.imm `
+            -OutputPath .\artifacts\windows-standalone-directx\face-orientation.ppm `
+            -MinPictureDrawCalls 0 -MinPicture360DrawCalls 0 -MinPicture360EquirectDrawCalls 0
+          python tests\tools\classify_face_orientation_capture.py `
+            artifacts\windows-standalone-directx\face-orientation.ppm `
+            --status-output artifacts\windows-standalone-directx\face-orientation-status.json `
+            --capture-output artifacts\windows-standalone-directx\captures\face-orientation\directx.png `
+            --overlay-output artifacts\windows-standalone-directx\captures\face-orientation\directx-overlay.png
+
       - name: Compare DirectX render metrics against committed DirectX baseline
         shell: pwsh
         run: >
@@ -228,6 +242,20 @@ jobs:
         shell: pwsh
         run: .\code\appImmViewer\scripts\run-vulkan-sample1-smoke.ps1 -Configuration Release -SkipBuild -KeepArtifacts -DurationSeconds 420 -PresentSeconds 120 -MaxFrame 7200
 
+      - name: Capture and classify Vulkan face orientation
+        shell: pwsh
+        run: |
+          .\code\appImmViewer\scripts\capture_windows_vulkan_validation.ps1 `
+            -Configuration Release -SkipBuild -PlayerFrame 0 `
+            -SamplePath .\exampleImmFiles\face-orientation.imm `
+            -OutputPath .\artifacts\windows-standalone-vulkan\face-orientation.ppm `
+            -MinPictureDrawCalls 0 -MinPicture360DrawCalls 0 -MinPicture360EquirectDrawCalls 0
+          python tests\tools\classify_face_orientation_capture.py `
+            artifacts\windows-standalone-vulkan\face-orientation.ppm `
+            --status-output artifacts\windows-standalone-vulkan\face-orientation-status.json `
+            --capture-output artifacts\windows-standalone-vulkan\captures\face-orientation\vulkan.png `
+            --overlay-output artifacts\windows-standalone-vulkan\captures\face-orientation\vulkan-overlay.png
+
       - name: Compare Vulkan render metrics against committed DirectX baseline
         if: always()
         shell: pwsh
@@ -378,6 +406,21 @@ jobs:
           -SkipBuild
           -SettingsPath .\code\appImmViewer\exe\settings-baseline-opengl-sample1.json
           -OutputPath .\artifacts\windows-standalone-opengl\windows-opengl-sample1.ppm
+
+      - name: Capture and classify OpenGL face orientation
+        shell: pwsh
+        run: |
+          .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 `
+            -Configuration Release -SkipBuild -PlayerFrame 0 `
+            -SettingsPath .\code\appImmViewer\exe\settings-baseline-opengl-sample1.json `
+            -SamplePath .\exampleImmFiles\face-orientation.imm `
+            -OutputPath .\artifacts\windows-standalone-opengl\face-orientation.ppm `
+            -MinPictureDrawCalls 0 -MinPicture360DrawCalls 0 -MinPicture360EquirectDrawCalls 0
+          python tests\tools\classify_face_orientation_capture.py `
+            artifacts\windows-standalone-opengl\face-orientation.ppm `
+            --status-output artifacts\windows-standalone-opengl\face-orientation-status.json `
+            --capture-output artifacts\windows-standalone-opengl\captures\face-orientation\opengl.png `
+            --overlay-output artifacts\windows-standalone-opengl\captures\face-orientation\opengl-overlay.png
 
       - name: Compare OpenGL render metrics against committed DirectX baseline
         shell: pwsh
@@ -782,6 +825,22 @@ jobs:
           -RenderCapturePath artifacts\godot-smoke-windows-vulkan-render-only\godot-vulkan-render-precheck.ppm
           -LogDir artifacts\godot-smoke-windows-vulkan-render-only
 
+      - name: Capture and classify Godot Vulkan face orientation
+        shell: pwsh
+        run: |
+          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1 `
+            -Configuration Release -SkipBuild -CompositionMode render_only -PlayerFrame 0 `
+            -DocumentPath res://../../exampleImmFiles/face-orientation.imm `
+            -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm `
+            -CapturePath artifacts\godot-smoke-windows-vulkan\face-orientation-scene.ppm `
+            -RenderCapturePath artifacts\godot-smoke-windows-vulkan\face-orientation.ppm `
+            -LogDir artifacts\godot-smoke-windows-vulkan\face-orientation
+          python tests\tools\classify_face_orientation_capture.py `
+            artifacts\godot-smoke-windows-vulkan\face-orientation.ppm `
+            --status-output artifacts\godot-smoke-windows-vulkan\face-orientation-status.json `
+            --capture-output artifacts\godot-smoke-windows-vulkan\captures\face-orientation\godot-vulkan.png `
+            --overlay-output artifacts\godot-smoke-windows-vulkan\captures\face-orientation\godot-vulkan-overlay.png
+
       - name: Run Godot Vulkan visual baseline smoke
         continue-on-error: true
         timeout-minutes: 10
@@ -1050,6 +1109,14 @@ jobs:
           test -f artifacts/prebuilt-macos-viewer/appImmViewerMetal.app/Contents/MacOS/appImmViewerMetal
           test -f artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
 
+      - name: Stage macOS Metal face-orientation evidence
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/macos-standalone-metal/captures/face-orientation
+          cp artifacts/prebuilt-macos-viewer/validation/face-orientation-status.json artifacts/macos-standalone-metal/face-orientation-status.json
+          cp artifacts/prebuilt-macos-viewer/validation/captures/face-orientation/metal.png artifacts/macos-standalone-metal/captures/face-orientation/metal.png
+          cp artifacts/prebuilt-macos-viewer/validation/captures/face-orientation/metal-overlay.png artifacts/macos-standalone-metal/captures/face-orientation/metal-overlay.png
+
       - name: Record macOS Metal render metrics
         run: >
           python3 tests/tools/compare_render_metrics.py artifacts/prebuilt-macos-viewer/validation/macos-metal-static.ppm
@@ -1164,6 +1231,28 @@ jobs:
           if [ "$smoke_status" -ne 0 ]; then
             exit "$smoke_status"
           fi
+
+      - name: Capture and classify Godot Metal face orientation
+        run: |
+          set -euo pipefail
+          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
+          mkdir -p artifacts/godot-smoke-macos-metal/captures/face-orientation
+          IMM_GODOT_VISUAL_SMOKE=1 \
+          IMM_GODOT_VISUAL_DOCUMENT_PATH="res://../../exampleImmFiles/face-orientation.imm" \
+          IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME=0 \
+          IMM_GODOT_VISUAL_SMOKE_COMPOSITION_MODE=render_only \
+          IMM_GODOT_VISUAL_SMOKE_USE_SPAWN_AREA=1 \
+          IMM_GODOT_VISUAL_SMOKE_RELOAD_CYCLES=0 \
+          IMM_GODOT_LOG_FILE="$PWD/artifacts/godot-smoke-macos-metal/face-orientation-native.log" \
+          IMM_GODOT_VISUAL_SMOKE_RENDER_PNG="$PWD/artifacts/godot-smoke-macos-metal/face-orientation.png" \
+          IMM_GODOT_VISUAL_SMOKE_PNG="$PWD/artifacts/godot-smoke-macos-metal/face-orientation-scene.png" \
+          "$GODOT_EXE" --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --resolution 1280x720 --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30 \
+            > artifacts/godot-smoke-macos-metal/face-orientation.log 2>&1
+          python3 tests/tools/classify_face_orientation_capture.py \
+            artifacts/godot-smoke-macos-metal/face-orientation.png \
+            --status-output artifacts/godot-smoke-macos-metal/face-orientation-status.json \
+            --capture-output artifacts/godot-smoke-macos-metal/captures/face-orientation/godot-metal.png \
+            --overlay-output artifacts/godot-smoke-macos-metal/captures/face-orientation/godot-metal-overlay.png
 
       - name: Verify Godot Metal audio pipeline
         if: always()

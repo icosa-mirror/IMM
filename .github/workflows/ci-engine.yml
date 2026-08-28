@@ -398,9 +398,31 @@ jobs:
             -immSmokeMinOrderedOverlayImmUniqueColors 3000 \
             -immSmokeExpectedGraphicsApi Metal || ordered_overlay_status=$?
 
-          if [ "$full_depth_status" -ne 0 ] || [ "$ordered_overlay_status" -ne 0 ]; then
+          face_orientation_status=0
+          "$player" \
+            -logFile "$artifact_dir/face-orientation-player.log" \
+            -screen-width 1280 \
+            -screen-height 720 \
+            -screen-fullscreen 0 \
+            -force-metal \
+            -immDocumentName face-orientation.imm \
+            -immSmokeCapturePath "$artifact_dir/face-orientation.png" \
+            -immSmokeFrames 120 \
+            -immSmokeQuit 1 \
+            -immSmokeCompositionProbe 0 \
+            -immSmokeExpectedGraphicsApi Metal || face_orientation_status=$?
+
+          if [ "$full_depth_status" -ne 0 ] || [ "$ordered_overlay_status" -ne 0 ] || [ "$face_orientation_status" -ne 0 ]; then
             exit 1
           fi
+
+      - name: Classify Unity macOS Metal face orientation
+        run: |
+          python3 tests/tools/classify_face_orientation_capture.py \
+            artifacts/unity-macos-metal-composition/face-orientation.png \
+            --status-output artifacts/unity-macos-metal-composition/face-orientation-status.json \
+            --capture-output artifacts/unity-macos-metal-composition/captures/face-orientation/unity-metal.png \
+            --overlay-output artifacts/unity-macos-metal-composition/captures/face-orientation/unity-metal-overlay.png
 
       - name: Classify Unity macOS Metal visual smokes
         if: always()
@@ -810,8 +832,12 @@ jobs:
             param(
               [string] $CaptureName,
               [string] $LogName,
-              [string] $CompositionProbe
+              [string] $CompositionProbe,
+              [string] $DocumentName = ""
             )
+            if ($DocumentName) {
+              $playerArgs += @("-immDocumentName", $DocumentName)
+            }
 
             $capturePath = Join-Path $artifactDir $CaptureName
             $playerLog = Join-Path $artifactDir $LogName
@@ -850,6 +876,16 @@ jobs:
 
           Invoke-UnitySmoke -CaptureName "unity-windows-directx-render.png" -LogName "unity-render-player.log" -CompositionProbe "0"
           Invoke-UnitySmoke -CaptureName "unity-windows-directx-composition.png" -LogName "unity-player.log" -CompositionProbe "1"
+          Invoke-UnitySmoke -CaptureName "face-orientation.png" -LogName "face-orientation-player.log" -CompositionProbe "0" -DocumentName "face-orientation.imm"
+
+      - name: Classify Unity DirectX face orientation
+        shell: pwsh
+        run: |
+          python tests\tools\classify_face_orientation_capture.py `
+            artifacts\unity-windows-directx-composition\face-orientation.png `
+            --status-output artifacts\unity-windows-directx-composition\face-orientation-status.json `
+            --capture-output artifacts\unity-windows-directx-composition\captures\face-orientation\unity-directx.png `
+            --overlay-output artifacts\unity-windows-directx-composition\captures\face-orientation\unity-directx-overlay.png
 
       - name: Classify Unity DirectX composition status
         if: always()
@@ -1310,6 +1346,32 @@ jobs:
           if ($renderProcess.ExitCode -ne 0) {
             throw "Unity Vulkan render-only smoke failed with exit code $($renderProcess.ExitCode)"
           }
+          $faceCapturePath = Join-Path $artifactDir "unity-windows-vulkan-face-orientation.png"
+          $facePlayerLog = Join-Path $artifactDir "unity-face-orientation-player.log"
+          $facePlayerArgs = @(
+            "-logFile", $facePlayerLog,
+            "-screen-width", "1280",
+            "-screen-height", "720",
+            "-screen-fullscreen", "0",
+            "-force-vulkan",
+            "-immDocumentName", "face-orientation.imm",
+            "-immSmokeCapturePath", $faceCapturePath,
+            "-immSmokeFrames", "360",
+            "-immSmokeQuit", "1",
+            "-immSmokeExpectedGraphicsApi", "Vulkan",
+            "-immSmokeCompositionProbe", "0"
+          )
+          $faceProcess = Start-Process -FilePath $player -ArgumentList $facePlayerArgs -PassThru
+          if (-not $faceProcess.WaitForExit(240000)) {
+            Stop-Process -Id $faceProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "Unity Vulkan face-orientation smoke timed out"
+          }
+          if (-not (Test-Path $faceCapturePath)) {
+            throw "Unity Vulkan face-orientation capture was not written: $faceCapturePath"
+          }
+          if ($faceProcess.ExitCode -ne 0) {
+            throw "Unity Vulkan face-orientation smoke failed with exit code $($faceProcess.ExitCode)"
+          }
           $env:IMM_UNITY_SMOKE_OVERLAY_FIXTURE = "1"
           $env:IMM_UNITY_SKIP_DOCUMENT_BACKGROUND_COLOR = "1"
           $env:IMM_UNITY_EXPECT_GRAPHICS_API = "Vulkan"
@@ -1359,6 +1421,16 @@ jobs:
           --capture artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-ordered-overlay.png
           --composition-mode ordered_overlay
           --output artifacts\unity-windows-vulkan-ordered-overlay\composition-status.json
+
+      - name: Classify Unity Windows Vulkan face orientation
+        if: always()
+        shell: pwsh
+        run: |
+          python tests\tools\classify_face_orientation_capture.py `
+            artifacts\unity-windows-vulkan-ordered-overlay\unity-windows-vulkan-face-orientation.png `
+            --status-output artifacts\unity-windows-vulkan-ordered-overlay\face-orientation-status.json `
+            --capture-output artifacts\unity-windows-vulkan-ordered-overlay\captures\face-orientation\unity-vulkan.png `
+            --overlay-output artifacts\unity-windows-vulkan-ordered-overlay\captures\face-orientation\unity-vulkan-overlay.png
 
       - name: Record Unity Vulkan ordered overlay metrics
         if: always()
@@ -2082,6 +2154,7 @@ jobs:
           --required-marker "[IMM_UNITY_SMOKE] synthetic stereo Vulkan capture="
           --required-marker "[IMM_UNITY_SMOKE] capture="
           --required-capture-name unity-android-vulkan-render.png
+          --required-capture-name unity-android-vulkan-face-orientation.png
           --required-capture-name unity-android-vulkan-synthetic-stereo.png
           --required-capture-name unity-android-vulkan-synthetic-stereo-native.png
           --required-capture-name unity-android-vulkan.png
@@ -2205,6 +2278,17 @@ jobs:
           }
 
           if ($failed) { exit 1 }
+
+      - name: Classify Unity Android Vulkan face orientation
+        if: always()
+        shell: pwsh
+        run: |
+          $capture = Get-ChildItem -Path artifacts/unity-android-vulkan/ftl-results -Recurse -Filter unity-android-vulkan-face-orientation.png -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $capture) { throw "Missing Firebase face-orientation capture" }
+          python tests/tools/classify_face_orientation_capture.py $capture.FullName `
+            --status-output artifacts/unity-android-vulkan/face-orientation-status.json `
+            --capture-output artifacts/unity-android-vulkan/captures/face-orientation/unity-android-vulkan.png `
+            --overlay-output artifacts/unity-android-vulkan/captures/face-orientation/unity-android-vulkan-overlay.png
 
       - name: Write Unity Android Vulkan screenshot report
         if: always()

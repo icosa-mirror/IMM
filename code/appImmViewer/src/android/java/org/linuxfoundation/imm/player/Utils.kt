@@ -20,6 +20,7 @@ object Utils {
   // Path to Quill we show when there's an error loading a Quill path.
   var quillErrorPath = "sample1.imm"
   var quillDemoPath = "sample1.imm"
+  const val faceOrientationPath = "face-orientation.imm"
   /*var controllerAssets = arrayOf(
       "controllers/controller_new.obj",
       "controllers/pointer.obj"
