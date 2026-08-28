@@ -416,9 +416,12 @@ def main() -> int:
         ],
         ROOT / "code/appImmGodot/src/main.cpp": [
             "#if defined(ANDROID)",
-            "#elif defined(IMM_IOS)",
             "config.overrideFrontIsCCW = true;",
             "config.frontIsCCW = false;",
+        ],
+        ROOT / "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp": [
+            "A reflected layer already reverses its submitted triangle winding.",
+            "mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::FRONT",
         ],
         ROOT / "code/appImmViewer/src/viewer/viewer.cpp": [
             "Settings::Rendering::API::Vulkan",

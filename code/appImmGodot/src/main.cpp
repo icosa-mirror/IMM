@@ -157,15 +157,6 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
         config.overrideFrontIsCCW = true;
         config.frontIsCCW = false;
     }
-#elif defined(IMM_IOS)
-    if (config.rendererApi == piRenderer::API::Metal)
-    {
-        // Godot iOS Metal and Godot macOS Metal use different render-target
-        // projection conventions. The iOS path presents authored front faces
-        // as clockwise in Metal window space.
-        config.overrideFrontIsCCW = true;
-        config.frontIsCCW = false;
-    }
 #endif
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;

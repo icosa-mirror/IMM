@@ -344,8 +344,12 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         const bool forcePaintWireframe = std::getenv("IMM_FORCE_PAINT_WIREFRAME") != nullptr;
         mRasterState[0] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip NO
         mRasterState[1] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::BACK, true, false);  // single sided, flip NO
-        mRasterState[2] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
-        mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
+        // A reflected layer already reverses its submitted triangle winding.
+        // Cull the configured front side to retain that reflected surface;
+        // reversing both the front winding and cull side selects its backface.
+        // This matches the pretessellated paint renderer's reflected states.
+        mRasterState[2] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
+        mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
 
         if (!mRasterState[0]) return false;
         if (!mRasterState[1]) return false;
