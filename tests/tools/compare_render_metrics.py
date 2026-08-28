@@ -367,6 +367,223 @@ def collect_spatial_region_metrics(
     return metrics
 
 
+def resize_capture_luma(
+    width: int,
+    height: int,
+    pixels: bytes,
+    target_width: int,
+    target_height: int,
+    crop: tuple[int, int, int, int],
+) -> list[float]:
+    """Area-average a capture to a stable analysis size.
+
+    Surface-facing defects often add fine internal polygon edges without moving
+    the silhouette enough to affect coarse whole-frame metrics. Area averaging
+    keeps those edges measurable while normalizing platform capture sizes and
+    single-pixel antialiasing differences.
+    """
+
+    crop_x, crop_y, crop_width, crop_height = crop
+    result: list[float] = []
+    for target_y in range(target_height):
+        source_y0 = crop_y + target_y * crop_height // target_height
+        source_y1 = crop_y + (target_y + 1) * crop_height // target_height
+        source_y1 = max(source_y0 + 1, source_y1)
+        for target_x in range(target_width):
+            source_x0 = crop_x + target_x * crop_width // target_width
+            source_x1 = crop_x + (target_x + 1) * crop_width // target_width
+            source_x1 = max(source_x0 + 1, source_x1)
+            total = 0
+            count = 0
+            for source_y in range(source_y0, min(crop_y + crop_height, source_y1)):
+                row = source_y * width
+                for source_x in range(source_x0, min(crop_x + crop_width, source_x1)):
+                    total += luma_at(pixels, row + source_x)
+                    count += 1
+            result.append(total / count if count else 0.0)
+    return result
+
+
+def compute_surface_detail_grid(
+    luma: list[float],
+    width: int,
+    height: int,
+    tile_width: int,
+    tile_height: int,
+    edge_threshold: float,
+) -> dict:
+    edge_counts = [0] * (tile_width * tile_height)
+    pixel_counts = [0] * (tile_width * tile_height)
+    total_edges = 0
+    for y in range(1, height - 1):
+        for x in range(1, width - 1):
+            index = y * width + x
+            center = luma[index]
+            gradient = max(
+                abs(center - luma[index - 1]),
+                abs(center - luma[index + 1]),
+                abs(center - luma[index - width]),
+                abs(center - luma[index + width]),
+            )
+            tile_x = min(tile_width - 1, x * tile_width // width)
+            tile_y = min(tile_height - 1, y * tile_height // height)
+            tile = tile_y * tile_width + tile_x
+            pixel_counts[tile] += 1
+            if gradient >= edge_threshold:
+                edge_counts[tile] += 1
+                total_edges += 1
+    densities = [
+        edges / pixels if pixels else 0.0
+        for edges, pixels in zip(edge_counts, pixel_counts)
+    ]
+    total_pixels = sum(pixel_counts)
+    return {
+        "edge_counts": edge_counts,
+        "pixel_counts": pixel_counts,
+        "densities": densities,
+        "edge_pixels": total_edges,
+        "analyzed_pixels": total_pixels,
+        "edge_pixel_share": total_edges / total_pixels if total_pixels else 0.0,
+    }
+
+
+def value_percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * percentile) - 1))
+    return ordered[index]
+
+
+def collect_surface_detail_metrics(
+    reference_path: Path,
+    candidate_path: Path,
+    specification: dict,
+) -> dict:
+    reference_width, reference_height, reference_pixels, _ = read_rgb_capture(reference_path)
+    candidate_width, candidate_height, candidate_pixels, _ = read_rgb_capture(candidate_path)
+    analysis_width = int(specification.get("analysis_width", 320))
+    analysis_height = int(specification.get("analysis_height", 180))
+    tile_width = int(specification.get("tile_width", 20))
+    tile_height = int(specification.get("tile_height", 12))
+    edge_threshold = float(specification.get("edge_threshold", 18.0))
+    crop_aspect_ratio = specification.get("center_crop_aspect_ratio")
+    crop_aspect = float(crop_aspect_ratio) if crop_aspect_ratio is not None else None
+    reference_crop = center_crop_region(reference_width, reference_height, crop_aspect)
+    candidate_crop = center_crop_region(candidate_width, candidate_height, crop_aspect)
+    reference_luma = resize_capture_luma(
+        reference_width,
+        reference_height,
+        reference_pixels,
+        analysis_width,
+        analysis_height,
+        reference_crop,
+    )
+    candidate_luma = resize_capture_luma(
+        candidate_width,
+        candidate_height,
+        candidate_pixels,
+        analysis_width,
+        analysis_height,
+        candidate_crop,
+    )
+    reference_grid = compute_surface_detail_grid(
+        reference_luma,
+        analysis_width,
+        analysis_height,
+        tile_width,
+        tile_height,
+        edge_threshold,
+    )
+    candidate_grid = compute_surface_detail_grid(
+        candidate_luma,
+        analysis_width,
+        analysis_height,
+        tile_width,
+        tile_height,
+        edge_threshold,
+    )
+    tile_excess_threshold = float(specification.get("tile_excess_threshold", 0.04))
+    density_excesses = [
+        candidate - reference
+        for reference, candidate in zip(reference_grid["densities"], candidate_grid["densities"])
+    ]
+    positive_edge_count_excess = sum(
+        max(0, candidate - reference)
+        for reference, candidate in zip(reference_grid["edge_counts"], candidate_grid["edge_counts"])
+    )
+    analyzed_pixels = max(1, sum(reference_grid["pixel_counts"]))
+    excessive_tiles = [
+        index for index, excess in enumerate(density_excesses)
+        if excess >= tile_excess_threshold
+    ]
+    worst_tiles = sorted(
+        (
+            {
+                "x": index % tile_width,
+                "y": index // tile_width,
+                "reference_edge_share": reference_grid["densities"][index],
+                "candidate_edge_share": candidate_grid["densities"][index],
+                "excess_edge_share": excess,
+            }
+            for index, excess in enumerate(density_excesses)
+        ),
+        key=lambda tile: tile["excess_edge_share"],
+        reverse=True,
+    )[:12]
+    reference_share = reference_grid["edge_pixel_share"]
+    candidate_share = candidate_grid["edge_pixel_share"]
+    return {
+        "analysis_width": analysis_width,
+        "analysis_height": analysis_height,
+        "tile_width": tile_width,
+        "tile_height": tile_height,
+        "edge_threshold": edge_threshold,
+        "tile_excess_threshold": tile_excess_threshold,
+        "center_crop_aspect_ratio": crop_aspect_ratio,
+        "reference_edge_pixel_share": reference_share,
+        "candidate_edge_pixel_share": candidate_share,
+        "edge_pixel_share_ratio": candidate_share / reference_share if reference_share > 0 else None,
+        "localized_excess_edge_pixel_share": positive_edge_count_excess / analyzed_pixels,
+        "excess_tile_count": len(excessive_tiles),
+        "excess_tile_share": len(excessive_tiles) / len(density_excesses) if density_excesses else 0.0,
+        "p95_tile_excess_edge_share": value_percentile(density_excesses, 0.95),
+        "maximum_tile_excess_edge_share": max(density_excesses) if density_excesses else None,
+        "worst_tiles": worst_tiles,
+    }
+
+
+def validate_surface_detail_contract(specification: dict, metrics: dict | None) -> list[str]:
+    if not metrics:
+        return ["surface-detail comparison requires a reference capture"]
+    errors: list[str] = []
+    checks = [
+        (
+            "localized_excess_edge_pixel_share",
+            "max_localized_excess_edge_pixel_share",
+            "localized excess edge-pixel share",
+        ),
+        ("excess_tile_share", "max_excess_tile_share", "excess surface-detail tile share"),
+        (
+            "p95_tile_excess_edge_share",
+            "max_p95_tile_excess_edge_share",
+            "surface-detail p95 tile excess",
+        ),
+        (
+            "maximum_tile_excess_edge_share",
+            "max_tile_excess_edge_share",
+            "surface-detail maximum tile excess",
+        ),
+        ("edge_pixel_share_ratio", "max_edge_pixel_share_ratio", "surface-detail edge-pixel ratio"),
+    ]
+    for metric_name, limit_name, label in checks:
+        limit = specification.get(limit_name)
+        actual = metrics.get(metric_name)
+        if limit is not None and actual is not None and float(actual) > float(limit):
+            errors.append(f"{label} {float(actual):.4f} exceeds contract maximum {float(limit):.4f}")
+    return errors
+
+
 def read_rgb_capture(path: Path) -> tuple[int, int, bytes, str]:
     suffix = path.suffix.lower()
     if suffix == ".ppm":
@@ -1119,6 +1336,19 @@ def evaluate_capture(candidate_path: Path, reference_path: Path | None, contract
             output["color_component_probes"] = color_component_metrics
             errors.extend(
                 validate_color_component_contract(color_component_specification, color_component_metrics)
+            )
+        surface_detail_specification = (
+            validation.get("expected_surface_detail") if isinstance(validation, dict) else None
+        )
+        if isinstance(surface_detail_specification, dict):
+            surface_detail_metrics = (
+                collect_surface_detail_metrics(reference_path, candidate_path, surface_detail_specification)
+                if reference_path
+                else None
+            )
+            output["surface_detail"] = surface_detail_metrics
+            errors.extend(
+                validate_surface_detail_contract(surface_detail_specification, surface_detail_metrics)
             )
     output["passed"] = not errors
     output["errors"] = errors

@@ -435,6 +435,13 @@ def main() -> int:
             "iAttachRetainedBufferCleanup(mState);",
             "[previous release];",
         ],
+        ROOT / "tests/tools/compare_render_metrics.py": [
+            "collect_surface_detail_metrics",
+            "validate_surface_detail_contract",
+            "localized_excess_edge_pixel_share",
+            "edge_pixel_share_ratio",
+            'output["surface_detail"]',
+        ],
     }
 
     errors: list[str] = []
@@ -442,6 +449,36 @@ def main() -> int:
         missing = require_tokens(path, tokens)
         for token in missing:
             errors.append(f"{path.relative_to(ROOT)} missing token: {token}")
+
+    surface_detail_contracts = [
+        "android-standalone-gles-sample1.json",
+        "android-standalone-vulkan-sample1.json",
+        "godot-android-vulkan-sample1.json",
+        "godot-ios-metal-sample1.json",
+        "godot-windows-vulkan-sample1.json",
+        "ios-standalone-metal-sample1.json",
+        "macos-metal-sample1.json",
+        "macos-standalone-metal-sample1.json",
+        "unity-android-vulkan-external-render-sample1.json",
+        "unity-android-vulkan-sample1.json",
+        "unity-macos-metal-sample1.json",
+        "unity-windows-directx-sample1.json",
+        "web-three-sample1.json",
+        "windows-directx-sample1.json",
+    ]
+    for contract_name in surface_detail_contracts:
+        contract_path = ROOT / "tests/baselines/render" / contract_name
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        surface_detail = contract.get("validation", {}).get("expected_surface_detail")
+        if not isinstance(surface_detail, dict):
+            errors.append(f"{contract_name} must require fine surface-detail validation")
+            continue
+        if surface_detail.get("max_edge_pixel_share_ratio") != 1.04:
+            errors.append(
+                f"{contract_name} must retain the reviewed 1.04 surface edge-density ceiling"
+            )
+        if surface_detail.get("analysis_width", 0) < 320 or surface_detail.get("analysis_height", 0) < 180:
+            errors.append(f"{contract_name} surface-detail analysis resolution is too coarse")
 
     unity_ci_preparer = (
         ROOT / "tests/tools/prepare_unity_ci_project.py"

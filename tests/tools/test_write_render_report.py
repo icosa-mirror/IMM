@@ -34,6 +34,13 @@ def main() -> int:
                     "errors": [],
                     "reference": {"width": 2, "height": 2, "non_black_pixels": 4, "near_visible_pixels": 0, "visible_luma_mean": 14.0},
                     "candidate": {"width": 2, "height": 2, "non_black_pixels": 4, "near_visible_pixels": 4, "visible_luma_mean": 89.0},
+                    "surface_detail": {
+                        "reference_edge_pixel_share": 0.25,
+                        "candidate_edge_pixel_share": 0.30,
+                        "edge_pixel_share_ratio": 1.2,
+                        "localized_excess_edge_pixel_share": 0.05,
+                        "excess_tile_share": 0.1,
+                    },
                 }
             ),
             encoding="utf-8",
@@ -85,6 +92,8 @@ def main() -> int:
         assert "![Reference]" in text
         assert "![Candidate]" in text
         assert "visible_luma_mean" in text
+        assert "surface_detail_edge_pixel_share_ratio" in text
+        assert "1.200" in text
         assert "Rendering: success" in text
         assert "Composition mode: full_depth" in text
         assert "Composition contract: depth_composition" in text

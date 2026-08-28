@@ -165,6 +165,15 @@ def write_report(metrics: dict, report_path: Path, images: list[tuple[str, Path]
                 ["spatial_grid_correlation", "", top_level_metric(metrics, "spatial_luma_grid", "correlation")],
             ]
         )
+    if metrics.get("surface_detail"):
+        rows.extend(
+            [
+                ["surface_detail_edge_pixel_share", top_level_metric(metrics, "surface_detail", "reference_edge_pixel_share"), top_level_metric(metrics, "surface_detail", "candidate_edge_pixel_share")],
+                ["surface_detail_edge_pixel_share_ratio", "", top_level_metric(metrics, "surface_detail", "edge_pixel_share_ratio")],
+                ["surface_detail_localized_excess", "", top_level_metric(metrics, "surface_detail", "localized_excess_edge_pixel_share")],
+                ["surface_detail_excess_tile_share", "", top_level_metric(metrics, "surface_detail", "excess_tile_share")],
+            ]
+        )
     widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
     lines.append("## Metrics")
     lines.append("| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(rows[0])) + " |")

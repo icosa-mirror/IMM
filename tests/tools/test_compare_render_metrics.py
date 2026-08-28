@@ -75,6 +75,33 @@ def blank_right_half(width: int, height: int, pixels: list[tuple[int, int, int]]
     ]
 
 
+def make_smooth_surface_pixels(width: int, height: int) -> list[tuple[int, int, int]]:
+    pixels: list[tuple[int, int, int]] = []
+    for y in range(height):
+        for x in range(width):
+            if 8 <= x < width - 8 and 8 <= y < height - 8:
+                shade = 92 + (x * 8 // width)
+                pixels.append((shade, shade, shade))
+            else:
+                pixels.append((20, 20, 20))
+    return pixels
+
+
+def add_local_surface_hatching(
+    width: int,
+    height: int,
+    pixels: list[tuple[int, int, int]],
+) -> list[tuple[int, int, int]]:
+    hatched = list(pixels)
+    # Preserve the patch's average luma while adding dense, face-like internal
+    # edges. A coarse regional mean therefore misses this corruption.
+    for y in range(24, 40):
+        for x in range(24, 40):
+            shade = 76 if (x + y) % 2 == 0 else 116
+            hatched[y * width + x] = (shade, shade, shade)
+    return hatched
+
+
 def diagnostic_squares_only(width: int, height: int) -> list[tuple[int, int, int]]:
     pixels = [(0, 0, 0)] * (width * height)
     for x, color in ((1, (255, 0, 255)), (3, (255, 255, 0)), (5, (0, 255, 255))):
@@ -158,6 +185,10 @@ def main() -> int:
         png_path = temp / "candidate.png"
         output_path = temp / "metrics.json"
         contract_path = temp / "contract.json"
+        surface_reference_path = temp / "surface-reference.ppm"
+        surface_mild_drift_path = temp / "surface-mild-drift.ppm"
+        surface_wrong_facing_path = temp / "surface-wrong-facing.ppm"
+        surface_contract_path = temp / "surface-contract.json"
 
         pixels = make_reference_pixels(width, height)
         write_ppm(reference_path, width, height, pixels)
@@ -169,6 +200,20 @@ def main() -> int:
         write_ppm(partial_path, width, height, blank_right_half(width, height, pixels))
         write_ppm(black_path, width, height, [(0, 0, 0)] * (width * height))
         write_ppm(diagnostic_path, width, height, diagnostic_squares_only(width, height))
+        surface_pixels = make_smooth_surface_pixels(64, 64)
+        write_ppm(surface_reference_path, 64, 64, surface_pixels)
+        write_ppm(
+            surface_mild_drift_path,
+            64,
+            64,
+            [(min(255, r + 3), min(255, g + 3), min(255, b + 3)) for r, g, b in surface_pixels],
+        )
+        write_ppm(
+            surface_wrong_facing_path,
+            64,
+            64,
+            add_local_surface_hatching(64, 64, surface_pixels),
+        )
         write_ppm(probe_good_path, 100, 100, make_probe_pixels(100, 100, False))
         write_ppm(
             probe_fragmented_red_path,
@@ -338,6 +383,72 @@ def main() -> int:
             [cropped_region_specification], [cropped_barred_region]
         ) == []
         assert compare_render_metrics.validate_spatial_contract(contract, barred_spatial)
+
+        surface_detail_contract = {
+            "analysis_width": 64,
+            "analysis_height": 64,
+            "tile_width": 8,
+            "tile_height": 8,
+            "edge_threshold": 14,
+            "tile_excess_threshold": 0.05,
+            "max_localized_excess_edge_pixel_share": 0.02,
+            "max_excess_tile_share": 0.10,
+            "max_p95_tile_excess_edge_share": 0.10,
+            "max_edge_pixel_share_ratio": 1.5,
+        }
+        same_surface_detail = compare_render_metrics.collect_surface_detail_metrics(
+            surface_reference_path,
+            surface_reference_path,
+            surface_detail_contract,
+        )
+        mild_surface_detail = compare_render_metrics.collect_surface_detail_metrics(
+            surface_reference_path,
+            surface_mild_drift_path,
+            surface_detail_contract,
+        )
+        wrong_surface_detail = compare_render_metrics.collect_surface_detail_metrics(
+            surface_reference_path,
+            surface_wrong_facing_path,
+            surface_detail_contract,
+        )
+        assert compare_render_metrics.validate_surface_detail_contract(
+            surface_detail_contract, same_surface_detail
+        ) == []
+        assert compare_render_metrics.validate_surface_detail_contract(
+            surface_detail_contract, mild_surface_detail
+        ) == []
+        wrong_surface_errors = compare_render_metrics.validate_surface_detail_contract(
+            surface_detail_contract, wrong_surface_detail
+        )
+        assert wrong_surface_errors, "localized internal-face hatching unexpectedly passed"
+        surface_contract_path.write_text(
+            json.dumps(
+                {
+                    "schema": "imm-render-baseline-contract-v1",
+                    "baseline": "synthetic-surface-detail",
+                    "validation": {"expected_surface_detail": surface_detail_contract},
+                }
+            ),
+            encoding="utf-8",
+        )
+        evaluated_wrong_surface = compare_render_metrics.evaluate_capture(
+            surface_wrong_facing_path,
+            surface_reference_path,
+            surface_contract_path,
+        )
+        assert evaluated_wrong_surface["surface_detail"] == wrong_surface_detail
+        assert evaluated_wrong_surface["passed"] is False
+        assert any("surface-detail" in error for error in evaluated_wrong_surface["errors"])
+        coarse_surface_metrics = compare_render_metrics.collect_spatial_metrics(
+            surface_reference_path,
+            surface_wrong_facing_path,
+            4,
+            4,
+        )
+        assert coarse_surface_metrics["mean_abs_delta"] < 0.01, (
+            "surface-detail fixture no longer demonstrates a coarse-metric blind spot"
+        )
+
         scaled = compare_render_metrics.collect_metrics(scaled_path)
         assert any("width differs" in error for error in compare_render_metrics.compare_metrics(reference, scaled))
         assert not any(

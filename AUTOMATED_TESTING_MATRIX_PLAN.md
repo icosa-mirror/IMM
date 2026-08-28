@@ -75,6 +75,14 @@ Reference captures should not require exact full-frame hashes unless the rendere
 The render baseline is used to validate standalone Vulkan, Godot Vulkan/Metal visual paths, and device screenshots where exact pixel parity is not realistic.
 Windows Unity DirectX is the initial known-good baseline for engine composition order: Unity/Godot visual smokes add front, rear-visible, and rear-occluded scene geometry probes and fail when projected screen regions do not match the expected compositing order.
 
+### Surface-facing detail validation
+
+Whole-frame luma, correlation, and content-area measurements are intentionally tolerant of renderer and platform variation, but that tolerance can hide reversed polygon winding, incorrect face culling, reversed normals, or disabled self-occlusion. These defects expose dense internal triangle boundaries while leaving the silhouette, average colour, and coarse spatial grid almost unchanged.
+
+Render-only baseline contracts therefore include `expected_surface_detail`. `compare_render_metrics.py` area-averages both images to a fixed analysis resolution, measures immediate-neighbour luma edges in a fine tile grid, and compares the candidate edge-pixel density with the reviewed reference. A candidate may contain at most four percent more fine surface edges than its reference. The report also records the worst local tiles so a failure can be distinguished from a camera, lighting, or whole-frame colour change.
+
+This is a visual symptom test, not a diagnosis: a failure means that unexpected fine interior surfaces or polygon boundaries became visible. The cause may be winding, culling, normals, depth writes, or another surface-order problem. Composition captures containing host-engine probes and sample-play captures containing diagnostic text retain their separate contracts; the surface-facing check applies to clean render-only captures so those intentional edges do not contaminate it.
+
 ## Runner Tiers
 
 | Tier | Runner type | Purpose | Required for PR gate |

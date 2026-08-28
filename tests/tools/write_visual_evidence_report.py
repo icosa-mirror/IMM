@@ -995,6 +995,16 @@ def add_metrics_table(lines: list[str], metrics: dict) -> None:
         ("visible_luma_mean", metric_value(metrics, "reference", "visible_luma_mean"), metric_value(metrics, "candidate", "visible_luma_mean")),
         ("visible_chroma_mean", metric_value(metrics, "reference", "visible_chroma_mean"), metric_value(metrics, "candidate", "visible_chroma_mean")),
     ]
+    surface_detail = metrics.get("surface_detail")
+    if isinstance(surface_detail, dict):
+        rows.extend(
+            [
+                ("surface_detail_edge_pixel_share", metric_value(metrics, "surface_detail", "reference_edge_pixel_share"), metric_value(metrics, "surface_detail", "candidate_edge_pixel_share")),
+                ("surface_detail_edge_pixel_share_ratio", "", metric_value(metrics, "surface_detail", "edge_pixel_share_ratio")),
+                ("surface_detail_localized_excess", "", metric_value(metrics, "surface_detail", "localized_excess_edge_pixel_share")),
+                ("surface_detail_excess_tile_share", "", metric_value(metrics, "surface_detail", "excess_tile_share")),
+            ]
+        )
     lines.append("| Metric | Reference | Candidate |")
     lines.append("| --- | --- | --- |")
     for name, reference, candidate in rows:

@@ -5,6 +5,15 @@
   "reference_capture": "tests/baselines/render/windows-directx-sample1.ppm",
   "schema": "imm-render-baseline-contract-v1",
   "validation": {
+    "expected_surface_detail": {
+      "analysis_height": 180,
+      "analysis_width": 320,
+      "edge_threshold": 18,
+      "max_edge_pixel_share_ratio": 1.04,
+      "tile_excess_threshold": 0.04,
+      "tile_height": 12,
+      "tile_width": 20
+    },
     "format": "ppm-p6",
     "expected_quadrant_luma_share": {
       "tolerance": 0.16,

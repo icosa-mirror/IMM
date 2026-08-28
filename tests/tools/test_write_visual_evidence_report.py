@@ -494,6 +494,13 @@ def main() -> int:
             "reference": {"width": 1, "height": 1},
             "contract": {"path": "godot-windows-vulkan-sample1.json"},
             "spatial_luma_grid": {"mean_abs_delta": 0.01, "correlation": 0.99},
+            "surface_detail": {
+                "reference_edge_pixel_share": 0.25,
+                "candidate_edge_pixel_share": 0.24,
+                "edge_pixel_share_ratio": 0.96,
+                "localized_excess_edge_pixel_share": 0.01,
+                "excess_tile_share": 0.02,
+            },
             "errors": [],
         }
         failed_overlay_metrics = {
@@ -506,6 +513,13 @@ def main() -> int:
             "reference": {"width": 1, "height": 1},
             "contract": {"path": "sample1-ordered-overlay.json"},
             "spatial_luma_grid": {"mean_abs_delta": 0.02, "correlation": 0.98},
+            "surface_detail": {
+                "reference_edge_pixel_share": 0.25,
+                "candidate_edge_pixel_share": 0.30,
+                "edge_pixel_share_ratio": 1.2,
+                "localized_excess_edge_pixel_share": 0.05,
+                "excess_tile_share": 0.1,
+            },
             "errors": [
                 "color component probe character-occluded-cyan share 0.007910 "
                 "exceeds contract maximum 0.000250"
@@ -727,6 +741,8 @@ def main() -> int:
         assert "![godot-vulkan-ordered-overlay.png]" in text
         assert "## Windows Godot Vulkan Ordered Overlay\n\n- Result: composition_failed" in text
         assert "character-occluded-cyan share 0.007910 exceeds contract maximum 0.000250" in text
+        assert "surface_detail_edge_pixel_share_ratio" in text
+        assert "| surface_detail_edge_pixel_share_ratio |  | 1.200 |" in text
         normalized_overlay_metrics = json.loads(
             (
                 output
