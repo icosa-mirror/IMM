@@ -415,13 +415,12 @@ def main() -> int:
             "SetUnityProjectionAdjusted(true)",
         ],
         ROOT / "code/appImmGodot/src/main.cpp": [
-            "#if defined(ANDROID)",
-            "config.overrideFrontIsCCW = true;",
-            "config.frontIsCCW = false;",
+            "Godot's native texture and projection contract already accounts for its",
+            "Do not infer face winding from the Vulkan",
         ],
         ROOT / "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp": [
-            "A reflected layer already reverses its submitted triangle winding.",
-            "mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::FRONT",
+            "Static paint's reflected geometry has the opposite submitted winding.",
+            "mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::FRONT",
         ],
         ROOT / "code/appImmViewer/src/viewer/viewer.cpp": [
             "Settings::Rendering::API::Vulkan",
@@ -595,6 +594,12 @@ def main() -> int:
     if "compare-ppm-captures.ps1" in windows_godot_smoke:
         errors.append(
             "Godot Vulkan smoke must use only the shared render-metrics baseline comparator"
+        )
+
+    godot_bridge = (ROOT / "code/appImmGodot/src/main.cpp").read_text(encoding="utf-8")
+    if "overrideFrontIsCCW" in godot_bridge:
+        errors.append(
+            "Godot must preserve the shared front-face convention instead of overriding it per platform"
         )
 
     for workflow_name in ["ci-engine.yml", "ci-gpu.yml"]:
