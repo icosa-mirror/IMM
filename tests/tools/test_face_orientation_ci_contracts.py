@@ -14,6 +14,15 @@ def require_tokens(path: str, tokens: list[str]) -> None:
 
 
 def main() -> int:
+    engine_workflow = (ROOT / ".github/workflows/ci-engine.yml").read_text(encoding="utf-8")
+    directx_runner = engine_workflow[
+        engine_workflow.index("function Invoke-UnitySmoke") : engine_workflow.index(
+            "- name: Classify Unity DirectX face orientation"
+        )
+    ]
+    assert directx_runner.index("$playerArgs = @(") < directx_runner.index(
+        '$playerArgs += @("-immDocumentName", $DocumentName)'
+    )
     require_tokens(
         ".github/workflows/ci-gpu.yml",
         [

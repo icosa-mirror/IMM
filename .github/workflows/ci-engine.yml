@@ -835,10 +835,6 @@ jobs:
               [string] $CompositionProbe,
               [string] $DocumentName = ""
             )
-            if ($DocumentName) {
-              $playerArgs += @("-immDocumentName", $DocumentName)
-            }
-
             $capturePath = Join-Path $artifactDir $CaptureName
             $playerLog = Join-Path $artifactDir $LogName
             $playerArgs = @(
@@ -852,6 +848,9 @@ jobs:
               "-immSmokeQuit", "1",
               "-immSmokeCompositionProbe", $CompositionProbe
             )
+            if ($DocumentName) {
+              $playerArgs += @("-immDocumentName", $DocumentName)
+            }
             $process = Start-Process -FilePath $player -ArgumentList $playerArgs -PassThru
             if (-not $process.WaitForExit(240000)) {
               Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
