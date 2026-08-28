@@ -80,6 +80,13 @@ def main() -> int:
         "code/ImmGodotSampleProject/export_presets.cfg",
         ["sample1.imm,face-orientation.imm", "--imm-godot-face-orientation-capture-path="],
     )
+    require_tokens(
+        "code/ImmGodotSampleProject/scripts/visual_smoke_controller.gd",
+        [
+            'OS.get_name() in ["Android", "iOS"] and requested_path.begins_with("res://")',
+            '"user://%s" % file_name',
+        ],
+    )
     android_test_source = (
         ROOT
         / "code/projects/android/appImmViewer/src/androidTest/java/org/linuxfoundation/imm/player/ImmFtlSmokeTest.java"

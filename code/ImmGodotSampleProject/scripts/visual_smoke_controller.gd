@@ -1038,6 +1038,16 @@ func _selected_renderer_name(renderer_api: int = -1) -> String:
 func _sample_document_path() -> String:
 	var requested_path: String = _get_env_string("IMM_GODOT_VISUAL_DOCUMENT_PATH", "")
 	if not requested_path.is_empty():
+		# Native IMM loading needs a real filesystem path. On mobile exports,
+		# res:// files live inside the packaged project, so copy an explicitly
+		# requested embedded document to user:// before handing it to the plugin.
+		if OS.get_name() in ["Android", "iOS"] and requested_path.begins_with("res://"):
+			var file_name: String = requested_path.get_file()
+			return _prepare_embedded_document(
+				requested_path,
+				"user://%s" % file_name,
+				file_name
+			)
 		return requested_path
 	if OS.get_name() not in ["Android", "iOS"]:
 		return SAMPLE_DOCUMENT_PATH
