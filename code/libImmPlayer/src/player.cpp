@@ -1404,6 +1404,10 @@ namespace ImmPlayer
         {
             mRenderer->SetWriteMask(true, false, false, false, true);
             mRenderer->SetState(piSTATE_DEPTH_TEST, true);
+            // The standalone Metal resolve pass disables dynamic culling for
+            // its full-screen quad. Restore it before applying the paint
+            // raster states on the following frame.
+            mRenderer->SetState(piSTATE_CULL_FACE, true);
             mRenderer->SetDepthState(mDepthState);
             mRenderer->SetRasterState(mRasterState);
             mRenderer->SetBlendState(mBlendState);
@@ -1535,6 +1539,7 @@ namespace ImmPlayer
         }
         else
         {
+            mRenderer->SetState(piSTATE_CULL_FACE, true);
             mRenderer->SetDepthState(mDepthState);
             mRenderer->SetRasterState(mRasterState);
             mRenderer->SetBlendState(mBlendState);
@@ -1666,6 +1671,7 @@ namespace ImmPlayer
         }
         else
         {
+            mRenderer->SetState(piSTATE_CULL_FACE, true);
             mRenderer->SetDepthState(mDepthState);
             mRenderer->SetRasterState(mRasterState);
             mRenderer->SetBlendState(mBlendState);

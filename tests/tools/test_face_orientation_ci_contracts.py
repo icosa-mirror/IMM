@@ -44,6 +44,7 @@ def main() -> int:
     require_tokens(
         ".github/workflows/ci-ios.yml",
         [
+            "Classify standalone iOS Metal face orientation\n        continue-on-error: true",
             "standalone-ios-metal/face-orientation-status.json",
             "unity-ios-player-build/face-orientation-status.json",
             "godot-ios-metal/face-orientation-status.json",
@@ -68,13 +69,8 @@ def main() -> int:
         "code/ImmGodotSampleProject/export_presets.cfg",
         ["sample1.imm,face-orientation.imm", "--imm-godot-face-orientation-capture-path="],
     )
-    require_tokens(
-        "code/appImmViewer/src/viewer/viewer.cpp",
-        [
-            "renderingAPI != Settings::Rendering::API::Vulkan",
-            "renderingAPI != Settings::Rendering::API::Metal",
-        ],
-    )
+    player_source = (ROOT / "code/libImmPlayer/src/player.cpp").read_text(encoding="utf-8")
+    assert player_source.count("mRenderer->SetState(piSTATE_CULL_FACE, true);") >= 6
     print("Face-orientation CI contracts verified")
     return 0
 

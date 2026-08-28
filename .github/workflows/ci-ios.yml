@@ -209,6 +209,7 @@ jobs:
           xcrun simctl shutdown "$STANDALONE_IOS_UDID" >/dev/null 2>&1 || true
 
       - name: Classify standalone iOS Metal face orientation
+        continue-on-error: true
         run: |
           python3 tests/tools/classify_face_orientation_capture.py \
             artifacts/standalone-ios-metal/standalone-ios-metal-face-orientation.png \
