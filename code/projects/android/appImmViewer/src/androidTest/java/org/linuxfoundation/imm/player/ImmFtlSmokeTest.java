@@ -89,7 +89,10 @@ public final class ImmFtlSmokeTest {
         File sampleCapture = new File(artifactDir, "sample-native-render-after.ppm");
         Files.copy(nativeCapture.toPath(), sampleCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-        runShell(device, "am force-stop " + PACKAGE_NAME);
+        // MainActivity is singleTask, so launching it again delivers this intent through
+        // onNewIntent(). Do not force-stop the target package here: Android instrumentation
+        // runs inside that package, so force-stop also kills this test before it can save
+        // the face-orientation capture.
         runShell(device, "logcat -c");
         assertTrue("Could not remove stale native capture", !nativeCapture.exists() || nativeCapture.delete());
 

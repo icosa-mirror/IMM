@@ -71,6 +71,13 @@ def main() -> int:
         "code/ImmGodotSampleProject/export_presets.cfg",
         ["sample1.imm,face-orientation.imm", "--imm-godot-face-orientation-capture-path="],
     )
+    android_test_source = (
+        ROOT
+        / "code/projects/android/appImmViewer/src/androidTest/java/org/linuxfoundation/imm/player/ImmFtlSmokeTest.java"
+    ).read_text(encoding="utf-8")
+    assert 'runShell(device, "am force-stop " + PACKAGE_NAME)' not in android_test_source
+    assert android_test_source.count("targetContext.startActivity(") == 2
+    assert 'faceIntent.putExtra("QUILL_PATH", faceDocument.getAbsolutePath())' in android_test_source
     player_source = (ROOT / "code/libImmPlayer/src/player.cpp").read_text(encoding="utf-8")
     assert player_source.count("mRenderer->SetState(piSTATE_CULL_FACE, true);") >= 6
     require_tokens(
