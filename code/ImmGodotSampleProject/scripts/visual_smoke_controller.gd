@@ -28,6 +28,7 @@ const IMM_TICKS_PER_SECOND := 12600
 # different scene content and invalidate cross-platform visual comparisons.
 const DEFAULT_VISUAL_SMOKE_PLAYER_FRAME := 60
 const VISUAL_SMOKE_FRAME_RATE := 30
+const VISUAL_SMOKE_FIXED_DT := "0.0333333333333333"
 const SUCCESS_MARKER_METAL := "IMM Godot Metal visual smoke passed"
 const SUCCESS_MARKER_VULKAN := "IMM Godot Vulkan visual smoke passed"
 const VISUAL_RESULT_PREFIX := "[IMM_GODOT_VISUAL_RESULT_20260813]"
@@ -169,6 +170,8 @@ func _run_visual_smoke() -> void:
 	await _apply_visual_smoke_viewport_size()
 	status_label.visible = false
 	var prefer_spawn_area := _visual_smoke_prefers_spawn_area()
+	var forced_player_frame: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME", DEFAULT_VISUAL_SMOKE_PLAYER_FRAME)
+	_configure_validation_clock(forced_player_frame)
 
 	if not _setup_viewer():
 		failures.append("ImmViewerNode setup failed")
@@ -186,7 +189,6 @@ func _run_visual_smoke() -> void:
 
 	var selected_renderer_api := _selected_renderer_api()
 	var selected_renderer_name := _selected_renderer_name(selected_renderer_api)
-	var forced_player_frame: int = _get_env_int("IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME", DEFAULT_VISUAL_SMOKE_PLAYER_FRAME)
 	viewer.renderer_api = selected_renderer_api
 	var backend_diagnostics: Dictionary = viewer.get_render_backend_diagnostics()
 	if int(backend_diagnostics.get("renderer_api", -1)) != selected_renderer_api:
@@ -241,7 +243,9 @@ func _run_visual_smoke() -> void:
 				_queue_active_camera()
 
 	if sequence_ready:
-		await _wait_for_forced_player_frame(forced_player_frame)
+		var reached_forced_player_frame: bool = await _wait_for_forced_player_frame(forced_player_frame)
+		if not reached_forced_player_frame:
+			failures.append("native validation clock did not reach player frame %d" % forced_player_frame)
 		await _capture_render_baseline(failures, selected_renderer_name)
 		if _visual_smoke_composition_mode() != COMPOSITION_MODE_RENDER_ONLY:
 			_setup_scene_composition_probe()
@@ -482,9 +486,18 @@ func _apply_forced_player_frame(player_frame: int) -> void:
 	var ticks_per_frame: int = IMM_TICKS_PER_SECOND / VISUAL_SMOKE_FRAME_RATE
 	viewer.set_time(int(player_frame * ticks_per_frame), 0)
 
-func _wait_for_forced_player_frame(player_frame: int) -> void:
+func _configure_validation_clock(player_frame: int) -> void:
 	if player_frame < 0:
 		return
+	# libImmPlayer reads this process environment setting every GlobalWork call.
+	# Setting it in the scene works on desktop, iOS, and Android, unlike relying
+	# on a host shell environment that is not inherited by packaged mobile apps.
+	OS.set_environment("IMM_VIEWER_VALIDATE_FIXED_DT", VISUAL_SMOKE_FIXED_DT)
+	OS.set_environment("IMM_VIEWER_VALIDATE_PLAYER_FRAME", str(player_frame))
+
+func _wait_for_forced_player_frame(player_frame: int) -> bool:
+	if player_frame < 0:
+		return true
 	var deadline_msec: int = Time.get_ticks_msec() + int(_max_ready_seconds() * 1000.0)
 	while Time.get_ticks_msec() < deadline_msec:
 		_apply_forced_player_frame(player_frame)
@@ -496,11 +509,12 @@ func _wait_for_forced_player_frame(player_frame: int) -> void:
 				_selected_renderer_name(),
 				player_frame,
 			])
-			return
+			return true
 	print("IMM Godot %s visual smoke did not observe validation player frame %d before capture" % [
 		_selected_renderer_name(),
 		player_frame,
 	])
+	return false
 
 func _frame_interactive_camera() -> bool:
 	var deadline_msec: int = Time.get_ticks_msec() + int(SPAWN_AREA_FRAME_WAIT_SECONDS * 1000.0)

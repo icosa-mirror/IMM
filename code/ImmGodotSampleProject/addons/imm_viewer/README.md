@@ -37,7 +37,7 @@ If Godot shows the blurred 360 background but not authored foreground paint, fir
 
 Run the authored-spawn visual smoke capture and inspect the PNG for foreground content:
 
-CI leaves `IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME` unset and therefore captures frame 60, matching the committed Windows reference. Set it explicitly, as below, only when inspecting another authored frame.
+CI leaves `IMM_GODOT_VISUAL_SMOKE_PLAYER_FRAME` unset and therefore captures frame 60, matching the committed Windows reference. The validation scene also enables libImmPlayer's fixed 30 Hz clock inside the Godot process, which works for packaged Android and iOS apps that do not inherit a host shell environment. Set the player frame explicitly, as below, only when inspecting another authored frame.
 
 ```sh
 IMM_GODOT_VISUAL_SMOKE=1 \
