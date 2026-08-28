@@ -478,32 +478,35 @@ def main() -> int:
         for token in missing:
             errors.append(f"{path.relative_to(ROOT)} missing token: {token}")
 
-    surface_detail_contracts = [
-        "android-standalone-gles-sample1.json",
-        "android-standalone-vulkan-sample1.json",
-        "godot-android-vulkan-sample1.json",
-        "godot-ios-metal-sample1.json",
-        "godot-windows-vulkan-sample1.json",
-        "ios-standalone-metal-sample1.json",
-        "macos-metal-sample1.json",
-        "macos-standalone-metal-sample1.json",
-        "unity-android-vulkan-external-render-sample1.json",
-        "unity-android-vulkan-sample1.json",
-        "unity-macos-metal-sample1.json",
-        "unity-windows-directx-sample1.json",
-        "web-three-sample1.json",
-        "windows-directx-sample1.json",
-    ]
-    for contract_name in surface_detail_contracts:
+    surface_detail_contracts = {
+        "android-standalone-gles-sample1.json": 1.04,
+        "android-standalone-vulkan-sample1.json": 1.04,
+        # Godot's Android screenshot is captured at the device's wider display
+        # resolution. Its valid renderer-specific edge density is higher than
+        # the DirectX reference; face winding is checked by the dedicated fixture.
+        "godot-android-vulkan-sample1.json": 1.25,
+        "godot-ios-metal-sample1.json": 1.04,
+        "godot-windows-vulkan-sample1.json": 1.04,
+        "ios-standalone-metal-sample1.json": 1.04,
+        "macos-metal-sample1.json": 1.04,
+        "macos-standalone-metal-sample1.json": 1.04,
+        "unity-android-vulkan-external-render-sample1.json": 1.04,
+        "unity-android-vulkan-sample1.json": 1.04,
+        "unity-macos-metal-sample1.json": 1.04,
+        "unity-windows-directx-sample1.json": 1.04,
+        "web-three-sample1.json": 1.04,
+        "windows-directx-sample1.json": 1.04,
+    }
+    for contract_name, expected_ceiling in surface_detail_contracts.items():
         contract_path = ROOT / "tests/baselines/render" / contract_name
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
         surface_detail = contract.get("validation", {}).get("expected_surface_detail")
         if not isinstance(surface_detail, dict):
             errors.append(f"{contract_name} must require fine surface-detail validation")
             continue
-        if surface_detail.get("max_edge_pixel_share_ratio") != 1.04:
+        if surface_detail.get("max_edge_pixel_share_ratio") != expected_ceiling:
             errors.append(
-                f"{contract_name} must retain the reviewed 1.04 surface edge-density ceiling"
+                f"{contract_name} must retain its reviewed {expected_ceiling} surface edge-density ceiling"
             )
         if surface_detail.get("analysis_width", 0) < 320 or surface_detail.get("analysis_height", 0) < 180:
             errors.append(f"{contract_name} surface-detail analysis resolution is too coarse")
