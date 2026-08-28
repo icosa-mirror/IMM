@@ -22,6 +22,7 @@ def main() -> int:
             "windows-standalone-opengl/face-orientation-status.json",
             "godot-smoke-windows-vulkan/face-orientation-status.json",
             "godot-smoke-macos-metal/face-orientation-status.json",
+            "$smokeStatus = 0",
             "smoke_status=0",
         ],
     )

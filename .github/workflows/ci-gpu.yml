@@ -826,15 +826,25 @@ jobs:
           -LogDir artifacts\godot-smoke-windows-vulkan-render-only
 
       - name: Capture and classify Godot Vulkan face orientation
+        continue-on-error: true
         shell: pwsh
         run: |
-          .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1 `
-            -Configuration Release -SkipBuild -CompositionMode render_only -PlayerFrame 0 `
-            -DocumentPath res://../../exampleImmFiles/face-orientation.imm `
-            -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm `
-            -CapturePath artifacts\godot-smoke-windows-vulkan\face-orientation-scene.ppm `
-            -RenderCapturePath artifacts\godot-smoke-windows-vulkan\face-orientation.ppm `
-            -LogDir artifacts\godot-smoke-windows-vulkan\face-orientation
+          $smokeStatus = 0
+          try {
+            .\code\projects\windows\run-godot-vulkan-visual-baseline-smoke.ps1 `
+              -Configuration Release -SkipBuild -CompositionMode render_only -PlayerFrame 0 `
+              -DocumentPath res://../../exampleImmFiles/face-orientation.imm `
+              -ReferencePath .\tests\baselines\render\windows-directx-sample1.ppm `
+              -CapturePath artifacts\godot-smoke-windows-vulkan\face-orientation-scene.ppm `
+              -RenderCapturePath artifacts\godot-smoke-windows-vulkan\face-orientation.ppm `
+              -LogDir artifacts\godot-smoke-windows-vulkan\face-orientation
+          } catch {
+            $smokeStatus = 1
+          }
+          "godot_exit=$smokeStatus" | Set-Content artifacts\godot-smoke-windows-vulkan\face-orientation-runtime-status.txt
+          if (!(Test-Path artifacts\godot-smoke-windows-vulkan\face-orientation.ppm)) {
+            throw "Godot Vulkan face-orientation capture is missing"
+          }
           python tests\tools\classify_face_orientation_capture.py `
             artifacts\godot-smoke-windows-vulkan\face-orientation.ppm `
             --status-output artifacts\godot-smoke-windows-vulkan\face-orientation-status.json `
