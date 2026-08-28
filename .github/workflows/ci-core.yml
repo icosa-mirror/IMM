@@ -30,6 +30,16 @@ jobs:
             --baseline tests/baselines/content/sample1.json \
             --write-actual artifacts/baseline-content/sample1.actual.json
 
+      - name: Verify face-orientation IMM baseline
+        run: |
+          python tests/tools/verify_imm_baseline.py \
+            exampleImmFiles/face-orientation.imm \
+            --baseline tests/baselines/content/face-orientation.json \
+            --write-actual artifacts/baseline-content/face-orientation.actual.json
+
+      - name: Verify face-orientation fixture copies
+        run: python tests/tools/test_face_orientation_fixture_sync.py
+
       - name: Write baseline drift report
         if: always()
         run: >
@@ -51,7 +61,9 @@ jobs:
             --mode content \
             --renderer none \
             --include exampleImmFiles/sample1.imm \
-            --include tests/baselines/content/sample1.json
+            --include exampleImmFiles/face-orientation.imm \
+            --include tests/baselines/content/sample1.json \
+            --include tests/baselines/content/face-orientation.json
 
       - name: Collect artifact summary
         if: always()
@@ -176,6 +188,7 @@ jobs:
           python tests/tools/test_compare_render_metrics.py
           python tests/tools/test_write_render_report.py
           python tests/tools/test_write_visual_evidence_report.py
+          python tests/tools/test_face_orientation_ci_contracts.py
           python tests/tools/test_verify_full_depth_evidence_report.py
           python tests/tools/test_preflight_runner.py
           python tests/tools/test_run_firebase_test_lab_android.py

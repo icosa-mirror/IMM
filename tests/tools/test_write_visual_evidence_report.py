@@ -83,6 +83,72 @@ def main() -> int:
     ) == ("evidence_incomplete", "evidence"), (
         "Missing Firebase evidence must not be reported as a rendering failure"
     )
+    assert effective_status(
+        {"passed": True},
+        {},
+        {"classification": {"result": "passed", "failure_class": ""}},
+        {"result": "render_failed", "failure_class": "face_orientation"},
+    ) == ("render_failed", "face_orientation"), (
+        "An explicit face-orientation failure must override coarse render metrics"
+    )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp = Path(temp_dir)
+        lane = temp / "raw" / "WindowsStandaloneDirectX-GPU"
+        face_captures = lane / "captures" / "face-orientation"
+        face_captures.mkdir(parents=True)
+        (face_captures / "face-orientation.png").write_bytes(PNG_1X1)
+        (face_captures / "face-orientation-overlay.png").write_bytes(PNG_1X1)
+        (lane / "render-report.md").write_text("# Render report\n", encoding="utf-8")
+        (lane / "face-orientation-status.json").write_text(
+            json.dumps({
+                "schema": "imm-face-orientation-status-v1",
+                "result": "passed",
+                "failure_class": "",
+                "failures": [],
+                "checks": {
+                    "backface_interior_hidden": {
+                        "passed": True,
+                        "actual": 0.0,
+                        "maximum": 0.002,
+                    }
+                },
+            }),
+            encoding="utf-8",
+        )
+        (lane / "manifest.json").write_text(
+            json.dumps({
+                "schema": "imm-ci-artifact-manifest-v1",
+                "classification": {"result": "passed", "failure_class": ""},
+                "matrix": {
+                    "product": "standalone",
+                    "platform": "windows",
+                    "mode": "non-vr",
+                    "renderer": "directx",
+                },
+            }),
+            encoding="utf-8",
+        )
+        output = temp / "output"
+        report = output / "VALIDATION_REPORT.md"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "tests/tools/write_visual_evidence_report.py",
+                "--input-root", str(temp / "raw"),
+                "--output-dir", str(output),
+                "--markdown-output", str(report),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+        report_text = report.read_text(encoding="utf-8")
+        assert "- Face orientation: passed" in report_text
+        assert "### Face-orientation checks" in report_text
+        assert "face-orientation.png" in report_text
+        assert "face-orientation-overlay.png" in report_text
 
     hardware_only_row = {
         "hosted_gate": "",

@@ -908,7 +908,9 @@ def find_strict_metrics(root: Path) -> dict:
     )
 
 
-def effective_status(metrics: dict, status: dict, manifest: dict) -> tuple[str, str]:
+def effective_status(metrics: dict, status: dict, manifest: dict, face_status: dict | None = None) -> tuple[str, str]:
+    if face_status and face_status.get("result") != "passed":
+        return ("render_failed", face_status.get("failure_class", "face_orientation"))
     status_result = status.get("result")
     if status_result in {
         "runtime_failed",
@@ -1088,15 +1090,16 @@ def main() -> int:
         root = artifact_root_for(report)
         metrics = find_metrics(root, report)
         status = find_json(root, "composition-status.json")
+        face_status = find_json(root, "face-orientation-status.json")
         manifest = find_manifest(root, key)
         images = find_images_for_report(report, key)
-        if not metrics and not status and not manifest and not images:
+        if not metrics and not status and not face_status and not manifest and not images:
             continue
 
         visual_sections += 1
         name = display_name(key)
         section_slug = slugify(key)
-        result, failure_class = effective_status(metrics, status, manifest)
+        result, failure_class = effective_status(metrics, status, manifest, face_status)
         lines.append(f"## {name}")
         lines.append("")
         lines.append(f"- Result: {result}")
@@ -1118,10 +1121,13 @@ def main() -> int:
                 lines.append(f"- Depth composition: {status.get('depth_composition', '')}")
             if status.get("depth_interleaving"):
                 lines.append(f"- Depth interleaving: {status.get('depth_interleaving', '')}")
+        if face_status:
+            lines.append(f"- Face orientation: {face_status.get('result', '')}")
         lines.append("")
 
         errors = metrics.get("errors") or []
         failures = status.get("failures") or []
+        face_failures = face_status.get("failures") or []
         if errors:
             lines.append("### Render Errors")
             lines.extend(f"- {error}" for error in errors)
@@ -1130,9 +1136,28 @@ def main() -> int:
             lines.append("### Composition Failures")
             lines.extend(f"- {failure}" for failure in failures)
             lines.append("")
+        if face_failures:
+            lines.append("### Face-orientation Failures")
+            lines.extend(f"- {failure}" for failure in face_failures)
+            lines.append("")
 
         add_metrics_table(lines, metrics)
         add_color_component_table(lines, metrics)
+
+        if face_status:
+            lines.extend([
+                "### Face-orientation checks",
+                "",
+                "| Check | Passed | Actual | Limit |",
+                "| --- | --- | ---: | ---: |",
+            ])
+            for check_name, check in (face_status.get("checks") or {}).items():
+                limit = check.get("minimum", check.get("maximum", ""))
+                lines.append(
+                    f"| {check_name} | {str(bool(check.get('passed'))).lower()} | "
+                    f"{float(check.get('actual') or 0.0):.6f} | {limit} |"
+                )
+            lines.append("")
 
         for image in images:
             copied_image = copy_image(image, capture_output_dir / section_slug)
@@ -1142,6 +1167,7 @@ def main() -> int:
         section_output_dir = capture_output_dir / section_slug
         write_section_json(section_output_dir, "render-metrics.json", metrics)
         write_section_json(section_output_dir, "composition-status.json", status)
+        write_section_json(section_output_dir, "face-orientation-status.json", face_status)
         write_section_json(section_output_dir, "manifest.json", manifest)
 
     if visual_sections == 0:
