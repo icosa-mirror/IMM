@@ -420,8 +420,11 @@ def main() -> int:
             "SetUnityProjectionAdjusted(true)",
         ],
         ROOT / "code/appImmGodot/src/main.cpp": [
-            "Godot's native texture and projection contract already accounts for its",
-            "Do not infer face winding from the Vulkan",
+            "Godot's Metal projection is already adjusted for its render target",
+            "if (config.rendererApi == piRenderer::API::Metal)",
+            "config.overrideFrontIsCCW = true;",
+            "config.frontIsCCW = false;",
+            "Vulkan retains its existing host convention",
         ],
         ROOT / "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp": [
             "Static paint's reflected geometry has the opposite submitted winding.",
@@ -599,12 +602,6 @@ def main() -> int:
     if "compare-ppm-captures.ps1" in windows_godot_smoke:
         errors.append(
             "Godot Vulkan smoke must use only the shared render-metrics baseline comparator"
-        )
-
-    godot_bridge = (ROOT / "code/appImmGodot/src/main.cpp").read_text(encoding="utf-8")
-    if "overrideFrontIsCCW" in godot_bridge:
-        errors.append(
-            "Godot must preserve the shared front-face convention instead of overriding it per platform"
         )
 
     for workflow_name in ["ci-engine.yml", "ci-gpu.yml"]:
