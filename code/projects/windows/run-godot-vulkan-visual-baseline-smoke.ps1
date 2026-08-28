@@ -50,9 +50,11 @@ function Resolve-GodotExe([string]$requested) {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
 $sampleProject = Join-Path $repoRoot "code\ImmGodotSampleProject"
+$xrSampleProject = Join-Path $repoRoot "code\ImmGodotXRSampleProject"
 $variant = if ($Configuration -eq "Debug") { "debug" } else { "release" }
 $extensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\$variant"
 $editorExtensionDir = Join-Path $sampleProject "addons\imm_viewer\bin\windows\debug"
+$xrEditorExtensionDir = Join-Path $xrSampleProject "addons\imm_viewer\bin\windows\debug"
 
 if (-not $ReferencePath) {
     $ReferencePath = Join-Path $repoRoot "build\baseline-captures\windows-directx-static.ppm"
@@ -107,8 +109,11 @@ foreach ($dll in $requiredDlls) {
 }
 if ($editorExtensionDir -ne $extensionDir) {
     New-Item -ItemType Directory -Force $editorExtensionDir | Out-Null
+    New-Item -ItemType Directory -Force $xrEditorExtensionDir | Out-Null
     foreach ($dll in $requiredDlls) {
-        Copy-Item -Force (Join-Path $extensionDir $dll) (Join-Path $editorExtensionDir $dll)
+        $sourceDll = Join-Path $extensionDir $dll
+        Copy-Item -Force $sourceDll (Join-Path $editorExtensionDir $dll)
+        Copy-Item -Force $sourceDll (Join-Path $xrEditorExtensionDir $dll)
     }
 }
 

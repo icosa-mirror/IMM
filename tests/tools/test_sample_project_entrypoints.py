@@ -28,6 +28,9 @@ def main() -> int:
     godot_windows_build = (
         ROOT / "code/projects/windows/build-godot-extension.ps1"
     ).read_text(encoding="utf-8")
+    godot_windows_visual_smoke = (
+        ROOT / "code/projects/windows/run-godot-vulkan-visual-baseline-smoke.ps1"
+    ).read_text(encoding="utf-8")
     godot_android_build = (
         ROOT / "code/projects/android/build-godot-extension-android.ps1"
     ).read_text(encoding="utf-8")
@@ -73,6 +76,8 @@ def main() -> int:
             assert desktop_bytes[:2] == b"MZ", f"Invalid PE header: {desktop_dll}"
             assert xr_bytes == desktop_bytes, f"XR Godot DLL is stale or mismatched: {xr_dll}"
     assert 'code\\ImmGodotXRSampleProject\\addons\\imm_viewer\\bin\\windows\\$variant' in godot_windows_build
+    assert '$xrEditorExtensionDir = Join-Path $xrSampleProject "addons\\imm_viewer\\bin\\windows\\debug"' in godot_windows_visual_smoke
+    assert 'Copy-Item -Force $sourceDll (Join-Path $xrEditorExtensionDir $dll)' in godot_windows_visual_smoke
     godot_android_libraries = [
         "libimm_godot_extension.arm64.so",
         "libImmGodotPlugin.so",
