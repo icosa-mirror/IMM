@@ -1,0 +1,39 @@
+{
+  "expected_content": {
+    "loadable_by_godot_viewer_node": true,
+    "loadable_by_standalone": true,
+    "loadable_by_unity_stroke_reader": true,
+    "requires_audio_metadata_or_clean_absence": true,
+    "requires_chapter_count_greater_than_or_equal": 1,
+    "requires_finite_bounds": true,
+    "requires_layer_count_greater_than": 0,
+    "requires_non_empty_document": true,
+    "requires_spawn_area_query": true
+  },
+  "fixture": {
+    "byte_size": 6344,
+    "file_name": "face-orientation.imm",
+    "magic_hex": "496d6d65727369760400000000000000",
+    "path": "exampleImmFiles/face-orientation.imm",
+    "sha256": "3615eb923ad39693c9d5a4ea1dcbcd03725756b128886d7f856f247c7a6186f9"
+  },
+  "runtime_assertions": {
+    "godot": [
+      "addon imports",
+      "ImmViewerNode loads the fixture",
+      "public node API reports content values consistent with this baseline"
+    ],
+    "standalone": [
+      "document load reaches CPU-ready state",
+      "document load reaches GPU-ready state when renderer is available",
+      "background color can be read",
+      "playback controls do not crash"
+    ],
+    "unity": [
+      "package imports",
+      "native plugin loads for the target platform",
+      "public wrapper API reports content values consistent with this baseline"
+    ]
+  },
+  "schema": "imm-content-baseline-v1"
+}

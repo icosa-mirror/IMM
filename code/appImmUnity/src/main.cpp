@@ -92,6 +92,7 @@
 #include "libImmExporter/src/document/sequence.h"
 #include "libImmExporter/src/document/layerPaint.h"
 #include "libImmExporter/src/document/layerPaint/element.h"
+#include "libImmExporter/src/document/layerSpawnArea.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
 #include <windows.h>
@@ -2502,6 +2503,67 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateGr
     if (!ok)
         return nullptr;
 
+    return layer;
+}
+
+extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSpawnAreaLayer(
+    void* sequenceHandle,
+    void* parentLayerHandle,
+    const char* name,
+    const ImmExporterTransformC* transform,
+    int floorLevel)
+{
+    ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    if (seq == nullptr)
+        return nullptr;
+
+    ImmExporter::Layer* parent = reinterpret_cast<ImmExporter::Layer*>(parentLayerHandle);
+    if (parent == nullptr)
+        parent = seq->GetRoot();
+    ImmExporter::Layer* layer = seq->CreateLayer(parent);
+    if (layer == nullptr)
+        return nullptr;
+
+    const ImmCore::trans3d t = ImmExporterMakeTransform(transform);
+    ImmCore::piString wname;
+    if (name != nullptr && name[0] != '\0')
+        wname.InitCopyS(name);
+    else
+        wname.InitCopyW(L"Validation Camera");
+
+    const bool ok = layer->Init(
+        ImmExporter::Layer::Type::SpawnArea,
+        wname.GetS(),
+        true,
+        t,
+        ImmCore::trans3d::identity(),
+        1.0f,
+        false,
+        ImmCore::piTick(0),
+        0);
+    wname.End();
+    if (!ok)
+        return nullptr;
+
+    ImmExporter::LayerSpawnArea* spawnArea = new ImmExporter::LayerSpawnArea();
+    if (!spawnArea->Init())
+    {
+        delete spawnArea;
+        return nullptr;
+    }
+    spawnArea->SetTracking(
+        floorLevel != 0
+            ? ImmExporter::LayerSpawnArea::TrackingLevel::Floor
+            : ImmExporter::LayerSpawnArea::TrackingLevel::Eye);
+    ImmExporter::LayerSpawnArea::Volume volume = {};
+    volume.mType = ImmExporter::LayerSpawnArea::Volume::Type::Sphere;
+    volume.mShape.mSphere = ImmCore::vec4(0.0f, 0.0f, 0.0f, 0.01f);
+    volume.mAllowTranslationX = false;
+    volume.mAllowTranslationY = false;
+    volume.mAllowTranslationZ = false;
+    spawnArea->SetVolume(volume);
+    layer->SetImplementation(spawnArea);
+    seq->SetInitialSpawnArea(layer);
     return layer;
 }
 

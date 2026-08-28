@@ -102,8 +102,11 @@ def collect_fixtures(paths: list[Path], root: Path) -> list[dict]:
 
 
 def default_fixtures(root: Path) -> list[Path]:
-    sample = root / "exampleImmFiles" / "sample1.imm"
-    return [sample] if sample.exists() else []
+    return [
+        fixture
+        for name in ("sample1.imm", "face-orientation.imm")
+        if (fixture := root / "exampleImmFiles" / name).exists()
+    ]
 
 
 def normalize_status(status: str) -> str:
