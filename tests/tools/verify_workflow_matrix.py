@@ -907,6 +907,7 @@ def verify_strict_visual_validation_contract(path: Path, workflow_rel: str, erro
             "WebPlayerValidationEvidence",
             "--product web",
             "--renderer webgl",
+            'LIBGL_ALWAYS_SOFTWARE: "1"',
         ],
         ".github/workflows/ci-validation.yml": [
             "WebPlayerValidationEvidence",

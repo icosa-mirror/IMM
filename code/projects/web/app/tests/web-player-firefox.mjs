@@ -18,17 +18,30 @@ const server = await createServer({
     server: { host: "127.0.0.1", port: 4181, strictPort: true },
 });
 await server.listen();
+const firefoxUserPrefs = {
+    // Hosted Linux runners can block WebGL2 after a Firefox/runner-image update
+    // even though Mesa software rendering is available under Xvfb.
+    "webgl.disabled": false,
+    "webgl.force-enabled": true,
+};
+if (process.env.IMM_WEB_REQUIRE_AUDIO_GESTURE === "1") {
+    firefoxUserPrefs["media.autoplay.default"] = 5;
+}
 const browser = await firefox.launch({
     headless: process.env.IMM_WEB_HEADLESS === "1",
-    firefoxUserPrefs: process.env.IMM_WEB_REQUIRE_AUDIO_GESTURE === "1"
-        ? { "media.autoplay.default": 5 }
-        : undefined,
+    firefoxUserPrefs,
 });
 
 try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     const errors = [];
     capturePageErrors(page, errors);
+    const webgl2Available = await page.evaluate(() => {
+        const canvas = document.createElement("canvas");
+        return canvas.getContext("webgl2") !== null;
+    });
+    assert.equal(webgl2Available, true,
+        `Firefox did not expose WebGL2 before loading IMM: ${JSON.stringify(errors)}`);
     await page.goto("http://127.0.0.1:4181/?src=/fixtures/sample1.imm");
     try {
         await page.waitForFunction(() => window.__immDiagnostics?.().ready === true,

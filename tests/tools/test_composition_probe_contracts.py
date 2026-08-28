@@ -454,6 +454,12 @@ def main() -> int:
             "edge_pixel_share_ratio",
             'output["surface_detail"]',
         ],
+        ROOT / "code/projects/web/app/tests/web-player-firefox.mjs": [
+            '"webgl.disabled": false',
+            '"webgl.force-enabled": true',
+            'canvas.getContext("webgl2")',
+            "assert.equal(webgl2Available, true",
+        ],
     }
 
     errors: list[str] = []
