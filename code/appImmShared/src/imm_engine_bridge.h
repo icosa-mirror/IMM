@@ -21,7 +21,6 @@ namespace ImmShared
             bool reverseDepthBuffer = false;
             bool overrideFrontIsCCW = false;
             bool frontIsCCW = true;
-            bool staticPaintReflectedFrontUsesBaseWinding = false;
             bool initializeRendererOnInit = true;
             int initializeWindow = 0;
             int initializeDisplay = 0;

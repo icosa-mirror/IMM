@@ -427,9 +427,8 @@ def main() -> int:
             "Vulkan retains its existing host convention",
         ],
         ROOT / "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp": [
-            "Godot on iOS Metal already accounts for that reflection",
-            "const bool reflectedFrontIsCCW = mReflectedFrontUsesBaseWinding",
-            "mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe, reflectedFrontIsCCW, piRenderer::CullMode::FRONT",
+            "Static paint's reflected geometry has the opposite submitted winding.",
+            "mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::FRONT",
         ],
         ROOT / "code/appImmViewer/src/viewer/viewer.cpp": [
             "Settings::Rendering::API::Vulkan",

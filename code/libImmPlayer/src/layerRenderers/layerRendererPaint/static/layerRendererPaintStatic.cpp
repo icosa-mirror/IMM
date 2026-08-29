@@ -215,10 +215,7 @@ namespace ImmPlayer
     //===================================================================
 
 
-    LayerRendererPaintStatic::LayerRendererPaintStatic(bool reflectedFrontUsesBaseWinding)
-        : LayerRendererPaint()
-        , mReflectedFrontUsesBaseWinding(reflectedFrontUsesBaseWinding)
-    {}
+    LayerRendererPaintStatic::LayerRendererPaintStatic() : LayerRendererPaint() {}
     LayerRendererPaintStatic::~LayerRendererPaintStatic() {}
 
 bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::ColorSpace colorSpace, bool frontIsCCW)
@@ -347,15 +344,11 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         const bool forcePaintWireframe = std::getenv("IMM_FORCE_PAINT_WIREFRAME") != nullptr;
         mRasterState[0] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip NO
         mRasterState[1] = renderer->CreateRasterState(forcePaintWireframe, frontIsCCW, piRenderer::CullMode::BACK, true, false);  // single sided, flip NO
-        // Most static-paint hosts require the reflected sections' submitted
-        // winding. Godot on iOS Metal already accounts for that reflection in
-        // its host projection, so it uses the base winding like pretessellated
-        // paint. Keep this explicit instead of changing every Metal host.
-        const bool reflectedFrontIsCCW = mReflectedFrontUsesBaseWinding
-            ? frontIsCCW
-            : !frontIsCCW;
-        mRasterState[2] = renderer->CreateRasterState(forcePaintWireframe, reflectedFrontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
-        mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe, reflectedFrontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
+        // Static paint's reflected geometry has the opposite submitted winding.
+        // Keep this distinct from the pretessellated renderer: its generated
+        // geometry uses a different winding convention for reflected layers.
+        mRasterState[2] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::NONE, true, false);  // double sided, flip YES
+        mRasterState[3] = renderer->CreateRasterState(forcePaintWireframe,!frontIsCCW, piRenderer::CullMode::FRONT, true, false); // single sided, flip YES
 
         if (!mRasterState[0]) return false;
         if (!mRasterState[1]) return false;

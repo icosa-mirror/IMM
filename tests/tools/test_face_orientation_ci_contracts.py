@@ -120,15 +120,6 @@ def main() -> int:
             "config.rendererApi == piRenderer::API::Metal",
             "config.overrideFrontIsCCW = true;",
             "config.frontIsCCW = false;",
-            "config.staticPaintReflectedFrontUsesBaseWinding = true;",
-        ],
-    )
-    require_tokens(
-        "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp",
-        [
-            "mReflectedFrontUsesBaseWinding",
-            "const bool reflectedFrontIsCCW",
-            "piRenderer::CullMode::FRONT",
         ],
     )
     print("Face-orientation CI contracts verified")

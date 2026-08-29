@@ -154,12 +154,6 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     {
         config.overrideFrontIsCCW = true;
         config.frontIsCCW = false;
-#if defined(IMM_IOS)
-        // iOS Godot's host projection already reflects static-paint flip
-        // sections. Reusing the submitted-winding override required by other
-        // hosts exposes the reflected backface half of single-sided strokes.
-        config.staticPaintReflectedFrontUsesBaseWinding = true;
-#endif
     }
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
