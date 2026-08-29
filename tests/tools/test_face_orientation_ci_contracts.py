@@ -85,6 +85,8 @@ def main() -> int:
         [
             'OS.get_name() in ["Android", "iOS"] and requested_path.begins_with("res://")',
             '"user://%s" % file_name',
+            "Sequence readiness can precede spatial metadata after a document swap.",
+            "if _frame_camera_from_document(prefer_spawn_area):",
         ],
     )
     android_test_source = (

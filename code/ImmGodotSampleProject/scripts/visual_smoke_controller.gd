@@ -466,9 +466,12 @@ func _load_visual_smoke_document(document_path: String, prefer_spawn_area: bool,
 			_apply_background_color()
 			_apply_forced_player_frame(forced_player_frame)
 			_select_visual_smoke_spawn_area()
-			_frame_camera_from_document(prefer_spawn_area)
-			_queue_active_camera()
-			return true
+			# Sequence readiness can precede spatial metadata after a document swap.
+			# Do not retain the previous document's diagnostic camera while waiting
+			# for the restored sample's spawn area or bounds.
+			if _frame_camera_from_document(prefer_spawn_area):
+				_queue_active_camera()
+				return true
 		_queue_active_camera()
 		await get_tree().create_timer(0.05).timeout
 	return false
