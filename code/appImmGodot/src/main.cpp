@@ -147,18 +147,13 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolderName;
     config.rendererApi = iResolveRendererApi(rendererApi);
-    // Godot macOS supplies a render-target-adjusted Metal projection whose Y
-    // reflection reverses window-space winding. Godot iOS retains the authored
-    // counter-clockwise convention; the dedicated face fixture verifies both.
-    // Vulkan retains its existing host convention.
+    // Godot's Metal projection is already adjusted for its render target. The
+    // resulting Y reflection reverses window-space winding relative to the
+    // standalone Metal viewer. Vulkan retains its existing host convention.
     if (config.rendererApi == piRenderer::API::Metal)
     {
         config.overrideFrontIsCCW = true;
-#if defined(IMM_IOS)
-        config.frontIsCCW = true;
-#else
         config.frontIsCCW = false;
-#endif
     }
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
