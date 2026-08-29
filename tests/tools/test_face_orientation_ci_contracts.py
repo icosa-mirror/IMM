@@ -31,6 +31,7 @@ def main() -> int:
             "windows-standalone-opengl/face-orientation-status.json",
             "godot-smoke-windows-vulkan/face-orientation-status.json",
             "godot-smoke-macos-metal/face-orientation-status.json",
+            'IMM_GODOT_VISUAL_SMOKE_REFLECT_DOCUMENT_X: "1"',
             "$smokeStatus = 0",
             "smoke_status=0",
         ],
@@ -89,6 +90,7 @@ def main() -> int:
             'OS.get_name() in ["Android", "iOS"] and requested_path.begins_with("res://")',
             '"user://%s" % file_name',
             "Sequence readiness can precede spatial metadata after a document swap.",
+            'IMM_GODOT_VISUAL_SMOKE_REFLECT_DOCUMENT_X',
             "if _frame_camera_from_document(prefer_spawn_area):",
         ],
     )
@@ -119,8 +121,13 @@ def main() -> int:
         [
             "config.rendererApi == piRenderer::API::Metal",
             "config.overrideFrontIsCCW = true;",
-            "config.frontIsCCW = false;",
+            "config.frontIsCCW = config.rendererApi != piRenderer::API::Metal;",
+            "gDocumentWindingReversed",
         ],
+    )
+    require_tokens(
+        "code/appImmGodotGDExtension/src/imm_viewer_node.cpp",
+        ["_document_transform.basis.determinant() < 0.0f"],
     )
     print("Face-orientation CI contracts verified")
     return 0

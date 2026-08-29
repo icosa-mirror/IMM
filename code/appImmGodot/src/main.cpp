@@ -21,6 +21,7 @@ namespace
 {
     ImmShared::ImmEngineBridge gBridge;
     bool gDebugLogging = false;
+    bool gDocumentWindingReversed = false;
     ImmGodotRenderAdapter gRenderAdapter = {};
 
     bool iEnvFlagEnabled(const char *name)
@@ -147,13 +148,17 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace,
     config.logFileName = logFileName;
     config.tmpFolderName = tmpFolderName;
     config.rendererApi = iResolveRendererApi(rendererApi);
-    // Godot's Metal projection is already adjusted for its render target. The
-    // resulting Y reflection reverses window-space winding relative to the
-    // standalone Metal viewer. Vulkan retains its existing host convention.
-    if (config.rendererApi == piRenderer::API::Metal)
+    // Godot Metal starts with clockwise front faces because its host projection
+    // already contains a render-target reflection. A negative-determinant
+    // document transform reverses winding once more on every backend.
+    if (config.rendererApi == piRenderer::API::Metal || gDocumentWindingReversed)
     {
         config.overrideFrontIsCCW = true;
-        config.frontIsCCW = false;
+        config.frontIsCCW = config.rendererApi != piRenderer::API::Metal;
+        if (gDocumentWindingReversed)
+        {
+            config.frontIsCCW = !config.frontIsCCW;
+        }
     }
     config.initializeRendererOnInit = true;
     config.initializeFullscreen = true;
@@ -200,6 +205,11 @@ extern "C" IMMGODOT_EXPORT int ImmGodot_IsInitialized()
 extern "C" IMMGODOT_EXPORT void ImmGodot_SetDebugLogging(int enabled)
 {
     gDebugLogging = enabled != 0;
+}
+
+extern "C" IMMGODOT_EXPORT void ImmGodot_SetDocumentWindingReversed(int reversed)
+{
+    gDocumentWindingReversed = reversed != 0;
 }
 
 extern "C" IMMGODOT_EXPORT void ImmGodot_SetRenderAdapter(const ImmGodotRenderAdapter *adapter)

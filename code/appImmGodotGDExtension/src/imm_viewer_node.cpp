@@ -1333,6 +1333,7 @@ bool ImmViewerNode::initialize_native_backend()
     }
 
     ImmGodot_SetDebugLogging(_debug_logging ? 1 : 0);
+    ImmGodot_SetDocumentWindingReversed(_document_transform.basis.determinant() < 0.0f ? 1 : 0);
     ImmGodotRenderAdapter adapter = {};
     adapter.version = 1;
     adapter.userData = this;

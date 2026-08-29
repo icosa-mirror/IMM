@@ -423,11 +423,12 @@ def main() -> int:
             "SetUnityProjectionAdjusted(true)",
         ],
         ROOT / "code/appImmGodot/src/main.cpp": [
-            "Godot's Metal projection is already adjusted for its render target",
-            "if (config.rendererApi == piRenderer::API::Metal)",
+            "Godot Metal starts with clockwise front faces",
+            "if (config.rendererApi == piRenderer::API::Metal || gDocumentWindingReversed)",
             "config.overrideFrontIsCCW = true;",
-            "config.frontIsCCW = false;",
-            "Vulkan retains its existing host convention",
+            "config.frontIsCCW = config.rendererApi != piRenderer::API::Metal;",
+            "config.frontIsCCW = !config.frontIsCCW;",
+            "ImmGodot_SetDocumentWindingReversed",
         ],
         ROOT / "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp": [
             "Static paint's reflected geometry has the opposite submitted winding.",

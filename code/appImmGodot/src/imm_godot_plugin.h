@@ -226,6 +226,7 @@ extern "C"
 
     IMMGODOT_EXPORT int ImmGodot_Init(int colorSpace, int antialiasing, char *logFileName, char *tmpFolderName);
     IMMGODOT_EXPORT int ImmGodot_InitEx(int colorSpace, int antialiasing, char *logFileName, char *tmpFolderName, int rendererApi);
+    IMMGODOT_EXPORT void ImmGodot_SetDocumentWindingReversed(int reversed);
     IMMGODOT_EXPORT void ImmGodot_Shutdown();
     IMMGODOT_EXPORT int ImmGodot_IsInitialized();
     IMMGODOT_EXPORT void ImmGodot_SetDebugLogging(int enabled);

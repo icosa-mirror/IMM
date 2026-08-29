@@ -132,6 +132,11 @@ func _setup_viewer() -> bool:
 	viewer.auto_queue_render = true
 	viewer.renderer_api = _selected_renderer_api()
 	viewer.render_camera_path = NodePath("../CameraRig/Camera3D")
+	if _get_env_int("IMM_GODOT_VISUAL_SMOKE_REFLECT_DOCUMENT_X", 0) != 0:
+		viewer.document_transform = Transform3D(
+			Basis(Vector3.LEFT, Vector3.UP, Vector3.BACK),
+			Vector3.ZERO
+		)
 	add_child(viewer)
 	return true
 

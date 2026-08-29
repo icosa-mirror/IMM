@@ -827,6 +827,8 @@ jobs:
 
       - name: Capture and classify Godot Vulkan face orientation
         continue-on-error: true
+        env:
+          IMM_GODOT_VISUAL_SMOKE_REFLECT_DOCUMENT_X: "1"
         shell: pwsh
         run: |
           $smokeStatus = 0
