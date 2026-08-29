@@ -112,7 +112,7 @@ def main() -> int:
     assert 'rm -rf "${plat}debug"' in build_workflow
     assert 'cp -R "${plat}release" "${plat}debug"' in build_workflow
     for token in [
-        '[node name="ImmViewer" type="ImmViewerNode" parent="."]',
+        '[node name="ImmViewer" type="ImmViewerNode" parent="."',
         '[sub_resource type="ImmViewerCompositorEffect"',
         'compositor = SubResource("Compositor_xr")',
         'renderer_api = 5',
