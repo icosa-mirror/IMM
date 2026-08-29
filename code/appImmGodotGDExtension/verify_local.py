@@ -295,7 +295,7 @@ def verify_render_thread_queue() -> None:
         if token not in sconstruct:
             raise RuntimeError(f"SConstruct is missing compositor/Metal build token: {token}")
     metal_helper = (ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm").read_text(encoding="utf-8")
-    for token in ["MTLRenderPassDescriptor", "MTLLoadActionLoad", "MTLStoreActionStore", "depth_texture_handle", "depthAttachment.texture", "depthAttachment.clearDepth = 1.0", "ImmGodotMetalFrameMode_CommandQueueRenderPass", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame"]:
+    for token in ["MTLRenderPassDescriptor", "MTLLoadActionClear", "MTLClearColorMake(0.0, 0.0, 0.0, 0.0)", "MTLStoreActionStore", "depth_texture_handle", "depthAttachment.texture", "depthAttachment.clearDepth = 1.0", "ImmGodotMetalFrameMode_CommandQueueRenderPass", "ImmGodot_BeginMetalFrame", "ImmGodot_EndMetalFrame"]:
         if token not in metal_helper:
             raise RuntimeError(f"Metal frame helper token is missing: {token}")
     if "ImmViewerCompositorEffect::queue_render_request" not in source:

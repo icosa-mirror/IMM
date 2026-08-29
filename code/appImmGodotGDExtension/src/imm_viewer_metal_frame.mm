@@ -33,15 +33,19 @@ namespace godot
 
         MTLRenderPassDescriptor *pass_descriptor = [[MTLRenderPassDescriptor renderPassDescriptor] retain];
         pass_descriptor.colorAttachments[0].texture = color_texture;
+        // This target is an IMM-only intermediate that is composited into
+        // Godot's scene later. Clear it every frame so pixels from an earlier
+        // document or camera pose cannot survive when the current draw covers
+        // less of the texture.
+        pass_descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
         const char *clear_test = std::getenv("IMM_GODOT_METAL_CLEAR_TEST");
         if (clear_test != nullptr && clear_test[0] != '\0' && clear_test[0] != '0')
         {
-            pass_descriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
             pass_descriptor.colorAttachments[0].clearColor = MTLClearColorMake(1.0, 0.0, 0.0, 1.0);
         }
         else
         {
-            pass_descriptor.colorAttachments[0].loadAction = MTLLoadActionLoad;
+            pass_descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
         }
         pass_descriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
         if (depth_texture != nil)
