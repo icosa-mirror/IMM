@@ -11,6 +11,10 @@ access_resolved_depth = true
 [sub_resource type="Compositor" id="Compositor_xr"]
 compositor_effects = Array[CompositorEffect]([SubResource("ImmViewerCompositorEffect_xr")])
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_capsule"]
+shading_mode = 0
+albedo_color = Color(1, 0.35, 0.05, 1)
+
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_4pkp0"]
 
 [node name="XRSampleScene" type="Node3D" unique_id=1598861674]
@@ -45,5 +49,6 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1668863448]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.2682762, 0, -1.7058086)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5744891, -0.730108, -0.91536355)
+material_override = SubResource("StandardMaterial3D_capsule")
 mesh = SubResource("CapsuleMesh_4pkp0")

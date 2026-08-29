@@ -263,7 +263,10 @@ def main() -> int:
             "depth_composited_texture",
             "preserved_host_color",
             "frag_color = preserved_host_color",
+            'fragment_shader_source += mirror_imm_x ? "#define MIRROR_IMM_X\\n" : "";',
             "vec2 imm_uv = vec2(1.0 - uv_interp.x, uv_interp.y)",
+            "vec2 imm_uv = uv_interp;",
+            "depth_composited_texture, color_texture, false",
             "The IMM 360 picture is valid far-plane content",
         ],
         ROOT / "code/appImmGodotGDExtension/src/imm_viewer_metal_frame.mm": [

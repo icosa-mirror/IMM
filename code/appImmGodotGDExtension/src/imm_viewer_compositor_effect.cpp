@@ -117,6 +117,7 @@ namespace
         RID depth_pipeline;
         int64_t framebuffer_format = RenderingDevice::INVALID_FORMAT_ID;
         int64_t depth_framebuffer_format = RenderingDevice::INVALID_FORMAT_ID;
+        bool depth_mirror_imm_x = false;
     };
 
     CompositeResources *g_composite_resources = nullptr;
@@ -281,7 +282,7 @@ void main() {
         return g_composite_resources->pipeline.is_valid();
     }
 
-    bool ensure_depth_composite_resources(RenderingDevice *rendering_device, int64_t framebuffer_format)
+    bool ensure_depth_composite_resources(RenderingDevice *rendering_device, int64_t framebuffer_format, bool mirror_imm_x)
     {
         if (rendering_device == nullptr || framebuffer_format == RenderingDevice::INVALID_FORMAT_ID)
         {
@@ -291,6 +292,17 @@ void main() {
         if (g_composite_resources == nullptr)
         {
             g_composite_resources = new CompositeResources();
+        }
+
+        if (g_composite_resources->depth_shader.is_valid() && g_composite_resources->depth_mirror_imm_x != mirror_imm_x)
+        {
+            if (g_composite_resources->depth_pipeline.is_valid())
+            {
+                rendering_device->free_rid(g_composite_resources->depth_pipeline);
+                g_composite_resources->depth_pipeline = RID();
+            }
+            rendering_device->free_rid(g_composite_resources->depth_shader);
+            g_composite_resources->depth_shader = RID();
         }
 
         if (!g_composite_resources->depth_shader.is_valid())
@@ -306,13 +318,13 @@ layout(location = 0) out vec2 uv_interp;
 void main() {
     vec2 positions[4] = vec2[](vec2(-1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, -1.0), vec2(1.0, 1.0));
     vec2 pos = positions[gl_VertexIndex];
-    uv_interp = vec2((1.0 - pos.x) * 0.5, (pos.y + 1.0) * 0.5);
+    uv_interp = vec2((pos.x + 1.0) * 0.5, (pos.y + 1.0) * 0.5);
     gl_Position = vec4(pos, 0.0, 1.0);
 }
 )");
-            shader_source->set_stage_source(RenderingDevice::SHADER_STAGE_FRAGMENT, R"(
-#version 450
-
+            String fragment_shader_source = "#version 450\n";
+            fragment_shader_source += mirror_imm_x ? "#define MIRROR_IMM_X\n" : "";
+            fragment_shader_source += R"(
 layout(location = 0) in vec2 uv_interp;
 layout(set = 0, binding = 0) uniform sampler2D source_color;
 layout(set = 0, binding = 1) uniform sampler2D source_depth;
@@ -321,12 +333,11 @@ layout(set = 0, binding = 3) uniform sampler2D host_color;
 layout(location = 0) out vec4 frag_color;
 
 void main() {
-    // A second fullscreen pass copies this merged texture into Godot color.
-    // That pass applies the renderer's X flip, so sample the native IMM
-    // intermediates with the compensating coordinate here. Godot color and
-    // depth intentionally retain uv_interp: the two passes then cancel for
-    // host resources while preserving the single required IMM flip.
+#ifdef MIRROR_IMM_X
     vec2 imm_uv = vec2(1.0 - uv_interp.x, uv_interp.y);
+#else
+    vec2 imm_uv = uv_interp;
+#endif
     vec4 imm_color = texture(source_color, imm_uv);
     float imm_depth = texture(source_depth, imm_uv).r;
     float host_depth = texture(scene_depth, uv_interp).r;
@@ -346,7 +357,8 @@ void main() {
     }
     frag_color = imm_color;
 }
-)");
+)";
+            shader_source->set_stage_source(RenderingDevice::SHADER_STAGE_FRAGMENT, fragment_shader_source);
 
             Ref<RDShaderSPIRV> spirv = rendering_device->shader_compile_spirv_from_source(shader_source, false);
             if (!spirv.is_valid() ||
@@ -360,6 +372,7 @@ void main() {
             {
                 return false;
             }
+            g_composite_resources->depth_mirror_imm_x = mirror_imm_x;
         }
 
         if (!g_composite_resources->sampler.is_valid())
@@ -551,7 +564,7 @@ void main() {
         return true;
     }
 
-    bool composite_texture_to_color_with_depth(RenderingDevice *rendering_device, const RID &source_texture, const RID &source_depth_texture, const RID &scene_depth_texture, const RID &host_color_texture, const RID &color_texture)
+    bool composite_texture_to_color_with_depth(RenderingDevice *rendering_device, const RID &source_texture, const RID &source_depth_texture, const RID &scene_depth_texture, const RID &host_color_texture, const RID &color_texture, bool mirror_imm_x)
     {
         if (rendering_device == nullptr || !source_texture.is_valid() || !source_depth_texture.is_valid() || !scene_depth_texture.is_valid() || !host_color_texture.is_valid() || !color_texture.is_valid())
         {
@@ -572,7 +585,7 @@ void main() {
         }
 
         const int64_t framebuffer_format = rendering_device->framebuffer_get_format(framebuffer);
-        if (!ensure_depth_composite_resources(rendering_device, framebuffer_format))
+        if (!ensure_depth_composite_resources(rendering_device, framebuffer_format, mirror_imm_x))
         {
             release_composite_resources(rendering_device);
             rendering_device->free_rid(framebuffer);
@@ -1289,10 +1302,10 @@ void ImmViewerCompositorEffect::_render_callback(int32_t effect_callback_type, R
                 depth_aware_vulkan_composite = true;
                 depth_color_merge_result =
                     had_depth_composited_texture &&
-                    composite_texture_to_color_with_depth(rendering_device, intermediate_texture, intermediate_depth_texture, depth_texture, color_texture, depth_composited_texture);
+                    composite_texture_to_color_with_depth(rendering_device, intermediate_texture, intermediate_depth_texture, depth_texture, color_texture, depth_composited_texture, !used_xr_render_data);
                 depth_aware_vulkan_composite_result =
                     depth_color_merge_result &&
-                    composite_texture_to_color(rendering_device, depth_composited_texture, color_texture, !used_xr_render_data);
+                    composite_texture_to_color(rendering_device, depth_composited_texture, color_texture, false);
                 eye_composite_result = depth_aware_vulkan_composite_result;
             }
             else
