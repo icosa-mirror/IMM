@@ -103,6 +103,8 @@ code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.ilk
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.pdb
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
+code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
+code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
 code/appImmGodotGDExtension/src/*.os
 code/appImmGodotGDExtension/*.pdb
 # Unity  local testing artifacts
@@ -113,3 +115,4 @@ code/ImmUnitySampleProject/Assets/Samples.meta
 /LLM Scripts
 /quillplayer_decompiled
 /.codex-temp/
+/code/projects/android/appImmViewer/build_gles_codex
