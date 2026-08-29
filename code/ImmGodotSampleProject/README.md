@@ -13,8 +13,8 @@ This project mirrors the intent of the Unity sample project and exercises the na
 
 ## Open in Godot
 
-1. Open `code/ImmGodotSampleProject` in Godot 4.5 or newer.
-2. Use Forward+ rendering. On macOS, Godot 4.6.1 selects Metal for the Forward+ path.
+1. Open `code/ImmGodotSampleProject` in Godot 4.7 or newer.
+2. Use Forward+ rendering. On macOS, Godot 4.7.2 selects Metal for the Forward+ path.
 3. Press Run. The project main scene is `scenes/SampleScene.tscn`, which loads `sample1.imm` through the native GDExtension and compositor. The editor Play path uses the active authored spawn area for initial camera placement when one is available, converted for Godot's `Camera3D` `-Z` forward convention, with document-bounds framing only as a fallback.
 
 ## Using the addon in a new project
@@ -88,7 +88,7 @@ The default document path is set to `res://../../exampleImmFiles/sample1.imm`, w
 
 Build the GDExtension with `godot-cpp`, run the native smoke, and run the visual smoke scene when validating visible rendering. On Windows, `.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp` clones the default Godot 4.5-compatible `godot-cpp` bindings into `thirdparty\godot-cpp`, builds them, and builds the extension.
 
-For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe` to the same command to run the native `SampleScene.tscn` smoke immediately after the build. For visible validation, run the `VisualSmokeScene.tscn` harness with `IMM_GODOT_VISUAL_SMOKE=1`; on Windows it selects Vulkan by default.
+For Windows renderer-backend work, add `-RunSmoke -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe` to the same command to run the native `SampleScene.tscn` smoke immediately after the build. For visible validation, run the `VisualSmokeScene.tscn` harness with `IMM_GODOT_VISUAL_SMOKE=1`; on Windows it selects Vulkan by default.
 
 ### Offline stereo simulation
 
@@ -96,7 +96,7 @@ Windows renderer work can exercise the native two-eye matrix/render path without
 
 ```powershell
 .\code\projects\windows\run-godot-stereo-simulation-smoke.ps1 `
-    -GodotExe "C:\path\to\Godot_v4.6.1-stable_mono_win64.exe"
+    -GodotExe "C:\path\to\Godot_v4.7.2-stable_mono_win64.exe"
 ```
 
 The helper explicitly launches Godot with `--xr-mode off`. `StereoSimulationSmokeScene.tscn` captures an upright mono reference, then supplies a synthetic 64 mm IPD through the same native stereo camera contract used by the OpenXR path and renders eye 0 and eye 1 separately. It writes `mono.png`, `left.png`, `right.png`, and `result.json` under `artifacts/godot-stereo-simulation/`.
@@ -107,10 +107,10 @@ To capture one real OpenXR frame and replay its exact submitted stereo matrices 
 
 ```powershell
 .\code\projects\windows\capture-godot-openxr-frame.ps1 `
-    -GodotExe "C:\path\to\Godot_v4.6.1-stable_mono_win64.exe"
+    -GodotExe "C:\path\to\Godot_v4.7.2-stable_mono_win64.exe"
 
 .\code\projects\windows\run-godot-stereo-simulation-smoke.ps1 `
-    -GodotExe "C:\path\to\Godot_v4.6.1-stable_mono_win64.exe" `
+    -GodotExe "C:\path\to\Godot_v4.7.2-stable_mono_win64.exe" `
     -ReplayPath "artifacts\godot-xr-matrix-replay\xr-frame.json" `
     -OutputDirectory "artifacts\godot-xr-matrix-replay\replay"
 ```

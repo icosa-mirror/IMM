@@ -7,7 +7,7 @@ All commands run from `code/projects/android`.
 - **JDK 17** — matches CI and the Android Gradle Plugin (8.5.2) / Kotlin (1.9.22) toolchain. Newer JDKs (21/22) are untested here; the system default `java` may be too new. Point Gradle at a JDK 17 install via `JAVA_HOME` or `org.gradle.java.home` when needed.
 - **Android SDK** with **NDK `26.1.10909125`** (pinned in `appImmViewer/build.gradle`) and platform `android-34`.
 - **Android Godot GDExtension builds** additionally require Python, SCons, `godot-cpp` for Godot 4.5, and NDK `28.1.13356709`.
-- **Android Godot export/runtime smoke** requires a Godot 4.5 console executable, Android export templates, and an attached Vulkan-capable Android device or emulator.
+- **Android Godot export/runtime smoke** requires a Godot 4.7.2 console executable, matching Android export templates, and an attached Vulkan-capable Android device or emulator.
 - Tell Gradle where the SDK is — either export `ANDROID_SDK_ROOT`, or create `code/projects/android/local.properties` (gitignored):
 
   ```properties
@@ -92,10 +92,10 @@ The Android Godot build stages the native IMM plugin and GDExtension libraries i
 
 Use `-PreflightOnly` to verify tool discovery without building. The helper resolves the Android SDK/NDK from parameters or environment and can build `godot-cpp` for the pinned Godot 4.5 target.
 
-With the staged Android libraries, a Godot 4.5 console executable, Android export templates, and a Vulkan-capable device or emulator attached:
+With the staged Android libraries, a Godot 4.7.2 console executable, matching Android export templates, and a Vulkan-capable device or emulator attached:
 
 ```powershell
-./run-godot-android-vulkan-smoke.ps1 -GodotExe C:\path\to\Godot_v4.5-stable_win64_console.exe
+./run-godot-android-vulkan-smoke.ps1 -GodotExe C:\path\to\Godot_v4.7.2-stable_win64_console.exe
 ```
 
 The smoke stages `exampleImmFiles/sample1.imm` into the Godot sample project only for export, removes the staged copy afterward, exports the Android debug APK, installs it, launches the Vulkan visual smoke scene, captures `logcat`, pulls the saved PNG from app data, and requires the native Vulkan compositor to report successful picture and static-paint draw submission.

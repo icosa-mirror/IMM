@@ -47,7 +47,7 @@ Use `-PreflightOnly` to resolve Python, MSBuild, SCons, `godot-cpp`, and expecte
 Use `-RunSmoke` to run the native Godot smoke test immediately after the build:
 
 ```powershell
-.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
+.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe
 ```
 
 You can still run SCons directly from this directory if `appImmGodot` and `godot-cpp` are already built:
@@ -128,7 +128,7 @@ To also run the native Godot project smoke locally, build the extension, set `IM
 
 ```powershell
 $env:IMM_GODOT_RUN_LOCAL_SMOKE = "1"
-$env:GODOT_EXE = "C:\path\to\Godot_v4.5-stable_win64.exe"
+$env:GODOT_EXE = "C:\path\to\Godot_v4.7.2-stable_win64.exe"
 python code\appImmGodotGDExtension\verify_local.py
 ```
 
@@ -158,10 +158,10 @@ Prerequisites:
 
 This is Android packaging coverage for the Godot addon binaries. Runtime verification still requires exporting/running a Godot Android project with the addon enabled on a Vulkan-capable Android device or emulator.
 
-After building the extension and installing Godot 4.5 or newer, run the sample smoke test:
+After building the extension and installing Godot 4.7 or newer, run the sample smoke test:
 
 ```powershell
-.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe -RequireExtension
 ```
 
 The smoke test runs `res://scripts/smoke_test_runner.gd` headlessly, checks the Forward+ project default, instantiates `res://scenes/SampleScene.tscn`, verifies native-class loading, asserts that `auto_queue_render` auto-registers camera 0, calls `load_document()` if the scene has not already loaded the document, requires `is_loaded()`, checks document state/background color, applies that color to Godot's default clear color, exercises chapter/bounds/layer/spawn-area query APIs, exercises layer visibility/opacity/transform overrides when authored layers exist, exercises volume and pause/play/toggle/restart controls, exercises the registered camera/viewport render queue, and validates render-adapter graphics/before/after callback diagnostics. The wrapper requires both a zero Godot exit code and the `IMM Godot smoke test passed` marker in output. With `-RequireExtension`, the wrapper first verifies that `imm_godot_extension.dll`, `ImmGodotPlugin.dll`, and the staged IMM runtime dependency DLLs exist, then asserts the `ImmViewer` node is the native `ImmViewerNode` class rather than the script stub. Passing `-LoadUnloadCycles N` additionally unloads and reloads the document `N` times while the camera/render queue remains active, then verifies the final render diagnostics.
@@ -173,7 +173,7 @@ On macOS, the local debug path is:
 IMM_GODOT_EXPECT_NATIVE=1 IMM_GODOT_SMOKE_SCENE=res://scenes/SampleScene.tscn /Applications/Godot.app/Contents/MacOS/Godot --headless --path code/ImmGodotSampleProject --script res://scripts/smoke_test_runner.gd
 ```
 
-That path currently builds and loads the native extension, instantiates `ImmViewerNode`, loads the sample IMM document, and passes the native Compatibility/headless smoke on Godot 4.6.1. The smoke validates core signals and keeps native timeline setters/relative seeks safe before the IMM timeline-ready state is reached. It does not exercise visible Metal presentation; use the Forward+/Metal visual harness below for that.
+That path builds and loads the native extension, instantiates `ImmViewerNode`, loads the sample IMM document, and runs the native Compatibility/headless smoke. The smoke validates core signals and keeps native timeline setters/relative seeks safe before the IMM timeline-ready state is reached. It does not exercise visible Metal presentation; use the Forward+/Metal visual harness below for that.
 
 For the macOS Forward+/Metal visual harness, run:
 
@@ -181,7 +181,7 @@ For the macOS Forward+/Metal visual harness, run:
 IMM_GODOT_VISUAL_SMOKE=1 IMM_GODOT_VISUAL_SMOKE_PNG=/tmp/imm-godot-metal-visual-smoke.png /Applications/Godot.app/Contents/MacOS/Godot --path code/ImmGodotSampleProject --rendering-driver metal --rendering-method forward_plus --scene res://scenes/VisualSmokeScene.tscn --fixed-fps 30
 ```
 
-This path explicitly loads the GDExtension, creates a native `ImmViewerNode`, attaches `ImmViewerCompositorEffect` to the active camera, loads `sample1.imm`, queues camera renders, saves a PNG, and requires valid Godot-owned Metal command queue/color texture handles plus a successful `ImmGodot_RenderCamera` result. The current local visual smoke passes on Godot 4.6.1, verifies non-background content pixels in the saved PNG, checks the saved image orientation, and composites the Metal intermediate into Godot scene color without an extra vertical texture-coordinate flip.
+This path explicitly loads the GDExtension, creates a native `ImmViewerNode`, attaches `ImmViewerCompositorEffect` to the active camera, loads `sample1.imm`, queues camera renders, saves a PNG, and requires valid Godot-owned Metal command queue/color texture handles plus a successful `ImmGodot_RenderCamera` result. The visual smoke verifies non-background content pixels in the saved PNG, checks the saved image orientation, and composites the Metal intermediate into Godot scene color without an extra vertical texture-coordinate flip.
 
 Add `-LogDir artifacts\godot-smoke` to save `godot-smoke-output.log` and `godot-smoke-summary.txt`. On Windows, pass `-RendererApi 5` to `run-godot-smoke.ps1` or `-SmokeRendererApi 5` to `build-godot-extension.ps1 -RunSmoke` to request Vulkan diagnostics from the smoke scene. For native smoke and preflight runs, the wrapper also writes `godot-extension-dlls.txt` with the expected staged DLLs, found/missing status, byte size, and UTC timestamp. The Windows GitHub Actions job caches `thirdparty/godot-cpp` by `GODOT_CPP_REF`, builds the GDExtension, and runs the staging preflight. The headed Windows Godot Vulkan playback smoke and standalone Vulkan viewer smoke run in CI GPU Matrix on GitHub-hosted Windows runners. macOS CI builds the Metal standalone viewer, runs its playback smoke with resolution-independent validation, builds the macOS Godot GDExtension, and wires the Metal visual smoke scene behind the same CI profile. The combined Godot addon package now waits for Windows, Android, and macOS platform binaries before assembling `ImmPlayerPlugin-Godot`.
 

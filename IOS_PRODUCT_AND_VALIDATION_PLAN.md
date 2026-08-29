@@ -172,7 +172,7 @@ Phase 3 is complete.
 1. Focused CI run `31884179111` validates the ordinary Godot sample project on
    an Apple-silicon iOS Simulator through Metal. The sample project and its
    normal Run-button scene remain unchanged.
-2. The Simulator lane builds and caches a narrowly patched Godot 4.7.1 engine.
+2. The Simulator lane builds and caches a narrowly patched Godot 4.7.2 engine.
    The patches enable the Metal rendering device on the Simulator, omit an
    unsupported unused cube-array fallback, and avoid the Simulator's unsupported
    timed-present path. They apply only to the CI Simulator engine; stock Godot

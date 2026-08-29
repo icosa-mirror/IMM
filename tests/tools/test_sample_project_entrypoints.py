@@ -371,7 +371,7 @@ def main() -> int:
         "Build Godot iOS static GDExtension",
         "libimm_godot_extension.ios.template_debug.xcframework",
         'platform=ios target=template_debug arch=arm64 ios_simulator=no',
-        'GODOT_VERSION: 4.7.1-stable',
+        'GODOT_VERSION: 4.7.2-stable',
         'GODOT_CPP_REF: godot-4.5-stable',
         "Build Godot arm64 iOS Simulator engine with Metal",
         "!TARGET_OS_SIMULATOR",

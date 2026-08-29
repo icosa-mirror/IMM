@@ -649,9 +649,9 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 90
     env:
-      GODOT_VERSION: 4.7.1-stable
+      GODOT_VERSION: 4.7.2-stable
       GODOT_CPP_REF: godot-4.5-stable
-      GODOT_IOS_METAL_SIMULATOR_ENGINE_REF: 4.7.1-stable
+      GODOT_IOS_METAL_SIMULATOR_ENGINE_REF: 4.7.2-stable
       FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
       FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
       FTL_IOS_DEVICE: ${{ vars.FIREBASE_TEST_LAB_IOS_GODOT_DEVICE || 'model=iphonese3,version=18.4,locale=en,orientation=landscape' }}

@@ -724,10 +724,10 @@ jobs:
           }
           (Split-Path -Parent $sourceDll) | Out-File -FilePath $env:GITHUB_PATH -Append
 
-      - name: Download Godot 4.5
+      - name: Download Godot 4.7.2
         shell: pwsh
         run: |
-          $version = "4.5-stable"
+          $version = "4.7.2-stable"
           $zipName = "Godot_v$($version)_win64.exe.zip"
           $url = "https://github.com/godotengine/godot-builds/releases/download/$version/$zipName"
           Invoke-WebRequest -Uri $url -OutFile $zipName
@@ -1174,7 +1174,7 @@ jobs:
       - name: Download Godot for macOS
         run: |
           set -euo pipefail
-          version="${GODOT_VERSION:-4.5-stable}"
+          version="${GODOT_VERSION:-4.7.2-stable}"
           zip_name="Godot_v${version}_macos.universal.zip"
           url="https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}"
           curl -fL --retry 5 --retry-delay 2 --retry-all-errors "$url" -o "$zip_name"
@@ -1219,7 +1219,7 @@ jobs:
         timeout-minutes: 8
         run: |
           set -euo pipefail
-          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
+          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.7+ executable}"
           mkdir -p artifacts/godot-smoke-macos-metal
           smoke_status=0
           IMM_GODOT_VISUAL_SMOKE=1 \
@@ -1246,7 +1246,7 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.5+ executable}"
+          : "${GODOT_EXE:?GODOT_EXE must point to a Godot 4.7+ executable}"
           mkdir -p artifacts/godot-smoke-macos-metal/captures/face-orientation
           smoke_status=0
           IMM_GODOT_VISUAL_SMOKE=1 \

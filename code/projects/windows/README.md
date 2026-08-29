@@ -81,7 +81,7 @@ Godot GDExtension builds require Python, SCons, Visual Studio C++ tools, `godot-
 python -m pip install --user scons
 ```
 
-The helpers default to Godot 4.5-compatible `godot-cpp` bindings (`godot-4.5-stable`). Use a matching Godot 4.5 executable for local smoke runs; the Windows CI job installs SCons, downloads Godot 4.5, caches `thirdparty\godot-cpp`, and builds the extension with the same binding ref.
+The helpers retain Godot 4.5-compatible `godot-cpp` bindings (`godot-4.5-stable`) as the extension ABI minimum. Use Godot 4.7.2 for local smoke runs; the Windows CI job installs SCons, downloads Godot 4.7.2, caches `thirdparty\godot-cpp`, and builds the extension against the 4.5-compatible binding ref.
 
 Batch:
 
@@ -114,13 +114,13 @@ Use `-GodotCppRef <tag-or-branch>` or `GODOT_CPP_REF` to override the default `g
 To build the extension and immediately run the native Godot smoke test:
 
 ```powershell
-.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
+.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe
 ```
 
 To request Vulkan in that smoke, pass renderer API `5` (`0=Auto`, `1=OpenGL`, `2=Direct3D`, `3=GLES`, `4=Metal`, `5=Vulkan`) and run headed so Godot exposes a `RenderingDevice`:
 
 ```powershell
-.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -HeadedSmoke -SmokeRendererApi 5 -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe
+.\code\projects\windows\build-godot-extension.ps1 -Configuration Release -BootstrapGodotCpp -BuildGodotCpp -RunSmoke -HeadedSmoke -SmokeRendererApi 5 -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe
 ```
 
 To run local Godot extension checks without MSBuild, SCons, or `godot-cpp`:
@@ -139,7 +139,7 @@ To include the native Godot project smoke when Godot is installed and the extens
 
 ```powershell
 $env:IMM_GODOT_RUN_LOCAL_SMOKE = "1"
-$env:GODOT_EXE = "C:\path\to\Godot_v4.5-stable_win64.exe"
+$env:GODOT_EXE = "C:\path\to\Godot_v4.7.2-stable_win64.exe"
 python code\appImmGodotGDExtension\verify_local.py
 ```
 
@@ -158,19 +158,19 @@ After building the GDExtension, run the Godot project smoke test with a Godot ex
 Or pass the executable directly:
 
 ```powershell
-.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe -RequireExtension
 ```
 
 Use `-RendererApi 5 -Headed` to request Vulkan explicitly in the native smoke scene. The default `Auto` renderer also resolves to Vulkan for the Windows Godot plugin when the project is running Forward+/Vulkan. The headed Vulkan smoke verifies that Godot exposes native Vulkan driver resources, starts an IMM Vulkan frame against Godot's external instance/device/queue through the compositor, and renders nonzero IMM content after document load.
 
 ```powershell
-.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -RendererApi 5 -Headed
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe -RequireExtension -RendererApi 5 -Headed
 ```
 
 To save smoke output and run metadata for debugging:
 
 ```powershell
-.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -LogDir artifacts\godot-smoke
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe -RequireExtension -LogDir artifacts\godot-smoke
 ```
 
 Native smoke logs also include `godot-extension-dlls.txt`, which records every expected staged DLL with found/missing status, byte size, and UTC timestamp before Godot launches.
@@ -178,7 +178,7 @@ Native smoke logs also include `godot-extension-dlls.txt`, which records every e
 To check Godot executable resolution, smoke scene selection, and native dependency staging without launching the project:
 
 ```powershell
-.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.5-stable_win64.exe -RequireExtension -PreflightOnly
+.\code\projects\windows\run-godot-smoke.ps1 -Configuration Release -GodotExe C:\path\to\Godot_v4.7.2-stable_win64.exe -RequireExtension -PreflightOnly
 ```
 
 ## Godot Helper Behavior
@@ -197,4 +197,4 @@ To check Godot executable resolution, smoke scene selection, and native dependen
    - or `code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release`
 11. Runs `run-godot-smoke.ps1 -RequireExtension` when `-RunSmoke` is passed, adding `-Headed` when `-HeadedSmoke` is passed.
 
-The GitHub Actions Windows job captures a DirectX standalone baseline, downloads Godot 4.5, caches `thirdparty\godot-cpp` by `GODOT_CPP_REF`, builds the GDExtension, and runs `run-godot-smoke.ps1 -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight`. The non-VR Vulkan capture lanes run in CI as part of the CI GPU Matrix on GitHub-hosted Windows runners. CI uploads Windows Godot platform binaries as `Internal-ImmGodotGDExtension-Windows-platform` for the combined addon package, and uploads one `ImmViewer-Windows` standalone viewer artifact containing the executable, `settings.json`, `settings-vulkan.json`, `settings-opengl-vr.json`, and `sample1.imm`; each packaged settings file loads the bundled `sample1.imm` from the artifact root.
+The GitHub Actions Windows job captures a DirectX standalone baseline, downloads Godot 4.7.2, caches `thirdparty\godot-cpp` by `GODOT_CPP_REF`, builds the GDExtension, and runs `run-godot-smoke.ps1 -RequireExtension -PreflightOnly -LogDir artifacts\godot-extension-preflight`. The non-VR Vulkan capture lanes run in CI as part of the CI GPU Matrix on GitHub-hosted Windows runners. CI uploads Windows Godot platform binaries as `Internal-ImmGodotGDExtension-Windows-platform` for the combined addon package, and uploads one `ImmViewer-Windows` standalone viewer artifact containing the executable, `settings.json`, `settings-vulkan.json`, `settings-opengl-vr.json`, and `sample1.imm`; each packaged settings file loads the bundled `sample1.imm` from the artifact root.

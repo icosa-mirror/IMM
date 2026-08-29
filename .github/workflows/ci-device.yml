@@ -414,7 +414,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="4.5-stable"
+          version="4.7.2-stable"
           template_version="${version/-/.}"
           zip_name="Godot_v${version}_linux.x86_64.zip"
           curl -L "https://github.com/godotengine/godot-builds/releases/download/${version}/${zip_name}" -o godot-android-export.zip

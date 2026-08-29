@@ -3,7 +3,7 @@
 This project is intentionally separate from `ImmGodotSampleProject`: it enables OpenXR at Godot startup, while the desktop sample and its CI remain non-XR.
 
 1. Start the OpenXR runtime and connect the headset on Windows, or prepare an OpenXR-capable Android device.
-2. Import this directory as a Godot 4.6 project.
+2. Import this directory as a Godot 4.7 project.
 3. Run the project.
 
 The repository includes Windows and Android ARM64 plugin binaries. To replace them with a local build, run `code/projects/windows/build-godot-extension.ps1` or `code/projects/android/build-godot-extension-android.ps1` with the required configuration. Both build scripts update this project and `ImmGodotSampleProject`.

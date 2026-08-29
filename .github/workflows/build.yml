@@ -30,7 +30,7 @@ jobs:
     runs-on: windows-latest
     env:
       GODOT_CPP_REF: godot-4.5-stable
-      GODOT_VERSION: 4.5-stable
+      GODOT_VERSION: 4.7.2-stable
 
     steps:
     - name: Checkout repository
@@ -291,7 +291,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GODOT_CPP_REF: godot-4.5-stable
-      GODOT_VERSION: 4.5-stable
+      GODOT_VERSION: 4.7.2-stable
 
     steps:
     - name: Checkout repository
@@ -465,7 +465,7 @@ jobs:
     runs-on: macos-14
     env:
       GODOT_CPP_REF: godot-4.5-stable
-      GODOT_VERSION: 4.5-stable
+      GODOT_VERSION: 4.7.2-stable
 
     steps:
     - name: Checkout repository
