@@ -614,6 +614,8 @@ namespace ImmShared
         conf.frontIsCCW = mConfig.overrideFrontIsCCW
             ? mConfig.frontIsCCW
             : (mConfig.rendererApi != piRenderer::API::DX);
+        conf.staticPaintReflectedFrontUsesBaseWinding =
+            mConfig.staticPaintReflectedFrontUsesBaseWinding;
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
 #if defined(ANDROID) || defined(__ANDROID__)
         if (mConfig.rendererApi == piRenderer::API::GLES)

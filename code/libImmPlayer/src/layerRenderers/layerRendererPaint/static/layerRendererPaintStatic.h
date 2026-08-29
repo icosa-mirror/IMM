@@ -8,7 +8,7 @@ namespace ImmPlayer
 	class LayerRendererPaintStatic : public LayerRendererPaint
 	{
 	public:
-		LayerRendererPaintStatic();
+		explicit LayerRendererPaintStatic(bool reflectedFrontUsesBaseWinding);
 		~LayerRendererPaintStatic();
 
 		bool Init(ImmCore::piRenderer* renderer, ImmCore::piLog* log, ImmImporter::Drawing::ColorSpace colorSpace, bool frontIsCCW) override;
@@ -36,6 +36,7 @@ namespace ImmPlayer
 		ImmCore::piArray     mVisibleLayerInfos;
 
         ImmImporter::Drawing::ColorSpace mColorSpace;
+        bool mReflectedFrontUsesBaseWinding;
 
 #if defined(ANDROID)
 		static const int kNumShaders = 5 * 3 * 2; // 5 brushes, 3 stereo modes, 2 wiggle = 30

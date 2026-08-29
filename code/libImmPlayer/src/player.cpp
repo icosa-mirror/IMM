@@ -209,7 +209,8 @@ namespace ImmPlayer
                 mLayerPaintRender = new LayerRendererPaintPretessellated();
                 break;
             case Drawing::Static:
-                mLayerPaintRender = new LayerRendererPaintStatic();
+                mLayerPaintRender = new LayerRendererPaintStatic(
+                    configuration->staticPaintReflectedFrontUsesBaseWinding);
                 break;
             default:
                 return false;

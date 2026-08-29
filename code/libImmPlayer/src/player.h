@@ -34,6 +34,7 @@ namespace ImmPlayer {
             ClipSpaceDepth clipDepth;
             ClipSpaceDepth projectionMatrix;
             bool           frontIsCCW;
+            bool           staticPaintReflectedFrontUsesBaseWinding = false;
             ImmImporter::Drawing::PaintRenderingTechnique paintRenderingTechnique = Drawing::Static;
         };
 
