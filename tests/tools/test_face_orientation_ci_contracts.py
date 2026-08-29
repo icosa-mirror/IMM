@@ -59,6 +59,8 @@ def main() -> int:
             "standalone-ios-metal/face-orientation-status.json",
             "unity-ios-player-build/face-orientation-status.json",
             "godot-ios-metal/face-orientation-status.json",
+            'if [ "${{ steps.godot_ios_native_cache.outputs.cache-hit }}" != "true" ]; then',
+            "rm -rf build/godot-ios-native build/godot-ios-simulator-native",
         ],
     )
     require_tokens(

@@ -906,6 +906,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts/godot-ios-metal
+          # A restore-key match can contain an IMM archive built from different
+          # sources. Keep cached godot-cpp dependencies, but only reuse the IMM
+          # build trees when the complete source-hash key matched exactly.
+          if [ "${{ steps.godot_ios_native_cache.outputs.cache-hit }}" != "true" ]; then
+            rm -rf build/godot-ios-native build/godot-ios-simulator-native
+          fi
           device_archive="$PWD/build/godot-ios-native/godot/libimm_godot_extension.a"
           simulator_archive="$PWD/build/godot-ios-simulator-native/godot/libimm_godot_extension.a"
           if [ ! -d thirdparty/godot-cpp/.git ]; then
