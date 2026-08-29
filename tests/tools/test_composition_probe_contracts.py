@@ -420,9 +420,11 @@ def main() -> int:
             "SetUnityProjectionAdjusted(true)",
         ],
         ROOT / "code/appImmGodot/src/main.cpp": [
-            "Godot's Metal projection is already adjusted for its render target",
+            "Godot macOS supplies a render-target-adjusted Metal projection",
             "if (config.rendererApi == piRenderer::API::Metal)",
             "config.overrideFrontIsCCW = true;",
+            "#if defined(IMM_IOS)",
+            "config.frontIsCCW = true;",
             "config.frontIsCCW = false;",
             "Vulkan retains its existing host convention",
         ],

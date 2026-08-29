@@ -114,6 +114,8 @@ def main() -> int:
         [
             "config.rendererApi == piRenderer::API::Metal",
             "config.overrideFrontIsCCW = true;",
+            "#if defined(IMM_IOS)",
+            "config.frontIsCCW = true;",
             "config.frontIsCCW = false;",
         ],
     )
