@@ -895,8 +895,9 @@ jobs:
             thirdparty/godot-cpp
             build/godot-ios-native
             build/godot-ios-simulator-native
-          key: godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
+          key: godot-ios-native-simulator-xcode16-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
           restore-keys: |
+            godot-ios-native-simulator-xcode16-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
             godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
             godot-ios-native-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-
 
@@ -978,7 +979,7 @@ jobs:
             thirdparty/godot-cpp
             build/godot-ios-native
             build/godot-ios-simulator-native
-          key: godot-ios-native-simulator-xcode16-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
+          key: godot-ios-native-simulator-xcode16-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.GODOT_CPP_REF }}-${{ hashFiles('code/projects/ios/CMakeLists.txt', 'code/appImmGodotGDExtension/src/**', 'code/appImmGodot/src/**', 'code/appImmShared/src/**') }}
 
       - name: Download Godot and iOS export templates
         id: godot_ios_tools
