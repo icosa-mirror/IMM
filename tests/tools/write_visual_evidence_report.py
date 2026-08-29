@@ -310,6 +310,12 @@ def observed_matrix_results(input_root: Path, report_keys: set[str]) -> dict[str
                 result = str(classification.get("result") or "")
                 if str(classification.get("failure_class") or "") == "build":
                     continue
+            face_status = find_json(manifest_path.parent, "face-orientation-status.json")
+            if face_status and face_status.get("result") != "passed":
+                # Face orientation is a strict visual verdict. A passing coarse
+                # render manifest must not keep the matrix green when the
+                # dedicated diagnostic found exposed backfaces.
+                result = "failed"
             renderer = str(matrix.get("renderer") or "")
             mode = str(matrix.get("mode") or "")
             if (

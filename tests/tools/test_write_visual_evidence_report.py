@@ -23,6 +23,7 @@ def main() -> int:
         add_color_component_table,
         effective_status,
         find_images_for_report,
+        observed_matrix_results,
         required_depth_gaps_for_scope,
         row_required_for_scope,
         row_visual_requirement,
@@ -91,6 +92,35 @@ def main() -> int:
     ) == ("render_failed", "face_orientation"), (
         "An explicit face-orientation failure must override coarse render metrics"
     )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        lane = Path(temp_dir) / "GodotIOSMetal"
+        lane.mkdir(parents=True)
+        (lane / "manifest.json").write_text(
+            json.dumps({
+                "schema": "imm-ci-artifact-manifest-v1",
+                "classification": {"result": "passed", "failure_class": ""},
+                "matrix": {
+                    "product": "godot",
+                    "platform": "ios",
+                    "mode": "non-vr",
+                    "renderer": "metal",
+                },
+            }),
+            encoding="utf-8",
+        )
+        (lane / "face-orientation-status.json").write_text(
+            json.dumps({
+                "schema": "imm-face-orientation-status-v1",
+                "result": "render_failed",
+                "failure_class": "face_orientation",
+            }),
+            encoding="utf-8",
+        )
+        observed = observed_matrix_results(Path(temp_dir), set())
+        assert observed["godotiosnonvrmetal"] == {"failed"}, (
+            "A face-orientation failure must make the visual matrix row fail"
+        )
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp = Path(temp_dir)
