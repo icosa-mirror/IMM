@@ -102,9 +102,13 @@ code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/godot-extension-d
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.ilk
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/*.pdb
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/debug/~*.pdb
 code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
+code/ImmGodotSampleProject/addons/imm_viewer/bin/windows/release/~*.pdb
 code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/debug/~*.dll
+code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/debug/~*.pdb
 code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/release/~*.dll
+code/ImmGodotXRSampleProject/addons/imm_viewer/bin/windows/release/~*.pdb
 code/appImmGodotGDExtension/src/*.os
 code/appImmGodotGDExtension/*.pdb
 # Unity  local testing artifacts
