@@ -485,7 +485,10 @@ def main() -> int:
         # resolution. Its valid renderer-specific edge density is higher than
         # the DirectX reference; face winding is checked by the dedicated fixture.
         "godot-android-vulkan-sample1.json": 1.25,
-        "godot-ios-metal-sample1.json": 1.04,
+        # The iOS Simulator Metal capture also has a stable renderer-specific
+        # edge density above the DirectX reference. Its dedicated face fixture
+        # provides the strict winding verdict.
+        "godot-ios-metal-sample1.json": 1.20,
         "godot-windows-vulkan-sample1.json": 1.04,
         "ios-standalone-metal-sample1.json": 1.04,
         "macos-metal-sample1.json": 1.04,
