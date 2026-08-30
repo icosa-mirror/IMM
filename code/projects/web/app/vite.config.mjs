@@ -1,10 +1,12 @@
 import { resolve } from "node:path";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { defineConfig } from "vite";
+import { copyDecoderRelease, validateDecoderAssets } from "./scripts/decoder-assets.mjs";
 
 const samplePath = resolve(import.meta.dirname, "../../../../exampleImmFiles/sample1.imm");
 const decoderPath = resolve(import.meta.dirname, "public/decoder");
+await validateDecoderAssets(decoderPath);
 const basePath = process.env.IMM_WEB_BASE_PATH ?? "/";
 const releaseId = process.env.VITE_IMM_RELEASE_ID?.trim() ?? "";
 if (releaseId !== "" && !/^[A-Za-z0-9._-]+$/.test(releaseId)) {
@@ -47,10 +49,7 @@ export default defineConfig({
             await copyFile(samplePath, resolve(fixtureDirectory, "sample1.imm"));
             if (releaseId !== "") {
                 const releaseDecoderDirectory = resolve(outputDirectory, "decoder", releaseId);
-                await mkdir(releaseDecoderDirectory, { recursive: true });
-                for (const filename of await readdir(decoderPath)) {
-                    await copyFile(resolve(decoderPath, filename), resolve(releaseDecoderDirectory, filename));
-                }
+                await copyDecoderRelease(decoderPath, releaseDecoderDirectory);
                 await writeFile(resolve(outputDirectory, "version.json"), `${JSON.stringify({ release: releaseId }, null, 2)}\n`);
             }
         },

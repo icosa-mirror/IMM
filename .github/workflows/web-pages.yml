@@ -52,6 +52,18 @@ jobs:
         working-directory: code/projects/web/app
         run: bun test
 
+      - name: Build reusable library package
+        working-directory: code/projects/web/app
+        run: bun run build:library:ci
+
+      - name: Upload reusable library package
+        uses: actions/upload-artifact@v4
+        with:
+          name: imm-three-loader-${{ github.sha }}
+          path: code/projects/web/app/dist-library
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run browser smoke test
         working-directory: code/projects/web/app
         env:
@@ -90,6 +102,8 @@ jobs:
         run: |
           test -f "code/projects/web/app/dist/decoder/$IMM_WEB_RELEASE_ID/imm-web-decoder.wasm"
           test -f "code/projects/web/app/dist/decoder/$IMM_WEB_RELEASE_ID/imm-web-decoder-worker.mjs"
+          test -f "code/projects/web/app/dist/decoder/$IMM_WEB_RELEASE_ID/imm-web-paint-packet.mjs"
+          test -f "code/projects/web/app/dist/decoder/$IMM_WEB_RELEASE_ID/manifest.json"
           test -f "code/projects/web/app/dist/fixtures/$IMM_WEB_RELEASE_ID/sample1.imm"
           grep -qF "\"release\": \"$IMM_WEB_RELEASE_ID\"" code/projects/web/app/dist/version.json
           grep -qF "$IMM_WEB_BASE_PATH" code/projects/web/app/dist/index.html

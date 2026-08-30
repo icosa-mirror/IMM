@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { verifyDecoderRelease } from "../scripts/decoder-assets.mjs";
 
 const release = process.env.VITE_IMM_RELEASE_ID?.trim() ?? "";
 if (release === "") {
@@ -18,6 +19,7 @@ assert.match(index, /data-imm-release-bootstrap/);
 assert.match(index, /cache-bust/);
 await stat(resolve("dist/decoder", release, "imm-web-decoder-worker.mjs"));
 await stat(resolve("dist/decoder", release, "imm-web-decoder.wasm"));
+await verifyDecoderRelease(resolve("dist/decoder", release));
 await stat(resolve("dist/fixtures", release, "sample1.imm"));
 
 const builtFiles = await import("node:fs/promises").then(({ readdir }) => readdir(resolve("dist/assets")));

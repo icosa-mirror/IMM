@@ -68,6 +68,24 @@ emcmake cmake -S code/projects/web/decoder -B build/web-decoder-wasm \
 cmake --build build/web-decoder-wasm
 ```
 
+## Build the reusable library
+
+With the pinned Emscripten environment active, run:
+
+```bash
+cd code/projects/web/app
+bun install
+bun run build:library
+```
+
+This command deletes any previous generated decoder output, rebuilds and tests
+the decoder, assembles `dist-library`, and verifies the packaged worker import
+graph and decoder hashes. Copy the complete `dist-library` directory to a
+consumer; do not select individual decoder files or combine files from different
+builds. CI runs the same package assembly against the decoder produced in its
+clean build job and uploads `imm-three-loader-<commit>` as a downloadable
+artifact.
+
 ## Run the application
 
 ```bash

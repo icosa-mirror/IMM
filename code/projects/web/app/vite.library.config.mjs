@@ -1,10 +1,12 @@
-import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
+import { copyDecoderRelease } from "./scripts/decoder-assets.mjs";
 
 const decoderPath = resolve(import.meta.dirname, "public/decoder");
 
 export default defineConfig({
+    publicDir: false,
     build: {
         outDir: "dist-library",
         emptyOutDir: true,
@@ -23,10 +25,7 @@ export default defineConfig({
         async writeBundle(outputOptions) {
             const outputDirectory = outputOptions.dir ?? resolve(import.meta.dirname, "dist-library");
             const outputDecoder = resolve(outputDirectory, "decoder");
-            await mkdir(outputDecoder, { recursive: true });
-            for (const filename of await readdir(decoderPath)) {
-                await copyFile(resolve(decoderPath, filename), resolve(outputDecoder, filename));
-            }
+            await copyDecoderRelease(decoderPath, outputDecoder);
             await writeFile(resolve(outputDirectory, "package.json"), `${JSON.stringify({
                 name: "@immersive-foundation/three-imm-loader",
                 version: "0.0.0-dev",
