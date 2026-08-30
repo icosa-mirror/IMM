@@ -84,7 +84,10 @@ graph and decoder hashes. Copy the complete `dist-library` directory to a
 consumer; do not select individual decoder files or combine files from different
 builds. CI runs the same package assembly against the decoder produced in its
 clean build job and uploads `imm-three-loader-<commit>` as a downloadable
-artifact.
+artifact. `dist-library` is also committed so clean checkouts contain a usable
+loader package. On direct pushes to `main` and `develop`, the existing binary-sync
+job replaces that tracked directory from the validated CI artifact and commits
+any generated changes alongside the Unity and Godot runtime binaries.
 
 ## Run the application
 

@@ -1,0 +1,23 @@
+{
+  "name": "@immersive-foundation/three-imm-loader",
+  "version": "0.0.0-dev",
+  "type": "module",
+  "module": "./imm-three-loader.js",
+  "types": "./types/library/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/library/index.d.ts",
+      "import": "./imm-three-loader.js"
+    },
+    "./decoder/*": "./decoder/*"
+  },
+  "files": [
+    "imm-three-loader.js",
+    "imm-three-loader.js.map",
+    "types",
+    "decoder"
+  ],
+  "peerDependencies": {
+    "three": "0.180.x"
+  }
+}

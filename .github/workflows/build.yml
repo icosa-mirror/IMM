@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       sync_binaries:
-        description: Commit freshly built plugin binaries back to the integration branch.
+        description: Commit freshly built runtime binaries and packages back to the integration branch.
         required: false
         default: false
         type: boolean
@@ -1100,6 +1100,12 @@ jobs:
         name: ImmPlayerPlugin-Godot
         path: artifacts/ImmGodotGDExtension
 
+    - name: Download Three.js IMM loader package
+      uses: actions/download-artifact@v4
+      with:
+        name: imm-three-loader-${{ github.sha }}
+        path: artifacts/ImmThreeLoader
+
     - name: Extract and sync plugin binaries
       shell: bash
       run: |
@@ -1137,16 +1143,25 @@ jobs:
           cp -R "artifacts/ImmGodotGDExtension/addons/imm_viewer/bin/$platform/." "code/ImmGodotXRSampleProject/addons/imm_viewer/bin/$platform/"
         done
 
+    - name: Sync Three.js IMM loader package
+      shell: bash
+      run: |
+        set -euo pipefail
+        destination="code/projects/web/app/dist-library"
+        rm -rf "$destination"
+        mkdir -p "$destination"
+        cp -R artifacts/ImmThreeLoader/. "$destination/"
+
     - name: Commit and push if changed
       shell: bash
       run: |
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add code/ImmUnitySampleProject/Packages/*/Plugins/ code/ImmGodotSampleProject/addons/imm_viewer/bin/ code/ImmGodotXRSampleProject/addons/imm_viewer/bin/
+        git add code/ImmUnitySampleProject/Packages/*/Plugins/ code/ImmGodotSampleProject/addons/imm_viewer/bin/ code/ImmGodotXRSampleProject/addons/imm_viewer/bin/ code/projects/web/app/dist-library/
         if git diff --cached --quiet; then
           echo "No binary changes — nothing to commit"
         else
-          git commit -m "chore: update committed plugin binaries (Unity + Godot) [skip ci]"
+          git commit -m "chore: update committed runtime binaries (Unity + Godot + Web) [skip ci]"
           git pull --rebase
           git push
         fi

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 export const decoderAssetFiles = Object.freeze([
@@ -42,12 +42,15 @@ export async function copyDecoderRelease(sourceDirectory, targetDirectory) {
     const hashes = {};
     for (const filename of decoderAssetFiles) {
         const source = resolve(sourceDirectory, filename);
-        await copyFile(source, resolve(targetDirectory, filename));
-        hashes[filename] = createHash("sha256").update(await readFile(source)).digest("hex");
+        const sourceBytes = await readFile(source);
+        const releaseBytes = filename.endsWith(".mjs")
+            ? Buffer.from(sourceBytes.toString("utf8").replace(/\r\n?/g, "\n"))
+            : sourceBytes;
+        await writeFile(resolve(targetDirectory, filename), releaseBytes);
+        hashes[filename] = createHash("sha256").update(releaseBytes).digest("hex");
     }
     await writeFile(resolve(targetDirectory, "manifest.json"), `${JSON.stringify({
         format: 1,
-        revision: process.env.GITHUB_SHA ?? process.env.VITE_IMM_RELEASE_ID ?? null,
         sha256: hashes,
     }, null, 2)}\n`);
 }
