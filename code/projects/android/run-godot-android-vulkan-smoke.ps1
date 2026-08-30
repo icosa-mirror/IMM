@@ -131,7 +131,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 & $adbPath shell am force-stop org.linuxfoundation.imm.godot.sample | Out-Null
-& $adbPath shell am start -n org.linuxfoundation.imm.godot.sample/com.godot.game.GodotApp | Out-Null
+# Godot 4.7 launches through an exported activity alias; GodotApp itself is private.
+$launchOutput = & $adbPath shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p org.linuxfoundation.imm.godot.sample
+if ($LASTEXITCODE -ne 0 -or ($launchOutput -join "`n") -notmatch "Status:\s+ok") {
+    throw "Android Godot launcher intent failed: $($launchOutput -join ' ')"
+}
 Start-Sleep -Seconds $WaitSeconds
 
 & $adbPath logcat -d | Out-File -FilePath $logPath -Encoding utf8

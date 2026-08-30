@@ -381,6 +381,18 @@ def main() -> int:
             "default=90.0",
             "time.sleep(retry_delay)",
         ],
+        ROOT / "code/projects/android/appImmGodotFtlTest/src/androidTest/java/org/linuxfoundation/imm/godot/ftltest/GodotVulkanFtlSmokeTest.java": [
+            "Godot 4.7 exposes a launcher activity alias",
+            "android.intent.action.MAIN",
+            "android.intent.category.LAUNCHER",
+            'launchOutput.contains("Status: ok")',
+        ],
+        ROOT / "code/projects/android/run-godot-android-vulkan-smoke.ps1": [
+            "Godot 4.7 launches through an exported activity alias",
+            "android.intent.action.MAIN",
+            "android.intent.category.LAUNCHER",
+            '"Status:\\s+ok"',
+        ],
         ROOT / ".github/workflows/ci-device.yml": [
             "godot-android-vulkan-sample1.json",
             "godot-android-vulkan-composition-sample1.json",

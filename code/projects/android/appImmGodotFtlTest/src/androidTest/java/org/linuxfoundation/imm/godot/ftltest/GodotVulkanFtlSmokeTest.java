@@ -20,7 +20,6 @@ import java.nio.charset.StandardCharsets;
 @RunWith(AndroidJUnit4.class)
 public final class GodotVulkanFtlSmokeTest {
     private static final String PACKAGE_NAME = "org.linuxfoundation.imm.godot.sample";
-    private static final String ACTIVITY_NAME = "com.godot.game.GodotApp";
     private static final String DEVICE_CAPTURE_NAME = "device_after_smoke.png";
 
     @Test
@@ -37,7 +36,12 @@ public final class GodotVulkanFtlSmokeTest {
 
         runShell(device, "logcat -c");
         runShell(device, "am force-stop " + PACKAGE_NAME);
-        runShell(device, "am start -n " + PACKAGE_NAME + "/" + ACTIVITY_NAME);
+        // Godot 4.7 exposes a launcher activity alias while keeping GodotApp private.
+        // Resolve the launcher intent so this test does not depend on that internal detail.
+        String launchOutput = runShell(
+                device,
+                "am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p " + PACKAGE_NAME);
+        assertTrue("Godot launcher intent failed: " + launchOutput, launchOutput.contains("Status: ok"));
 
         String logcat = waitForSmoke(device, waitSeconds);
         writeText(logcatPath, logcat);
