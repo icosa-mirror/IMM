@@ -124,6 +124,9 @@ export interface ImmDocument {
     metrics: ImmDecodeMetrics;
 }
 
+/** Version of the worker-to-main document contract consumed by this build. */
+export const IMM_DOCUMENT_SCHEMA_VERSION = 5;
+
 export const IMM_LAYER_PAINT = 1;
 export const IMM_LAYER_MODEL = 3;
 export const IMM_LAYER_PICTURE = 4;

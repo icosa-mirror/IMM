@@ -8,6 +8,7 @@ extern "C" {
 #endif
 
 #define IMM_WEB_OUTPUT_SCHEMA_VERSION 5u
+#define IMM_WEB_PAINT_PACKET_SCHEMA_VERSION 1u
 #define IMM_WEB_ERROR_MESSAGE_CAPACITY 160u
 
 typedef enum ImmWebStatus
@@ -185,6 +186,38 @@ typedef struct ImmWebKeepAliveInfo
     float parameters[6];
 } ImmWebKeepAliveInfo;
 
+typedef struct ImmWebPaintPacketHeader
+{
+    uint32_t schema_version;
+    uint32_t byte_size;
+    uint64_t resource_id;
+    uint32_t generation;
+    uint32_t layer_id;
+    uint32_t drawing_id;
+    uint32_t stroke_count;
+    uint32_t point_count;
+    uint32_t geometry_count;
+    float biggest_stroke;
+    uint32_t records_offset;
+    uint32_t reserved[4];
+} ImmWebPaintPacketHeader;
+
+typedef struct ImmWebPaintGeometryRecord
+{
+    uint32_t brush_type;
+    uint32_t vertex_count;
+    uint32_t triangle_count;
+    uint32_t index_component_bytes;
+    uint32_t positions_offset;
+    uint32_t colors_offset;
+    uint32_t directions_offset;
+    uint32_t visibility_offset;
+    uint32_t masks_offset;
+    uint32_t progress_offset;
+    uint32_t indices_offset;
+    uint32_t index_count;
+} ImmWebPaintGeometryRecord;
+
 uint32_t imm_web_schema_version(void);
 
 ImmWebStatus imm_web_inspect(
@@ -257,6 +290,11 @@ uint32_t imm_web_get_animation_key(
     ImmWebAnimationKey* out_key);
 uint32_t imm_web_get_chapter_info(uint32_t chapter_index, ImmWebChapterInfo* out_info);
 uint32_t imm_web_get_keep_alive_info(uint32_t layer_index, ImmWebKeepAliveInfo* out_info);
+const uint8_t* imm_web_build_drawing_packet(
+    uint32_t layer_id,
+    uint32_t drawing_id,
+    ImmWebError* out_error);
+void imm_web_release_drawing_packet(void);
 
 #if defined(__cplusplus)
 }

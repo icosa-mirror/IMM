@@ -14,9 +14,17 @@ const localCodecFixtures = [
 ].filter((entry) => entry[1] !== undefined);
 const localFloorSpawnFixture = process.env.IMM_WEB_LOCAL_FLOOR_SPAWN_FIXTURE;
 const audioSoakSeconds = Number(process.env.IMM_WEB_AUDIO_SOAK_SECONDS ?? "0");
+const testPort = Number(process.env.IMM_WEB_TEST_PORT ?? "4179");
+if (!Number.isInteger(testPort) || testPort < 1 || testPort > 65_535) {
+    throw new Error(`Invalid IMM_WEB_TEST_PORT: ${process.env.IMM_WEB_TEST_PORT}`);
+}
+const testOrigin = `http://127.0.0.1:${testPort}`;
 await mkdir(artifactDirectory, { recursive: true });
 
-const server = await createServer({ root: appRoot, server: { host: "127.0.0.1", port: 4177 } });
+const server = await createServer({
+    root: appRoot,
+    server: { host: "127.0.0.1", port: testPort, strictPort: true },
+});
 await server.listen();
 const browser = await chromium.launch({
     channel: "chrome",
@@ -49,7 +57,7 @@ try {
         contentType: "application/octet-stream",
         body: "not an IMM document",
     }));
-    await controlsPage.goto("http://127.0.0.1:4177/");
+    await controlsPage.goto(`${testOrigin}/`);
     await controlsPage.waitForFunction(() => document.querySelector("#status")?.textContent?.startsWith("Fetching"));
     assert.equal(await controlsPage.locator("#url-input").isDisabled(), false,
         "URL input was disabled while the default IMM loaded");
@@ -205,7 +213,7 @@ try {
     desktop.on("console", (message) => {
         if (message.type() === "error") errors.push(message.text());
     });
-    await desktop.goto("http://127.0.0.1:4177/?src=/fixtures/sample1.imm&visual-test=1");
+    await desktop.goto(`${testOrigin}/?src=/fixtures/sample1.imm&visual-test=1`);
     await desktop.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 120_000 });
     await desktop.waitForTimeout(1_000);
     const desktopMetrics = await desktop.evaluate(() => window.__immDiagnostics());
@@ -286,7 +294,7 @@ try {
     phase3.on("console", (message) => {
         if (message.type() === "error") phase3Errors.push(message.text());
     });
-    await phase3.goto("http://127.0.0.1:4177/phase3-fixture.html");
+    await phase3.goto(`${testOrigin}/phase3-fixture.html`);
     await phase3.waitForFunction(() => window.__phase3Fixture?.state().ready === true);
     const expectedStates = [
         { ticks: 0, x: -1, opacity: 0.25, drawIn: 0, drawing: 0 },
@@ -414,7 +422,7 @@ try {
     await phase3.close();
 
     const alphaHash = await browser.newPage({ viewport: { width: 640, height: 360 }, deviceScaleFactor: 1 });
-    await alphaHash.goto("http://127.0.0.1:4177/phase3-fixture.html?antialias=0");
+    await alphaHash.goto(`${testOrigin}/phase3-fixture.html?antialias=0`);
     await alphaHash.waitForFunction(() => window.__phase3Fixture?.state().ready === true);
     const alphaHashState = await alphaHash.evaluate(() => window.__phase3Fixture.state());
     assert.equal(alphaHashState.sampleCount, 0);
@@ -434,7 +442,7 @@ try {
     await alphaHash.close();
 
     const embedded = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
-    await embedded.goto("http://127.0.0.1:4177/embed.html");
+    await embedded.goto(`${testOrigin}/embed.html`);
     await embedded.setInputFiles("#file-input", resolve(repositoryRoot, "exampleImmFiles/sample1.imm"));
     await embedded.waitForFunction(() => document.querySelector("#summary")?.textContent?.includes('"sharedRenderer": true'));
     await embedded.waitForTimeout(1_000);
@@ -456,7 +464,7 @@ try {
     const mobile = await mobileContext.newPage();
     const cdp = await mobileContext.newCDPSession(mobile);
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
-    await mobile.goto("http://127.0.0.1:4177/?src=/fixtures/sample1.imm&visual-test=1");
+    await mobile.goto(`${testOrigin}/?src=/fixtures/sample1.imm&visual-test=1`);
     await mobile.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 60_000 });
     await mobile.waitForTimeout(2_000);
     const mobileMetrics = await mobile.evaluate(() => window.__immDiagnostics());

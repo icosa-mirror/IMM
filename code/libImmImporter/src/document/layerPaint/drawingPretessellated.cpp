@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "drawingPretessellated.h"
+#include "paintGeometry.h"
 
 #ifndef __forceinline
 #define __forceinline inline
@@ -61,9 +62,7 @@ namespace ImmImporter
 		const int brushIDint = static_cast<int>(brushID);
 		const Element::VisibilityType visibleMode = ele->GetVisibleMode();
 
-		const int sectionNumPoints = Element::kSectionsLUT[brushIDint];
-
-		const vec2 rect[4] = { vec2(-1.0f,-1.0f), vec2(1.0f,-1.0f), vec2(1.0f,1.0f), vec2(-1.0f,1.0f) };
+		const int sectionNumPoints = static_cast<int>(PaintGeometry::GetSectionCount(brushID));
 
 		// Generate vertices
         int nv = 0;
@@ -79,8 +78,8 @@ namespace ImmImporter
 			{
 				for (int i = 0; i <2; i++)
 				{
-					const float u = (i == 0) ? 1.0f : -1.0f;
-					verts[nv].mPos = p->mPos - wid * bU * u;
+					const vec2 section = PaintGeometry::GetSectionPosition(brushID, static_cast<uint32_t>(i));
+					verts[nv].mPos = p->mPos + wid * (bU * section.x + bV * section.y);
 					verts[nv].mCol[0] = int(255.0f*col.x);
 					verts[nv].mCol[1] = int(255.0f*col.y);
 					verts[nv].mCol[2] = int(255.0f*col.z);
@@ -99,24 +98,7 @@ namespace ImmImporter
 			{
 				for (int i = 0; i <sectionNumPoints; i++)
 				{
-					const float u = float(i) / float(sectionNumPoints);
-					const float a = 6.2831f*u;
-					vec2 sc;
-
-
-					if (brushID == Element::BrushSectionType::Circle)
-					{
-						sc = vec2(cosf(a), sinf(a));
-					}
-					else if (brushID == Element::BrushSectionType::Ellipse)
-					{
-						const float ecc = 0.3f;
-						sc = vec2(cosf(a), sinf(a) * ecc);
-					}
-					else if (brushID == Element::BrushSectionType::Square)
-					{
-						sc = rect[i];
-					}
+					const vec2 sc = PaintGeometry::GetSectionPosition(brushID, static_cast<uint32_t>(i));
 
 					verts[nv].mPos = p->mPos + wid * (bU * sc.x + bV * sc.y );
 					verts[nv].mCol[0] = int(255.0f*col.x);

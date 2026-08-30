@@ -55,6 +55,7 @@ if(EMSCRIPTEN)
         ${IMM_CORE_DIR}/src/libWave/piWave.cpp
 
         ${IMM_IMPORTER_DIR}/src/document/layerPaint/element.cpp
+        ${IMM_IMPORTER_DIR}/src/document/layerPaint/paintGeometry.cpp
         ${IMM_IMPORTER_DIR}/src/document/layerPaint/drawingPretessellated.cpp
         ${IMM_IMPORTER_DIR}/src/document/layerPaint/drawingStatic.cpp
         ${IMM_IMPORTER_DIR}/src/document/sequence.cpp
@@ -110,7 +111,7 @@ if(EMSCRIPTEN)
         "SHELL:-sALLOW_MEMORY_GROWTH=1"
         "SHELL:-sMAXIMUM_MEMORY=4GB"
         "SHELL:-sSTACK_SIZE=4194304"
-        "SHELL:-sEXPORTED_FUNCTIONS=['_imm_web_schema_version','_imm_web_inspect','_imm_web_decode_scene','_imm_web_open_scene_metadata','_imm_web_decode_drawing','_imm_web_decode_layer_asset','_imm_web_decode_open_scene_eager','_imm_web_release_scene','_imm_web_get_layer_count','_imm_web_get_background_color','_imm_web_get_layer_info','_imm_web_get_layer_transforms','_imm_web_get_animation_info','_imm_web_get_frame_buffer','_imm_web_get_drawing_count','_imm_web_get_drawing_biggest_stroke','_imm_web_get_stroke_count','_imm_web_get_stroke_info','_imm_web_get_stroke_points','_imm_web_get_stroke_point_times','_imm_web_get_picture_info','_imm_web_get_picture_pixels','_imm_web_get_sound_info','_imm_web_get_sound_bytes','_imm_web_get_playback_info','_imm_web_get_timeline_layer_info','_imm_web_get_timeline_layer_transforms','_imm_web_get_animation_key','_imm_web_get_chapter_info','_imm_web_get_keep_alive_info','_malloc','_free']"
+        "SHELL:-sEXPORTED_FUNCTIONS=['_imm_web_schema_version','_imm_web_inspect','_imm_web_decode_scene','_imm_web_open_scene_metadata','_imm_web_decode_drawing','_imm_web_decode_layer_asset','_imm_web_decode_open_scene_eager','_imm_web_release_scene','_imm_web_build_drawing_packet','_imm_web_release_drawing_packet','_imm_web_get_layer_count','_imm_web_get_background_color','_imm_web_get_layer_info','_imm_web_get_layer_transforms','_imm_web_get_animation_info','_imm_web_get_frame_buffer','_imm_web_get_drawing_count','_imm_web_get_drawing_biggest_stroke','_imm_web_get_stroke_count','_imm_web_get_stroke_info','_imm_web_get_stroke_points','_imm_web_get_stroke_point_times','_imm_web_get_picture_info','_imm_web_get_picture_pixels','_imm_web_get_sound_info','_imm_web_get_sound_bytes','_imm_web_get_playback_info','_imm_web_get_timeline_layer_info','_imm_web_get_timeline_layer_transforms','_imm_web_get_animation_key','_imm_web_get_chapter_info','_imm_web_get_keep_alive_info','_malloc','_free']"
         "SHELL:-sEXPORTED_RUNTIME_METHODS=['HEAPU8']"
         "SHELL:-sNO_EXIT_RUNTIME=1"
         "SHELL:-sUSE_ZLIB=1"
@@ -124,8 +125,8 @@ if(EMSCRIPTEN)
         COPYONLY
     )
     configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/js/imm-web-geometry.mjs
-        ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-geometry.mjs
+        ${CMAKE_CURRENT_SOURCE_DIR}/js/imm-web-paint-packet.mjs
+        ${IMM_WEB_OUTPUT_DIRECTORY}/imm-web-paint-packet.mjs
         COPYONLY
     )
 
@@ -153,5 +154,19 @@ else()
     add_test(
         NAME imm_web_decoder_tests
         COMMAND imm_web_decoder_tests ${CMAKE_CURRENT_SOURCE_DIR}/../../../../exampleImmFiles/sample1.imm
+    )
+
+    add_executable(imm_web_paint_geometry_tests
+        tests/imm_web_paint_geometry_tests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../libImmImporter/src/document/layerPaint/paintGeometry.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../libImmImporter/src/document/layerPaint/element.cpp
+    )
+    target_include_directories(imm_web_paint_geometry_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../..
+    )
+    target_compile_features(imm_web_paint_geometry_tests PRIVATE cxx_std_17)
+    add_test(
+        NAME imm_web_paint_geometry_tests
+        COMMAND imm_web_paint_geometry_tests
     )
 endif()

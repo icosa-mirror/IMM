@@ -7,6 +7,7 @@
 #include "libImmImporter/src/document/sequence.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
 #include "libImmImporter/src/document/layerSound.h"
+#include "libImmImporter/src/document/layerPaint/paintGeometry.h"
 #include "libImmImporter/src/fromImmersive/fromImmersive.h"
 
 #include <algorithm>
@@ -72,8 +73,21 @@ namespace
     std::vector<StoredTimelineLayer> gTimelineLayers;
     std::vector<StoredChapter> gChapters;
     std::vector<StoredSound> gSounds;
+    std::vector<uint8_t> gDrawingPacket;
     bool gAnimateOnStart = false;
     int64_t gDurationTicks = 0;
+
+    struct [[maybe_unused]] BuiltPaintGeometry
+    {
+        uint32_t brushType = 0u;
+        std::vector<float> positions;
+        std::vector<float> colors;
+        std::vector<float> directions;
+        std::vector<uint8_t> visibility;
+        std::vector<uint8_t> masks;
+        std::vector<float> progress;
+        std::vector<uint32_t> indices;
+    };
 
     void setError(ImmWebError* error, ImmWebStatus status, const char* message)
     {
@@ -132,6 +146,433 @@ namespace
             }
         }
         return kNoContentLayer;
+    }
+
+    bool samePosition(const ImmStrokeReader::StrokePointC& left, const ImmStrokeReader::StrokePointC& right)
+    {
+        return left.px == right.px && left.py == right.py && left.pz == right.pz;
+    }
+
+    [[maybe_unused]] bool appendPacketBytes(
+        std::vector<uint8_t>* packet,
+        const void* source,
+        size_t byteCount,
+        size_t alignment,
+        uint32_t* outOffset)
+    {
+        if (packet == nullptr || source == nullptr || outOffset == nullptr || alignment == 0u)
+            return false;
+        const size_t alignedSize = (packet->size() + alignment - 1u) & ~(alignment - 1u);
+        if (alignedSize > std::numeric_limits<uint32_t>::max() ||
+            byteCount > std::numeric_limits<uint32_t>::max() - alignedSize)
+            return false;
+        packet->resize(alignedSize, 0u);
+        *outOffset = static_cast<uint32_t>(alignedSize);
+        const auto* bytes = static_cast<const uint8_t*>(source);
+        packet->insert(packet->end(), bytes, bytes + byteCount);
+        return true;
+    }
+
+    [[maybe_unused]] bool buildPaintGeometry(
+        const ImmStrokeReader::StrokeStore& store,
+        uint32_t layerIndex,
+        uint32_t drawingIndex,
+        std::vector<BuiltPaintGeometry>* geometries,
+        uint32_t* outStrokeCount,
+        uint32_t* outPointCount,
+        float* outBiggestStroke)
+    {
+        if (geometries == nullptr || outStrokeCount == nullptr || outPointCount == nullptr ||
+            outBiggestStroke == nullptr)
+            return false;
+
+        const int strokeCountValue = store.GetStrokeCount(
+            static_cast<int>(layerIndex), static_cast<int>(drawingIndex));
+        if (strokeCountValue < 0 || !store.GetDrawingBiggestStroke(
+            static_cast<int>(layerIndex), static_cast<int>(drawingIndex), outBiggestStroke))
+            return false;
+        *outStrokeCount = static_cast<uint32_t>(strokeCountValue);
+        *outPointCount = 0u;
+        geometries->clear();
+        geometries->resize(static_cast<size_t>(ImmImporter::Element::BrushSectionType::Count));
+        for (uint32_t brush = 0u; brush < geometries->size(); ++brush)
+            (*geometries)[brush].brushType = brush;
+
+        for (uint32_t strokeIndex = 0u; strokeIndex < *outStrokeCount; ++strokeIndex)
+        {
+            ImmStrokeReader::StrokeInfoC info{};
+            if (!store.GetStrokeInfo(
+                static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex), &info))
+                return false;
+            if (info.numPoints < 0 || info.brushType < 0 ||
+                info.brushType >= static_cast<int>(ImmImporter::Element::BrushSectionType::Count) ||
+                static_cast<uint32_t>(info.numPoints) > std::numeric_limits<uint32_t>::max() - *outPointCount)
+                return false;
+
+            const uint32_t pointCount = static_cast<uint32_t>(info.numPoints);
+            *outPointCount += pointCount;
+            if (pointCount < 2u)
+                continue;
+
+            std::vector<ImmStrokeReader::StrokePointC> sourcePoints(pointCount);
+            std::vector<float> sourceTimes(pointCount);
+            if (!store.GetStrokePoints(
+                    static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex),
+                    sourcePoints.data(), static_cast<int>(pointCount)) ||
+                !store.GetStrokePointTimes(
+                    static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex),
+                    sourceTimes.data(), static_cast<int>(pointCount)))
+                return false;
+
+            std::vector<ImmImporter::Point> basisPoints(pointCount);
+            for (uint32_t pointIndex = 0u; pointIndex < pointCount; ++pointIndex)
+            {
+                const auto& source = sourcePoints[pointIndex];
+                auto& target = basisPoints[pointIndex];
+                target.mPos = ImmCore::vec3(source.px, source.py, source.pz);
+                target.mNor = ImmCore::vec3(source.nx, source.ny, source.nz);
+            }
+
+            BuiltPaintGeometry& geometry = (*geometries)[static_cast<size_t>(info.brushType)];
+            const auto brush = static_cast<ImmImporter::Element::BrushSectionType>(info.brushType);
+            const uint32_t sectionCount = ImmImporter::PaintGeometry::GetSectionCount(brush);
+            const uint32_t vertexBase = static_cast<uint32_t>(geometry.visibility.size());
+            const uint64_t addedVertices = static_cast<uint64_t>(pointCount) * sectionCount;
+            if (addedVertices > std::numeric_limits<uint32_t>::max() - vertexBase)
+                return false;
+            const uint32_t vertexCount = static_cast<uint32_t>(addedVertices);
+            geometry.positions.reserve(geometry.positions.size() + static_cast<size_t>(vertexCount) * 3u);
+            geometry.colors.reserve(geometry.colors.size() + static_cast<size_t>(vertexCount) * 4u);
+            geometry.directions.reserve(geometry.directions.size() + static_cast<size_t>(vertexCount) * 3u);
+            geometry.visibility.reserve(geometry.visibility.size() + vertexCount);
+            geometry.masks.reserve(geometry.masks.size() + vertexCount);
+            geometry.progress.reserve(geometry.progress.size() + vertexCount);
+
+            for (uint32_t pointIndex = 0u; pointIndex < pointCount; ++pointIndex)
+            {
+                ImmCore::vec3 tangent;
+                ImmCore::vec3 basisU;
+                ImmCore::vec3 basisV;
+                ImmImporter::PaintGeometry::ComputeBasis(
+                    basisPoints.data(), pointCount, pointIndex, &tangent, &basisU, &basisV);
+                ImmCore::vec3 center = basisPoints[pointIndex].mPos;
+                const uint32_t adjacentIndex = pointIndex == 0u
+                    ? 1u
+                    : pointIndex + 1u == pointCount ? pointIndex - 1u : pointIndex;
+                if (adjacentIndex != pointIndex && samePosition(sourcePoints[pointIndex], sourcePoints[adjacentIndex]))
+                    center = center + tangent * (pointIndex == 0u ? -0.0001f : 0.0001f);
+
+                const auto& source = sourcePoints[pointIndex];
+                for (uint32_t sectionIndex = 0u; sectionIndex < sectionCount; ++sectionIndex)
+                {
+                    const ImmCore::vec2 section = ImmImporter::PaintGeometry::GetSectionPosition(brush, sectionIndex);
+                    const ImmCore::vec3 position = center + source.width * (
+                        basisU * section.x + basisV * section.y);
+                    geometry.positions.insert(geometry.positions.end(), {position.x, position.y, position.z});
+                    geometry.colors.insert(geometry.colors.end(), {source.r, source.g, source.b, source.alpha});
+                    geometry.directions.insert(geometry.directions.end(), {source.dx, source.dy, source.dz});
+                    geometry.visibility.push_back(static_cast<uint8_t>(info.visibilityMode));
+                    geometry.masks.push_back(static_cast<uint8_t>(strokeIndex & 127u));
+                    geometry.progress.push_back(sourceTimes[pointIndex]);
+                }
+            }
+
+            const uint32_t addedIndexCount = ImmImporter::PaintGeometry::GetTriangleIndexCount(pointCount, brush);
+            const size_t indexBase = geometry.indices.size();
+            geometry.indices.resize(indexBase + addedIndexCount);
+            if (!ImmImporter::PaintGeometry::BuildTriangleIndices(
+                pointCount,
+                brush,
+                vertexBase,
+                false,
+                geometry.indices.data() + indexBase,
+                addedIndexCount))
+                return false;
+        }
+
+        geometries->erase(std::remove_if(geometries->begin(), geometries->end(), [](const BuiltPaintGeometry& geometry) {
+            return geometry.positions.empty();
+        }), geometries->end());
+        return true;
+    }
+
+    [[maybe_unused]] bool serializePaintPacket(
+        uint32_t layerId,
+        uint32_t drawingId,
+        uint32_t strokeCount,
+        uint32_t pointCount,
+        float biggestStroke,
+        const std::vector<BuiltPaintGeometry>& geometries)
+    {
+        if (geometries.size() > std::numeric_limits<uint32_t>::max())
+            return false;
+        const size_t fixedSize = sizeof(ImmWebPaintPacketHeader) +
+            geometries.size() * sizeof(ImmWebPaintGeometryRecord);
+        if (fixedSize > std::numeric_limits<uint32_t>::max())
+            return false;
+        gDrawingPacket.assign(fixedSize, 0u);
+        std::vector<ImmWebPaintGeometryRecord> records(geometries.size());
+
+        for (size_t geometryIndex = 0u; geometryIndex < geometries.size(); ++geometryIndex)
+        {
+            const BuiltPaintGeometry& source = geometries[geometryIndex];
+            ImmWebPaintGeometryRecord& record = records[geometryIndex];
+            record.brush_type = source.brushType;
+            record.vertex_count = static_cast<uint32_t>(source.visibility.size());
+            record.triangle_count = static_cast<uint32_t>(source.indices.size() / 3u);
+            record.index_component_bytes = record.vertex_count > 65535u ? 4u : 2u;
+            record.index_count = static_cast<uint32_t>(source.indices.size());
+            if (!appendPacketBytes(&gDrawingPacket, source.positions.data(), source.positions.size() * sizeof(float), 4u, &record.positions_offset) ||
+                !appendPacketBytes(&gDrawingPacket, source.colors.data(), source.colors.size() * sizeof(float), 4u, &record.colors_offset) ||
+                !appendPacketBytes(&gDrawingPacket, source.directions.data(), source.directions.size() * sizeof(float), 4u, &record.directions_offset) ||
+                !appendPacketBytes(&gDrawingPacket, source.visibility.data(), source.visibility.size(), 1u, &record.visibility_offset) ||
+                !appendPacketBytes(&gDrawingPacket, source.masks.data(), source.masks.size(), 1u, &record.masks_offset) ||
+                !appendPacketBytes(&gDrawingPacket, source.progress.data(), source.progress.size() * sizeof(float), 4u, &record.progress_offset))
+                return false;
+
+            if (record.index_component_bytes == 4u)
+            {
+                if (!appendPacketBytes(&gDrawingPacket, source.indices.data(), source.indices.size() * sizeof(uint32_t), 4u, &record.indices_offset))
+                    return false;
+            }
+            else
+            {
+                std::vector<uint16_t> indices16(source.indices.size());
+                std::transform(source.indices.begin(), source.indices.end(), indices16.begin(), [](uint32_t index) {
+                    return static_cast<uint16_t>(index);
+                });
+                if (!appendPacketBytes(&gDrawingPacket, indices16.data(), indices16.size() * sizeof(uint16_t), 2u, &record.indices_offset))
+                    return false;
+            }
+        }
+
+        if (gDrawingPacket.size() > std::numeric_limits<uint32_t>::max())
+            return false;
+        ImmWebPaintPacketHeader header{};
+        header.schema_version = IMM_WEB_PAINT_PACKET_SCHEMA_VERSION;
+        header.byte_size = static_cast<uint32_t>(gDrawingPacket.size());
+        header.resource_id = (static_cast<uint64_t>(layerId) << 32u) | drawingId;
+        header.generation = 1u;
+        header.layer_id = layerId;
+        header.drawing_id = drawingId;
+        header.stroke_count = strokeCount;
+        header.point_count = pointCount;
+        header.geometry_count = static_cast<uint32_t>(records.size());
+        header.biggest_stroke = biggestStroke;
+        header.records_offset = sizeof(ImmWebPaintPacketHeader);
+        std::memcpy(gDrawingPacket.data(), &header, sizeof(header));
+        if (!records.empty())
+            std::memcpy(gDrawingPacket.data() + header.records_offset, records.data(), records.size() * sizeof(records[0]));
+        return true;
+    }
+
+    struct DirectPaintGeometry
+    {
+        uint32_t brushType = 0u;
+        uint32_t vertexCount = 0u;
+        uint32_t indexCount = 0u;
+        uint32_t vertexCursor = 0u;
+        uint32_t indexCursor = 0u;
+        ImmWebPaintGeometryRecord record{};
+    };
+
+    bool buildPaintPacketDirect(
+        const ImmStrokeReader::StrokeStore& store,
+        uint32_t layerIndex,
+        uint32_t layerId,
+        uint32_t drawingId,
+        uint32_t drawingIndex)
+    {
+        const int strokeCountValue = store.GetStrokeCount(
+            static_cast<int>(layerIndex), static_cast<int>(drawingIndex));
+        float biggestStroke = 0.0f;
+        if (strokeCountValue < 0 || !store.GetDrawingBiggestStroke(
+                static_cast<int>(layerIndex), static_cast<int>(drawingIndex), &biggestStroke))
+            return false;
+
+        const uint32_t strokeCount = static_cast<uint32_t>(strokeCountValue);
+        uint32_t pointCount = 0u;
+        std::vector<ImmStrokeReader::StrokeInfoC> strokes(strokeCount);
+        DirectPaintGeometry layouts[static_cast<size_t>(ImmImporter::Element::BrushSectionType::Count)]{};
+        for (uint32_t brush = 0u; brush < static_cast<uint32_t>(ImmImporter::Element::BrushSectionType::Count); ++brush)
+            layouts[brush].brushType = brush;
+
+        for (uint32_t strokeIndex = 0u; strokeIndex < strokeCount; ++strokeIndex)
+        {
+            auto& info = strokes[strokeIndex];
+            if (!store.GetStrokeInfo(
+                    static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex), &info) ||
+                info.numPoints < 0 || info.brushType < 0 ||
+                info.brushType >= static_cast<int>(ImmImporter::Element::BrushSectionType::Count))
+                return false;
+            const uint32_t sourcePointCount = static_cast<uint32_t>(info.numPoints);
+            if (sourcePointCount > std::numeric_limits<uint32_t>::max() - pointCount)
+                return false;
+            pointCount += sourcePointCount;
+            if (sourcePointCount < 2u)
+                continue;
+
+            auto& layout = layouts[static_cast<size_t>(info.brushType)];
+            const auto brush = static_cast<ImmImporter::Element::BrushSectionType>(info.brushType);
+            const uint64_t addedVertices = static_cast<uint64_t>(sourcePointCount) *
+                ImmImporter::PaintGeometry::GetSectionCount(brush);
+            const uint64_t addedIndices = ImmImporter::PaintGeometry::GetTriangleIndexCount(sourcePointCount, brush);
+            if (addedVertices > std::numeric_limits<uint32_t>::max() - layout.vertexCount ||
+                addedIndices > std::numeric_limits<uint32_t>::max() - layout.indexCount)
+                return false;
+            layout.vertexCount += static_cast<uint32_t>(addedVertices);
+            layout.indexCount += static_cast<uint32_t>(addedIndices);
+        }
+
+        uint32_t geometryCount = 0u;
+        for (const auto& layout : layouts)
+            geometryCount += layout.vertexCount == 0u ? 0u : 1u;
+        size_t packetSize = sizeof(ImmWebPaintPacketHeader) +
+            static_cast<size_t>(geometryCount) * sizeof(ImmWebPaintGeometryRecord);
+        std::vector<ImmWebPaintGeometryRecord> records;
+        records.reserve(geometryCount);
+        auto allocateRange = [&packetSize](uint64_t byteCount, size_t alignment, uint32_t* outOffset) {
+            const size_t aligned = (packetSize + alignment - 1u) & ~(alignment - 1u);
+            if (aligned > std::numeric_limits<uint32_t>::max() ||
+                byteCount > std::numeric_limits<uint32_t>::max() - aligned)
+                return false;
+            *outOffset = static_cast<uint32_t>(aligned);
+            packetSize = aligned + static_cast<size_t>(byteCount);
+            return true;
+        };
+
+        for (auto& layout : layouts)
+        {
+            if (layout.vertexCount == 0u)
+                continue;
+            auto& record = layout.record;
+            record.brush_type = layout.brushType;
+            record.vertex_count = layout.vertexCount;
+            record.index_count = layout.indexCount;
+            record.triangle_count = layout.indexCount / 3u;
+            record.index_component_bytes = layout.vertexCount > 65535u ? 4u : 2u;
+            if (!allocateRange(static_cast<uint64_t>(layout.vertexCount) * 3u * sizeof(float), 4u, &record.positions_offset) ||
+                !allocateRange(static_cast<uint64_t>(layout.vertexCount) * 4u * sizeof(float), 4u, &record.colors_offset) ||
+                !allocateRange(static_cast<uint64_t>(layout.vertexCount) * 3u * sizeof(float), 4u, &record.directions_offset) ||
+                !allocateRange(layout.vertexCount, 1u, &record.visibility_offset) ||
+                !allocateRange(layout.vertexCount, 1u, &record.masks_offset) ||
+                !allocateRange(static_cast<uint64_t>(layout.vertexCount) * sizeof(float), 4u, &record.progress_offset) ||
+                !allocateRange(static_cast<uint64_t>(layout.indexCount) * record.index_component_bytes,
+                    record.index_component_bytes, &record.indices_offset))
+                return false;
+            records.push_back(record);
+        }
+
+        gDrawingPacket.assign(packetSize, 0u);
+        ImmWebPaintPacketHeader header{};
+        header.schema_version = IMM_WEB_PAINT_PACKET_SCHEMA_VERSION;
+        header.byte_size = static_cast<uint32_t>(packetSize);
+        header.resource_id = (static_cast<uint64_t>(layerId) << 32u) | drawingId;
+        header.generation = 1u;
+        header.layer_id = layerId;
+        header.drawing_id = drawingId;
+        header.stroke_count = strokeCount;
+        header.point_count = pointCount;
+        header.geometry_count = geometryCount;
+        header.biggest_stroke = biggestStroke;
+        header.records_offset = sizeof(ImmWebPaintPacketHeader);
+        std::memcpy(gDrawingPacket.data(), &header, sizeof(header));
+        if (!records.empty())
+            std::memcpy(gDrawingPacket.data() + header.records_offset,
+                records.data(), records.size() * sizeof(records[0]));
+
+        std::vector<ImmStrokeReader::StrokePointC> sourcePoints;
+        std::vector<float> sourceTimes;
+        std::vector<ImmImporter::Point> basisPoints;
+        std::vector<uint32_t> strokeIndices;
+        for (uint32_t strokeIndex = 0u; strokeIndex < strokeCount; ++strokeIndex)
+        {
+            const auto& info = strokes[strokeIndex];
+            const uint32_t sourcePointCount = static_cast<uint32_t>(info.numPoints);
+            if (sourcePointCount < 2u)
+                continue;
+            sourcePoints.resize(sourcePointCount);
+            sourceTimes.resize(sourcePointCount);
+            basisPoints.resize(sourcePointCount);
+            if (!store.GetStrokePoints(
+                    static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex),
+                    sourcePoints.data(), static_cast<int>(sourcePointCount)) ||
+                !store.GetStrokePointTimes(
+                    static_cast<int>(layerIndex), static_cast<int>(drawingIndex), static_cast<int>(strokeIndex),
+                    sourceTimes.data(), static_cast<int>(sourcePointCount)))
+                return false;
+            for (uint32_t pointIndex = 0u; pointIndex < sourcePointCount; ++pointIndex)
+            {
+                const auto& source = sourcePoints[pointIndex];
+                basisPoints[pointIndex].mPos = ImmCore::vec3(source.px, source.py, source.pz);
+                basisPoints[pointIndex].mNor = ImmCore::vec3(source.nx, source.ny, source.nz);
+            }
+
+            auto& layout = layouts[static_cast<size_t>(info.brushType)];
+            const auto brush = static_cast<ImmImporter::Element::BrushSectionType>(info.brushType);
+            const uint32_t sectionCount = ImmImporter::PaintGeometry::GetSectionCount(brush);
+            auto* positions = reinterpret_cast<float*>(gDrawingPacket.data() + layout.record.positions_offset);
+            auto* colors = reinterpret_cast<float*>(gDrawingPacket.data() + layout.record.colors_offset);
+            auto* directions = reinterpret_cast<float*>(gDrawingPacket.data() + layout.record.directions_offset);
+            auto* visibility = gDrawingPacket.data() + layout.record.visibility_offset;
+            auto* masks = gDrawingPacket.data() + layout.record.masks_offset;
+            auto* progress = reinterpret_cast<float*>(gDrawingPacket.data() + layout.record.progress_offset);
+            const uint32_t vertexBase = layout.vertexCursor;
+            for (uint32_t pointIndex = 0u; pointIndex < sourcePointCount; ++pointIndex)
+            {
+                ImmCore::vec3 tangent;
+                ImmCore::vec3 basisU;
+                ImmCore::vec3 basisV;
+                ImmImporter::PaintGeometry::ComputeBasis(
+                    basisPoints.data(), sourcePointCount, pointIndex, &tangent, &basisU, &basisV);
+                ImmCore::vec3 center = basisPoints[pointIndex].mPos;
+                const uint32_t adjacentIndex = pointIndex == 0u
+                    ? 1u
+                    : pointIndex + 1u == sourcePointCount ? pointIndex - 1u : pointIndex;
+                if (adjacentIndex != pointIndex && samePosition(sourcePoints[pointIndex], sourcePoints[adjacentIndex]))
+                    center = center + tangent * (pointIndex == 0u ? -0.0001f : 0.0001f);
+                const auto& source = sourcePoints[pointIndex];
+                for (uint32_t sectionIndex = 0u; sectionIndex < sectionCount; ++sectionIndex)
+                {
+                    const uint32_t vertex = layout.vertexCursor++;
+                    const ImmCore::vec2 section = ImmImporter::PaintGeometry::GetSectionPosition(brush, sectionIndex);
+                    const ImmCore::vec3 position = center + source.width * (basisU * section.x + basisV * section.y);
+                    positions[vertex * 3u] = position.x;
+                    positions[vertex * 3u + 1u] = position.y;
+                    positions[vertex * 3u + 2u] = position.z;
+                    colors[vertex * 4u] = source.r;
+                    colors[vertex * 4u + 1u] = source.g;
+                    colors[vertex * 4u + 2u] = source.b;
+                    colors[vertex * 4u + 3u] = source.alpha;
+                    directions[vertex * 3u] = source.dx;
+                    directions[vertex * 3u + 1u] = source.dy;
+                    directions[vertex * 3u + 2u] = source.dz;
+                    visibility[vertex] = static_cast<uint8_t>(info.visibilityMode);
+                    masks[vertex] = static_cast<uint8_t>(strokeIndex & 127u);
+                    progress[vertex] = sourceTimes[pointIndex];
+                }
+            }
+
+            const uint32_t addedIndexCount = ImmImporter::PaintGeometry::GetTriangleIndexCount(sourcePointCount, brush);
+            strokeIndices.resize(addedIndexCount);
+            if (!ImmImporter::PaintGeometry::BuildTriangleIndices(
+                    sourcePointCount, brush, vertexBase, false,
+                    strokeIndices.data(), addedIndexCount))
+                return false;
+            if (layout.record.index_component_bytes == 4u)
+            {
+                auto* indices = reinterpret_cast<uint32_t*>(gDrawingPacket.data() + layout.record.indices_offset);
+                std::copy(strokeIndices.begin(), strokeIndices.end(), indices + layout.indexCursor);
+            }
+            else
+            {
+                auto* indices = reinterpret_cast<uint16_t*>(gDrawingPacket.data() + layout.record.indices_offset);
+                std::transform(strokeIndices.begin(), strokeIndices.end(), indices + layout.indexCursor,
+                    [](uint32_t index) { return static_cast<uint16_t>(index); });
+            }
+            layout.indexCursor += addedIndexCount;
+        }
+        return true;
     }
 
     void capturePlaybackDocument(ImmImporter::Sequence& sequence, const ImmStrokeReader::StrokeStore& store)
@@ -323,6 +764,8 @@ static_assert(sizeof(ImmWebAnimationKey) == 80u, "ImmWebAnimationKey ABI changed
 static_assert(sizeof(ImmWebChapterInfo) == 24u, "ImmWebChapterInfo ABI changed");
 static_assert(sizeof(ImmWebKeepAliveInfo) == 32u, "ImmWebKeepAliveInfo ABI changed");
 static_assert(sizeof(ImmWebSoundInfo) == 64u, "ImmWebSoundInfo ABI changed");
+static_assert(sizeof(ImmWebPaintPacketHeader) == 64u, "ImmWebPaintPacketHeader ABI changed");
+static_assert(sizeof(ImmWebPaintGeometryRecord) == 48u, "ImmWebPaintGeometryRecord ABI changed");
 
 extern "C" ImmWebStatus imm_web_decode_scene(
     const uint8_t* source,
@@ -500,8 +943,44 @@ extern "C" void imm_web_release_scene(void)
     gTimelineLayers.clear();
     gChapters.clear();
     gSounds.clear();
+    imm_web_release_drawing_packet();
     gAnimateOnStart = false;
     gDurationTicks = 0;
+}
+
+extern "C" const uint8_t* imm_web_build_drawing_packet(
+    uint32_t layerId,
+    uint32_t drawingId,
+    ImmWebError* outError)
+{
+    imm_web_release_drawing_packet();
+    if (gStore == nullptr)
+    {
+        setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "No decoded scene is open");
+        return nullptr;
+    }
+    const uint32_t layerIndex = findContentLayerIndex(*gStore, layerId);
+    if (layerIndex == kNoContentLayer || drawingId >= static_cast<uint32_t>(
+            gStore->GetDrawingCount(static_cast<int>(layerIndex))))
+    {
+        setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "Paint drawing does not exist");
+        return nullptr;
+    }
+
+    if (!buildPaintPacketDirect(*gStore, layerIndex, layerId, drawingId, drawingId))
+    {
+        imm_web_release_drawing_packet();
+        setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Could not build paint drawing packet");
+        return nullptr;
+    }
+
+    setError(outError, IMM_WEB_STATUS_OK, "");
+    return gDrawingPacket.data();
+}
+
+extern "C" void imm_web_release_drawing_packet(void)
+{
+    std::vector<uint8_t>().swap(gDrawingPacket);
 }
 
 extern "C" uint32_t imm_web_get_layer_count(void)

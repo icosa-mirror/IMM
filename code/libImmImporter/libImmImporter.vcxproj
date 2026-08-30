@@ -21,6 +21,7 @@
     <ClCompile Include="src\document\layerPaint\drawingPretessellated.cpp" />
     <ClCompile Include="src\document\layerPaint\drawingStatic.cpp" />
     <ClCompile Include="src\document\layerPaint\element.cpp" />
+    <ClCompile Include="src\document\layerPaint\paintGeometry.cpp" />
     <ClCompile Include="src\document\layerPicture.cpp" />
     <ClCompile Include="src\document\layerSound.cpp" />
     <ClCompile Include="src\document\layerSpawnArea.cpp" />

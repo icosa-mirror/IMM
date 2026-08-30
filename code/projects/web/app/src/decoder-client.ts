@@ -1,4 +1,9 @@
 import { releaseAssetUrl } from "./release-assets";
+import {
+    assertSupportedDelta,
+    assertSupportedDocument,
+    assertSupportedSummary,
+} from "./format/validate-imm-document";
 
 export interface ImmDocumentSummary {
     schemaVersion: number;
@@ -27,11 +32,12 @@ interface DecoderResponse {
     summary?: ImmDocumentSummary;
     document?: ImmDocument;
     delta?: ImmStagedDelta;
+    diagnostics?: ImmDecoderDiagnostics;
     error?: DecoderError;
 }
 
 interface PendingRequest {
-    resolve: (value: ImmDocumentSummary | ImmDocument | ImmStagedDelta | undefined) => void;
+    resolve: (value: ImmDocumentSummary | ImmDocument | ImmStagedDelta | ImmDecoderDiagnostics | undefined) => void;
     reject: (error: Error) => void;
     allowEmpty: boolean;
 }
@@ -77,6 +83,10 @@ export class ImmDecoderClient {
         return this.#requestDocument("fallbackEager", {});
     }
 
+    diagnostics(): Promise<ImmDecoderDiagnostics> {
+        return this.#request<ImmDecoderDiagnostics>("diagnostics", {});
+    }
+
     release(): Promise<void> {
         return this.#request<void>("release", {}, [], true);
     }
@@ -90,7 +100,7 @@ export class ImmDecoderClient {
     }
 
     #request<T>(
-        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "fallbackEager" | "release",
+        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "fallbackEager" | "diagnostics" | "release",
         payload: Record<string, unknown>,
         transfer: Transferable[] = [],
         allowEmpty = false,
@@ -127,9 +137,16 @@ export class ImmDecoderClient {
         }
         this.#pending.delete(response.requestId);
 
-        const value = response.summary ?? response.document ?? response.delta;
+        const value = response.summary ?? response.document ?? response.delta ?? response.diagnostics;
         if (response.ok && (value !== undefined || pending.allowEmpty)) {
-            pending.resolve(value);
+            try {
+                if (response.summary !== undefined) assertSupportedSummary(response.summary);
+                if (response.document !== undefined) assertSupportedDocument(response.document);
+                if (response.delta !== undefined) assertSupportedDelta(response.delta);
+                pending.resolve(value);
+            } catch (error) {
+                pending.reject(error instanceof Error ? error : new Error(String(error)));
+            }
             return;
         }
 
@@ -152,3 +169,9 @@ import type { ImmDocument, ImmDrawing, ImmPicture, ImmSound } from "./format/imm
 export type ImmStagedDelta =
     | { type: "drawing"; layerId: number; drawingId: number; drawing: ImmDrawing }
     | { type: "asset"; layerId: number; picture?: ImmPicture; sound?: ImmSound };
+
+export interface ImmDecoderDiagnostics {
+    peakWasmHeapBytes: number;
+    peakPaintPacketBytes: number;
+    geometryTransferBytes: number;
+}

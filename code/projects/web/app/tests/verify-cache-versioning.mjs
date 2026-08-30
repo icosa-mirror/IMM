@@ -18,7 +18,6 @@ assert.match(index, /data-imm-release-bootstrap/);
 assert.match(index, /cache-bust/);
 await stat(resolve("dist/decoder", release, "imm-web-decoder-worker.mjs"));
 await stat(resolve("dist/decoder", release, "imm-web-decoder.wasm"));
-await stat(resolve("dist/decoder", release, "imm-web-geometry.mjs"));
 await stat(resolve("dist/fixtures", release, "sample1.imm"));
 
 const builtFiles = await import("node:fs/promises").then(({ readdir }) => readdir(resolve("dist/assets")));

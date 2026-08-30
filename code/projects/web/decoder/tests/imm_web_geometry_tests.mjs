@@ -40,7 +40,11 @@ for (let brushType = 0; brushType < geometries.length; brushType++) {
     if (brushType >= 2) assertOutwardFacing(geometry);
 }
 
-console.log("IMM web geometry: all five brush topologies passed exact buffer assertions");
+assertDuplicateEndpointsRemainFinite();
+assertStrokeMasksVisibilityAndProgress();
+assertLargeDrawingUsesWideIndices();
+
+console.log("IMM web geometry: brush, endpoint, mask, progress, and large-index assertions passed");
 
 function writePoint(pointIndex, x, y, z, brushType) {
     const offset = pointIndex * POINT_FLOATS;
@@ -76,4 +80,66 @@ function assertOutwardFacing(geometry) {
 
 function position(positions, index) {
     return Array.from(positions.slice(index * 3, index * 3 + 3));
+}
+
+function assertDuplicateEndpointsRemainFinite() {
+    const duplicatePoints = new Float32Array(4 * POINT_FLOATS);
+    const duplicateTimes = new Float32Array([0, 0.25, 0.75, 1]);
+    writeFixturePoint(duplicatePoints, 0, 0, 0, 0);
+    writeFixturePoint(duplicatePoints, 1, 0, 0, 0);
+    writeFixturePoint(duplicatePoints, 2, 0, 0, 2);
+    writeFixturePoint(duplicatePoints, 3, 0, 0, 2);
+    const [geometry] = packPaintGeometry({
+        descriptors: new Uint32Array([0, 4, 2, 0]),
+        points: duplicatePoints,
+        pointTimes: duplicateTimes,
+    });
+    assert.ok(Array.from(geometry.positions).every(Number.isFinite));
+    assert.ok(Array.from(geometry.directions).every(Number.isFinite));
+    assert.equal(geometry.progress[0], 0);
+    assert.equal(geometry.progress.at(-1), 1);
+}
+
+function assertStrokeMasksVisibilityAndProgress() {
+    const fixturePoints = new Float32Array(4 * POINT_FLOATS);
+    for (let index = 0; index < 4; index++) writeFixturePoint(fixturePoints, index, index, 0, 0);
+    const [geometry] = packPaintGeometry({
+        descriptors: new Uint32Array([
+            0, 2, 0, 1,
+            2, 2, 0, 2,
+        ]),
+        points: fixturePoints,
+        pointTimes: new Float32Array([0, 0.4, 0.6, 1]),
+    });
+    assert.deepEqual(Array.from(geometry.visibility), [1, 1, 1, 1, 2, 2, 2, 2]);
+    assert.deepEqual(Array.from(geometry.masks), [0, 0, 0, 0, 1, 1, 1, 1]);
+    const expectedProgress = [0, 0, 0.4, 0.4, 0.6, 0.6, 1, 1];
+    assert.ok(Array.from(geometry.progress).every(
+        (value, index) => Math.abs(value - expectedProgress[index]) < 1e-6));
+}
+
+function assertLargeDrawingUsesWideIndices() {
+    const pointCount = 32_768;
+    const fixturePoints = new Float32Array(pointCount * POINT_FLOATS);
+    for (let index = 0; index < pointCount; index++) {
+        writeFixturePoint(fixturePoints, index, index * 0.001, 0, 0);
+    }
+    const [geometry] = packPaintGeometry({
+        descriptors: new Uint32Array([0, pointCount, 0, 0]),
+        points: fixturePoints,
+        pointTimes: new Float32Array(pointCount),
+    });
+    assert.ok(geometry.indices instanceof Uint32Array);
+    assert.equal(geometry.positions.length / 3, 65_536);
+    assert.equal(Math.max(...geometry.indices.subarray(geometry.indices.length - 12)), 65_535);
+}
+
+function writeFixturePoint(target, pointIndex, x, y, z) {
+    target.set([
+        x, y, z,
+        0, 1, 0,
+        0, 0, -1,
+        0.25, 0.5, 0.75, 0.8,
+        1,
+    ], pointIndex * POINT_FLOATS);
 }

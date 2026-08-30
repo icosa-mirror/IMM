@@ -8,6 +8,7 @@ add_library(
     STATIC
 
     ${libImm-dir}/src/document/layerPaint/element.cpp
+    ${libImm-dir}/src/document/layerPaint/paintGeometry.cpp
     ${libImm-dir}/src/document/layerPaint/drawingPretessellated.cpp
     ${libImm-dir}/src/document/layerPaint/drawingStatic.cpp
     ${libImm-dir}/src/document/sequence.cpp

@@ -5,6 +5,8 @@ import {
     IMM_ACTION_MAKE_DEFAULT,
     IMM_ACTION_STOP,
     IMM_ANIM_ACTION,
+    IMM_ANIM_DRAW_IN_TIME,
+    IMM_ANIM_LOOP,
     IMM_ANIM_OFFSET,
     IMM_ANIM_OPACITY,
     IMM_ANIM_TRANSFORM,
@@ -14,6 +16,7 @@ import {
     IMM_INTERPOLATION_SMOOTHSTEP,
     IMM_INTERPOLATION_EASE_IN,
     IMM_INTERPOLATION_EASE_OUT,
+    IMM_DOCUMENT_SCHEMA_VERSION,
     type ImmAnimationKey,
     type ImmDocument,
     type ImmLayer,
@@ -120,7 +123,7 @@ function fixture(): ImmDocument {
         ],
     });
     return {
-        schemaVersion: 2,
+        schemaVersion: IMM_DOCUMENT_SCHEMA_VERSION,
         backgroundColor: [0, 0, 0],
         ticksPerSecond: 100,
         animateOnStart: true,
@@ -334,5 +337,30 @@ describe("IMM deterministic playback evaluation", () => {
             ];
             expect(evaluateImmDocument(document, 25).layers.get(2)?.opacity).toBeCloseTo(expected * 0.5, 7);
         }
+    });
+
+    test("evaluates draw-in time and authored loop overrides at key boundaries", () => {
+        const document = fixture();
+        const paint = document.layers[2];
+        if (paint === undefined) throw new Error("Paint fixture is missing");
+        paint.parentId = 0;
+        paint.keys = [
+            key(IMM_ANIM_VISIBILITY, 0, { boolValue: true }),
+            key(IMM_ANIM_DRAW_IN_TIME, 0, {
+                interpolation: IMM_INTERPOLATION_LINEAR,
+                doubleValue: 0,
+            }),
+            key(IMM_ANIM_DRAW_IN_TIME, 100, { doubleValue: 2 }),
+            key(IMM_ANIM_LOOP, 0, { boolValue: false }),
+            key(IMM_ANIM_LOOP, 100, { boolValue: true }),
+        ];
+
+        const held = evaluateImmDocument(document, 50).layers.get(2);
+        expect(held?.drawInTime).toBeCloseTo(1, 7);
+        expect(held?.drawingIndex).toBe(0);
+
+        const looped = evaluateImmDocument(document, 150).layers.get(2);
+        expect(looped?.drawInTime).toBeCloseTo(2, 7);
+        expect(looped?.drawingIndex).toBe(2);
     });
 });

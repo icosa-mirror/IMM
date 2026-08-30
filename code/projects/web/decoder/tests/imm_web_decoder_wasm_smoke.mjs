@@ -17,15 +17,25 @@ const worker = new Worker(workerUrl, { type: "module" });
 
 try {
     const request = (message, transfer) => new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error("Timed out waiting for decoder worker")), 10_000);
-        worker.once("error", (error) => {
+        const cleanup = () => {
             clearTimeout(timeout);
+            worker.off("error", onError);
+            worker.off("message", onMessage);
+        };
+        const onError = (error) => {
+            cleanup();
             reject(error);
-        });
-        worker.once("message", (message) => {
-            clearTimeout(timeout);
-            resolve(message);
-        });
+        };
+        const onMessage = (response) => {
+            cleanup();
+            resolve(response);
+        };
+        const timeout = setTimeout(() => {
+            cleanup();
+            reject(new Error("Timed out waiting for decoder worker"));
+        }, 10_000);
+        worker.once("error", onError);
+        worker.once("message", onMessage);
         worker.postMessage(message, transfer);
     });
     const result = await request({ requestId: 1, type: "inspect", source }, [source]);
@@ -54,7 +64,11 @@ try {
         decodeBytes.byteOffset,
         decodeBytes.byteOffset + decodeBytes.byteLength,
     );
-    const decoded = await request({ requestId: 2, type: "decode", source: decodeSource }, [decodeSource]);
+    const decoded = await request({
+        requestId: 2,
+        type: "decode",
+        source: decodeSource,
+    }, [decodeSource]);
     if (!decoded.ok) {
         throw new Error(`Wasm scene decode failed: ${decoded.error.message}`);
     }

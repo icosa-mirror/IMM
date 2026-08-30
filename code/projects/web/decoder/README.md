@@ -9,9 +9,14 @@ schema-v5 bulk C ABI exports the complete hierarchy, playback clock, chapters,
 animation keys, transforms and pivots, visibility and opacity, default spawn,
 paint drawings/strokes/points/timing/frame maps, keep-alive parameters, and
 decoded picture metadata/pixels. It also preserves WAV, Ogg Vorbis, and Ogg
-Opus sound payloads with their playback and spatial metadata. Its worker
-expands the five paint brush types into transferable indexed buffers before
-returning the canonical document.
+Opus sound payloads with their playback and spatial metadata. Shared native
+paint algorithms expand the five brush types into a versioned contiguous packet
+inside Wasm; the worker copies each packet once into transferable indexed views
+before returning the canonical document.
+
+The exact schema-v5 document ABI, paint-packet ABI, worker marshaling, and ownership rules are frozen in
+[`CONTRACT.md`](CONTRACT.md). Update that contract and increment the schema for
+any incompatible boundary change.
 
 ## Native contract test
 

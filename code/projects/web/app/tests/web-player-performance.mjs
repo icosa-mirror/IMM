@@ -1,4 +1,5 @@
 import { stat, writeFile } from "node:fs/promises";
+import { cpus, totalmem } from "node:os";
 import { basename, resolve } from "node:path";
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
@@ -24,6 +25,7 @@ const browser = await chromium.launch({
     headless: process.env.IMM_WEB_HEADLESS === "1",
     args: ["--window-size=1280,720", "--disable-background-timer-throttling"],
 });
+const browserVersion = browser.version();
 
 const results = [];
 try {
@@ -34,8 +36,22 @@ try {
             if (message.type() === "error") errors.push(message.text());
         });
         page.on("pageerror", (error) => errors.push(error.message));
+        const navigationStartedAt = performance.now();
+        const benchmarkParameters = new URLSearchParams({ src: "", "visual-test": "1" });
+        if (process.env.IMM_WEB_STAGED !== "1") benchmarkParameters.set("benchmark-eager", "1");
+        await page.goto(`http://127.0.0.1:4190/?${benchmarkParameters}`);
+        const navigationMs = performance.now() - navigationStartedAt;
+        await page.evaluate(() => {
+            window.__immBenchmarkLongTasks = [];
+            const observer = new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                    window.__immBenchmarkLongTasks.push({ startTime: entry.startTime, duration: entry.duration });
+                }
+            });
+            observer.observe({ type: "longtask", buffered: true });
+            window.__immBenchmarkLongTaskObserver = observer;
+        });
         const loadStartedAt = performance.now();
-        await page.goto("http://127.0.0.1:4190/?src=&visual-test=1&benchmark-eager=1");
         await page.setInputFiles("#file-input", filePath);
         await page.waitForFunction(
             () => window.__immDiagnostics?.().ready === true,
@@ -129,11 +145,20 @@ try {
             }
             requestAnimationFrame(sample);
         }), 10_000);
-        const diagnostics = await page.evaluate(() => window.__immDiagnostics());
+        const { diagnostics, decoderDiagnostics, longTasks } = await page.evaluate(async () => {
+            window.__immBenchmarkLongTaskObserver?.disconnect();
+            return {
+                diagnostics: window.__immDiagnostics(),
+                decoderDiagnostics: await window.__immDecoderDiagnostics(),
+                longTasks: window.__immBenchmarkLongTasks ?? [],
+            };
+        });
         const result = {
             file: basename(filePath),
             fileBytes,
+            navigationMs,
             readyMs,
+            timeToFirstMeaningfulFrameMs: readyMs,
             settleMs,
             selectedChapterIndex: heavyPoint.selected.chapterIndex,
             chapterCount: heavyPoint.chapterCount,
@@ -150,7 +175,24 @@ try {
             drawCalls: diagnostics.drawCalls,
             renderedTriangles: diagnostics.renderedTriangles,
             gpuFrameMs: diagnostics.gpuFrameMs,
+            timelineEvaluationMs: diagnostics.timelineEvaluationMs,
+            adapterUpdateMs: diagnostics.adapterUpdateMs,
             jsHeapBytes: diagnostics.jsHeapBytes,
+            peakWasmHeapBytes: decoderDiagnostics.peakWasmHeapBytes,
+            peakPaintPacketBytes: decoderDiagnostics.peakPaintPacketBytes,
+            geometryTransferBytes: decoderDiagnostics.geometryTransferBytes,
+            geometryBufferBytes: diagnostics.geometryBufferBytes,
+            estimatedGpuAllocationBytes: diagnostics.estimatedGpuAllocationBytes,
+            geometryBytesPerSourcePoint: diagnostics.geometryBytesPerSourcePoint,
+            geometryBytesPerTriangle: diagnostics.geometryBytesPerTriangle,
+            decodeMs: diagnostics.decodeMs,
+            workerMarshalMs: diagnostics.workerMarshalMs,
+            workerPackMs: diagnostics.workerPackMs,
+            geometryUploadMs: diagnostics.geometryUploadMs,
+            firstUploadRenderMs: diagnostics.firstUploadRenderMs,
+            longTaskCount: longTasks.length,
+            worstLongTaskMs: Math.max(0, ...longTasks.map((entry) => entry.duration)),
+            totalLongTaskMs: longTasks.reduce((total, entry) => total + entry.duration, 0),
             pixelRatio: diagnostics.pixelRatio,
             canvasWidth: diagnostics.canvasWidth,
             canvasHeight: diagnostics.canvasHeight,
@@ -168,6 +210,13 @@ try {
 const report = {
     capturedAt: new Date().toISOString(),
     chromeHeadless: process.env.IMM_WEB_HEADLESS === "1",
+    browserVersion,
+    platform: process.platform,
+    architecture: process.arch,
+    cpu: cpus()[0]?.model ?? "unknown",
+    logicalCpuCount: cpus().length,
+    systemMemoryBytes: totalmem(),
+    browserProfile: "Playwright temporary isolated profile",
     viewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
     warmupMs: 5_000,
     sampleMs: 10_000,

@@ -95,6 +95,9 @@ metal_player_debug.txt
 /code/projects/web/app/public/decoder/
 /code/projects/web/app/dist/
 
+# Local web performance run output; commit summarized results instead.
+/code/projects/web/performance/*.json
+
 # Godot GDExtension local build artifacts
 artifacts/
 thirdparty/godot-cpp/

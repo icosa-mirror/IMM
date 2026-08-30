@@ -78,6 +78,11 @@ let lastMetrics: Record<string, unknown> | null = null;
 let frameStart = performance.now();
 let frameCount = 0;
 let meanFrameMs = 0;
+let timelineEvaluationTotalMs = 0;
+let adapterUpdateTotalMs = 0;
+let runtimeSampleCount = 0;
+let meanTimelineEvaluationMs = 0;
+let meanAdapterUpdateMs = 0;
 let firstUploadRenderMs: number | null = null;
 let measureNextRender = false;
 const timerContext = renderer.getContext() as WebGL2RenderingContext;
@@ -97,6 +102,7 @@ declare global {
         __immLoadUrl: (url: string) => Promise<void>;
         __immDisposeView: () => void;
         __immDiagnostics: () => Record<string, unknown>;
+        __immDecoderDiagnostics: () => ReturnType<ImmDecoderClient["diagnostics"]>;
         __immPlayback: {
             play(): void;
             pause(): void;
@@ -154,6 +160,7 @@ pasteUrl.addEventListener("click", async () => {
 
 window.__immLoadUrl = loadUrl;
 window.__immDisposeView = resetDocumentState;
+window.__immDecoderDiagnostics = () => decoder.diagnostics();
 window.__immDiagnostics = () => {
     const activeViewpoint = playback?.evaluate().layers.get(Number(viewpoint.value));
     return {
@@ -174,6 +181,8 @@ window.__immDiagnostics = () => {
         : null,
     firstUploadRenderMs: firstUploadRenderMs === null ? null : round(firstUploadRenderMs),
     gpuFrameMs: gpuFrameMs === null ? null : round(gpuFrameMs),
+    timelineEvaluationMs: round(meanTimelineEvaluationMs),
+    adapterUpdateMs: round(meanAdapterUpdateMs),
     gpuTimerAvailable: timerExtension !== null,
     cameraPosition: camera.position.toArray(),
     cameraQuaternion: camera.quaternion.toArray(),
@@ -326,16 +335,26 @@ renderer.setAnimationLoop((animationTime) => {
     frameCount++;
     if (now - frameStart >= 500) {
         meanFrameMs = (now - frameStart) / frameCount;
+        meanTimelineEvaluationMs = runtimeSampleCount === 0 ? 0 : timelineEvaluationTotalMs / runtimeSampleCount;
+        meanAdapterUpdateMs = runtimeSampleCount === 0 ? 0 : adapterUpdateTotalMs / runtimeSampleCount;
         frameStart = now;
         frameCount = 0;
+        timelineEvaluationTotalMs = 0;
+        adapterUpdateTotalMs = 0;
+        runtimeSampleCount = 0;
     }
     resize();
     if (!renderer.xr.isPresenting) controls.update(deltaSeconds);
     if (playback !== null && immView !== null) {
         const previousTicks = playback.timeTicks;
+        const evaluationStartedAt = performance.now();
         const snapshot = playback.advance(immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds);
+        timelineEvaluationTotalMs += performance.now() - evaluationStartedAt;
+        const adapterStartedAt = performance.now();
         applyAuthoredSpawn(false, snapshot);
         immView.applySnapshot(snapshot, camera);
+        adapterUpdateTotalMs += performance.now() - adapterStartedAt;
+        runtimeSampleCount++;
         syncAudio(playback.timeTicks < previousTicks, snapshot);
         updatePlaybackControls();
     }
@@ -641,6 +660,18 @@ function showSummary(
         (drawingTotal, drawing) => drawingTotal + drawing.strokeCount, 0), 0);
     const pointCount = paintLayers.reduce((total, layer) => total + layer.drawings.reduce(
         (drawingTotal, drawing) => drawingTotal + drawing.pointCount, 0), 0);
+    const geometryBufferBytes = paintLayers.reduce((layerTotal, layer) => layerTotal + layer.drawings.reduce(
+        (drawingTotal, drawing) => drawingTotal + drawing.geometries.reduce(
+            (geometryTotal, geometry) => geometryTotal + geometry.positions.byteLength +
+                geometry.colors.byteLength + geometry.directions.byteLength + geometry.visibility.byteLength +
+                geometry.masks.byteLength + geometry.progress.byteLength + geometry.indices.byteLength,
+            0,
+        ), 0,
+    ), 0);
+    const textureBufferBytes = document.layers.reduce(
+        (total, layer) => total + (layer.picture?.pixels.byteLength ?? 0),
+        0,
+    );
     const metrics = {
         layers: document.layers.length,
         paintLayers: view.diagnostics.paintLayerCount,
@@ -650,6 +681,13 @@ function showSummary(
         points: pointCount,
         meshes: view.diagnostics.meshCount,
         triangles: view.diagnostics.triangleCount,
+        geometryBufferBytes,
+        textureBufferBytes,
+        estimatedGpuAllocationBytes: geometryBufferBytes + textureBufferBytes,
+        geometryBytesPerSourcePoint: pointCount === 0 ? 0 : round(geometryBufferBytes / pointCount),
+        geometryBytesPerTriangle: view.diagnostics.triangleCount === 0
+            ? 0
+            : round(geometryBufferBytes / view.diagnostics.triangleCount),
         decodeMs: round(document.metrics.decodeMs),
         workerMarshalMs: round(document.metrics.marshalMs),
         workerPackMs: round(document.metrics.packMs),
