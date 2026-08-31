@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+    normalizeWasm32Pointer,
     PAINT_PACKET_SCHEMA_VERSION,
     parsePaintPacket,
 } from "../../decoder/js/imm-web-paint-packet.mjs";
@@ -39,6 +40,12 @@ function packet(): Uint8Array {
 }
 
 describe("native paint packet validation", () => {
+    test("normalizes signed Wasm32 pointer results into unsigned byte offsets", () => {
+        expect(normalizeWasm32Pointer(0x7fff_ffff)).toBe(0x7fff_ffff);
+        expect(normalizeWasm32Pointer(-0x8000_0000)).toBe(0x8000_0000);
+        expect(normalizeWasm32Pointer(-1)).toBe(0xffff_ffff);
+    });
+
     test("parses a versioned, aligned packet into zero-copy attribute views", () => {
         const bytes = packet();
         const parsed = parsePaintPacket(bytes, LAYER_ID, DRAWING_ID);
