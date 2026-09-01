@@ -11,7 +11,7 @@ import {
 } from "../runtime/imm-playback";
 import type { StagedLoadWork } from "../staged-loading";
 import type { ImmStagedDelta } from "../decoder-client";
-import { IMMLoadSession } from "./imm-load-session";
+import { IMMLoadSession, type IMMLoadTelemetry } from "./imm-load-session";
 
 export interface IMMViewpointPose {
     layerId: number;
@@ -39,6 +39,7 @@ export class IMMAsset {
     readonly playback: ImmPlaybackController;
     readonly view: ImmThreeView;
     readonly backgroundComplete: Promise<void>;
+    readonly loadTelemetry: IMMLoadTelemetry;
 
     #session: IMMLoadSession | null;
     #audio: ImmWebAudio | null;
@@ -50,9 +51,11 @@ export class IMMAsset {
         document: ImmDocument,
         session: IMMLoadSession,
         remainingWork: readonly StagedLoadWork[],
+        loadTelemetry: IMMLoadTelemetry,
         options: IMMAssetOptions,
     ) {
         this.document = document;
+        this.loadTelemetry = loadTelemetry;
         this.#session = session;
         this.view = new ImmThreeView(document, { renderer: options.renderer });
         this.scene = this.view.object3d;

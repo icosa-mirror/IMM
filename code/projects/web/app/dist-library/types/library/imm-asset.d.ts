@@ -3,7 +3,7 @@ import type { ImmDocument, ImmTransform } from "../format/imm-document";
 import { ImmThreeView } from "../render-three/imm-three-view";
 import { ImmPlaybackController, type ImmPlaybackSnapshot } from "../runtime/imm-playback";
 import type { StagedLoadWork } from "../staged-loading";
-import { IMMLoadSession } from "./imm-load-session";
+import { IMMLoadSession, type IMMLoadTelemetry } from "./imm-load-session";
 export interface IMMViewpointPose {
     layerId: number;
     name: string;
@@ -28,7 +28,8 @@ export declare class IMMAsset {
     readonly playback: ImmPlaybackController;
     readonly view: ImmThreeView;
     readonly backgroundComplete: Promise<void>;
-    constructor(document: ImmDocument, session: IMMLoadSession, remainingWork: readonly StagedLoadWork[], options: IMMAssetOptions);
+    readonly loadTelemetry: IMMLoadTelemetry;
+    constructor(document: ImmDocument, session: IMMLoadSession, remainingWork: readonly StagedLoadWork[], loadTelemetry: IMMLoadTelemetry, options: IMMAssetOptions);
     get playing(): boolean;
     get waiting(): boolean;
     get timeSeconds(): number;

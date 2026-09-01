@@ -95,7 +95,13 @@ export class IMMLoader extends THREE.Loader {
                 audioContext: options.audioContext,
                 onBackgroundError: options.onBackgroundError,
             };
-            return new IMMAsset(initial.document, session, initial.remainingWork, assetOptions);
+            return new IMMAsset(
+                initial.document,
+                session,
+                initial.remainingWork,
+                initial.telemetry,
+                assetOptions,
+            );
         } catch (error) {
             session.dispose();
             throw error;

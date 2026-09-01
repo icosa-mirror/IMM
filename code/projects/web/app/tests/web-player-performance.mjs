@@ -7,11 +7,19 @@ import { createServer } from "vite";
 const args = process.argv.slice(2);
 const outputIndex = args.indexOf("--output");
 const outputPath = outputIndex < 0 ? null : resolve(args[outputIndex + 1] ?? "");
+const modeIndex = args.indexOf("--mode");
+const requestedBenchmarkLoadMode = modeIndex < 0
+    ? (process.env.IMM_WEB_STAGED === "1" ? "staged" : "eager")
+    : args[modeIndex + 1];
+if (requestedBenchmarkLoadMode !== "eager" && requestedBenchmarkLoadMode !== "staged") {
+    throw new Error("--mode must be eager or staged");
+}
 const filePaths = args
-    .filter((_, index) => index !== outputIndex && index !== outputIndex + 1)
+    .filter((_, index) => index !== outputIndex && index !== outputIndex + 1 &&
+        index !== modeIndex && index !== modeIndex + 1)
     .map((filePath) => resolve(filePath));
 if (filePaths.length === 0) {
-    throw new Error("Usage: node tests/web-player-performance.mjs [--output result.json] file.imm [...]");
+    throw new Error("Usage: node tests/web-player-performance.mjs [--mode eager|staged] [--output result.json] file.imm [...]");
 }
 
 const appRoot = resolve(process.env.IMM_WEB_APP_ROOT ?? resolve(import.meta.dirname, ".."));
@@ -38,7 +46,7 @@ try {
         page.on("pageerror", (error) => errors.push(error.message));
         const navigationStartedAt = performance.now();
         const benchmarkParameters = new URLSearchParams({ src: "", "visual-test": "1" });
-        if (process.env.IMM_WEB_STAGED !== "1") benchmarkParameters.set("benchmark-eager", "1");
+        if (requestedBenchmarkLoadMode === "eager") benchmarkParameters.set("benchmark-eager", "1");
         await page.goto(`http://127.0.0.1:4190/?${benchmarkParameters}`);
         const navigationMs = performance.now() - navigationStartedAt;
         await page.evaluate(() => {
@@ -181,6 +189,34 @@ try {
             peakWasmHeapBytes: decoderDiagnostics.peakWasmHeapBytes,
             peakPaintPacketBytes: decoderDiagnostics.peakPaintPacketBytes,
             geometryTransferBytes: decoderDiagnostics.geometryTransferBytes,
+            requestedLoadMode: decoderDiagnostics.requestedLoadMode,
+            effectiveLoadMode: decoderDiagnostics.effectiveLoadMode,
+            fallbackReason: decoderDiagnostics.fallbackReason,
+            requestedItems: diagnostics.requestedItems,
+            initiallyLoadedItems: diagnostics.initiallyLoadedItems,
+            deferredItems: diagnostics.deferredItems,
+            backgroundCompletedItems: diagnostics.backgroundCompletedItems,
+            stagedRequests: decoderDiagnostics.stagedRequests,
+            stagedDrawingDecodeMs: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.decodeMs, 0),
+            stagedNativeBuildMs: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.nativeBuildMs, 0),
+            stagedWasmCopyMs: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.wasmCopyMs, 0),
+            stagedTransferMs: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.transferMs, 0),
+            stagedAdapterMs: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.adapterMs, 0),
+            layerLookupCount: decoderDiagnostics.stagedRequests.filter(
+                (request) => request.type === "asset").length,
+            layerLookupMs: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.lookupMs, 0),
+            resourceLookupCount: decoderDiagnostics.stagedRequests.filter(
+                (request) => request.type === "drawing").length,
+            stagedPacketCount: decoderDiagnostics.stagedRequests.filter(
+                (request) => request.type === "drawing").length,
+            stagedPacketBytes: decoderDiagnostics.stagedRequests.reduce(
+                (total, request) => total + request.packetBytes, 0),
             geometryBufferBytes: diagnostics.geometryBufferBytes,
             estimatedGpuAllocationBytes: diagnostics.estimatedGpuAllocationBytes,
             geometryBytesPerSourcePoint: diagnostics.geometryBytesPerSourcePoint,
@@ -199,7 +235,15 @@ try {
             errors,
         };
         results.push(result);
-        process.stdout.write(`${JSON.stringify(result)}\n`);
+        process.stdout.write(`${JSON.stringify({
+            file: result.file,
+            readyMs: result.readyMs,
+            requestedLoadMode: result.requestedLoadMode,
+            effectiveLoadMode: result.effectiveLoadMode,
+            fallbackReason: result.fallbackReason,
+            stagedPacketCount: result.stagedPacketCount,
+            errorCount: result.errors.length,
+        })}\n`);
         await page.close();
     }
 } finally {
@@ -211,6 +255,7 @@ const report = {
     capturedAt: new Date().toISOString(),
     chromeHeadless: process.env.IMM_WEB_HEADLESS === "1",
     browserVersion,
+    requestedBenchmarkLoadMode,
     platform: process.platform,
     architecture: process.arch,
     cpu: cpus()[0]?.model ?? "unknown",

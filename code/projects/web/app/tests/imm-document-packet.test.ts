@@ -69,11 +69,25 @@ function document(schemaVersion = 5): ImmDocument {
     };
 }
 
+const requestMetrics = {
+    type: "drawing" as const,
+    layerId: 1,
+    drawingId: 0,
+    decodeMs: 0,
+    nativeBuildMs: 0,
+    wasmCopyMs: 0,
+    packetParseMs: 0,
+    transferMs: 0,
+    adapterMs: 0,
+    lookupMs: 0,
+    packetBytes: 64,
+};
+
 describe("IMM decoder packet validation", () => {
     test("accepts the current schema and a well-formed paint packet", () => {
         expect(() => assertSupportedSummary({ schemaVersion: 5 })).not.toThrow();
         expect(() => assertSupportedDocument(document())).not.toThrow();
-        expect(() => assertSupportedDelta({ type: "drawing", layerId: 1, drawingId: 0, drawing: drawing() }))
+        expect(() => assertSupportedDelta({ type: "drawing", layerId: 1, drawingId: 0, drawing: drawing(), metrics: requestMetrics }))
             .not.toThrow();
     });
 
@@ -82,19 +96,31 @@ describe("IMM decoder packet validation", () => {
         expect(() => assertSupportedDocument(document(6))).toThrow("schema 6 is unsupported; expected 5");
     });
 
+    test("rejects malformed staged request metrics", () => {
+        expect(() => assertSupportedDelta({
+            type: "drawing",
+            layerId: 1,
+            drawingId: 0,
+            drawing: drawing(),
+            metrics: { ...requestMetrics, packetBytes: -1 },
+        })).toThrow("metrics packetBytes must be a finite non-negative number");
+    });
+
     test("rejects mismatched attribute lengths", () => {
         const malformed = drawing({ geometries: [geometry({ colors: new Float32Array(8) })] });
-        expect(() => assertSupportedDelta({ type: "drawing", layerId: 1, drawingId: 0, drawing: malformed }))
+        expect(() => assertSupportedDelta({ type: "drawing", layerId: 1, drawingId: 0, drawing: malformed, metrics: requestMetrics }))
             .toThrow("colors length 8 does not match expected length 12");
     });
 
     test("rejects incomplete triangles and out-of-range indices", () => {
         expect(() => assertSupportedDelta({
             type: "drawing", layerId: 1, drawingId: 0,
+            metrics: requestMetrics,
             drawing: drawing({ geometries: [geometry({ indices: new Uint16Array([0, 1]) })] }),
         })).toThrow("indices must contain complete triangles");
         expect(() => assertSupportedDelta({
             type: "drawing", layerId: 1, drawingId: 0,
+            metrics: requestMetrics,
             drawing: drawing({ geometries: [geometry({ indices: new Uint16Array([0, 1, 3]) })] }),
         })).toThrow("index 3 exceeds vertex count 3");
     });
@@ -102,10 +128,12 @@ describe("IMM decoder packet validation", () => {
     test("rejects duplicate and unsupported brush records", () => {
         expect(() => assertSupportedDelta({
             type: "drawing", layerId: 1, drawingId: 0,
+            metrics: requestMetrics,
             drawing: drawing({ geometries: [geometry(), geometry()] }),
         })).toThrow("repeats brush type 0");
         expect(() => assertSupportedDelta({
             type: "drawing", layerId: 1, drawingId: 0,
+            metrics: requestMetrics,
             drawing: drawing({ geometries: [geometry({ brushType: 5 })] }),
         })).toThrow("brushType must be an integer from 0 through 4");
     });

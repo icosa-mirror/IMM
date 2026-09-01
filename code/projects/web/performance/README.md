@@ -12,11 +12,13 @@ window.
 
    ```powershell
    $env:IMM_WEB_HEADLESS = "1"
-   node tests/web-player-performance.mjs --output ..\performance\run.json ..\..\..\..\exampleImmFiles\sample1.imm
+   node tests/web-player-performance.mjs --mode staged --output ..\performance\run.json ..\..\..\..\exampleImmFiles\sample1.imm
    ```
 
 3. Use the same machine and close unrelated high-load applications for paired
    comparisons. The harness uses a temporary isolated Chrome profile.
+   `--mode eager` and `--mode staged` select the requested path explicitly;
+   the report records both that request and the effective mode.
 4. Add medium-animation, paint-heavy, and practical-upper-bound private fixtures
    as additional arguments without committing those source assets.
 5. Preserve raw reports. Compare `readyMs`, worker decode/marshal/pack times,
@@ -30,3 +32,11 @@ committed fixture alone.
 
 The current committed comparison and its gate assessment are in
 `WASM_REBALANCE_PHASE2_RESULTS.md`.
+Phase 2.1 implementation and committed-fixture validation are summarized in
+`WASM_REBALANCE_PHASE21_RESULTS.md`.
+
+Phase 2.1 reports additionally include requested/effective load mode, fallback
+reason, initial/deferred/background item counts, per-request decode/build/copy/
+transfer/adapter timing, packet count and bytes, and indexed layer/resource
+lookup counts. A staged result with `effectiveLoadMode: "eager"` is a fallback
+result and must not be compared as a successful staged load.

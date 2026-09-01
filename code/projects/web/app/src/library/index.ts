@@ -9,6 +9,7 @@ export {
 export {
     IMMLoadSession,
     type IMMInitialLoad,
+    type IMMLoadTelemetry,
     type IMMLoadProgress,
     type IMMLoadSessionOptions,
     type IMMLoadStage,

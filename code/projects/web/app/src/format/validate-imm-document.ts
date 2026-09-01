@@ -14,11 +14,27 @@ interface DrawingDelta {
     layerId: number;
     drawingId: number;
     drawing: ImmDrawing;
+    metrics: StagedRequestMetrics;
 }
 
 interface AssetDelta {
     type: "asset";
     layerId: number;
+    metrics: StagedRequestMetrics;
+}
+
+interface StagedRequestMetrics {
+    type: "drawing" | "asset";
+    layerId: number;
+    drawingId?: number;
+    decodeMs: number;
+    nativeBuildMs: number;
+    wasmCopyMs: number;
+    packetParseMs: number;
+    transferMs: number;
+    adapterMs: number;
+    lookupMs: number;
+    packetBytes: number;
 }
 
 export type ValidatedStagedDelta = DrawingDelta | AssetDelta;
@@ -44,14 +60,36 @@ export function assertSupportedDelta(delta: ValidatedStagedDelta): void {
     if (delta.type === "drawing") {
         assertNonNegativeInteger(delta.layerId, "drawing delta layerId");
         assertNonNegativeInteger(delta.drawingId, "drawing delta drawingId");
+        assertStagedMetrics(delta.metrics, "drawing", delta.layerId, delta.drawingId);
         assertDrawing(delta.drawing, `layer ${delta.layerId} drawing ${delta.drawingId}`);
         return;
     }
     if (delta.type === "asset") {
         assertNonNegativeInteger(delta.layerId, "asset delta layerId");
+        assertStagedMetrics(delta.metrics, "asset", delta.layerId);
         return;
     }
     fail("staged delta has an unsupported type");
+}
+
+function assertStagedMetrics(
+    metrics: StagedRequestMetrics,
+    type: "drawing" | "asset",
+    layerId: number,
+    drawingId?: number,
+): void {
+    if (metrics === undefined || metrics.type !== type || metrics.layerId !== layerId ||
+        metrics.drawingId !== drawingId) {
+        fail(`${type} delta metrics identity does not match the request`);
+    }
+    for (const field of [
+        "decodeMs", "nativeBuildMs", "wasmCopyMs", "packetParseMs",
+        "transferMs", "adapterMs", "lookupMs", "packetBytes",
+    ] as const) {
+        if (!Number.isFinite(metrics[field]) || metrics[field] < 0) {
+            fail(`${type} delta metrics ${field} must be a finite non-negative number`);
+        }
+    }
 }
 
 function assertSchemaVersion(actual: number, kind: string): void {

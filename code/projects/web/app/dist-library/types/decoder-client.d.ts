@@ -20,7 +20,7 @@ export declare class ImmDecoderClient {
     openMetadata(source: ArrayBuffer): Promise<ImmDocument>;
     decodeDrawing(layerId: number, drawingId: number): Promise<ImmStagedDelta>;
     decodeLayerAsset(layerId: number): Promise<ImmStagedDelta>;
-    fallbackEager(): Promise<ImmDocument>;
+    fallbackEager(reason: string): Promise<ImmDocument>;
     diagnostics(): Promise<ImmDecoderDiagnostics>;
     release(): Promise<void>;
     dispose(): void;
@@ -31,15 +31,34 @@ export type ImmStagedDelta = {
     layerId: number;
     drawingId: number;
     drawing: ImmDrawing;
+    metrics: ImmStagedRequestMetrics;
 } | {
     type: "asset";
     layerId: number;
     picture?: ImmPicture;
     sound?: ImmSound;
+    metrics: ImmStagedRequestMetrics;
 };
+export interface ImmStagedRequestMetrics {
+    type: "drawing" | "asset";
+    layerId: number;
+    drawingId?: number;
+    decodeMs: number;
+    nativeBuildMs: number;
+    wasmCopyMs: number;
+    packetParseMs: number;
+    transferMs: number;
+    adapterMs: number;
+    lookupMs: number;
+    packetBytes: number;
+}
 export interface ImmDecoderDiagnostics {
     peakWasmHeapBytes: number;
     peakPaintPacketBytes: number;
     geometryTransferBytes: number;
+    requestedLoadMode: "eager" | "staged";
+    effectiveLoadMode: "eager" | "staged";
+    fallbackReason: string | null;
+    stagedRequests: ImmStagedRequestMetrics[];
 }
 //# sourceMappingURL=decoder-client.d.ts.map

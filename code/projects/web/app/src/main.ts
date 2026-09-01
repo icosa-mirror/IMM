@@ -75,6 +75,15 @@ let immView: ImmThreeView | null = null;
 let playback: ImmPlaybackController | null = null;
 let immAudio: ImmWebAudio | null = null;
 let lastMetrics: Record<string, unknown> | null = null;
+let loadTelemetry = {
+    requestedMode: "staged" as "eager" | "staged",
+    effectiveMode: "staged" as "eager" | "staged",
+    fallbackReason: null as string | null,
+    requestedItems: 0,
+    initiallyLoadedItems: 0,
+    deferredItems: 0,
+    backgroundCompletedItems: 0,
+};
 let frameStart = performance.now();
 let frameCount = 0;
 let meanFrameMs = 0;
@@ -166,6 +175,7 @@ window.__immDiagnostics = () => {
     return {
     ready: immView !== null,
     ...lastMetrics,
+    ...loadTelemetry,
     frameMs: round(meanFrameMs),
     fps: meanFrameMs > 0 ? round(1_000 / meanFrameMs) : 0,
     pixelRatio: renderer.getPixelRatio(),
@@ -411,6 +421,10 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     let document: ImmDocument;
     let remainingWork: StagedLoadWork[] = [];
     if (benchmarkEagerDecode) {
+        loadTelemetry = {
+            requestedMode: "eager", effectiveMode: "eager", fallbackReason: null,
+            requestedItems: 0, initiallyLoadedItems: 0, deferredItems: 0, backgroundCompletedItems: 0,
+        };
         status.textContent = "Benchmark mode: decoding the complete IMM before playback…";
         document = await decoder.decode(source);
     } else {
@@ -419,15 +433,26 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
             const work = createNativeLoadOrder(document);
             const initialWork = work.filter((item) => item.initial);
             remainingWork = work.filter((item) => !item.initial);
+            loadTelemetry = {
+                requestedMode: "staged", effectiveMode: "staged", fallbackReason: null,
+                requestedItems: work.length,
+                initiallyLoadedItems: 0,
+                deferredItems: remainingWork.length,
+                backgroundCompletedItems: 0,
+            };
             for (let index = 0; index < initialWork.length; index++) {
                 if (requestId !== loadRequestId) return;
                 status.textContent = `Buffering native five-second window ${index + 1}/${initialWork.length}…`;
                 applyStagedDelta(document, await decodeStagedWork(initialWork[index]!));
+                loadTelemetry.initiallyLoadedItems++;
             }
         } catch (stagedError) {
             if (requestId !== loadRequestId) return;
             status.textContent = "Staged loading failed; using the eager decoder…";
-            document = await decoder.fallbackEager().catch(() => { throw stagedError; });
+            const fallbackReason = stagedError instanceof Error ? stagedError.message : String(stagedError);
+            loadTelemetry.effectiveMode = "eager";
+            loadTelemetry.fallbackReason = fallbackReason;
+            document = await decoder.fallbackEager(fallbackReason).catch(() => { throw stagedError; });
             remainingWork = [];
         }
     }
@@ -478,6 +503,7 @@ function decodeStagedWork(work: StagedLoadWork): Promise<ImmStagedDelta> {
 }
 
 function applyStagedDelta(document: ImmDocument, delta: ImmStagedDelta): void {
+    const startedAt = performance.now();
     const layer = document.layers.find((candidate) => candidate.id === delta.layerId);
     if (layer === undefined) throw new Error(`Staged decoder returned unknown layer ${delta.layerId}`);
     if (delta.type === "drawing") {
@@ -489,6 +515,7 @@ function applyStagedDelta(document: ImmDocument, delta: ImmStagedDelta): void {
         if (delta.picture !== undefined) layer.picture = delta.picture;
         if (delta.sound !== undefined) layer.sound = delta.sound;
     }
+    delta.metrics.adapterMs += performance.now() - startedAt;
 }
 
 async function continueStagedLoad(name: string, work: StagedLoadWork[], requestId: number): Promise<void> {
@@ -499,15 +526,18 @@ async function continueStagedLoad(name: string, work: StagedLoadWork[], requestI
         const document = playback?.document;
         if (document === undefined) return;
         applyStagedDelta(document, delta);
+        loadTelemetry.backgroundCompletedItems++;
 
         const loadedLayer = document.layers.find((layer) => layer.id === work[index]!.layerId);
         if (work[index]!.type === "drawing" || loadedLayer?.type === 3 || loadedLayer?.type === 4) {
-            immView?.refreshLayer(
+            const adapterStartedAt = performance.now();
+            const refreshed = immView?.refreshLayer(
                 delta.layerId,
                 delta.type === "drawing" ? delta.drawingId : undefined,
                 camera,
-            );
-            if (immView !== null) showSummary(name, document, immView);
+            ) ?? false;
+            delta.metrics.adapterMs += performance.now() - adapterStartedAt;
+            if (refreshed && immView !== null) showSummary(name, document, immView);
         }
 
         if (loadedLayer?.type === 5) {

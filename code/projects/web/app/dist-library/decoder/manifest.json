@@ -1,9 +1,9 @@
 {
   "format": 1,
   "sha256": {
-    "imm-web-decoder-worker.mjs": "9c0ee8ee97c2b1edebb62090a6c501ba6b8007ae2651710ce77399f8c75a223a",
+    "imm-web-decoder-worker.mjs": "b149a9be87a81080366d6aa786c7aee3df417bb4ab4a996036205c9815fec43a",
     "imm-web-decoder.mjs": "b89245171fc8629aecc89570f858c34453f04f4eccacc80eff31e86770aa4ec2",
-    "imm-web-decoder.wasm": "b689ca52ad1dbe8aee458fa3662326180163717f5a7991ff754cd91277e69e7f",
+    "imm-web-decoder.wasm": "3687534e582bf3e94712d5a7133918778700558f52e9d08c5eaf8f86487fdb32",
     "imm-web-paint-packet.mjs": "ca3fbf455aa77d74bc9456ddd597d33c1a039c3edaa0c2afad4b0db17aaa1fff"
   }
 }

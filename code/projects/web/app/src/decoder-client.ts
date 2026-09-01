@@ -34,6 +34,7 @@ interface DecoderResponse {
     delta?: ImmStagedDelta;
     diagnostics?: ImmDecoderDiagnostics;
     error?: DecoderError;
+    sentAtEpochMs?: number;
 }
 
 interface PendingRequest {
@@ -48,6 +49,7 @@ export class ImmDecoderClient {
     readonly #pending = new Map<number, PendingRequest>();
     #nextRequestId = 1;
     #disposed = false;
+    #stagedRequests: ImmStagedRequestMetrics[] = [];
 
     constructor(workerUrl = releaseAssetUrl("decoder", "imm-web-decoder-worker.mjs")) {
         this.#worker = new Worker(workerUrl, { type: "module", name: "imm-decoder" });
@@ -64,10 +66,12 @@ export class ImmDecoderClient {
     }
 
     decode(source: ArrayBuffer): Promise<ImmDocument> {
+        this.#stagedRequests = [];
         return this.#requestDocument("decode", { source }, [source]);
     }
 
     openMetadata(source: ArrayBuffer): Promise<ImmDocument> {
+        this.#stagedRequests = [];
         return this.#requestDocument("openMetadata", { source }, [source]);
     }
 
@@ -79,8 +83,8 @@ export class ImmDecoderClient {
         return this.#request<ImmStagedDelta>("decodeLayerAsset", { layerId });
     }
 
-    fallbackEager(): Promise<ImmDocument> {
-        return this.#requestDocument("fallbackEager", {});
+    fallbackEager(reason: string): Promise<ImmDocument> {
+        return this.#requestDocument("fallbackEager", { fallbackReason: reason });
     }
 
     diagnostics(): Promise<ImmDecoderDiagnostics> {
@@ -137,6 +141,17 @@ export class ImmDecoderClient {
         }
         this.#pending.delete(response.requestId);
 
+        if (response.delta?.metrics !== undefined && response.sentAtEpochMs !== undefined) {
+            response.delta.metrics.transferMs = Math.max(
+                0,
+                performance.timeOrigin + performance.now() - response.sentAtEpochMs,
+            );
+            this.#stagedRequests.push(response.delta.metrics);
+        }
+        if (response.diagnostics !== undefined) {
+            response.diagnostics.stagedRequests = this.#stagedRequests.map((metrics) => ({ ...metrics }));
+        }
+
         const value = response.summary ?? response.document ?? response.delta ?? response.diagnostics;
         if (response.ok && (value !== undefined || pending.allowEmpty)) {
             try {
@@ -167,11 +182,29 @@ export class ImmDecoderClient {
 import type { ImmDocument, ImmDrawing, ImmPicture, ImmSound } from "./format/imm-document";
 
 export type ImmStagedDelta =
-    | { type: "drawing"; layerId: number; drawingId: number; drawing: ImmDrawing }
-    | { type: "asset"; layerId: number; picture?: ImmPicture; sound?: ImmSound };
+    | { type: "drawing"; layerId: number; drawingId: number; drawing: ImmDrawing; metrics: ImmStagedRequestMetrics }
+    | { type: "asset"; layerId: number; picture?: ImmPicture; sound?: ImmSound; metrics: ImmStagedRequestMetrics };
+
+export interface ImmStagedRequestMetrics {
+    type: "drawing" | "asset";
+    layerId: number;
+    drawingId?: number;
+    decodeMs: number;
+    nativeBuildMs: number;
+    wasmCopyMs: number;
+    packetParseMs: number;
+    transferMs: number;
+    adapterMs: number;
+    lookupMs: number;
+    packetBytes: number;
+}
 
 export interface ImmDecoderDiagnostics {
     peakWasmHeapBytes: number;
     peakPaintPacketBytes: number;
     geometryTransferBytes: number;
+    requestedLoadMode: "eager" | "staged";
+    effectiveLoadMode: "eager" | "staged";
+    fallbackReason: string | null;
+    stagedRequests: ImmStagedRequestMetrics[];
 }

@@ -229,6 +229,13 @@ try {
         decodedDrawing?.pointCount !== eagerDrawing.pointCount) {
         throw new Error("Staged drawing does not match eager drawing counts");
     }
+    const drawingMetrics = stagedDrawing.delta?.metrics;
+    if (drawingMetrics?.type !== "drawing" || drawingMetrics.layerId !== eagerPaintLayer.id ||
+        drawingMetrics.drawingId !== drawingId || drawingMetrics.packetBytes <= 0 ||
+        drawingMetrics.decodeMs < 0 || drawingMetrics.nativeBuildMs < 0 ||
+        drawingMetrics.wasmCopyMs < 0 || drawingMetrics.packetParseMs < 0) {
+        throw new Error(`Staged drawing metrics are incomplete: ${JSON.stringify(drawingMetrics)}`);
+    }
 
     const stagedPicture = await request({
         requestId: 5,
@@ -297,6 +304,30 @@ try {
     if (stagedStrokeCount !== strokeCount || stagedPointCount !== pointCount ||
         stagedPictureBytes !== eagerPictureBytes || stagedSoundBytes !== eagerSoundBytes) {
         throw new Error("Fully staged paint/picture/sound totals do not match eager decode");
+    }
+
+    const diagnostics = await request({ requestId: nextStagedRequestId++, type: "diagnostics" });
+    if (!diagnostics.ok || diagnostics.diagnostics?.requestedLoadMode !== "staged" ||
+        diagnostics.diagnostics?.effectiveLoadMode !== "staged" ||
+        diagnostics.diagnostics?.fallbackReason !== null ||
+        diagnostics.diagnostics?.stagedRequests.length === 0) {
+        throw new Error(`Staged diagnostics are incomplete: ${JSON.stringify(diagnostics.diagnostics)}`);
+    }
+
+    const fallbackReason = "IMM_PHASE21_TEST_FALLBACK";
+    const fallback = await request({
+        requestId: nextStagedRequestId++,
+        type: "fallbackEager",
+        fallbackReason,
+    });
+    if (!fallback.ok || fallback.document?.layers.length !== decoded.document.layers.length) {
+        throw new Error(`Wasm eager fallback failed: ${fallback.error?.message ?? "invalid document"}`);
+    }
+    const fallbackDiagnostics = await request({ requestId: nextStagedRequestId++, type: "diagnostics" });
+    if (!fallbackDiagnostics.ok || fallbackDiagnostics.diagnostics?.requestedLoadMode !== "staged" ||
+        fallbackDiagnostics.diagnostics?.effectiveLoadMode !== "eager" ||
+        fallbackDiagnostics.diagnostics?.fallbackReason !== fallbackReason) {
+        throw new Error(`Eager fallback diagnostics are incomplete: ${JSON.stringify(fallbackDiagnostics.diagnostics)}`);
     }
 
     const released = await request({ requestId: nextStagedRequestId++, type: "release" });

@@ -7,10 +7,25 @@ interface DrawingDelta {
     layerId: number;
     drawingId: number;
     drawing: ImmDrawing;
+    metrics: StagedRequestMetrics;
 }
 interface AssetDelta {
     type: "asset";
     layerId: number;
+    metrics: StagedRequestMetrics;
+}
+interface StagedRequestMetrics {
+    type: "drawing" | "asset";
+    layerId: number;
+    drawingId?: number;
+    decodeMs: number;
+    nativeBuildMs: number;
+    wasmCopyMs: number;
+    packetParseMs: number;
+    transferMs: number;
+    adapterMs: number;
+    lookupMs: number;
+    packetBytes: number;
 }
 export type ValidatedStagedDelta = DrawingDelta | AssetDelta;
 export declare function assertSupportedSummary(summary: VersionedSummary): void;

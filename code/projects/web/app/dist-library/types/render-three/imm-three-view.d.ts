@@ -49,7 +49,7 @@ export declare class ImmThreeView {
     /** The host owns the renderer and clock; time is an explicit document-relative value. */
     update(timeSeconds: number, camera: THREE.Camera): void;
     /** Uploads newly decoded content without rebuilding already resident layers. */
-    refreshLayer(layerId: number, drawingId?: number, camera?: THREE.Camera): void;
+    refreshLayer(layerId: number, drawingId?: number, camera?: THREE.Camera): boolean;
     dispose(): void;
 }
 export declare function validateImmHostCompatibility(camera: THREE.Camera | undefined, depth: ImmHostDepthContract): ImmHostCompatibilityWarning[];

@@ -16,6 +16,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace
@@ -74,6 +75,8 @@ namespace
     std::vector<StoredChapter> gChapters;
     std::vector<StoredSound> gSounds;
     std::vector<uint8_t> gDrawingPacket;
+    std::unordered_map<uint32_t, uint32_t> gContentLayerIndices;
+    std::unordered_map<uint64_t, uint32_t> gDrawingResourceLayerIndices;
     bool gAnimateOnStart = false;
     int64_t gDurationTicks = 0;
 
@@ -134,18 +137,40 @@ namespace
         return result;
     }
 
-    uint32_t findContentLayerIndex(const ImmStrokeReader::StrokeStore& store, uint32_t layerId)
+    uint64_t makeDrawingResourceId(uint32_t layerId, uint32_t drawingId)
     {
+        return (static_cast<uint64_t>(layerId) << 32u) | drawingId;
+    }
+
+    void rebuildContentIndexes(const ImmStrokeReader::StrokeStore& store)
+    {
+        gContentLayerIndices.clear();
+        gDrawingResourceLayerIndices.clear();
         const int layerCount = store.GetLayerCount();
         for (int layerIndex = 0; layerIndex < layerCount; ++layerIndex)
         {
             ImmStrokeReader::StrokeLayerInfoC info{};
-            if (store.GetLayerInfo(layerIndex, &info) && static_cast<uint32_t>(info.id) == layerId)
+            if (!store.GetLayerInfo(layerIndex, &info))
             {
-                return static_cast<uint32_t>(layerIndex);
+                continue;
+            }
+            const uint32_t layerId = static_cast<uint32_t>(info.id);
+            const uint32_t contentLayerIndex = static_cast<uint32_t>(layerIndex);
+            gContentLayerIndices.emplace(layerId, contentLayerIndex);
+            const int drawingCount = store.GetDrawingCount(layerIndex);
+            for (int drawingIndex = 0; drawingIndex < drawingCount; ++drawingIndex)
+            {
+                gDrawingResourceLayerIndices.emplace(
+                    makeDrawingResourceId(layerId, static_cast<uint32_t>(drawingIndex)),
+                    contentLayerIndex);
             }
         }
-        return kNoContentLayer;
+    }
+
+    uint32_t findContentLayerIndex(uint32_t layerId)
+    {
+        const auto match = gContentLayerIndices.find(layerId);
+        return match == gContentLayerIndices.end() ? kNoContentLayer : match->second;
     }
 
     bool samePosition(const ImmStrokeReader::StrokePointC& left, const ImmStrokeReader::StrokePointC& right)
@@ -575,7 +600,7 @@ namespace
         return true;
     }
 
-    void capturePlaybackDocument(ImmImporter::Sequence& sequence, const ImmStrokeReader::StrokeStore& store)
+    void capturePlaybackDocument(ImmImporter::Sequence& sequence)
     {
         gTimelineLayers.clear();
         gChapters.clear();
@@ -585,7 +610,7 @@ namespace
         ImmImporter::Layer* root = sequence.GetRoot();
         gDurationTicks = root == nullptr ? 0 : ImmCore::piTick::CastInt(root->GetDuration());
         sequence.Recurse(
-            [&store](ImmImporter::Layer* layer, int, int, bool) {
+            [](ImmImporter::Layer* layer, int, int, bool) {
                 StoredTimelineLayer stored{};
                 stored.id = layer->GetID();
                 stored.parentId = layer->GetParent() == nullptr
@@ -604,7 +629,7 @@ namespace
                 stored.opacity = layer->GetOpacity();
                 stored.maxRepeatCount = layer->GetMaxRepeatCount();
                 stored.durationTicks = ImmCore::piTick::CastInt(layer->GetDuration());
-                stored.contentLayerIndex = findContentLayerIndex(store, stored.id);
+                stored.contentLayerIndex = findContentLayerIndex(stored.id);
                 stored.local = layer->GetTransform();
                 stored.world = layer->GetTransformToWorld();
                 stored.pivot = layer->GetPivot();
@@ -807,7 +832,8 @@ extern "C" ImmWebStatus imm_web_decode_scene(
     gBackgroundColor[0] = background.x;
     gBackgroundColor[1] = background.y;
     gBackgroundColor[2] = background.z;
-    capturePlaybackDocument(sequence, *store);
+    rebuildContentIndexes(*store);
+    capturePlaybackDocument(sequence);
     sequence.Deinit(&log);
     gStore = std::move(store);
     setError(outError, IMM_WEB_STATUS_OK, "");
@@ -855,7 +881,8 @@ extern "C" ImmWebStatus imm_web_open_scene_metadata(
     gBackgroundColor[0] = background.x;
     gBackgroundColor[1] = background.y;
     gBackgroundColor[2] = background.z;
-    capturePlaybackDocument(*sequence, *store);
+    rebuildContentIndexes(*store);
+    capturePlaybackDocument(*sequence);
     gSequence = std::move(sequence);
     gLog = std::move(log);
     gStore = std::move(store);
@@ -913,7 +940,7 @@ extern "C" ImmWebStatus imm_web_decode_layer_asset(
         setError(outError, IMM_WEB_STATUS_SCENE_DECODE_FAILED, "Native IMM layer asset decode failed");
         return IMM_WEB_STATUS_SCENE_DECODE_FAILED;
     }
-    capturePlaybackDocument(*gSequence, *gStore);
+    capturePlaybackDocument(*gSequence);
     setError(outError, IMM_WEB_STATUS_OK, "");
     return IMM_WEB_STATUS_OK;
 }
@@ -943,6 +970,8 @@ extern "C" void imm_web_release_scene(void)
     gTimelineLayers.clear();
     gChapters.clear();
     gSounds.clear();
+    gContentLayerIndices.clear();
+    gDrawingResourceLayerIndices.clear();
     imm_web_release_drawing_packet();
     gAnimateOnStart = false;
     gDurationTicks = 0;
@@ -959,13 +988,13 @@ extern "C" const uint8_t* imm_web_build_drawing_packet(
         setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "No decoded scene is open");
         return nullptr;
     }
-    const uint32_t layerIndex = findContentLayerIndex(*gStore, layerId);
-    if (layerIndex == kNoContentLayer || drawingId >= static_cast<uint32_t>(
-            gStore->GetDrawingCount(static_cast<int>(layerIndex))))
+    const auto resource = gDrawingResourceLayerIndices.find(makeDrawingResourceId(layerId, drawingId));
+    if (resource == gDrawingResourceLayerIndices.end())
     {
         setError(outError, IMM_WEB_STATUS_INVALID_ARGUMENT, "Paint drawing does not exist");
         return nullptr;
     }
+    const uint32_t layerIndex = resource->second;
 
     if (!buildPaintPacketDirect(*gStore, layerIndex, layerId, drawingId, drawingId))
     {

@@ -1,4 +1,4 @@
-import { type ImmStagedDelta } from "../decoder-client";
+import { type ImmStagedDelta, type ImmStagedRequestMetrics } from "../decoder-client";
 import type { ImmDocument } from "../format/imm-document";
 import { type StagedLoadWork } from "../staged-loading";
 export type IMMLoadStage = "metadata" | "initial" | "background" | "complete" | "fallback";
@@ -17,6 +17,17 @@ export interface IMMLoadSessionOptions {
 export interface IMMInitialLoad {
     document: ImmDocument;
     remainingWork: StagedLoadWork[];
+    telemetry: IMMLoadTelemetry;
+}
+export interface IMMLoadTelemetry {
+    requestedMode: "eager" | "staged";
+    effectiveMode: "eager" | "staged";
+    fallbackReason: string | null;
+    requestedItems: number;
+    initiallyLoadedItems: number;
+    deferredItems: number;
+    backgroundCompletedItems: number;
+    requests: ImmStagedRequestMetrics[];
 }
 export declare class IMMLoadSession {
     #private;

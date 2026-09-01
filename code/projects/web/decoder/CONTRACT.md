@@ -134,3 +134,23 @@ in the C header.
 Schema 5 remains the document contract while paint packet schema 1 replaces the
 normal per-stroke geometry path. Both boundaries keep browser objects and native
 renderer handles out of their public formats.
+
+## Operational diagnostics
+
+1. Operational load telemetry is not part of schema 5 because it does not alter
+   decoded playback data. The worker diagnostics response reports requested and
+   effective load modes, an eager-fallback reason, memory and packet totals, and
+   one timing record for every staged drawing or asset request.
+2. Drawing timing records separate native decode, native packet build, the
+   Wasm-to-JavaScript copy, packet parsing, worker transfer, and main-thread
+   adapter work. Asset records report native decode, indexed layer lookup,
+   transferred bytes, worker transfer, and adapter work.
+3. Content-layer and drawing-resource indexes are built when a scene opens and
+   cleared on release. Staged asset decode does not change document topology and
+   therefore does not rebuild them. Drawing and asset requests do not scan the
+   content-layer collection.
+4. The application and library load session separately report requested,
+   initially loaded, deferred, and background-completed item counts. A staged
+   run that falls back to eager retains `requestedMode: "staged"`, reports
+   `effectiveMode: "eager"`, and includes the triggering error as
+   `fallbackReason`.

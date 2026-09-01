@@ -240,11 +240,12 @@ export class ImmThreeView {
     }
 
     /** Uploads newly decoded content without rebuilding already resident layers. */
-    refreshLayer(layerId: number, drawingId?: number, camera?: THREE.Camera): void {
+    refreshLayer(layerId: number, drawingId?: number, camera?: THREE.Camera): boolean {
         const layer = this.#document.layers.find((candidate) => candidate.id === layerId);
         const node = this.#nodes.get(layerId);
-        if (layer === undefined || node === undefined) return;
+        if (layer === undefined || node === undefined) return false;
         const startedAt = performance.now();
+        let changed = false;
 
         const paint = this.#paint.get(layerId);
         if (paint !== undefined && (drawingId === undefined || paint.activeDrawing === drawingId)) {
@@ -255,6 +256,7 @@ export class ImmThreeView {
             if (state !== undefined) this.#applyLayerState(state);
             this.diagnostics.meshCount += paint.node.children.length - previousMeshes;
             this.diagnostics.triangleCount += objectTriangleCount(paint.node) - previousTriangles;
+            changed = true;
         } else if (layer.type === IMM_LAYER_PICTURE && layer.picture !== undefined && !this.#pictures.has(layerId)) {
             const record = this.#createPicture(layer, node);
             if (record !== null) {
@@ -262,6 +264,7 @@ export class ImmThreeView {
                 this.diagnostics.pictureLayerCount++;
                 this.diagnostics.meshCount++;
                 this.diagnostics.triangleCount += triangleCountFor(record.mesh.geometry);
+                changed = true;
             }
         } else if (layer.type === IMM_LAYER_MODEL && layer.model !== undefined && !this.#models.has(layerId)) {
             const record = this.#createModel(layer, node);
@@ -269,9 +272,12 @@ export class ImmThreeView {
             this.diagnostics.modelLayerCount++;
             this.diagnostics.meshCount++;
             this.diagnostics.triangleCount += triangleCountFor(record.mesh.geometry);
+            changed = true;
         }
         this.diagnostics.geometryBuildMs += performance.now() - startedAt;
+        if (!changed) return false;
         this.setTimeTicks(this.#timeTicks, camera);
+        return true;
     }
 
     dispose(): void {
