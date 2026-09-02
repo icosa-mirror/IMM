@@ -4,7 +4,9 @@
 
 using namespace ImmCore;
 
-namespace ImmImporter::PaintGeometry
+namespace ImmImporter
+{
+namespace PaintGeometry
 {
     namespace
     {
@@ -187,4 +189,5 @@ namespace ImmImporter::PaintGeometry
         }
         return true;
     }
+}
 }

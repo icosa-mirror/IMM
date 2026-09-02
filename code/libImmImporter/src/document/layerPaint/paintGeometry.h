@@ -4,7 +4,9 @@
 
 #include "element.h"
 
-namespace ImmImporter::PaintGeometry
+namespace ImmImporter
+{
+namespace PaintGeometry
 {
     uint32_t GetSectionCount(Element::BrushSectionType brush);
     ImmCore::vec2 GetSectionPosition(Element::BrushSectionType brush, uint32_t sectionIndex);
@@ -31,4 +33,5 @@ namespace ImmImporter::PaintGeometry
         bool flipped,
         uint32_t* indices,
         uint32_t indexCapacity);
+}
 }

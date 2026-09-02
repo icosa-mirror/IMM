@@ -168,6 +168,7 @@ target_link_libraries(libImmCoreMinimal
 
 set(IMMIMPORTER_SOURCES
     ${CODE_DIR}/libImmImporter/src/document/layerPaint/element.cpp
+    ${CODE_DIR}/libImmImporter/src/document/layerPaint/paintGeometry.cpp
     ${CODE_DIR}/libImmImporter/src/document/layerPaint/drawingPretessellated.cpp
     ${CODE_DIR}/libImmImporter/src/document/layerPaint/drawingStatic.cpp
     ${CODE_DIR}/libImmImporter/src/document/sequence.cpp
