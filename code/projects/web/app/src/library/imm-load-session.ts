@@ -1,3 +1,4 @@
+import { stagedDelivery } from "../staged-delivery";
 import {
     ImmDecoderClient,
     type ImmStagedDelta,
@@ -121,11 +122,8 @@ export class IMMLoadSession {
         onDelta: (delta: ImmStagedDelta, item: StagedLoadWork) => void | Promise<void>,
     ): Promise<void> {
         try {
-            for (let index = 0; index < work.length; index++) {
-                this.#throwIfDisposed();
-                const item = work[index]!;
+            for await (const { delta, item, index } of stagedDelivery(this.#decoder, work, () => this.#disposed)) {
                 this.#onProgress?.({ stage: "background", loaded: index, total: work.length, item });
-                const delta = await this.#decode(item);
                 this.#throwIfDisposed();
                 applyStagedDelta(document, delta);
                 this.#telemetry.requests.push(delta.metrics);
@@ -134,6 +132,7 @@ export class IMMLoadSession {
                 await onDelta(delta, item);
                 delta.metrics.adapterMs += performance.now() - adapterStartedAt;
             }
+            this.#throwIfDisposed();
             this.#onProgress?.({ stage: "complete", loaded: work.length, total: work.length });
             await this.release();
         } catch (error) {

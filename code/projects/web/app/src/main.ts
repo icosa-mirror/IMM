@@ -1,3 +1,4 @@
+import { stagedDelivery, createDeliveryMetrics, type StagedDeliveryMode } from "./staged-delivery";
 import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
 import { cameraAudioTransform, ImmWebAudio } from "./audio/imm-web-audio";
@@ -38,6 +39,19 @@ const viewpoint = requiredElement<HTMLSelectElement>("viewpoint");
 const cameraMode = requiredElement<HTMLSelectElement>("camera-mode");
 const renderQuality = requiredElement<HTMLSelectElement>("render-quality");
 const benchmarkEagerDecode = new URLSearchParams(location.search).get("benchmark-eager") === "1";
+const deliveryParameters = new URLSearchParams(location.search);
+const benchmarkTrace = deliveryParameters.get("visual-test") === "1" && deliveryParameters.get("benchmark-trace") === "1";
+const deliveryBenchmark = deliveryParameters.get("visual-test") === "1"
+    && deliveryParameters.has("benchmark-background-limit");
+const deliveryMode = deliveryParameters.get("benchmark-delivery") ?? "batch-paced";
+if (deliveryBenchmark && !["single", "single-paced", "batch-paced"].includes(deliveryMode)) {
+    throw new Error("Unsupported benchmark delivery mode");
+}
+const deliveryLimit = deliveryBenchmark ? Number(deliveryParameters.get("benchmark-background-limit")) : Infinity;
+if (deliveryBenchmark && (!Number.isInteger(deliveryLimit) || deliveryLimit < 1)) {
+    throw new Error("Background benchmark limit must be a positive integer");
+}
+let backgroundDelivery = createDeliveryMetrics();
 const renderQualityStorageKey = "imm-render-quality";
 type RenderQuality = "normal" | "high";
 let selectedRenderQuality = loadRenderQuality();
@@ -111,6 +125,7 @@ declare global {
         __immLoadUrl: (url: string) => Promise<void>;
         __immDisposeView: () => void;
         __immDiagnostics: () => Record<string, unknown>;
+        __immDeliveryDiagnostics: () => ReturnType<typeof createDeliveryMetrics>;
         __immDecoderDiagnostics: () => ReturnType<ImmDecoderClient["diagnostics"]>;
         __immPlayback: {
             play(): void;
@@ -170,12 +185,14 @@ pasteUrl.addEventListener("click", async () => {
 window.__immLoadUrl = loadUrl;
 window.__immDisposeView = resetDocumentState;
 window.__immDecoderDiagnostics = () => decoder.diagnostics();
+window.__immDeliveryDiagnostics = () => ({ ...backgroundDelivery });
 window.__immDiagnostics = () => {
     const activeViewpoint = playback?.evaluate().layers.get(Number(viewpoint.value));
     return {
     ready: immView !== null,
     ...lastMetrics,
     ...loadTelemetry,
+    backgroundDelivery: { ...backgroundDelivery },
     frameMs: round(meanFrameMs),
     fps: meanFrameMs > 0 ? round(1_000 / meanFrameMs) : 0,
     pixelRatio: renderer.getPixelRatio(),
@@ -360,10 +377,12 @@ renderer.setAnimationLoop((animationTime) => {
         const evaluationStartedAt = performance.now();
         const snapshot = playback.advance(immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds);
         timelineEvaluationTotalMs += performance.now() - evaluationStartedAt;
+        recordBenchmarkSpan("evaluate", evaluationStartedAt);
         const adapterStartedAt = performance.now();
         applyAuthoredSpawn(false, snapshot);
         immView.applySnapshot(snapshot, camera);
         adapterUpdateTotalMs += performance.now() - adapterStartedAt;
+        recordBenchmarkSpan("frame-adapter", adapterStartedAt);
         runtimeSampleCount++;
         syncAudio(playback.timeTicks < previousTicks, snapshot);
         updatePlaybackControls();
@@ -377,7 +396,9 @@ renderer.setAnimationLoop((animationTime) => {
             timerQueryActive = true;
         }
     }
+    const traceRenderStartedAt = benchmarkTrace ? performance.now() : 0;
     renderer.render(scene, camera);
+    recordBenchmarkSpan("render", traceRenderStartedAt);
     if (timerExtension !== null && timerQueryActive) {
         timerContext.endQuery(timerExtension.TIME_ELAPSED_EXT);
         timerQueryActive = false;
@@ -387,6 +408,12 @@ renderer.setAnimationLoop((animationTime) => {
         measureNextRender = false;
     }
 });
+
+function recordBenchmarkSpan(name: string, start: number): void {
+    if (!benchmarkTrace) return;
+    performance.measure(`IMM_REBALANCE:${name}`, { start, end: performance.now() });
+    performance.clearMeasures(`IMM_REBALANCE:${name}`);
+}
 
 function pollGpuTimer(): void {
     if (timerExtension === null || timerQuery === null) return;
@@ -461,7 +488,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     const nextAudio = new ImmWebAudio(document);
     try {
         const nextPlayback = new ImmPlaybackController(document);
-        nextPlayback.play();
+        if (deliveryBenchmark) nextPlayback.pause(); else nextPlayback.play();
         immView = nextView;
         playback = nextPlayback;
         immAudio = nextAudio;
@@ -479,6 +506,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         if (remainingWork.length > 0) {
             void continueStagedLoad(name, remainingWork, requestId).catch((error) => {
                 if (requestId === loadRequestId) {
+                    if (deliveryBenchmark) console.error("IMM_REBALANCE: background load failed", error);
                     status.textContent = `Background IMM loading stopped: ${error instanceof Error ? error.message : String(error)}`;
                 }
             });
@@ -519,9 +547,11 @@ function applyStagedDelta(document: ImmDocument, delta: ImmStagedDelta): void {
 }
 
 async function continueStagedLoad(name: string, work: StagedLoadWork[], requestId: number): Promise<void> {
-    for (let index = 0; index < work.length; index++) {
-        if (requestId !== loadRequestId) return;
-        const delta = await decodeStagedWork(work[index]!);
+    backgroundDelivery = createDeliveryMetrics();
+    const selectedWork = deliveryBenchmark ? work.slice(0, deliveryLimit) : work;
+    for await (const { delta, index } of stagedDelivery(decoder, selectedWork, () => requestId !== loadRequestId,
+        deliveryBenchmark ? { mode: deliveryMode as StagedDeliveryMode, metrics: backgroundDelivery,
+            trace: benchmarkTrace } : { trace: benchmarkTrace })) {
         if (requestId !== loadRequestId) return;
         const document = playback?.document;
         if (document === undefined) return;

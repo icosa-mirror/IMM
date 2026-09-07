@@ -269,20 +269,51 @@ try {
     let nextStagedRequestId = 8;
     let stagedStrokeCount = decodedDrawing.strokeCount;
     let stagedPointCount = decodedDrawing.pointCount;
-    for (const layer of stagedPaintLayers) {
-        for (let index = 0; index < layer.drawings.length; index++) {
-            if (layer.id === eagerPaintLayer.id && index === drawingId) continue;
-            const response = await request({
-                requestId: nextStagedRequestId++,
-                type: "decodeDrawing",
-                layerId: layer.id,
-                drawingId: index,
-            });
-            if (!response.ok || response.delta?.type !== "drawing") {
-                throw new Error(`Wasm full staged drawing decode failed for ${layer.id}/${index}`);
+    const batchWork = stagedPaintLayers.flatMap((layer) => layer.drawings
+        .map((_, index) => ({ type: "drawing", layerId: layer.id, drawingId: index }))
+        .filter((item) => item.layerId !== eagerPaintLayer.id || item.drawingId !== drawingId));
+    for (let offset = 0; offset < batchWork.length;) {
+        const items = batchWork.slice(offset, offset + 8);
+        const response = await request({ requestId: nextStagedRequestId++, type: "decodeBatch", items });
+        if (!response.ok || !Array.isArray(response.deltas) || response.deltas.length < 1
+            || response.deltas.length > items.length) {
+            throw new Error("Wasm staged batch returned invalid response");
+        }
+        for (const [index, delta] of response.deltas.entries()) {
+            const item = items[index];
+            if (delta.type !== "drawing" || delta.layerId !== item.layerId || delta.drawingId !== item.drawingId) {
+                throw new Error("Wasm staged batch resource order mismatch");
             }
-            stagedStrokeCount += response.delta.drawing.strokeCount;
-            stagedPointCount += response.delta.drawing.pointCount;
+            const eager = paintLayers.find((layer) => layer.id === item.layerId).drawings[item.drawingId];
+            const single = await request({ requestId: nextStagedRequestId++, type: "decodeDrawing",
+                layerId: item.layerId, drawingId: item.drawingId });
+            if (!single.ok || !isDeepStrictEqual(delta.drawing, single.delta.drawing)) {
+                throw new Error(`Batched drawing differs from single staged resource ${item.layerId}/${item.drawingId}`);
+            }
+            if (!isDeepStrictEqual(delta.drawing, eager)) {
+                throw new Error(`Batched drawing differs from eager resource ${item.layerId}/${item.drawingId}`);
+            }
+            stagedStrokeCount += delta.drawing.strokeCount;
+            stagedPointCount += delta.drawing.pointCount;
+        }
+        offset += response.deltas.length;
+    }
+    for (const items of [[], Array(9).fill({ type: "asset", layerId: stagedSpawnLayer.id }),
+        [{ type: "invalid", layerId: 0 }]]) {
+        const response = await request({ requestId: nextStagedRequestId++, type: "decodeBatch", items });
+        if (response.ok) throw new Error("Worker accepted invalid staged batch");
+    }
+    const assetItems = [pictureLayers[0], soundLayers[0], stagedSpawnLayer]
+        .map((layer) => ({ type: "asset", layerId: layer.id }));
+    const expectedAssets = [stagedPicture.delta, stagedSound.delta, stagedSpawn.delta];
+    for (let offset = 0; offset < assetItems.length;) {
+        const response = await request({ requestId: nextStagedRequestId++, type: "decodeBatch",
+            items: assetItems.slice(offset) });
+        if (!response.ok || !response.deltas?.length) throw new Error("Wasm asset batch failed");
+        for (const delta of response.deltas) {
+            const { metrics: _actualMetrics, ...actual } = delta;
+            const { metrics: _expectedMetrics, ...expected } = expectedAssets[offset++];
+            if (!isDeepStrictEqual(actual, expected)) throw new Error("Batched asset differs from single staged asset");
         }
     }
     let stagedPictureBytes = stagedPicture.delta.picture.pixels.length;

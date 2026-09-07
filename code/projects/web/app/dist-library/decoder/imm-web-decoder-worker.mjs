@@ -702,6 +702,7 @@ async function handleMessage(message, send) {
         "openMetadata",
         "decodeDrawing",
         "decodeLayerAsset",
+        "decodeBatch",
         "fallbackEager",
         "diagnostics",
         "release",
@@ -741,6 +742,34 @@ async function handleMessage(message, send) {
             }
             contentLayerIndices.clear();
             send({ requestId, ok: true });
+        } else if (type === "decodeBatch") {
+            if (!Array.isArray(message.items) || message.items.length < 1 || message.items.length > 8
+                || message.items.some((item) => !item
+                    || !["drawing", "asset"].includes(item.type)
+                    || !Number.isInteger(item.layerId)
+                    || (item.type === "drawing" && !Number.isInteger(item.drawingId)))) {
+                throw new TypeError("decodeBatch requires 1�8 valid staged items");
+            }
+            const deltas = [];
+            const transfers = [];
+            const startedAt = performance.now();
+            let bytes = 0;
+            for (const item of message.items) {
+                const result = decodeStagedDelta({
+                    ...item,
+                    type: item.type === "drawing" ? "decodeDrawing" : "decodeLayerAsset",
+                });
+                if (!result.ok) {
+                    send({ requestId, ok: false, error: result.error });
+                    return;
+                }
+                deltas.push(result.delta);
+                transfers.push(...result.transfers);
+                bytes += result.delta.metrics.packetBytes;
+                // An individual resource is indivisible; thresholds bound additional work.
+                if (bytes >= 2 * 1024 * 1024 || performance.now() - startedAt >= 4) break;
+            }
+            send({ requestId, ok: true, deltas }, transfers);
         } else if (type === "decodeDrawing" || type === "decodeLayerAsset") {
             const result = decodeStagedDelta(message);
             const transfers = result.transfers ?? [];

@@ -3,6 +3,7 @@ import { cpus, totalmem } from "node:os";
 import { basename, resolve } from "node:path";
 import { chromium } from "playwright-core";
 import { createServer } from "vite";
+import { startPerformanceTrace } from "./performance-trace.mjs";
 
 const args = process.argv.slice(2);
 const outputIndex = args.indexOf("--output");
@@ -47,7 +48,11 @@ try {
         const navigationStartedAt = performance.now();
         const benchmarkParameters = new URLSearchParams({ src: "", "visual-test": "1" });
         if (requestedBenchmarkLoadMode === "eager") benchmarkParameters.set("benchmark-eager", "1");
+        if (process.env.IMM_WEB_TRACE_OUTPUT) benchmarkParameters.set("benchmark-trace", "1");
         await page.goto(`http://127.0.0.1:4190/?${benchmarkParameters}`);
+        const stopTrace = process.env.IMM_WEB_TRACE_OUTPUT
+            ? await startPerformanceTrace(page, `${process.env.IMM_WEB_TRACE_OUTPUT}.${results.length}.json`)
+            : null;
         const navigationMs = performance.now() - navigationStartedAt;
         await page.evaluate(() => {
             window.__immBenchmarkLongTasks = [];
@@ -244,6 +249,7 @@ try {
             stagedPacketCount: result.stagedPacketCount,
             errorCount: result.errors.length,
         })}\n`);
+        if (stopTrace) await stopTrace();
         await page.close();
     }
 } finally {

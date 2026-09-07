@@ -32,13 +32,14 @@ interface DecoderResponse {
     summary?: ImmDocumentSummary;
     document?: ImmDocument;
     delta?: ImmStagedDelta;
+    deltas?: ImmStagedDelta[];
     diagnostics?: ImmDecoderDiagnostics;
     error?: DecoderError;
     sentAtEpochMs?: number;
 }
 
 interface PendingRequest {
-    resolve: (value: ImmDocumentSummary | ImmDocument | ImmStagedDelta | ImmDecoderDiagnostics | undefined) => void;
+    resolve: (value: ImmDocumentSummary | ImmDocument | ImmStagedDelta | ImmStagedDelta[] | ImmDecoderDiagnostics | undefined) => void;
     reject: (error: Error) => void;
     allowEmpty: boolean;
 }
@@ -83,6 +84,10 @@ export class ImmDecoderClient {
         return this.#request<ImmStagedDelta>("decodeLayerAsset", { layerId });
     }
 
+    decodeBatch(items: readonly import("./staged-loading").StagedLoadWork[]): Promise<ImmStagedDelta[]> {
+        return this.#request<ImmStagedDelta[]>("decodeBatch", { items });
+    }
+
     fallbackEager(reason: string): Promise<ImmDocument> {
         return this.#requestDocument("fallbackEager", { fallbackReason: reason });
     }
@@ -104,7 +109,7 @@ export class ImmDecoderClient {
     }
 
     #request<T>(
-        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "fallbackEager" | "diagnostics" | "release",
+        type: "inspect" | "decode" | "openMetadata" | "decodeDrawing" | "decodeLayerAsset" | "decodeBatch" | "fallbackEager" | "diagnostics" | "release",
         payload: Record<string, unknown>,
         transfer: Transferable[] = [],
         allowEmpty = false,
@@ -148,16 +153,30 @@ export class ImmDecoderClient {
             );
             this.#stagedRequests.push(response.delta.metrics);
         }
+        if (Array.isArray(response.deltas) && response.sentAtEpochMs !== undefined) {
+            const transferMs = Math.max(0, performance.timeOrigin + performance.now() - response.sentAtEpochMs);
+            for (const delta of response.deltas) {
+                // Attribute the shared message wait once, preserving aggregate telemetry.
+                if (delta?.metrics !== undefined) {
+                    delta.metrics.transferMs = delta === response.deltas[0] ? transferMs : 0;
+                    this.#stagedRequests.push(delta.metrics);
+                }
+            }
+        }
         if (response.diagnostics !== undefined) {
             response.diagnostics.stagedRequests = this.#stagedRequests.map((metrics) => ({ ...metrics }));
         }
 
-        const value = response.summary ?? response.document ?? response.delta ?? response.diagnostics;
+        const value = response.summary ?? response.document ?? response.delta ?? response.deltas ?? response.diagnostics;
         if (response.ok && (value !== undefined || pending.allowEmpty)) {
             try {
                 if (response.summary !== undefined) assertSupportedSummary(response.summary);
                 if (response.document !== undefined) assertSupportedDocument(response.document);
-                if (response.delta !== undefined) assertSupportedDelta(response.delta);
+                if (response.delta !== undefined) {
+                    const startedAt = performance.now();
+                    assertSupportedDelta(response.delta);
+                    response.delta.metrics.validationMs = performance.now() - startedAt;
+                }
                 pending.resolve(value);
             } catch (error) {
                 pending.reject(error instanceof Error ? error : new Error(String(error)));
@@ -186,6 +205,7 @@ export type ImmStagedDelta =
     | { type: "asset"; layerId: number; picture?: ImmPicture; sound?: ImmSound; metrics: ImmStagedRequestMetrics };
 
 export interface ImmStagedRequestMetrics {
+    validationMs?: number;
     type: "drawing" | "asset";
     layerId: number;
     drawingId?: number;
