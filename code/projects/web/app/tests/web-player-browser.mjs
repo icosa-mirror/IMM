@@ -48,8 +48,10 @@ try {
             value: { readText: async () => clipboardText },
         });
     }, clipboardImmUrl);
+    let releaseDefaultFixture;
+    const defaultFixtureGate = new Promise(resolveGate => { releaseDefaultFixture = resolveGate; });
     await controlsPage.route("**/fixtures/sample1.imm", async (route) => {
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+        await defaultFixtureGate;
         await route.continue();
     });
     await controlsPage.route("**/fixtures/not-an-imm.imm", (route) => route.fulfill({
@@ -65,6 +67,7 @@ try {
         "File input was disabled while the default IMM loaded");
     await controlsPage.locator("#paste-url").click();
     assert.equal(await controlsPage.locator("#url-input").inputValue(), clipboardImmUrl);
+    releaseDefaultFixture();
     await controlsPage.waitForFunction(() => window.__immDiagnostics?.().ready === true, undefined, { timeout: 120_000 });
     assert.equal((await controlsPage.locator("#status").textContent())?.includes("sample1.imm"), true,
         "Base URL did not load the bundled sample IMM by default");
