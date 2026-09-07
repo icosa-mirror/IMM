@@ -1,3 +1,4 @@
+import { ImmFrameEvaluator } from "./runtime/imm-playback";
 import { stagedDelivery, createDeliveryMetrics, type StagedDeliveryMode } from "./staged-delivery";
 import * as THREE from "three";
 import { VRButton } from "three/addons/webxr/VRButton.js";
@@ -51,6 +52,9 @@ const deliveryLimit = deliveryBenchmark ? Number(deliveryParameters.get("benchma
 if (deliveryBenchmark && (!Number.isInteger(deliveryLimit) || deliveryLimit < 1)) {
     throw new Error("Background benchmark limit must be a positive integer");
 }
+const reusableEvaluation = !(deliveryParameters.get("visual-test") === "1"
+    && deliveryParameters.get("benchmark-evaluation") === "owned");
+let frameEvaluator: ImmFrameEvaluator | null = null;
 let backgroundDelivery = createDeliveryMetrics();
 const renderQualityStorageKey = "imm-render-quality";
 type RenderQuality = "normal" | "high";
@@ -193,6 +197,7 @@ window.__immDiagnostics = () => {
     ...lastMetrics,
     ...loadTelemetry,
     backgroundDelivery: { ...backgroundDelivery },
+    evaluationMode: reusableEvaluation ? "reusable" : "owned",
     frameMs: round(meanFrameMs),
     fps: meanFrameMs > 0 ? round(1_000 / meanFrameMs) : 0,
     pixelRatio: renderer.getPixelRatio(),
@@ -375,7 +380,9 @@ renderer.setAnimationLoop((animationTime) => {
     if (playback !== null && immView !== null) {
         const previousTicks = playback.timeTicks;
         const evaluationStartedAt = performance.now();
-        const snapshot = playback.advance(immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds);
+        const playbackDelta = immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds;
+        const snapshot = frameEvaluator === null ? playback.advance(playbackDelta)
+            : playback.advanceFrame(playbackDelta, frameEvaluator);
         timelineEvaluationTotalMs += performance.now() - evaluationStartedAt;
         recordBenchmarkSpan("evaluate", evaluationStartedAt);
         const adapterStartedAt = performance.now();
@@ -491,6 +498,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         if (deliveryBenchmark) nextPlayback.pause(); else nextPlayback.play();
         immView = nextView;
         playback = nextPlayback;
+        frameEvaluator = reusableEvaluation ? new ImmFrameEvaluator(document) : null;
         immAudio = nextAudio;
         configurePlaybackControls(document);
         measureNextRender = true;
@@ -516,6 +524,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     } catch (error) {
         if (immView === nextView) immView = null;
         playback = null;
+        frameEvaluator = null;
         if (immAudio === nextAudio) immAudio = null;
         void nextAudio.dispose();
         nextView.dispose();
@@ -640,6 +649,7 @@ function disposeView(): void {
     void immAudio?.dispose();
     immAudio = null;
     playback = null;
+    frameEvaluator = null;
     playbackControls.hidden = true;
 }
 

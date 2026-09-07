@@ -3,7 +3,7 @@
 This directory contains two consumers of the shared Wasm decoder and Three.js
 adapter:
 
-- `index.html` is the standalone player. It owns its renderer, canvas, camera,
+- `index.html` is the Three.js browser app. It owns its renderer, canvas, camera,
   controls, and render loop and accepts local files or same-origin/CORS URLs.
   It loads the bundled `sample1.imm` by default, keeps both source controls
   available while loading, and can paste an HTTP(S) IMM URL from the clipboard.
@@ -34,7 +34,7 @@ repository's native model import/export functions are serialization stubs, so
 the Wasm decoder explicitly returns no model geometry until a real format and
 fixture exist.
 
-The standalone player decodes embedded WAV, Ogg Vorbis, and Ogg Opus payloads
+The Three.js browser app decodes embedded WAV, Ogg Vorbis, and Ogg Opus payloads
 through Web Audio. Audio and document playback start automatically on load.
 If browser autoplay policy suspends Web Audio, **Enable audio** retries from an
 explicit click. Flat and positional layers follow authored visibility, opacity, gain,
@@ -51,7 +51,7 @@ latency. Authored waits retain native behavior: active child timelines and
 sounds may continue, and a stationary authored sound timeline is not counted
 as clock drift.
 
-On browsers with WebXR support, the standalone player also presents Three.js's
+On browsers with WebXR support, the Three.js browser app also presents Three.js's
 VR entry button. The current authored viewpoint becomes the XR reference pose;
 the embeddable adapter continues to leave renderer, camera, controls, and the XR
 session entirely under host ownership.
@@ -110,6 +110,22 @@ The host calls `update(timeSeconds, camera)`, `setTimeSeconds`, or
 `setTimeTicks` and renders its own scene, then calls `dispose()` when unloading
 the document. The adapter disposes every geometry, material, and texture it
 creates and keeps only each paint layer's active drawing resident in WebGL.
+
+## Evaluation frame ownership
+
+The Three.js browser app and `IMMAsset.update()` use one `ImmFrameEvaluator`
+per loaded document.
+It indexes animation-key groups and reuses frame containers; transform and
+playback semantics are unchanged.
+
+`IMMAsset.update()` returns borrowed snapshot state valid until the next update;
+consume it immediately. This is also the normal update path used by Gallery Viewer.
+`ImmPlaybackController.advance()` still returns independent snapshots. The
+package exports `ImmFrameEvaluator`: `evaluateFrame()` returns borrowed state
+valid until its next call. `controller.advanceFrame(deltaSeconds, evaluator)`
+also applies transport and waiting-timeline offsets. Call `rebuild()` after
+changing hierarchy or animation-key structure. Staged resource replacement is
+supported without rebuilding metadata.
 
 ## Verification
 

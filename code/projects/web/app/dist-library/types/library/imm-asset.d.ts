@@ -12,6 +12,7 @@ export interface IMMViewpointPose {
     activationKey: string;
 }
 export interface IMMFrameResult {
+    /** Borrowed evaluation state, valid until the next update(). */
     snapshot: ImmPlaybackSnapshot;
     authoredCamera?: IMMViewpointPose;
 }
@@ -44,6 +45,7 @@ export declare class IMMAsset {
     selectChapter(index: number): IMMViewpointPose | undefined;
     selectViewpoint(layerId: number): IMMViewpointPose;
     initialAuthoredCamera(): IMMViewpointPose | undefined;
+    /** Evaluate and render using reusable state. Consume the snapshot before the next update(). */
     update(animationTimeMs: number, camera: THREE.Camera): IMMFrameResult;
     setMuted(muted: boolean): void;
     enableAudio(): Promise<void>;

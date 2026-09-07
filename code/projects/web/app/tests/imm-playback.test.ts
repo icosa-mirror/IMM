@@ -1,3 +1,4 @@
+import { evaluateImmDocument as referenceEvaluate, ImmPlaybackController as ReferenceController } from "./fixtures/imm-playback-reference";
 import { describe, expect, test } from "bun:test";
 import {
     IMM_ACTION_PLAY,
@@ -22,7 +23,7 @@ import {
     type ImmLayer,
     type ImmTransform,
 } from "../src/format/imm-document";
-import { evaluateImmDocument, ImmPlaybackController, resolveActiveSpawnArea } from "../src/runtime/imm-playback";
+import { evaluateImmDocument, ImmFrameEvaluator, ImmPlaybackController, resolveActiveSpawnArea } from "../src/runtime/imm-playback";
 
 const identity: ImmTransform = {
     rotation: [0, 0, 0, 1],
@@ -363,4 +364,75 @@ describe("IMM deterministic playback evaluation", () => {
         expect(looped?.drawInTime).toBeCloseTo(2, 7);
         expect(looped?.drawingIndex).toBe(2);
     });
+});
+
+describe("reusable evaluation frames", () => {
+    test("matches the frozen evaluator across seeks, waiting offsets and interpolation modes", () => {
+        const document = fixture();
+        const evaluator = new ImmFrameEvaluator(document);
+        for (const interpolation of [IMM_INTERPOLATION_NONE, IMM_INTERPOLATION_LINEAR,
+            IMM_INTERPOLATION_SMOOTHSTEP, IMM_INTERPOLATION_EASE_IN, IMM_INTERPOLATION_EASE_OUT]) {
+            for (const layer of document.layers) for (const key of layer.keys) key.interpolation = interpolation;
+            evaluator.rebuild();
+            for (const waiting of [false, true]) {
+                const offsets = new Map([[1, 237]]);
+                for (const ticks of [0, 1, 99, 100, 101, 199, 200, 399, 400, 401, 600, 999, 1000, 250, 0]) {
+                    const expected = referenceEvaluate(document, ticks, offsets, waiting);
+                    expect(evaluator.evaluateFrame(ticks, offsets, waiting)).toEqual(expected);
+                    expect(evaluateImmDocument(document, ticks, offsets, waiting)).toEqual(expected);
+                }
+            }
+        }
+    });
+
+    test("preserves owned snapshots and reuses only explicitly borrowed frame containers", () => {
+        const document = fixture();
+        const evaluator = new ImmFrameEvaluator(document);
+        const owned = evaluateImmDocument(document, 0);
+        const expected = referenceEvaluate(document, 0);
+        const first = evaluator.evaluateFrame(0);
+        const firstLayer = first.layers.get(1);
+        const second = evaluator.evaluateFrame(150);
+        expect(second).toBe(first);
+        expect(second.layers.get(1)).toBe(firstLayer);
+        expect(owned).toEqual(expected);
+        expect(second).toEqual(referenceEvaluate(document, 150));
+    });
+
+    test("rebuild handles key structure and hierarchy changes", () => {
+        const document = fixture();
+        const evaluator = new ImmFrameEvaluator(document);
+        document.layers[0]!.keys.push(key(IMM_ANIM_OPACITY, 0, { floatValue: 0.25 }));
+        document.layers.push(layer({id: 50, parentId: 1, type: 0, localTransform: {...identity, scale: 2}}));
+        expect(() => evaluator.evaluateFrame(0)).toThrow("Rebuild");
+        evaluator.rebuild();
+        expect(evaluator.evaluateFrame(120)).toEqual(referenceEvaluate(document, 120));
+    });
+
+    test("observes staged drawing replacements without rebuilding metadata", () => {
+        const document = fixture();
+        const evaluator = new ImmFrameEvaluator(document);
+        evaluator.evaluateFrame(0);
+        const paint = document.layers.find(layer => layer.frameBuffer.length > 0)!;
+        paint.drawings = [...paint.drawings, {biggestStroke: 1, strokeCount: 0, pointCount: 0, geometries: []}];
+        paint.frameBuffer.fill(paint.drawings.length - 1);
+        expect(evaluator.evaluateFrame(150)).toEqual(referenceEvaluate(document, 150));
+    });
+});
+
+test("borrowed-frame transport matches the original controller through waiting and seeks", () => {
+    const document = fixture();
+    const actual = new ImmPlaybackController(document);
+    const expected = new ReferenceController(document);
+    const evaluator = new ImmFrameEvaluator(document);
+    for (const start of [0, 390, 200, 590, 990, 0]) {
+        actual.seekTicks(start); expected.seekTicks(start);
+        actual.play(); expected.play();
+        for (let i = 0; i < 30; i++) {
+            if (i === 10) { actual.continue(); expected.continue(); }
+            if (i === 20) { actual.pause(); expected.pause(); }
+            expect(actual.advanceFrame(0.025, evaluator)).toEqual(expected.advance(0.025));
+        }
+    }
+    expect(() => actual.advanceFrame(0, new ImmFrameEvaluator(fixture()))).toThrow("different document");
 });

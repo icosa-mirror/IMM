@@ -1,3 +1,4 @@
+// Frozen evaluator before the reusable-frame experiment. Test and benchmark oracle only.
 import {
     IMM_ACTION_LOOP,
     IMM_ACTION_MAKE_DEFAULT,
@@ -17,7 +18,7 @@ import {
     type ImmDocument,
     type ImmLayer,
     type ImmTransform,
-} from "../format/imm-document";
+} from "../../src/format/imm-document";
 
 export interface ImmEvaluatedLayer {
     layer: ImmLayer;
@@ -138,23 +139,13 @@ export class ImmPlaybackController {
     }
 
     advance(deltaSeconds: number): ImmPlaybackSnapshot {
-        return this.#advance(deltaSeconds);
-    }
-
-    /** Advances transport and returns a borrowed frame from the supplied evaluator. */
-    advanceFrame(deltaSeconds: number, evaluator: ImmFrameEvaluator): ImmPlaybackSnapshot {
-        if (evaluator.document !== this.document) throw new Error("Frame evaluator belongs to a different document");
-        return this.#advance(deltaSeconds, evaluator);
-    }
-
-    #advance(deltaSeconds: number, evaluator?: ImmFrameEvaluator): ImmPlaybackSnapshot {
         if (this.playing && deltaSeconds > 0) {
             const exactTicks = deltaSeconds * this.document.ticksPerSecond * this.playbackRate + this.#fractionalTicks;
             const wholeTicks = Math.floor(exactTicks);
             this.#fractionalTicks = exactTicks - wholeTicks;
             if (this.waiting) {
                 this.#advanceWaitingTimelines(wholeTicks);
-                return evaluator?.evaluateFrame(this.timeTicks, this.#timelineOffsets, this.waiting) ?? this.evaluate();
+                return this.evaluate();
             }
             const target = Math.min(this.durationTicks, this.timeTicks + wholeTicks);
             const stop = nextStopBetween(this.document, this.timeTicks, target);
@@ -172,7 +163,7 @@ export class ImmPlaybackController {
             }
             if (this.timeTicks >= this.durationTicks) this.playing = false;
         }
-        return evaluator?.evaluateFrame(this.timeTicks, this.#timelineOffsets, this.waiting) ?? this.evaluate();
+        return this.evaluate();
     }
 
     evaluate(): ImmPlaybackSnapshot {
@@ -192,96 +183,21 @@ export class ImmPlaybackController {
     }
 }
 
-interface CompiledLayer {
-    keys: ReadonlyMap<number, readonly ImmAnimationKey[]>;
-    parent?: CompiledLayer;
-    context: EvaluationContext;
-    state: ImmEvaluatedLayer;
-    local: LocalEvaluation;
-}
-
-interface EvaluationWorkspace {
-    entries: CompiledLayer[];
-    snapshot: ImmPlaybackSnapshot;
-}
-
-/**
- * Indexed metadata and reusable frame containers. evaluateFrame() returns borrowed
- * state that is overwritten by the next call. Use evaluateImmDocument() when a
- * snapshot must survive later evaluations. Call rebuild() after editing hierarchy
- * or animation-key structure; staged drawing/picture/sound replacement is supported.
- */
-export class ImmFrameEvaluator {
-    readonly document: ImmDocument;
-    #workspace!: EvaluationWorkspace;
-
-    constructor(document: ImmDocument) {
-        this.document = document;
-        this.rebuild();
-    }
-
-    rebuild(): void {
-        const seen = new Map<number, CompiledLayer>();
-        const states = new Map<number, ImmEvaluatedLayer>();
-        const entries: CompiledLayer[] = [];
-        for (const layer of this.document.layers) {
-            const keys = new Map<number, ImmAnimationKey[]>();
-            for (const key of layer.keys) {
-                let group = keys.get(key.property);
-                if (!group) { group = []; keys.set(key.property, group); }
-                group.push(key);
-            }
-            const entry: CompiledLayer = {
-                keys, parent: layer.parentId < 0 ? undefined : seen.get(layer.parentId),
-                context: {} as EvaluationContext, state: {} as ImmEvaluatedLayer,
-                local: {} as LocalEvaluation,
-            };
-            entries.push(entry);
-            states.set(layer.id, entry.state);
-            seen.set(layer.id, entry);
-        }
-        this.#workspace = { entries, snapshot: { timeTicks: 0, chapterIndex: 0, waiting: false, layers: states } };
-    }
-
-    evaluateFrame(ticks: number, offsets: ReadonlyMap<number, number> = EMPTY_OFFSETS, waiting = false): ImmPlaybackSnapshot {
-        if (this.#workspace.entries.length !== this.document.layers.length) {
-            throw new Error("Rebuild the frame evaluator after changing document structure");
-        }
-        return evaluateDocument(this.document, ticks, offsets, waiting, this.#workspace);
-    }
-}
-
-const EMPTY_OFFSETS: ReadonlyMap<number, number> = new Map();
-const EMPTY_KEYS: readonly ImmAnimationKey[] = [];
-
 export function evaluateImmDocument(
-    document: ImmDocument,
-    requestedTicks: number,
-    timelineOffsets: ReadonlyMap<number, number> = EMPTY_OFFSETS,
-    waiting = false,
-): ImmPlaybackSnapshot {
-    return evaluateDocument(document, requestedTicks, timelineOffsets, waiting);
-}
-
-function evaluateDocument(
     document: ImmDocument,
     requestedTicks: number,
     timelineOffsets: ReadonlyMap<number, number> = new Map(),
     waiting = false,
-    workspace?: EvaluationWorkspace,
 ): ImmPlaybackSnapshot {
     const timeTicks = clampTicks(requestedTicks, document.durationTicks);
-    const states = workspace?.snapshot.layers as Map<number, ImmEvaluatedLayer> | undefined ?? new Map<number, ImmEvaluatedLayer>();
-    const contexts = workspace ? undefined : new Map<number, EvaluationContext>();
+    const states = new Map<number, ImmEvaluatedLayer>();
+    const contexts = new Map<number, EvaluationContext>();
     const rootTimelineTicks = wrapTimeline(timeTicks, document.durationTicks, 1);
 
-    for (let index = 0; index < document.layers.length; index++) {
-        const layer = document.layers[index]!;
-        const entry = workspace?.entries[index];
-        const parent = entry ? entry.parent?.context
-            : layer.parentId < 0 ? undefined : contexts!.get(layer.parentId);
+    for (const layer of document.layers) {
+        const parent = layer.parentId < 0 ? undefined : contexts.get(layer.parentId);
         const controllingTicks = parent?.timelineTicks ?? rootTimelineTicks;
-        const local = evaluateLocalLayer(layer, controllingTicks, document.ticksPerSecond, entry?.keys, entry?.local);
+        const local = evaluateLocalLayer(layer, controllingTicks, document.ticksPerSecond);
         const visible = (parent?.visible ?? true) && local.visible;
         const opacity = (parent?.opacity ?? 1) * local.opacity;
         const timelineTicks = layer.isTimeline
@@ -292,33 +208,22 @@ function evaluateDocument(
             )
             : controllingTicks;
         const drawingIndex = selectDrawing(layer, local.localTimeTicks, document.ticksPerSecond, local.loop);
-        const state = entry?.state ?? {} as ImmEvaluatedLayer;
-        state.layer = layer;
-        state.timelineTicks = controllingTicks;
-        state.localTimeTicks = local.localTimeTicks;
-        state.visible = visible;
-        state.opacity = opacity;
-        state.transform = local.transform;
-        state.worldTransform = parent === undefined
-            ? cloneTransform(local.transform)
-            : composeTransform((entry ? entry.parent?.state : states.get(layer.parentId))?.worldTransform
-                ?? layer.worldTransform, local.transform);
-        state.drawInTime = local.drawInTime;
-        state.drawingIndex = drawingIndex;
-        if (!entry) states.set(layer.id, state);
-        const context = entry?.context ?? {} as EvaluationContext;
-        context.visible = visible;
-        context.opacity = opacity;
-        context.timelineTicks = timelineTicks;
-        if (!entry) contexts!.set(layer.id, context);
+        states.set(layer.id, {
+            layer,
+            timelineTicks: controllingTicks,
+            localTimeTicks: local.localTimeTicks,
+            visible,
+            opacity,
+            transform: local.transform,
+            worldTransform: parent === undefined
+                ? cloneTransform(local.transform)
+                : composeTransform(states.get(layer.parentId)?.worldTransform ?? layer.worldTransform, local.transform),
+            drawInTime: local.drawInTime,
+            drawingIndex,
+        });
+        contexts.set(layer.id, { visible, opacity, timelineTicks });
     }
 
-    if (workspace) {
-        workspace.snapshot.timeTicks = timeTicks;
-        workspace.snapshot.chapterIndex = chapterAt(document, timeTicks);
-        workspace.snapshot.waiting = waiting;
-        return workspace.snapshot;
-    }
     return { timeTicks, chapterIndex: chapterAt(document, timeTicks), waiting, layers: states };
 }
 
@@ -351,30 +256,29 @@ export function resolveActiveSpawnArea(
     };
 }
 
-function evaluateLocalLayer(layer: ImmLayer, timelineTicks: number, ticksPerSecond: number,
-    compiledKeys?: ReadonlyMap<number, readonly ImmAnimationKey[]>, destination?: LocalEvaluation): LocalEvaluation {
-    const visibilityKeys = keysFor(layer, IMM_ANIM_VISIBILITY, compiledKeys);
+function evaluateLocalLayer(layer: ImmLayer, timelineTicks: number, ticksPerSecond: number): LocalEvaluation {
+    const visibilityKeys = keysFor(layer, IMM_ANIM_VISIBILITY);
     const visibilityKey = previousKey(visibilityKeys, timelineTicks);
     const visible = visibilityKeys.length === 0 ? layer.visible : visibilityKey?.boolValue === true;
     const offset = visibilityKey === undefined
-        ? valueAt(keysFor(layer, IMM_ANIM_OFFSET, compiledKeys), timelineTicks, "uintValue", 0)
-        : keysFor(layer, IMM_ANIM_OFFSET, compiledKeys).find((key) => key.timeTicks === visibilityKey.timeTicks)?.uintValue ?? 0;
+        ? valueAt(keysFor(layer, IMM_ANIM_OFFSET), timelineTicks, "uintValue", 0)
+        : keysFor(layer, IMM_ANIM_OFFSET).find((key) => key.timeTicks === visibilityKey.timeTicks)?.uintValue ?? 0;
     const localTimeTicks = visibilityKey !== undefined && visible
         ? Math.max(0, timelineTicks - visibilityKey.timeTicks + offset)
         : timelineTicks;
-    const result = destination ?? {} as LocalEvaluation;
-    result.visible = visible;
-    result.opacity = interpolateNumber(keysFor(layer, IMM_ANIM_OPACITY, compiledKeys), timelineTicks, "floatValue", layer.opacity);
-    result.transform = interpolateTransform(
-            keysFor(layer, IMM_ANIM_TRANSFORM, compiledKeys),
+    return {
+        visible,
+        opacity: interpolateNumber(keysFor(layer, IMM_ANIM_OPACITY), timelineTicks, "floatValue", layer.opacity),
+        transform: interpolateTransform(
+            keysFor(layer, IMM_ANIM_TRANSFORM),
             timelineTicks,
             layer.localTransform,
             layer.pivotTransform,
-        );
-    result.drawInTime = interpolateNumber(keysFor(layer, IMM_ANIM_DRAW_IN_TIME, compiledKeys), timelineTicks, "doubleValue", 0);
-    result.localTimeTicks = localTimeTicks;
-    result.loop = previousKey(keysFor(layer, IMM_ANIM_LOOP, compiledKeys), timelineTicks)?.boolValue;
-    return result;
+        ),
+        drawInTime: interpolateNumber(keysFor(layer, IMM_ANIM_DRAW_IN_TIME), timelineTicks, "doubleValue", 0),
+        localTimeTicks,
+        loop: previousKey(keysFor(layer, IMM_ANIM_LOOP), timelineTicks)?.boolValue,
+    };
 }
 
 function selectDrawing(layer: ImmLayer, localTicks: number, ticksPerSecond: number, loop: boolean | undefined): number {
@@ -388,13 +292,11 @@ function selectDrawing(layer: ImmLayer, localTicks: number, ticksPerSecond: numb
     return drawing < layer.drawings.length ? drawing : 0;
 }
 
-function keysFor(layer: ImmLayer, property: number,
-    compiled?: ReadonlyMap<number, readonly ImmAnimationKey[]>): readonly ImmAnimationKey[] {
-    if (compiled) return compiled.get(property) ?? EMPTY_KEYS;
+function keysFor(layer: ImmLayer, property: number): ImmAnimationKey[] {
     return layer.keys.filter((key) => key.property === property);
 }
 
-function previousKey(keys: readonly ImmAnimationKey[], ticks: number): ImmAnimationKey | undefined {
+function previousKey(keys: ImmAnimationKey[], ticks: number): ImmAnimationKey | undefined {
     let result: ImmAnimationKey | undefined;
     for (const key of keys) {
         if (key.timeTicks > ticks) break;
@@ -403,7 +305,7 @@ function previousKey(keys: readonly ImmAnimationKey[], ticks: number): ImmAnimat
     return result;
 }
 
-function interpolationPair(keys: readonly ImmAnimationKey[], ticks: number): [ImmAnimationKey, ImmAnimationKey | undefined, number] | undefined {
+function interpolationPair(keys: ImmAnimationKey[], ticks: number): [ImmAnimationKey, ImmAnimationKey | undefined, number] | undefined {
     if (keys.length === 0) return undefined;
     let previous = keys[0];
     if (previous === undefined) return undefined;
@@ -424,7 +326,7 @@ function interpolationPair(keys: readonly ImmAnimationKey[], ticks: number): [Im
 }
 
 function interpolateNumber(
-    keys: readonly ImmAnimationKey[],
+    keys: ImmAnimationKey[],
     ticks: number,
     field: "floatValue" | "doubleValue",
     fallback: number,
@@ -436,7 +338,7 @@ function interpolateNumber(
 }
 
 function interpolateTransform(
-    keys: readonly ImmAnimationKey[],
+    keys: ImmAnimationKey[],
     ticks: number,
     fallback: ImmTransform,
     pivot: ImmTransform,
@@ -451,7 +353,7 @@ function interpolateTransform(
 }
 
 function valueAt(
-    keys: readonly ImmAnimationKey[],
+    keys: ImmAnimationKey[],
     ticks: number,
     field: "uintValue",
     fallback: number,

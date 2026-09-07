@@ -40,3 +40,12 @@ reason, initial/deferred/background item counts, per-request decode/build/copy/
 transfer/adapter timing, packet count and bytes, and indexed layer/resource
 lookup counts. A staged result with `effectiveLoadMode: "eager"` is a fallback
 result and must not be compared as a successful staged load.
+
+The subsequent delivery comparison and stall trace are documented in
+`WASM_REBALANCE_DELIVERY_EXPERIMENT.md`. Production loading retains single
+requests; batching and pacing are explicit experimental modes.
+
+Reusable scene evaluation results and reproduction steps are documented in
+`WASM_REBALANCE_EVALUATION_RESULTS.md`. The Three.js browser app and library `IMMAsset.update()` use reusable frames,
+including Gallery Viewer's normal update path. Returned asset snapshots are
+valid until the next update.

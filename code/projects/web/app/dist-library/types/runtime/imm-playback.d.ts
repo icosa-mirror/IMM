@@ -37,7 +37,22 @@ export declare class ImmPlaybackController {
     skipForward(): void;
     skipBack(): void;
     advance(deltaSeconds: number): ImmPlaybackSnapshot;
+    /** Advances transport and returns a borrowed frame from the supplied evaluator. */
+    advanceFrame(deltaSeconds: number, evaluator: ImmFrameEvaluator): ImmPlaybackSnapshot;
     evaluate(): ImmPlaybackSnapshot;
+}
+/**
+ * Indexed metadata and reusable frame containers. evaluateFrame() returns borrowed
+ * state that is overwritten by the next call. Use evaluateImmDocument() when a
+ * snapshot must survive later evaluations. Call rebuild() after editing hierarchy
+ * or animation-key structure; staged drawing/picture/sound replacement is supported.
+ */
+export declare class ImmFrameEvaluator {
+    #private;
+    readonly document: ImmDocument;
+    constructor(document: ImmDocument);
+    rebuild(): void;
+    evaluateFrame(ticks: number, offsets?: ReadonlyMap<number, number>, waiting?: boolean): ImmPlaybackSnapshot;
 }
 export declare function evaluateImmDocument(document: ImmDocument, requestedTicks: number, timelineOffsets?: ReadonlyMap<number, number>, waiting?: boolean): ImmPlaybackSnapshot;
 /** Resolves the authored spawn area at a playback time, including timed MakeDefault actions. */

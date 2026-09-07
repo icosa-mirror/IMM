@@ -14,3 +14,5 @@ export {
     type IMMLoadSessionOptions,
     type IMMLoadStage,
 } from "./imm-load-session";
+
+export { ImmFrameEvaluator, type ImmPlaybackSnapshot } from "../runtime/imm-playback";

@@ -5,6 +5,7 @@ import type { ImmDocument, ImmTransform } from "../format/imm-document";
 import { ImmThreeView } from "../render-three/imm-three-view";
 import {
     ImmPlaybackController,
+    ImmFrameEvaluator,
     resolveActiveSpawnArea,
     type ImmActiveSpawnArea,
     type ImmPlaybackSnapshot,
@@ -22,6 +23,7 @@ export interface IMMViewpointPose {
 }
 
 export interface IMMFrameResult {
+    /** Borrowed evaluation state, valid until the next update(). */
     snapshot: ImmPlaybackSnapshot;
     authoredCamera?: IMMViewpointPose;
 }
@@ -41,6 +43,7 @@ export class IMMAsset {
     readonly backgroundComplete: Promise<void>;
     readonly loadTelemetry: IMMLoadTelemetry;
 
+    #frameEvaluator: ImmFrameEvaluator;
     #session: IMMLoadSession | null;
     #audio: ImmWebAudio | null;
     #previousAnimationTime: number | null = null;
@@ -61,6 +64,7 @@ export class IMMAsset {
         this.scene = this.view.object3d;
         this.scene.name = "IMM content";
         this.playback = new ImmPlaybackController(document);
+        this.#frameEvaluator = new ImmFrameEvaluator(document);
         this.playback.play();
         this.#audio = options.audio === false ? null : new ImmWebAudio(document, { context: options.audioContext });
         void this.#audio?.prepare();
@@ -139,13 +143,14 @@ export class IMMAsset {
         return this.#resolveAuthoredCamera(true);
     }
 
+    /** Evaluate and render using reusable state. Consume the snapshot before the next update(). */
     update(animationTimeMs: number, camera: THREE.Camera): IMMFrameResult {
         this.#throwIfDisposed();
         const rawDelta = this.#previousAnimationTime === null ? 0 : (animationTimeMs - this.#previousAnimationTime) / 1_000;
         this.#previousAnimationTime = animationTimeMs;
         const delta = this.#audio?.timelineDeltaSeconds(THREE.MathUtils.clamp(rawDelta, 0, 0.1)) ??
             THREE.MathUtils.clamp(rawDelta, 0, 0.1);
-        const snapshot = this.playback.advance(delta);
+        const snapshot = this.playback.advanceFrame(delta, this.#frameEvaluator);
         this.view.applySnapshot(snapshot, camera);
         this.#audio?.update(snapshot, cameraAudioTransform(camera));
         void this.#audio?.setTransportPlaying(this.playback.playing);

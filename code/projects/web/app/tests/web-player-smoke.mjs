@@ -28,6 +28,7 @@ try {
         { timeout: 30_000 },
     );
     const diagnostics = await standalone.evaluate(() => window.__immDiagnostics());
+    assert.equal(diagnostics.evaluationMode, "reusable");
     assert.equal(diagnostics.strokes, 1_171);
     assert.equal(diagnostics.meshes, 42);
     assert.ok(diagnostics.renderedTriangles > 0);

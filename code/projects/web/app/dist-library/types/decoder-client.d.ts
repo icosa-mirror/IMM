@@ -20,6 +20,7 @@ export declare class ImmDecoderClient {
     openMetadata(source: ArrayBuffer): Promise<ImmDocument>;
     decodeDrawing(layerId: number, drawingId: number): Promise<ImmStagedDelta>;
     decodeLayerAsset(layerId: number): Promise<ImmStagedDelta>;
+    decodeBatch(items: readonly import("./staged-loading").StagedLoadWork[]): Promise<ImmStagedDelta[]>;
     fallbackEager(reason: string): Promise<ImmDocument>;
     diagnostics(): Promise<ImmDecoderDiagnostics>;
     release(): Promise<void>;
@@ -40,6 +41,7 @@ export type ImmStagedDelta = {
     metrics: ImmStagedRequestMetrics;
 };
 export interface ImmStagedRequestMetrics {
+    validationMs?: number;
     type: "drawing" | "asset";
     layerId: number;
     drawingId?: number;
