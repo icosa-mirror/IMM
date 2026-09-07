@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ReaderRuntime>../../../ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime</ReaderRuntime>
+    <AdapterSource Condition="'$(AdapterSource)' == ''">$(ReaderRuntime)/SharpQuillCompat.cs</AdapterSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ReaderRuntime)/ImmStrokeReader.cs" />
+    <Compile Include="$(AdapterSource)" />
+    <Compile Include="$(ReaderRuntime)/ThirdParty/SharpQuill/**/*.cs" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

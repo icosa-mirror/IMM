@@ -154,6 +154,13 @@ namespace ImmStrokeReader
                     continue;
                 }
 
+                // Spawn areas are metadata, not paint. Converting them to LayerPaint
+                // creates empty layers in consumers such as Open Brush.
+                if (info.type == 8)
+                {
+                    continue;
+                }
+
                 bool isPicture = info.type == 4;
                 if (isPicture && !includePictures)
                 {
