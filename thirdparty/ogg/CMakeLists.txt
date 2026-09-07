@@ -6,7 +6,7 @@ set(OGG_SOURCES
     src/framing.c
     )
 
-set(VORBIS_DIR libvorbis-1.3.5)
+set(VORBIS_DIR libvorbis-1.3.7)
 set(VORBIS_SOURCES
     ${VORBIS_DIR}/lib/analysis.c
     ${VORBIS_DIR}/lib/mdct.c

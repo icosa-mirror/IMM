@@ -93,8 +93,8 @@ target_include_directories(ImmGodotPlugin PRIVATE
     ${CODE_DIR}
     ${CODE_DIR}/libImmPlayer/src
     ${THIRDPARTY_DIR}/ogg/include
-    ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include
-    ${THIRDPARTY_DIR}/lpng1637
+    ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include
+    ${THIRDPARTY_DIR}/libpng-1.6.58
     ${THIRDPARTY_DIR}/libjpeg-turbo/include/android
 )
 target_compile_definitions(ImmGodotPlugin PRIVATE ANDROID ANDROID_ENABLED)

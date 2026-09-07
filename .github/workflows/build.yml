@@ -375,6 +375,9 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :appImmStrokeReader:assembleDebug
 
+    - name: Verify Android stroke reader codec versions
+      run: python tests/tools/verify_android_codec_versions.py code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/Android/arm64-v8a/libImmStrokeReader.so
+
     - name: Upload Unity Plugin
       shell: bash
       run: |

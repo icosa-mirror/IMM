@@ -30,7 +30,7 @@ set(PNG_ARM_NEON_OPT 0 CACHE STRING "" FORCE)
 set(PNG_HARDWARE_OPTIMIZATIONS OFF CACHE BOOL "" FORCE)
 set(SKIP_INSTALL_LIBRARIES ON CACHE BOOL "" FORCE)
 set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
-add_subdirectory(${THIRDPARTY_DIR}/lpng1637 ${CMAKE_BINARY_DIR}/libpng-build)
+add_subdirectory(${THIRDPARTY_DIR}/libpng-1.6.58 ${CMAKE_BINARY_DIR}/libpng-build)
 
 add_subdirectory(${THIRDPARTY_DIR}/ogg ${CMAKE_BINARY_DIR}/ogg-build)
 
@@ -95,10 +95,10 @@ target_include_directories(libImmCoreUnity
         ${CODE_DIR}
         ${THIRDPARTY_DIR}/ogg/include
         ${THIRDPARTY_DIR}/opus-src/include
-        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include
-        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include/vorbis
-        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/lib
-        ${THIRDPARTY_DIR}/lpng1637
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include/vorbis
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/lib
+        ${THIRDPARTY_DIR}/libpng-1.6.58
         ${CMAKE_BINARY_DIR}/libpng-build
         ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo
         ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo/include
@@ -148,10 +148,10 @@ target_include_directories(libImmCoreMinimal
     PUBLIC
         ${CODE_DIR}
         ${THIRDPARTY_DIR}/ogg/include
-        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include
-        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/include/vorbis
-        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.5/lib
-        ${THIRDPARTY_DIR}/lpng1637
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include/vorbis
+        ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/lib
+        ${THIRDPARTY_DIR}/libpng-1.6.58
         ${CMAKE_BINARY_DIR}/libpng-build
         ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo
         ${THIRDPARTY_DIR}/libjpeg-turbo/libjpeg-turbo/include

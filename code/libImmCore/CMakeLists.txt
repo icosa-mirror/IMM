@@ -46,27 +46,35 @@ add_subdirectory(${ogg-third-party} ${CMAKE_BINARY_DIR}/ogg-build)
 
 include_directories(
     ${ogg-third-party}/include
-    ${ogg-third-party}/libvorbis-1.3.5/include
-    ${ogg-third-party}/libvorbis-1.3.5/include/vorbis
-    ${ogg-third-party}/libvorbis-1.3.5/lib
+    ${ogg-third-party}/libvorbis-1.3.7/include
+    ${ogg-third-party}/libvorbis-1.3.7/include/vorbis
+    ${ogg-third-party}/libvorbis-1.3.7/lib
 )
 
 # libpng from thirdparty (build from source)
 # Set ZLIB for Android NDK (zlib is included in the sysroot)
 set(ZLIB_LIBRARY z)
 set(ZLIB_INCLUDE_DIR "${CMAKE_SYSROOT}/usr/include")
-set(ZLIB_FOUND TRUE)
+find_package(ZLIB REQUIRED)
+# NDK headers are already on the compiler's implicit search path. Exporting
+# the sysroot as -isystem puts C headers ahead of libc++'s wrapper headers.
+set_property(TARGET ZLIB::ZLIB PROPERTY INTERFACE_INCLUDE_DIRECTORIES "")
 set(PNG_BUILD_ZLIB OFF CACHE BOOL "Use system zlib" FORCE)
 set(PNG_SHARED OFF CACHE BOOL "Build shared lib" FORCE)
 set(PNG_STATIC ON CACHE BOOL "Build static lib" FORCE)
 set(PNG_TESTS OFF CACHE BOOL "Build libpng tests" FORCE)
+set(PNG_TOOLS OFF CACHE BOOL "Build libpng tools" FORCE)
+# NEON is mandatory on arm64; libpng no longer accepts the old cached "check" mode.
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    set(PNG_ARM_NEON "on" CACHE STRING "ARM NEON implementation" FORCE)
+endif()
 # Skip install targets to avoid POST_BUILD copy conflicts with custom output directory
 set(SKIP_INSTALL_LIBRARIES ON CACHE BOOL "Skip libpng install" FORCE)
 set(SKIP_INSTALL_ALL ON CACHE BOOL "Skip all libpng install" FORCE)
-add_subdirectory(${THIRDPARTY_DIR}/lpng1637 ${CMAKE_BINARY_DIR}/libpng-build)
+add_subdirectory(${THIRDPARTY_DIR}/libpng-1.6.58 ${CMAKE_BINARY_DIR}/libpng-build)
 
 include_directories(
-    ${THIRDPARTY_DIR}/lpng1637
+    ${THIRDPARTY_DIR}/libpng-1.6.58
     ${CMAKE_BINARY_DIR}/libpng-build  # For pnglibconf.h
 )
 

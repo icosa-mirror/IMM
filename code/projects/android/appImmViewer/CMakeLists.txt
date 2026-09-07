@@ -92,12 +92,12 @@ set_target_properties(libImmPlayer PROPERTIES IMPORTED_LOCATION
 set(OGG_THIRDPARTY_DIR ${THIRDPARTY_DIR}/ogg)
 target_include_directories(appImmPlayer PRIVATE
     ${OGG_THIRDPARTY_DIR}/include
-    ${OGG_THIRDPARTY_DIR}/libvorbis-1.3.5/include
+    ${OGG_THIRDPARTY_DIR}/libvorbis-1.3.7/include
 )
 
 # libpng (built by libImmCore)
 target_include_directories(appImmPlayer PRIVATE
-    ${THIRDPARTY_DIR}/lpng1637
+    ${THIRDPARTY_DIR}/libpng-1.6.58
 )
 
 add_library(png-lib STATIC IMPORTED)

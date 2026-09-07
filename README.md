@@ -97,9 +97,7 @@ The ImmViewer works both on Mono and in VR (either with Oculus RIFT or Oculus Qu
 
 1. Download Android Studio (version 4.1.0) from developer.android.com.
 
-2. Open folder thirdparty/lpng1637/projects/androidstudio in Android Studio first and build the project.
-
-2. Open projects/android/ in android studio and build libCore, libImmImporte, libImmPlayer, appImmViewer in order.
+2. Open `code/projects/android/` in Android Studio and build `libImmCore`, `libImmImporter`, `libImmPlayer`, and `appImmViewer` in order. The core build compiles the bundled libpng and Vorbis sources automatically.
 
 3. Connect your Quest or Quest 2 Device to your computer and follow the Developer Guide to enable Developer mode on your device. There will be a Quest device showing up on your Android Studio.
 
