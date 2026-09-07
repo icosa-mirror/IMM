@@ -23,3 +23,11 @@
 - IMM rendering works with OpenGL and Metal.
 - IMM rendering works with Vulkan on Windows, subject to reconfirmation if that distinction becomes important.
 - A normal modern local Android phone can expose Unity's Vulkan display render buffer as a 1x1 image through `IUnityGraphicsVulkan::AccessRenderBufferTexture` while the camera surface is full resolution. Treat this as an Android Vulkan portability problem in the direct-display integration, not evidence that Vulkan, Android, or IMM rendering is generally unsupported.
+
+# Private benchmark resource lookup
+
+- Before asking for previously used benchmark inputs, consult the machine-local
+  workload section in `LLM Docs/WASM_WEB_RUNTIME_REBALANCE_PLAN.md`, the ignored
+  `artifacts/rebalance-phase3-corpus-paths.json` mapping, and prior session commands.
+  Existing performance reports intentionally retain filenames only; that does not
+  mean the original source paths are unavailable. Keep private paths out of public docs.
