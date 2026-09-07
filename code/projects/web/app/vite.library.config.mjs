@@ -40,7 +40,7 @@ export default defineConfig({
                     "./decoder/*": "./decoder/*",
                 },
                 files: ["imm-three-loader.js", "imm-three-loader.js.map", "types", "decoder"],
-                peerDependencies: { three: "0.180.x" },
+                peerDependencies: { three: "0.185.x" },
             }, null, 2)}\n`);
         },
     }],
