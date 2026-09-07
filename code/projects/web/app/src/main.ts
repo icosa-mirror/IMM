@@ -48,6 +48,14 @@ const deliveryMode = deliveryParameters.get("benchmark-delivery") ?? "batch-pace
 if (deliveryBenchmark && !["single", "single-paced", "batch-paced"].includes(deliveryMode)) {
     throw new Error("Unsupported benchmark delivery mode");
 }
+const benchmarkTimeSeconds = Number(deliveryParameters.get("benchmark-time-seconds") ?? 0);
+const benchmarkNoAudio = deliveryBenchmark && deliveryParameters.get("benchmark-audio") === "0";
+const benchmarkFixedStep = deliveryBenchmark && deliveryParameters.get("benchmark-fixed-step") === "1";
+let benchmarkUpdateMs = 0;
+const benchmarkGalleryCamera = deliveryBenchmark && deliveryParameters.get("benchmark-gallery-camera") === "1";
+if (deliveryBenchmark && (!Number.isFinite(benchmarkTimeSeconds) || benchmarkTimeSeconds < 0)) {
+    throw new Error("Benchmark time must be nonnegative");
+}
 const deliveryLimit = deliveryBenchmark ? Number(deliveryParameters.get("benchmark-background-limit")) : Infinity;
 if (deliveryBenchmark && (!Number.isInteger(deliveryLimit) || deliveryLimit < 1)) {
     throw new Error("Background benchmark limit must be a positive integer");
@@ -61,7 +69,7 @@ type RenderQuality = "normal" | "high";
 let selectedRenderQuality = loadRenderQuality();
 renderQuality.value = selectedRenderQuality;
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: !benchmarkGalleryCamera });
 renderer.setPixelRatio(renderPixelRatio(selectedRenderQuality));
 const idleClearColor = new THREE.Color(0x10151d);
 renderer.setClearColor(idleClearColor, 1);
@@ -73,7 +81,7 @@ renderer.xr.setFramebufferScaleFactor(appliedXrFramebufferScale);
 renderer.xr.addEventListener("sessionend", applyXrFramebufferScale);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, 1, 0.01, 20_000);
+const camera = new THREE.PerspectiveCamera(benchmarkGalleryCamera ? 45 : 70, 1, 0.01, 20_000);
 const idleCameraPosition = new THREE.Vector3(3, 2, 5);
 const idleControlsTarget = new THREE.Vector3(0, 0.75, 0);
 camera.position.copy(idleCameraPosition);
@@ -129,6 +137,8 @@ declare global {
         __immLoadUrl: (url: string) => Promise<void>;
         __immDisposeView: () => void;
         __immDiagnostics: () => Record<string, unknown>;
+        __immFrameDiagnostics: () => { updateMs: number; drawCalls: number; triangles: number };
+        __immSelectBenchmarkWork?: (document: ImmDocument, work: StagedLoadWork[]) => StagedLoadWork[];
         __immDeliveryDiagnostics: () => ReturnType<typeof createDeliveryMetrics>;
         __immDecoderDiagnostics: () => ReturnType<ImmDecoderClient["diagnostics"]>;
         __immPlayback: {
@@ -189,11 +199,13 @@ pasteUrl.addEventListener("click", async () => {
 window.__immLoadUrl = loadUrl;
 window.__immDisposeView = resetDocumentState;
 window.__immDecoderDiagnostics = () => decoder.diagnostics();
+window.__immFrameDiagnostics = () => ({ updateMs: benchmarkUpdateMs, drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles });
 window.__immDeliveryDiagnostics = () => ({ ...backgroundDelivery });
 window.__immDiagnostics = () => {
     const activeViewpoint = playback?.evaluate().layers.get(Number(viewpoint.value));
     return {
     ready: immView !== null,
+    threeRevision: THREE.REVISION,
     ...lastMetrics,
     ...loadTelemetry,
     backgroundDelivery: { ...backgroundDelivery },
@@ -380,7 +392,7 @@ renderer.setAnimationLoop((animationTime) => {
     if (playback !== null && immView !== null) {
         const previousTicks = playback.timeTicks;
         const evaluationStartedAt = performance.now();
-        const playbackDelta = immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds;
+        const playbackDelta = benchmarkFixedStep ? 1 / 60 : immAudio?.timelineDeltaSeconds(deltaSeconds) ?? deltaSeconds;
         const snapshot = frameEvaluator === null ? playback.advance(playbackDelta)
             : playback.advanceFrame(playbackDelta, frameEvaluator);
         timelineEvaluationTotalMs += performance.now() - evaluationStartedAt;
@@ -389,6 +401,7 @@ renderer.setAnimationLoop((animationTime) => {
         applyAuthoredSpawn(false, snapshot);
         immView.applySnapshot(snapshot, camera);
         adapterUpdateTotalMs += performance.now() - adapterStartedAt;
+        if (deliveryBenchmark) benchmarkUpdateMs = performance.now() - evaluationStartedAt;
         recordBenchmarkSpan("frame-adapter", adapterStartedAt);
         runtimeSampleCount++;
         syncAudio(playback.timeTicks < previousTicks, snapshot);
@@ -492,10 +505,13 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
     }
     if (requestId !== loadRequestId) return;
     const nextView = new ImmThreeView(document, { renderer, parent: scene });
-    const nextAudio = new ImmWebAudio(document);
+    const nextAudio = benchmarkNoAudio ? null : new ImmWebAudio(document);
     try {
         const nextPlayback = new ImmPlaybackController(document);
-        if (deliveryBenchmark) nextPlayback.pause(); else nextPlayback.play();
+        if (deliveryBenchmark) {
+            nextPlayback.pause();
+            nextPlayback.seekTicks(Math.round(benchmarkTimeSeconds * document.ticksPerSecond));
+        } else nextPlayback.play();
         immView = nextView;
         playback = nextPlayback;
         frameEvaluator = reusableEvaluation ? new ImmFrameEvaluator(document) : null;
@@ -508,7 +524,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         renderer.setClearColor(new THREE.Color().fromArray(document.backgroundColor), 1);
         showSummary(name, document, nextView);
         syncAudio(true);
-        void nextAudio.prepare().then(() => {
+        void nextAudio?.prepare().then(() => {
             if (immAudio === nextAudio) updateAudioControl();
         });
         if (remainingWork.length > 0) {
@@ -526,7 +542,7 @@ async function loadDocument(name: string, source: ArrayBuffer, requestId: number
         playback = null;
         frameEvaluator = null;
         if (immAudio === nextAudio) immAudio = null;
-        void nextAudio.dispose();
+        void nextAudio?.dispose();
         nextView.dispose();
         resetDocumentState();
         throw error;
@@ -557,7 +573,9 @@ function applyStagedDelta(document: ImmDocument, delta: ImmStagedDelta): void {
 
 async function continueStagedLoad(name: string, work: StagedLoadWork[], requestId: number): Promise<void> {
     backgroundDelivery = createDeliveryMetrics();
-    const selectedWork = deliveryBenchmark ? work.slice(0, deliveryLimit) : work;
+    const selectedWork = deliveryBenchmark && window.__immSelectBenchmarkWork
+        ? window.__immSelectBenchmarkWork(playback!.document, work)
+        : deliveryBenchmark ? work.slice(0, deliveryLimit) : work;
     for await (const { delta, index } of stagedDelivery(decoder, selectedWork, () => requestId !== loadRequestId,
         deliveryBenchmark ? { mode: deliveryMode as StagedDeliveryMode, metrics: backgroundDelivery,
             trace: benchmarkTrace } : { trace: benchmarkTrace })) {
@@ -579,7 +597,7 @@ async function continueStagedLoad(name: string, work: StagedLoadWork[], requestI
             if (refreshed && immView !== null) showSummary(name, document, immView);
         }
 
-        if (loadedLayer?.type === 5) {
+        if (loadedLayer?.type === 5 && !benchmarkNoAudio) {
             const nextAudio = new ImmWebAudio(document);
             const previousAudio = immAudio;
             immAudio = nextAudio;
