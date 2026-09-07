@@ -5,11 +5,12 @@ import { IMMLoader, IMMLoadSession, ImmFrameEvaluator } from "/imm-library/imm-t
 // Instrument the real Gallery loader without changing its production integration.
 const parameters = new URLSearchParams(location.search);
 const mode = parameters.get("evaluation");
+const deliveryMode = parameters.get("delivery") ?? "single";
 const seconds = Number(parameters.get("time-seconds") ?? 1);
 const limit = Number(parameters.get("background-limit") ?? Infinity);
 const sceneDuration = Number(parameters.get("scene-duration") ?? 30);
 const sceneSelection = parameters.get("resource-selection") === "scene";
-const state = { mode, seconds, sceneDuration, threeRevision: REVISION, startedAt: 0, readyAt: 0, completedAt: 0, originalDeferred: 0, selectedDeferred: 0,
+const state = { mode, deliveryMode, seconds, sceneDuration, threeRevision: REVISION, startedAt: 0, readyAt: 0, completedAt: 0, originalDeferred: 0, selectedDeferred: 0,
     frames: [], updates: [], tasks: [], peakHeapBytes: 0 };
 window.__galleryLoading = state;
 const observer = new PerformanceObserver(list => {
@@ -34,7 +35,7 @@ IMMLoadSession.prototype.continue = function(document, work, onDelta) {
         : work.slice(0, limit);
     state.selectedDeferred = selected.length;
     if (sceneSelection) console.log(`IMM_SCENE_20260907: preloading ${selected.length} resources for the scene segment`);
-    return originalContinue.call(this, document, selected, onDelta);
+    return originalContinue.call(this, document, selected, onDelta, { mode: deliveryMode });
 };
 const originalLoad = IMMLoader.prototype.loadAsync;
 IMMLoader.prototype.loadAsync = function(...args) {

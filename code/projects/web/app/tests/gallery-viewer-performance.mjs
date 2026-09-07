@@ -11,7 +11,9 @@ const args = process.argv.slice(2);
 const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
 const root = resolve(import.meta.dirname, "../../../../..");
 const gallery = resolve(option("--gallery", resolve(root, "../gallery-viewer")));
-const loadingComparison = args.includes("--loading-comparison");
+const batchingComparison = args.includes("--batching-comparison");
+const audioEnabled = args.includes("--audio");
+const loadingComparison = args.includes("--loading-comparison") || batchingComparison;
 const workload = option("--workload", "sample1.imm");
 let input = resolve(root, "exampleImmFiles/sample1.imm");
 if (workload !== "sample1.imm") {
@@ -47,7 +49,7 @@ const server = createServer(async (request, response) => {
         const path = resolve(base, relative);
         if (path !== base && !path.startsWith(`${base}${sep}`)) { response.writeHead(403).end(); return; }
         if (pathname === "/test/browser-imm.html") {
-            let html = (await readFile(path, "utf8")).replace('"/sample1.imm"', '"/workload.imm"').replace("audio: true", "audio: false");
+            let html = (await readFile(path, "utf8")).replace('"/sample1.imm"', '"/workload.imm"').replace("audio: true", `audio: ${audioEnabled}`);
             if (loadingComparison) html = html.replace('window.__galleryImm.ready = true;', `
                 if (viewer.cameraControls) { viewer.cameraControls.update(0); viewer.cameraControls.enabled = false; viewer.cameraControls.update = () => false; }
                 if (viewer.trackballControls) { viewer.trackballControls.enabled = false; viewer.trackballControls.update = () => {}; }
@@ -76,16 +78,17 @@ try {
         }
         const sceneDuration = Number(option("--scene-duration", "30"));
         const selection = args.includes("--scene-playback") ? "scene" : "slice";
-        const report = { workload, seconds, sceneDuration, selection, browser: browser.version(), profile: "temporary", audio: false,
+        const modes = batchingComparison ? ["single", "batch-paced"] : ["owned", "reusable"];
+        const report = { workload, seconds, sceneDuration, selection, browser: browser.version(), profile: "temporary", audio: audioEnabled, batchingComparison,
             viewport: { width: 1440, height: 900 }, backgroundLimit: limit, results };
         for (let round = roundOffset; round < roundOffset + rounds; round++) {
-            for (const mode of round % 2 ? ["reusable", "owned"] : ["owned", "reusable"]) {
+            for (const mode of round % 2 ? [...modes].reverse() : modes) {
                 const page = await browser.newPage({ viewport: report.viewport });
                 const errors = [];
                 page.on("pageerror", error => errors.push(error.message));
                 page.on("console", message => { if (message.text().startsWith("IMM_SCENE_20260907:")) console.log(message.text()); });
                 try {
-                    await page.goto(`http://127.0.0.1:${server.address().port}/test/browser-imm.html?evaluation=${mode}&background-limit=${limit}&time-seconds=${seconds}&resource-selection=${selection}&scene-duration=${sceneDuration}`);
+                    await page.goto(`http://127.0.0.1:${server.address().port}/test/browser-imm.html?evaluation=${batchingComparison ? "reusable" : mode}&delivery=${batchingComparison ? mode : "single"}&background-limit=${limit}&time-seconds=${seconds}&resource-selection=${selection}&scene-duration=${sceneDuration}`);
                     await page.waitForFunction(() => window.__galleryLoading?.done, null, { timeout: 240_000 });
                     const result = await page.evaluate(() => ({ ...window.__galleryLoading, diagnostics: window.__galleryImmDiagnostics() }));
                     if (result.error || errors.length || result.telemetry.effectiveMode !== "staged"
@@ -97,13 +100,13 @@ try {
                     if (args.includes("--measure-playback")) {
                         result.playbackSample = await page.evaluate(measureScenePlayback, { harness: "gallery", seconds, segmentSeconds: sceneDuration });
                     }
-                    results.push({ round, ...result });
+                    results.push({ round, ...result, mode });
                     await writeFile(output, JSON.stringify(report, null, 2));
                     console.log(`Gallery ${workload} ${mode} round ${round + 1}: ${result.selectedDeferred}/${result.originalDeferred} deferred resources, ${Math.round(result.completedAt - result.readyAt)} ms background.`);
                 } finally { await page.close(); }
             }
         }
-        if (new Set(results.map(x => JSON.stringify([x.selectedDeferred, x.telemetry.packetBytes, x.telemetry.initiallyLoadedItems, x.timeTicks, x.pixels.hash, x.playbackSample?.workHash]))).size !== 1) {
+        if (new Set(results.map(x => JSON.stringify([x.selectedDeferred, x.telemetry.packetBytes, x.telemetry.initiallyLoadedItems, x.resources, x.timeTicks, x.pixels.hash, x.playbackSample?.workHash]))).size !== 1) {
             throw new Error("Gallery loading comparison resource work, authored time, or rendered pixels differ");
         }
         console.log(`Gallery ${workload} loading comparison passed with equal resource work.`);

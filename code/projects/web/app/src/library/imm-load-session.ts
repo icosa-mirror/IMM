@@ -1,4 +1,4 @@
-import { stagedDelivery } from "../staged-delivery";
+import { stagedDelivery, type StagedDeliveryOptions } from "../staged-delivery";
 import {
     ImmDecoderClient,
     type ImmStagedDelta,
@@ -120,9 +120,10 @@ export class IMMLoadSession {
         document: ImmDocument,
         work: readonly StagedLoadWork[],
         onDelta: (delta: ImmStagedDelta, item: StagedLoadWork) => void | Promise<void>,
+        deliveryOptions: StagedDeliveryOptions = {},
     ): Promise<void> {
         try {
-            for await (const { delta, item, index } of stagedDelivery(this.#decoder, work, () => this.#disposed)) {
+            for await (const { delta, item, index } of stagedDelivery(this.#decoder, work, () => this.#disposed, deliveryOptions)) {
                 this.#onProgress?.({ stage: "background", loaded: index, total: work.length, item });
                 this.#throwIfDisposed();
                 applyStagedDelta(document, delta);
