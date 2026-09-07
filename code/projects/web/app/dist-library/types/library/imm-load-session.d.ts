@@ -1,3 +1,4 @@
+import { type StagedDeliveryOptions } from "../staged-delivery";
 import { type ImmStagedDelta, type ImmStagedRequestMetrics } from "../decoder-client";
 import type { ImmDocument } from "../format/imm-document";
 import { type StagedLoadWork } from "../staged-loading";
@@ -33,7 +34,7 @@ export declare class IMMLoadSession {
     #private;
     constructor(options: IMMLoadSessionOptions);
     load(source: ArrayBuffer): Promise<IMMInitialLoad>;
-    continue(document: ImmDocument, work: readonly StagedLoadWork[], onDelta: (delta: ImmStagedDelta, item: StagedLoadWork) => void | Promise<void>): Promise<void>;
+    continue(document: ImmDocument, work: readonly StagedLoadWork[], onDelta: (delta: ImmStagedDelta, item: StagedLoadWork) => void | Promise<void>, deliveryOptions?: StagedDeliveryOptions): Promise<void>;
     release(): Promise<void>;
     dispose(): void;
 }

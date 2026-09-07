@@ -104,14 +104,18 @@ describe("controlled delivery modes", () => {
     }
 });
 
-test("production default uses single requests without added pacing", async () => {
+test("production default uses bounded batches and delivers all resources", async () => {
     const metrics = createDeliveryMetrics();
+    const requestedSizes: number[] = [];
     const decoder = {
-        async decodeBatch(): Promise<ImmStagedDelta[]> { throw new Error("Unexpected experimental batch"); },
-        async decodeLayerAsset(layerId: number) { return delta(layerId); },
+        async decodeBatch(requested: readonly StagedLoadWork[]): Promise<ImmStagedDelta[]> {
+            requestedSizes.push(requested.length);
+            return requested.map(item => delta(item.layerId));
+        },
+        async decodeLayerAsset(): Promise<ImmStagedDelta> { throw new Error("Unexpected single request"); },
     };
     for await (const _ of stagedDelivery(decoder, work, () => false, { metrics })) {}
-    expect(metrics.messages).toBe(work.length);
+    expect(metrics.messages).toBe(Math.ceil(work.length / 8));
     expect(metrics.items).toBe(work.length);
-    expect(metrics.yields).toBe(0);
+    expect(requestedSizes.every(size => size > 0 && size <= 8)).toBe(true);
 });

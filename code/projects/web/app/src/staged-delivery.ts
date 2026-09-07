@@ -18,14 +18,14 @@ export interface StagedDeliveryOptions {
 
 // Time and byte thresholds cannot preempt one indivisible resource.
 // Keep one worker response resident and check cancellation after every await.
-// Batching/pacing remain opt-in until a repeatable performance benefit is established.
+// Bounded batches are the production default; single-request modes remain available for comparisons.
 export async function* stagedDelivery(
     decoder: Pick<ImmDecoderClient, "decodeBatch"> & Partial<Pick<ImmDecoderClient, "decodeDrawing" | "decodeLayerAsset">>,
     work: readonly StagedLoadWork[],
     cancelled: () => boolean,
     options: StagedDeliveryOptions = {},
 ): AsyncGenerator<{ delta: ImmStagedDelta; item: StagedLoadWork; index: number }> {
-    const mode = options.mode ?? "single";
+    const mode = options.mode ?? "batch-paced";
     const metrics = options.metrics;
     const timed = (name: string, start: number) => {
         const end = performance.now();

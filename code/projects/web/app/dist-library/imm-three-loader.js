@@ -1448,7 +1448,7 @@ function y(e) {
   throw new Error(`Invalid IMM decoder packet: ${e}`);
 }
 async function* Xe(e, t, i, s = {}) {
-  const n = s.mode ?? "single", r = s.metrics, o = (l, d) => {
+  const n = s.mode ?? "batch-paced", r = s.metrics, o = (l, d) => {
     const m = performance.now();
     return s.trace && (performance.measure(`IMM_REBALANCE:${l}`, { start: d, end: m }), performance.clearMeasures(`IMM_REBALANCE:${l}`)), m - d;
   };
@@ -1674,17 +1674,17 @@ class oi {
       }), this.#r(), this.#i?.({ stage: "complete", loaded: 1, total: 1 }), await this.release(), { document: i, remainingWork: [], telemetry: this.#n };
     }
   }
-  async continue(t, i, s) {
+  async continue(t, i, s, n = {}) {
     try {
-      for await (const { delta: n, item: r, index: o } of Xe(this.#t, i, () => this.#o)) {
-        this.#i?.({ stage: "background", loaded: o, total: i.length, item: r }), this.#r(), Mt(t, n), this.#n.requests.push(n.metrics), this.#n.backgroundCompletedItems++;
-        const a = performance.now();
-        await s(n, r), n.metrics.adapterMs += performance.now() - a;
+      for await (const { delta: r, item: o, index: a } of Xe(this.#t, i, () => this.#o, n)) {
+        this.#i?.({ stage: "background", loaded: a, total: i.length, item: o }), this.#r(), Mt(t, r), this.#n.requests.push(r.metrics), this.#n.backgroundCompletedItems++;
+        const c = performance.now();
+        await s(r, o), r.metrics.adapterMs += performance.now() - c;
       }
       this.#r(), this.#i?.({ stage: "complete", loaded: i.length, total: i.length }), await this.release();
-    } catch (n) {
+    } catch (r) {
       if (this.#o) return;
-      throw n;
+      throw r;
     }
   }
   async release() {
