@@ -184,7 +184,6 @@ export class ImmWebAudio {
             if (sound === undefined || sound.bytes.length === 0) continue;
             await this.#prepareSound(layer.id, layer.name, sound);
         }
-        this.#reconcile(true);
     }
 
     /** Decode a staged sound without replacing the context or restarting other sounds. */
@@ -212,7 +211,8 @@ export class ImmWebAudio {
                 if (active !== undefined) this.#stop(layerId, active);
                 this.#decoded.set(layerId, { buffer, sound });
                 this.#failures = this.#failures.filter(failure => failure.layerId !== layerId);
-                this.#reconcile(false);
+                // Decoding can finish between animation frames. Start this sound in update(),
+                // using the next evaluated snapshot instead of the previous frame's offsets.
             } catch (error) {
                 if (this.#disposed || this.document.layers.find(layer => layer.id === layerId)?.sound !== sound) return;
                 this.#failures.push({ layerId, name,

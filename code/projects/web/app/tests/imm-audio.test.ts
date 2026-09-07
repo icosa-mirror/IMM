@@ -51,16 +51,19 @@ function sound(overrides: Partial<ImmSound> = {}): ImmSound {
 function stagedAudioFixture(decode: (bytes: ArrayBuffer) => Promise<AudioBuffer> = async () => ({} as AudioBuffer)) {
     const document = { layers: [{ id: 1, name: "first", type: 5, sound: sound({ bytes: new Uint8Array([1]) }) }] } as unknown as ImmDocument;
     let decodes = 0, closes = 0, starts = 0, stops = 0;
+    const sourceOffsets: number[] = [];
     const context = {
         state: "suspended", currentTime: 0, destination: {}, listener: {},
         createGain: () => ({ gain: { cancelScheduledValues() {}, setValueAtTime() {} }, connect() {}, disconnect() {} }),
         decodeAudioData: (bytes: ArrayBuffer) => { decodes++; return decode(bytes); },
         close: async () => { closes++; },
+        resume: async () => { context.state = "running"; },
+        suspend: async () => { context.state = "suspended"; },
         createBufferSource: () => ({ connect() {}, disconnect() {}, addEventListener() {},
-            start() { starts++; }, stop() { stops++; } }),
-    } as unknown as AudioContext;
-    const audio = new ImmWebAudio(document, { context });
-    return { document, audio, counts: () => ({ decodes, closes }), transportCounts: () => ({ starts, stops }) };
+            start(_when: number, offset: number) { starts++; sourceOffsets.push(offset); }, stop() { stops++; } }),
+    };
+    const audio = new ImmWebAudio(document, { context: context as unknown as AudioContext });
+    return { document, audio, context, sourceOffsets, counts: () => ({ decodes, closes }), transportCounts: () => ({ starts, stops }) };
 }
 
 describe("staged audio residency", () => {
@@ -78,9 +81,51 @@ describe("staged audio residency", () => {
             sound: sound({ type: IMM_SOUND_FLAT, bytes: new Uint8Array([2]) }) });
         snapshot.layers.set(2, { ...snapshot.layers.get(1)!, layer: document.layers[1]! });
         await audio.refreshLayer(2);
+        expect(transportCounts()).toEqual({ starts: 1, stops: 0 });
+        audio.update(snapshot, identity);
         expect(transportCounts()).toEqual({ starts: 2, stops: 0 });
         await audio.dispose();
         expect(transportCounts()).toEqual({ starts: 2, stops: 2 });
+    });
+
+    test("a decode finishing between frames starts at the next snapshot without restarting resident audio", async () => {
+        let finishSecond!: (buffer: AudioBuffer) => void;
+        const { document, audio, context, sourceOffsets, transportCounts } = stagedAudioFixture(async bytes => {
+            if (new Uint8Array(bytes)[0] === 2) return new Promise(resolve => { finishSecond = resolve; });
+            return { duration: 10 } as AudioBuffer;
+        });
+        document.ticksPerSecond = 100;
+        document.layers[0]!.sound!.type = IMM_SOUND_FLAT;
+        document.layers[0]!.keys = [];
+        document.layers.push({ ...document.layers[0]!, id: 2,
+            sound: sound({ type: IMM_SOUND_FLAT, bytes: new Uint8Array([2]) }) });
+        const preparation = audio.prepare();
+        await audio.refreshLayer(1);
+        await audio.setTransportPlaying(true);
+        const snapshot = { layers: new Map(document.layers.map(layer => [layer.id, {
+            layer, visible: true, opacity: 1, localTimeTicks: 100, worldTransform: identity,
+        }])) } as unknown as ImmPlaybackSnapshot;
+        audio.update(snapshot, identity);
+        expect(sourceOffsets).toEqual([1]);
+
+        // Audio advances while the next sound decodes and the last visual snapshot remains at 1s.
+        context.currentTime = 0.5;
+        finishSecond({ duration: 10 } as AudioBuffer);
+        await preparation;
+        expect(transportCounts()).toEqual({ starts: 1, stops: 0 });
+        expect(audio.timelineDeltaSeconds(0.1)).toBe(0.5);
+        for (const state of snapshot.layers.values()) state.localTimeTicks = 150;
+        audio.update(snapshot, identity);
+        expect(sourceOffsets).toEqual([1, 1.5]);
+        expect(transportCounts()).toEqual({ starts: 2, stops: 0 });
+
+        context.currentTime = 0.75;
+        expect(audio.timelineDeltaSeconds(0.1)).toBe(0.25);
+        for (const state of snapshot.layers.values()) state.localTimeTicks = 175;
+        audio.update(snapshot, identity);
+        expect(audio.diagnostics.currentDrift).toHaveLength(2);
+        expect(audio.diagnostics.maximumAbsoluteDriftSeconds).toBeCloseTo(0, 9);
+        await audio.dispose();
     });
 
     test("new audio preserves decoded sounds, mute state and the existing context", async () => {
