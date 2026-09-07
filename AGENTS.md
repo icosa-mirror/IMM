@@ -31,3 +31,10 @@
   `artifacts/rebalance-phase3-corpus-paths.json` mapping, and prior session commands.
   Existing performance reports intentionally retain filenames only; that does not
   mean the original source paths are unavailable. Keep private paths out of public docs.
+
+# Performance investigation procedure
+
+1. Follow `code/projects/web/performance/INVESTIGATION_PROCEDURE.md` for web performance work. Start from a specific Gallery user interaction and its measured limiting cost; resource counts and architectural cleanup do not establish benefit.
+2. Before changing production behavior, record the baseline, maximum plausible end-to-end saving, experiment budget, acceptance checks, and stop condition. Keep unaccepted prototypes out of the default path.
+3. Compare one independent change at a time using recorded artifact hashes and matched workloads. Label combined comparisons as combined; do not attribute their results to an individual change.
+4. Keep a decision record for rejected candidates. Revisit them only with new evidence or a changed target, and distinguish CPU headroom from visible latency or frame-rate improvement.
