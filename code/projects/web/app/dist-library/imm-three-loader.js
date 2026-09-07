@@ -1,6 +1,6 @@
 import * as u from "three";
-const tt = 5, vt = 1, et = 3, it = 4, Bt = 5, N = 1, st = 2, J = 0, qt = 1, Tt = 5, _ = 6, Nt = 7, nt = 8, Ht = 9, Lt = 0, jt = 2, Ft = 3, Wt = 4, Kt = 0, Qt = 2, Zt = 3, Ut = 1, Xt = 2, V = 0, Jt = 1, H = 2, _t = 3, rt = 4, $t = 0, te = 1, ee = 2, ie = 0, ot = 1, se = 2, xt = new u.Vector3(0, 0, -1), wt = new u.Vector3(0, 1, 0), x = new u.Vector3(), w = new u.Vector3(), L = new u.Vector3(), T = new u.Vector3(), k = new u.Vector3(), b = new u.Vector3(), O = new u.Quaternion(), M = new u.Vector3();
-function ne() {
+const tt = 5, Mt = 1, et = 3, it = 4, Ot = 5, N = 1, st = 2, J = 0, Bt = 1, vt = 5, _ = 6, qt = 7, nt = 8, Nt = 9, Ht = 0, Lt = 2, jt = 3, Ft = 4, Wt = 0, Kt = 2, Qt = 3, Zt = 1, Ut = 2, V = 0, Xt = 1, H = 2, Jt = 3, rt = 4, _t = 0, $t = 1, te = 2, ee = 0, ot = 1, ie = 2, Tt = new u.Vector3(0, 0, -1), xt = new u.Vector3(0, 1, 0), x = new u.Vector3(), w = new u.Vector3(), L = new u.Vector3(), T = new u.Vector3(), k = new u.Vector3(), b = new u.Vector3(), O = new u.Quaternion(), M = new u.Vector3();
+function se() {
   const e = typeof document > "u" ? void 0 : document.createElement("audio");
   return {
     webAudio: (globalThis.AudioContext ?? globalThis.webkitAudioContext) !== void 0,
@@ -9,28 +9,29 @@ function ne() {
     oggOpus: e?.canPlayType('audio/ogg; codecs="opus"') ?? ""
   };
 }
-class at {
+class ne {
   document;
-  codecs = ne();
+  codecs = se();
   #t;
   #s;
-  #e = /* @__PURE__ */ new Map();
   #i = /* @__PURE__ */ new Map();
-  #o = [];
-  #c = 0;
-  #n = /* @__PURE__ */ new Map();
-  #a = /* @__PURE__ */ new Map();
+  #e = /* @__PURE__ */ new Map();
   #r = /* @__PURE__ */ new Map();
+  #a = [];
+  #n = 0;
+  #c = /* @__PURE__ */ new Map();
+  #o = /* @__PURE__ */ new Map();
+  #u = /* @__PURE__ */ new Map();
+  #h = 0;
   #d = 0;
-  #m = 0;
-  #u = null;
+  #f = null;
   #l = !1;
   #g = !1;
-  #h = !0;
+  #m = !0;
+  #y = !1;
   #p = !1;
-  #f = !1;
-  #y = null;
-  #w = null;
+  #M = null;
+  #S = null;
   constructor(t, i = {}) {
     this.document = t;
     const s = globalThis.AudioContext ?? globalThis.webkitAudioContext;
@@ -40,33 +41,33 @@ class at {
     return {
       available: this.#t !== null,
       contextState: this.#t?.state ?? "unavailable",
-      userEnabled: this.#h,
-      muted: this.#p,
-      soundLayers: this.document.layers.filter((t) => t.type === Bt).length,
-      decodedSounds: this.#e.size,
-      playingSounds: this.#i.size,
-      loopingSounds: [...this.#i.values()].filter((t) => t.source.loop).length,
-      positionalSounds: [...this.#i.values()].filter((t) => t.panner !== void 0).length,
-      sourceStarts: this.#c,
-      timelineClock: this.#M() ? "audio-context" : "animation-frame",
+      userEnabled: this.#m,
+      muted: this.#y,
+      soundLayers: this.document.layers.filter((t) => t.type === Ot).length,
+      decodedSounds: this.#i.size,
+      playingSounds: this.#e.size,
+      loopingSounds: [...this.#e.values()].filter((t) => t.source.loop).length,
+      positionalSounds: [...this.#e.values()].filter((t) => t.panner !== void 0).length,
+      sourceStarts: this.#n,
+      timelineClock: this.#T() ? "audio-context" : "animation-frame",
       baseLatencySeconds: this.#t?.baseLatency ?? null,
       outputLatencySeconds: this.#t?.outputLatency ?? null,
-      driftSampleCount: this.#d,
-      maximumAbsoluteDriftSeconds: this.#m,
-      currentDrift: [...this.#r].map(([t, i]) => ({ layerId: t, driftSeconds: i })),
-      lastStartOffsets: [...this.#n].map(([t, i]) => ({
+      driftSampleCount: this.#h,
+      maximumAbsoluteDriftSeconds: this.#d,
+      currentDrift: [...this.#u].map(([t, i]) => ({ layerId: t, driftSeconds: i })),
+      lastStartOffsets: [...this.#c].map(([t, i]) => ({
         layerId: t,
         offsetSeconds: i
       })),
-      activeTimings: [...this.#i].map(([t, i]) => ({
+      activeTimings: [...this.#e].map(([t, i]) => ({
         layerId: t,
         contextStartSeconds: i.contextStartSeconds,
         contextTimeSeconds: this.#t?.currentTime ?? 0,
         actualSeconds: i.offsetSeconds + (this.#t?.currentTime ?? 0) - i.contextStartSeconds,
-        expectedSeconds: this.#a.get(t) ?? null,
+        expectedSeconds: this.#o.get(t) ?? null,
         durationSeconds: i.durationSeconds
       })),
-      decodeFailures: [...this.#o],
+      decodeFailures: [...this.#a],
       codecs: this.codecs,
       ambisonicSupported: !1,
       unsupportedAmbisonicLayers: this.document.layers.filter(
@@ -80,80 +81,97 @@ class at {
       for (const t of this.document.layers) {
         if (this.#l) return;
         const i = t.sound;
-        if (!(i === void 0 || i.bytes.length === 0))
-          try {
-            const s = i.bytes.buffer.slice(
-              i.bytes.byteOffset,
-              i.bytes.byteOffset + i.bytes.byteLength
-            ), n = await this.#t.decodeAudioData(s);
-            if (this.#l) return;
-            this.#e.set(t.id, { buffer: n, sound: i });
-          } catch (s) {
-            if (this.#l) return;
-            this.#o.push({
-              layerId: t.id,
-              name: t.name,
-              reason: s instanceof Error ? s.message : String(s)
-            });
-          }
+        i === void 0 || i.bytes.length === 0 || await this.#k(t.id, t.name, i);
       }
       this.#v(!0);
     }
   }
+  /** Decode a staged sound without replacing the context or restarting other sounds. */
+  async refreshLayer(t) {
+    const i = this.document.layers.find((s) => s.id === t);
+    i?.sound === void 0 || i.sound.bytes.length === 0 || await this.#k(i.id, i.name, i.sound);
+  }
+  #k(t, i, s) {
+    if (this.#l || this.#t === null || this.#i.get(t)?.sound === s)
+      return Promise.resolve();
+    const n = this.#r.get(t);
+    if (n?.sound === s) return n.promise;
+    const r = this.#t, o = (async () => {
+      try {
+        const a = s.bytes.buffer.slice(
+          s.bytes.byteOffset,
+          s.bytes.byteOffset + s.bytes.byteLength
+        ), c = await r.decodeAudioData(a);
+        if (this.#l || this.document.layers.find((d) => d.id === t)?.sound !== s) return;
+        const l = this.#e.get(t);
+        l !== void 0 && this.#x(t, l), this.#i.set(t, { buffer: c, sound: s }), this.#a = this.#a.filter((d) => d.layerId !== t), this.#v(!1);
+      } catch (a) {
+        if (this.#l || this.document.layers.find((c) => c.id === t)?.sound !== s) return;
+        this.#a.push({
+          layerId: t,
+          name: i,
+          reason: a instanceof Error ? a.message : String(a)
+        });
+      }
+    })();
+    return this.#r.set(t, { sound: s, promise: o }), o.then(() => {
+      this.#r.get(t)?.promise === o && this.#r.delete(t);
+    }), o;
+  }
   async enable() {
     if (this.#l || this.#t === null) return;
     const t = this.#t;
-    this.#h = !0, this.#p = !1, this.#S(1);
-    const i = lt(t);
-    await this.#x(this.#f && ct()), !(this.#l || this.#t !== t) && this.#v(!i && lt(t));
+    this.#m = !0, this.#y = !1, this.#b(1);
+    const i = ct(t);
+    await this.#A(this.#p && at()), !(this.#l || this.#t !== t) && this.#v(!i && ct(t));
   }
   setMuted(t) {
-    this.#p = t, this.#S(t ? 0 : 1);
+    this.#y = t, this.#b(t ? 0 : 1);
   }
   async setPageVisible(t) {
-    this.#l || this.#t === null || !this.#h || await this.#x(t && this.#f);
+    this.#l || this.#t === null || !this.#m || await this.#A(t && this.#p);
   }
   async setTransportPlaying(t) {
-    this.#f !== t && (this.#f = t, !(this.#l || this.#t === null || !this.#h) && await this.#x(t && ct()));
+    this.#p !== t && (this.#p = t, !(this.#l || this.#t === null || !this.#m) && await this.#A(t && at()));
   }
   /** Uses Web Audio's monotonic clock while audible sources run so visuals cannot free-run against it. */
   timelineDeltaSeconds(t) {
-    if (!this.#M() || this.#t === null)
-      return this.#u = null, t;
-    const i = this.#t.currentTime, s = this.#u;
-    return this.#u = i, s === null ? t : re(i, s, t);
+    if (!this.#T() || this.#t === null)
+      return this.#f = null, t;
+    const i = this.#t.currentTime, s = this.#f;
+    return this.#f = i, s === null ? t : re(i, s, t);
   }
   update(t, i, s = !1) {
-    this.#y = t, this.#w = i, this.#b(i), this.#v(s);
+    this.#M = t, this.#S = i, this.#P(i), this.#v(s);
   }
   async dispose() {
     if (this.#l) return;
-    this.#l = !0, this.#T(), this.#e.clear(), this.#s?.disconnect(), this.#s = null;
+    this.#l = !0, this.#w(), this.#i.clear(), this.#s?.disconnect(), this.#s = null;
     const t = this.#t;
     this.#t = null, t !== null && t.state !== "closed" && await t.close();
   }
   #v(t) {
-    if (!(this.#l || this.#t === null || this.#y === null)) {
-      if (t && this.#T(), !this.#h) {
-        this.#T();
+    if (!(this.#l || this.#t === null || this.#M === null)) {
+      if (t && this.#w(), !this.#m) {
+        this.#w();
         return;
       }
-      for (const [i, s] of this.#e) {
-        const n = this.#y.layers.get(i);
-        let r = this.#i.get(i);
+      for (const [i, s] of this.#i) {
+        const n = this.#M.layers.get(i);
+        let r = this.#e.get(i);
         if (n === void 0 || s.sound.type === N || !ce(s.sound, n.visible, n.layer.keys)) {
-          r !== void 0 && this.#A(i, r);
+          r !== void 0 && this.#x(i, r);
           continue;
         }
-        if (r === void 0 && (r = this.#k(i, s, n.localTimeTicks / this.document.ticksPerSecond), r === void 0))
+        if (r === void 0 && (r = this.#C(i, s, n.localTimeTicks / this.document.ticksPerSecond), r === void 0))
           continue;
-        this.#y.waiting ? (this.#a.delete(i), this.#r.delete(i)) : this.#C(i, r, n.localTimeTicks / this.document.ticksPerSecond);
-        const o = s.sound.type === st ? le(s.sound, n.worldTransform, this.#w?.translation ?? [0, 0, 0]) : 1;
+        this.#M.waiting ? (this.#o.delete(i), this.#u.delete(i)) : this.#z(i, r, n.localTimeTicks / this.document.ticksPerSecond);
+        const o = s.sound.type === st ? le(s.sound, n.worldTransform, this.#S?.translation ?? [0, 0, 0]) : 1;
         g(r.gain.gain, s.sound.gain * n.opacity * o, this.#t.currentTime), r.panner !== void 0 && me(r.panner, n.worldTransform, this.#t.currentTime);
       }
     }
   }
-  #k(t, i, s) {
+  #C(t, i, s) {
     if (this.#t === null || this.#s === null || i.sound.type === N) return;
     const n = i.buffer.duration, r = i.sound.looping && n > 0 ? (s % n + n) % n : Math.max(0, s);
     if (!i.sound.looping && r >= n) return;
@@ -170,22 +188,22 @@ class at {
       durationSeconds: n,
       looping: i.sound.looping
     };
-    return this.#i.size === 0 && this.#M() && (this.#u = this.#t.currentTime), this.#i.set(t, l), this.#c++, this.#n.set(t, r), o.addEventListener("ended", () => {
-      this.#i.get(t)?.source === o && (this.#i.delete(t), a.disconnect(), c?.disconnect());
+    return this.#e.size === 0 && this.#T() && (this.#f = this.#t.currentTime), this.#e.set(t, l), this.#n++, this.#c.set(t, r), o.addEventListener("ended", () => {
+      this.#e.get(t)?.source === o && (this.#e.delete(t), a.disconnect(), c?.disconnect());
     }, { once: !0 }), o.start(0, r), l;
   }
-  #A(t, i) {
-    this.#i.delete(t), this.#a.delete(t), this.#r.delete(t), i.source.stop(), i.source.disconnect(), i.panner?.disconnect(), i.gain.disconnect();
+  #x(t, i) {
+    this.#e.delete(t), this.#o.delete(t), this.#u.delete(t), i.source.stop(), i.source.disconnect(), i.panner?.disconnect(), i.gain.disconnect();
   }
-  #T() {
-    for (const [t, i] of this.#i) this.#A(t, i);
-  }
-  #S(t) {
-    this.#t !== null && this.#s !== null && g(this.#s.gain, t, this.#t.currentTime);
+  #w() {
+    for (const [t, i] of this.#e) this.#x(t, i);
   }
   #b(t) {
+    this.#t !== null && this.#s !== null && g(this.#s.gain, t, this.#t.currentTime);
+  }
+  #P(t) {
     if (this.#t === null) return;
-    T.fromArray(t.translation), k.copy(xt).applyQuaternion(new u.Quaternion().fromArray(t.rotation)).normalize(), b.copy(wt).applyQuaternion(new u.Quaternion().fromArray(t.rotation)).normalize();
+    T.fromArray(t.translation), k.copy(Tt).applyQuaternion(new u.Quaternion().fromArray(t.rotation)).normalize(), b.copy(xt).applyQuaternion(new u.Quaternion().fromArray(t.rotation)).normalize();
     const i = this.#t.listener, s = this.#t.currentTime;
     D(i.positionX, i.positionY, i.positionZ) ? (g(i.positionX, T.x, s), g(i.positionY, T.y, s), g(i.positionZ, T.z, s)) : i.setPosition?.(
       T.x,
@@ -200,29 +218,29 @@ class at {
       b.z
     );
   }
-  #M() {
-    return this.#t?.state === "running" && this.#h && this.#f && this.#e.size > 0;
+  #T() {
+    return this.#t?.state === "running" && this.#m && this.#p && this.#i.size > 0;
   }
-  #C(t, i, s) {
-    if (this.#t === null || !this.#M()) return;
-    const n = this.#a.get(t);
-    if (this.#a.set(t, s), n === void 0 || ae(n, s)) return;
+  #z(t, i, s) {
+    if (this.#t === null || !this.#T()) return;
+    const n = this.#o.get(t);
+    if (this.#o.set(t, s), n === void 0 || ae(n, s)) return;
     const r = i.offsetSeconds + this.#t.currentTime - i.contextStartSeconds, o = oe(
       r,
       s,
       i.durationSeconds,
       i.looping
     );
-    this.#r.set(t, o), this.#d++, this.#m = Math.max(this.#m, Math.abs(o));
+    this.#u.set(t, o), this.#h++, this.#d = Math.max(this.#d, Math.abs(o));
   }
-  async #x(t) {
+  async #A(t) {
     const i = this.#t;
     if (i !== null) {
       try {
         t ? await i.resume() : await i.suspend();
       } catch {
       }
-      this.#l || this.#t !== i || (this.#u = i.currentTime);
+      this.#l || this.#t !== i || (this.#f = i.currentTime);
     }
   }
 }
@@ -245,26 +263,26 @@ function le(e, t, i) {
   return ue(e, s, Math.abs(t.scale)) * de(e, t, i);
 }
 function ue(e, t, i = 1) {
-  if (e.attenuationType === $t) return 1;
+  if (e.attenuationType === _t) return 1;
   const s = Math.max(0, e.attenuationMin * i), n = Math.max(s, e.attenuationMax * i);
   if (t <= s) return 1;
   if (t >= n || n <= s) return 0;
-  if (e.attenuationType === te)
+  if (e.attenuationType === $t)
     return 1 - (t - s) / (n - s);
-  if (e.attenuationType === ee) {
+  if (e.attenuationType === te) {
     const r = 5 / Math.max(1e-3, Math.log2(n / (s + 1e-3)));
     return Math.max(0, Math.min(1, (s / Math.max(t, 1e-3)) ** r));
   }
   return 1;
 }
 function de(e, t, i) {
-  if (e.modifierType === ie || (M.fromArray(i).sub(x.fromArray(t.translation)), O.fromArray(t.rotation).invert(), M.applyQuaternion(O), t.flip === 1 && (M.x *= -1), t.flip === 2 && (M.y *= -1), t.flip === 3 && (M.z *= -1), M.lengthSq() === 0)) return 1;
+  if (e.modifierType === ee || (M.fromArray(i).sub(x.fromArray(t.translation)), O.fromArray(t.rotation).invert(), M.applyQuaternion(O), t.flip === 1 && (M.x *= -1), t.flip === 2 && (M.y *= -1), t.flip === 3 && (M.z *= -1), M.lengthSq() === 0)) return 1;
   const s = e.modifierParameters[e.modifierType === ot ? 2 : 3] ?? 0;
   if (e.modifierType === ot) {
     const n = e.modifierParameters[0] ?? 0, r = e.modifierParameters[1] ?? 0, o = Math.max(0, Math.min(1, -M.normalize().z)), a = 1 - j(n, n + r, Math.acos(o));
     return W(a) * (1 - s) + s;
   }
-  if (e.modifierType === se) {
+  if (e.modifierType === ie) {
     if (M.z *= -1, M.z < 0) return 0;
     const n = Math.tan(e.modifierParameters[0] ?? 0), r = Math.tan(e.modifierParameters[1] ?? 0), o = e.modifierParameters[2] ?? 0, a = Math.tan((e.modifierParameters[0] ?? 0) + o), c = Math.tan((e.modifierParameters[1] ?? 0) + o), l = Math.abs(M.x / Math.max(M.z, 1e-12)), d = Math.abs(M.y / Math.max(M.z, 1e-12)), m = j(0, a - n, l - n), h = j(0, c - r, d - r), p = 1 - Math.max(m, h);
     return W(p * p) * (1 - s) + s;
@@ -273,7 +291,7 @@ function de(e, t, i) {
 }
 function me(e, t, i) {
   const s = new u.Quaternion().fromArray(t.rotation);
-  x.fromArray(t.translation), w.copy(xt), L.copy(wt), t.flip === 3 && (w.z *= -1), t.flip === 2 && (L.y *= -1), w.applyQuaternion(s).normalize(), L.applyQuaternion(s).normalize(), D(e.positionX, e.positionY, e.positionZ) ? (g(e.positionX, x.x, i), g(e.positionY, x.y, i), g(e.positionZ, x.z, i)) : e.setPosition?.(x.x, x.y, x.z), D(e.orientationX, e.orientationY, e.orientationZ) ? (g(e.orientationX, w.x, i), g(e.orientationY, w.y, i), g(e.orientationZ, w.z, i)) : e.setOrientation?.(w.x, w.y, w.z);
+  x.fromArray(t.translation), w.copy(Tt), L.copy(xt), t.flip === 3 && (w.z *= -1), t.flip === 2 && (L.y *= -1), w.applyQuaternion(s).normalize(), L.applyQuaternion(s).normalize(), D(e.positionX, e.positionY, e.positionZ) ? (g(e.positionX, x.x, i), g(e.positionY, x.y, i), g(e.positionZ, x.z, i)) : e.setPosition?.(x.x, x.y, x.z), D(e.orientationX, e.orientationY, e.orientationZ) ? (g(e.orientationX, w.x, i), g(e.orientationY, w.y, i), g(e.orientationZ, w.z, i)) : e.setOrientation?.(w.x, w.y, w.z);
 }
 function g(e, t, i) {
   e.cancelScheduledValues(i), e.setValueAtTime(Number.isFinite(t) ? t : 0, i);
@@ -289,10 +307,10 @@ function j(e, t, i) {
 function W(e) {
   return Math.max(0, Math.min(1, e));
 }
-function ct() {
+function at() {
   return typeof document > "u" || document.visibilityState !== "hidden";
 }
-function lt(e) {
+function ct(e) {
   return e.state === "running";
 }
 function he(e) {
@@ -363,7 +381,7 @@ class Me {
     this.seekTicks(0), this.playing = !0;
   }
   seekTicks(t) {
-    this.timeTicks = bt(t, this.durationTicks), this.waiting = !1, this.#t = 0, this.#s.clear();
+    this.timeTicks = kt(t, this.durationTicks), this.waiting = !1, this.#t = 0, this.#s.clear();
   }
   seekSeconds(t) {
     this.seekTicks(Math.round(t * this.document.ticksPerSecond));
@@ -382,24 +400,24 @@ class Me {
     this.seekTicks(s?.startTicks ?? 0), this.playing = !0;
   }
   advance(t) {
-    return this.#e(t);
+    return this.#i(t);
   }
   /** Advances transport and returns a borrowed frame from the supplied evaluator. */
   advanceFrame(t, i) {
     if (i.document !== this.document) throw new Error("Frame evaluator belongs to a different document");
-    return this.#e(t, i);
+    return this.#i(t, i);
   }
-  #e(t, i) {
+  #i(t, i) {
     if (this.playing && t > 0) {
       const s = t * this.document.ticksPerSecond * this.playbackRate + this.#t, n = Math.floor(s);
       if (this.#t = s - n, this.waiting)
-        return this.#i(n), i?.evaluateFrame(this.timeTicks, this.#s, this.waiting) ?? this.evaluate();
+        return this.#e(n), i?.evaluateFrame(this.timeTicks, this.#s, this.waiting) ?? this.evaluate();
       const r = Math.min(this.durationTicks, this.timeTicks + n), o = Ce(this.document, this.timeTicks, r), a = Pe(this.document, this.timeTicks, r);
       if (a !== void 0 && (o === void 0 || a < o))
         this.timeTicks = a > 0 ? (r - a) % a : 0, this.#s.clear();
       else if (o !== void 0) {
         const c = this.timeTicks;
-        this.timeTicks = Math.max(0, o - 1), this.waiting = !0, this.#i(Math.max(0, n - (this.timeTicks - c)));
+        this.timeTicks = Math.max(0, o - 1), this.waiting = !0, this.#e(Math.max(0, n - (this.timeTicks - c)));
       } else
         this.timeTicks = r;
       this.timeTicks >= this.durationTicks && (this.playing = !1);
@@ -409,7 +427,7 @@ class Me {
   evaluate() {
     return B(this.document, this.timeTicks, this.#s, this.waiting);
   }
-  #i(t) {
+  #e(t) {
     if (t <= 0) return;
     const i = this.evaluate();
     for (const s of i.layers.values())
@@ -444,20 +462,20 @@ class ve {
     }
     this.#t = { entries: s, snapshot: { timeTicks: 0, chapterIndex: 0, waiting: !1, layers: i } };
   }
-  evaluateFrame(t, i = At, s = !1) {
+  evaluateFrame(t, i = wt, s = !1) {
     if (this.#t.entries.length !== this.document.layers.length)
       throw new Error("Rebuild the frame evaluator after changing document structure");
-    return St(this.document, t, i, s, this.#t);
+    return At(this.document, t, i, s, this.#t);
   }
 }
-const At = /* @__PURE__ */ new Map(), Te = [];
-function B(e, t, i = At, s = !1) {
-  return St(e, t, i, s);
+const wt = /* @__PURE__ */ new Map(), Te = [];
+function B(e, t, i = wt, s = !1) {
+  return At(e, t, i, s);
 }
-function St(e, t, i = /* @__PURE__ */ new Map(), s = !1, n) {
-  const r = bt(t, e.durationTicks), o = n?.snapshot.layers ?? /* @__PURE__ */ new Map(), a = n ? void 0 : /* @__PURE__ */ new Map(), c = dt(r, e.durationTicks, 1);
+function At(e, t, i = /* @__PURE__ */ new Map(), s = !1, n) {
+  const r = kt(t, e.durationTicks), o = n?.snapshot.layers ?? /* @__PURE__ */ new Map(), a = n ? void 0 : /* @__PURE__ */ new Map(), c = ut(r, e.durationTicks, 1);
   for (let l = 0; l < e.layers.length; l++) {
-    const d = e.layers[l], m = n?.entries[l], h = m ? m.parent?.context : d.parentId < 0 ? void 0 : a.get(d.parentId), p = h?.timelineTicks ?? c, f = we(d, p, e.ticksPerSecond, m?.keys, m?.local), A = (h?.visible ?? !0) && f.visible, Y = (h?.opacity ?? 1) * f.opacity, S = d.isTimeline ? dt(
+    const d = e.layers[l], m = n?.entries[l], h = m ? m.parent?.context : d.parentId < 0 ? void 0 : a.get(d.parentId), p = h?.timelineTicks ?? c, f = we(d, p, e.ticksPerSecond, m?.keys, m?.local), A = (h?.visible ?? !0) && f.visible, Y = (h?.opacity ?? 1) * f.opacity, S = d.isTimeline ? ut(
       f.localTimeTicks + (i.get(d.id) ?? 0),
       d.durationTicks,
       f.loop === !0 ? 0 : d.maxRepeatCount
@@ -473,7 +491,7 @@ function xe(e, t, i = B(e, t)) {
   for (const r of i.layers.values())
     if (r.layer.type === 8)
       for (const o of r.layer.keys)
-        o.property !== _ || o.uintValue !== Zt || o.timeTicks <= r.timelineTicks && o.timeTicks >= n && (s = r, n = o.timeTicks);
+        o.property !== _ || o.uintValue !== Qt || o.timeTicks <= r.timelineTicks && o.timeTicks >= n && (s = r, n = o.timeTicks);
   return s === void 0 ? void 0 : {
     state: s,
     actionTimeTicks: Number.isFinite(n) ? n : null
@@ -481,12 +499,12 @@ function xe(e, t, i = B(e, t)) {
 }
 function we(e, t, i, s, n) {
   const r = C(e, J, s), o = K(r, t), a = r.length === 0 ? e.visible : o?.boolValue === !0, c = o === void 0 ? ke(C(e, nt, s), t, "uintValue", 0) : C(e, nt, s).find((m) => m.timeTicks === o.timeTicks)?.uintValue ?? 0, l = o !== void 0 && a ? Math.max(0, t - o.timeTicks + c) : t, d = n ?? {};
-  return d.visible = a, d.opacity = ut(C(e, qt, s), t, "floatValue", e.opacity), d.transform = Se(
-    C(e, Ht, s),
+  return d.visible = a, d.opacity = lt(C(e, Bt, s), t, "floatValue", e.opacity), d.transform = Se(
+    C(e, Nt, s),
     t,
     e.localTransform,
     e.pivotTransform
-  ), d.drawInTime = ut(C(e, Tt, s), t, "doubleValue", 0), d.localTimeTicks = l, d.loop = K(C(e, Nt, s), t)?.boolValue, d;
+  ), d.drawInTime = lt(C(e, vt, s), t, "doubleValue", 0), d.localTimeTicks = l, d.loop = K(C(e, qt, s), t)?.boolValue, d;
 }
 function Ae(e, t, i, s) {
   if (e.frameBuffer.length === 0 || e.frameRate <= 0) return 0;
@@ -504,7 +522,7 @@ function K(e, t) {
   }
   return i;
 }
-function kt(e, t) {
+function St(e, t) {
   if (e.length === 0) return;
   let i = e[0];
   if (i === void 0) return;
@@ -516,31 +534,31 @@ function kt(e, t) {
       break;
     }
   }
-  if (s === void 0 || i.interpolation === Lt) return [i, void 0, 0];
+  if (s === void 0 || i.interpolation === Ht) return [i, void 0, 0];
   const n = s.timeTicks - i.timeTicks, r = n <= 0 ? 0 : Math.max(0, Math.min(1, (t - i.timeTicks) / n));
   return [i, s, be(r, i.interpolation)];
 }
-function ut(e, t, i, s) {
-  const n = kt(e, t);
+function lt(e, t, i, s) {
+  const n = St(e, t);
   if (n === void 0) return s;
   const [r, o, a] = n;
   return o === void 0 ? r[i] : r[i] + (o[i] - r[i]) * a;
 }
 function Se(e, t, i, s) {
-  const n = kt(e, t);
+  const n = St(e, t);
   if (n === void 0) return Z(i);
   const [r, o, a] = n;
   if (o === void 0) return Z(r.transformValue);
   const c = G(r.transformValue, s), l = G(o.transformValue, s);
-  return G(ze(c, l, a), Ie(s));
+  return G(ze(c, l, a), Re(s));
 }
 function ke(e, t, i, s) {
   return K(e, t)?.[i] ?? s;
 }
 function be(e, t) {
-  return t === Ft ? e * e * e : t === Wt ? 1 - (1 - e) ** 3 : t === jt ? e * e * (3 - 2 * e) : e;
+  return t === jt ? e * e * e : t === Ft ? 1 - (1 - e) ** 3 : t === Lt ? e * e * (3 - 2 * e) : e;
 }
-function dt(e, t, i) {
+function ut(e, t, i) {
   if (t <= 0) return Math.max(0, e);
   const s = Math.floor(Math.max(0, e) / t);
   return i !== 0 && s >= i ? t : Math.max(0, e) % t;
@@ -554,12 +572,12 @@ function Q(e, t) {
   return i;
 }
 function Ce(e, t, i) {
-  return e.layers.find((n) => n.parentId < 0)?.keys.find((n) => n.property === _ && n.uintValue === Kt && n.timeTicks > t && n.timeTicks <= i)?.timeTicks;
+  return e.layers.find((n) => n.parentId < 0)?.keys.find((n) => n.property === _ && n.uintValue === Wt && n.timeTicks > t && n.timeTicks <= i)?.timeTicks;
 }
 function Pe(e, t, i) {
-  return e.layers.find((n) => n.parentId < 0)?.keys.find((n) => n.property === _ && n.uintValue === Qt && n.timeTicks > t && n.timeTicks <= i)?.timeTicks;
+  return e.layers.find((n) => n.parentId < 0)?.keys.find((n) => n.property === _ && n.uintValue === Kt && n.timeTicks > t && n.timeTicks <= i)?.timeTicks;
 }
-function bt(e, t) {
+function kt(e, t) {
   if (!Number.isFinite(e)) throw new RangeError("Playback time must be finite");
   return Math.max(0, Math.min(t, Math.round(e)));
 }
@@ -571,7 +589,7 @@ function Z(e) {
     translation: [...e.translation]
   };
 }
-function Ct(e, t) {
+function bt(e, t) {
   return e.reduce((i, s, n) => i + s * (t[n] ?? 0), 0);
 }
 function U(e) {
@@ -589,7 +607,7 @@ function ze(e, t, i) {
   };
 }
 function G(e, t) {
-  const i = Pt(t.translation, e.flip).map((n) => n * e.scale), s = zt(i, e.rotation).map(
+  const i = Ct(t.translation, e.flip).map((n) => n * e.scale), s = Pt(i, e.rotation).map(
     (n, r) => n + (e.translation[r] ?? 0)
   );
   return e.flip === 0 ? {
@@ -607,9 +625,9 @@ function G(e, t) {
     translation: s
   } : { rotation: F(e.rotation, t.rotation), scale: e.scale * t.scale, flip: 0, translation: s };
 }
-function Ie(e) {
-  const t = Re(e.rotation), i = 1 / e.scale, s = Pt(
-    zt(e.translation.map((n) => -n), t).map((n) => n * i),
+function Re(e) {
+  const t = Ie(e.rotation), i = 1 / e.scale, s = Ct(
+    Pt(e.translation.map((n) => -n), t).map((n) => n * i),
     e.flip
   );
   return { rotation: X(t, e.flip), scale: i, flip: e.flip, translation: s };
@@ -622,17 +640,17 @@ function F(e, t) {
     e[3] * t[3] - e[0] * t[0] - e[1] * t[1] - e[2] * t[2]
   ]);
 }
-function Re(e) {
-  const t = Ct(e, e);
+function Ie(e) {
+  const t = bt(e, e);
   return [-e[0] / t, -e[1] / t, -e[2] / t, e[3] / t];
 }
 function X(e, t) {
   return t === 1 ? [e[0], -e[1], -e[2], e[3]] : t === 2 ? [-e[0], e[1], -e[2], e[3]] : t === 3 ? [-e[0], -e[1], e[2], e[3]] : [...e];
 }
-function Pt(e, t) {
+function Ct(e, t) {
   return [t === 1 ? -e[0] : e[0], t === 2 ? -e[1] : e[1], t === 3 ? -e[2] : e[2]];
 }
-function zt(e, t) {
+function Pt(e, t) {
   const [i, s, n] = e, [r, o, a, c] = t, l = c * i + o * n - a * s, d = c * s + a * i - r * n, m = c * n + r * s - o * i, h = -r * i - o * s - a * n;
   return [
     l * c + h * -r + d * -a - m * -o,
@@ -641,7 +659,7 @@ function zt(e, t) {
   ];
 }
 function De(e, t, i) {
-  let s = Ct(e, t), n = t;
+  let s = bt(e, t), n = t;
   if (s < 0 && (s = -s, n = t.map((l) => -l)), 1 - s <= 1e-6)
     return U(e.map((l, d) => l * (1 - i) + (n[d] ?? l) * i));
   const r = Math.acos(Math.max(-1, Math.min(1, s))), o = Math.sin(r), a = Math.sin((1 - i) * r) / o, c = Math.sin(i * r) / o;
@@ -653,26 +671,26 @@ class Ye {
   diagnostics;
   #t;
   #s = /* @__PURE__ */ new Map();
-  #e = /* @__PURE__ */ new Map();
   #i = /* @__PURE__ */ new Map();
-  #o = /* @__PURE__ */ new Map();
-  #c = [];
+  #e = /* @__PURE__ */ new Map();
+  #r = /* @__PURE__ */ new Map();
+  #a = [];
   #n;
-  #a;
-  #r;
-  #d;
-  #m = 0;
-  #u = 0;
+  #c;
+  #o;
+  #u;
+  #h = 0;
+  #d = 0;
   constructor(t, i = {}) {
     this.#t = t, this.object3d.name = "IMM document";
     const s = i.renderer?.getContext(), n = s === void 0 ? null : Number(s.getParameter(s.SAMPLES));
-    this.#a = n;
+    this.#c = n;
     const r = s !== void 0 && s.getExtension("OES_sample_variables") !== null;
-    this.#r = {
+    this.#o = {
       depthBits: s === void 0 ? null : Number(s.getParameter(s.DEPTH_BITS)),
       logarithmicDepthBuffer: i.renderer?.capabilities.logarithmicDepthBuffer ?? !1,
       reversedDepthBuffer: i.renderer?.capabilities.reversedDepthBuffer ?? !1
-    }, this.#n = r && n !== null && n > 0 ? "sample-mask" : n !== null && n > 0 ? "alpha-to-coverage" : "alpha-hash", this.#d = Be(), this.#c.push(this.#d);
+    }, this.#n = r && n !== null && n > 0 ? "sample-mask" : n !== null && n > 0 ? "alpha-to-coverage" : "alpha-hash", this.#u = Be(), this.#a.push(this.#u);
     const o = performance.now();
     for (const h of t.layers) {
       const p = new u.Group();
@@ -682,7 +700,7 @@ class Ye {
     for (const h of t.layers) {
       const p = this.#s.get(h.id);
       if (p !== void 0) {
-        if (h.type === vt && h.drawings.length > 0) {
+        if (h.type === Mt && h.drawings.length > 0) {
           const f = {
             layer: h,
             node: p,
@@ -690,15 +708,15 @@ class Ye {
             resources: [],
             materials: []
           };
-          this.#e.set(h.id, f);
-          const A = this.#g(f, 0);
+          this.#i.set(h.id, f);
+          const A = this.#l(f, 0);
           a++, d += A.meshes, m += A.triangles;
         } else if (h.type === et && h.model !== void 0) {
-          const f = this.#p(h, p);
-          this.#i.set(h.id, f), c++, d++, m += R(f.mesh.geometry);
+          const f = this.#m(h, p);
+          this.#e.set(h.id, f), c++, d++, m += I(f.mesh.geometry);
         } else if (h.type === it && h.picture !== void 0) {
-          const f = this.#f(h, p);
-          f !== null && (this.#o.set(h.id, f), l++, d++, m += R(f.mesh.geometry));
+          const f = this.#y(h, p);
+          f !== null && (this.#r.set(h.id, f), l++, d++, m += I(f.mesh.geometry));
         }
       }
     }
@@ -710,7 +728,7 @@ class Ye {
       triangleCount: m,
       geometryBuildMs: performance.now() - o,
       alphaMode: this.#n,
-      depthBits: this.#r.depthBits,
+      depthBits: this.#o.depthBits,
       stencilBits: s === void 0 ? null : Number(s.getParameter(s.STENCIL_BITS)),
       sampleCount: n,
       maxSamples: s === void 0 ? null : Number(s.getParameter(
@@ -719,12 +737,12 @@ class Ye {
       programmableSampleMask: r,
       maxTextureSize: i.renderer?.capabilities.maxTextureSize ?? null,
       colorMode: "srgb-output-no-tone-mapping",
-      activeDrawingCount: this.#e.size,
-      hostCompatibilityWarnings: ht(void 0, this.#r)
+      activeDrawingCount: this.#i.size,
+      hostCompatibilityWarnings: mt(void 0, this.#o)
     }, this.setTimeTicks(0), i.parent?.add(this.object3d);
   }
   get timeTicks() {
-    return this.#m;
+    return this.#h;
   }
   setTimeSeconds(t, i) {
     this.setTimeTicks(Math.round(t * this.#t.ticksPerSecond), i);
@@ -734,17 +752,17 @@ class Ye {
   }
   /** Applies a caller-owned evaluation so multiple consumers can share one frame snapshot. */
   applySnapshot(t, i) {
-    this.#m = t.timeTicks, this.#u = Math.floor(t.timeTicks * 60 / this.#t.ticksPerSecond) & 63;
-    for (const s of t.layers.values()) this.#l(s);
-    i !== void 0 && (this.#y(i), this.diagnostics.hostCompatibilityWarnings = ht(i, this.#r)), this.object3d.updateMatrixWorld();
+    this.#h = t.timeTicks, this.#d = Math.floor(t.timeTicks * 60 / this.#t.ticksPerSecond) & 63;
+    for (const s of t.layers.values()) this.#f(s);
+    i !== void 0 && (this.#p(i), this.diagnostics.hostCompatibilityWarnings = mt(i, this.#o)), this.object3d.updateMatrixWorld();
   }
   /** Pins stochastic coverage for deterministic captures and host-controlled render sequencing. */
   setCoverageFrame(t) {
-    this.#u = Math.max(0, Math.trunc(t)) & 63;
-    for (const i of this.#e.values())
-      for (const s of i.materials) s.uniforms.immFrame.value = this.#u;
-    for (const i of this.#o.values()) i.material.uniforms.immFrame.value = this.#u;
-    for (const i of this.#i.values()) i.material.uniforms.immFrame.value = this.#u;
+    this.#d = Math.max(0, Math.trunc(t)) & 63;
+    for (const i of this.#i.values())
+      for (const s of i.materials) s.uniforms.immFrame.value = this.#d;
+    for (const i of this.#r.values()) i.material.uniforms.immFrame.value = this.#d;
+    for (const i of this.#e.values()) i.material.uniforms.immFrame.value = this.#d;
   }
   /** The host owns the renderer and clock; time is an explicit document-relative value. */
   update(t, i) {
@@ -756,45 +774,45 @@ class Ye {
     if (n === void 0 || r === void 0) return !1;
     const o = performance.now();
     let a = !1;
-    const c = this.#e.get(t);
+    const c = this.#i.get(t);
     if (c !== void 0 && (i === void 0 || c.activeDrawing === i)) {
-      const l = c.node.children.length, d = mt(c.node);
+      const l = c.node.children.length, d = dt(c.node);
       c.activeDrawing = -1;
-      const m = B(this.#t, this.#m).layers.get(t);
-      m !== void 0 && this.#l(m), this.diagnostics.meshCount += c.node.children.length - l, this.diagnostics.triangleCount += mt(c.node) - d, a = !0;
-    } else if (n.type === it && n.picture !== void 0 && !this.#o.has(t)) {
-      const l = this.#f(n, r);
-      l !== null && (this.#o.set(t, l), this.diagnostics.pictureLayerCount++, this.diagnostics.meshCount++, this.diagnostics.triangleCount += R(l.mesh.geometry), a = !0);
-    } else if (n.type === et && n.model !== void 0 && !this.#i.has(t)) {
-      const l = this.#p(n, r);
-      this.#i.set(t, l), this.diagnostics.modelLayerCount++, this.diagnostics.meshCount++, this.diagnostics.triangleCount += R(l.mesh.geometry), a = !0;
+      const m = B(this.#t, this.#h).layers.get(t);
+      m !== void 0 && this.#f(m), this.diagnostics.meshCount += c.node.children.length - l, this.diagnostics.triangleCount += dt(c.node) - d, a = !0;
+    } else if (n.type === it && n.picture !== void 0 && !this.#r.has(t)) {
+      const l = this.#y(n, r);
+      l !== null && (this.#r.set(t, l), this.diagnostics.pictureLayerCount++, this.diagnostics.meshCount++, this.diagnostics.triangleCount += I(l.mesh.geometry), a = !0);
+    } else if (n.type === et && n.model !== void 0 && !this.#e.has(t)) {
+      const l = this.#m(n, r);
+      this.#e.set(t, l), this.diagnostics.modelLayerCount++, this.diagnostics.meshCount++, this.diagnostics.triangleCount += I(l.mesh.geometry), a = !0;
     }
-    return this.diagnostics.geometryBuildMs += performance.now() - o, a ? (this.setTimeTicks(this.#m, s), !0) : !1;
+    return this.diagnostics.geometryBuildMs += performance.now() - o, a ? (this.setTimeTicks(this.#h, s), !0) : !1;
   }
   dispose() {
     this.object3d.removeFromParent();
-    for (const t of this.#e.values()) this.#h(t);
-    for (const t of this.#c) t.dispose();
-    this.#c.length = 0, this.#e.clear(), this.#i.clear(), this.#o.clear(), this.#s.clear(), this.object3d.clear();
+    for (const t of this.#i.values()) this.#g(t);
+    for (const t of this.#a) t.dispose();
+    this.#a.length = 0, this.#i.clear(), this.#e.clear(), this.#r.clear(), this.#s.clear(), this.object3d.clear();
   }
-  #l(t) {
+  #f(t) {
     const i = this.#s.get(t.layer.id);
     if (i === void 0) return;
     i.visible = t.visible, Fe(i, t.transform);
-    const s = this.#e.get(t.layer.id);
+    const s = this.#i.get(t.layer.id);
     if (s !== void 0) {
-      s.activeDrawing !== t.drawingIndex && this.#g(s, t.drawingIndex);
-      const o = t.layer.keys.some((a) => a.property === Tt);
+      s.activeDrawing !== t.drawingIndex && this.#l(s, t.drawingIndex);
+      const o = t.layer.keys.some((a) => a.property === vt);
       for (const a of s.materials)
-        a.uniforms.immOpacity.value = t.opacity, a.uniforms.immDrawIn.value = o ? t.drawInTime : 1, a.uniforms.immTime.value = this.#m / this.#t.ticksPerSecond, a.uniforms.immFrame.value = this.#u;
+        a.uniforms.immOpacity.value = t.opacity, a.uniforms.immDrawIn.value = o ? t.drawInTime : 1, a.uniforms.immTime.value = this.#h / this.#t.ticksPerSecond, a.uniforms.immFrame.value = this.#d;
     }
-    const n = this.#o.get(t.layer.id);
-    n !== void 0 && (n.material.uniforms.immOpacity.value = t.opacity, n.material.uniforms.immFrame.value = this.#u);
-    const r = this.#i.get(t.layer.id);
-    r !== void 0 && (r.material.uniforms.immOpacity.value = t.opacity, r.material.uniforms.immFrame.value = this.#u);
+    const n = this.#r.get(t.layer.id);
+    n !== void 0 && (n.material.uniforms.immOpacity.value = t.opacity, n.material.uniforms.immFrame.value = this.#d);
+    const r = this.#e.get(t.layer.id);
+    r !== void 0 && (r.material.uniforms.immOpacity.value = t.opacity, r.material.uniforms.immFrame.value = this.#d);
   }
-  #g(t, i) {
-    this.#h(t), t.node.clear(), t.activeDrawing = i;
+  #l(t, i) {
+    this.#g(t), t.node.clear(), t.activeDrawing = i;
     const s = t.layer.drawings[i];
     if (s === void 0) return { meshes: 0, triangles: 0 };
     let n = 0, r = 0;
@@ -803,30 +821,30 @@ class Ye {
         o.brushType,
         this.#n,
         t.layer,
-        this.#d,
-        this.#a
+        this.#u,
+        this.#c
       ), l = new u.Mesh(a, c);
       l.name = `${t.layer.name} drawing ${i} brush ${o.brushType}`, l.userData.immLayerType = "paint", l.userData.immDrawingIndex = i, t.node.add(l), t.resources.push(a, c), t.materials.push(c), n++, r += o.triangleCount;
     }
     return { meshes: n, triangles: r };
   }
-  #h(t) {
+  #g(t) {
     for (const i of t.resources) i.dispose();
     t.resources.length = 0, t.materials.length = 0;
   }
-  #p(t, i) {
+  #m(t, i) {
     const s = t.model;
     if (s === void 0) throw new Error(`Model layer ${t.id} has no geometry`);
     const n = Ge(s), r = Oe(
       s,
       t.opacity,
       this.#n,
-      this.#d,
-      this.#a
+      this.#u,
+      this.#c
     ), o = new u.Mesh(n, r);
-    return o.name = t.name, o.userData.immLayerType = "model", i.add(o), this.#c.push(n, r), { layer: t, node: i, mesh: o, material: r };
+    return o.name = t.name, o.userData.immLayerType = "model", i.add(o), this.#a.push(n, r), { layer: t, node: i, mesh: o, material: r };
   }
-  #f(t, i) {
+  #y(t, i) {
     const s = t.picture;
     if (s === void 0) return null;
     const n = new u.DataTexture(
@@ -844,26 +862,26 @@ class Ye {
         n,
         t.opacity,
         this.#n,
-        this.#d,
-        this.#a
+        this.#u,
+        this.#c
       );
-    } else if (s.contentType === Jt || s.contentType === H)
+    } else if (s.contentType === Xt || s.contentType === H)
       r = new u.SphereGeometry(100, 64, 32), o = He(
         n,
         t.opacity,
         s.contentType === H,
         this.#n,
-        this.#d,
-        this.#a
+        this.#u,
+        this.#c
       );
-    else if (s.contentType === _t || s.contentType === rt)
+    else if (s.contentType === Jt || s.contentType === rt)
       r = new u.SphereGeometry(100, 64, 32), o = Le(
         n,
         t.opacity,
         s.contentType === rt,
         this.#n,
-        this.#d,
-        this.#a
+        this.#u,
+        this.#c
       );
     else
       return n.dispose(), null;
@@ -871,12 +889,12 @@ class Ye {
     return a.name = t.name, a.userData.immLayerType = "picture", a.userData.immPictureType = s.contentType, a.renderOrder = s.contentType === V ? 0 : -1e4, s.contentType !== V && (o.depthTest = !1, o.depthWrite = !1, o.side = u.BackSide), s.contentType === H && (a.onBeforeRender = (c, l, d) => {
       const m = d.viewport;
       o.uniforms.immEye.value = m !== void 0 && m.x > 0 ? 1 : 0;
-    }), i.add(a), this.#c.push(n, r, o), { layer: t, node: i, mesh: a, material: o, viewerLocked: s.viewerLocked };
+    }), i.add(a), this.#a.push(n, r, o), { layer: t, node: i, mesh: a, material: o, viewerLocked: s.viewerLocked };
   }
-  #y(t) {
+  #p(t) {
     t.updateMatrixWorld();
     const i = new u.Vector3().setFromMatrixPosition(t.matrixWorld), s = new u.Quaternion().setFromRotationMatrix(t.matrixWorld);
-    for (const n of this.#o.values()) {
+    for (const n of this.#r.values()) {
       if (!n.viewerLocked) continue;
       const r = n.node.parent, a = n.layer.picture?.contentType === V ? n.node.position.clone().applyQuaternion(s).add(i) : i.clone(), c = s.clone().multiply(n.node.quaternion);
       if (r === null)
@@ -889,13 +907,13 @@ class Ye {
     }
   }
 }
-function mt(e) {
+function dt(e) {
   let t = 0;
   return e.traverse((i) => {
-    i instanceof u.Mesh && (t += R(i.geometry));
+    i instanceof u.Mesh && (t += I(i.geometry));
   }), t;
 }
-function ht(e, t) {
+function mt(e, t) {
   const i = [];
   return t.depthBits !== null && t.depthBits < 24 && i.push({
     code: "depth-buffer",
@@ -906,10 +924,10 @@ function ht(e, t) {
   }), t.reversedDepthBuffer && i.push({
     code: "reversed-depth",
     message: "Host renderer uses reversed depth; native desktop parity uses conventional LESS_EQUAL depth."
-  }), e === void 0 ? i : e instanceof u.PerspectiveCamera ? (ft(e.near, 0.01) || i.push({
+  }), e === void 0 ? i : e instanceof u.PerspectiveCamera ? (ht(e.near, 0.01) || i.push({
     code: "camera-near",
     message: `Host camera near plane is ${e.near}; native desktop parity uses 0.01.`
-  }), ft(e.far, 2e4) || i.push({
+  }), ht(e.far, 2e4) || i.push({
     code: "camera-far",
     message: `Host camera far plane is ${e.far}; native desktop parity uses 20000.`
   }), i) : (i.push({
@@ -917,7 +935,7 @@ function ht(e, t) {
     message: "Host camera is not perspective; native desktop parity uses a perspective projection."
   }), i);
 }
-function ft(e, t) {
+function ht(e, t) {
   return Math.abs(e - t) <= Math.max(1e-6, Math.abs(t) * 1e-6);
 }
 function Ve(e) {
@@ -1034,7 +1052,7 @@ function qe(e, t, i, s, n) {
             void main(){
                 immColor=color; immVertexProgress=immProgress; immMaskSeed=immMask;
                 vec3 animatedPosition=position;
-                if(immKeepAliveType==${Ut}) animatedPosition+=immWiggle.z*sin(immWiggle.x*position.yzx+immWiggle.y*immTime);
+                if(immKeepAliveType==${Zt}) animatedPosition+=immWiggle.z*sin(immWiggle.x*position.yzx+immWiggle.y*immTime);
                 vec3 cpos=(modelViewMatrix*vec4(animatedPosition,1.0)).xyz;
                 immDirectional=1.0;
                 if(immVisibility<0.5){
@@ -1078,7 +1096,7 @@ function qe(e, t, i, s, n) {
             void main(){
                 float reveal=smoothstep(0.3,1.0,2.0*immDrawIn-immVertexProgress);
                 float blink=1.0;
-                if(immKeepAliveType==${Xt}){
+                if(immKeepAliveType==${Ut}){
                     float mapped=clamp((keepAliveWave()-immBlink.w)/max(immBlinkMaxIn-immBlink.w,0.00001),0.0,1.0);
                     blink=mix(immBlink.y,immBlink.z,mapped);
                 }
@@ -1115,17 +1133,17 @@ function Ne(e, t, i, s, n) {
     coverageMode: i,
     blueNoise: s,
     sampleCount: n,
-    vertexShader: `${It} in vec2 uv; out vec2 immUv;
+    vertexShader: `${zt} in vec2 uv; out vec2 immUv;
             void main(){ immUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentBody: `in vec2 immUv;
             void main(){ immWriteCoverage(texture(immPicture,vec2(immUv.x,1.0-immUv.y))); }`,
     side: u.DoubleSide
   });
 }
-const It = `
+const zt = `
     precision highp float; precision highp int;
     uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix; in vec3 position;
-`, Rt = `${It}
+`, Rt = `${zt}
     out vec3 immDirection;
     void main(){ immDirection=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }
 `;
@@ -1246,7 +1264,7 @@ const je = `
         #endif
     }
 `;
-function R(e) {
+function I(e) {
   return e.index?.count !== void 0 ? e.index.count / 3 : e.getAttribute("position").count / 3;
 }
 function Fe(e, t) {
@@ -1261,12 +1279,12 @@ class We {
   loadTelemetry;
   #t;
   #s;
-  #e;
-  #i = null;
-  #o = "";
-  #c = !1;
+  #i;
+  #e = null;
+  #r = "";
+  #a = !1;
   constructor(t, i, s, n, r) {
-    this.document = t, this.loadTelemetry = n, this.#s = i, this.view = new Ye(t, { renderer: r.renderer }), this.scene = this.view.object3d, this.scene.name = "IMM content", this.playback = new Me(t), this.#t = new ve(t), this.playback.play(), this.#e = r.audio === !1 ? null : new at(t, { context: r.audioContext }), this.#e?.prepare(), this.backgroundComplete = s.length === 0 ? Promise.resolve() : i.continue(t, s, (a, c) => this.#n(a, c)).catch((a) => {
+    this.document = t, this.loadTelemetry = n, this.#s = i, this.view = new Ye(t, { renderer: r.renderer }), this.scene = this.view.object3d, this.scene.name = "IMM content", this.playback = new Me(t), this.#t = new ve(t), this.playback.play(), this.#i = r.audio === !1 ? null : new ne(t, { context: r.audioContext }), this.#i?.prepare(), this.backgroundComplete = s.length === 0 ? Promise.resolve() : i.continue(t, s, (a, c) => this.#n(a, c)).catch((a) => {
       throw r.onBackgroundError?.(a), a;
     });
     const o = () => {
@@ -1293,67 +1311,67 @@ class We {
     return this.document.layers.filter((t) => t.type === 8);
   }
   play() {
-    this.#r(), this.playback.play(), this.#e?.setTransportPlaying(!0);
+    this.#o(), this.playback.play(), this.#i?.setTransportPlaying(!0);
   }
   pause() {
-    this.#r(), this.playback.pause(), this.#e?.setTransportPlaying(!1);
+    this.#o(), this.playback.pause(), this.#i?.setTransportPlaying(!1);
   }
   continue() {
-    this.#r(), this.playback.continue(), this.#e?.setTransportPlaying(!0);
+    this.#o(), this.playback.continue(), this.#i?.setTransportPlaying(!0);
   }
   restart() {
-    return this.#r(), this.playback.restart(), this.#i = null, this.#a(!0);
+    return this.#o(), this.playback.restart(), this.#e = null, this.#c(!0);
   }
   seek(t) {
-    return this.#r(), this.playback.seekSeconds(t), this.#a(!0);
+    return this.#o(), this.playback.seekSeconds(t), this.#c(!0);
   }
   selectChapter(t) {
-    return this.#r(), this.playback.selectChapter(t), this.#a(!0);
+    return this.#o(), this.playback.selectChapter(t), this.#c(!0);
   }
   selectViewpoint(t) {
-    this.#r();
+    this.#o();
     const i = this.playback.evaluate().layers.get(t);
     if (i === void 0 || i.layer.type !== 8) throw new RangeError(`IMM viewpoint ${t} does not exist`);
-    const s = pt(
+    const s = ft(
       i.layer.id,
       i.layer.name,
       i.layer.spawnTracking,
       i.worldTransform,
       `selected:${i.layer.id}:${this.playback.chapterIndex}`
     );
-    return this.#o = s.activationKey, s;
+    return this.#r = s.activationKey, s;
   }
   initialAuthoredCamera() {
-    return this.#r(), this.#a(!0);
+    return this.#o(), this.#c(!0);
   }
   /** Evaluate and render using reusable state. Consume the snapshot before the next update(). */
   update(t, i) {
-    this.#r();
-    const s = this.#i === null ? 0 : (t - this.#i) / 1e3;
-    this.#i = t;
-    const n = this.#e?.timelineDeltaSeconds(u.MathUtils.clamp(s, 0, 0.1)) ?? u.MathUtils.clamp(s, 0, 0.1), r = this.playback.advanceFrame(n, this.#t);
-    return this.view.applySnapshot(r, i), this.#e?.update(r, he(i)), this.#e?.setTransportPlaying(this.playback.playing), { snapshot: r, authoredCamera: this.#a(!1, r) };
+    this.#o();
+    const s = this.#e === null ? 0 : (t - this.#e) / 1e3;
+    this.#e = t;
+    const n = this.#i?.timelineDeltaSeconds(u.MathUtils.clamp(s, 0, 0.1)) ?? u.MathUtils.clamp(s, 0, 0.1), r = this.playback.advanceFrame(n, this.#t);
+    return this.view.applySnapshot(r, i), this.#i?.update(r, he(i)), this.#i?.setTransportPlaying(this.playback.playing), { snapshot: r, authoredCamera: this.#c(!1, r) };
   }
   setMuted(t) {
-    this.#e?.setMuted(t);
+    this.#i?.setMuted(t);
   }
   async enableAudio() {
-    await this.#e?.enable();
+    await this.#i?.enable();
   }
   async dispose() {
-    this.#c || (this.#c = !0, this.#s?.dispose(), this.#s = null, this.view.dispose(), await this.#e?.dispose(), this.#e = null);
+    this.#a || (this.#a = !0, this.#s?.dispose(), this.#s = null, this.view.dispose(), await this.#i?.dispose(), this.#i = null);
   }
   async #n(t, i) {
-    if (this.#c) return;
+    if (this.#a) return;
     const s = this.document.layers.find((n) => n.id === i.layerId);
-    (i.type === "drawing" || s?.type === 3 || s?.type === 4) && this.view.refreshLayer(t.layerId, t.type === "drawing" ? t.drawingId : void 0), s?.type === 5 && this.#e !== null && (await this.#e.dispose(), this.#e = new at(this.document), await this.#e.prepare());
+    (i.type === "drawing" || s?.type === 3 || s?.type === 4) && this.view.refreshLayer(t.layerId, t.type === "drawing" ? t.drawingId : void 0), s?.type === 5 && this.#i !== null && await this.#i.refreshLayer(s.id);
   }
-  #a(t, i = this.playback.evaluate()) {
+  #c(t, i = this.playback.evaluate()) {
     const s = xe(this.document, this.playback.timeTicks, i);
     if (s === void 0) return;
     const n = Ke(s, this.playback.chapterIndex);
-    if (!(!t && n === this.#o))
-      return this.#o = n, pt(
+    if (!(!t && n === this.#r))
+      return this.#r = n, ft(
         s.state.layer.id,
         s.state.layer.name,
         s.state.layer.spawnTracking,
@@ -1361,8 +1379,8 @@ class We {
         n
       );
   }
-  #r() {
-    if (this.#c) throw new Error("IMMAsset is disposed");
+  #o() {
+    if (this.#a) throw new Error("IMMAsset is disposed");
   }
 }
 function li(e) {
@@ -1371,7 +1389,7 @@ function li(e) {
 function Ke(e, t) {
   return `${e.state.layer.id}:${e.actionTimeTicks ?? "initial"}:${t}`;
 }
-function pt(e, t, i, s, n) {
+function ft(e, t, i, s, n) {
   return {
     layerId: e,
     name: t,
@@ -1386,25 +1404,25 @@ function pt(e, t, i, s, n) {
   };
 }
 function Qe(e) {
-  Et(e.schemaVersion, "summary");
+  Dt(e.schemaVersion, "summary");
 }
 function Ze(e) {
-  Et(e.schemaVersion, "document"), Array.isArray(e.layers) || y("document.layers must be an array");
+  Dt(e.schemaVersion, "document"), Array.isArray(e.layers) || y("document.layers must be an array");
   for (const t of e.layers)
-    Array.isArray(t.drawings) || y(`layer ${t.id} drawings must be an array`), t.drawings.forEach((i, s) => Yt(i, `layer ${t.id} drawing ${s}`));
+    Array.isArray(t.drawings) || y(`layer ${t.id} drawings must be an array`), t.drawings.forEach((i, s) => Et(i, `layer ${t.id} drawing ${s}`));
 }
-function Dt(e) {
+function It(e) {
   if (e.type === "drawing") {
-    E(e.layerId, "drawing delta layerId"), E(e.drawingId, "drawing delta drawingId"), yt(e.metrics, "drawing", e.layerId, e.drawingId), Yt(e.drawing, `layer ${e.layerId} drawing ${e.drawingId}`);
+    E(e.layerId, "drawing delta layerId"), E(e.drawingId, "drawing delta drawingId"), pt(e.metrics, "drawing", e.layerId, e.drawingId), Et(e.drawing, `layer ${e.layerId} drawing ${e.drawingId}`);
     return;
   }
   if (e.type === "asset") {
-    E(e.layerId, "asset delta layerId"), yt(e.metrics, "asset", e.layerId);
+    E(e.layerId, "asset delta layerId"), pt(e.metrics, "asset", e.layerId);
     return;
   }
   y("staged delta has an unsupported type");
 }
-function yt(e, t, i, s) {
+function pt(e, t, i, s) {
   (e === void 0 || e.type !== t || e.layerId !== i || e.drawingId !== s) && y(`${t} delta metrics identity does not match the request`);
   for (const n of [
     "decodeMs",
@@ -1418,10 +1436,10 @@ function yt(e, t, i, s) {
   ])
     (!Number.isFinite(e[n]) || e[n] < 0) && y(`${t} delta metrics ${n} must be a finite non-negative number`);
 }
-function Et(e, t) {
+function Dt(e, t) {
   e !== tt && y(`${t} schema ${e} is unsupported; expected ${tt}`);
 }
-function Yt(e, t) {
+function Et(e, t) {
   E(e.strokeCount, `${t} strokeCount`), E(e.pointCount, `${t} pointCount`), (!Number.isFinite(e.biggestStroke) || e.biggestStroke < 0) && y(`${t} biggestStroke must be a finite non-negative number`), Array.isArray(e.geometries) || y(`${t} geometries must be an array`);
   const i = /* @__PURE__ */ new Set();
   e.geometries.forEach((s, n) => {
@@ -1431,14 +1449,14 @@ function Yt(e, t) {
 function Ue(e, t) {
   (!Number.isInteger(e.brushType) || e.brushType < 0 || e.brushType > 4) && y(`${t} brushType must be an integer from 0 through 4`), z(e.positions, Float32Array, `${t} positions`), z(e.colors, Float32Array, `${t} colors`), z(e.directions, Float32Array, `${t} directions`), z(e.visibility, Uint8Array, `${t} visibility`), z(e.masks, Uint8Array, `${t} masks`), z(e.progress, Float32Array, `${t} progress`), !(e.indices instanceof Uint16Array) && !(e.indices instanceof Uint32Array) && y(`${t} indices must be Uint16Array or Uint32Array`), (e.positions.length === 0 || e.positions.length % 3 !== 0) && y(`${t} positions must contain one or more vec3 values`);
   const i = e.positions.length / 3;
-  I(e.colors, i * 4, `${t} colors`), I(e.directions, i * 3, `${t} directions`), I(e.visibility, i, `${t} visibility`), I(e.masks, i, `${t} masks`), I(e.progress, i, `${t} progress`), (e.indices.length === 0 || e.indices.length % 3 !== 0) && y(`${t} indices must contain complete triangles`), (!Number.isInteger(e.triangleCount) || e.triangleCount !== e.indices.length / 3) && y(`${t} triangleCount does not match the index buffer`);
+  R(e.colors, i * 4, `${t} colors`), R(e.directions, i * 3, `${t} directions`), R(e.visibility, i, `${t} visibility`), R(e.masks, i, `${t} masks`), R(e.progress, i, `${t} progress`), (e.indices.length === 0 || e.indices.length % 3 !== 0) && y(`${t} indices must contain complete triangles`), (!Number.isInteger(e.triangleCount) || e.triangleCount !== e.indices.length / 3) && y(`${t} triangleCount does not match the index buffer`);
   for (const s of e.indices)
     s >= i && y(`${t} index ${s} exceeds vertex count ${i}`);
 }
 function z(e, t, i) {
   e instanceof t || y(`${i} has the wrong typed-array representation`);
 }
-function I(e, t, i) {
+function R(e, t, i) {
   e.length !== t && y(`${i} length ${e.length} does not match expected length ${t}`);
 }
 function E(e, t) {
@@ -1462,13 +1480,13 @@ async function* Xe(e, t, i, s = {}) {
     for (const f of h) {
       if (n !== "single" && performance.now() - c >= 4) {
         const P = performance.now();
-        await new Promise((Ot) => setTimeout(Ot, 0));
-        const Gt = o("yield", P);
-        if (r && (r.yields++, r.yieldMs += Gt), i()) return;
+        await new Promise((Gt) => setTimeout(Gt, 0));
+        const Vt = o("yield", P);
+        if (r && (r.yields++, r.yieldMs += Vt), i()) return;
         c = performance.now();
       }
       const A = performance.now();
-      n === "batch-paced" && Dt(f);
+      n === "batch-paced" && It(f);
       const Y = n === "batch-paced" ? o("validation", A) : f.metrics.validationMs ?? 0;
       r && (r.validationMs += Y);
       const S = t[a];
@@ -1483,32 +1501,32 @@ async function* Xe(e, t, i, s = {}) {
   }
   r && !i() && (r.completedAt = performance.now());
 }
-const gt = "".trim();
+const yt = "".trim();
 function Je(e, t) {
-  const i = gt === "" ? "" : `${encodeURIComponent(gt)}/`;
+  const i = yt === "" ? "" : `${encodeURIComponent(yt)}/`;
   return `/${e}/${i}${t}`;
 }
 class _e {
   #t;
   #s = /* @__PURE__ */ new Map();
-  #e = 1;
-  #i = !1;
-  #o = [];
+  #i = 1;
+  #e = !1;
+  #r = [];
   constructor(t = Je("decoder", "imm-web-decoder-worker.mjs")) {
     this.#t = new Worker(t, { type: "module", name: "imm-decoder" }), this.#t.addEventListener("message", (i) => {
-      this.#a(i.data);
+      this.#c(i.data);
     }), this.#t.addEventListener("error", (i) => {
-      this.#r(new Error(`IMM decoder worker failed: ${i.message}`));
+      this.#o(new Error(`IMM decoder worker failed: ${i.message}`));
     });
   }
   inspect(t) {
     return this.#n("inspect", { source: t }, [t]);
   }
   decode(t) {
-    return this.#o = [], this.#c("decode", { source: t }, [t]);
+    return this.#r = [], this.#a("decode", { source: t }, [t]);
   }
   openMetadata(t) {
-    return this.#o = [], this.#c("openMetadata", { source: t }, [t]);
+    return this.#r = [], this.#a("openMetadata", { source: t }, [t]);
   }
   decodeDrawing(t, i) {
     return this.#n("decodeDrawing", { layerId: t, drawingId: i });
@@ -1520,7 +1538,7 @@ class _e {
     return this.#n("decodeBatch", { items: t });
   }
   fallbackEager(t) {
-    return this.#c("fallbackEager", { fallbackReason: t });
+    return this.#a("fallbackEager", { fallbackReason: t });
   }
   diagnostics() {
     return this.#n("diagnostics", {});
@@ -1528,13 +1546,13 @@ class _e {
   release() {
     return this.#n("release", {}, [], !0);
   }
-  #c(t, i, s = []) {
+  #a(t, i, s = []) {
     return this.#n(t, i, s);
   }
   #n(t, i, s = [], n = !1) {
-    if (this.#i)
+    if (this.#e)
       return Promise.reject(new Error("IMM decoder client is disposed"));
-    const r = this.#e++, o = new Promise((a, c) => {
+    const r = this.#i++, o = new Promise((a, c) => {
       this.#s.set(r, {
         resolve: (l) => a(l),
         reject: c,
@@ -1544,27 +1562,27 @@ class _e {
     return this.#t.postMessage({ requestId: r, type: t, ...i }, s), o;
   }
   dispose() {
-    this.#i || (this.#i = !0, this.#t.terminate(), this.#r(new Error("IMM decoder client was disposed")));
+    this.#e || (this.#e = !0, this.#t.terminate(), this.#o(new Error("IMM decoder client was disposed")));
   }
-  #a(t) {
+  #c(t) {
     const i = this.#s.get(t.requestId);
     if (i === void 0)
       return;
     if (this.#s.delete(t.requestId), t.delta?.metrics !== void 0 && t.sentAtEpochMs !== void 0 && (t.delta.metrics.transferMs = Math.max(
       0,
       performance.timeOrigin + performance.now() - t.sentAtEpochMs
-    ), this.#o.push(t.delta.metrics)), Array.isArray(t.deltas) && t.sentAtEpochMs !== void 0) {
+    ), this.#r.push(t.delta.metrics)), Array.isArray(t.deltas) && t.sentAtEpochMs !== void 0) {
       const o = Math.max(0, performance.timeOrigin + performance.now() - t.sentAtEpochMs);
       for (const a of t.deltas)
-        a?.metrics !== void 0 && (a.metrics.transferMs = a === t.deltas[0] ? o : 0, this.#o.push(a.metrics));
+        a?.metrics !== void 0 && (a.metrics.transferMs = a === t.deltas[0] ? o : 0, this.#r.push(a.metrics));
     }
-    t.diagnostics !== void 0 && (t.diagnostics.stagedRequests = this.#o.map((o) => ({ ...o })));
+    t.diagnostics !== void 0 && (t.diagnostics.stagedRequests = this.#r.map((o) => ({ ...o })));
     const s = t.summary ?? t.document ?? t.delta ?? t.deltas ?? t.diagnostics;
     if (t.ok && (s !== void 0 || i.allowEmpty)) {
       try {
         if (t.summary !== void 0 && Qe(t.summary), t.document !== void 0 && Ze(t.document), t.delta !== void 0) {
           const o = performance.now();
-          Dt(t.delta), t.delta.metrics.validationMs = performance.now() - o;
+          It(t.delta), t.delta.metrics.validationMs = performance.now() - o;
         }
         i.resolve(s);
       } catch (o) {
@@ -1575,17 +1593,17 @@ class _e {
     const n = t.error, r = n === void 0 ? "Decoder returned an invalid response" : `${n.message} (status ${n.status}, byte ${n.byteOffset})`;
     i.reject(new Error(r));
   }
-  #r(t) {
+  #o(t) {
     for (const i of this.#s.values())
       i.reject(t);
     this.#s.clear();
   }
 }
-const $e = 3, ti = 4, ei = 5, Vt = 8, ii = /* @__PURE__ */ new Set([
+const $e = 3, ti = 4, ei = 5, Yt = 8, ii = /* @__PURE__ */ new Set([
   $e,
   ti,
   ei,
-  Vt
+  Yt
 ]);
 function si(e) {
   return e.keys.find((t) => t.property === J)?.timeTicks ?? 0;
@@ -1606,7 +1624,7 @@ function ri(e, t = 5) {
   let a = 0;
   for (const c of e.layers) {
     const l = si(ni(c, i, n));
-    if (c.type === vt)
+    if (c.type === Mt)
       for (let d = 0; d < c.drawings.length; d++) {
         const m = c.frameBuffer.findIndex((p) => p === d), h = m < 0 || c.frameRate <= 0 ? 0 : m * e.ticksPerSecond / c.frameRate;
         o.push({
@@ -1621,21 +1639,21 @@ function ri(e, t = 5) {
   }
   return o.sort((c, l) => c.neededTicks - l.neededTicks || c.order - l.order), o.map(({ order: c, ...l }) => ({
     ...l,
-    initial: l.neededTicks <= r || l.type === "asset" && i.get(l.layerId)?.type === Vt
+    initial: l.neededTicks <= r || l.type === "asset" && i.get(l.layerId)?.type === Yt
   }));
 }
 class oi {
   #t;
   #s;
-  #e;
   #i;
-  #o = !1;
-  #c = !1;
+  #e;
+  #r = !1;
+  #a = !1;
   #n;
   constructor(t) {
-    this.#t = new _e(String(t.decoderWorkerURL)), this.#s = t.initialBufferSeconds ?? 5, this.#e = t.stagedLoading ?? !0, this.#i = t.onProgress, this.#n = {
-      requestedMode: this.#e ? "staged" : "eager",
-      effectiveMode: this.#e ? "staged" : "eager",
+    this.#t = new _e(String(t.decoderWorkerURL)), this.#s = t.initialBufferSeconds ?? 5, this.#i = t.stagedLoading ?? !0, this.#e = t.onProgress, this.#n = {
+      requestedMode: this.#i ? "staged" : "eager",
+      effectiveMode: this.#i ? "staged" : "eager",
       fallbackReason: null,
       requestedItems: 0,
       initiallyLoadedItems: 0,
@@ -1645,62 +1663,62 @@ class oi {
     };
   }
   async load(t) {
-    if (this.#r(), this.#i?.({ stage: "metadata", loaded: 0, total: 1 }), !this.#e) {
+    if (this.#o(), this.#e?.({ stage: "metadata", loaded: 0, total: 1 }), !this.#i) {
       const s = await this.#t.decode(t);
-      return this.#r(), this.#i?.({ stage: "complete", loaded: 1, total: 1 }), await this.release(), { document: s, remainingWork: [], telemetry: this.#n };
+      return this.#o(), this.#e?.({ stage: "complete", loaded: 1, total: 1 }), await this.release(), { document: s, remainingWork: [], telemetry: this.#n };
     }
     let i;
     try {
-      i = await this.#t.openMetadata(t), this.#r();
+      i = await this.#t.openMetadata(t), this.#o();
       const s = ri(i, this.#s), n = s.filter((o) => o.initial), r = s.filter((o) => !o.initial);
       this.#n.requestedItems = s.length, this.#n.deferredItems = r.length;
       for (let o = 0; o < n.length; o++) {
-        this.#r();
+        this.#o();
         const a = n[o];
-        this.#i?.({ stage: "initial", loaded: o, total: n.length, item: a });
-        const c = await this.#a(a);
-        Mt(i, c), this.#n.requests.push(c.metrics), this.#n.initiallyLoadedItems++;
+        this.#e?.({ stage: "initial", loaded: o, total: n.length, item: a });
+        const c = await this.#c(a);
+        gt(i, c), this.#n.requests.push(c.metrics), this.#n.initiallyLoadedItems++;
       }
-      return this.#i?.({
+      return this.#e?.({
         stage: r.length === 0 ? "complete" : "initial",
         loaded: n.length,
         total: n.length
       }), r.length === 0 && await this.release(), { document: i, remainingWork: r, telemetry: this.#n };
     } catch (s) {
-      this.#r(), this.#i?.({ stage: "fallback", loaded: 0, total: 1 });
+      this.#o(), this.#e?.({ stage: "fallback", loaded: 0, total: 1 });
       const n = s instanceof Error ? s.message : String(s);
       return this.#n.effectiveMode = "eager", this.#n.fallbackReason = n, i = await this.#t.fallbackEager(n).catch(() => {
         throw s;
-      }), this.#r(), this.#i?.({ stage: "complete", loaded: 1, total: 1 }), await this.release(), { document: i, remainingWork: [], telemetry: this.#n };
+      }), this.#o(), this.#e?.({ stage: "complete", loaded: 1, total: 1 }), await this.release(), { document: i, remainingWork: [], telemetry: this.#n };
     }
   }
   async continue(t, i, s, n = {}) {
     try {
-      for await (const { delta: r, item: o, index: a } of Xe(this.#t, i, () => this.#o, n)) {
-        this.#i?.({ stage: "background", loaded: a, total: i.length, item: o }), this.#r(), Mt(t, r), this.#n.requests.push(r.metrics), this.#n.backgroundCompletedItems++;
+      for await (const { delta: r, item: o, index: a } of Xe(this.#t, i, () => this.#r, n)) {
+        this.#e?.({ stage: "background", loaded: a, total: i.length, item: o }), this.#o(), gt(t, r), this.#n.requests.push(r.metrics), this.#n.backgroundCompletedItems++;
         const c = performance.now();
         await s(r, o), r.metrics.adapterMs += performance.now() - c;
       }
-      this.#r(), this.#i?.({ stage: "complete", loaded: i.length, total: i.length }), await this.release();
+      this.#o(), this.#e?.({ stage: "complete", loaded: i.length, total: i.length }), await this.release();
     } catch (r) {
-      if (this.#o) return;
+      if (this.#r) return;
       throw r;
     }
   }
   async release() {
-    this.#c || this.#o || (this.#c = !0, await this.#t.release());
+    this.#a || this.#r || (this.#a = !0, await this.#t.release());
   }
   dispose() {
-    this.#o || (this.#o = !0, this.#t.dispose());
+    this.#r || (this.#r = !0, this.#t.dispose());
   }
-  #a(t) {
+  #c(t) {
     return t.type === "drawing" ? this.#t.decodeDrawing(t.layerId, t.drawingId) : this.#t.decodeLayerAsset(t.layerId);
   }
-  #r() {
-    if (this.#o) throw new DOMException("IMM load was aborted", "AbortError");
+  #o() {
+    if (this.#r) throw new DOMException("IMM load was aborted", "AbortError");
   }
 }
-function Mt(e, t) {
+function gt(e, t) {
   const i = performance.now(), s = e.layers.find((n) => n.id === t.layerId);
   if (s === void 0) throw new Error(`Staged decoder returned unknown layer ${t.layerId}`);
   if (t.type === "drawing") {
@@ -1714,9 +1732,9 @@ function Mt(e, t) {
 class ui extends u.Loader {
   #t;
   #s;
-  #e = 5;
-  #i = !0;
-  #o = !0;
+  #i = 5;
+  #e = !0;
+  #r = !0;
   setRenderer(t) {
     return this.#t = t, this;
   }
@@ -1724,13 +1742,13 @@ class ui extends u.Loader {
     return this.#s = t, this;
   }
   setInitialBufferSeconds(t) {
-    return this.#e = Math.max(0, t), this;
+    return this.#i = Math.max(0, t), this;
   }
   setStagedLoading(t) {
-    return this.#i = t, this;
+    return this.#e = t, this;
   }
   setAudio(t) {
-    return this.#o = t, this;
+    return this.#r = t, this;
   }
   load(t, i, s, n) {
     this.loadAsync(t, s).then(i, n);
@@ -1767,15 +1785,15 @@ class ui extends u.Loader {
     if (i.signal?.aborted) throw new DOMException("IMM load was aborted", "AbortError");
     const o = new oi({
       decoderWorkerURL: r,
-      initialBufferSeconds: i.initialBufferSeconds ?? this.#e,
-      stagedLoading: i.stagedLoading ?? this.#i,
+      initialBufferSeconds: i.initialBufferSeconds ?? this.#i,
+      stagedLoading: i.stagedLoading ?? this.#e,
       onProgress: (c) => s?.(ci(c))
     }), a = () => o.dispose();
     i.signal?.addEventListener("abort", a, { once: !0 });
     try {
       const c = t instanceof ArrayBuffer ? t : t.buffer.slice(t.byteOffset, t.byteOffset + t.byteLength), l = await o.load(c), d = {
         renderer: n,
-        audio: i.audio ?? this.#o,
+        audio: i.audio ?? this.#r,
         audioContext: i.audioContext,
         onBackgroundError: i.onBackgroundError
       };

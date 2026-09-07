@@ -65,6 +65,8 @@ export declare class ImmWebAudio {
     constructor(document: ImmDocument, options?: ImmAudioOptions);
     get diagnostics(): ImmAudioDiagnostics;
     prepare(): Promise<void>;
+    /** Decode a staged sound without replacing the context or restarting other sounds. */
+    refreshLayer(layerId: number): Promise<void>;
     enable(): Promise<void>;
     setMuted(muted: boolean): void;
     setPageVisible(visible: boolean): Promise<void>;

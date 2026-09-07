@@ -110,6 +110,7 @@ export class ImmWebAudio {
     #master: GainNode | null;
     #decoded = new Map<number, DecodedSound>();
     #active = new Map<number, ActiveSound>();
+    #decoding = new Map<number, { sound: ImmSound; promise: Promise<void> }>();
     #failures: Array<{ layerId: number; name: string; reason: string }> = [];
     #sourceStarts = 0;
     #lastStartOffsets = new Map<number, number>();
@@ -181,24 +182,48 @@ export class ImmWebAudio {
             if (this.#disposed) return;
             const sound = layer.sound;
             if (sound === undefined || sound.bytes.length === 0) continue;
-            try {
-                const encoded = sound.bytes.buffer.slice(
-                    sound.bytes.byteOffset,
-                    sound.bytes.byteOffset + sound.bytes.byteLength,
-                ) as ArrayBuffer;
-                const buffer = await this.#context.decodeAudioData(encoded);
-                if (this.#disposed) return;
-                this.#decoded.set(layer.id, { buffer, sound });
-            } catch (error) {
-                if (this.#disposed) return;
-                this.#failures.push({
-                    layerId: layer.id,
-                    name: layer.name,
-                    reason: error instanceof Error ? error.message : String(error),
-                });
-            }
+            await this.#prepareSound(layer.id, layer.name, sound);
         }
         this.#reconcile(true);
+    }
+
+    /** Decode a staged sound without replacing the context or restarting other sounds. */
+    async refreshLayer(layerId: number): Promise<void> {
+        const layer = this.document.layers.find(candidate => candidate.id === layerId);
+        if (layer?.sound === undefined || layer.sound.bytes.length === 0) return;
+        await this.#prepareSound(layer.id, layer.name, layer.sound);
+    }
+
+    #prepareSound(layerId: number, name: string, sound: ImmSound): Promise<void> {
+        if (this.#disposed || this.#context === null || this.#decoded.get(layerId)?.sound === sound) {
+            return Promise.resolve();
+        }
+        const existing = this.#decoding.get(layerId);
+        if (existing?.sound === sound) return existing.promise;
+        const context = this.#context;
+        const promise = (async () => {
+            try {
+                const encoded = sound.bytes.buffer.slice(
+                    sound.bytes.byteOffset, sound.bytes.byteOffset + sound.bytes.byteLength,
+                ) as ArrayBuffer;
+                const buffer = await context.decodeAudioData(encoded);
+                if (this.#disposed || this.document.layers.find(layer => layer.id === layerId)?.sound !== sound) return;
+                const active = this.#active.get(layerId);
+                if (active !== undefined) this.#stop(layerId, active);
+                this.#decoded.set(layerId, { buffer, sound });
+                this.#failures = this.#failures.filter(failure => failure.layerId !== layerId);
+                this.#reconcile(false);
+            } catch (error) {
+                if (this.#disposed || this.document.layers.find(layer => layer.id === layerId)?.sound !== sound) return;
+                this.#failures.push({ layerId, name,
+                    reason: error instanceof Error ? error.message : String(error) });
+            }
+        })();
+        this.#decoding.set(layerId, { sound, promise });
+        void promise.then(() => {
+            if (this.#decoding.get(layerId)?.promise === promise) this.#decoding.delete(layerId);
+        });
+        return promise;
     }
 
     async enable(): Promise<void> {

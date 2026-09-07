@@ -177,9 +177,7 @@ export class IMMAsset {
             this.view.refreshLayer(delta.layerId, delta.type === "drawing" ? delta.drawingId : undefined);
         }
         if (layer?.type === 5 && this.#audio !== null) {
-            await this.#audio.dispose();
-            this.#audio = new ImmWebAudio(this.document);
-            await this.#audio.prepare();
+            await this.#audio.refreshLayer(layer.id);
         }
     }
 

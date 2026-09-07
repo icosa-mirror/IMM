@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+    ImmWebAudio,
     IMM_ATTENUATION_LINEAR,
     IMM_ATTENUATION_LOGARITHMIC,
     IMM_MODIFIER_CONE,
@@ -15,9 +16,12 @@ import {
     IMM_ASSET_OPUS,
     IMM_ASSET_WAV,
     IMM_SOUND_POSITIONAL,
+    IMM_SOUND_FLAT,
     type ImmSound,
     type ImmTransform,
+    type ImmDocument,
 } from "../src/format/imm-document";
+import type { ImmPlaybackSnapshot } from "../src/runtime/imm-playback";
 
 const identity: ImmTransform = {
     rotation: [0, 0, 0, 1],
@@ -43,6 +47,92 @@ function sound(overrides: Partial<ImmSound> = {}): ImmSound {
         ...overrides,
     };
 }
+
+function stagedAudioFixture(decode: (bytes: ArrayBuffer) => Promise<AudioBuffer> = async () => ({} as AudioBuffer)) {
+    const document = { layers: [{ id: 1, name: "first", type: 5, sound: sound({ bytes: new Uint8Array([1]) }) }] } as unknown as ImmDocument;
+    let decodes = 0, closes = 0, starts = 0, stops = 0;
+    const context = {
+        state: "suspended", currentTime: 0, destination: {}, listener: {},
+        createGain: () => ({ gain: { cancelScheduledValues() {}, setValueAtTime() {} }, connect() {}, disconnect() {} }),
+        decodeAudioData: (bytes: ArrayBuffer) => { decodes++; return decode(bytes); },
+        close: async () => { closes++; },
+        createBufferSource: () => ({ connect() {}, disconnect() {}, addEventListener() {},
+            start() { starts++; }, stop() { stops++; } }),
+    } as unknown as AudioContext;
+    const audio = new ImmWebAudio(document, { context });
+    return { document, audio, counts: () => ({ decodes, closes }), transportCounts: () => ({ starts, stops }) };
+}
+
+describe("staged audio residency", () => {
+    test("arrival of another sound does not restart a sound already playing", async () => {
+        const { document, audio, transportCounts } = stagedAudioFixture(async () => ({ duration: 10 } as AudioBuffer));
+        document.ticksPerSecond = 100;
+        document.layers[0]!.sound!.type = IMM_SOUND_FLAT;
+        document.layers[0]!.keys = [];
+        await audio.prepare();
+        const snapshot = { layers: new Map([[1, { layer: document.layers[0], visible: true,
+            opacity: 1, localTimeTicks: 0, worldTransform: identity }]]) } as unknown as ImmPlaybackSnapshot;
+        audio.update(snapshot, identity);
+        expect(transportCounts()).toEqual({ starts: 1, stops: 0 });
+        document.layers.push({ ...document.layers[0]!, id: 2,
+            sound: sound({ type: IMM_SOUND_FLAT, bytes: new Uint8Array([2]) }) });
+        snapshot.layers.set(2, { ...snapshot.layers.get(1)!, layer: document.layers[1]! });
+        await audio.refreshLayer(2);
+        expect(transportCounts()).toEqual({ starts: 2, stops: 0 });
+        await audio.dispose();
+        expect(transportCounts()).toEqual({ starts: 2, stops: 2 });
+    });
+
+    test("new audio preserves decoded sounds, mute state and the existing context", async () => {
+        const { document, audio, counts } = stagedAudioFixture();
+        await audio.prepare();
+        audio.setMuted(true);
+        document.layers.push({ ...document.layers[0]!, id: 2, sound: sound({ bytes: new Uint8Array([2]) }) });
+        await audio.refreshLayer(2);
+        await audio.refreshLayer(1);
+        expect(counts()).toEqual({ decodes: 2, closes: 0 });
+        expect(audio.diagnostics.decodedSounds).toBe(2);
+        expect(audio.diagnostics.muted).toBe(true);
+        await audio.dispose();
+        expect(counts().closes).toBe(1);
+        expect(audio.diagnostics.decodedSounds).toBe(0);
+    });
+
+    test("an arrival concurrent with initial preparation shares the pending decode", async () => {
+        let complete!: (buffer: AudioBuffer) => void;
+        const { audio, counts } = stagedAudioFixture(() => new Promise(resolve => { complete = resolve; }));
+        const preparation = audio.prepare();
+        const refresh = audio.refreshLayer(1);
+        expect(counts().decodes).toBe(1);
+        complete({} as AudioBuffer);
+        await Promise.all([preparation, refresh]);
+        expect(audio.diagnostics.decodedSounds).toBe(1);
+        await audio.dispose();
+    });
+
+    test("a decode completing after disposal cannot repopulate audio residency", async () => {
+        let complete!: (buffer: AudioBuffer) => void;
+        const { audio } = stagedAudioFixture(() => new Promise(resolve => { complete = resolve; }));
+        const preparation = audio.prepare();
+        await audio.dispose();
+        complete({} as AudioBuffer);
+        await preparation;
+        expect(audio.diagnostics.decodedSounds).toBe(0);
+    });
+
+    test("a failed arrival leaves resident sounds available and reports the failure", async () => {
+        const { document, audio } = stagedAudioFixture(async bytes => {
+            if (new Uint8Array(bytes)[0] === 2) throw new Error("Unsupported audio");
+            return {} as AudioBuffer;
+        });
+        await audio.prepare();
+        document.layers.push({ ...document.layers[0]!, id: 2, sound: sound({ bytes: new Uint8Array([2]) }) });
+        await audio.refreshLayer(2);
+        expect(audio.diagnostics.decodedSounds).toBe(1);
+        expect(audio.diagnostics.decodeFailures.map(failure => failure.layerId)).toEqual([2]);
+        await audio.dispose();
+    });
+});
 
 describe("IMM native audio contracts", () => {
     test("measures looping drift across buffer wrap boundaries", () => {
