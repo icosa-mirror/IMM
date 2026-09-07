@@ -14,7 +14,7 @@ export async function measureScenePlayback({ harness, seconds, segmentSeconds = 
     const transport = () => asset ? { timeTicks: asset.playback.timeTicks, waiting: asset.waiting } : window.__immPlayback.snapshot();
     const originalUpdater = gallery?.contentUpdater;
     let frame = 0, updateMs = 0, previous, measuredStart, measuredEnd;
-    const intervals = [], updates = [], tasks = [];
+    const intervals = [], updates = [], tasks = [], drawingFrames = [];
     let triangles = 0, draws = 0, workHash = 2166136261, peakHeap = 0;
     const label = document.createElement("div");
     label.style.cssText = "position:fixed;top:8px;left:12px;padding:6px 10px;background:#000b;color:white;font:16px sans-serif;z-index:9999;pointer-events:none";
@@ -48,12 +48,14 @@ export async function measureScenePlayback({ harness, seconds, segmentSeconds = 
                     }
                     const metrics = gallery ? { updateMs, drawCalls: gallery.renderer.info.render.calls,
                         triangles: gallery.renderer.info.render.triangles } : window.__immFrameDiagnostics();
+                    const drawing = window.__immDrawingProbe?.takeFrame();
                     if (frame === warmupFrames) {
                         measuredStart = previous;
                         label.textContent = "Benchmark: measuring loaded-scene playback";
                         console.log("IMM_SCENE_20260907: warm-up complete; measuring sustained playback");
                     }
                     if (frame >= warmupFrames) {
+                        if (drawing) drawingFrames.push(drawing);
                         intervals.push(now - previous); updates.push(metrics.updateMs);
                         triangles += metrics.triangles; draws += metrics.drawCalls;
                         workHash = Math.imul(workHash ^ metrics.triangles, 16777619);
@@ -80,7 +82,7 @@ export async function measureScenePlayback({ harness, seconds, segmentSeconds = 
         console.log(`IMM_SCENE_20260907: completed ${measuredFrames} measured frames in ${(elapsedMs / 1000).toFixed(1)} s`);
         return { measuredFrames, warmupFrames, segmentSeconds, measuredLoops, elapsedMs,
             fps: measuredFrames * 1000 / elapsedMs, frameMs: stats(intervals), updateMs: stats(updates),
-            triangles, draws, workHash: workHash >>> 0, peakHeap, longTasks };
+            triangles, draws, workHash: workHash >>> 0, peakHeap, longTasks, drawingFrames };
     } finally {
         cancelAnimationFrame(raf); observer.disconnect(); pause(); seek();
         if (gallery) gallery.contentUpdater = originalUpdater;
