@@ -19,6 +19,7 @@ bool Sequence::Init(const Type & type, uint16_t caps, const vec3 & backgroundCol
 	mType = type;
 	mCaps = caps;
     mSpawnAreaNeedsUpdate = false;
+    mAnimateOnStart = false;
     mFrameRate = 0;  // TODO --- pass this as argument, and DESTROY the SetFramerate() function
 
 	if (!mLayers.Init(256, true)) // this array grows as needed
