@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
+import { isDeepStrictEqual } from "node:util";
 
 
 if (process.argv.length !== 4) {
@@ -228,6 +229,9 @@ try {
     if (decodedDrawing?.strokeCount !== eagerDrawing.strokeCount ||
         decodedDrawing?.pointCount !== eagerDrawing.pointCount) {
         throw new Error("Staged drawing does not match eager drawing counts");
+    }
+    if (!isDeepStrictEqual(decodedDrawing, eagerDrawing)) {
+        throw new Error("Single staged drawing differs from eager geometry or metadata");
     }
     const drawingMetrics = stagedDrawing.delta?.metrics;
     if (drawingMetrics?.type !== "drawing" || drawingMetrics.layerId !== eagerPaintLayer.id ||

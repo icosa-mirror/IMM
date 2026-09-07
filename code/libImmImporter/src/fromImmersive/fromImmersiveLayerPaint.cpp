@@ -476,6 +476,12 @@ namespace ImmImporter
                             }
                             points[k].mDir = piTransforms::piNormal::ipolar(piQuantize::ibits10(qdat));
                         }
+                        else
+                        {
+                            // Always-visible strokes omit direction data in the file.
+                            // Initialize it for deterministic stroke exports and render packets.
+                            points[k].mDir = vec3(0.0f);
+                        }
                         // Color
                         {
                             ivec3 qdat;
