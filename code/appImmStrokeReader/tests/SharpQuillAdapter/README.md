@@ -11,9 +11,9 @@ Run from the repository root after building the Windows stroke reader:
 dotnet run --project code/appImmStrokeReader/tests/SharpQuillAdapter/SharpQuillAdapter.csproj -- code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Plugins/x86_64/ImmStrokeReader.dll exampleImmFiles/sample1.imm artifacts/sharpquill-adapter-native.log
 ```
 
-The native library needs its dependency DLLs alongside it. Create the log's parent
-directory before running. The Windows build CI job runs this check after building
-the reader.
+The native library needs its dependency DLLs alongside it. The test creates the
+log's parent directory if needed. The Windows build CI job runs this check after
+building the reader.
 
 The fixture contains paint, pictures, and spawn areas. Both picture-inclusion
 settings must preserve the native paint count; spawn areas must not become empty

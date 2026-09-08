@@ -9,9 +9,11 @@ if (args.Length != 3)
     throw new ArgumentException("Expected native library, sample1.imm, and native log paths.");
 string libraryPath = Path.GetFullPath(args[0]);
 string samplePath = Path.GetFullPath(args[1]);
+string logPath = Path.GetFullPath(args[2]);
+Directory.CreateDirectory(Path.GetDirectoryName(logPath));
 NativeLibrary.SetDllImportResolver(typeof(Reader).Assembly,
     (name, assembly, searchPath) => name == "ImmStrokeReader" ? NativeLibrary.Load(libraryPath) : IntPtr.Zero);
-Require(Reader.StrokeReader_Init(Path.GetFullPath(args[2])) == 0, "Reader initialization failed.");
+Require(Reader.StrokeReader_Init(logPath) == 0, $"Reader initialization failed (log: {logPath}).");
 
 foreach (bool includePictures in new[] { false, true })
 {
