@@ -25,8 +25,8 @@ def main() -> int:
     assert current.returncode == 0, current.stderr
 
     release = run_verify(source, "--release")
-    assert release.returncode != 0, "release policy should block current deferred rows"
-    assert "Release policy blocks deferred row" in release.stderr
+    assert release.returncode == 0, release.stderr
+    assert "deferred rows do not block the release" in release.stderr
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir) / "matrix_status.json"

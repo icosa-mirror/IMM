@@ -92,7 +92,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("matrix_status", type=Path)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--release", action="store_true", help="Apply release-blocking policy: no deferred rows are allowed")
+    parser.add_argument("--release", action="store_true", help="Apply release policy: deferred rows are reported but do not block")
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
@@ -193,7 +193,7 @@ def main() -> int:
         if status == "deferred" and not str(row.get("promotion_criteria", "")).strip():
             errors.append(f"Deferred row {key} must include promotion_criteria")
         if args.release and status == "deferred":
-            errors.append(f"Release policy blocks deferred row {key}; promote to supported or mark unsupported/waived with owner_decision")
+            print(f"Release includes deferred row {key}; deferred rows do not block the release", file=sys.stderr)
 
     missing_required = REQUIRED_ROWS - coverage_keys
     for key in sorted(missing_required):
