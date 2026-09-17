@@ -31,7 +31,7 @@ class ne {
   #y = !1;
   #p = !1;
   #M = null;
-  #S = null;
+  #A = null;
   constructor(t, i = {}) {
     this.document = t;
     const s = globalThis.AudioContext ?? globalThis.webkitAudioContext;
@@ -49,7 +49,7 @@ class ne {
       loopingSounds: [...this.#e.values()].filter((t) => t.source.loop).length,
       positionalSounds: [...this.#e.values()].filter((t) => t.panner !== void 0).length,
       sourceStarts: this.#n,
-      timelineClock: this.#T() ? "audio-context" : "animation-frame",
+      timelineClock: this.#v() ? "audio-context" : "animation-frame",
       baseLatencySeconds: this.#t?.baseLatency ?? null,
       outputLatencySeconds: this.#t?.outputLatency ?? null,
       driftSampleCount: this.#h,
@@ -81,17 +81,16 @@ class ne {
       for (const t of this.document.layers) {
         if (this.#l) return;
         const i = t.sound;
-        i === void 0 || i.bytes.length === 0 || await this.#k(t.id, t.name, i);
+        i === void 0 || i.bytes.length === 0 || await this.#S(t.id, t.name, i);
       }
-      this.#v(!0);
     }
   }
   /** Decode a staged sound without replacing the context or restarting other sounds. */
   async refreshLayer(t) {
     const i = this.document.layers.find((s) => s.id === t);
-    i?.sound === void 0 || i.sound.bytes.length === 0 || await this.#k(i.id, i.name, i.sound);
+    i?.sound === void 0 || i.sound.bytes.length === 0 || await this.#S(i.id, i.name, i.sound);
   }
-  #k(t, i, s) {
+  #S(t, i, s) {
     if (this.#l || this.#t === null || this.#i.get(t)?.sound === s)
       return Promise.resolve();
     const n = this.#r.get(t);
@@ -104,7 +103,7 @@ class ne {
         ), c = await r.decodeAudioData(a);
         if (this.#l || this.document.layers.find((d) => d.id === t)?.sound !== s) return;
         const l = this.#e.get(t);
-        l !== void 0 && this.#x(t, l), this.#i.set(t, { buffer: c, sound: s }), this.#a = this.#a.filter((d) => d.layerId !== t), this.#v(!1);
+        l !== void 0 && this.#T(t, l), this.#i.set(t, { buffer: c, sound: s }), this.#a = this.#a.filter((d) => d.layerId !== t);
       } catch (a) {
         if (this.#l || this.document.layers.find((c) => c.id === t)?.sound !== s) return;
         this.#a.push({
@@ -123,50 +122,50 @@ class ne {
     const t = this.#t;
     this.#m = !0, this.#y = !1, this.#b(1);
     const i = ct(t);
-    await this.#A(this.#p && at()), !(this.#l || this.#t !== t) && this.#v(!i && ct(t));
+    await this.#w(this.#p && at()), !(this.#l || this.#t !== t) && this.#k(!i && ct(t));
   }
   setMuted(t) {
     this.#y = t, this.#b(t ? 0 : 1);
   }
   async setPageVisible(t) {
-    this.#l || this.#t === null || !this.#m || await this.#A(t && this.#p);
+    this.#l || this.#t === null || !this.#m || await this.#w(t && this.#p);
   }
   async setTransportPlaying(t) {
-    this.#p !== t && (this.#p = t, !(this.#l || this.#t === null || !this.#m) && await this.#A(t && at()));
+    this.#p !== t && (this.#p = t, !(this.#l || this.#t === null || !this.#m) && await this.#w(t && at()));
   }
   /** Uses Web Audio's monotonic clock while audible sources run so visuals cannot free-run against it. */
   timelineDeltaSeconds(t) {
-    if (!this.#T() || this.#t === null)
+    if (!this.#v() || this.#t === null)
       return this.#f = null, t;
     const i = this.#t.currentTime, s = this.#f;
     return this.#f = i, s === null ? t : re(i, s, t);
   }
   update(t, i, s = !1) {
-    this.#M = t, this.#S = i, this.#P(i), this.#v(s);
+    this.#M = t, this.#A = i, this.#P(i), this.#k(s);
   }
   async dispose() {
     if (this.#l) return;
-    this.#l = !0, this.#w(), this.#i.clear(), this.#s?.disconnect(), this.#s = null;
+    this.#l = !0, this.#x(), this.#i.clear(), this.#s?.disconnect(), this.#s = null;
     const t = this.#t;
     this.#t = null, t !== null && t.state !== "closed" && await t.close();
   }
-  #v(t) {
+  #k(t) {
     if (!(this.#l || this.#t === null || this.#M === null)) {
-      if (t && this.#w(), !this.#m) {
-        this.#w();
+      if (t && this.#x(), !this.#m) {
+        this.#x();
         return;
       }
       for (const [i, s] of this.#i) {
         const n = this.#M.layers.get(i);
         let r = this.#e.get(i);
         if (n === void 0 || s.sound.type === N || !ce(s.sound, n.visible, n.layer.keys)) {
-          r !== void 0 && this.#x(i, r);
+          r !== void 0 && this.#T(i, r);
           continue;
         }
         if (r === void 0 && (r = this.#C(i, s, n.localTimeTicks / this.document.ticksPerSecond), r === void 0))
           continue;
         this.#M.waiting ? (this.#o.delete(i), this.#u.delete(i)) : this.#z(i, r, n.localTimeTicks / this.document.ticksPerSecond);
-        const o = s.sound.type === st ? le(s.sound, n.worldTransform, this.#S?.translation ?? [0, 0, 0]) : 1;
+        const o = s.sound.type === st ? le(s.sound, n.worldTransform, this.#A?.translation ?? [0, 0, 0]) : 1;
         g(r.gain.gain, s.sound.gain * n.opacity * o, this.#t.currentTime), r.panner !== void 0 && me(r.panner, n.worldTransform, this.#t.currentTime);
       }
     }
@@ -188,15 +187,15 @@ class ne {
       durationSeconds: n,
       looping: i.sound.looping
     };
-    return this.#e.size === 0 && this.#T() && (this.#f = this.#t.currentTime), this.#e.set(t, l), this.#n++, this.#c.set(t, r), o.addEventListener("ended", () => {
+    return this.#e.size === 0 && this.#v() && (this.#f = this.#t.currentTime), this.#e.set(t, l), this.#n++, this.#c.set(t, r), o.addEventListener("ended", () => {
       this.#e.get(t)?.source === o && (this.#e.delete(t), a.disconnect(), c?.disconnect());
     }, { once: !0 }), o.start(0, r), l;
   }
-  #x(t, i) {
+  #T(t, i) {
     this.#e.delete(t), this.#o.delete(t), this.#u.delete(t), i.source.stop(), i.source.disconnect(), i.panner?.disconnect(), i.gain.disconnect();
   }
-  #w() {
-    for (const [t, i] of this.#e) this.#x(t, i);
+  #x() {
+    for (const [t, i] of this.#e) this.#T(t, i);
   }
   #b(t) {
     this.#t !== null && this.#s !== null && g(this.#s.gain, t, this.#t.currentTime);
@@ -218,11 +217,11 @@ class ne {
       b.z
     );
   }
-  #T() {
+  #v() {
     return this.#t?.state === "running" && this.#m && this.#p && this.#i.size > 0;
   }
   #z(t, i, s) {
-    if (this.#t === null || !this.#T()) return;
+    if (this.#t === null || !this.#v()) return;
     const n = this.#o.get(t);
     if (this.#o.set(t, s), n === void 0 || ae(n, s)) return;
     const r = i.offsetSeconds + this.#t.currentTime - i.contextStartSeconds, o = oe(
@@ -233,7 +232,7 @@ class ne {
     );
     this.#u.set(t, o), this.#h++, this.#d = Math.max(this.#d, Math.abs(o));
   }
-  async #A(t) {
+  async #w(t) {
     const i = this.#t;
     if (i !== null) {
       try {
