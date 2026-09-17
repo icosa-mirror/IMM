@@ -10,7 +10,11 @@ namespace ImmPlayer
     /// </summary>
     public static class ImmNativePlugin
     {
+#if UNITY_IOS && !UNITY_EDITOR
+        private const string DllName = "__Internal";
+#else
         private const string DllName = "ImmUnityPlugin";
+#endif
 
         #region Unity Plugin Callbacks
 
@@ -18,7 +22,24 @@ namespace ImmPlayer
         public static extern IntPtr GetRenderEventFunc();
 
         [DllImport(DllName)]
+        public static extern IntPtr GetRenderEventAndDataFunc();
+
+        [DllImport(DllName)]
+        public static extern int ConfigureVulkanRenderEvent(int eventId);
+
+        [DllImport(DllName)]
         public static extern void Debug();
+
+        [DllImport(DllName)]
+        public static extern int IsReadyForDocumentLoad();
+
+        [DllImport(DllName)]
+        public static extern void SetVulkanDedicatedQueueAllowed(int allowed);
+
+#if UNITY_IOS && !UNITY_EDITOR
+        [DllImport(DllName)]
+        public static extern void ImmUnityRegisterRenderingPlugin();
+#endif
 
         #endregion
 
@@ -49,6 +70,9 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void GlobalWork(int enabled);
 
+        [DllImport(DllName)]
+        public static extern int PrepareCamera(int cameraID);
+
         /// <summary>
         /// Set camera matrices for rendering
         /// </summary>
@@ -62,6 +86,15 @@ namespace ImmPlayer
             float[] prjLeft,
             float[] world2reye,
             float[] prjRight);
+
+        [DllImport(DllName)]
+        public static extern void SetCameraViewport(int cameraID, int width, int height);
+
+        [DllImport(DllName)]
+        public static extern void SetVulkanCameraRenderBuffers(int cameraID, IntPtr colorRenderBuffer, IntPtr depthRenderBuffer, int width, int height, int samples);
+
+        [DllImport(DllName)]
+        public static extern void SetVulkanCameraEyeRenderBuffers(int cameraID, int eye, IntPtr colorRenderBuffer, IntPtr depthRenderBuffer, int width, int height, int samples, int depthForSampling);
 
         #endregion
 
@@ -84,6 +117,10 @@ namespace ImmPlayer
         /// <returns>Document ID, or negative on error</returns>
         [DllImport(DllName)]
         public static extern int LoadFromMemory(string fileName, int size, IntPtr data);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool IsDocumentActive(int id);
 
         /// <summary>
         /// Unload a document
@@ -245,6 +282,26 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern bool GetSpawnAreaInfo(int docId, int spawnareaId, out SerializedSpawnArea serializedSpawnArea);
 
+        // Timeline-driven spawn-area change signal (Quill MakeDefault keyframes);
+        // consume with SetSpawnAreaNeedsUpdate(docId, false) after re-anchoring.
+        [DllImport(DllName)]
+        public static extern bool GetSpawnAreaNeedsUpdate(int docId);
+
+        [DllImport(DllName)]
+        public static extern void SetSpawnAreaNeedsUpdate(int docId, bool state);
+
+        // Pose-only spawn-area query, cheap enough to poll every frame (no name
+        // marshaling, no screenshot lookup). Returns the live evaluated
+        // transform - animated viewpoint layers move it continuously.
+        [DllImport(DllName)]
+        public static extern bool GetSpawnAreaPose(int docId, int spawnareaId, out SpawnAreaPose pose);
+
+        // Mirrors a flag-file entry into the native process environment so
+        // raw-getenv toggles across the player/renderer libs work on Android
+        // (env vars never reach an Android app process otherwise).
+        [DllImport(DllName)]
+        public static extern void SetRuntimeFlag(string name, string value);
+
         #endregion
     }
 
@@ -269,6 +326,23 @@ namespace ImmPlayer
     {
         public int loadingState;
         public int playbackState;
+    }
+
+    // Mirror of the native SerializedSpawnAreaPose (main.cpp): the spawn area's
+    // live spawn-area-to-world transform in IMM space plus the flags the
+    // per-frame viewpoint driver needs. Blittable - no per-call allocation.
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SpawnAreaPose
+    {
+        public float posx, posy, posz;
+        public float rotx, roty, rotz, rotw;
+        public float sca;
+        public int animated;
+        public int isFloorLevel;
+        public int locomotion; // volume allow-translation mask: X<<2 | Y<<1 | Z
+
+        public UnityEngine.Vector3 GetPosition() => new UnityEngine.Vector3(posx, posy, posz);
+        public UnityEngine.Quaternion GetRotation() => new UnityEngine.Quaternion(rotx, roty, rotz, rotw);
     }
 
     [StructLayout(LayoutKind.Sequential)]
