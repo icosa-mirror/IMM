@@ -4,11 +4,33 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
+
+
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 2
+
+
+def call_github(request: urllib.request.Request):
+    """Send a GitHub API request, retrying connections that drop before a reply."""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return urllib.request.urlopen(request, timeout=30)
+        except urllib.error.HTTPError:
+            raise
+        except (http.client.HTTPException, OSError) as exc:
+            # URLError and RemoteDisconnected both derive from OSError; HTTPError
+            # is a definite answer and is never retried.
+            if attempt == MAX_ATTEMPTS:
+                raise
+            print(f"Retrying GitHub API request after transient failure: {exc}", file=sys.stderr)
+            time.sleep(RETRY_DELAY_SECONDS * attempt)
 
 
 def request_json(url: str, token: str) -> dict:
@@ -20,7 +42,7 @@ def request_json(url: str, token: str) -> dict:
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with call_github(request) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -35,7 +57,7 @@ def delete_url(url: str, token: str) -> int:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with call_github(request) as response:
             return response.status
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
