@@ -369,7 +369,22 @@ def main() -> int:
         print(f"{name:7s} {mem_path:10.2f} {file_path:10.2f} {saved:10.2f} "
               f"{100.0 * saved / file_path:7.1f}%")
     print("\nmem-path = export-mem + handoff-copy + read-mem;")
-    print("file-path = export-file + read-file (StrokeReader_LoadFromFile).")
+    print("file-path = export-file + read-file (StrokeReader_LoadFromFile).\n")
+
+    # What one edit costs today: the live-document plan replaces this row with per-edit cases
+    # (docs/runtime-live-document-api.md section 9). It stays as the comparison baseline.
+    edit_header = f"{'case':7s} {'graph':>10s} {'mem-path':>10s} {'edit-document':>14s}"
+    print(edit_header)
+    print("-" * len(edit_header))
+    for name, data in results.items():
+        stages = data["stages"]
+        graph = sum(stages[key]["median"] for key in
+                    ("create", "layers", "drawings", "points", "bounds", "frames"))
+        mem_path = (stages["export-mem"]["median"] + stages["handoff-copy"]["median"]
+                    + stages["read-mem"]["median"])
+        print(f"{name:7s} {graph:10.2f} {mem_path:10.2f} {graph + mem_path:14.2f}")
+    print("\nedit-document = graph build + in-memory compile and reload, i.e. what every edit")
+    print("costs before the live path exists; M1 must beat it by touching only the dirty layer.")
 
     if arguments.json is not None:
         arguments.json.parent.mkdir(parents=True, exist_ok=True)
