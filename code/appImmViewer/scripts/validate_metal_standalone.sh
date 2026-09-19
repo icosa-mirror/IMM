@@ -2,7 +2,7 @@
 set -eu
 
 usage() {
-    echo "usage: $0 [--cli-contract|--native-frame-failure-contract|--bundle-contract|--content-override-contract|--audio-contract|--interactive-audio-contract|--repeat-contract|--reload-contract] [appImmViewerMetal-path] [content-path]" >&2
+    echo "usage: $0 [--cli-contract|--native-frame-failure-contract|--bundle-contract|--content-override-contract|--audio-contract|--interactive-audio-contract|--repeat-contract|--reload-contract|--live-edit-contract] [appImmViewerMetal-path] [content-path]" >&2
     echo "" >&2
     echo "Audio contract environment:" >&2
     echo "  IMM_METAL_VALIDATE_AUDIO_EXPECTED_OPUS_DECODED  Exact distinct decoded Opus sounds expected (default: 3)" >&2
@@ -27,6 +27,7 @@ check_audio_contract=0
 check_interactive_audio_contract=0
 check_repeat_contract=0
 check_reload_contract=0
+check_live_edit_contract=0
 if [ "${1:-}" = "--cli-contract" ]; then
     check_cli_contract=1
     shift
@@ -50,6 +51,9 @@ elif [ "${1:-}" = "--repeat-contract" ]; then
     shift
 elif [ "${1:-}" = "--reload-contract" ]; then
     check_reload_contract=1
+    shift
+elif [ "${1:-}" = "--live-edit-contract" ]; then
+    check_live_edit_contract=1
     shift
 fi
 
@@ -974,6 +978,29 @@ run_case() {
     fi
     validate_metal_renderer_cleanup "$log_path" "$name"
 
+    if [ "${IMM_METAL_VALIDATE_LIVE_EDIT:-0}" != "0" ]; then
+        if ! grep -Eq "\[IMM_LIVE_EDIT\].*elements=2 points=16 attached=1 replaced=1 revision=1" "$log_path"; then
+            echo "$name did not queue the expected two-element live edit" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+        if ! grep -Eq "\[IMM_LIVE_EDIT\].*revision=1 status=4 result=0 drawingBBoxUnchanged=0" "$log_path"; then
+            echo "$name did not present the live edit atomically" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+        if grep -q "\[IMM_LIVE_EDIT_FRAME\].*geometryMatch=0" "$log_path"; then
+            echo "$name observed mismatched model and renderer geometry during live edit" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+        if ! grep -q "\[IMM_LIVE_EDIT_FRAME\].*revision=1 .*geometryMatch=1" "$log_path"; then
+            echo "$name did not sample the presented revision with matching renderer geometry" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+    fi
+
     if [ "${IMM_METAL_VALIDATE_HELPER_DRAWS:-1}" != "0" ]; then
         if ! grep -q "IMM Metal pipeline sanity: singleTriangle=1" "$log_path"; then
             echo "$name did not pass the Metal single-triangle pipeline sanity check" >&2
@@ -1171,6 +1198,21 @@ fi
 
 if [ "$check_reload_contract" -eq 1 ]; then
     run_reload_contract_check
+    exit 0
+fi
+
+if [ "$check_live_edit_contract" -eq 1 ]; then
+    export IMM_VIEWER_LIVE_EDIT=1
+    export IMM_LIVE_EDIT_TRACE_FRAMES=1
+    export IMM_METAL_VALIDATE_LIVE_EDIT=1
+    export IMM_METAL_VALIDATE_EXPECTED_VALUES=0
+    export IMM_METAL_VALIDATE_FRAME=90
+    export IMM_METAL_VALIDATE_MAX_FRAME=180
+    export IMM_METAL_VALIDATE_MIN_PICTURE_DRAWCALLS=0
+    export IMM_METAL_VALIDATE_MIN_PICTURE360_DRAWCALLS=0
+    export IMM_METAL_VALIDATE_HELPER_DRAWS=0
+    run_case live_edit - 0 0 0 0 "" "" "$static_settings_path" "$content_path"
+    echo "Standalone Metal live-edit validation passed."
     exit 0
 fi
 

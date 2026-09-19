@@ -518,6 +518,16 @@ if(IMM_BUILD_VIEWER)
         COMMENT "Validating standalone macOS Metal capture output"
     )
 
+    add_custom_target(validateAppImmViewerMetalLiveEdit
+        COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
+            --live-edit-contract
+            "$<TARGET_FILE:appImmViewerMetal>"
+            "${CODE_DIR}/../exampleImmFiles/sample1.imm"
+        DEPENDS appImmViewerMetal
+        WORKING_DIRECTORY "${CODE_DIR}/.."
+        COMMENT "Validating atomic standalone macOS Metal live editing"
+    )
+
     add_custom_target(validateAppImmViewerMetalAudio
         COMMAND ${CODE_DIR}/appImmViewer/scripts/validate_metal_standalone.sh
             --audio-contract

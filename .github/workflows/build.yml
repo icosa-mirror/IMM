@@ -513,6 +513,9 @@ jobs:
     - name: Smoke macOS Metal standalone viewer
       run: IMM_METAL_VALIDATE_EXPECTED_VALUES=0 cmake --build build/macos --target validateAppImmViewerMetalCapture --config Release
 
+    - name: Validate macOS Metal live editing
+      run: cmake --build build/macos --target validateAppImmViewerMetalLiveEdit --config Release
+
     - name: Capture and classify macOS Metal face orientation
       continue-on-error: true
       run: |
