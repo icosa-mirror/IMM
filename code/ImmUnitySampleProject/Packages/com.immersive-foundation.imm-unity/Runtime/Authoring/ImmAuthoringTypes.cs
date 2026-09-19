@@ -81,7 +81,9 @@ namespace ImmPlayer.Authoring
     public enum ImmAuthoringLayerType
     {
         Group = 0,
-        Paint = 1
+        Paint = 1,
+        /// <summary>A viewpoint: tracking level plus a locomotion volume. Carries no paint data.</summary>
+        SpawnArea = 2
     }
 
     public enum ImmAuthoringAnimationProperty
@@ -195,6 +197,20 @@ namespace ImmPlayer.Authoring
         public uint MaxRepeatCount;
         public uint PaintMaxRepeatCount;
 
+        // Spawn-area (viewpoint) settings; ignored for group and paint layers.
+        /// <summary>Mark this viewpoint as the document default. The first marked layer wins.</summary>
+        public bool SpawnAreaIsDefault;
+        /// <summary>True for a floor-level viewpoint, false for eye level.</summary>
+        public bool SpawnAreaFloorLevel;
+        public ExportSpawnAreaVolume SpawnAreaVolume;
+        /// <summary>Locomotion volume centre, relative to the viewpoint transform.</summary>
+        public Vector3 SpawnAreaVolumeOffset;
+        /// <summary>Sphere radius in X for a sphere volume; the three radii for a box volume.</summary>
+        public Vector3 SpawnAreaVolumeExtent;
+        public bool SpawnAreaAllowTranslationX;
+        public bool SpawnAreaAllowTranslationY;
+        public bool SpawnAreaAllowTranslationZ;
+
         public static ImmAuthoringLayerProperties Default(string name) => new ImmAuthoringLayerProperties
         {
             Name = name,
@@ -205,7 +221,15 @@ namespace ImmPlayer.Authoring
             IsTimeline = false,
             DurationTicks = 0,
             MaxRepeatCount = 0,
-            PaintMaxRepeatCount = 1
+            PaintMaxRepeatCount = 1,
+            SpawnAreaIsDefault = false,
+            SpawnAreaFloorLevel = false,
+            SpawnAreaVolume = ExportSpawnAreaVolume.Sphere,
+            SpawnAreaVolumeOffset = Vector3.zero,
+            SpawnAreaVolumeExtent = new Vector3(0.01f, 0.01f, 0.01f),
+            SpawnAreaAllowTranslationX = false,
+            SpawnAreaAllowTranslationY = false,
+            SpawnAreaAllowTranslationZ = false
         };
     }
 

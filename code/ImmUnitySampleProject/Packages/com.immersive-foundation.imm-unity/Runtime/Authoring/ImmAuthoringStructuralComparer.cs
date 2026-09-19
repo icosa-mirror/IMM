@@ -90,6 +90,18 @@ namespace ImmPlayer.Authoring
             Equal(differences, $"{path}.durationTicks", expected.DurationTicks, actual.DurationTicks);
             Equal(differences, $"{path}.maxRepeatCount", expected.MaxRepeatCount, actual.MaxRepeatCount);
             Equal(differences, $"{path}.paintMaxRepeatCount", expected.PaintMaxRepeatCount, actual.PaintMaxRepeatCount);
+            Equal(differences, $"{path}.spawnAreaIsDefault", expected.SpawnAreaIsDefault, actual.SpawnAreaIsDefault);
+            Equal(differences, $"{path}.spawnAreaFloorLevel", expected.SpawnAreaFloorLevel, actual.SpawnAreaFloorLevel);
+            Equal(differences, $"{path}.spawnAreaVolume", expected.SpawnAreaVolume, actual.SpawnAreaVolume);
+            Near(differences, $"{path}.spawnAreaVolumeOffset.x", expected.SpawnAreaVolumeOffset.x, actual.SpawnAreaVolumeOffset.x, tolerance);
+            Near(differences, $"{path}.spawnAreaVolumeOffset.y", expected.SpawnAreaVolumeOffset.y, actual.SpawnAreaVolumeOffset.y, tolerance);
+            Near(differences, $"{path}.spawnAreaVolumeOffset.z", expected.SpawnAreaVolumeOffset.z, actual.SpawnAreaVolumeOffset.z, tolerance);
+            Near(differences, $"{path}.spawnAreaVolumeExtent.x", expected.SpawnAreaVolumeExtent.x, actual.SpawnAreaVolumeExtent.x, tolerance);
+            Near(differences, $"{path}.spawnAreaVolumeExtent.y", expected.SpawnAreaVolumeExtent.y, actual.SpawnAreaVolumeExtent.y, tolerance);
+            Near(differences, $"{path}.spawnAreaVolumeExtent.z", expected.SpawnAreaVolumeExtent.z, actual.SpawnAreaVolumeExtent.z, tolerance);
+            Equal(differences, $"{path}.spawnAreaAllowTranslationX", expected.SpawnAreaAllowTranslationX, actual.SpawnAreaAllowTranslationX);
+            Equal(differences, $"{path}.spawnAreaAllowTranslationY", expected.SpawnAreaAllowTranslationY, actual.SpawnAreaAllowTranslationY);
+            Equal(differences, $"{path}.spawnAreaAllowTranslationZ", expected.SpawnAreaAllowTranslationZ, actual.SpawnAreaAllowTranslationZ);
         }
 
         private static void CompareAnimationKeys(

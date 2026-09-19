@@ -318,6 +318,7 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult<ExportSequence>.Failure(ImmAuthoringErrorCode.NativeExportFailed, "Native sequence creation failed.");
 
             Dictionary<long, IntPtr> layerHandles = new Dictionary<long, IntPtr>();
+            IntPtr defaultSpawnAreaHandle = IntPtr.Zero;
             try
             {
                 foreach (ImmAuthoringLayerSnapshot layer in snapshot.Layers)
@@ -326,15 +327,53 @@ namespace ImmPlayer.Authoring
                     IntPtr parent = layer.ParentId == 0 ? IntPtr.Zero : layerHandles[layer.ParentId];
                     TransformNative transform = ToNative(layer.Properties.Transform);
                     TransformNative pivot = ToNative(layer.Properties.Pivot);
-                    IntPtr handle = layer.Type == ImmAuthoringLayerType.Group
-                        ? Native.ImmExporter_CreateGroupLayer(
-                            sequence.Handle, parent, layer.Properties.Name, layer.Properties.Visible ? 1 : 0,
-                            layer.Properties.Opacity, ref transform, ref pivot, layer.Properties.IsTimeline ? 1 : 0,
-                            layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount)
-                        : Native.ImmExporter_CreatePaintLayer(
+                    IntPtr handle;
+                    if (layer.Type == ImmAuthoringLayerType.SpawnArea)
+                    {
+                        // The native spawn-area entry point carries the viewpoint transform and
+                        // tracking level only; visibility/opacity/timeline stay at their native
+                        // defaults (animation keys still apply on top of them).
+                        handle = Native.ImmExporter_CreateSpawnAreaLayer(
+                            sequence.Handle, parent, layer.Properties.Name, ref transform,
+                            layer.Properties.SpawnAreaFloorLevel ? 1 : 0);
+                        if (handle != IntPtr.Zero)
+                        {
+                            int locomotionMask =
+                                (layer.Properties.SpawnAreaAllowTranslationX ? 4 : 0) |
+                                (layer.Properties.SpawnAreaAllowTranslationY ? 2 : 0) |
+                                (layer.Properties.SpawnAreaAllowTranslationZ ? 1 : 0);
+                            UnityEngine.Vector3 offset = layer.Properties.SpawnAreaVolumeOffset;
+                            UnityEngine.Vector3 extent = layer.Properties.SpawnAreaVolumeExtent;
+                            bool box = layer.Properties.SpawnAreaVolume == ExportSpawnAreaVolume.Box;
+                            if (!Native.ImmExporter_SpawnAreaSetProperties(
+                                    handle,
+                                    (int)layer.Properties.SpawnAreaVolume,
+                                    offset.x, offset.y, offset.z,
+                                    extent.x,
+                                    box ? extent.y : extent.x,
+                                    box ? extent.z : extent.x,
+                                    locomotionMask))
+                            {
+                                return CompileFailure(sequence, "Native spawn-area property setup failed.", layer.Id);
+                            }
+                            if (layer.Properties.SpawnAreaIsDefault && defaultSpawnAreaHandle == IntPtr.Zero)
+                                defaultSpawnAreaHandle = handle;
+                        }
+                    }
+                    else if (layer.Type == ImmAuthoringLayerType.Group)
+                    {
+                        handle = Native.ImmExporter_CreateGroupLayer(
                             sequence.Handle, parent, layer.Properties.Name, layer.Properties.Visible ? 1 : 0,
                             layer.Properties.Opacity, ref transform, ref pivot, layer.Properties.IsTimeline ? 1 : 0,
                             layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount);
+                    }
+                    else
+                    {
+                        handle = Native.ImmExporter_CreatePaintLayer(
+                            sequence.Handle, parent, layer.Properties.Name, layer.Properties.Visible ? 1 : 0,
+                            layer.Properties.Opacity, ref transform, ref pivot, layer.Properties.IsTimeline ? 1 : 0,
+                            layer.Properties.DurationTicks, layer.Properties.MaxRepeatCount);
+                    }
                     if (handle == IntPtr.Zero)
                         return CompileFailure(sequence, "Native layer creation failed.", layer.Id);
                     layerHandles.Add(layer.Id, handle);
@@ -366,6 +405,15 @@ namespace ImmPlayer.Authoring
                             return CompileFailure(sequence, paintResult.Message, paintResult.ObjectId);
                     }
                 }
+
+                // The graph's chosen default viewpoint wins over the first-created
+                // spawn area the native layer creation falls back to.
+                if (defaultSpawnAreaHandle != IntPtr.Zero &&
+                    !Native.ImmExporter_SetInitialSpawnArea(sequence.Handle, defaultSpawnAreaHandle))
+                {
+                    return CompileFailure(sequence, "Native default spawn-area selection failed.", 0);
+                }
+
                 return ImmAuthoringResult<ExportSequence>.Success(sequence);
             }
             catch

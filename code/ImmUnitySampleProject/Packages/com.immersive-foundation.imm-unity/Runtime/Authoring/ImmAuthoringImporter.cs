@@ -87,6 +87,7 @@ namespace ImmPlayer.Authoring
     {
         private const int SourceGroupLayerType = 0;
         private const int SourcePaintLayerType = 1;
+        private const int SourceSpawnAreaLayerType = 8;
 
         public static ImmAuthoringImportResult ImportFromFile(string filePath, string nativeLogPath = null)
         {
@@ -239,7 +240,9 @@ namespace ImmPlayer.Authoring
                     foreach (SourceLayer sourceLayer in sourceLayers)
                     {
                         options.CancellationToken.ThrowIfCancellationRequested();
-                        if (sourceLayer.Info.type != SourceGroupLayerType && sourceLayer.Info.type != SourcePaintLayerType)
+                        if (sourceLayer.Info.type != SourceGroupLayerType &&
+                            sourceLayer.Info.type != SourcePaintLayerType &&
+                            sourceLayer.Info.type != SourceSpawnAreaLayerType)
                         {
                             issues.Add(new ImmAuthoringImportIssue(
                                 ImmAuthoringImportIssueCode.UnsupportedLayerType,
@@ -253,10 +256,14 @@ namespace ImmPlayer.Authoring
                             layersBySourceId,
                             importedLayers,
                             issues);
-                        ImmAuthoringLayerProperties properties = ConvertLayerProperties(sourceLayer, issues);
-                        ImmAuthoringResult<long> addLayer = sourceLayer.Info.type == SourceGroupLayerType
-                            ? editable.CreateGroupLayer(parentId, properties, sourceLayer.Info.childIndex)
-                            : editable.CreatePaintLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        ImmAuthoringLayerProperties properties = ConvertLayerProperties(source, sourceLayer, issues);
+                        ImmAuthoringResult<long> addLayer;
+                        if (sourceLayer.Info.type == SourceGroupLayerType)
+                            addLayer = editable.CreateGroupLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        else if (sourceLayer.Info.type == SourcePaintLayerType)
+                            addLayer = editable.CreatePaintLayer(parentId, properties, sourceLayer.Info.childIndex);
+                        else
+                            addLayer = editable.CreateSpawnAreaLayer(parentId, properties, sourceLayer.Info.childIndex);
                         if (!addLayer.Succeeded)
                             return DisposeAndFail(document, addLayer.ErrorCode, addLayer.Message, statistics, transaction);
 
@@ -577,40 +584,92 @@ namespace ImmPlayer.Authoring
         }
 
         private static ImmAuthoringLayerProperties ConvertLayerProperties(
-            SourceLayer source,
+            StrokeReaderDocument source,
+            SourceLayer sourceLayer,
             List<ImmAuthoringImportIssue> issues)
         {
             ImmAuthoringLayerProperties properties = ImmAuthoringLayerProperties.Default(
-                string.IsNullOrWhiteSpace(source.Info.name) ? $"Layer {source.Info.id}" : source.Info.name);
-            properties.Visible = source.Info.visible != 0;
-            properties.Opacity = Mathf.Clamp01(source.Info.opacity);
-            if (!Mathf.Approximately(properties.Opacity, source.Info.opacity))
+                string.IsNullOrWhiteSpace(sourceLayer.Info.name) ? $"Layer {sourceLayer.Info.id}" : sourceLayer.Info.name);
+            properties.Visible = sourceLayer.Info.visible != 0;
+            properties.Opacity = Mathf.Clamp01(sourceLayer.Info.opacity);
+            if (!Mathf.Approximately(properties.Opacity, sourceLayer.Info.opacity))
             {
                 issues.Add(new ImmAuthoringImportIssue(
                     ImmAuthoringImportIssueCode.InvalidSourceValue,
                     $"Layer '{properties.Name}' opacity was outside 0-1 and was clamped.",
-                    source.Info.id));
+                    sourceLayer.Info.id));
             }
-            properties.Transform = ConvertTransform(source.LocalTransform, source.Info.id, "transform", issues);
+            properties.Transform = ConvertTransform(sourceLayer.LocalTransform, sourceLayer.Info.id, "transform", issues);
             properties.Pivot = ConvertTransform(
                 new StrokeLayerTransform
                 {
-                    rotX = source.Info.pivotRotX,
-                    rotY = source.Info.pivotRotY,
-                    rotZ = source.Info.pivotRotZ,
-                    rotW = source.Info.pivotRotW,
-                    scale = source.Info.pivotScale,
-                    flip = source.Info.pivotFlip,
-                    transX = source.Info.pivotTransX,
-                    transY = source.Info.pivotTransY,
-                    transZ = source.Info.pivotTransZ
+                    rotX = sourceLayer.Info.pivotRotX,
+                    rotY = sourceLayer.Info.pivotRotY,
+                    rotZ = sourceLayer.Info.pivotRotZ,
+                    rotW = sourceLayer.Info.pivotRotW,
+                    scale = sourceLayer.Info.pivotScale,
+                    flip = sourceLayer.Info.pivotFlip,
+                    transX = sourceLayer.Info.pivotTransX,
+                    transY = sourceLayer.Info.pivotTransY,
+                    transZ = sourceLayer.Info.pivotTransZ
                 },
-                source.Info.id,
+                sourceLayer.Info.id,
                 "pivot",
                 issues);
-            properties.IsTimeline = source.Info.isTimeline != 0;
-            properties.DurationTicks = Math.Max(0, source.Info.durationTicks);
-            properties.MaxRepeatCount = source.Info.maxRepeatCount;
+            properties.IsTimeline = sourceLayer.Info.isTimeline != 0;
+            properties.DurationTicks = Math.Max(0, sourceLayer.Info.durationTicks);
+            properties.MaxRepeatCount = sourceLayer.Info.maxRepeatCount;
+
+            if (sourceLayer.Info.type == SourceSpawnAreaLayerType)
+            {
+                properties.SpawnAreaIsDefault = sourceLayer.Info.isDefaultSpawn != 0;
+                if (ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(
+                        source.DocId,
+                        sourceLayer.Index,
+                        out StrokeSpawnAreaInfo spawnArea))
+                {
+                    properties.SpawnAreaFloorLevel = spawnArea.IsFloorLevel;
+                    properties.SpawnAreaVolume = spawnArea.volumeType == 1
+                        ? ExportSpawnAreaVolume.Box
+                        : ExportSpawnAreaVolume.Sphere;
+                    properties.SpawnAreaVolumeOffset = new Vector3(
+                        spawnArea.volumeOffsetX,
+                        spawnArea.volumeOffsetY,
+                        spawnArea.volumeOffsetZ);
+
+                    // The authoring graph requires positive extents; the format allows
+                    // degenerate volumes, which are repaired (and reported) here.
+                    const float minimumExtent = 0.0001f;
+                    Vector3 extent = new Vector3(
+                        spawnArea.volumeExtentX,
+                        spawnArea.volumeExtentY,
+                        spawnArea.volumeExtentZ);
+                    Vector3 repaired = new Vector3(
+                        Mathf.Max(extent.x, minimumExtent),
+                        Mathf.Max(extent.y, minimumExtent),
+                        Mathf.Max(extent.z, minimumExtent));
+                    if (repaired != extent)
+                    {
+                        issues.Add(new ImmAuthoringImportIssue(
+                            ImmAuthoringImportIssueCode.InvalidSourceValue,
+                            $"Spawn area '{properties.Name}' has a non-positive volume extent; it was repaired.",
+                            sourceLayer.Info.id));
+                    }
+                    properties.SpawnAreaVolumeExtent = repaired;
+
+                    properties.SpawnAreaAllowTranslationX = spawnArea.AllowTranslationX;
+                    properties.SpawnAreaAllowTranslationY = spawnArea.AllowTranslationY;
+                    properties.SpawnAreaAllowTranslationZ = spawnArea.AllowTranslationZ;
+                }
+                else
+                {
+                    issues.Add(new ImmAuthoringImportIssue(
+                        ImmAuthoringImportIssueCode.InvalidSourceValue,
+                        $"Spawn area '{properties.Name}' viewpoint data could not be read; defaults were used.",
+                        sourceLayer.Info.id));
+                }
+            }
+
             return properties;
         }
 
