@@ -23,20 +23,26 @@ committed binaries have not been rebuilt yet (CI rebuilds Android, iOS and macOS
 `sync-binaries` job commits the results); use `--platform windows` or `--platform android`
 to check only what was built locally.
 
+Last verified green on all four platforms against the binaries from sync commit
+`32e99926`, which is also the first sync in which the exporter API reaches iOS and macOS.
+The one entry point it reports as a known gap is `ImmUnityRegisterRenderingPlugin` on iOS,
+which Unity compiles from `Plugins/iOS/ImmUnityPluginRegister.mm` rather than taking from
+the static library.
+
 ---
 
 ## 1. Plugin inventory
 
 | Plugin | Unity package | Platform | Binary | Format | Exports (all symbols) | Plugin API | Size | sha256 (16) |
 |---|---|---|---|---|---|---|---|---|
-| ImmUnityPlugin | `com.immersive-foundation.imm-unity` | Windows x86_64 | `Plugins/x86_64/ImmUnityPlugin.dll` | PE | 81 | 81 | 4.42 MB | `e8fbc8fe9df642f2` |
-| ImmUnityPlugin | " | Android arm64-v8a | `Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so` | ELF | 3582 | 60 | 12.90 MB | `6e265dd0d4d3bdab` |
-| ImmUnityPlugin | " | iOS (static) | `Plugins/iOS/libImmUnityPlugin.a` | ar | 2759 | 60 | 4.10 MB | `a7385d0d07bdfa62` |
-| ImmUnityPlugin | " | macOS | `Plugins/OSX/ImmUnityPlugin.bundle/Contents/MacOS/ImmUnityPlugin` | Mach-O | 2302 | 60 | 3.05 MB | `780bf54c7c5af444` |
-| ImmStrokeReader | `com.immersive-foundation.imm-stroke-reader` | Windows x86_64 | `Plugins/x86_64/ImmStrokeReader.dll` | PE | 37 | 37 | 341 KB | `2c332f70b0a66627` |
-| ImmStrokeReader | " | Android arm64-v8a | `Plugins/Android/arm64-v8a/libImmStrokeReader.so` | ELF | 2067 | 37 | 7.16 MB | `d5c7b41b9b052d2d` |
-| ImmStrokeReader | " | iOS (static) | `Plugins/iOS/libImmStrokeReader.a` | ar | 123 | 37 | 84 KB | `76a2d24de61ad65e` |
-| ImmStrokeReader | " | macOS | `Plugins/macOS/libImmStrokeReader.dylib` | Mach-O | 1458 | 37 | 1.63 MB | `833bc3f3aac718d8` |
+| ImmUnityPlugin | `com.immersive-foundation.imm-unity` | Windows x86_64 | `Plugins/x86_64/ImmUnityPlugin.dll` | PE | 97 | 97 | 4.43 MB | `e749d3416a95cc92` |
+| ImmUnityPlugin | " | Android arm64-v8a | `Plugins/Android/libs/arm64-v8a/libImmUnityPlugin.so` | ELF | 4389 | 97 | 15.20 MB | `9f7b0f380c46d420` |
+| ImmUnityPlugin | " | iOS (static) | `Plugins/iOS/libImmUnityPlugin.a` | ar | 3075 | 97 | 4.30 MB | `3ec0cf52173196a7` |
+| ImmUnityPlugin | " | macOS | `Plugins/OSX/ImmUnityPlugin.bundle/Contents/MacOS/ImmUnityPlugin` | Mach-O | 2776 | 97 | 3.36 MB | `288f1802eb4abe0d` |
+| ImmStrokeReader | `com.immersive-foundation.imm-stroke-reader` | Windows x86_64 | `Plugins/x86_64/ImmStrokeReader.dll` | PE | 38 | 38 | 343 KB | `4d39d985393ac9fd` |
+| ImmStrokeReader | " | Android arm64-v8a | `Plugins/Android/arm64-v8a/libImmStrokeReader.so` | ELF | 2071 | 38 | 7.17 MB | `4055acda5b5148e1` |
+| ImmStrokeReader | " | iOS (static) | `Plugins/iOS/libImmStrokeReader.a` | ar | 125 | 38 | 86 KB | `a4cebc357ad5357d` |
+| ImmStrokeReader | " | macOS | `Plugins/macOS/libImmStrokeReader.dylib` | Mach-O | 1460 | 38 | 1.63 MB | `9284550c60929172` |
 
 "Plugin API" counts the plugin's own `extern "C"` entry points present in that binary.
 The larger "all symbols" figure is the whole default-visibility symbol table: on Android,
@@ -46,18 +52,18 @@ is exported as well. Only the `extern "C"` names are a supported interface.
 
 Every platform now builds the full API: the 21 `ImmExporter_*` entry points are part of
 the Android, iOS and macOS binaries as well, since `libImmExporter` (with the vendored
-libopusenc for Opus audio) is wired into all four build systems. The counts above are from
-the binary sync that followed the exporter enablement for Windows and Android; iOS and
-macOS pick the new entry points up in the next binary sync.
+libopusenc for Opus audio) is wired into all four build systems. The table above is from
+the binary sync in commit `32e99926`, the first one to carry the exporter on all four
+platforms, so every row's "Plugin API" column is the same 97 (or 38) entry points.
 
 Local build outputs under the `exe/` folders (not shipped; only the stroke reader DLL here
 is tracked in git):
 
 | Path | Exports | Note |
 |---|---|---|
-| `code/appImmUnity/exe/ImmUnityPlugin.dll` | 81 | current; identical export set to the shipped package DLL |
+| `code/appImmUnity/exe/ImmUnityPlugin.dll` | 97 | current; identical export set to the shipped package DLL |
 | `code/appImmUnity/exe/Release/ImmUnityPlugin.dll` | 60 | leftover from an earlier output layout; both configs now write the flat `exe\` path |
-| `code/appImmStrokeReader/exe/ImmStrokeReader.dll` | 28 | **tracked and stale** — predates the nine `StrokeReader_GetAuthoring*` entry points |
+| `code/appImmStrokeReader/exe/ImmStrokeReader.dll` | 38 | current; rebuilt by CI and committed, same export set as the shipped package DLL |
 
 Windows runtime dependencies (from the PE import tables):
 
@@ -270,23 +276,24 @@ None of these flags is documented in the packages.
 
 Source: `code/appImmStrokeReader/src/main.cpp` + `strokeStore.cpp/.h`. It links only
 `libImmImporter` and `libImmCore` (no player, no renderer, no exporter) and reads an IMM
-file into a plain in-memory stroke/layer graph. All 37 entry points exist on all four
+file into a plain in-memory stroke/layer graph. All 38 entry points exist on all four
 platforms.
 
 ### 3.1 Native API (38 entry points)
 
-All are declared in `Runtime/ImmStrokeReader.cs` except where noted.
+All are declared in `Runtime/ImmStrokeReader.cs`.
 
 | Group | Entry points |
 |---|---|
-| Build/init | `StrokeReader_GetBuildId` (**not declared**), `Init`, `IsInitialized`, `End` (—), `GetDocumentCount` |
+| Build/init | `StrokeReader_GetBuildId`, `Init`, `IsInitialized`, `End` (—), `GetDocumentCount` |
 | Load | `LoadFromFile`, `LoadFromMemory`, `Unload` |
 | Document | `GetDocumentInfo` |
 | Layers | `GetLayerCount`, `GetLayerInfo`, `GetLayerTransform` |
 | Layers (authoring view) | `GetAuthoringLayerCount`, `GetAuthoringLayerInfo`, `GetAuthoringLayerTransform` |
+| Spawn area | `GetLayerSpawnAreaInfo` |
 | Animation | `GetLayerAnimationKeyCount`, `GetLayerAnimationKey`, `GetLayerAnimationInfo`, `GetAuthoringLayerAnimationInfo` |
 | Drawings / frames | `GetDrawingCount`, `GetDrawingIndexForChapter`, `GetFrameBuffer`, `GetAuthoringDrawingCount`, `GetAuthoringFrameBuffer` |
-| Strokes | `GetStrokeCount`, `GetStrokeInfo`, `GetStrokePoints`, `GetAuthoringStrokeCount`, `GetAuthoringStrokeInfo`, `GetAuthoringStrokePoints`, `GetDrawingBiggestStroke` (**not declared**) |
+| Strokes | `GetStrokeCount`, `GetStrokeInfo`, `GetStrokePoints`, `GetAuthoringStrokeCount`, `GetAuthoringStrokeInfo`, `GetAuthoringStrokePoints`, `GetDrawingBiggestStroke` |
 | Pictures | `GetPictureInfo`, `GetPicturePixelData` |
 | Chapters | `GetChapterCount`, `GetChapterCountFromFile`, `GetCurrentChapter`, `SetChapter` |
 
@@ -499,8 +506,9 @@ the shipped package, but it sits at a plausible install path.
 - `README.md:163` states the macOS ImmUnity build "is currently disabled in CI";
   `build.yml:501` builds `--target ImmUnity` on `macos-14`.
 - The committed `ImmUnityPlugin.bundle`'s `_CodeSignature/CodeResources` predates the
-  committed binary (signature no longer covers it), and the macOS bundle/dylib are one
-  binary-sync commit behind the Windows/Android/iOS copies.
+  committed binary (signature no longer covers it) — `sync-binaries` refreshes the bundle
+  binary but not its `_CodeSignature`. The export sets themselves are current on all four
+  platforms as of `32e99926`.
 
 ---
 
