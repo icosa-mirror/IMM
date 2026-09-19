@@ -2724,6 +2724,52 @@ extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_PaintAddF
     paint->AddFrame(drawingIndex);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_LayerAddAnimationKey(
+    void* layerHandle,
+    int property,
+    int64_t timeTicks,
+    int interpolation,
+    int boolValue,
+    uint32_t intValue,
+    float floatValue,
+    double doubleValue,
+    const ImmExporterTransformC* transformValue)
+{
+    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (layer == nullptr)
+        return false;
+    if (property < 0 || property >= static_cast<int>(ImmExporter::Layer::AnimProperty::MAX))
+        return false;
+    if (interpolation < 0 || interpolation >= static_cast<int>(ImmExporter::Layer::InterpolationType::MAX))
+        return false;
+
+    // Every field is filled from its own argument so the stored key carries
+    // exactly what the managed caller sent; the IMM writer only reads the field
+    // that belongs to the property being written (see toImmersiveLayer.cpp).
+    ImmExporter::Layer::AnimValue value;
+    value.mBool = boolValue != 0;
+    value.mInt = intValue;
+    value.mFloat = floatValue;
+    value.mDouble = doubleValue;
+    value.mTransform = ImmExporterMakeTransform(transformValue);
+
+    return layer->AddKey(
+        static_cast<ImmCore::piTick>(timeTicks),
+        static_cast<ImmExporter::Layer::AnimProperty>(property),
+        value,
+        static_cast<ImmExporter::Layer::InterpolationType>(interpolation));
+}
+
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_PaintSetMaxRepeatCount(void* paintLayerHandle, uint32_t maxRepeatCount)
+{
+    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(paintLayerHandle);
+    if (layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::Paint)
+        return false;
+
+    layer->SetMaxRepeatCount(maxRepeatCount);
+    return true;
+}
+
 extern "C" UNITY_INTERFACE_EXPORT bool UNITY_INTERFACE_API ImmExporter_ExportToFile(
     void* sequenceHandle,
     const char* fileName,
