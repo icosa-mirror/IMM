@@ -89,15 +89,23 @@ that the deferred refresh already handles. The next attempt should keep the draw
 resources valid (a tombstone the renderer can still load, or an explicit per-drawing GPU
 release) instead of clearing geometry underneath it.
 
-**Mechanism finding (round 6), which also explains the M1b hang.**
-`LayerRendererPaintStatic::LoadInCPU` allocates a *new* draw-info slot for every drawing in
-the layer on every call (`mLayerInfo.Alloc(&isNew, &id, true)` then `me->Init(dr)`), and
-`LoadInGPU` is a no-op on this path. So refreshing a layer by calling `UnloadInCPU` +
-`LoadInCPU` is not a rebuild of existing state — it re-allocates the layer's draw info. Any
-per-edit refresh must work per drawing on its existing pool slot (or free that one slot and
-re-init it), never re-run the whole layer's CPU load. That is the change M2 needs, and it is
-also the likely reason a zero-chunk drawing hung: it entered a load path that expects to
-build draw info for every drawing it is given.
+**Mechanism findings, and a hypothesis that was wrong.** The working refresh is the
+layer-wide pair (`UnloadInCPU` + `LoadInCPU`) plus the deferred, per-layer GPU re-upload:
+that is what measures 0.061 ms + 0.004 ms on the 4,000-drawing document. Two alternatives
+were tried and rejected with evidence:
+
+- Replacing the layer's GPU buffers immediately (inside the same frame) **hung**
+  `appImmViewer`. Deferring the destruction by the number of frames the renderer keeps in
+  flight fixed it, and that is what the current code does.
+- Re-initialising one drawing's existing draw-info slot in place, to avoid the layer-wide
+  `LoadInCPU` (which allocates a fresh slot per drawing), **crashed** the viewer with an
+  access violation. `iSLayerDrawInfoStatic::Init` is therefore not a safe re-init on a live
+  slot. The entry point stays in the renderer interface, unused, so the next attempt starts
+  from the crash rather than from the guess — the per-drawing route needs the slot's own
+  release path (whatever `UnloadInCPU` does per drawing), not `Init` alone.
+
+So the earlier claim that the layer-wide load caused the M1b hang was wrong: that hang was
+the immediate GPU destruction, and the layer-wide CPU load is what still works.
 
 Animation and spawn areas:
 
