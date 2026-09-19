@@ -451,6 +451,258 @@ namespace ImmPlayer
             currentFilePath = string.Empty;
         }
 
+        #region Extended API coverage
+
+        private const string ApiPrefix = "[IMM_E2E_API] ";
+
+        [Header("Extended API Coverage (Read Only)")]
+        public bool apiHasAudio;
+        public ImmDocument.ChapterInfo apiChapterInfo;
+        public long apiChapterTotalTicks;
+        public long apiTimeSinceStartTicks;
+        public long apiTimeSinceStopTicks;
+        public bool apiIsPlaying;
+        public long apiPausedAtTick;
+        public long apiResumedAtTick;
+        public string apiSpawnAreaSummary = "";
+        public bool apiSpawnAreaPoseValid;
+        public Vector3 apiSpawnAreaPosition;
+        public bool apiSpawnAreaNeedsUpdateAfterSet;
+        public bool apiSpawnAreaNeedsUpdateAfterConsume;
+        public bool apiSpawnAreaThumbnailAvailable;
+        public int apiSpawnAreaThumbnailWidth;
+        public int apiSpawnAreaThumbnailHeight;
+        public PerformanceInfoNative apiPerformanceInfo;
+        public string apiLastAction = "";
+
+        [Header("Extended API Coverage Settings")]
+        [SerializeField] private int viewportCameraId = 0;
+        [SerializeField] private float viewportOriginX = 0f;
+        [SerializeField] private float viewportOriginY = 0f;
+
+        /// <summary>
+        /// Exercise the document-level wrappers the sample otherwise never reaches: audio
+        /// presence, the full chapter layout, playback position, tick-accurate pause/resume,
+        /// and the spawn-area volume, pose, needs-update and thumbnail queries. Everything it
+        /// reads lands in the <c>api*</c> fields, so the Inspector shows the results.
+        /// </summary>
+        [ContextMenu("Extended API/Run Document Coverage")]
+        public void RunDocumentApiCoverage()
+        {
+            if (_doc == null || !_doc.IsLoaded)
+            {
+                Debug.LogWarning($"{ApiPrefix}RunDocumentApiCoverage: no document loaded");
+                return;
+            }
+
+            apiHasAudio = _doc.HasAudio();
+
+            if (_doc.TryGetChapterInfo(out ImmDocument.ChapterInfo chapterInfo))
+            {
+                apiChapterInfo = chapterInfo;
+                long totalTicks = 0;
+                if (chapterInfo.Lengths != null)
+                {
+                    foreach (long length in chapterInfo.Lengths)
+                        totalTicks += length;
+                }
+
+                apiChapterTotalTicks = totalTicks;
+            }
+
+            _doc.GetTime(out apiTimeSinceStartTicks, out apiTimeSinceStopTicks);
+            apiIsPlaying = _doc.IsPlaying();
+
+            // Schedule a pause one second ahead and immediately resume at the current tick, so
+            // both deferred-playback entry points are exercised without stopping the sample.
+            long playTicks = _doc.GetPlayTime();
+            long oneSecond = ImmPlayer.Exporter.ExportLayerTiming.TicksPerSecond;
+            _doc.PauseAt(playTicks + oneSecond);
+            apiPausedAtTick = playTicks + oneSecond;
+            _doc.ResumeAt(playTicks);
+            apiResumedAtTick = playTicks;
+
+            int spawnAreaId = _doc.GetActiveSpawnAreaId();
+            if (spawnAreaId < 0 && _spawnAreaIds.Length > 0)
+                spawnAreaId = _spawnAreaIds[0];
+
+            if (spawnAreaId >= 0)
+            {
+                SerializedSpawnArea? spawnInfo = _doc.GetSpawnAreaInfo(spawnAreaId);
+                if (spawnInfo.HasValue)
+                {
+                    SerializedSpawnArea info = spawnInfo.Value;
+                    apiSpawnAreaSummary =
+                        $"id={spawnAreaId} name={info.GetName()} type={info.mType} animated={info.mAnimated}";
+                }
+
+                if (_doc.TryGetSpawnAreaPose(spawnAreaId, out SpawnAreaPose pose))
+                {
+                    apiSpawnAreaPoseValid = true;
+                    apiSpawnAreaPosition = pose.GetPosition();
+                }
+
+                _doc.SetSpawnAreaNeedsUpdate(true);
+                apiSpawnAreaNeedsUpdateAfterSet = _doc.GetSpawnAreaNeedsUpdate();
+                apiSpawnAreaNeedsUpdateAfterConsume = _doc.ConsumeSpawnAreaNeedsUpdate();
+
+                if (_doc.TryGetSpawnAreaThumbnail(spawnAreaId, out Texture2D thumbnail))
+                {
+                    apiSpawnAreaThumbnailAvailable = true;
+                    apiSpawnAreaThumbnailWidth = thumbnail.width;
+                    apiSpawnAreaThumbnailHeight = thumbnail.height;
+                    Destroy(thumbnail);
+                }
+            }
+
+            apiLastAction = "RunDocumentApiCoverage";
+            Debug.Log(
+                $"{ApiPrefix}document hasAudio={apiHasAudio} chapters={apiChapterInfo.Count} " +
+                $"chapterTicks={apiChapterTotalTicks} playMarkers={apiChapterInfo.HasPlays} " +
+                $"timeSinceStart={apiTimeSinceStartTicks} isPlaying={apiIsPlaying} " +
+                $"pausedAt={apiPausedAtTick} resumedAt={apiResumedAtTick} " +
+                $"spawnArea=[{apiSpawnAreaSummary}] poseValid={apiSpawnAreaPoseValid} " +
+                $"needsUpdateAfterSet={apiSpawnAreaNeedsUpdateAfterSet} " +
+                $"needsUpdateAfterConsume={apiSpawnAreaNeedsUpdateAfterConsume} " +
+                $"thumbnail={apiSpawnAreaThumbnailAvailable}" +
+                (apiSpawnAreaThumbnailAvailable
+                    ? $" {apiSpawnAreaThumbnailWidth}x{apiSpawnAreaThumbnailHeight}"
+                    : string.Empty));
+        }
+
+        /// <summary>
+        /// Exercise <see cref="ImmDocument.Continue"/> after a plain <see cref="ImmDocument.Pause"/>.
+        /// </summary>
+        [ContextMenu("Extended API/Pause Then Continue")]
+        public void PauseThenContinue()
+        {
+            if (_doc == null || !_doc.IsLoaded)
+            {
+                Debug.LogWarning($"{ApiPrefix}PauseThenContinue: no document loaded");
+                return;
+            }
+
+            _doc.Pause();
+            bool pausedState = _doc.IsPlaying();
+            _doc.Continue();
+            apiLastAction = "Pause(); Continue()";
+            Debug.Log($"{ApiPrefix}paused isPlaying={pausedState} afterContinue isPlaying={_doc.IsPlaying()}");
+        }
+
+        /// <summary>
+        /// Override a camera's viewport origin with the player's explicit call, which the sample
+        /// otherwise only reaches through its default render path.
+        /// </summary>
+        [ContextMenu("Extended API/Apply Camera Viewport Override")]
+        public void ApplyCameraViewportOverride()
+        {
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogWarning($"{ApiPrefix}ApplyCameraViewportOverride: no player manager");
+                return;
+            }
+
+            manager.SetCameraViewport(viewportCameraId, viewportOriginX, viewportOriginY, 0, 0);
+            apiLastAction = $"SetCameraViewport(camera={viewportCameraId}, x={viewportOriginX}, y={viewportOriginY})";
+            Debug.Log($"{ApiPrefix}{apiLastAction}");
+        }
+
+        /// <summary>Drop the viewport override applied by <see cref="ApplyCameraViewportOverride"/>.</summary>
+        [ContextMenu("Extended API/Clear Camera Viewport Override")]
+        public void ClearCameraViewportOverride()
+        {
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogWarning($"{ApiPrefix}ClearCameraViewportOverride: no player manager");
+                return;
+            }
+
+            manager.ClearCameraViewport(viewportCameraId);
+            apiLastAction = $"ClearCameraViewport(camera={viewportCameraId})";
+            Debug.Log($"{ApiPrefix}{apiLastAction}");
+        }
+
+        /// <summary>Read the player's own per-frame counters for this document.</summary>
+        [ContextMenu("Extended API/Log Player Performance Info")]
+        public void LogPlayerPerformanceInfo()
+        {
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogWarning($"{ApiPrefix}LogPlayerPerformanceInfo: no player manager");
+                return;
+            }
+
+            manager.SetPerformanceMeasurementEnabled(true);
+            apiPerformanceInfo = manager.GetPerformanceInfo();
+            apiLastAction = "SetPerformanceMeasurementEnabled(true); GetPerformanceInfo()";
+            Debug.Log(
+                $"{ApiPrefix}performance cpuLoadMs={apiPerformanceInfo.cpuLoadTimeMS} " +
+                $"drawCalls={apiPerformanceInfo.numDrawCalls} triangles={apiPerformanceInfo.numTriangles} " +
+                $"gpuAverageMs={apiPerformanceInfo.gpuTimeAverageMs:F3}");
+        }
+
+        /// <summary>
+        /// Abandon an in-flight load. Interesting only while a load is still running, so call it
+        /// from the load path (or immediately after starting one) rather than after playback.
+        /// </summary>
+        [ContextMenu("Extended API/Cancel Pending Load")]
+        public void CancelPendingLoad()
+        {
+            if (_doc == null)
+            {
+                Debug.LogWarning($"{ApiPrefix}CancelPendingLoad: no document");
+                return;
+            }
+
+            _doc.CancelLoading();
+            apiLastAction = "CancelLoading()";
+            Debug.Log($"{ApiPrefix}{apiLastAction}");
+        }
+
+        /// <summary>Unload every document the player holds, not just the one this sample loaded.</summary>
+        [ContextMenu("Extended API/Unload All Documents")]
+        public void UnloadEveryDocument()
+        {
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogWarning($"{ApiPrefix}UnloadEveryDocument: no player manager");
+                return;
+            }
+
+            manager.UnloadAllDocuments(true);
+            _doc = null;
+            layers = new ImmDocument.LayerInfo[0];
+            spawnAreas = new ImmDocument.SpawnAreaInfo[0];
+            layerList = new LayerListEntry[0];
+            _spawnAreaIds = new int[0];
+            apiLastAction = "UnloadAllDocuments(synchronous: true)";
+            Debug.Log($"{ApiPrefix}{apiLastAction}");
+        }
+
+        /// <summary>Shut the native player down, exercising the explicit teardown path.</summary>
+        [ContextMenu("Extended API/Shutdown Player")]
+        public void ShutdownPlayer()
+        {
+            ImmPlayerManager manager = ImmPlayerManager.Instance;
+            if (manager == null)
+            {
+                Debug.LogWarning($"{ApiPrefix}ShutdownPlayer: no player manager");
+                return;
+            }
+
+            manager.Shutdown();
+            _doc = null;
+            _spawnAreaIds = new int[0];
+            apiLastAction = "Shutdown()";
+            Debug.Log($"{ApiPrefix}{apiLastAction}");
+        }
+
+        #endregion
+
         public void RefreshStatus()
         {
             if (_doc == null)
