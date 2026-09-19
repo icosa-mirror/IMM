@@ -23,6 +23,11 @@ committed binaries have not been rebuilt yet (CI rebuilds Android, iOS and macOS
 `sync-binaries` job commits the results); use `--platform windows` or `--platform android`
 to check only what was built locally.
 
+CI runs the same tool in `build.yml` — in `package-unity-plugins`, after the four platform
+artifacts are staged into the packages, and again in `sync-binaries` before it commits — so
+drift fails the build instead of surfacing as an `EntryPointNotFoundException` at runtime
+(see [G16](#g16--no-automated-export-vs-dllimport-check)).
+
 Last verified green on all four platforms against the binaries from sync commit
 `32e99926`, which is also the first sync in which the exporter API reaches iOS and macOS.
 The one entry point it reports as a known gap is `ImmUnityRegisterRenderingPlugin` on iOS,
@@ -395,7 +400,7 @@ are kept in full detail after it.
 | G13 | S3 | managed code never calls `StrokeReader_End` | Open |
 | G14 | S3 | `Debug()` unused | Open |
 | G15 | S3 | `code/appImmStrokeReader/exe/ImmStrokeReader.dll` was 9 entry points behind | Fixed |
-| G16 | S3 | CI does not compare P/Invokes against exports | Tool added, CI wiring open |
+| G16 | S3 | CI does not compare P/Invokes against exports | Fixed |
 | G17 | S3 | no reference doc for the entry points or the runtime flags | Fixed (this document) |
 | G18 | S3 | `code/ImmStrokeReaderUPM/` is an empty package skeleton | Open |
 
@@ -487,12 +492,26 @@ caller. Useful when diagnosing "plugin loaded but renderer absent" on device.
 
 ### G16 — no automated export-vs-DllImport check
 
-`ci-engine.yml:99-126` asserts three export names via `dumpbin`;
-`tests/tools/verify_package_layout.py` checks existence and non-zero size.
-`tests/tools/verify_unity_plugin_exports.py` now performs the missing check offline for
-all four platforms (and found G1/G2 and the stale Android binaries), but it is still not
-invoked by a workflow: wiring it into the "Verify Unity native plugin exports" step, plus
-the stroke reader binary, would close the loop.
+Closed. `ci-engine.yml:99-126` asserts three export names via `dumpbin`, and
+`tests/tools/verify_package_layout.py` checks existence and non-zero size, but neither
+compared the C# `[DllImport]` set against a plugin's export table — which is how G1/G2 (a
+declared entry point missing from every binary) survived.
+
+`tests/tools/verify_unity_plugin_exports.py` performs the missing check offline for all four
+platforms, and `build.yml` now runs it twice, both times after fresh binaries have been
+staged into the package folders it reads:
+
+- `package-unity-plugins`, which runs once per run after all four platform artifacts are
+  synced into the packages — this gates the UPM zips on every trigger, including PRs and the
+  daily schedule;
+- `sync-binaries`, before its commit — this refuses to publish a binary refresh that would
+  leave a declaration unexported.
+
+Both invocations are non-strict, so the documented known gap (`ImmUnityRegisterRenderingPlugin`
+on iOS, which Unity compiles from `Plugins/iOS/ImmUnityPluginRegister.mm`) is reported without
+failing. They read the freshly built binaries inside the job workspace rather than the
+committed ones, so a native change does not turn the pipeline red while the Android/iOS/macOS
+binaries are still waiting for their binary sync.
 
 ### G18 — `ImmStrokeReaderUPM/` is a broken package skeleton
 

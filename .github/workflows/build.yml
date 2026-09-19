@@ -874,6 +874,11 @@ jobs:
         cp -R artifacts/Internal-ImmViewerPlugin-macOS/. "$unity_pkg/Plugins/OSX/ImmUnityPlugin.bundle/"
         cp artifacts/Internal-ImmViewerPlugin-iOS/libImmUnityPlugin.a "$unity_pkg/Plugins/iOS/libImmUnityPlugin.a"
 
+    - name: Verify plugin exports match the C# declarations
+      run: |
+        python tests/tools/verify_unity_plugin_exports.py \
+          --json artifacts/unity-plugin-exports.json
+
     - name: Stage stroke reader Unity package
       shell: bash
       run: |
@@ -1151,6 +1156,11 @@ jobs:
         cp -R  "$unity_src/OSX/ImmUnityPlugin.bundle"               "$unity_dst/OSX/ImmUnityPlugin.bundle"
         mkdir -p "$unity_dst/iOS"
         cp "$unity_src/iOS/libImmUnityPlugin.a"                     "$unity_dst/iOS/libImmUnityPlugin.a"
+
+    - name: Verify plugin exports match the C# declarations
+      run: |
+        python tests/tools/verify_unity_plugin_exports.py \
+          --json artifacts/unity-plugin-exports.json
 
     - name: Sync Godot GDExtension binaries
       shell: bash
