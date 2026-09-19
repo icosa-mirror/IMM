@@ -598,6 +598,10 @@ namespace ImmPlayer
                     format = TextureFormat.R16;
                     bytesPerPixel = 2;
                     return true;
+                case 5: // FORMAT_I_RG
+                    format = TextureFormat.RG16;
+                    bytesPerPixel = 2;
+                    return true;
                 case 6: // FORMAT_I_RGB
                     format = TextureFormat.RGB24;
                     bytesPerPixel = 3;
@@ -610,10 +614,17 @@ namespace ImmPlayer
                     format = TextureFormat.RFloat;
                     bytesPerPixel = 4;
                     return true;
-                case 10: // FORMAT_F_RGB
-                    format = TextureFormat.RGBFloat;
-                    bytesPerPixel = 12;
+                case 9: // FORMAT_F_RG
+                    format = TextureFormat.RGFloat;
+                    bytesPerPixel = 8;
                     return true;
+                case 10: // FORMAT_F_RGB
+                    // Unity has no 3-channel float layout (RFloat/RGFloat/RGBAFloat only), and
+                    // RGB48 would reinterpret the floats as 16-bit normalised values, so this
+                    // format has to be reported as unsupported rather than mapped to something wrong.
+                    format = TextureFormat.RGBA32;
+                    bytesPerPixel = 0;
+                    return false;
                 case 11: // FORMAT_F_RGBA
                     format = TextureFormat.RGBAFloat;
                     bytesPerPixel = 16;
