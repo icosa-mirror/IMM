@@ -34,7 +34,6 @@ namespace ImmPlayer
 		void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
 			uint64_t token, ImmCore::piLog * log) override;
 		void AdvanceDrawingRetirement(ImmCore::piRenderer * renderer, ImmCore::piLog * log) override;
-		void SetResourceRetirementFrames(uint32_t maxFramesInFlight) override;
 
 		void PrepareForDisplay(StereoMode stereoMode) override;
 		void DisplayPreRender(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la, const ImmCore::frustum3& frus, const ImmCore::trans3d & layerToViewer, float opacity) override;
@@ -75,7 +74,6 @@ namespace ImmPlayer
 		uint64_t mPresentationSample = 0;
 		bool mTracePresentationFrames = false;
 		std::vector<RetiredDrawing> mRetiredDrawings;
-		uint64_t mResourceRetirementFrames = 3;
 	};
 
 }

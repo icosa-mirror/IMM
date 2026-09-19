@@ -69,11 +69,6 @@ namespace ImmPlayer
 			(void)renderer; (void)log;
 		}
 
-		virtual void SetResourceRetirementFrames(uint32_t maxFramesInFlight)
-		{
-			(void)maxFramesInFlight;
-		}
-
 		virtual void PrepareForDisplay(StereoMode stereoMode) override = 0;
 
 		virtual void

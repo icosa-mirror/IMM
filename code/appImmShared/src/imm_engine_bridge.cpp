@@ -593,7 +593,6 @@ namespace ImmShared
         Player::Configuration conf = {};
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
-        conf.maxFramesInFlight = mConfig.maxFramesInFlight;
         const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
                                          mConfig.rendererApi == piRenderer::API::Metal ||
                                          mConfig.rendererApi == piRenderer::API::Vulkan);

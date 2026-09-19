@@ -42,6 +42,33 @@ def main() -> int:
         "code/appImmViewer/src/android/cpp/NonVrApp.cpp",
         ["gEngine.liveEditValidation.Tick(*gEngine.viewer, gEngine.log, gEngine.frameCount"],
     )
+    require_tokens(
+        "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm",
+        [
+            "A host-owned external command buffer may have been created with unretained references.",
+            "[mState->retainedBuffers addObject:buffer->buffer]",
+            "[state->commandBuffer addCompletedHandler:",
+        ],
+    )
+    require_tokens(
+        "code/libImmCore/src/libRender/vulkan/piVulkan_Renderer.cpp",
+        [
+            "iEnqueueDeferredDestroy(mState",
+            "state->batchRingStampCounter - e.ringStamp",
+            "state->vkWaitForFences",
+        ],
+    )
+    static_renderer = (
+        ROOT
+        / "code/libImmPlayer/src/layerRenderers/layerRendererPaint/static/layerRendererPaintStatic.cpp"
+    ).read_text(encoding="utf-8")
+    assert "mRetirementFrame + 1" in static_renderer
+    for path in [
+        "code/libImmPlayer/src/player.h",
+        "code/appImmShared/src/imm_engine_bridge.h",
+        "code/appImmViewer/src/viewer/viewer.cpp",
+    ]:
+        assert "maxFramesInFlight" not in (ROOT / path).read_text(encoding="utf-8"), path
     print("Standalone live-edit validation contracts passed")
     return 0
 

@@ -639,9 +639,13 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         replacementStatic->SetGpuId(oldToken);
 
         // Ownership transfers only after model geometry and renderer identity have both moved.
+        // The old slot cannot be selected after this swap. Retire its CPU wrappers at the next
+        // render boundary; each graphics backend owns the lifetime of already-submitted GPU
+        // resources (Vulkan's deferred-destroy queue is fence/ring based, while Metal, D3D,
+        // and OpenGL retain or defer resources referenced by submitted commands).
         mRetiredDrawings.push_back(RetiredDrawing{
             replacementStatic, static_cast<uint64_t>(oldToken),
-            mRetirementFrame + mResourceRetirementFrames });
+            mRetirementFrame + 1 });
         log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] renderer swap activeToken=%llu retiredToken=%d",
             static_cast<unsigned long long>(token), oldToken);
         return true;
@@ -687,11 +691,6 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             }
             mRetiredDrawings.erase(mRetiredDrawings.begin() + i);
         }
-    }
-
-    void LayerRendererPaintStatic::SetResourceRetirementFrames(uint32_t maxFramesInFlight)
-    {
-        mResourceRetirementFrames = maxFramesInFlight > 0 ? maxFramesInFlight : 1;
     }
 
     void LayerRendererPaintStatic::PrepareForDisplay(StereoMode stereoMode)

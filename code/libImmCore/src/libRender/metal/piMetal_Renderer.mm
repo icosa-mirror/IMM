@@ -2785,7 +2785,22 @@ void piRendererMetal::DestroyVertexArray(piVertexArray obj)
     if (mState->liveVertexArrays > 0) --mState->liveVertexArrays;
     delete obj;
 }
-void piRendererMetal::AttachVertexArray(piVertexArray obj) { mState->currentVertexArray = obj; }
+void piRendererMetal::AttachVertexArray(piVertexArray obj)
+{
+    mState->currentVertexArray = obj;
+    if (!obj || !mState->frameActive || !mState->commandBuffer || !mState->retainedBuffers)
+        return;
+
+    // A host-owned external command buffer may have been created with unretained references.
+    // Keep every buffer encoded through this vertex array alive until that command buffer
+    // completes, so destroying a retired drawing slot never depends on a guessed frame count.
+    piBuffer buffers[] = { obj->vertexBuffer[0], obj->vertexBuffer[1], obj->indexBuffer };
+    for (piBuffer buffer : buffers)
+    {
+        if (buffer && buffer->buffer && ![mState->retainedBuffers containsObject:buffer->buffer])
+            [mState->retainedBuffers addObject:buffer->buffer];
+    }
+}
 void piRendererMetal::DettachVertexArray(void) { mState->currentVertexArray = nullptr; }
 piVertexArray piRendererMetal::CreateVertexArray2(int, piBuffer vb0, const ArrayLayout2 *, piBuffer vb1, const ArrayLayout2 *, const void *, size_t, piBuffer ib, const IndexArrayFormat ebFormat)
 {

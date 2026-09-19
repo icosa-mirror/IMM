@@ -13,7 +13,6 @@ namespace ImmShared
         {
             int colorSpace = 0;
             int antialiasing = 0;
-            uint32_t maxFramesInFlight = 3;
             const char *logFileName = nullptr;
             const char *tmpFolderName = nullptr;
             ImmCore::piRenderer::API rendererApi = ImmCore::piRenderer::API::GL;
