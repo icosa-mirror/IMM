@@ -371,8 +371,8 @@ def main() -> int:
     print("\nmem-path = export-mem + handoff-copy + read-mem;")
     print("file-path = export-file + read-file (StrokeReader_LoadFromFile).\n")
 
-    # What one edit costs today: the live-document plan replaces this row with per-edit cases
-    # (docs/runtime-live-document-api.md section 9). It stays as the comparison baseline.
+    # What one edit costs today: live-document measurements keep this row as the comparison
+    # baseline and add per-edit cases alongside it.
     edit_header = f"{'case':7s} {'graph':>10s} {'mem-path':>10s} {'edit-document':>14s}"
     print(edit_header)
     print("-" * len(edit_header))

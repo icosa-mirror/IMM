@@ -1990,7 +1990,7 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerI
 }
 
 //----------------------------------------------------------------------------
-// Live document editing (see docs/runtime-live-document-api.md).
+// Live document editing.
 // Additive: nothing here runs unless a document is attached for editing, and
 // attaching changes no behaviour of the ordinary load and playback paths.
 //----------------------------------------------------------------------------
