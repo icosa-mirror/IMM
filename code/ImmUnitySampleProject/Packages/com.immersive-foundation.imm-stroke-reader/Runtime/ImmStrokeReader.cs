@@ -16,6 +16,11 @@ namespace ImmPlayer
         [DllImport(DllName)]
         private static extern IntPtr StrokeReader_GetBuildId();
 
+        /// <summary>
+        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5"),
+        /// the intended way to confirm which stroke reader library a player actually loaded.
+        /// </summary>
+        /// <returns>The native build id string, or null when the plugin reports none.</returns>
         public static string GetBuildId()
         {
             IntPtr p = StrokeReader_GetBuildId();
@@ -44,22 +49,6 @@ namespace ImmPlayer
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_IsInitialized();
-
-        /// <summary>
-        /// Native build identifier of the loaded stroke reader library.
-        /// </summary>
-        [DllImport(DllName)]
-        private static extern IntPtr StrokeReader_GetBuildId();
-
-        /// <summary>
-        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5"),
-        /// the intended way to confirm which stroke reader library a player actually loaded.
-        /// </summary>
-        public static string GetBuildId()
-        {
-            IntPtr value = StrokeReader_GetBuildId();
-            return value == IntPtr.Zero ? string.Empty : Marshal.PtrToStringAnsi(value);
-        }
 
         #endregion
 
