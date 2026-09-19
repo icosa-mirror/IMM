@@ -698,12 +698,35 @@ namespace ImmPlayer
         }
 
         /// <summary>
+        /// Picture metadata for a picture layer; false for any other layer type or when the
+        /// layer holds no picture. Read the pixels with
+        /// <see cref="ImmStrokeReader.StrokeReader_GetPicturePixelData"/>.
+        /// </summary>
+        public bool GetPictureInfo(int layerIdx, out StrokePictureInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetPictureInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>
         /// Viewpoint data of a spawn-area layer. Returns false for any other layer type.
         /// </summary>
         public bool GetLayerSpawnAreaInfo(int layerIdx, out StrokeSpawnAreaInfo info)
         {
             info = default;
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>
+        /// Local and world transform of a layer as the document stores it. The authoring array
+        /// has its own view of the same layer: see <see cref="GetAuthoringLayerTransform"/>.
+        /// </summary>
+        public bool GetLayerTransform(int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world)
+        {
+            local = default;
+            world = default;
+            if (_docId <= 0) return false;
+            return ImmStrokeReader.StrokeReader_GetLayerTransform(_docId, layerIdx, out local, out world);
         }
 
         public bool GetAuthoringLayerTransform(int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world)

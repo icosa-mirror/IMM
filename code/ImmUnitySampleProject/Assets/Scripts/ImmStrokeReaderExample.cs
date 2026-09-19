@@ -397,10 +397,10 @@ namespace ImmPlayer
                         continue;
                     }
 
-                    if (_document.GetAuthoringStrokeInfo(layerIndex, drawingIndex, 0, out StrokeInfo info))
+                    if (_document.GetAuthoringStrokeInfo(layerIndex, drawingIndex, 0, out StrokeInfo strokeInfo))
                     {
                         StrokeAuthoringPoint[] points = _document.GetAuthoringStrokePoints(layerIndex, drawingIndex, 0);
-                        Log($"    drawing {drawingIndex}: {strokes} strokes, first brush={info.brushType} points={info.numPoints} " +
+                        Log($"    drawing {drawingIndex}: {strokes} strokes, first brush={strokeInfo.brushType} points={strokeInfo.numPoints} " +
                             $"authoringPoints={(points != null ? points.Length : 0)}");
                     }
                 }
