@@ -127,6 +127,7 @@ namespace ExePlayer
         // The player the viewer drives. Exposed so the validation harness can exercise the
         // live-editing API against a document that is actually rendering.
         ImmPlayer::Player * GetPlayer() { return &mPlayer; }
+        int GetPrimaryDocumentId() const { return mDocuments[0]; }
 
 		bool ReplaceLoadingStateChangeListener(OnDocumentStateChange handler);
 		bool IsDocumentLoaded(int docID) const;

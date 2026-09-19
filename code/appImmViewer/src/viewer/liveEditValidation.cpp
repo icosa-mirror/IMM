@@ -12,19 +12,6 @@
 
 namespace ExePlayer
 {
-    namespace
-    {
-        int iFindLoadedDocument(Viewer & viewer)
-        {
-            for (int id = 0; id < 64; id++)
-            {
-                if (viewer.IsDocumentLoaded(id))
-                    return id;
-            }
-            return -1;
-        }
-    }
-
     uint64_t LiveEditValidation::RequestedFrameFromEnvironment(void)
     {
         const char * value = std::getenv("IMM_VIEWER_LIVE_EDIT");
@@ -50,8 +37,8 @@ namespace ExePlayer
             if (frame < requestedFrame)
                 return;
 
-            const int docId = iFindLoadedDocument(viewer);
-            if (docId < 0)
+            const int docId = viewer.GetPrimaryDocumentId();
+            if (docId < 0 || !viewer.IsDocumentLoaded(docId))
                 return;
 
             int layerId = -1;
