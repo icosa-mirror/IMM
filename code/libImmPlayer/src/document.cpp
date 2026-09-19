@@ -549,10 +549,24 @@ namespace ImmPlayer
             const Layer::Type layerType = layer->GetType();
             if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
             {
-                // Same pair the loader uses, for one layer instead of the whole document.
-                layerPaintRender->UnloadInCPU(log, layer);
-                if (!layerPaintRender->LoadInCPU(log, layer))
-                    log->Printf(LT_ERROR, L"Live edit: CPU geometry rebuild failed for layer %d", static_cast<int>(layer->GetID()));
+                // Per drawing, releasing and re-allocating only the slots of the drawings this
+                // layer owns. The layer-wide pair is kept as the fallback for renderers that
+                // cannot refresh a drawing on its own.
+                LayerPaint *paint = (LayerPaint *)layer->GetImplementation();
+                const unsigned int drawingCount = (paint != nullptr) ? paint->GetNumDrawings() : 0u;
+                unsigned int refreshed = 0;
+                for (unsigned int d = 0; d < drawingCount; d++)
+                {
+                    if (layerPaintRender->RefreshDrawingInCPU(layer, d, log))
+                        refreshed++;
+                }
+
+                if (drawingCount == 0 || refreshed == 0)
+                {
+                    layerPaintRender->UnloadInCPU(log, layer);
+                    if (!layerPaintRender->LoadInCPU(log, layer))
+                        log->Printf(LT_ERROR, L"Live edit: CPU geometry rebuild failed for layer %d", static_cast<int>(layer->GetID()));
+                }
             }
             else if (layerType == Layer::Type::Picture && layerRenderPicture != nullptr)
             {
