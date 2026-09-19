@@ -193,6 +193,11 @@ namespace ImmPlayer
         piSoundEngine* soundEngine, piLog *log, const piTick now,
         const Command * command)
     {
+        // Live edits are applied only to a fully loaded document; while a load or unload is
+        // in flight they stay queued so the loader is never raced.
+        if (mEditing && mState.mLoadingState == LoadingState::Loaded)
+            iApplyDirtyCPU(layerPaintRender, layerRenderPicture, log);
+
         //======================================================================
         // 1. process loading commands
         //======================================================================
@@ -450,6 +455,12 @@ namespace ImmPlayer
         piRenderer* renderer, piLog *log, Drawing::ColorSpace colorSpace)
     {
         Document::LoadingState st = mState.mLoadingState;
+
+        // Layers whose CPU geometry was rebuilt this frame get their GPU data replaced here,
+        // one layer at a time, in place of the renderer's own load/unload entry points.
+        if (mEditing && st == LoadingState::Loaded && !mDirtyGPU.empty())
+            iApplyDirtyGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log);
+
         if (st == LoadingState::LoadingGPU)
         {
             if (!iLoadGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log, colorSpace))
@@ -470,6 +481,127 @@ namespace ImmPlayer
 
         // should we animate+render?
         return (mState.mLoadingState == Document::LoadingState::Loaded && mState.mPlaybackState != Document::PlaybackState::PausedAndHidden);
+    }
+
+    //--------------------------------------------------------------------------
+    // Live editing
+    //--------------------------------------------------------------------------
+
+    bool Document::AttachEditing(void)
+    {
+        // A document can be edited once it is either fully loaded or idle (created empty).
+        if (mState.mLoadingState != LoadingState::Loaded &&
+            mState.mLoadingState != LoadingState::UnloadingCompleted)
+            return false;
+
+        mEditing = true;
+        return true;
+    }
+
+    void Document::MarkLayerGeometryDirty(ImmImporter::Layer * layer)
+    {
+        if (!mEditing || layer == nullptr)
+            return;
+
+        for (const ImmImporter::Layer * queued : mDirtyCPU)
+        {
+            if (queued == layer)
+                return; // already waiting for its CPU pass
+        }
+
+        // A layer sitting in the GPU queue has stale CPU geometry now, so it goes back.
+        for (size_t i = 0; i < mDirtyGPU.size(); i++)
+        {
+            if (mDirtyGPU[i] == layer)
+            {
+                mDirtyGPU.erase(mDirtyGPU.begin() + i);
+                break;
+            }
+        }
+
+        mDirtyCPU.push_back(layer);
+    }
+
+    uint64_t Document::CommitEdits(void)
+    {
+        // The revision advances here; the queued layers reach the renderer over the next CPU
+        // and GPU passes, which is what HasPendingEdits() reports.
+        mRevision++;
+        return mRevision;
+    }
+
+    void Document::iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, piLog * log)
+    {
+        if (mDirtyCPU.empty())
+            return;
+
+        std::vector<ImmImporter::Layer *> layers;
+        layers.swap(mDirtyCPU);
+
+        for (ImmImporter::Layer * layer : layers)
+        {
+            if (layer == nullptr)
+                continue;
+
+            const Layer::Type layerType = layer->GetType();
+            if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
+            {
+                // Same pair the loader uses, for one layer instead of the whole document.
+                layerPaintRender->UnloadInCPU(log, layer);
+                if (!layerPaintRender->LoadInCPU(log, layer))
+                    log->Printf(LT_ERROR, L"Live edit: CPU geometry rebuild failed for layer %d", static_cast<int>(layer->GetID()));
+            }
+            else if (layerType == Layer::Type::Picture && layerRenderPicture != nullptr)
+            {
+                layerRenderPicture->UnloadInCPU(log, layer);
+                layerRenderPicture->LoadInCPU(log, layer);
+            }
+            else
+            {
+                log->Printf(LT_ERROR, L"Live edit: layer %d of type %d cannot be refreshed", static_cast<int>(layer->GetID()), static_cast<int>(layerType));
+                continue;
+            }
+
+            mDirtyGPU.push_back(layer);
+        }
+    }
+
+    void Document::iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,
+        LayerRendererModel * layerRenderModel, piRenderer * renderer, piLog * log)
+    {
+        if (mDirtyGPU.empty())
+            return;
+
+        std::vector<ImmImporter::Layer *> layers;
+        layers.swap(mDirtyGPU);
+
+        for (ImmImporter::Layer * layer : layers)
+        {
+            if (layer == nullptr)
+                continue;
+
+            const Layer::Type layerType = layer->GetType();
+            if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
+            {
+                layerPaintRender->UnloadInGPU(renderer, nullptr, log, layer);
+                if (!layerPaintRender->LoadInGPU(renderer, nullptr, log, layer))
+                    log->Printf(LT_ERROR, L"Live edit: GPU upload failed for layer %d", static_cast<int>(layer->GetID()));
+            }
+            else if (layerType == Layer::Type::Picture && layerRenderPicture != nullptr)
+            {
+                layerRenderPicture->UnloadInGPU(renderer, nullptr, log, layer);
+                layerRenderPicture->LoadInGPU(renderer, nullptr, log, layer);
+            }
+            else if (layerType == Layer::Type::Model && layerRenderModel != nullptr)
+            {
+                layerRenderModel->UnloadInGPU(renderer, nullptr, log, layer);
+                layerRenderModel->LoadInGPU(renderer, nullptr, log, layer);
+            }
+            else
+            {
+                log->Printf(LT_ERROR, L"Live edit: layer %d of type %d cannot be re-uploaded", static_cast<int>(layer->GetID()), static_cast<int>(layerType));
+            }
+        }
     }
 
     void Document::UnloadSync(

@@ -30,6 +30,12 @@ namespace ImmImporter
 		bool  Add(const Element * ele, ColorSpace colorSpace, bool flipped);
 		void  StopAdding(void);
 
+		// Live editing: rebuild this drawing's vertices, indices and chunks from new element
+		// data. The previous geometry is dropped and the new elements go through the same
+		// builder the importer uses, so the result is what an import of the same points would
+		// have produced. The caller keeps ownership of the elements.
+		bool  ReplaceGeometry(const Element * elements, int numElements, ColorSpace colorSpace, bool flipped, float biggestStroke) override;
+
 		void     SetGpuId(int id);
 		int      GetGpuId(void) const;
 

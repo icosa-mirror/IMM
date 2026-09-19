@@ -533,6 +533,68 @@ namespace ImmPlayer
         return true;
     }
 
+    //--------------------------------------------------------------------------
+    // Live editing
+    //--------------------------------------------------------------------------
+
+    bool Player::AttachEditing(int docId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc)
+            return false;
+        return doc->AttachEditing();
+    }
+
+    bool Player::IsEditing(int docId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        return doc != nullptr && doc->IsEditing();
+    }
+
+    uint64_t Player::CommitEdits(int docId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc || !doc->IsEditing())
+            return 0;
+        return doc->CommitEdits();
+    }
+
+    bool Player::ReplaceDrawingGeometry(int docId, int layerId, int drawingIndex,
+        const Element * elements, int numElements,
+        Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc || !doc->IsEditing())
+            return false;
+        if (elements == nullptr || numElements <= 0)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer || layer->GetType() != Layer::Type::Paint)
+            return false;
+
+        LayerPaint *layerPaint = (LayerPaint *)layer->GetImplementation();
+        if (layerPaint == nullptr)
+            return false;
+        if (drawingIndex < 0 || static_cast<unsigned int>(drawingIndex) >= layerPaint->GetNumDrawings())
+            return false;
+
+        Drawing *drawing = layerPaint->GetDrawing(drawingIndex);
+        if (drawing == nullptr)
+            return false;
+        if (!drawing->ReplaceGeometry(elements, numElements, colorSpace, flipped, biggestStroke))
+            return false;
+
+        // Regenerated on the next CPU pass, re-uploaded on the GPU pass after it.
+        doc->MarkLayerGeometryDirty(layer);
+        return true;
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);

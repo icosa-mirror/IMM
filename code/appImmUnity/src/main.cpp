@@ -85,6 +85,9 @@
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
+#include "libImmImporter/src/document/layerPaint/element.h"
+#include "libImmCore/src/libCompression/basic/piQuantize.h"
+#include <new>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -1983,6 +1986,103 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerI
     if (outDiag == nullptr)
         return false;
     return iPlayer().GetLayerDiagnostics(docId, layerId, *outDiag);
+}
+
+//----------------------------------------------------------------------------
+// Live document editing (see docs/runtime-live-document-api.md).
+// Additive: nothing here runs unless a document is attached for editing, and
+// attaching changes no behaviour of the ordinary load and playback paths.
+//----------------------------------------------------------------------------
+
+struct ImmAuthoringPointC
+{
+    float px, py, pz;   // position
+    float nx, ny, nz;   // normal
+    float dx, dy, dz;   // view direction
+    float r, g, b;      // colour, 0..1
+    float alpha;        // 0..1
+    float width;        // world units
+    float length;
+    float time;
+};
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int docId)
+{
+    return iPlayer().AttachEditing(docId) ? 0 : -1;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int docId)
+{
+    return iPlayer().IsEditing(docId) ? 1 : 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int docId, unsigned long long *revisionOut)
+{
+    const uint64_t revision = iPlayer().CommitEdits(docId);
+    if (revision == 0)
+        return -4; // not attached
+    if (revisionOut != nullptr)
+        *revisionOut = revision;
+    return 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
+    int docId, int layerId, int drawingIndex, int brush, int visible,
+    const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace)
+{
+    if (points == nullptr)
+        return -2;
+    if (numPoints < 2 || numPoints > 8192) // Element holds a fixed 8192-point array
+        return -2;
+    if (brush <= static_cast<int>(ImmImporter::Element::BrushSectionType::Point) ||
+        brush >= static_cast<int>(ImmImporter::Element::BrushSectionType::Count))
+        return -3; // point sections are not representable in the paint exporter or the runtime
+
+    if (biggestStroke <= 0.0f)
+    {
+        biggestStroke = 0.0f;
+        for (int i = 0; i < numPoints; i++)
+        {
+            if (points[i].width > biggestStroke)
+                biggestStroke = points[i].width;
+        }
+        if (biggestStroke <= 0.0f)
+            return -2;
+    }
+
+    // Element is a fixed 8192-point block (~512 KB), so it is built on the heap.
+    ImmImporter::Element *element = new (std::nothrow) ImmImporter::Element();
+    if (element == nullptr)
+        return -5;
+
+    element->Make(numPoints,
+        static_cast<ImmImporter::Element::BrushSectionType>(brush),
+        static_cast<ImmImporter::Element::VisibilityType>(visible));
+
+    ImmImporter::Point *dst = element->GetPoints();
+    for (int i = 0; i < numPoints; i++)
+    {
+        const ImmAuthoringPointC &src = points[i];
+        dst[i].mPos = ImmCore::vec3(src.px, src.py, src.pz);
+        dst[i].mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
+        dst[i].mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
+        dst[i].mCol = ImmCore::vec3(src.r, src.g, src.b);
+        // Same quantisation the exporter applies before writing a file, so a live edit and an
+        // export of the same points describe the pixels identically.
+        dst[i].mTra = ImmCore::piQuantize::bits8(src.alpha);
+        dst[i].mWid = ImmCore::piQuantize::bits15(src.width / (1.7f * biggestStroke));
+        dst[i].mLen = src.length;
+        dst[i].mTim = src.time;
+    }
+
+    element->Compute(biggestStroke);
+
+    const bool replaced = iPlayer().ReplaceDrawingGeometry(
+        docId, layerId, drawingIndex, element, 1,
+        static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), false, biggestStroke);
+
+    delete element;
+    return replaced ? 0 : -1;
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Pause(int id)

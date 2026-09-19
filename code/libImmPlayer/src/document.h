@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <vector>
 
 #include "libImmCore/src/libBasics/piMutex.h"
 
@@ -157,6 +158,36 @@ namespace ImmPlayer {
         void SetCommandId(int id);
         int  GetCommandId(void);
         bool IsSequenceReady(void) const { return mSequenceReady; }
+
+        //----------------------------------------------------------------------
+        // Live editing. Additive: nothing changes for a document that is only
+        // playing, because dirty refreshes run only after AttachEditing and only
+        // in the Loaded state.
+        //----------------------------------------------------------------------
+
+        bool AttachEditing(void);
+        bool IsEditing(void) const { return mEditing; }
+        uint64_t GetRevision(void) const { return mRevision; }
+
+        // Queue one layer for per-layer regeneration: the next CPU pass rebuilds its
+        // geometry, the following GPU pass re-uploads it, and no other layer is touched.
+        void MarkLayerGeometryDirty(ImmImporter::Layer * layer);
+        bool HasPendingEdits(void) const { return !mDirtyCPU.empty() || !mDirtyGPU.empty(); }
+
+        // Publish queued edits. The revision advances once the queues have been applied.
+        uint64_t CommitEdits(void);
+
+    private:
+        bool mEditing = false;
+        bool mCommitRequested = false;
+        uint64_t mRevision = 0;
+        std::vector<ImmImporter::Layer *> mDirtyCPU;
+        std::vector<ImmImporter::Layer *> mDirtyGPU;
+
+        void iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, ImmCore::piLog * log);
+        void iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,
+            LayerRendererModel * layerRenderModel, ImmCore::piRenderer * renderer, ImmCore::piLog * log);
+
     private:
         bool iLoadCPU(ImmCore::piLog *log, ImmCore::piSoundEngine* soundEngine,
             LayerRendererPaint *layerPaintRender,

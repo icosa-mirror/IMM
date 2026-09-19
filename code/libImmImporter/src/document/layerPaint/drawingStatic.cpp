@@ -327,6 +327,40 @@ namespace ImmImporter
         */
     }
 
+    bool DrawingStatic::ReplaceGeometry(const Element * elements, int numElements, ColorSpace colorSpace, bool flipped, float biggestStroke)
+    {
+        if (numElements < 0 || (numElements > 0 && elements == nullptr))
+            return false;
+
+        // StartAdding/StopAdding append to whatever the buffers already hold, so the previous
+        // geometry has to go first. Capacity is kept, the next Add re-grows the lengths.
+        for (int i = 0; i < kNumBrushTypes; i++)
+        {
+            mGeometry.mBuffers[i].mPoints.SetLength(0);
+            mGeometry.mBuffers[i].mIndices.SetLength(0);
+            mGeometry.mBuffers[i].mChunks.SetLength(0);
+        }
+
+        if (numElements == 0)
+        {
+            // Nothing to add: Add() is what normally seeds the bbox, so clear it here.
+            mBBox = bound3(1e20f);
+            return StartAdding(biggestStroke) ? (StopAdding(), true) : false;
+        }
+
+        if (!StartAdding(biggestStroke))
+            return false;
+
+        for (int i = 0; i < numElements; i++)
+        {
+            if (!Add(&elements[i], colorSpace, flipped))
+                return false;
+        }
+
+        StopAdding();
+        return true;
+    }
+
     const uint32_t DrawingStatic::GetNumStrokes(void) const
     {
         return mGeometry.mNumStrokes;

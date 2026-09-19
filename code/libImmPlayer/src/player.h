@@ -116,6 +116,22 @@ namespace ImmPlayer {
         bool SetLayerTransform(int docId, int layerId, const ImmCore::trans3d & transform);
         bool ClearLayerTransformOverride(int docId, int layerId);
 
+        //----------------------------------------------------------------------
+        // Live editing. Additive: a document only enters this path after
+        // AttachEditing succeeds, and a queued layer is refreshed on the next
+        // CPU and GPU passes (see Document::MarkLayerGeometryDirty).
+        //----------------------------------------------------------------------
+
+        bool AttachEditing(int docId);
+        bool IsEditing(int docId);
+        uint64_t CommitEdits(int docId);
+
+        // Replace one drawing's geometry with the given elements. The elements stay owned by
+        // the caller: they are only read while the drawing rebuilds its own buffers.
+        bool ReplaceDrawingGeometry(int docId, int layerId, int drawingIndex,
+            const ImmImporter::Element * elements, int numElements,
+            ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
+
         struct LayerDiagnostics
         {
             int hasVisibilityKeys = 0;

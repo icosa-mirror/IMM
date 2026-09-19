@@ -43,6 +43,15 @@ namespace ImmImporter
 		virtual const uint32_t GetNumStrokes(void) const = 0;
 		virtual const uint32_t GetNumGeometryChunks(uint32_t type) const = 0;
 
+		// Live editing: rebuild this drawing's geometry from new elements. The default is to
+		// refuse, so representations that cannot be rebuilt in place (pretessellated) report
+		// failure instead of silently doing nothing.
+		virtual bool ReplaceGeometry(const Element * elements, int numElements, ColorSpace colorSpace, bool flipped, float biggestStroke)
+		{
+			(void)elements; (void)numElements; (void)colorSpace; (void)flipped; (void)biggestStroke;
+			return false;
+		}
+
 	protected:
 		virtual void iAppendChunk(const uint32_t vbase, const uint32_t ibase, const uint32_t pbase, const uint32_t numPoints, uint32_t numIndices, uint32_t numPolygons, const bound3 & bbox, const uint32_t type, float biggestStroke) = 0;
 	};
