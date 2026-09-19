@@ -105,6 +105,7 @@
 #include <string>
 #endif
 #include "IUnityGraphics.h"
+#include "imm_authoring.h"
 // Unity<->IMM Vulkan overlay integration is available on Windows (desktop) and
 // Android (Quest). The Unity Vulkan interface header is self-contained (defines
 // its own Vk* typedefs) and the Vulkan renderer is already built into the arm64
@@ -1995,41 +1996,6 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerI
 // attaching changes no behaviour of the ordinary load and playback paths.
 //----------------------------------------------------------------------------
 
-struct ImmAuthoringPointC
-{
-    float px, py, pz;   // position
-    float nx, ny, nz;   // normal
-    float dx, dy, dz;   // view direction
-    float r, g, b;      // colour, 0..1
-    float alpha;        // 0..1
-    float width;        // world units
-    float length;
-    float time;
-};
-
-struct ImmAuthoringRevisionsC
-{
-    uint32_t structSize;
-    uint32_t structVersion;
-    uint64_t requested;
-    uint64_t prepared;
-    uint64_t presented;
-};
-
-struct ImmAuthoringCommitStatusC
-{
-    uint32_t structSize;
-    uint32_t structVersion;
-    uint64_t revision;
-    int32_t state;
-    int32_t result;
-    uint32_t failingCommand;
-    uint32_t reserved;
-    uint64_t object;
-};
-
-static constexpr uint32_t kImmAuthoringStructVersion = 1;
-
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int docId)
 {
     return iPlayer().AttachEditing(docId) ? 0 : -1;
@@ -2068,10 +2034,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(in
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisions(
-    int docId, ImmAuthoringRevisionsC *revisionsOut)
+    int docId, ImmAuthoringRevisions *revisionsOut)
 {
-    if (revisionsOut == nullptr || revisionsOut->structVersion != kImmAuthoringStructVersion ||
-        revisionsOut->structSize < sizeof(ImmAuthoringRevisionsC))
+    if (revisionsOut == nullptr || revisionsOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
+        revisionsOut->structSize < sizeof(ImmAuthoringRevisions))
         return -2;
 
     ImmPlayer::Document::AuthoringRevisions revisions;
@@ -2084,10 +2050,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisi
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommitStatus(
-    int docId, unsigned long long revision, ImmAuthoringCommitStatusC *statusOut)
+    int docId, unsigned long long revision, ImmAuthoringCommitStatus *statusOut)
 {
-    if (statusOut == nullptr || statusOut->structVersion != kImmAuthoringStructVersion ||
-        statusOut->structSize < sizeof(ImmAuthoringCommitStatusC))
+    if (statusOut == nullptr || statusOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
+        statusOut->structSize < sizeof(ImmAuthoringCommitStatus))
         return -2;
 
     ImmPlayer::Document::AuthoringCommitStatus status;
@@ -2116,7 +2082,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGe
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
     int docId, int layerId, int brush, int visible,
-    const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace, int frameIndex,
+    const ImmAuthoringPoint *points, int numPoints, float biggestStroke, int colorSpace, int frameIndex,
     int *drawingIndexOut)
 {
     (void)docId; (void)layerId; (void)brush; (void)visible; (void)points;
@@ -2134,7 +2100,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
     int docId, int layerId, unsigned long long drawingId, int brush, int visible,
-    const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace)
+    const ImmAuthoringPoint *points, int numPoints, float biggestStroke, int colorSpace)
 {
     if (layerId < 0 || drawingId == 0)
         return -2;
@@ -2166,7 +2132,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSe
     std::vector<ImmImporter::Element::PointSource> sources(numPoints);
     for (int i = 0; i < numPoints; i++)
     {
-        const ImmAuthoringPointC &src = points[i];
+        const ImmAuthoringPoint &src = points[i];
         ImmImporter::Element::PointSource &dst = sources[i];
         dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
         dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
