@@ -1376,7 +1376,7 @@ static uint64_t iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &l
     const auto editStart = Clock::now();
     const bool replaced = resolved && player->QueueDrawingGeometry(
         docId, static_cast<uint32_t>(layerId), drawingId, std::move(elements),
-        ImmImporter::Drawing::ColorSpace::Gamma, false, biggestStroke);
+        ImmImporter::Drawing::ColorSpace::Gamma, false, biggestStroke) == 0;
     const auto editEnd = Clock::now();
 
     const auto commitStart = Clock::now();

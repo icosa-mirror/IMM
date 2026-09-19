@@ -654,13 +654,15 @@ namespace ImmPlayer
         return true;
     }
 
-    bool Player::QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
+    int32_t Player::QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
         std::vector<Document::AuthoringElementGeometry> elements,
         Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
     {
         std::lock_guard<std::mutex> guard(mMutex);
         Document *doc = (Document *)mDocuments.GetAddress(docId);
-        return doc != nullptr && doc->QueueDrawingGeometry(
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueDrawingGeometry(
             layerId, drawingId, std::move(elements), colorSpace, flipped, biggestStroke);
     }
 

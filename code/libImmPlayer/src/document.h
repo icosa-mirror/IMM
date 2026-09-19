@@ -208,7 +208,7 @@ namespace ImmPlayer {
         };
 
         bool GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const;
-        bool QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
+        int32_t QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;

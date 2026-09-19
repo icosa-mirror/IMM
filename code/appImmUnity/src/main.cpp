@@ -2183,12 +2183,10 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSe
         if (biggestStroke < maximumPointWidth)
             return -6;
 
-        const bool queued = iPlayer().QueueDrawingGeometry(
+        return iPlayer().QueueDrawingGeometry(
             docId, static_cast<uint32_t>(layerId), drawingId, std::move(elements),
             static_cast<ImmImporter::Drawing::ColorSpace>(geometry->colorSpace),
             geometry->flipped != 0, biggestStroke);
-
-        return queued ? 0 : -1;
     }
     catch (const std::bad_alloc &)
     {

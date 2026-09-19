@@ -624,19 +624,21 @@ namespace ImmPlayer
         return false;
     }
 
-    bool Document::QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
+    int32_t Document::QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
         std::vector<AuthoringElementGeometry> elements,
         Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
     {
-        if (!mEditing || elements.empty() || biggestStroke <= 0.0f)
-            return false;
+        if (!mEditing)
+            return -4;
+        if (elements.empty() || biggestStroke <= 0.0f)
+            return -2;
         if (iFindDrawingHandle(layerId, drawingId) == nullptr)
-            return false;
+            return -1;
 
         // This first vertical slice intentionally permits one replacement per batch. It keeps
         // failure atomic until replacement layer bundles support multi-command preparation.
         if (!mOpenGeometryEdits.empty())
-            return false;
+            return -7;
 
         GeometryEdit edit;
         edit.mLayerId = layerId;
@@ -646,7 +648,7 @@ namespace ImmPlayer
         edit.mFlipped = flipped;
         edit.mBiggestStroke = biggestStroke;
         mOpenGeometryEdits.push_back(std::move(edit));
-        return true;
+        return 0;
     }
 
     bool Document::GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const
