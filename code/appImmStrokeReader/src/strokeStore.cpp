@@ -7,6 +7,7 @@
 
 #include "libImmCore/src/libBasics/piStr.h"
 #include "libImmImporter/src/document/sequence.h"
+#include "libImmImporter/src/document/layerSpawnArea.h"
 
 namespace ImmStrokeReader
 {
@@ -307,6 +308,31 @@ bool StrokeStore::GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const
     const size_t copyLen = std::min(utf8Name.size(), sizeof(info->name) - 1);
     std::memcpy(info->name, utf8Name.data(), copyLen);
 
+    return true;
+}
+
+bool StrokeStore::GetLayerSpawnAreaInfo(int layerIdx, StrokeSpawnAreaInfoC* info) const
+{
+    if (info == nullptr)
+        return false;
+    // Authoring layer index space: the viewpoint data is captured while the
+    // authoring layer graph is built during import.
+    if (layerIdx < 0 || layerIdx >= static_cast<int>(mDocument.authoringLayers.size()))
+        return false;
+
+    const StoredLayer& layer = mDocument.authoringLayers[layerIdx];
+    if (layer.layerType != static_cast<uint32_t>(ImmImporter::Layer::Type::SpawnArea))
+        return false;
+
+    info->isFloorLevel = layer.isFloorLevel ? 1 : 0;
+    info->volumeType = layer.spawnVolumeType;
+    info->volumeOffsetX = layer.spawnVolumeOffset[0];
+    info->volumeOffsetY = layer.spawnVolumeOffset[1];
+    info->volumeOffsetZ = layer.spawnVolumeOffset[2];
+    info->volumeExtentX = layer.spawnVolumeExtent[0];
+    info->volumeExtentY = layer.spawnVolumeExtent[1];
+    info->volumeExtentZ = layer.spawnVolumeExtent[2];
+    info->locomotion = layer.spawnLocomotion;
     return true;
 }
 
@@ -789,6 +815,40 @@ void StrokeStore::CaptureSequenceMetadata(ImmImporter::Sequence& sequence)
 
             captured.layerId = layer->GetID();
             captured.layerType = static_cast<uint32_t>(layer->GetType());
+            if (layer->GetType() == ImmImporter::Layer::Type::SpawnArea)
+            {
+                const ImmImporter::LayerSpawnArea* spawnArea =
+                    reinterpret_cast<const ImmImporter::LayerSpawnArea*>(layer->GetImplementation());
+                if (spawnArea != nullptr)
+                {
+                    captured.isFloorLevel =
+                        spawnArea->GetTracking() == ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+                    const ImmImporter::LayerSpawnArea::Volume& volume = spawnArea->GetVolume();
+                    captured.spawnVolumeType = static_cast<int>(volume.mType);
+                    if (volume.mType == ImmImporter::LayerSpawnArea::Volume::Type::Box)
+                    {
+                        const ImmCore::vec3 centre = getcenter(volume.mShape.mBox);
+                        const ImmCore::vec3 radii = getradiius(volume.mShape.mBox);
+                        captured.spawnVolumeOffset[0] = centre.x;
+                        captured.spawnVolumeOffset[1] = centre.y;
+                        captured.spawnVolumeOffset[2] = centre.z;
+                        captured.spawnVolumeExtent[0] = radii.x;
+                        captured.spawnVolumeExtent[1] = radii.y;
+                        captured.spawnVolumeExtent[2] = radii.z;
+                    }
+                    else
+                    {
+                        captured.spawnVolumeOffset[0] = volume.mShape.mSphere.x;
+                        captured.spawnVolumeOffset[1] = volume.mShape.mSphere.y;
+                        captured.spawnVolumeOffset[2] = volume.mShape.mSphere.z;
+                        captured.spawnVolumeExtent[0] = volume.mShape.mSphere.w;
+                    }
+                    captured.spawnLocomotion =
+                        ((volume.mAllowTranslationX ? 1 : 0) << 2) |
+                        ((volume.mAllowTranslationY ? 1 : 0) << 1) |
+                        ((volume.mAllowTranslationZ ? 1 : 0) << 0);
+                }
+            }
             captured.name = layer->GetName().GetS();
             captured.visible = layer->GetVisible();
             captured.opacity = layer->GetOpacity();

@@ -205,6 +205,18 @@ namespace ImmPlayer
         public static extern int StrokeReader_GetAuthoringStrokeCount(int docId, int layerIdx, int drawingIdx);
 
         /// <summary>
+        /// Viewpoint data of a spawn-area layer (floor level, locomotion volume, locomotion mask).
+        /// </summary>
+        /// <param name="docId">Document ID</param>
+        /// <param name="layerIdx">Layer index</param>
+        /// <param name="info">Output viewpoint struct</param>
+        /// <returns>False when the layer is not a spawn area or the indices are invalid</returns>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetLayerSpawnAreaInfo(
+            int docId, int layerIdx, out StrokeSpawnAreaInfo info);
+
+        /// <summary>
         /// Largest single-element bounding-box extent in a drawing, in document units.
         /// </summary>
         /// <param name="docId">Document ID</param>
@@ -348,6 +360,33 @@ namespace ImmPlayer
         public float pivotTransX => legacy.pivotTransX;
         public float pivotTransY => legacy.pivotTransY;
         public float pivotTransZ => legacy.pivotTransZ;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSpawnAreaInfo
+    {
+        /// <summary>1 when the viewpoint is floor level, 0 for eye level.</summary>
+        public int isFloorLevel;
+
+        /// <summary>0 = sphere volume, 1 = box volume.</summary>
+        public int volumeType;
+
+        public float volumeOffsetX;
+        public float volumeOffsetY;
+        public float volumeOffsetZ;
+
+        /// <summary>Sphere radius in X for a sphere volume; the three radii for a box volume.</summary>
+        public float volumeExtentX;
+        public float volumeExtentY;
+        public float volumeExtentZ;
+
+        /// <summary>Locomotion mask: bit2 = allow X, bit1 = allow Y, bit0 = allow Z.</summary>
+        public int locomotion;
+
+        public bool IsFloorLevel => isFloorLevel != 0;
+        public bool AllowTranslationX => (locomotion & 4) != 0;
+        public bool AllowTranslationY => (locomotion & 2) != 0;
+        public bool AllowTranslationZ => (locomotion & 1) != 0;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -667,6 +706,15 @@ namespace ImmPlayer
         {
             info = default;
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetAuthoringLayerInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>
+        /// Viewpoint data of a spawn-area layer. Returns false for any other layer type.
+        /// </summary>
+        public bool GetLayerSpawnAreaInfo(int layerIdx, out StrokeSpawnAreaInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(_docId, layerIdx, out info);
         }
 
         public bool GetAuthoringLayerTransform(int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world)

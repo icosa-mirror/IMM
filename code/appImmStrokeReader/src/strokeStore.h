@@ -43,6 +43,21 @@ struct StrokeAuthoringLayerInfoC
     uint32_t maxRepeatCount;
 };
 
+// Viewpoint data of a spawn-area layer. Volume extent holds the radius in X for
+// a sphere volume and the three radii for a box volume.
+struct StrokeSpawnAreaInfoC
+{
+    int isFloorLevel;
+    int volumeType;                 // 0 = sphere, 1 = box
+    float volumeOffsetX;
+    float volumeOffsetY;
+    float volumeOffsetZ;
+    float volumeExtentX;
+    float volumeExtentY;
+    float volumeExtentZ;
+    int locomotion;                 // bit2 = allow X, bit1 = allow Y, bit0 = allow Z
+};
+
 struct StrokeLayerTransformC
 {
     float rotation[4];
@@ -151,6 +166,12 @@ struct StoredLayer
     int pictureHeight = 0;
     bool pictureHasAlpha = false;
     bool isDefaultSpawn = false;
+    // Spawn-area viewpoint data (only meaningful for Layer::Type::SpawnArea).
+    bool isFloorLevel = false;
+    int spawnVolumeType = 0;                            // 0 = sphere, 1 = box
+    float spawnVolumeOffset[3] = { 0.0f, 0.0f, 0.0f };
+    float spawnVolumeExtent[3] = { 0.0f, 0.0f, 0.0f };  // sphere: [0] is the radius
+    int spawnLocomotion = 0;                            // bit2 = X, bit1 = Y, bit0 = Z
     int32_t parentId = 0;
     int32_t childIndex = 0;
     bool isTimeline = false;
@@ -218,6 +239,7 @@ public:
     // Query interface
     int GetLayerCount() const;
     bool GetLayerInfo(int layerIdx, StrokeLayerInfoC* info) const;
+    bool GetLayerSpawnAreaInfo(int layerIdx, StrokeSpawnAreaInfoC* info) const;
     bool GetLayerTransform(int layerIdx, StrokeLayerTransformC* local, StrokeLayerTransformC* world, bool authoring = false) const;
     int GetDrawingCount(int layerIdx, bool authoring = false) const;
     bool GetDrawingBiggestStroke(int layerIdx, int drawingIdx, float* biggestStroke, bool authoring = false) const;

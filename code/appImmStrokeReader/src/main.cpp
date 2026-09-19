@@ -372,6 +372,20 @@ extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayer
     return it->second->GetLayerTransform(layerIdx, localTransform, worldTransform);
 }
 
+// Viewpoint data of a spawn-area layer; false for layers of any other type.
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetLayerSpawnAreaInfo(
+    int docId,
+    int layerIdx,
+    StrokeSpawnAreaInfoC* info)
+{
+    std::lock_guard<std::mutex> lock(gStrokeReader.mMutex);
+    if (!gStrokeReader.mInitialized || info == nullptr)
+        return false;
+
+    auto it = gStrokeReader.mDocuments.find(docId);
+    return it != gStrokeReader.mDocuments.end() && it->second->GetLayerSpawnAreaInfo(layerIdx, info);
+}
+
 extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API StrokeReader_GetAuthoringLayerTransform(
     int docId,
     int layerIdx,

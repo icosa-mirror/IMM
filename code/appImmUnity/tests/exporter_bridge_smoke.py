@@ -113,6 +113,22 @@ class PerformanceInfo(ctypes.Structure):
     ]
 
 
+class SpawnAreaInfo(ctypes.Structure):
+    """Mirror of the native StrokeSpawnAreaInfoC."""
+
+    _fields_ = [
+        ("isFloorLevel", ctypes.c_int),
+        ("volumeType", ctypes.c_int),
+        ("volumeOffsetX", ctypes.c_float),
+        ("volumeOffsetY", ctypes.c_float),
+        ("volumeOffsetZ", ctypes.c_float),
+        ("volumeExtentX", ctypes.c_float),
+        ("volumeExtentY", ctypes.c_float),
+        ("volumeExtentZ", ctypes.c_float),
+        ("locomotion", ctypes.c_int),
+    ]
+
+
 # Layer::AnimProperty / Layer::InterpolationType, mirrored by the managed enums.
 PROPERTY_VISIBILITY = 0
 PROPERTY_DRAW_IN_TIME = 5
@@ -691,6 +707,48 @@ def _verify_export_round_trip(reader: ctypes.CDLL, staging: Path, output_path: P
                 abs(actual - expected) < 1e-3,
                 f"viewpoint translation[{axis_index}] ({actual} != {expected})",
             )
+
+        # Spawn-area viewpoint data (floor level, volume, locomotion) must survive
+        # serialization too - the authoring importer depends on it to rebuild the
+        # viewpoint without marking the import lossy.
+        get_spawn_info = bind(
+            reader,
+            "StrokeReader_GetLayerSpawnAreaInfo",
+            ctypes.c_bool,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.POINTER(SpawnAreaInfo),
+        )
+        first_spawn = SpawnAreaInfo()
+        require(
+            get_spawn_info(document_id, first_index, ctypes.byref(first_spawn)),
+            "StrokeReader_GetLayerSpawnAreaInfo (sphere viewpoint)",
+        )
+        require(first_spawn.isFloorLevel == 1, "first viewpoint round-trips as floor level")
+        require(first_spawn.volumeType == 0, f"first viewpoint volume type ({first_spawn.volumeType} != sphere)")
+        require(abs(first_spawn.volumeExtentX - 1.25) < 1e-4, "first viewpoint sphere radius")
+        require(first_spawn.locomotion == 5, f"first viewpoint locomotion ({first_spawn.locomotion} != X|Z)")
+
+        second_spawn = SpawnAreaInfo()
+        require(
+            get_spawn_info(document_id, second_index, ctypes.byref(second_spawn)),
+            "StrokeReader_GetLayerSpawnAreaInfo (box viewpoint)",
+        )
+        require(second_spawn.isFloorLevel == 0, "second viewpoint round-trips as eye level")
+        require(second_spawn.volumeType == 1, f"second viewpoint volume type ({second_spawn.volumeType} != box)")
+        require(
+            abs(second_spawn.volumeExtentX - 1.0) < 1e-4
+            and abs(second_spawn.volumeExtentY - 2.0) < 1e-4
+            and abs(second_spawn.volumeExtentZ - 0.5) < 1e-4,
+            "second viewpoint box radii",
+        )
+        require(second_spawn.locomotion == 7, f"second viewpoint locomotion ({second_spawn.locomotion} != all axes)")
+
+        paint_spawn = SpawnAreaInfo()
+        require(
+            not get_spawn_info(document_id, index, ctypes.byref(paint_spawn)),
+            "StrokeReader_GetLayerSpawnAreaInfo rejects a paint layer",
+        )
     finally:
         unload(document_id)
         end()
