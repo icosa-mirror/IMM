@@ -57,6 +57,30 @@ typedef struct ImmAuthoringPoint
     float time;
 } ImmAuthoringPoint;
 
+typedef struct ImmAuthoringElementGeometry
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    int32_t brush;
+    int32_t visibility;
+    uint32_t pointCount;
+    uint32_t reserved;
+    const ImmAuthoringPoint * points;
+} ImmAuthoringElementGeometry;
+
+typedef struct ImmAuthoringDrawingGeometry
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    uint32_t elementCount;
+    uint32_t reserved0;
+    const ImmAuthoringElementGeometry * elements;
+    float biggestStroke;
+    int32_t colorSpace;
+    int32_t flipped;
+    uint32_t reserved1;
+} ImmAuthoringDrawingGeometry;
+
 typedef struct ImmAuthoringRevisions
 {
     uint32_t structSize;
@@ -89,8 +113,7 @@ IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int32_t
 IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
-    uint64_t drawingId, int32_t brush, int32_t visible, const ImmAuthoringPoint * points,
-    int32_t numPoints, float biggestStroke, int32_t colorSpace);
+    uint64_t drawingId, const ImmAuthoringDrawingGeometry * geometry);
 
 // Reserved exports retained while creation and frame mapping are implemented on the batch
 // model. Both currently return IMM_AUTHORING_UNSUPPORTED.

@@ -625,9 +625,10 @@ namespace ImmPlayer
     }
 
     bool Document::QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
-        const Element * elements, int numElements, Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
+        std::vector<AuthoringElementGeometry> elements,
+        Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
     {
-        if (!mEditing || elements == nullptr || numElements <= 0 || biggestStroke <= 0.0f)
+        if (!mEditing || elements.empty() || biggestStroke <= 0.0f)
             return false;
         if (iFindDrawingHandle(layerId, drawingId) == nullptr)
             return false;
@@ -637,17 +638,10 @@ namespace ImmPlayer
         if (!mOpenGeometryEdits.empty())
             return false;
 
-        std::unique_ptr<Element[]> copiedElements(new (std::nothrow) Element[numElements]);
-        if (!copiedElements)
-            return false;
-        for (int i = 0; i < numElements; i++)
-            copiedElements[i] = elements[i];
-
         GeometryEdit edit;
         edit.mLayerId = layerId;
         edit.mDrawingId = drawingId;
-        edit.mElements = std::move(copiedElements);
-        edit.mNumElements = numElements;
+        edit.mElements = std::move(elements);
         edit.mColorSpace = colorSpace;
         edit.mFlipped = flipped;
         edit.mBiggestStroke = biggestStroke;
@@ -738,18 +732,32 @@ namespace ImmPlayer
         }
 
         std::unique_ptr<DrawingStatic> replacement(new (std::nothrow) DrawingStatic());
-        if (!replacement || !replacement->Init(static_cast<uint32_t>(edit.mNumElements)))
+        if (!replacement || !replacement->Init(static_cast<uint32_t>(edit.mElements.size())) ||
+            !replacement->StartAdding(edit.mBiggestStroke))
         {
             iRejectCommit(batch.mRevision, -5, 0, edit.mDrawingId);
             return;
         }
-        if (!replacement->ReplaceGeometry(edit.mElements.get(), edit.mNumElements,
-            edit.mColorSpace, edit.mFlipped, edit.mBiggestStroke))
+
+        std::unique_ptr<Element> element(new (std::nothrow) Element());
+        bool geometryBuilt = element != nullptr;
+        for (const AuthoringElementGeometry & source : edit.mElements)
+        {
+            geometryBuilt = geometryBuilt && element->Set(source.mPoints.data(),
+                static_cast<int>(source.mPoints.size()), source.mBrush, source.mVisibility,
+                edit.mBiggestStroke);
+            geometryBuilt = geometryBuilt && replacement->Add(
+                element.get(), edit.mColorSpace, edit.mFlipped);
+            if (!geometryBuilt)
+                break;
+        }
+        if (!geometryBuilt)
         {
             replacement->Deinit();
             iRejectCommit(batch.mRevision, -5, 0, edit.mDrawingId);
             return;
         }
+        replacement->StopAdding();
         replacement->SetLoaded(activeStatic->GetLoaded());
 
         uint64_t rendererToken = 0;

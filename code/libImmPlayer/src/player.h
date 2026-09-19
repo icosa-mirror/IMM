@@ -134,13 +134,7 @@ namespace ImmPlayer {
         bool GetDrawingBBox(int docId, int layerId, int drawingIndex, ImmCore::bound3 & bboxOut);
 
         bool QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
-            const ImmImporter::Element * elements, int numElements,
-            ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
-
-        // Legacy index-based entry point used by the viewer harness. It resolves the session
-        // handle and copies the geometry into the current open authoring batch.
-        bool ReplaceDrawingGeometry(int docId, int layerId, int drawingIndex,
-            const ImmImporter::Element * elements, int numElements,
+            std::vector<Document::AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
 
         struct LayerDiagnostics

@@ -87,6 +87,7 @@
 #include "libImmImporter/src/document/layerSpawnArea.h"
 #include "libImmImporter/src/document/layerPaint/element.h"
 #include "libImmCore/src/libCompression/basic/piQuantize.h"
+#include <cmath>
 #include <new>
 #include <vector>
 #include <cstddef>
@@ -2099,67 +2100,100 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
-    int docId, int layerId, unsigned long long drawingId, int brush, int visible,
-    const ImmAuthoringPoint *points, int numPoints, float biggestStroke, int colorSpace)
+    int32_t docId, int32_t layerId, uint64_t drawingId, const ImmAuthoringDrawingGeometry *geometry)
 {
-    if (layerId < 0 || drawingId == 0)
-        return -2;
-    if (points == nullptr)
-        return -2;
-    if (numPoints < 2 || numPoints > 8192) // Element holds a fixed 8192-point array
-        return -2;
-    if (brush <= static_cast<int>(ImmImporter::Element::BrushSectionType::Point) ||
-        brush >= static_cast<int>(ImmImporter::Element::BrushSectionType::Count))
-        return -3; // point sections are not representable in the paint exporter or the runtime
+    constexpr uint32_t kMaxElements = 65536;
+    constexpr uint64_t kMaxTotalPoints = 1048576;
 
-    if (biggestStroke <= 0.0f)
+    if (layerId < 0 || drawingId == 0 || geometry == nullptr)
+        return -2;
+    if (geometry->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
+        return -3;
+    if (geometry->structSize < sizeof(ImmAuthoringDrawingGeometry) ||
+        geometry->elementCount == 0 || geometry->elementCount > kMaxElements ||
+        geometry->elements == nullptr || geometry->reserved0 != 0 || geometry->reserved1 != 0)
+        return -2;
+    if (geometry->colorSpace < static_cast<int32_t>(ImmImporter::Drawing::ColorSpace::Linear) ||
+        geometry->colorSpace > static_cast<int32_t>(ImmImporter::Drawing::ColorSpace::Gamma) ||
+        (geometry->flipped != 0 && geometry->flipped != 1))
+        return -2;
+
+    try
     {
-        biggestStroke = 0.0f;
-        for (int i = 0; i < numPoints; i++)
+        float biggestStroke = geometry->biggestStroke;
+        float maximumPointWidth = 0.0f;
+        uint64_t totalPoints = 0;
+        std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements;
+        elements.reserve(geometry->elementCount);
+
+        for (uint32_t elementIndex = 0; elementIndex < geometry->elementCount; elementIndex++)
         {
-            if (points[i].width > biggestStroke)
-                biggestStroke = points[i].width;
+            const ImmAuthoringElementGeometry &sourceElement = geometry->elements[elementIndex];
+            if (sourceElement.structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
+                return -3;
+            if (sourceElement.structSize < sizeof(ImmAuthoringElementGeometry) ||
+                sourceElement.reserved != 0 || sourceElement.points == nullptr ||
+                sourceElement.pointCount < 2 || sourceElement.pointCount > 8192)
+                return -2;
+            if (sourceElement.brush <= static_cast<int32_t>(ImmImporter::Element::BrushSectionType::Point) ||
+                sourceElement.brush >= static_cast<int32_t>(ImmImporter::Element::BrushSectionType::Count))
+                return -3; // point sections are not representable in the paint exporter or runtime
+            if (sourceElement.visibility < static_cast<int32_t>(ImmImporter::Element::VisibilityType::FadePow2) ||
+                sourceElement.visibility > static_cast<int32_t>(ImmImporter::Element::VisibilityType::Always))
+                return -2;
+
+            totalPoints += sourceElement.pointCount;
+            if (totalPoints > kMaxTotalPoints)
+                return -2;
+
+            ImmPlayer::Document::AuthoringElementGeometry element;
+            element.mBrush = static_cast<ImmImporter::Element::BrushSectionType>(sourceElement.brush);
+            element.mVisibility = static_cast<ImmImporter::Element::VisibilityType>(sourceElement.visibility);
+            element.mPoints.resize(sourceElement.pointCount);
+            for (uint32_t pointIndex = 0; pointIndex < sourceElement.pointCount; pointIndex++)
+            {
+                const ImmAuthoringPoint &src = sourceElement.points[pointIndex];
+                if (!std::isfinite(src.px) || !std::isfinite(src.py) || !std::isfinite(src.pz) ||
+                    !std::isfinite(src.nx) || !std::isfinite(src.ny) || !std::isfinite(src.nz) ||
+                    !std::isfinite(src.dx) || !std::isfinite(src.dy) || !std::isfinite(src.dz) ||
+                    !std::isfinite(src.r) || !std::isfinite(src.g) || !std::isfinite(src.b) ||
+                    !std::isfinite(src.alpha) || !std::isfinite(src.width) ||
+                    !std::isfinite(src.length) || !std::isfinite(src.time) ||
+                    src.alpha < 0.0f || src.alpha > 1.0f || src.width < 0.0f)
+                    return -6;
+                ImmImporter::Element::PointSource &dst = element.mPoints[pointIndex];
+                dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
+                dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
+                dst.mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
+                dst.mCol = ImmCore::vec3(src.r, src.g, src.b);
+                dst.mAlpha = src.alpha;
+                dst.mWidth = src.width;
+                dst.mLength = src.length;
+                dst.mTime = src.time;
+                if (src.width > maximumPointWidth)
+                    maximumPointWidth = src.width;
+            }
+            elements.push_back(std::move(element));
         }
+
         if (biggestStroke <= 0.0f)
+            biggestStroke = maximumPointWidth;
+        if (!std::isfinite(biggestStroke) || biggestStroke <= 0.0f)
             return -2;
-    }
+        if (biggestStroke < maximumPointWidth)
+            return -6;
 
-    // Element is a fixed 8192-point block (~512 KB), so it is built on the heap.
-    ImmImporter::Element *element = new (std::nothrow) ImmImporter::Element();
-    if (element == nullptr)
+        const bool queued = iPlayer().QueueDrawingGeometry(
+            docId, static_cast<uint32_t>(layerId), drawingId, std::move(elements),
+            static_cast<ImmImporter::Drawing::ColorSpace>(geometry->colorSpace),
+            geometry->flipped != 0, biggestStroke);
+
+        return queued ? 0 : -1;
+    }
+    catch (const std::bad_alloc &)
+    {
         return -5;
-
-    std::vector<ImmImporter::Element::PointSource> sources(numPoints);
-    for (int i = 0; i < numPoints; i++)
-    {
-        const ImmAuthoringPoint &src = points[i];
-        ImmImporter::Element::PointSource &dst = sources[i];
-        dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
-        dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
-        dst.mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
-        dst.mCol = ImmCore::vec3(src.r, src.g, src.b);
-        dst.mAlpha = src.alpha;
-        dst.mWidth = src.width;
-        dst.mLength = src.length;
-        dst.mTime = src.time;
     }
-
-    const bool built = element->Set(sources.data(), numPoints,
-        static_cast<ImmImporter::Element::BrushSectionType>(brush),
-        static_cast<ImmImporter::Element::VisibilityType>(visible),
-        biggestStroke);
-    if (!built)
-    {
-        delete element;
-        return -2;
-    }
-
-    const bool replaced = iPlayer().QueueDrawingGeometry(
-        docId, static_cast<uint32_t>(layerId), drawingId, element, 1,
-        static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), false, biggestStroke);
-
-    delete element;
-    return replaced ? 0 : -1;
 }
 
 extern "C" void UNITY_INTERFACE_EXPORT Pause(int id)

@@ -200,9 +200,16 @@ namespace ImmPlayer {
             uint64_t mObject = 0;
         };
 
+        struct AuthoringElementGeometry
+        {
+            ImmImporter::Element::BrushSectionType mBrush = ImmImporter::Element::BrushSectionType::Point;
+            ImmImporter::Element::VisibilityType mVisibility = ImmImporter::Element::VisibilityType::Always;
+            std::vector<ImmImporter::Element::PointSource> mPoints;
+        };
+
         bool GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const;
         bool QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
-            const ImmImporter::Element * elements, int numElements,
+            std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
@@ -230,8 +237,7 @@ namespace ImmPlayer {
         {
             uint32_t mLayerId = 0;
             uint64_t mDrawingId = 0;
-            std::unique_ptr<ImmImporter::Element[]> mElements;
-            int mNumElements = 0;
+            std::vector<AuthoringElementGeometry> mElements;
             ImmImporter::Drawing::ColorSpace mColorSpace = ImmImporter::Drawing::ColorSpace::Linear;
             bool mFlipped = false;
             float mBiggestStroke = 0.0f;

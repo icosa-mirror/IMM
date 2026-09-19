@@ -654,34 +654,13 @@ namespace ImmPlayer
     }
 
     bool Player::QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
-        const Element * elements, int numElements,
+        std::vector<Document::AuthoringElementGeometry> elements,
         Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
     {
         std::lock_guard<std::mutex> guard(mMutex);
         Document *doc = (Document *)mDocuments.GetAddress(docId);
         return doc != nullptr && doc->QueueDrawingGeometry(
-            layerId, drawingId, elements, numElements, colorSpace, flipped, biggestStroke);
-    }
-
-    bool Player::ReplaceDrawingGeometry(int docId, int layerId, int drawingIndex,
-        const Element * elements, int numElements,
-        Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
-    {
-        std::lock_guard<std::mutex> guard(mMutex);
-
-        Document *doc = (Document *)mDocuments.GetAddress(docId);
-        if (!doc || !doc->IsEditing())
-            return false;
-        if (elements == nullptr || numElements <= 0)
-            return false;
-
-        uint64_t drawingId = 0;
-        if (layerId < 0 || drawingIndex < 0 ||
-            !doc->GetDrawingHandle(static_cast<uint32_t>(layerId), static_cast<uint32_t>(drawingIndex), &drawingId))
-            return false;
-
-        return doc->QueueDrawingGeometry(static_cast<uint32_t>(layerId), drawingId,
-            elements, numElements, colorSpace, flipped, biggestStroke);
+            layerId, drawingId, std::move(elements), colorSpace, flipped, biggestStroke);
     }
 
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)

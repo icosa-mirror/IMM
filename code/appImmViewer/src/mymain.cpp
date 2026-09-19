@@ -1336,6 +1336,7 @@ static uint64_t iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &l
     // A short stroke of 16 points, deliberately offset from the origin so the document's
     // bounding box has to change if the geometry really was replaced.
     const int numPoints = 16;
+    const int numElements = 2;
     const float biggestStroke = 0.02f;
     std::vector<ImmImporter::Element::PointSource> points(numPoints);
     for (int i = 0; i < numPoints; i++)
@@ -1357,15 +1358,24 @@ static uint64_t iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &l
         !player->GetDrawingBBox(docId, layerId, 0, *drawingBoxBeforeOut))
         return 0;
 
-    ImmImporter::Element *element = new ImmImporter::Element();
-    const bool built = element->Set(points.data(), numPoints,
-        ImmImporter::Element::BrushSectionType::Circle,
-        ImmImporter::Element::VisibilityType::Always,
-        biggestStroke);
+    uint64_t drawingId = 0;
+    const bool resolved = player->GetDrawingHandle(docId, layerId, 0, drawingId);
+    std::vector<ImmPlayer::Document::AuthoringElementGeometry> elements;
+    elements.reserve(numElements);
+    for (int elementIndex = 0; elementIndex < numElements; elementIndex++)
+    {
+        ImmPlayer::Document::AuthoringElementGeometry element;
+        element.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+        element.mVisibility = ImmImporter::Element::VisibilityType::Always;
+        const auto begin = points.begin() + elementIndex * (numPoints / numElements);
+        const auto end = begin + (numPoints / numElements);
+        element.mPoints.assign(begin, end);
+        elements.push_back(std::move(element));
+    }
 
     const auto editStart = Clock::now();
-    const bool replaced = built && player->ReplaceDrawingGeometry(
-        docId, layerId, 0, element, 1,
+    const bool replaced = resolved && player->QueueDrawingGeometry(
+        docId, static_cast<uint32_t>(layerId), drawingId, std::move(elements),
         ImmImporter::Drawing::ColorSpace::Gamma, false, biggestStroke);
     const auto editEnd = Clock::now();
 
@@ -1373,12 +1383,10 @@ static uint64_t iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &l
     const uint64_t revision = player->CommitEdits(docId);
     const auto commitEnd = Clock::now();
 
-    delete element;
-
     log.Printf(LT_MESSAGE,
-        L"[IMM_LIVE_EDIT] frame=%d docId=%d layerId=%d points=%d attached=%d replaced=%d revision=%llu "
+        L"[IMM_LIVE_EDIT] frame=%d docId=%d layerId=%d elements=%d points=%d attached=%d replaced=%d revision=%llu "
         L"attachMs=%.3f editMs=%.3f commitMs=%.3f bboxBefore=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
-        frameId, docId, layerId, numPoints, attached ? 1 : 0, replaced ? 1 : 0,
+        frameId, docId, layerId, numElements, numPoints, attached ? 1 : 0, replaced ? 1 : 0,
         static_cast<unsigned long long>(revision),
         ms(attachStart, attachEnd), ms(editStart, editEnd), ms(commitStart, commitEnd),
         boxBefore.mMinX, boxBefore.mMinY, boxBefore.mMinZ,
