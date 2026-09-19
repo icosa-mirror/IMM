@@ -534,17 +534,40 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         if (dr == nullptr)
             return false;
 
-        const int id = dr->GetGpuId();
-        if (id == -1)
-            return false; // never loaded, so there is no slot to rebuild
+        // Release the drawing's existing slot the same way the layer-wide unload does, then
+        // allocate a fresh one for it. Calling Init() on a live slot crashes: it re-creates
+        // state the slot already owns.
+        const int previousId = dr->GetGpuId();
+        if (previousId != -1)
+        {
+            iSLayerDrawInfoStatic* previous = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(previousId);
+            if (previous != nullptr)
+            {
+                previous->End();
+                mLayerInfo.Free(previousId);
+            }
+            dr->SetGpuId(-1);
+        }
 
-        iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(id);
+        bool isNew = false;
+        uint64_t id = 0;
+        iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.Alloc(&isNew, &id, true);
         if (me == nullptr)
+        {
+            log->Printf(LT_ERROR, L"Live edit: no draw-info slot for layer drawing %u", drawingID);
             return false;
+        }
 
-        // Same pool slot, rebuilt from the drawing's current geometry: no allocation, so the
-        // pool neither grows nor moves under the renderer.
-        return me->Init(dr);
+        new (me) iSLayerDrawInfoStatic();
+
+        if (!me->Init(dr))
+        {
+            mLayerInfo.Free(id);
+            return false;
+        }
+
+        dr->SetGpuId(static_cast<int>(id));
+        return true;
     }
 
     void LayerRendererPaintStatic::PrepareForDisplay(StereoMode stereoMode)
