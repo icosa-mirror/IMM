@@ -2,6 +2,23 @@
 
 This directory contains C# wrapper classes for the IMM Unity native plugin.
 
+## Sample scenes
+
+| Scene | What it exercises |
+|---|---|
+| `Assets/Scenes/SampleScene.unity` | `ImmFeatureExamples`: player load/unload, playback, chapters, spawn areas, layer list and layer overrides. |
+| `Assets/Scenes/SampleSceneVR.unity` | The same feature panel plus `XrSceneBootstrap`/`OpenXRFlyRig` for XR. |
+| `Assets/Scenes/StrokeReaderSampleScene.unity` | `ImmStrokeReaderExample`: the stroke reader package without the player - document info, layers, drawings, strokes and points, authoring layers with animation keys and frame buffers, spawn-area viewpoints, picture pixels, chapters, the SharpQuill adapter and the plugin build id. |
+
+The stroke reader scene is registered in the build settings as *disabled* so it stays out
+of the CI player builds; open it directly, or regenerate it with
+**IMM > Create Stroke Reader Sample Scene** (headless equivalent:
+`-batchmode -quit -executeMethod ImmPlayer.EditorTools.StrokeReaderSampleSceneBuilder.CreateSampleScene`).
+
+Both the stroke reader scene and the playback scenes pick their document from
+`Assets/StreamingAssets` (a sample `.imm` file must be copied there), and the stroke
+reader example also accepts an explicit file path in the Inspector.
+
 ## Files
 
 - **ImmNativePlugin.cs** - Low-level P/Invoke declarations for native DLL functions
