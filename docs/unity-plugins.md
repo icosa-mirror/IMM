@@ -11,11 +11,18 @@ How to re-check after any native or wrapper change:
 ```powershell
 python tests/tools/verify_unity_plugin_exports.py            # every platform
 python tests/tools/verify_unity_plugin_exports.py --platform windows --json out.json
+python tests/tools/verify_unity_csharp.py                    # compile both package runtimes
 ```
 
-The tool reads the `[DllImport]` entry points out of the C# packages and the export
+The first tool reads the `[DllImport]` entry points out of the C# packages and the export
 tables out of the shipped binaries (PE, ELF, Mach-O and static archives, no external
 tools required). It exits 1 on drift.
+
+The second compiles the package runtime assemblies with MSBuild against the Unity Editor's
+own managed DLLs, using the `.csproj` files Unity writes into `code/ImmUnitySampleProject`.
+That catches C# errors the export check cannot see — see
+[G19](#g19--nothing-compiles-the-unity-package-c-on-push) for why this is currently a local
+check rather than a CI gate.
 
 There are no known platform gaps left, so the check is expected to pass for all four
 platforms. Right after changing native plugin source it will fail for the platforms whose
@@ -403,6 +410,7 @@ are kept in full detail after it.
 | G16 | S3 | CI does not compare P/Invokes against exports | Fixed |
 | G17 | S3 | no reference doc for the entry points or the runtime flags | Fixed (this document) |
 | G18 | S3 | `code/ImmStrokeReaderUPM/` is an empty package skeleton | Open |
+| G19 | S3 | nothing compiles the Unity package C# on push | Local tool added; CI gate open |
 
 ### Fix log
 
@@ -519,6 +527,25 @@ Contains `package.json` (version `0.1.0`, no `com.unity.nuget.newtonsoft-json`
 dependency) and `README.md` advertising `Plugins/`, `Runtime/` and `Samples~/Examples`
 that do not exist. Its manifest's `samples[0].path` points at a missing folder. It is not
 the shipped package, but it sits at a plausible install path.
+
+### G19 — nothing compiles the Unity package C# on push
+
+No job on a push or pull request compiles the C# in `com.immersive-foundation.imm-unity`.
+`build.yml` compiles the stroke-reader package's `ImmStrokeReader.cs` through the
+SharpQuill adapter (`dotnet run --project .../SharpQuillAdapter.csproj`, which is how G1/G2
+and a duplicate `GetBuildId` were caught), and everything else the Unity packages contain
+reaches a compiler only in the engine-phase Unity jobs — which run on the daily schedule and
+on `full`/`hardware`/`release` dispatches, not on an ordinary push.
+
+That gap shipped a real error: commit `037e9a44` mapped a spawn-area screenshot to
+`TextureFormat.RGBFloat`, which does not exist, so the entire package failed to compile
+(CS0117) and stayed that way through several pushes. It was found by
+`tests/tools/verify_unity_csharp.py`, which compiles the package runtimes with MSBuild
+against the Editor's own managed assemblies using the `.csproj` files Unity writes into the
+project. That tool is the local mitigation; it is not wired into CI because it needs both
+MSBuild and a Unity installation on the runner, and the generated `.csproj` files are not
+committed. Closing this properly means a Windows job that installs Unity and runs the
+compile (or `unity test` in EditMode) on push.
 
 ### Related documentation drift (not plugin gaps)
 
