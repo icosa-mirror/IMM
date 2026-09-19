@@ -169,6 +169,8 @@ namespace ImmPlayer {
         //----------------------------------------------------------------------
 
         bool AttachEditing(void);
+        bool DetachEditing(void);
+        bool DiscardPendingEdits(void);
         bool IsEditing(void) const { return mEditing; }
         uint64_t GetRevision(void) const { return mPresentedRevision; }
 

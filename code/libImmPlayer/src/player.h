@@ -123,7 +123,10 @@ namespace ImmPlayer {
         //----------------------------------------------------------------------
 
         bool AttachEditing(int docId);
+        bool DetachEditing(int docId);
+        bool DiscardPendingEdits(int docId);
         bool IsEditing(int docId);
+        bool GetEditingState(int docId, bool & editingOut);
         uint64_t CommitEdits(int docId, int32_t * resultOut = nullptr);
         bool GetAuthoringRevisions(int docId, Document::AuthoringRevisions & revisionsOut);
         bool GetAuthoringCommitStatus(int docId, uint64_t revision, Document::AuthoringCommitStatus & statusOut);

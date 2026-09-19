@@ -558,6 +558,25 @@ namespace ImmPlayer
         return true;
     }
 
+    bool Document::DetachEditing(void)
+    {
+        if (!mEditing || !mOpenGeometryEdits.empty() || !mSealedBatches.empty() ||
+            mPendingPresentation.mRevision != 0)
+            return false;
+
+        mDrawingHandles.clear();
+        mEditing = false;
+        return true;
+    }
+
+    bool Document::DiscardPendingEdits(void)
+    {
+        if (!mEditing)
+            return false;
+        mOpenGeometryEdits.clear();
+        return true;
+    }
+
     void Document::iBuildDrawingHandleMap(ImmImporter::Layer * layer)
     {
         if (layer == nullptr)

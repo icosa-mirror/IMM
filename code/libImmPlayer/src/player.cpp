@@ -553,6 +553,30 @@ namespace ImmPlayer
         return doc != nullptr && doc->IsEditing();
     }
 
+    bool Player::GetEditingState(int docId, bool & editingOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return false;
+        editingOut = doc->IsEditing();
+        return true;
+    }
+
+    bool Player::DetachEditing(int docId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        return doc != nullptr && doc->DetachEditing();
+    }
+
+    bool Player::DiscardPendingEdits(int docId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        return doc != nullptr && doc->DiscardPendingEdits();
+    }
+
     uint64_t Player::CommitEdits(int docId, int32_t * resultOut)
     {
         std::lock_guard<std::mutex> guard(mMutex);

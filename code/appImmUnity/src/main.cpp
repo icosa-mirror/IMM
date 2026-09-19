@@ -2035,9 +2035,25 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(in
     return iPlayer().AttachEditing(docId) ? 0 : -1;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int docId)
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int docId, int32_t *attachedOut)
 {
-    return iPlayer().IsEditing(docId) ? 1 : 0;
+    if (attachedOut == nullptr)
+        return -2;
+    bool editing = false;
+    if (!iPlayer().GetEditingState(docId, editing))
+        return -1;
+    *attachedOut = editing ? 1 : 0;
+    return 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Detach(int docId)
+{
+    return iPlayer().DetachEditing(docId) ? 0 : -4;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DiscardPending(int docId)
+{
+    return iPlayer().DiscardPendingEdits(docId) ? 0 : -4;
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int docId, unsigned long long *revisionOut)
