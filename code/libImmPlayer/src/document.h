@@ -181,8 +181,17 @@ namespace ImmPlayer {
         bool mEditing = false;
         bool mCommitRequested = false;
         uint64_t mRevision = 0;
+
+        // A GPU refresh waits for the frames still in flight that referenced the old buffers.
+        struct PendingGpuRefresh
+        {
+            ImmImporter::Layer * mLayer;
+            uint64_t mNotBeforeFrame;
+        };
+        uint64_t mFrameCounter = 0;
         std::vector<ImmImporter::Layer *> mDirtyCPU;
-        std::vector<ImmImporter::Layer *> mDirtyGPU;
+        std::vector<PendingGpuRefresh> mDirtyGPU;
+        static constexpr uint64_t kGpuRefreshDelayFrames = 3;
 
         void iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, ImmCore::piLog * log);
         void iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,

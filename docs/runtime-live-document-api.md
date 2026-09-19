@@ -110,9 +110,13 @@ Rules:
 2. A property-only edit performs no geometry work at all (§2 budget: under 2 ms).
 3. The document-wide rebuild (today's behaviour) is reachable only through explicit
    operations: load, import, save.
-4. Per-layer GPU re-packing is the M2 baseline, because the renderer holds one chunk buffer
-   per layer. Per-drawing slices inside that buffer are an optimisation to be justified by
+4. Per-layer GPU re-packing is the baseline, because the renderer holds one chunk buffer per
+   layer. Per-drawing slices inside that buffer are an optimisation to be justified by
    measurement, not assumed.
+5. A GPU refresh is deferred by three frames after the CPU rebuild. Destroying a layer's
+   buffers in the same frame that still references them hangs the renderer — measured, not
+   assumed: an immediate per-layer refresh hung `appImmViewer` until the refresh was delayed.
+   Three frames is the number of frames the renderer keeps in flight.
 
 ## 5. Threading and commit semantics
 
