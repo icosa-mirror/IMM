@@ -8,6 +8,7 @@
 #include "libImmCore/src/libSound/piSound.h"
 #include "appImmViewer/src/settings.h"
 #include "appImmViewer/src/resolve.h"
+#include "appImmViewer/src/viewer/liveEditValidation.h"
 #include "appImmViewer/src/viewer/viewer.h"
 #include "libImmPlayer/src/blue_noise.h"
 
@@ -470,6 +471,7 @@ public:
     ImmCore::piTimer _timer;
     ExePlayer::Settings _settings;
     ExePlayer::Viewer _viewer;
+    ExePlayer::LiveEditValidation _liveEditValidation;
     ExePlayer::Resolve _resolve;
     ImmCore::piSoundEngineBackend *_soundBackend;
     ImmCore::piTexture _colorTexture;
@@ -480,6 +482,7 @@ public:
     double _lastTime;
     double _smokeExitAfterSeconds;
     uint64_t _frameIndex;
+    uint64_t _liveEditFrame;
     int _nativeFrameFailureCount;
     uint64_t _validationFrame;
     uint64_t _validationMaxFrame;
@@ -1849,6 +1852,8 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
     _timeBase = _timer.GetTime();
     _lastTime = 0.0;
     _frameIndex = 0;
+    _liveEditFrame = ExePlayer::LiveEditValidation::RequestedFrameFromEnvironment();
+    _liveEditValidation.Reset();
     _nativeFrameFailureCount = 0;
     _documentVolume = _viewer.GetVolume(0);
     if (_documentVolume <= 0.0f)
@@ -2488,6 +2493,8 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
             _timeBase = _timer.GetTime();
             _lastTime = 0.0;
             _frameIndex = 0;
+            _liveEditFrame = ExePlayer::LiveEditValidation::RequestedFrameFromEnvironment();
+            _liveEditValidation.Reset();
             _nativeFrameFailureCount = 0;
             memset(&_events, 0, sizeof(_events));
             _documentVolume = _viewer.GetVolume(0);
@@ -2558,6 +2565,8 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
     _timeBase = _timer.GetTime();
     _lastTime = 0.0;
     _frameIndex = 0;
+    _liveEditFrame = ExePlayer::LiveEditValidation::RequestedFrameFromEnvironment();
+    _liveEditValidation.Reset();
     _nativeFrameFailureCount = 0;
     memset(&_events, 0, sizeof(_events));
     _documentVolume = _viewer.GetVolume(0);
@@ -3004,6 +3013,8 @@ static uint64_t iCountNonZeroPixels(const uint32_t *pixels, size_t pixelCount)
         _renderer->Clear(offscreenClear, nullptr, nullptr, nullptr, true);
         _viewer.GlobalRender(head, ImmCore::vec4(0.0f));
         _viewer.RenderMono(_renderSize, head, 0);
+        _liveEditValidation.Tick(_viewer, &_log, _frameIndex,
+                                 _liveEditFrame != ~0ull, _liveEditFrame);
         [self validateOffscreenFrameIfRequested];
 
         _resolve.Do(_renderer, nullptr, vp, 0, 1.0f, _colorTexture);
