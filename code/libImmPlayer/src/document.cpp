@@ -489,7 +489,7 @@ namespace ImmPlayer
                 Drawing * replacement = mPendingPresentation.mReplacement.get();
                 if (!layerPaintRender->PresentDrawingReplacement(
                     mPendingPresentation.mActive, replacement,
-                    mPendingPresentation.mRendererToken, log))
+                    mPendingPresentation.mRendererToken, revision, log))
                 {
                     iRejectCommit(revision, -10, 0, mPendingPresentation.mObject);
                     iDiscardPendingPresentation(layerPaintRender, renderer, log);

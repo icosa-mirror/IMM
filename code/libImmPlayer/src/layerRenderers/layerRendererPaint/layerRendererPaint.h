@@ -51,9 +51,10 @@ namespace ImmPlayer
 		}
 
 		virtual bool PresentDrawingReplacement(ImmImporter::Drawing * active,
-			ImmImporter::Drawing * replacement, uint64_t token, ImmCore::piLog * log)
+			ImmImporter::Drawing * replacement, uint64_t token, uint64_t revision,
+			ImmCore::piLog * log)
 		{
-			(void)active; (void)replacement; (void)token; (void)log;
+			(void)active; (void)replacement; (void)token; (void)revision; (void)log;
 			return false;
 		}
 

@@ -29,7 +29,8 @@ namespace ImmPlayer
 		bool PrepareDrawingReplacementInGPU(ImmCore::piRenderer * renderer,
 			uint64_t token, ImmCore::piLog * log) override;
 		bool PresentDrawingReplacement(ImmImporter::Drawing * active,
-			ImmImporter::Drawing * replacement, uint64_t token, ImmCore::piLog * log) override;
+			ImmImporter::Drawing * replacement, uint64_t token, uint64_t revision,
+			ImmCore::piLog * log) override;
 		void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
 			uint64_t token, ImmCore::piLog * log) override;
 		void AdvanceDrawingRetirement(ImmCore::piRenderer * renderer, ImmCore::piLog * log) override;
@@ -70,6 +71,8 @@ namespace ImmPlayer
 			uint64_t mRetireAfterFrame = 0;
 		};
 		uint64_t mRetirementFrame = 0;
+		uint64_t mPresentationSample = 0;
+		bool mTracePresentationFrames = false;
 		std::vector<RetiredDrawing> mRetiredDrawings;
 		static constexpr uint64_t kRetirementFramesInFlight = 3;
 	};

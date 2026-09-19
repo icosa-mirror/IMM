@@ -33,6 +33,9 @@ namespace ImmImporter
 		virtual void  SetGpuId(int id) = 0;
 		virtual int   GetGpuId(void) const = 0;
 
+		void SetAuthoringRevision(uint64_t revision) { mAuthoringRevision = revision; }
+		uint64_t GetAuthoringRevision(void) const { return mAuthoringRevision; }
+
         virtual void  SetLoaded(bool loaded) = 0;
         virtual bool  GetLoaded(void) const = 0;
 
@@ -61,6 +64,7 @@ namespace ImmImporter
         }
 
 	protected:
+		uint64_t mAuthoringRevision = 0;
 		virtual void iAppendChunk(const uint32_t vbase, const uint32_t ibase, const uint32_t pbase, const uint32_t numPoints, uint32_t numIndices, uint32_t numPolygons, const bound3 & bbox, const uint32_t type, float biggestStroke) = 0;
 	};
 }

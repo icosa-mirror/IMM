@@ -237,6 +237,8 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
         mCapLayersToRender = 1;
         mRetirementFrame = 0;
+        mPresentationSample = 0;
+        mTracePresentationFrames = std::getenv("IMM_LIVE_EDIT_TRACE_FRAMES") != nullptr;
         mRetiredDrawings.clear();
 
         mColorSpace = colorSpace;
@@ -601,7 +603,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     }
 
     bool LayerRendererPaintStatic::PresentDrawingReplacement(Drawing * active,
-        Drawing * replacement, uint64_t token, piLog * log)
+        Drawing * replacement, uint64_t token, uint64_t revision, piLog * log)
     {
         if (std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
         {
@@ -633,6 +635,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         replacementInfo->mGeometry = activeStatic->GetGeometry();
         oldInfo->mGeometry = replacementStatic->GetGeometry();
         activeStatic->SetGpuId(static_cast<int>(token));
+        activeStatic->SetAuthoringRevision(revision);
         replacementStatic->SetGpuId(oldToken);
 
         // Ownership transfers only after model geometry and renderer identity have both moved.
@@ -689,6 +692,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
     void LayerRendererPaintStatic::PrepareForDisplay(StereoMode stereoMode)
     {
         mStereoMode = stereoMode;
+        mPresentationSample++;
         mVisibleLayerInfos.SetLength(0);
     }
 
@@ -714,6 +718,25 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         }
         id = dr->GetGpuId();
         piAssert(id != -1);
+
+        if (mTracePresentationFrames)
+        {
+            iSLayerDrawInfoStatic * selectedInfo =
+                (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(id);
+            const DrawingStatic * selectedDrawing = dynamic_cast<const DrawingStatic *>(dr);
+            const bool geometryMatches = selectedInfo != nullptr && selectedDrawing != nullptr &&
+                selectedInfo->mGeometry == selectedDrawing->GetGeometry();
+            if (geometryMatches)
+                log->Printf(LT_MESSAGE,
+                    L"[IMM_LIVE_EDIT_FRAME] sample=%llu layer=%u revision=%llu rendererToken=%u geometryMatch=1",
+                    static_cast<unsigned long long>(mPresentationSample), la->GetID(),
+                    static_cast<unsigned long long>(dr->GetAuthoringRevision()), id);
+            else
+                log->Printf(LT_ERROR,
+                    L"[IMM_LIVE_EDIT_FRAME] sample=%llu layer=%u revision=%llu rendererToken=%u geometryMatch=0",
+                    static_cast<unsigned long long>(mPresentationSample), la->GetID(),
+                    static_cast<unsigned long long>(dr->GetAuthoringRevision()), id);
+        }
 
         // layer frustum culling
         if (boxInFrustum(frus, bbox) == 0)
