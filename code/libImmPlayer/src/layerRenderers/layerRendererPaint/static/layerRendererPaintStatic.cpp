@@ -409,7 +409,9 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         {
             const Drawing *dr = lp->GetDrawing(j);
             const int id = dr->GetGpuId();
-            if (id == -1) return;
+            // continue, not return: a drawing with no gpu id (one an editor just added, or one
+            // it emptied) must not strand every drawing after it in the layer.
+            if (id == -1) continue;
             iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(id);            
             me->End();
             mLayerInfo.Free(id);
