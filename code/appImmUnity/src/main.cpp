@@ -1997,12 +1997,12 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerI
 // attaching changes no behaviour of the ordinary load and playback paths.
 //----------------------------------------------------------------------------
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int32_t docId)
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int32_t docId)
 {
     return iPlayer().AttachEditing(docId) ? 0 : -1;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int32_t docId, int32_t *attachedOut)
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int32_t docId, int32_t *attachedOut)
 {
     if (attachedOut == nullptr)
         return -2;
@@ -2013,17 +2013,17 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttache
     return 0;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Detach(int32_t docId)
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Detach(int32_t docId)
 {
     return iPlayer().DetachEditing(docId) ? 0 : -4;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DiscardPending(int32_t docId)
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DiscardPending(int32_t docId)
 {
     return iPlayer().DiscardPendingEdits(docId) ? 0 : -4;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int32_t docId, uint64_t *revisionOut)
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int32_t docId, uint64_t *revisionOut)
 {
     int32_t result = 0;
     const uint64_t revision = iPlayer().CommitEdits(docId, &result);
@@ -2034,7 +2034,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(in
     return 0;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisions(
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisions(
     int32_t docId, ImmAuthoringRevisions *revisionsOut)
 {
     if (revisionsOut == nullptr || revisionsOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
@@ -2050,7 +2050,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisi
     return 0;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommitStatus(
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommitStatus(
     int32_t docId, uint64_t revision, ImmAuthoringCommitStatus *statusOut)
 {
     if (statusOut == nullptr || statusOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
@@ -2069,7 +2069,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommit
     return 0;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {
     if (drawingIdOut == nullptr || layerId < 0 || drawingIndex < 0)
@@ -2081,7 +2081,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGe
     return 0;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
     int32_t docId, int32_t layerId, int32_t brush, int32_t visible,
     const ImmAuthoringPoint *points, int32_t numPoints, float biggestStroke, int32_t colorSpace,
     int32_t frameIndex, int32_t *drawingIndexOut)
@@ -2092,25 +2092,22 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAd
     return -3; // creation needs reserved handles and replacement-layer preparation
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
     int32_t docId, int32_t layerId, int32_t frameIndex, int32_t drawingIndex)
 {
     (void)docId; (void)layerId; (void)frameIndex; (void)drawingIndex;
     return -3; // frame remapping joins the batch model after stable created handles
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
     int32_t docId, int32_t layerId, uint64_t drawingId, const ImmAuthoringDrawingGeometry *geometry)
 {
-    constexpr uint32_t kMaxElements = 65536;
-    constexpr uint64_t kMaxTotalPoints = 1048576;
-
     if (layerId < 0 || drawingId == 0 || geometry == nullptr)
         return -2;
     if (geometry->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
         return -3;
     if (geometry->structSize < sizeof(ImmAuthoringDrawingGeometry) ||
-        geometry->elementCount == 0 || geometry->elementCount > kMaxElements ||
+        geometry->elementCount == 0 || geometry->elementCount > IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING ||
         geometry->elements == nullptr || geometry->reserved0 != 0 || geometry->reserved1 != 0)
         return -2;
     if (geometry->colorSpace < static_cast<int32_t>(ImmImporter::Drawing::ColorSpace::Linear) ||
@@ -2133,7 +2130,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSe
                 return -3;
             if (sourceElement.structSize < sizeof(ImmAuthoringElementGeometry) ||
                 sourceElement.reserved != 0 || sourceElement.points == nullptr ||
-                sourceElement.pointCount < 2 || sourceElement.pointCount > 8192)
+                sourceElement.pointCount < IMM_AUTHORING_MIN_POINTS_PER_ELEMENT ||
+                sourceElement.pointCount > IMM_AUTHORING_MAX_POINTS_PER_ELEMENT)
                 return -2;
             if (sourceElement.brush <= static_cast<int32_t>(ImmImporter::Element::BrushSectionType::Point) ||
                 sourceElement.brush >= static_cast<int32_t>(ImmImporter::Element::BrushSectionType::Count))
@@ -2143,7 +2141,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSe
                 return -2;
 
             totalPoints += sourceElement.pointCount;
-            if (totalPoints > kMaxTotalPoints)
+            if (totalPoints > IMM_AUTHORING_MAX_POINTS_PER_DRAWING)
                 return -2;
 
             ImmPlayer::Document::AuthoringElementGeometry element;

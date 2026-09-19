@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #if defined(_WIN32)
@@ -43,7 +44,14 @@ typedef enum ImmAuthoringCommitState
     IMM_AUTHORING_COMMIT_REJECTED = 5
 } ImmAuthoringCommitState;
 
-enum { IMM_AUTHORING_STRUCT_VERSION_1 = 1 };
+enum
+{
+    IMM_AUTHORING_STRUCT_VERSION_1 = 1,
+    IMM_AUTHORING_MIN_POINTS_PER_ELEMENT = 2,
+    IMM_AUTHORING_MAX_POINTS_PER_ELEMENT = 8192,
+    IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING = 65536,
+    IMM_AUTHORING_MAX_POINTS_PER_DRAWING = 1048576
+};
 
 typedef struct ImmAuthoringPoint
 {
@@ -102,25 +110,43 @@ typedef struct ImmAuthoringCommitStatus
     uint64_t object;
 } ImmAuthoringCommitStatus;
 
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_Attach(int32_t docId);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_Detach(int32_t docId);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_IsAttached(int32_t docId, int32_t * attachedOut);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_DiscardPending(int32_t docId);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_Commit(int32_t docId, uint64_t * requestedRevisionOut);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_GetRevisions(int32_t docId, ImmAuthoringRevisions * revisionsOut);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int32_t docId, uint64_t revision,
+#ifdef __cplusplus
+// These layouts cross the native-library boundary. Keep the assertions beside the
+// public declarations so every C++ target catches an accidental ABI change.
+static_assert(sizeof(ImmAuthoringPoint) == 64, "ImmAuthoringPoint ABI changed");
+static_assert(offsetof(ImmAuthoringElementGeometry, points) == 24,
+    "ImmAuthoringElementGeometry ABI changed");
+static_assert(sizeof(ImmAuthoringElementGeometry) == 24 + sizeof(void *),
+    "ImmAuthoringElementGeometry ABI changed");
+static_assert(offsetof(ImmAuthoringDrawingGeometry, elements) == 16,
+    "ImmAuthoringDrawingGeometry ABI changed");
+static_assert(offsetof(ImmAuthoringDrawingGeometry, biggestStroke) == 16 + sizeof(void *),
+    "ImmAuthoringDrawingGeometry ABI changed");
+static_assert(sizeof(ImmAuthoringDrawingGeometry) == 32 + sizeof(void *),
+    "ImmAuthoringDrawingGeometry ABI changed");
+static_assert(sizeof(ImmAuthoringRevisions) == 32, "ImmAuthoringRevisions ABI changed");
+static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus ABI changed");
+#endif
+
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Attach(int32_t docId);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Detach(int32_t docId);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_IsAttached(int32_t docId, int32_t * attachedOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DiscardPending(int32_t docId);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Commit(int32_t docId, uint64_t * requestedRevisionOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetRevisions(int32_t docId, ImmAuthoringRevisions * revisionsOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int32_t docId, uint64_t revision,
     ImmAuthoringCommitStatus * statusOut);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
     uint64_t drawingId, const ImmAuthoringDrawingGeometry * geometry);
 
 // Reserved exports retained while creation and frame mapping are implemented on the batch
 // model. Both currently return IMM_AUTHORING_UNSUPPORTED.
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_DrawingAdd(int32_t docId, int32_t layerId,
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingAdd(int32_t docId, int32_t layerId,
     int32_t brush, int32_t visible, const ImmAuthoringPoint * points, int32_t numPoints,
     float biggestStroke, int32_t colorSpace, int32_t frameIndex, int32_t * drawingIndexOut);
-IMM_AUTHORING_EXPORT int IMM_AUTHORING_CALL ImmAuthoring_FrameSet(int32_t docId, int32_t layerId,
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_FrameSet(int32_t docId, int32_t layerId,
     int32_t frameIndex, int32_t drawingIndex);
 
 #ifdef __cplusplus
