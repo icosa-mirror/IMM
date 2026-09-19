@@ -128,6 +128,113 @@ Validation checks at least:
 - The player must retain its own input allocation for asynchronous memory loads;
   this is handled by `ImmPlayerManager.LoadDocumentFromMemory`.
 
+## Presentation edits versus content edits
+
+Two kinds of change reach playback: edits that the *player* can apply to a loaded
+document immediately, and edits that only exist in the mutable model until a revision is
+compiled and reloaded. Applications must not pay a rebuild for the first kind.
+
+Apply presentation edits directly to the loaded document (no compile, no preview
+request):
+
+| Edit | Live API |
+|---|---|
+| Layer visibility, opacity, transform | `ImmDocument.SetLayerVisible`, `SetLayerOpacity`, `SetLayerTransform` |
+| Drop a visibility or transform override | `ImmDocument.ClearLayerVisibilityOverride`, `ClearLayerTransformOverride` |
+| Playback state | `ImmDocument.Pause`, `Resume`, `Hide`, `Show`, `Continue`, `Restart`, `SkipForward`, `SkipBack` |
+| Seek and chapters | `ImmDocument.SetTime`, `SetChapter` |
+| Master volume | `ImmDocument.SetVolume` |
+| Active viewpoint | `ImmDocument.SetActiveSpawnAreaId` |
+| Document placement | `ImmDocument.SetTransform` |
+
+Compile and reload (a preview request) is required for content edits, which have no live
+player path at all:
+
+| Edit | Why there is no live path |
+|---|---|
+| Add, remove, reparent or reorder a layer | The player document graph and its GPU resources are built at load time |
+| Layer timeline flag, duration, repeat counts | Only settable when the native layer is created |
+| Spawn-area tracking level, locomotion volume, default flag | Only settable on the spawn-area layer at creation |
+| Drawings, frame mappings, strokes, points | Geometry is generated and uploaded during load |
+| Animation keys | Evaluated from the loaded layer data |
+| Document type, frame rate, background, capabilities, requirements | Fixed when the native sequence is created |
+
+Rules that follow from this split:
+
+- During an interactive drag (transform, opacity, visibility), write the live override
+  every frame and commit the equivalent model change once, when the interaction ends.
+  Committing per frame multiplies the rebuild cost by the frame count.
+- There is no `ClearLayerOpacityOverride`; to drop an opacity override, set the authored
+  opacity back (or re-apply the model value).
+- Overrides belong to the *loaded document*. A preview replacement installs a new
+  document, and the preview coordinator only carries playback state, playback time and
+  the document-to-world matrix across the swap; layer overrides must be re-applied by the
+  application (or by a coordinator extension) after a content edit commits.
+- A preview request that is only a presentation change is a defect: it costs the full
+  compile-and-reload path measured below for no visual gain.
+
+## Measured stage split (2026-09-19)
+
+`code/appImmUnity/tests/exporter_benchmark.py` drives the shipped Windows plugin through
+its C ABI and times each stage of the compile-and-reload pipeline, using the same corpus
+shape as `ImmAuthoringBenchmark` (per layer: one drawing per stroke, `Frames` mappings
+round-robined over those drawings) and the batch point-transfer path. It also times
+`StrokeReader_LoadFromFile` for the same bytes, which is the synchronous
+parse-plus-store cost of an import.
+
+Machine: AMD Ryzen 7 7800X3D (8 cores / 16 threads) - the Phase 0 reference CPU - with
+Windows 11 and the Release plugin build. Medians of 3 iterations, milliseconds:
+
+| Case | Drawings | Points | Bytes | Graph build* | Export to memory | Export to file | Decode (reader) | Player load (CPU) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Small | 10 | 160 | 3.1 KB | 0.07 | 0.40 | 2.23 | 1.61 | 3 |
+| Medium | 400 | 12,800 | 91.5 KB | 1.64 | 9.85 | 67.03 | 52.92 | 78 |
+| Large | 4,000 | 256,000 | 956.7 KB | 17.96 | 120.26 | 510.16 | 431.50 | 240 |
+
+\* Graph build is the sum of sequence, layer, drawing, batch-point, bounds and
+frame-mapping stages.
+
+The last column comes from a captured `appImmViewer` run over the same files
+(validation mode, 900-frame budget so the asynchronous load completes) and is the
+player's own "Loaded in CPU" figure: parse, decompress and CPU geometry build. Its
+"Loaded in GPU" figure reported 0 ms for this corpus because the generated strokes do
+not put anything in the validation camera's view, so per-drawing upload is never forced;
+the GPU stage needs a corpus that actually renders to be measured.
+
+What the split says:
+
+- **Graph construction is not the cost.** Building 4,000 drawings, 256,000 points and
+  2,400 frame mappings takes ~18 ms, about 2% of the Large pipeline.
+- **Serialization dominates.** Exporting the same graph costs 120 ms to memory and
+  510 ms to a file. The 390 ms gap between the two is the file-writer path, not
+  compression, so the preview path must use memory export (the preview coordinator
+  already does) and applications that write a file first pay roughly four times more for
+  the same bytes. These figures reproduce the Phase 0 "file export" column (466 ms for
+  Large) within build-to-build variation.
+- **Decode is the second cost, and the synchronous reader import is the most expensive
+  single operation measured.** The player's own CPU load is 240 ms for Large - consistent
+  with the recorded 202 ms load-to-sequence-ready - while `StrokeReader_LoadFromFile`
+  takes 431 ms, because it builds the whole graph and copies every point into the stroke
+  store. Importing into the mutable model keeps a second copy of all points on top of
+  that, so import is the stage to optimise before adding more authoring features.
+- **Consequence for the two known pitfalls.** Serialization and decode - not graph
+  construction - are what an in-memory handoff or per-layer caching would remove, and
+  what incremental GPU mutation would *not* help with. Any optimisation should target
+  those two stages and be measured with this harness.
+
+Reproduce with:
+
+```powershell
+python code\appImmUnity\tests\exporter_benchmark.py --repeat 9 --json artifacts\exporter-benchmark.json
+```
+
+These are development figures for stage attribution on one machine, not release
+guarantees. The player column is captured from `appImmViewer` in validation mode with
+`IMM_VIEWER_VALIDATE_MAX_FRAME` large enough for the asynchronous load to finish, parsing
+the player's own "Loaded in CPU" / "Loaded in GPU" / "Loaded in SPU" log lines; the GPU
+stage needs a corpus that renders to be meaningful, and both should be repeated per
+platform.
+
 ## Benchmark corpus and initial thresholds
 
 The runtime sample defines three synthetic cases:
