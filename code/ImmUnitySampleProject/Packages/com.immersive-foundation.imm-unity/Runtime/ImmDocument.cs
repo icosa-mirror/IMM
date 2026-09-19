@@ -471,6 +471,83 @@ namespace ImmPlayer
             };
         }
 
+        /// <summary>
+        /// Copy a spawn area's authored screenshot into a new texture. The caller owns and must
+        /// destroy the returned texture.
+        /// </summary>
+        /// <param name="linear">Pass true when the thumbnail feeds linear-space sampling.</param>
+        /// <returns>False when the spawn area has no screenshot or its pixel format is unknown.</returns>
+        public bool TryGetSpawnAreaThumbnail(int spawnAreaId, out Texture2D thumbnail, bool linear = false)
+        {
+            thumbnail = null;
+            SerializedSpawnArea? native = GetSpawnAreaInfo(spawnAreaId);
+            if (native == null)
+                return false;
+
+            SerializedSpawnArea.Screenshot shot = native.Value.screenshot;
+            if (shot.pData == IntPtr.Zero || shot.width <= 0 || shot.height <= 0)
+                return false;
+
+            if (!TryGetTextureFormat(shot.format, out TextureFormat format, out int bytesPerPixel))
+                return false;
+
+            var texture = new Texture2D(shot.width, shot.height, format, false, linear);
+            try
+            {
+                texture.LoadRawTextureData(shot.pData, shot.width * shot.height * bytesPerPixel);
+                texture.Apply(false, false);
+            }
+            catch
+            {
+                UnityEngine.Object.Destroy(texture);
+                throw;
+            }
+
+            thumbnail = texture;
+            return true;
+        }
+
+        // ImmCore::piImage formats; spawn-area screenshots are single-plane images whose
+        // format describes the interleaved layout.
+        private static bool TryGetTextureFormat(uint imageFormat, out TextureFormat format, out int bytesPerPixel)
+        {
+            switch (imageFormat)
+            {
+                case 2: // FORMAT_I_GREY
+                    format = TextureFormat.R8;
+                    bytesPerPixel = 1;
+                    return true;
+                case 4: // FORMAT_I_16BIT
+                    format = TextureFormat.R16;
+                    bytesPerPixel = 2;
+                    return true;
+                case 6: // FORMAT_I_RGB
+                    format = TextureFormat.RGB24;
+                    bytesPerPixel = 3;
+                    return true;
+                case 7: // FORMAT_I_RGBA
+                    format = TextureFormat.RGBA32;
+                    bytesPerPixel = 4;
+                    return true;
+                case 8: // FORMAT_F_GREY
+                    format = TextureFormat.RFloat;
+                    bytesPerPixel = 4;
+                    return true;
+                case 10: // FORMAT_F_RGB
+                    format = TextureFormat.RGBFloat;
+                    bytesPerPixel = 12;
+                    return true;
+                case 11: // FORMAT_F_RGBA
+                    format = TextureFormat.RGBAFloat;
+                    bytesPerPixel = 16;
+                    return true;
+                default:
+                    format = TextureFormat.RGBA32;
+                    bytesPerPixel = 0;
+                    return false;
+            }
+        }
+
         public SpawnAreaInfo[] GetSpawnAreas()
         {
             if (!IsLoaded) return new SpawnAreaInfo[0];
@@ -501,25 +578,81 @@ namespace ImmPlayer
         public bool TryGetSpawnAreaWorldPose(int spawnAreaId, Transform documentRoot, out Pose worldPose)
         {
             worldPose = default;
-            if (!IsLoaded || documentRoot == null)
+            if (documentRoot == null)
                 return false;
 
-            var info = GetSpawnAreaInfoManaged(spawnAreaId);
-            if (!info.HasValue)
+            if (!TryGetSpawnAreaPose(spawnAreaId, out SpawnAreaPose pose))
                 return false;
 
             Vector3 localPosition;
             Quaternion localRotation;
             ConvertSpawnAreaPoseToUnity(
-                info.Value.Transform.GetPosition(),
-                info.Value.Transform.GetRotation(),
-                info.Value.Transform.GetScale(),
+                pose.GetPosition(),
+                pose.GetRotation(),
+                pose.sca,
                 out localPosition,
                 out localRotation);
 
             Vector3 worldPosition = documentRoot.TransformPoint(localPosition);
             Quaternion worldRotation = documentRoot.rotation * localRotation;
             worldPose = new Pose(worldPosition, worldRotation);
+            return true;
+        }
+
+        /// <summary>
+        /// Cheap per-frame spawn-area pose query: no name marshaling, no screenshot lookup.
+        /// Prefer this over <see cref="GetSpawnAreaInfoManaged"/> in Update loops.
+        /// </summary>
+        public bool TryGetSpawnAreaPose(int spawnAreaId, out SpawnAreaPose pose)
+        {
+            pose = default;
+            if (!IsLoaded || spawnAreaId < 0)
+                return false;
+            return ImmNativePlugin.GetSpawnAreaPose(DocumentId, spawnAreaId, out pose);
+        }
+
+        /// <summary>
+        /// Cheap per-frame pose query for whichever spawn area is currently active.
+        /// </summary>
+        public bool TryGetActiveSpawnAreaPose(out SpawnAreaPose pose)
+        {
+            pose = default;
+            int spawnAreaId = GetActiveSpawnAreaId();
+            if (spawnAreaId < 0)
+                return false;
+            return TryGetSpawnAreaPose(spawnAreaId, out pose);
+        }
+
+        /// <summary>
+        /// Whether the timeline wants the host to re-anchor to the authored viewpoint
+        /// (a Quill "MakeDefault" keyframe on a spawn-area layer crossed during playback).
+        /// </summary>
+        public bool GetSpawnAreaNeedsUpdate()
+        {
+            if (!IsLoaded)
+                return false;
+            return ImmNativePlugin.GetSpawnAreaNeedsUpdate(DocumentId);
+        }
+
+        /// <summary>
+        /// Clear (or set) the re-anchor request. Call with false once the rig has re-anchored.
+        /// </summary>
+        public void SetSpawnAreaNeedsUpdate(bool state)
+        {
+            if (!IsLoaded)
+                return;
+            ImmNativePlugin.SetSpawnAreaNeedsUpdate(DocumentId, state);
+        }
+
+        /// <summary>
+        /// Read the re-anchor request and clear it in one step: true means "re-anchor now",
+        /// and subsequent calls return false until the timeline crosses another MakeDefault key.
+        /// </summary>
+        public bool ConsumeSpawnAreaNeedsUpdate()
+        {
+            if (!GetSpawnAreaNeedsUpdate())
+                return false;
+            SetSpawnAreaNeedsUpdate(false);
             return true;
         }
 
@@ -547,23 +680,26 @@ namespace ImmPlayer
             out Pose targetPose)
         {
             targetPose = default;
-            if (!IsLoaded || documentRoot == null || currentViewTarget == null || currentHead == null)
+            if (documentRoot == null || currentViewTarget == null || currentHead == null)
                 return false;
 
-            var info = GetSpawnAreaInfoManaged(spawnAreaId);
-            if (!info.HasValue)
+            if (!TryGetSpawnAreaPose(spawnAreaId, out SpawnAreaPose pose))
                 return false;
 
-            if (!TryGetSpawnAreaWorldPose(spawnAreaId, documentRoot, out Pose worldPose))
-                return false;
+            ConvertSpawnAreaPoseToUnity(
+                pose.GetPosition(),
+                pose.GetRotation(),
+                pose.sca,
+                out Vector3 localPosition,
+                out Quaternion localRotation);
+            Vector3 worldPosition = documentRoot.TransformPoint(localPosition);
+            Quaternion worldRotation = documentRoot.rotation * localRotation;
 
-            Vector3 worldPosition = worldPose.position;
             Quaternion headLocalRotation = Quaternion.Inverse(currentViewTarget.rotation) * currentHead.rotation;
-            Quaternion desiredHeadRotation = worldPose.rotation;
-            Quaternion targetRotation = desiredHeadRotation * Quaternion.Inverse(headLocalRotation);
+            Quaternion targetRotation = worldRotation * Quaternion.Inverse(headLocalRotation);
 
             Vector3 headLocalPosition = currentViewTarget.InverseTransformPoint(currentHead.position);
-            if (keepHeadHeightForFloorAreas && info.Value.Type == SerializedSpawnArea.Type.FloorLevel)
+            if (keepHeadHeightForFloorAreas && pose.isFloorLevel != 0)
             {
                 headLocalPosition.y = 0.0f;
             }
