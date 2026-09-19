@@ -107,6 +107,26 @@ were tried and rejected with evidence:
 So the earlier claim that the layer-wide load caused the M1b hang was wrong: that hang was
 the immediate GPU destruction, and the layer-wide CPU load is what still works.
 
+**The per-drawing release path, read rather than guessed (round 10).**
+`LayerRendererPaintStatic::UnloadInCPU` releases one drawing's slot with exactly two calls:
+
+```cpp
+const Drawing * dr = lp->GetDrawing(j);
+const int id = dr->GetGpuId();
+if (id == -1) return;
+iSLayerDrawInfoStatic * me = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(id);
+me->End();
+mLayerInfo.Free(id);
+```
+
+Two things follow. First, the safe per-drawing refresh is *release then re-allocate one
+slot* — `End()` + `Free(id)`, then `mLayerInfo.Alloc(&isNew, &id, true)`, placement-new,
+`Init(dr)`, and the drawing's gpu id updated — not `Init(dr)` on a live slot, which is what
+crashed. Second, `UnloadInCPU` uses `return` rather than `continue` when it meets a drawing
+with gpu id -1, so it abandons every later drawing in the layer. That is harmless for a
+document loaded in full (every drawing has an id) but wrong the moment an editor adds or
+empties a drawing, which is precisely the case this work introduces.
+
 Animation and spawn areas:
 
 | Function | Purpose |
