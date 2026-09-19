@@ -42,13 +42,33 @@ public:
 		// FadePow8
 	};
 
+	// Float point data as an editor holds it. Both the live-edit ABI and the viewer's test
+	// harness build elements from this, so geometry created either way is identical.
+	struct PointSource
+	{
+		vec3  mPos;
+		vec3  mNor;
+		vec3  mDir;
+		vec3  mCol;    // 0..1
+		float mAlpha;  // 0..1
+		float mWidth;  // world units, quantised against biggestStroke
+		float mLength;
+		float mTime;
+	};
+
 	static const int kSectionsLUT[];
+	static const int kMaxPoints = 8192;
 
 public:
     Element();
     ~Element();
 
 	void Make(int num, BrushSectionType bid, VisibilityType mode);
+
+	// Make() plus point transfer and Compute(), i.e. everything needed to hand the element to
+	// a drawing. Widths and alpha are quantised exactly as the exporter quantises them before
+	// writing a file, so a live element and an exported one describe the same pixels.
+	bool Set(const PointSource * points, int numPoints, BrushSectionType bid, VisibilityType mode, float biggestStroke);
 
 
     void Compute(float biggestStroke);

@@ -30,6 +30,32 @@ float Element::GetWidth(int vertex, float biggestStroke) const
     return piQuantize::ibits15(mPoints[vertex].mWid) * (1.7f*biggestStroke);
 }
 
+bool Element::Set(const PointSource * points, int numPoints, BrushSectionType bid, VisibilityType mode, float biggestStroke)
+{
+    if (points == nullptr || numPoints < 2 || numPoints > kMaxPoints || biggestStroke <= 0.0f)
+        return false;
+
+    Make(numPoints, bid, mode);
+
+    for (int i = 0; i < numPoints; i++)
+    {
+        const PointSource & src = points[i];
+        mPoints[i].mPos = src.mPos;
+        mPoints[i].mNor = src.mNor;
+        mPoints[i].mDir = src.mDir;
+        mPoints[i].mCol = src.mCol;
+        // The same quantisation the exporter applies before writing, so a live element and an
+        // exported one describe the same pixels.
+        mPoints[i].mTra = piQuantize::bits8(src.mAlpha);
+        mPoints[i].mWid = piQuantize::bits15(src.mWidth / (1.7f * biggestStroke));
+        mPoints[i].mLen = src.mLength;
+        mPoints[i].mTim = src.mTime;
+    }
+
+    Compute(biggestStroke);
+    return true;
+}
+
 void Element::Compute(float biggestStroke)
 {
     const uint64_t nump = mNumPoints;

@@ -1252,6 +1252,133 @@ extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 #endif
 #endif
 
+//--------------------------------------------------------------------------------------
+// Live-edit validation probe.
+//
+// IMM_VIEWER_LIVE_EDIT=<frame> applies one geometry edit to the first paint layer's first
+// drawing at that frame, through the same API an editor uses, and logs what each step cost.
+// This is the harness for milestone M1: it measures an edit against a document that is
+// actually loaded and rendering, instead of extrapolating from a static benchmark.
+//--------------------------------------------------------------------------------------
+static uint64_t iLiveEditFrame(void)
+{
+    const char *env = getenv("IMM_VIEWER_LIVE_EDIT");
+    if (env == nullptr || env[0] == 0)
+        return ~0ull;
+    return strtoull(env, nullptr, 10);
+}
+
+static int iFindLoadedDocument(ExePlayer::Viewer &viewer)
+{
+    for (int id = 0; id < 64; id++)
+    {
+        if (viewer.IsDocumentLoaded(id))
+            return id;
+    }
+    return -1;
+}
+
+static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, int frameId)
+{
+    using Clock = std::chrono::steady_clock;
+    const auto ms = [](Clock::time_point a, Clock::time_point b)
+    {
+        return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+
+    ImmPlayer::Player *player = viewer.GetPlayer();
+
+    int docId = -1;
+    for (int id = 0; id < 64; id++)
+    {
+        if (viewer.IsDocumentLoaded(id))
+        {
+            docId = id;
+            break;
+        }
+    }
+    if (docId < 0)
+    {
+        log.Printf(LT_ERROR, L"[IMM_LIVE_EDIT] frame=%d no ready document", frameId);
+        return;
+    }
+
+    int layerId = -1;
+    const int layerCount = player->GetLayerCount(docId);
+    for (int i = 0; i < layerCount; i++)
+    {
+        ImmPlayer::Player::LayerInfo info;
+        if (player->GetLayerInfoByIndex(docId, i, info) &&
+            info.type == static_cast<int>(ImmImporter::Layer::Type::Paint))
+        {
+            layerId = info.id;
+            break;
+        }
+    }
+    if (layerId < 0)
+    {
+        log.Printf(LT_ERROR, L"[IMM_LIVE_EDIT] frame=%d no paint layer in document %d", frameId, docId);
+        return;
+    }
+
+    const auto attachStart = Clock::now();
+    const bool attached = player->AttachEditing(docId);
+    const auto attachEnd = Clock::now();
+    if (!attached)
+    {
+        log.Printf(LT_ERROR, L"[IMM_LIVE_EDIT] frame=%d attach failed for document %d", frameId, docId);
+        return;
+    }
+
+    // A short stroke of 16 points, deliberately offset from the origin so the document's
+    // bounding box has to change if the geometry really was replaced.
+    const int numPoints = 16;
+    const float biggestStroke = 0.02f;
+    std::vector<ImmImporter::Element::PointSource> points(numPoints);
+    for (int i = 0; i < numPoints; i++)
+    {
+        const float t = static_cast<float>(i) / static_cast<float>(numPoints - 1);
+        ImmImporter::Element::PointSource &p = points[i];
+        p.mPos = ImmCore::vec3(2.0f + t * 0.5f, 1.5f, 0.0f);
+        p.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f);
+        p.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+        p.mCol = ImmCore::vec3(1.0f, 1.0f, 1.0f);
+        p.mAlpha = 1.0f;
+        p.mWidth = biggestStroke;
+        p.mLength = t;
+        p.mTime = t;
+    }
+
+    const ImmCore::bound3d boxBefore = player->GetDocumentBBox(docId);
+
+    ImmImporter::Element *element = new ImmImporter::Element();
+    const bool built = element->Set(points.data(), numPoints,
+        ImmImporter::Element::BrushSectionType::Circle,
+        ImmImporter::Element::VisibilityType::Always,
+        biggestStroke);
+
+    const auto editStart = Clock::now();
+    const bool replaced = built && player->ReplaceDrawingGeometry(
+        docId, layerId, 0, element, 1,
+        ImmImporter::Drawing::ColorSpace::Gamma, false, biggestStroke);
+    const auto editEnd = Clock::now();
+
+    const auto commitStart = Clock::now();
+    const uint64_t revision = player->CommitEdits(docId);
+    const auto commitEnd = Clock::now();
+
+    delete element;
+
+    log.Printf(LT_MESSAGE,
+        L"[IMM_LIVE_EDIT] frame=%d docId=%d layerId=%d points=%d attached=%d replaced=%d revision=%llu "
+        L"attachMs=%.3f editMs=%.3f commitMs=%.3f bboxBefore=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
+        frameId, docId, layerId, numPoints, attached ? 1 : 0, replaced ? 1 : 0,
+        static_cast<unsigned long long>(revision),
+        ms(attachStart, attachEnd), ms(editStart, editEnd), ms(commitStart, commitEnd),
+        boxBefore.mMinX, boxBefore.mMinY, boxBefore.mMinZ,
+        boxBefore.mMaxX, boxBefore.mMaxY, boxBefore.mMaxZ);
+}
+
 
 int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* instance)
 {
@@ -1768,6 +1895,13 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     int validationExitCode = 0;
     char validationCapturePath[PATH_MAX] = {};
 
+    const uint64_t liveEditFrame = iLiveEditFrame();
+    const bool liveEditEnabled = liveEditFrame != ~0ull;
+    bool liveEditApplied = false;
+    bool liveEditMeasured = false;
+    int liveEditDocId = -1;
+    uint64_t liveEditAppliedFrame = 0;
+
     const char *validationMaxFrameEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MAX_FRAME", "IMM_GL_VALIDATE_MAX_FRAME");
     if (validationMaxFrameEnv && validationMaxFrameEnv[0])
     {
@@ -1963,6 +2097,30 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
             mViewer.GlobalRender(vr_to_head, vec4(0.0f));
             // render
             mViewer.RenderMono(mRenderSize*mSuperSample, vr_to_head, 0);
+
+            if (liveEditEnabled)
+            {
+                // The load is asynchronous and budgeted per frame, so the edit waits for the
+                // document to be loaded instead of guessing a frame number.
+                if (!liveEditApplied && static_cast<uint64_t>(frameid) >= liveEditFrame &&
+                    (liveEditDocId = iFindLoadedDocument(mViewer)) >= 0)
+                {
+                    liveEditApplied = true;
+                    liveEditAppliedFrame = static_cast<uint64_t>(frameid);
+                    iApplyLiveEditProbe(mViewer, mLog, frameid);
+                }
+                else if (liveEditApplied && !liveEditMeasured &&
+                         static_cast<uint64_t>(frameid) >= liveEditAppliedFrame + 3)
+                {
+                    liveEditMeasured = true;
+                    const ImmCore::bound3d boxAfter = mViewer.GetPlayer()->GetDocumentBBox(liveEditDocId);
+                    mLog.Printf(LT_MESSAGE,
+                        L"[IMM_LIVE_EDIT] frame=%d appliedAt=%llu refreshed bboxAfter=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
+                        frameid, static_cast<unsigned long long>(liveEditAppliedFrame),
+                        boxAfter.mMinX, boxAfter.mMinY, boxAfter.mMinZ,
+                        boxAfter.mMaxX, boxAfter.mMaxY, boxAfter.mMaxZ);
+                }
+            }
 
             // Resolve before validation so capture/readback observes the frame just rendered.
             mResolve.Do(mRenderer, nullptr, vpM, 0, mQuitFade, mColorTextureM);

@@ -186,7 +186,8 @@ namespace ImmPlayer {
 
         void iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, ImmCore::piLog * log);
         void iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,
-            LayerRendererModel * layerRenderModel, ImmCore::piRenderer * renderer, ImmCore::piLog * log);
+            LayerRendererModel * layerRenderModel, ImmCore::piRenderer * renderer, ImmCore::piLog * log,
+            Drawing::ColorSpace colorSpace);
 
     private:
         bool iLoadCPU(ImmCore::piLog *log, ImmCore::piSoundEngine* soundEngine,

@@ -88,6 +88,7 @@
 #include "libImmImporter/src/document/layerPaint/element.h"
 #include "libImmCore/src/libCompression/basic/piQuantize.h"
 #include <new>
+#include <vector>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -2055,27 +2056,30 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSe
     if (element == nullptr)
         return -5;
 
-    element->Make(numPoints,
-        static_cast<ImmImporter::Element::BrushSectionType>(brush),
-        static_cast<ImmImporter::Element::VisibilityType>(visible));
-
-    ImmImporter::Point *dst = element->GetPoints();
+    std::vector<ImmImporter::Element::PointSource> sources(numPoints);
     for (int i = 0; i < numPoints; i++)
     {
         const ImmAuthoringPointC &src = points[i];
-        dst[i].mPos = ImmCore::vec3(src.px, src.py, src.pz);
-        dst[i].mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
-        dst[i].mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
-        dst[i].mCol = ImmCore::vec3(src.r, src.g, src.b);
-        // Same quantisation the exporter applies before writing a file, so a live edit and an
-        // export of the same points describe the pixels identically.
-        dst[i].mTra = ImmCore::piQuantize::bits8(src.alpha);
-        dst[i].mWid = ImmCore::piQuantize::bits15(src.width / (1.7f * biggestStroke));
-        dst[i].mLen = src.length;
-        dst[i].mTim = src.time;
+        ImmImporter::Element::PointSource &dst = sources[i];
+        dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
+        dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
+        dst.mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
+        dst.mCol = ImmCore::vec3(src.r, src.g, src.b);
+        dst.mAlpha = src.alpha;
+        dst.mWidth = src.width;
+        dst.mLength = src.length;
+        dst.mTime = src.time;
     }
 
-    element->Compute(biggestStroke);
+    const bool built = element->Set(sources.data(), numPoints,
+        static_cast<ImmImporter::Element::BrushSectionType>(brush),
+        static_cast<ImmImporter::Element::VisibilityType>(visible),
+        biggestStroke);
+    if (!built)
+    {
+        delete element;
+        return -2;
+    }
 
     const bool replaced = iPlayer().ReplaceDrawingGeometry(
         docId, layerId, drawingIndex, element, 1,

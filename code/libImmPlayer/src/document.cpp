@@ -459,7 +459,7 @@ namespace ImmPlayer
         // Layers whose CPU geometry was rebuilt this frame get their GPU data replaced here,
         // one layer at a time, in place of the renderer's own load/unload entry points.
         if (mEditing && st == LoadingState::Loaded && !mDirtyGPU.empty())
-            iApplyDirtyGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log);
+            iApplyDirtyGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log, colorSpace);
 
         if (st == LoadingState::LoadingGPU)
         {
@@ -543,6 +543,8 @@ namespace ImmPlayer
             if (layer == nullptr)
                 continue;
 
+            const auto refreshStart = std::chrono::steady_clock::now();
+
             const Layer::Type layerType = layer->GetType();
             if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
             {
@@ -562,46 +564,39 @@ namespace ImmPlayer
                 continue;
             }
 
+            const std::chrono::steady_clock::time_point refreshEnd = std::chrono::steady_clock::now();
+            log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] cpu refresh layer=%d ms=%.3f",
+                static_cast<int>(layer->GetID()),
+                std::chrono::duration<double, std::milli>(refreshEnd - refreshStart).count());
+
             mDirtyGPU.push_back(layer);
         }
     }
 
     void Document::iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,
-        LayerRendererModel * layerRenderModel, piRenderer * renderer, piLog * log)
+        LayerRendererModel * layerRenderModel, piRenderer * renderer, piLog * log, Drawing::ColorSpace colorSpace)
     {
         if (mDirtyGPU.empty())
             return;
 
+        // M1b finding: replacing a single layer's GPU buffers from inside the frame's update
+        // pass hangs the renderer (the frame's command buffer still references the buffers
+        // being destroyed). Until a safe integration point exists, the refresh goes through
+        // exactly the calls the loader uses, on the whole document - no encode, no parse, so
+        // it is still far cheaper than compile-and-reload.
         std::vector<ImmImporter::Layer *> layers;
         layers.swap(mDirtyGPU);
 
-        for (ImmImporter::Layer * layer : layers)
-        {
-            if (layer == nullptr)
-                continue;
+        const auto refreshStart = std::chrono::steady_clock::now();
+        if (!iUnloadGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log))
+            log->Printf(LT_ERROR, L"Live edit: GPU unload failed while refreshing %d layer(s)", static_cast<int>(layers.size()));
+        if (!iLoadGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log, colorSpace))
+            log->Printf(LT_ERROR, L"Live edit: GPU reload failed while refreshing %d layer(s)", static_cast<int>(layers.size()));
 
-            const Layer::Type layerType = layer->GetType();
-            if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
-            {
-                layerPaintRender->UnloadInGPU(renderer, nullptr, log, layer);
-                if (!layerPaintRender->LoadInGPU(renderer, nullptr, log, layer))
-                    log->Printf(LT_ERROR, L"Live edit: GPU upload failed for layer %d", static_cast<int>(layer->GetID()));
-            }
-            else if (layerType == Layer::Type::Picture && layerRenderPicture != nullptr)
-            {
-                layerRenderPicture->UnloadInGPU(renderer, nullptr, log, layer);
-                layerRenderPicture->LoadInGPU(renderer, nullptr, log, layer);
-            }
-            else if (layerType == Layer::Type::Model && layerRenderModel != nullptr)
-            {
-                layerRenderModel->UnloadInGPU(renderer, nullptr, log, layer);
-                layerRenderModel->LoadInGPU(renderer, nullptr, log, layer);
-            }
-            else
-            {
-                log->Printf(LT_ERROR, L"Live edit: layer %d of type %d cannot be re-uploaded", static_cast<int>(layer->GetID()), static_cast<int>(layerType));
-            }
-        }
+        const auto refreshEnd = std::chrono::steady_clock::now();
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] gpu refresh layers=%d ms=%.3f",
+            static_cast<int>(layers.size()),
+            std::chrono::duration<double, std::milli>(refreshEnd - refreshStart).count());
     }
 
     void Document::UnloadSync(
