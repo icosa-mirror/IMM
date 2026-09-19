@@ -214,6 +214,15 @@ interactive path.
 - No picture, model or sound mutation; paint layers, groups and spawn areas only.
 - No per-point ABI calls: geometry arrives one drawing at a time.
 
+## 8a. What the player already does live
+
+Layer *properties* need no new work: `Player::SetLayerVisible`, `SetLayerOpacity`,
+`SetLayerTransform` and their `Clear*Override` counterparts already mutate a playing
+document immediately, and the sample project exercises them. M1's property requirement is
+therefore met by existing code, and the only new property work is making a property change
+mark the right dirty unit — which for visibility, opacity and transform is nothing at all,
+since the display path reads them per frame.
+
 ## 9. Measurement hooks
 
 `code/appImmUnity/tests/exporter_benchmark.py` gains edit cases so M1 and M2 are accepted
