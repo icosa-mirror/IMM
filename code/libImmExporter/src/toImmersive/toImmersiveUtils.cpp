@@ -1,4 +1,6 @@
-#include <malloc.h>
+// <stdlib.h> rather than <malloc.h>: the exporter is built for Windows, Android and
+// Apple, and Apple platforms have no malloc.h.
+#include <stdlib.h>
 #include <string.h>
 
 #include "libImmCore/src/libBasics/piStr.h"

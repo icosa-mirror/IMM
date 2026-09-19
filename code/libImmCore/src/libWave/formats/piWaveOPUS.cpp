@@ -1,4 +1,6 @@
-#include <malloc.h>
+// <stdlib.h> rather than <malloc.h>: this file is compiled for Windows, Android and
+// Apple, and Apple platforms have no malloc.h.
+#include <stdlib.h>
 #include <string.h>
 
 

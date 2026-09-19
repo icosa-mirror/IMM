@@ -1,5 +1,6 @@
 #include <new>
-#include <malloc.h>
+// <stdlib.h> rather than <malloc.h>: Apple platforms have no malloc.h.
+#include <stdlib.h>
 #include <math.h>
 #include "libImmCore/src/libBasics/piVecTypes.h"
 #include "element.h"

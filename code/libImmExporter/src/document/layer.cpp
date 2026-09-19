@@ -1,4 +1,5 @@
-#include <malloc.h>
+// <stdlib.h> rather than <malloc.h>: Apple platforms have no malloc.h.
+#include <stdlib.h>
 
 #include "layer.h"
 #include "layerModel3d.h"
