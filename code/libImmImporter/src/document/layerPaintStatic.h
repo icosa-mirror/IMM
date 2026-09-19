@@ -22,31 +22,31 @@ namespace ImmImporter
 	{
 	public:
 		LayerPaintStatic() = default;
-		~LayerPaintStatic() = default;
+		~LayerPaintStatic() override = default;
 
-		bool Init(int numDrawings, int numFrames, int maxRepeatCount, uint32_t frameRate, unsigned int version);
-		void Deinit(void);
+		bool Init(int numDrawings, int numFrames, int maxRepeatCount, uint32_t frameRate, unsigned int version) override;
+		void Deinit(void) override;
 
 		// rendering controlls. Return proper data based on mCurrentFrame
-		const ImmCore::bound3& GetBBox(void) const;
-		const bool HasBBox(void) const;
-		const Drawing * GetCurrentDrawing(void) const;
-        bool GetPlaying(void) const;
+		const ImmCore::bound3& GetBBox(void) const override;
+		const bool HasBBox(void) const override;
+		const Drawing * GetCurrentDrawing(void) const override;
+        bool GetPlaying(void) const override;
 
 		// playback controlls
-		void SetTime(ImmCore::piTick time); // sets current time during playback
-		void SetPlaying(bool playing);
-        void SetOffset(uint32_t offsetFrames);
-        void SetMaxRepeatCount(uint32_t count);
+		void SetTime(ImmCore::piTick time) override; // sets current time during playback
+		void SetPlaying(bool playing) override;
+        void SetOffset(uint32_t offsetFrames) override;
+        void SetMaxRepeatCount(uint32_t count) override;
 
 
 		// for deserializing... (ugly!)
-		unsigned int GetNumDrawings(void) const;
-		unsigned int GetNumFrames(void) const;
-		uint32_t *   GetFrameBuffer(void);
-        unsigned int GetVersion(void) const;
-        unsigned int GetMaxRepeatCount(void) const;
-        unsigned int GetFrameRate(void) const;
+		unsigned int GetNumDrawings(void) const override;
+		unsigned int GetNumFrames(void) const override;
+		uint32_t *   GetFrameBuffer(void) override;
+        unsigned int GetVersion(void) const override;
+        unsigned int GetMaxRepeatCount(void) const override;
+        unsigned int GetFrameRate(void) const override;
 
         // for deserializing... (ugly!)
         Drawing * NewDrawing(void) override;

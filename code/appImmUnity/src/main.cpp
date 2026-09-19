@@ -1997,12 +1997,12 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerI
 // attaching changes no behaviour of the ordinary load and playback paths.
 //----------------------------------------------------------------------------
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int docId)
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int32_t docId)
 {
     return iPlayer().AttachEditing(docId) ? 0 : -1;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int docId, int32_t *attachedOut)
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int32_t docId, int32_t *attachedOut)
 {
     if (attachedOut == nullptr)
         return -2;
@@ -2013,17 +2013,17 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttache
     return 0;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Detach(int docId)
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Detach(int32_t docId)
 {
     return iPlayer().DetachEditing(docId) ? 0 : -4;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DiscardPending(int docId)
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DiscardPending(int32_t docId)
 {
     return iPlayer().DiscardPendingEdits(docId) ? 0 : -4;
 }
 
-extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int docId, unsigned long long *revisionOut)
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int32_t docId, uint64_t *revisionOut)
 {
     int32_t result = 0;
     const uint64_t revision = iPlayer().CommitEdits(docId, &result);
@@ -2035,7 +2035,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(in
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisions(
-    int docId, ImmAuthoringRevisions *revisionsOut)
+    int32_t docId, ImmAuthoringRevisions *revisionsOut)
 {
     if (revisionsOut == nullptr || revisionsOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
         revisionsOut->structSize < sizeof(ImmAuthoringRevisions))
@@ -2051,7 +2051,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisi
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommitStatus(
-    int docId, unsigned long long revision, ImmAuthoringCommitStatus *statusOut)
+    int32_t docId, uint64_t revision, ImmAuthoringCommitStatus *statusOut)
 {
     if (statusOut == nullptr || statusOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
         statusOut->structSize < sizeof(ImmAuthoringCommitStatus))
@@ -2070,7 +2070,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommit
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
-    int docId, int layerId, int drawingIndex, unsigned long long *drawingIdOut)
+    int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {
     if (drawingIdOut == nullptr || layerId < 0 || drawingIndex < 0)
         return -2;
@@ -2082,9 +2082,9 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGe
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
-    int docId, int layerId, int brush, int visible,
-    const ImmAuthoringPoint *points, int numPoints, float biggestStroke, int colorSpace, int frameIndex,
-    int *drawingIndexOut)
+    int32_t docId, int32_t layerId, int32_t brush, int32_t visible,
+    const ImmAuthoringPoint *points, int32_t numPoints, float biggestStroke, int32_t colorSpace,
+    int32_t frameIndex, int32_t *drawingIndexOut)
 {
     (void)docId; (void)layerId; (void)brush; (void)visible; (void)points;
     (void)numPoints; (void)biggestStroke; (void)colorSpace; (void)frameIndex;
@@ -2093,7 +2093,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAd
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
-    int docId, int layerId, int frameIndex, int drawingIndex)
+    int32_t docId, int32_t layerId, int32_t frameIndex, int32_t drawingIndex)
 {
     (void)docId; (void)layerId; (void)frameIndex; (void)drawingIndex;
     return -3; // frame remapping joins the batch model after stable created handles

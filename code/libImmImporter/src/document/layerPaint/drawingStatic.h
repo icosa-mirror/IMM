@@ -21,14 +21,14 @@ namespace ImmImporter
 	{
 	public:
 		DrawingStatic() = default;
-		~DrawingStatic() = default;
+		~DrawingStatic() override = default;
 
-		bool Init(uint32_t numElements);
-		void Deinit(void);
+		bool Init(uint32_t numElements) override;
+		void Deinit(void) override;
 
-		bool  StartAdding(float biggestStroke); // for the deserializer
-		bool  Add(const Element * ele, ColorSpace colorSpace, bool flipped);
-		void  StopAdding(void);
+		bool  StartAdding(float biggestStroke) override; // for the deserializer
+		bool  Add(const Element * ele, ColorSpace colorSpace, bool flipped) override;
+		void  StopAdding(void) override;
 
 		// Live editing: rebuild this drawing's vertices, indices and chunks from new element
 		// data. The previous geometry is dropped and the new elements go through the same
@@ -37,14 +37,14 @@ namespace ImmImporter
 		bool  ReplaceGeometry(const Element * elements, int numElements, ColorSpace colorSpace, bool flipped, float biggestStroke) override;
 		bool  SwapGeometry(Drawing * replacement) override;
 
-		void     SetGpuId(int id);
-		int      GetGpuId(void) const;
+		void     SetGpuId(int id) override;
+		int      GetGpuId(void) const override;
 
-        void  SetLoaded(bool loaded);
-        bool  GetLoaded(void) const;
+        void  SetLoaded(bool loaded) override;
+        bool  GetLoaded(void) const override;
 
-        void  SetFileOffset(uint64_t offset);
-        uint64_t GetFileOffset(void) const;
+        void  SetFileOffset(uint64_t offset) override;
+        uint64_t GetFileOffset(void) const override;
 
         // GPU vertex format
 #if ST_VERTEX_FORMAT == 1
@@ -101,14 +101,14 @@ namespace ImmImporter
 		};
 
 
-		const bound3& GetBBox(void) const;
-		const uint32_t GetNumStrokes(void) const;
-		const uint32_t GetNumGeometryChunks(uint32_t type) const;
+		const bound3& GetBBox(void) const override;
+		const uint32_t GetNumStrokes(void) const override;
+		const uint32_t GetNumGeometryChunks(uint32_t type) const override;
 		const Geometry::Chunk * GetGeometryChunk(uint32_t id, uint32_t type) const;
 		const Geometry *GetGeometry(void) const;
 
 	private:
-		void iAppendChunk(const uint32_t vbase, const uint32_t ibase, const uint32_t pbase, const uint32_t numPoints, uint32_t numIndices, uint32_t numPolygons, const ImmCore::bound3 & bbox, const uint32_t type, const float biggestStroke);
+		void iAppendChunk(const uint32_t vbase, const uint32_t ibase, const uint32_t pbase, const uint32_t numPoints, uint32_t numIndices, uint32_t numPolygons, const ImmCore::bound3 & bbox, const uint32_t type, const float biggestStroke) override;
 
 	private:
         bound3   mBBox;
