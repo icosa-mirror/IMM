@@ -45,6 +45,22 @@ namespace ImmPlayer
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool StrokeReader_IsInitialized();
 
+        /// <summary>
+        /// Native build identifier of the loaded stroke reader library.
+        /// </summary>
+        [DllImport(DllName)]
+        private static extern IntPtr StrokeReader_GetBuildId();
+
+        /// <summary>
+        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5"),
+        /// the intended way to confirm which stroke reader library a player actually loaded.
+        /// </summary>
+        public static string GetBuildId()
+        {
+            IntPtr value = StrokeReader_GetBuildId();
+            return value == IntPtr.Zero ? string.Empty : Marshal.PtrToStringAnsi(value);
+        }
+
         #endregion
 
         #region Loading API
@@ -187,6 +203,21 @@ namespace ImmPlayer
 
         [DllImport(DllName)]
         public static extern int StrokeReader_GetAuthoringStrokeCount(int docId, int layerIdx, int drawingIdx);
+
+        /// <summary>
+        /// Largest single-element bounding-box extent in a drawing, in document units.
+        /// </summary>
+        /// <param name="docId">Document ID</param>
+        /// <param name="layerIdx">Layer index</param>
+        /// <param name="drawingIdx">Drawing index</param>
+        /// <returns>Largest element extent, or 0 if the indices are invalid</returns>
+        /// <remarks>
+        /// This is the value the IMM format itself stores per drawing (it normalizes stroke
+        /// positions and widths by it), which makes it a cheap geometry-budget estimate:
+        /// how much document space the drawing occupies.
+        /// </remarks>
+        [DllImport(DllName)]
+        public static extern float StrokeReader_GetDrawingBiggestStroke(int docId, int layerIdx, int drawingIdx);
 
         /// <summary>
         /// Get information about a stroke (brush type, visibility, point count, bounding box).
@@ -711,6 +742,21 @@ namespace ImmPlayer
         public int GetStrokeCount(int layerIdx, int drawingIdx)
         {
             return _docId > 0 ? ImmStrokeReader.StrokeReader_GetStrokeCount(_docId, layerIdx, drawingIdx) : 0;
+        }
+
+        /// <summary>
+        /// Largest single-element bounding-box extent in a drawing, in document units: the
+        /// value the IMM format stores per drawing to normalize stroke positions and widths,
+        /// usable as a cheap geometry-budget estimate.
+        /// </summary>
+        public bool TryGetDrawingBiggestStroke(int layerIdx, int drawingIdx, out float biggestStroke)
+        {
+            biggestStroke = 0.0f;
+            if (_docId <= 0)
+                return false;
+
+            biggestStroke = ImmStrokeReader.StrokeReader_GetDrawingBiggestStroke(_docId, layerIdx, drawingIdx);
+            return true;
         }
 
         /// <summary>

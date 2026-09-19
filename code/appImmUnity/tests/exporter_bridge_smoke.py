@@ -503,8 +503,23 @@ def _verify_export_round_trip(reader: ctypes.CDLL, staging: Path, output_path: P
         ctypes.c_int,
         ctypes.POINTER(AnimationKey),
     )
+    get_build_id = bind(reader, "StrokeReader_GetBuildId", ctypes.c_char_p)
+    get_biggest_stroke = bind(
+        reader,
+        "StrokeReader_GetDrawingBiggestStroke",
+        ctypes.c_float,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+    )
     unload = bind(reader, "StrokeReader_Unload", None, ctypes.c_int)
     end = bind(reader, "StrokeReader_End", None)
+
+    build_id = get_build_id()
+    require(
+        build_id is not None and build_id.startswith(b"IMM_STROKE_READER_BUILD_ID="),
+        f"StrokeReader_GetBuildId ({build_id!r})",
+    )
 
     if not is_initialized():
         require(init(os.fsencode(staging / "stroke-reader-log.txt")) == 0, "StrokeReader_Init")
@@ -549,6 +564,14 @@ def _verify_export_round_trip(reader: ctypes.CDLL, staging: Path, output_path: P
         require(
             abs(found[PROPERTY_DRAW_IN_TIME].doubleValue - DRAW_IN_TIME_SECONDS) < 1e-6,
             "round-trip draw-in-time value",
+        )
+
+        # The smoke stroke spans 1.0 in X plus the 0.03 brush radius at each end, so the
+        # per-drawing value the format stores (largest element bbox extent) is ~1.06.
+        biggest = get_biggest_stroke(document_id, index, 0)
+        require(
+            1.0 <= biggest <= 1.1,
+            f"StrokeReader_GetDrawingBiggestStroke ({biggest} outside the authored 1.0-1.1 span)",
         )
     finally:
         unload(document_id)
