@@ -1369,6 +1369,42 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
 
     delete element;
 
+    // Second operation: append a drawing and point a frame at it, which is what an editor does
+    // when a new stroke is added rather than an existing one changed.
+    std::vector<ImmImporter::Element::PointSource> added(numPoints);
+    for (int i = 0; i < numPoints; i++)
+    {
+        const float t = static_cast<float>(i) / static_cast<float>(numPoints - 1);
+        ImmImporter::Element::PointSource &p = added[i];
+        p.mPos = ImmCore::vec3(1.0f + t * 0.5f, -1.0f, 0.0f);
+        p.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f);
+        p.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+        p.mCol = ImmCore::vec3(1.0f, 0.5f, 0.5f);
+        p.mAlpha = 1.0f;
+        p.mWidth = biggestStroke;
+        p.mLength = t;
+        p.mTime = t;
+    }
+
+    ImmImporter::Element *addedElement = new ImmImporter::Element();
+    const bool addedBuilt = addedElement->Set(added.data(), numPoints,
+        ImmImporter::Element::BrushSectionType::Circle,
+        ImmImporter::Element::VisibilityType::Always,
+        biggestStroke);
+
+    int addedIndex = -1;
+    const auto addStart = Clock::now();
+    const bool addedOk = addedBuilt && player->AddDrawing(
+        docId, layerId, addedElement, 1,
+        ImmImporter::Drawing::ColorSpace::Gamma, false, biggestStroke, 0, &addedIndex);
+    const auto addEnd = Clock::now();
+    delete addedElement;
+
+    const auto frameStart = Clock::now();
+    const bool frameOk = addedOk && player->SetFrameDrawing(docId, layerId, 0, addedIndex);
+    const auto frameEnd = Clock::now();
+    player->CommitEdits(docId);
+
     log.Printf(LT_MESSAGE,
         L"[IMM_LIVE_EDIT] frame=%d docId=%d layerId=%d points=%d attached=%d replaced=%d revision=%llu "
         L"attachMs=%.3f editMs=%.3f commitMs=%.3f bboxBefore=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
@@ -1377,6 +1413,11 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
         ms(attachStart, attachEnd), ms(editStart, editEnd), ms(commitStart, commitEnd),
         boxBefore.mMinX, boxBefore.mMinY, boxBefore.mMinZ,
         boxBefore.mMaxX, boxBefore.mMaxY, boxBefore.mMaxZ);
+
+    log.Printf(LT_MESSAGE,
+        L"[IMM_LIVE_EDIT] addDrawing added=%d addedOk=%d drawingIndex=%d frameOk=%d addMs=%.3f frameMs=%.3f",
+        addedBuilt ? 1 : 0, addedOk ? 1 : 0, addedIndex, frameOk ? 1 : 0,
+        ms(addStart, addEnd), ms(frameStart, frameEnd));
 }
 
 

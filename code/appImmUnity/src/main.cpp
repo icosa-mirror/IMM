@@ -2027,6 +2027,73 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(in
     return 0;
 }
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
+    int docId, int layerId, int brush, int visible,
+    const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace, int frameIndex,
+    int *drawingIndexOut)
+{
+    if (points == nullptr)
+        return -2;
+    if (numPoints < 2 || numPoints > 8192)
+        return -2;
+    if (brush <= static_cast<int>(ImmImporter::Element::BrushSectionType::Point) ||
+        brush >= static_cast<int>(ImmImporter::Element::BrushSectionType::Count))
+        return -3;
+
+    if (biggestStroke <= 0.0f)
+    {
+        for (int i = 0; i < numPoints; i++)
+        {
+            if (points[i].width > biggestStroke)
+                biggestStroke = points[i].width;
+        }
+        if (biggestStroke <= 0.0f)
+            return -2;
+    }
+
+    ImmImporter::Element *element = new (std::nothrow) ImmImporter::Element();
+    if (element == nullptr)
+        return -5;
+
+    std::vector<ImmImporter::Element::PointSource> sources(numPoints);
+    for (int i = 0; i < numPoints; i++)
+    {
+        const ImmAuthoringPointC &src = points[i];
+        ImmImporter::Element::PointSource &dst = sources[i];
+        dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
+        dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
+        dst.mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
+        dst.mCol = ImmCore::vec3(src.r, src.g, src.b);
+        dst.mAlpha = src.alpha;
+        dst.mWidth = src.width;
+        dst.mLength = src.length;
+        dst.mTime = src.time;
+    }
+
+    const bool built = element->Set(sources.data(), numPoints,
+        static_cast<ImmImporter::Element::BrushSectionType>(brush),
+        static_cast<ImmImporter::Element::VisibilityType>(visible),
+        biggestStroke);
+
+    int drawingIndex = -1;
+    const bool added = built && iPlayer().AddDrawing(
+        docId, layerId, element, 1,
+        static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), false, biggestStroke,
+        frameIndex, &drawingIndex);
+
+    delete element;
+
+    if (added && drawingIndexOut != nullptr)
+        *drawingIndexOut = drawingIndex;
+    return added ? 0 : -1;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
+    int docId, int layerId, int frameIndex, int drawingIndex)
+{
+    return iPlayer().SetFrameDrawing(docId, layerId, frameIndex, drawingIndex) ? 0 : -1;
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
     int docId, int layerId, int drawingIndex, int brush, int visible,
     const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace)

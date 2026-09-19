@@ -595,6 +595,75 @@ namespace ImmPlayer
         return true;
     }
 
+    bool Player::AddDrawing(int docId, int layerId, const Element * elements, int numElements,
+        Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke,
+        int frameIndex, int * drawingIndexOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc || !doc->IsEditing())
+            return false;
+        if (elements == nullptr || numElements <= 0)
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer || layer->GetType() != Layer::Type::Paint)
+            return false;
+
+        LayerPaint *layerPaint = (LayerPaint *)layer->GetImplementation();
+        if (layerPaint == nullptr)
+            return false;
+
+        Drawing *drawing = layerPaint->AddDrawing();
+        if (drawing == nullptr)
+            return false;
+
+        if (!drawing->ReplaceGeometry(elements, numElements, colorSpace, flipped, biggestStroke))
+            return false;
+
+        const int drawingIndex = static_cast<int>(layerPaint->GetNumDrawings()) - 1;
+
+        if (frameIndex >= 0)
+        {
+            uint32_t *frames = layerPaint->GetFrameBuffer();
+            if (frames == nullptr || static_cast<unsigned int>(frameIndex) >= layerPaint->GetNumFrames())
+                return false;
+            frames[frameIndex] = static_cast<uint32_t>(drawingIndex);
+        }
+
+        if (drawingIndexOut != nullptr)
+            *drawingIndexOut = drawingIndex;
+
+        doc->MarkLayerGeometryDirty(layer);
+        return true;
+    }
+
+    bool Player::SetFrameDrawing(int docId, int layerId, int frameIndex, int drawingIndex)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (!doc || !doc->IsEditing())
+            return false;
+
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (!layer || layer->GetType() != Layer::Type::Paint)
+            return false;
+
+        LayerPaint *layerPaint = (LayerPaint *)layer->GetImplementation();
+        if (layerPaint == nullptr)
+            return false;
+        if (frameIndex < 0 || static_cast<unsigned int>(frameIndex) >= layerPaint->GetNumFrames())
+            return false;
+        if (drawingIndex < 0 || static_cast<unsigned int>(drawingIndex) >= layerPaint->GetNumDrawings())
+            return false;
+
+        layerPaint->GetFrameBuffer()[frameIndex] = static_cast<uint32_t>(drawingIndex);
+        doc->MarkLayerGeometryDirty(layer);
+        return true;
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);

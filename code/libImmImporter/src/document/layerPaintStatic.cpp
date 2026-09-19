@@ -117,6 +117,24 @@ namespace ImmImporter
         return nullptr; // unused
     }
 
+    Drawing * LayerPaintStatic::AddDrawing(void)
+    {
+        // Existing drawings keep their indices: the frame buffer stores indices, and the GPU
+        // pool is addressed by each drawing's own gpu id, so appending invalidates neither.
+        mDrawings.push_back(DrawingStatic());
+
+        DrawingStatic & drawing = mDrawings.back();
+        if (!drawing.Init(1))
+        {
+            mDrawings.pop_back();
+            return nullptr;
+        }
+
+        drawing.SetGpuId(-1);
+        drawing.SetLoaded(false);
+        return &drawing;
+    }
+
 	Drawing * LayerPaintStatic::GetDrawing(int drawing) const
 	{
 		return const_cast<DrawingStatic*>(&mDrawings[drawing]);

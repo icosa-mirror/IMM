@@ -49,9 +49,13 @@ namespace ImmImporter
         unsigned int GetFrameRate(void) const;
 
         // for deserializing... (ugly!)
-        Drawing * NewDrawing(void);
+        Drawing * NewDrawing(void) override;
 		// for gpu unloading... (ugly!)
-		Drawing * GetDrawing(int drawing) const;
+		Drawing * GetDrawing(int drawing) const override;
+
+		// Live editing: append a drawing. Existing drawings keep their indices, so frame
+		// mappings pointing at them stay valid.
+		Drawing * AddDrawing(void) override;
 
 
 	private:

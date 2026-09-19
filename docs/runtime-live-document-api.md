@@ -70,13 +70,16 @@ Geometry transfer is **borrowed, not copied**: the caller's arrays must stay val
 `Commit` returns. One call per drawing, points in one batch — no per-point ABI calls in the
 interactive path.
 
-Implemented so far (M1a): `ImmAuthoring_Attach`, `ImmAuthoring_IsAttached`,
-`ImmAuthoring_Commit` and `ImmAuthoring_DrawingSetGeometry`. Geometry replacement works on
-static paint drawings (`DrawingStatic::ReplaceGeometry`); pretessellated drawings refuse, so
-the Android/GLES path that uses them reports failure rather than silently ignoring the edit.
-The points are quantised with the exporter's own helpers (`bits8` alpha, `bits15` width
-against `biggestStroke`) so a live edit and an export of the same points describe the same
-pixels.
+Implemented so far (M1a-M1c): `ImmAuthoring_Attach`, `ImmAuthoring_IsAttached`,
+`ImmAuthoring_Commit`, `ImmAuthoring_DrawingSetGeometry`, `ImmAuthoring_DrawingAdd` and
+`ImmAuthoring_FrameSet`. Appending a drawing keeps every existing index valid, so frame
+mappings and GPU ids are untouched; destroying one is not implemented yet because it shifts
+`mDrawings` indices and needs either a tombstone or a remap of both. Geometry replacement
+works on static paint drawings (`DrawingStatic::ReplaceGeometry`); pretessellated drawings
+refuse, so the Android/GLES path that uses them reports failure rather than silently
+ignoring the edit. The points are quantised with the exporter's own helpers (`bits8` alpha,
+`bits15` width against `biggestStroke`) so a live edit and an export of the same points
+describe the same pixels.
 
 Animation and spawn areas:
 

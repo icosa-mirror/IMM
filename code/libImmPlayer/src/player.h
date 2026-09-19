@@ -132,6 +132,15 @@ namespace ImmPlayer {
             const ImmImporter::Element * elements, int numElements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
 
+        // Append a drawing with the given geometry, optionally mapping a frame onto it, and
+        // return its index. Existing drawings keep their indices.
+        bool AddDrawing(int docId, int layerId, const ImmImporter::Element * elements, int numElements,
+            ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke,
+            int frameIndex, int * drawingIndexOut);
+
+        // Point a frame at a drawing of the same layer.
+        bool SetFrameDrawing(int docId, int layerId, int frameIndex, int drawingIndex);
+
         struct LayerDiagnostics
         {
             int hasVisibilityKeys = 0;
