@@ -111,6 +111,8 @@ namespace ImmPlayer
                 buf->mVertexData = nullptr;
                 buf->mIBO = nullptr;
                 buf->mVertexArray[0] = nullptr;
+                buf->mVertexArray[1] = nullptr;
+                buf->mVertexArray[2] = nullptr;
 
                 const uint32_t numChunks = dr->GetNumGeometryChunks(chunkType);
 
@@ -131,27 +133,30 @@ namespace ImmPlayer
 
         void Download(piRenderer* renderer, piLog *log)
         {
-            if (!mUploaded) return;
-
             for (int chunkType = 0; chunkType < LayerRendererPaintStatic::kNumChunkTypes; chunkType++)
             {
-                if (mGeometry->mBuffers[chunkType].mPoints.GetLength()==0) continue;
-                // GPU data
-
                 if (renderer->GetAPI() == piRenderer::API::DX)
                 {
                     for (int j = 0; j < 3; j++)
                     {
-                        renderer->DestroyVertexArray2(mBuffers[chunkType].mVertexArray[j]);
+                        if (mBuffers[chunkType].mVertexArray[j] != nullptr)
+                            renderer->DestroyVertexArray2(mBuffers[chunkType].mVertexArray[j]);
+                        mBuffers[chunkType].mVertexArray[j] = nullptr;
                     }
                 }
                 else
                 {
-                    renderer->DestroyVertexArray(mBuffers[chunkType].mVertexArray[0]);
+                    if (mBuffers[chunkType].mVertexArray[0] != nullptr)
+                        renderer->DestroyVertexArray(mBuffers[chunkType].mVertexArray[0]);
+                    mBuffers[chunkType].mVertexArray[0] = nullptr;
                 }
 
-                renderer->DestroyBuffer(mBuffers[chunkType].mVertexData);
-                renderer->DestroyBuffer(mBuffers[chunkType].mIBO);                
+                if (mBuffers[chunkType].mVertexData != nullptr)
+                    renderer->DestroyBuffer(mBuffers[chunkType].mVertexData);
+                if (mBuffers[chunkType].mIBO != nullptr)
+                    renderer->DestroyBuffer(mBuffers[chunkType].mIBO);
+                mBuffers[chunkType].mVertexData = nullptr;
+                mBuffers[chunkType].mIBO = nullptr;
             }
             mUploaded = false;
         }
@@ -172,6 +177,7 @@ namespace ImmPlayer
                 if (dst->mVertexData == nullptr)
                 {
                     log->Printf(LT_ERROR, L"Couldn't create data resource");
+                    Download(renderer, log);
                     return false;
                 }
 
@@ -179,6 +185,7 @@ namespace ImmPlayer
                 if (dst->mIBO == nullptr)
                 {
                     log->Printf(LT_ERROR, L"Couldn't create mIBO");
+                    Download(renderer, log);
                     return false;
                 }
 
@@ -191,6 +198,7 @@ namespace ImmPlayer
                         if (!dst->mVertexArray[j])
                         {
                             log->Printf(LT_ERROR, L"Couldn't create Vertex Array");
+                            Download(renderer, log);
                             return false;
                         }
                     }
@@ -202,6 +210,7 @@ namespace ImmPlayer
                     if (!dst->mVertexArray[0])
                     {
                         log->Printf(LT_ERROR, L"Couldn't create Vertex Array");
+                        Download(renderer, log);
                         return false;
                     }
                 }
@@ -227,6 +236,8 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 #endif
 
         mCapLayersToRender = 1;
+        mRetirementFrame = 0;
+        mRetiredDrawings.clear();
 
         mColorSpace = colorSpace;
         if (!mLayerInfo.Init(256, sizeof(iSLayerDrawInfoStatic))) // one per layer
@@ -367,6 +378,23 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     void LayerRendererPaintStatic::Deinit(piRenderer* renderer, piLog* log)
     {
+        for (RetiredDrawing & retired : mRetiredDrawings)
+        {
+            iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(retired.mToken);
+            if (info != nullptr)
+            {
+                info->Download(renderer, log);
+                info->End();
+                mLayerInfo.Free(retired.mToken);
+            }
+            if (retired.mDrawing != nullptr)
+            {
+                retired.mDrawing->Deinit();
+                delete retired.mDrawing;
+            }
+        }
+        mRetiredDrawings.clear();
+
         // Verify everything is freed for memory leaks
         const uint64_t num = mLayerInfo.GetMaxLength();
         bool notDeleted = false;
@@ -524,50 +552,138 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     }
 
-    bool LayerRendererPaintStatic::RefreshDrawingInCPU(Layer* la, unsigned int drawingID, piLog* log)
+    bool LayerRendererPaintStatic::PrepareDrawingReplacementInCPU(Drawing * replacement,
+        uint64_t * tokenOut, piLog * log)
     {
-        LayerPaint* lp = (LayerPaint*)la->GetImplementation();
-        if (lp == nullptr || drawingID >= lp->GetNumDrawings())
-            return false;
-
-        Drawing* dr = lp->GetDrawing(drawingID);
-        if (dr == nullptr)
-            return false;
-
-        // Release the drawing's existing slot the same way the layer-wide unload does, then
-        // allocate a fresh one for it. Calling Init() on a live slot crashes: it re-creates
-        // state the slot already owns.
-        const int previousId = dr->GetGpuId();
-        if (previousId != -1)
+        if (std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_CPU") != nullptr)
         {
-            iSLayerDrawInfoStatic* previous = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(previousId);
-            if (previous != nullptr)
-            {
-                previous->End();
-                mLayerInfo.Free(previousId);
-            }
-            dr->SetGpuId(-1);
+            log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected CPU replacement failure");
+            return false;
         }
+        if (replacement == nullptr || tokenOut == nullptr || dynamic_cast<DrawingStatic *>(replacement) == nullptr)
+            return false;
 
         bool isNew = false;
         uint64_t id = 0;
         iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.Alloc(&isNew, &id, true);
         if (me == nullptr)
         {
-            log->Printf(LT_ERROR, L"Live edit: no draw-info slot for layer drawing %u", drawingID);
+            log->Printf(LT_ERROR, L"Live edit: no draw-info slot for replacement drawing");
             return false;
         }
 
         new (me) iSLayerDrawInfoStatic();
 
-        if (!me->Init(dr))
+        if (!me->Init(replacement))
         {
             mLayerInfo.Free(id);
             return false;
         }
 
-        dr->SetGpuId(static_cast<int>(id));
+        replacement->SetGpuId(static_cast<int>(id));
+        *tokenOut = id;
         return true;
+    }
+
+    bool LayerRendererPaintStatic::PrepareDrawingReplacementInGPU(piRenderer * renderer,
+        uint64_t token, piLog * log)
+    {
+        if (std::getenv("IMM_LIVE_EDIT_FAIL_PREPARE_GPU") != nullptr)
+        {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected GPU replacement failure token=%llu",
+                static_cast<unsigned long long>(token));
+            return false;
+        }
+        if (token >= mLayerInfo.GetMaxLength() || !mLayerInfo.IsUsed(token))
+            return false;
+        iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(token);
+        return info != nullptr && info->Upload(renderer, log);
+    }
+
+    bool LayerRendererPaintStatic::PresentDrawingReplacement(Drawing * active,
+        Drawing * replacement, uint64_t token, piLog * log)
+    {
+        if (std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
+        {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected presentation failure token=%llu",
+                static_cast<unsigned long long>(token));
+            return false;
+        }
+        DrawingStatic * activeStatic = dynamic_cast<DrawingStatic *>(active);
+        DrawingStatic * replacementStatic = dynamic_cast<DrawingStatic *>(replacement);
+        if (activeStatic == nullptr || replacementStatic == nullptr ||
+            token >= mLayerInfo.GetMaxLength() || !mLayerInfo.IsUsed(token))
+            return false;
+
+        const int oldToken = activeStatic->GetGpuId();
+        if (oldToken < 0 || !mLayerInfo.IsUsed(static_cast<uint64_t>(oldToken)))
+        {
+            log->Printf(LT_ERROR, L"Live edit: active drawing has no renderer slot");
+            return false;
+        }
+
+        iSLayerDrawInfoStatic * replacementInfo = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(token);
+        iSLayerDrawInfoStatic * oldInfo = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(static_cast<uint64_t>(oldToken));
+        if (replacementInfo == nullptr || oldInfo == nullptr || !replacementInfo->mUploaded)
+            return false;
+
+        if (!activeStatic->SwapGeometry(replacementStatic))
+            return false;
+
+        replacementInfo->mGeometry = activeStatic->GetGeometry();
+        oldInfo->mGeometry = replacementStatic->GetGeometry();
+        activeStatic->SetGpuId(static_cast<int>(token));
+        replacementStatic->SetGpuId(oldToken);
+
+        // Ownership transfers only after model geometry and renderer identity have both moved.
+        mRetiredDrawings.push_back(RetiredDrawing{
+            replacementStatic, static_cast<uint64_t>(oldToken),
+            mRetirementFrame + kRetirementFramesInFlight });
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] renderer swap activeToken=%llu retiredToken=%d",
+            static_cast<unsigned long long>(token), oldToken);
+        return true;
+    }
+
+    void LayerRendererPaintStatic::CancelDrawingReplacement(piRenderer * renderer,
+        uint64_t token, piLog * log)
+    {
+        if (token >= mLayerInfo.GetMaxLength() || !mLayerInfo.IsUsed(token))
+            return;
+        iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(token);
+        if (info != nullptr)
+        {
+            info->Download(renderer, log);
+            info->End();
+            mLayerInfo.Free(token);
+        }
+    }
+
+    void LayerRendererPaintStatic::AdvanceDrawingRetirement(piRenderer * renderer, piLog * log)
+    {
+        mRetirementFrame++;
+        for (size_t i = 0; i < mRetiredDrawings.size();)
+        {
+            RetiredDrawing & retired = mRetiredDrawings[i];
+            if (retired.mRetireAfterFrame > mRetirementFrame)
+            {
+                i++;
+                continue;
+            }
+
+            iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(retired.mToken);
+            if (info != nullptr)
+            {
+                info->Download(renderer, log);
+                info->End();
+                mLayerInfo.Free(retired.mToken);
+            }
+            if (retired.mDrawing != nullptr)
+            {
+                retired.mDrawing->Deinit();
+                delete retired.mDrawing;
+            }
+            mRetiredDrawings.erase(mRetiredDrawings.begin() + i);
+        }
     }
 
     void LayerRendererPaintStatic::PrepareForDisplay(StereoMode stereoMode)

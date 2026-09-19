@@ -35,6 +35,7 @@ namespace ImmImporter
 		// builder the importer uses, so the result is what an import of the same points would
 		// have produced. The caller keeps ownership of the elements.
 		bool  ReplaceGeometry(const Element * elements, int numElements, ColorSpace colorSpace, bool flipped, float biggestStroke) override;
+		bool  SwapGeometry(Drawing * replacement) override;
 
 		void     SetGpuId(int id);
 		int      GetGpuId(void) const;

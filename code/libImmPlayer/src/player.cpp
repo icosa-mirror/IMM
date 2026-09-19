@@ -610,6 +610,25 @@ namespace ImmPlayer
             doc->GetDrawingHandle(static_cast<uint32_t>(layerId), static_cast<uint32_t>(drawingIndex), &drawingIdOut);
     }
 
+    bool Player::GetDrawingBBox(int docId, int layerId, int drawingIndex, bound3 & bboxOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr || drawingIndex < 0)
+            return false;
+        Layer *layer = iFindLayerById(doc->GetSequence(), layerId);
+        if (layer == nullptr || layer->GetType() != Layer::Type::Paint)
+            return false;
+        LayerPaint *paint = (LayerPaint *)layer->GetImplementation();
+        if (paint == nullptr || static_cast<unsigned int>(drawingIndex) >= paint->GetNumDrawings())
+            return false;
+        Drawing *drawing = paint->GetDrawing(drawingIndex);
+        if (drawing == nullptr)
+            return false;
+        bboxOut = drawing->GetBBox();
+        return true;
+    }
+
     bool Player::QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
         const Element * elements, int numElements,
         Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
@@ -1179,6 +1198,8 @@ namespace ImmPlayer
         {
             iTraceUnityGlobalRender("locked");
             bool anyDocReady = false;
+            if (!iEnvFlagEnabled("IMM_UNITY_SKIP_DOC_UPDATE_STATE_GPU") && mLayerPaintRender != nullptr)
+                mLayerPaintRender->AdvanceDrawingRetirement(mRenderer, mLog);
             for (uint64_t i = 0; i < num; i++)
             {
                 if (!mDocuments.IsUsed(i)) continue;

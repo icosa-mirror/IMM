@@ -206,10 +206,7 @@ namespace ImmPlayer {
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
 
-        // Queue one layer for per-layer regeneration: the next CPU pass rebuilds its
-        // geometry, the following GPU pass re-uploads it, and no other layer is touched.
-        void MarkLayerGeometryDirty(ImmImporter::Layer * layer, uint64_t revision = 0);
-        bool HasPendingEdits(void) const { return !mDirtyCPU.empty() || !mDirtyGPU.empty(); }
+        bool HasPendingEdits(void) const { return !mSealedBatches.empty() || mPendingPresentation.mRevision != 0; }
 
         // Publish queued edits. The revision advances once the queues have been applied.
         uint64_t CommitEdits(int32_t * resultOut = nullptr);
@@ -251,32 +248,23 @@ namespace ImmPlayer {
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
 
-        // A GPU refresh waits for the frames still in flight that referenced the old buffers.
-        struct PendingGpuRefresh
+        struct PendingPresentation
         {
-            ImmImporter::Layer * mLayer;
-            uint64_t mNotBeforeFrame;
-            uint64_t mRevision;
+            uint64_t mRevision = 0;
+            uint64_t mObject = 0;
+            ImmImporter::Drawing * mActive = nullptr;
+            std::unique_ptr<ImmImporter::Drawing> mReplacement;
+            uint64_t mRendererToken = 0;
         };
-        struct PendingCpuRefresh
-        {
-            ImmImporter::Layer * mLayer;
-            uint64_t mRevision;
-        };
-        uint64_t mFrameCounter = 0;
-        std::vector<PendingCpuRefresh> mDirtyCPU;
-        std::vector<PendingGpuRefresh> mDirtyGPU;
-        static constexpr uint64_t kGpuRefreshDelayFrames = 3;
+        PendingPresentation mPendingPresentation;
 
         void iBuildDrawingHandleMap(ImmImporter::Layer * layer);
         const DrawingHandleEntry * iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const;
         AuthoringCommitStatus * iFindCommitStatus(uint64_t revision);
         void iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object);
-        void iPrepareAuthoringCommit(void);
-        void iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, ImmCore::piLog * log);
-        void iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,
-            LayerRendererModel * layerRenderModel, ImmCore::piRenderer * renderer, ImmCore::piLog * log,
-            Drawing::ColorSpace colorSpace);
+        void iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, ImmCore::piLog * log);
+        void iDiscardPendingPresentation(LayerRendererPaint * layerPaintRender,
+            ImmCore::piRenderer * renderer, ImmCore::piLog * log);
 
     private:
         bool iLoadCPU(ImmCore::piLog *log, ImmCore::piSoundEngine* soundEngine,

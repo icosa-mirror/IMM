@@ -52,6 +52,14 @@ namespace ImmImporter
 			return false;
 		}
 
+        // Atomically exchange renderer-independent geometry storage with a compatible
+        // replacement drawing. Renderer slot identity is deliberately handled separately.
+        virtual bool SwapGeometry(Drawing * replacement)
+        {
+            (void)replacement;
+            return false;
+        }
+
 	protected:
 		virtual void iAppendChunk(const uint32_t vbase, const uint32_t ibase, const uint32_t pbase, const uint32_t numPoints, uint32_t numIndices, uint32_t numPolygons, const bound3 & bbox, const uint32_t type, float biggestStroke) = 0;
 	};

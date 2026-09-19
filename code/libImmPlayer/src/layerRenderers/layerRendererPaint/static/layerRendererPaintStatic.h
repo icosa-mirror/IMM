@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+
 #include "libImmCore/src/libBasics/piPool.h"
 
 #include "../layerRendererPaint.h"
@@ -22,8 +24,15 @@ namespace ImmPlayer
         bool UnloadInGPU(ImmCore::piRenderer *renderer, ImmCore::piSoundEngine *sound, ImmCore::piLog *log, ImmImporter::Layer *la, unsigned int drawingID) override;
 		void GlobalWork(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la, float masterVolume) override;
 
-		// Live editing: re-init one drawing's draw info on the pool slot it already owns.
-		bool RefreshDrawingInCPU(ImmImporter::Layer* la, unsigned int drawingID, ImmCore::piLog* log) override;
+		bool PrepareDrawingReplacementInCPU(ImmImporter::Drawing * replacement,
+			uint64_t * tokenOut, ImmCore::piLog * log) override;
+		bool PrepareDrawingReplacementInGPU(ImmCore::piRenderer * renderer,
+			uint64_t token, ImmCore::piLog * log) override;
+		bool PresentDrawingReplacement(ImmImporter::Drawing * active,
+			ImmImporter::Drawing * replacement, uint64_t token, ImmCore::piLog * log) override;
+		void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
+			uint64_t token, ImmCore::piLog * log) override;
+		void AdvanceDrawingRetirement(ImmCore::piRenderer * renderer, ImmCore::piLog * log) override;
 
 		void PrepareForDisplay(StereoMode stereoMode) override;
 		void DisplayPreRender(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmImporter::Layer* la, const ImmCore::frustum3& frus, const ImmCore::trans3d & layerToViewer, float opacity) override;
@@ -53,6 +62,16 @@ namespace ImmPlayer
         uint64_t mCapLayersToRender;
 
 		DrawCallInfo mDrawCallInfo {};
+
+		struct RetiredDrawing
+		{
+			ImmImporter::Drawing * mDrawing = nullptr;
+			uint64_t mToken = 0;
+			uint64_t mRetireAfterFrame = 0;
+		};
+		uint64_t mRetirementFrame = 0;
+		std::vector<RetiredDrawing> mRetiredDrawings;
+		static constexpr uint64_t kRetirementFramesInFlight = 3;
 	};
 
 }

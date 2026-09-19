@@ -1,4 +1,5 @@
 #include <new>
+#include <utility>
 
 #include "libImmCore/src/libBasics/piDebug.h"
 #include "libImmCore/src/libBasics/piFile.h"
@@ -358,6 +359,19 @@ namespace ImmImporter
         }
 
         StopAdding();
+        return true;
+    }
+
+    bool DrawingStatic::SwapGeometry(Drawing * replacement)
+    {
+        DrawingStatic * replacementStatic = dynamic_cast<DrawingStatic *>(replacement);
+        if (replacementStatic == nullptr)
+            return false;
+
+        // piTArray owns raw allocations and has an intentionally empty destructor. Swapping
+        // the aggregate transfers those allocations without copying or freeing either side.
+        std::swap(mGeometry, replacementStatic->mGeometry);
+        std::swap(mBBox, replacementStatic->mBBox);
         return true;
     }
 

@@ -33,14 +33,39 @@ namespace ImmPlayer
 		virtual void GlobalWork(ImmCore::piRenderer *renderer, ImmCore::piSoundEngine *sound, ImmCore::piLog *log, ImmImporter::Layer *la,
 								float masterVolume) override = 0;
 
-		// Live editing: rebuild one drawing's CPU draw info in place, on the pool slot it
-		// already owns. The layer-wide LoadInCPU allocates a slot for every drawing on every
-		// call, so it must not be used to refresh an edited layer. Renderers that cannot do this
-		// per drawing return false.
-		virtual bool RefreshDrawingInCPU(ImmImporter::Layer * la, unsigned int drawingID, ImmCore::piLog * log)
+		// Live editing replacement lifecycle. CPU and GPU preparation allocate a separate
+		// renderer slot. PresentDrawingReplacement swaps geometry and slot identity together;
+		// on success the renderer owns replacement, which then contains the retired geometry.
+		virtual bool PrepareDrawingReplacementInCPU(ImmImporter::Drawing * replacement,
+			uint64_t * tokenOut, ImmCore::piLog * log)
 		{
-			(void)la; (void)drawingID; (void)log;
+			(void)replacement; (void)tokenOut; (void)log;
 			return false;
+		}
+
+		virtual bool PrepareDrawingReplacementInGPU(ImmCore::piRenderer * renderer,
+			uint64_t token, ImmCore::piLog * log)
+		{
+			(void)renderer; (void)token; (void)log;
+			return false;
+		}
+
+		virtual bool PresentDrawingReplacement(ImmImporter::Drawing * active,
+			ImmImporter::Drawing * replacement, uint64_t token, ImmCore::piLog * log)
+		{
+			(void)active; (void)replacement; (void)token; (void)log;
+			return false;
+		}
+
+		virtual void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
+			uint64_t token, ImmCore::piLog * log)
+		{
+			(void)renderer; (void)token; (void)log;
+		}
+
+		virtual void AdvanceDrawingRetirement(ImmCore::piRenderer * renderer, ImmCore::piLog * log)
+		{
+			(void)renderer; (void)log;
 		}
 
 		virtual void PrepareForDisplay(StereoMode stereoMode) override = 0;

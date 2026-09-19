@@ -1278,7 +1278,8 @@ static int iFindLoadedDocument(ExePlayer::Viewer &viewer)
     return -1;
 }
 
-static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, int frameId)
+static uint64_t iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log,
+    int frameId, int * layerIdOut, ImmCore::bound3 * drawingBoxBeforeOut)
 {
     using Clock = std::chrono::steady_clock;
     const auto ms = [](Clock::time_point a, Clock::time_point b)
@@ -1300,7 +1301,7 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
     if (docId < 0)
     {
         log.Printf(LT_ERROR, L"[IMM_LIVE_EDIT] frame=%d no ready document", frameId);
-        return;
+        return 0;
     }
 
     int layerId = -1;
@@ -1318,8 +1319,10 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
     if (layerId < 0)
     {
         log.Printf(LT_ERROR, L"[IMM_LIVE_EDIT] frame=%d no paint layer in document %d", frameId, docId);
-        return;
+        return 0;
     }
+    if (layerIdOut != nullptr)
+        *layerIdOut = layerId;
 
     const auto attachStart = Clock::now();
     const bool attached = player->AttachEditing(docId);
@@ -1327,7 +1330,7 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
     if (!attached)
     {
         log.Printf(LT_ERROR, L"[IMM_LIVE_EDIT] frame=%d attach failed for document %d", frameId, docId);
-        return;
+        return 0;
     }
 
     // A short stroke of 16 points, deliberately offset from the origin so the document's
@@ -1350,6 +1353,9 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
     }
 
     const ImmCore::bound3d boxBefore = player->GetDocumentBBox(docId);
+    if (drawingBoxBeforeOut != nullptr &&
+        !player->GetDrawingBBox(docId, layerId, 0, *drawingBoxBeforeOut))
+        return 0;
 
     ImmImporter::Element *element = new ImmImporter::Element();
     const bool built = element->Set(points.data(), numPoints,
@@ -1378,6 +1384,7 @@ static void iApplyLiveEditProbe(ExePlayer::Viewer &viewer, ImmCore::piLog &log, 
         boxBefore.mMinX, boxBefore.mMinY, boxBefore.mMinZ,
         boxBefore.mMaxX, boxBefore.mMaxY, boxBefore.mMaxZ);
 
+    return revision;
 }
 
 
@@ -1902,6 +1909,9 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
     bool liveEditMeasured = false;
     int liveEditDocId = -1;
     uint64_t liveEditAppliedFrame = 0;
+    uint64_t liveEditRevision = 0;
+    int liveEditLayerId = -1;
+    ImmCore::bound3 liveEditDrawingBoxBefore;
 
     const char *validationMaxFrameEnv = iGetValidationEnv("IMM_VIEWER_VALIDATE_MAX_FRAME", "IMM_GL_VALIDATE_MAX_FRAME");
     if (validationMaxFrameEnv && validationMaxFrameEnv[0])
@@ -2108,16 +2118,36 @@ int piMainFunc(const wchar_t* path, const wchar_t** args, int numArgs, void* ins
                 {
                     liveEditApplied = true;
                     liveEditAppliedFrame = static_cast<uint64_t>(frameid);
-                    iApplyLiveEditProbe(mViewer, mLog, frameid);
+                    liveEditRevision = iApplyLiveEditProbe(
+                        mViewer, mLog, frameid, &liveEditLayerId, &liveEditDrawingBoxBefore);
                 }
                 else if (liveEditApplied && !liveEditMeasured &&
                          static_cast<uint64_t>(frameid) >= liveEditAppliedFrame + 3)
                 {
                     liveEditMeasured = true;
                     const ImmCore::bound3d boxAfter = mViewer.GetPlayer()->GetDocumentBBox(liveEditDocId);
+                    ImmCore::bound3 drawingBoxAfter;
+                    const bool hasDrawingBox = mViewer.GetPlayer()->GetDrawingBBox(
+                        liveEditDocId, liveEditLayerId, 0, drawingBoxAfter);
+                    ImmPlayer::Document::AuthoringCommitStatus commitStatus;
+                    const bool hasStatus = liveEditRevision != 0 &&
+                        mViewer.GetPlayer()->GetAuthoringCommitStatus(
+                            liveEditDocId, liveEditRevision, commitStatus);
+                    const bool drawingBBoxUnchanged = hasDrawingBox &&
+                        drawingBoxAfter.mMinX == liveEditDrawingBoxBefore.mMinX &&
+                        drawingBoxAfter.mMinY == liveEditDrawingBoxBefore.mMinY &&
+                        drawingBoxAfter.mMinZ == liveEditDrawingBoxBefore.mMinZ &&
+                        drawingBoxAfter.mMaxX == liveEditDrawingBoxBefore.mMaxX &&
+                        drawingBoxAfter.mMaxY == liveEditDrawingBoxBefore.mMaxY &&
+                        drawingBoxAfter.mMaxZ == liveEditDrawingBoxBefore.mMaxZ;
                     mLog.Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] frame=%d appliedAt=%llu refreshed bboxAfter=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
+                        L"[IMM_LIVE_EDIT] frame=%d appliedAt=%llu revision=%llu status=%d result=%d drawingBBoxUnchanged=%d "
+                        L"bboxAfter=(%.3f,%.3f,%.3f)-(%.3f,%.3f,%.3f)",
                         frameid, static_cast<unsigned long long>(liveEditAppliedFrame),
+                        static_cast<unsigned long long>(liveEditRevision),
+                        hasStatus ? static_cast<int>(commitStatus.mState) : -1,
+                        hasStatus ? commitStatus.mResult : -1,
+                        drawingBBoxUnchanged ? 1 : 0,
                         boxAfter.mMinX, boxAfter.mMinY, boxAfter.mMinZ,
                         boxAfter.mMaxX, boxAfter.mMaxY, boxAfter.mMaxZ);
                 }

@@ -117,9 +117,9 @@ namespace ImmPlayer {
         bool ClearLayerTransformOverride(int docId, int layerId);
 
         //----------------------------------------------------------------------
-        // Live editing. Additive: a document only enters this path after
-        // AttachEditing succeeds, and a queued layer is refreshed on the next
-        // CPU and GPU passes (see Document::MarkLayerGeometryDirty).
+        // Live editing. Additive: a document enters this path only after
+        // AttachEditing succeeds. Geometry commits prepare a replacement drawing and
+        // renderer slot before presenting either one.
         //----------------------------------------------------------------------
 
         bool AttachEditing(int docId);
@@ -128,6 +128,7 @@ namespace ImmPlayer {
         bool GetAuthoringRevisions(int docId, Document::AuthoringRevisions & revisionsOut);
         bool GetAuthoringCommitStatus(int docId, uint64_t revision, Document::AuthoringCommitStatus & statusOut);
         bool GetDrawingHandle(int docId, int layerId, int drawingIndex, uint64_t & drawingIdOut);
+        bool GetDrawingBBox(int docId, int layerId, int drawingIndex, ImmCore::bound3 & bboxOut);
 
         bool QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
             const ImmImporter::Element * elements, int numElements,
