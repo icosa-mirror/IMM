@@ -2787,8 +2787,67 @@ extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateSp
     volume.mAllowTranslationZ = false;
     spawnArea->SetVolume(volume);
     layer->SetImplementation(spawnArea);
-    seq->SetInitialSpawnArea(layer);
+
+    // First spawn area created becomes the sequence default; hosts can override
+    // it with ImmExporter_SetInitialSpawnArea once the layer tree is complete.
+    if (seq->GetInitialSpawnArea() == nullptr)
+        seq->SetInitialSpawnArea(layer);
     return layer;
+}
+
+// Pick which spawn-area layer the sequence treats as its default viewpoint.
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SetInitialSpawnArea(
+    void* sequenceHandle,
+    void* layerHandle)
+{
+    ImmExporter::Sequence* seq = reinterpret_cast<ImmExporter::Sequence*>(sequenceHandle);
+    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (seq == nullptr || layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::SpawnArea)
+        return false;
+
+    seq->SetInitialSpawnArea(layer);
+    return true;
+}
+
+// volumeType: 0 = sphere (extentX is the radius), 1 = box (extents are radii).
+// locomotionMask uses the same encoding the importer reports: bit2 = allow X,
+// bit1 = allow Y, bit0 = allow Z.
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmExporter_SpawnAreaSetProperties(
+    void* layerHandle,
+    int volumeType,
+    float offsetX, float offsetY, float offsetZ,
+    float extentX, float extentY, float extentZ,
+    int locomotionMask)
+{
+    ImmExporter::Layer* layer = reinterpret_cast<ImmExporter::Layer*>(layerHandle);
+    if (layer == nullptr || layer->GetType() != ImmExporter::Layer::Type::SpawnArea)
+        return false;
+
+    ImmExporter::LayerSpawnArea* spawnArea =
+        reinterpret_cast<ImmExporter::LayerSpawnArea*>(layer->GetImplementation());
+    if (spawnArea == nullptr)
+        return false;
+
+    ImmExporter::LayerSpawnArea::Volume volume = spawnArea->GetVolume();
+    if (volumeType == static_cast<int>(ImmExporter::LayerSpawnArea::Volume::Type::Box))
+    {
+        volume.mType = ImmExporter::LayerSpawnArea::Volume::Type::Box;
+        const ImmCore::vec3 centre(offsetX, offsetY, offsetZ);
+        const ImmCore::vec3 radii(extentX, extentY, extentZ);
+        volume.mShape.mBox = ImmCore::bound3(centre - radii, centre + radii);
+    }
+    else
+    {
+        volume.mType = ImmExporter::LayerSpawnArea::Volume::Type::Sphere;
+        volume.mShape.mSphere = ImmCore::vec4(offsetX, offsetY, offsetZ, extentX);
+    }
+
+    volume.mAllowTranslationX = (locomotionMask & 4) != 0;
+    volume.mAllowTranslationY = (locomotionMask & 2) != 0;
+    volume.mAllowTranslationZ = (locomotionMask & 1) != 0;
+
+    spawnArea->SetVolume(volume);
+    return true;
 }
 
 extern "C" UNITY_INTERFACE_EXPORT void* UNITY_INTERFACE_API ImmExporter_CreateDrawing(void* paintLayerHandle)

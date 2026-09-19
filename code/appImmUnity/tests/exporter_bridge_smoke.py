@@ -121,6 +121,10 @@ INTERPOLATION_LINEAR = 1
 PAINT_LAYER_NAME = b"Smoke Paint"
 PAINT_REPEAT_COUNT = 3
 DRAW_IN_TIME_SECONDS = 0.25
+FIRST_VIEWPOINT_NAME = b"Smoke Viewpoint"
+SECOND_VIEWPOINT_NAME = b"Smoke Viewpoint 2"
+SPAWN_AREA_LAYER_TYPE = 8  # ImmImporter::Layer::Type::SpawnArea
+VIEWPOINT_TRANSLATION = (2.0, 1.5, -3.0)
 
 
 def bind(library: ctypes.CDLL, name: str, result_type: object, *argument_types: object):
@@ -274,6 +278,37 @@ def export_smoke_file(library: ctypes.CDLL, output_path: Path) -> None:
         ctypes.c_int64,
         ctypes.c_uint32,
     )
+    create_spawn_area_layer = bind(
+        library,
+        "ImmExporter_CreateSpawnAreaLayer",
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_char_p,
+        ctypes.POINTER(Transform),
+        ctypes.c_int,
+    )
+    set_initial_spawn_area = bind(
+        library,
+        "ImmExporter_SetInitialSpawnArea",
+        ctypes.c_bool,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    )
+    spawn_area_set_properties = bind(
+        library,
+        "ImmExporter_SpawnAreaSetProperties",
+        ctypes.c_bool,
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_float,
+        ctypes.c_float,
+        ctypes.c_float,
+        ctypes.c_float,
+        ctypes.c_float,
+        ctypes.c_float,
+        ctypes.c_int,
+    )
     paint_set_max_repeat_count = bind(
         library,
         "ImmExporter_PaintSetMaxRepeatCount",
@@ -413,6 +448,38 @@ def export_smoke_file(library: ctypes.CDLL, output_path: Path) -> None:
         require(
             not paint_set_max_repeat_count(group, PAINT_REPEAT_COUNT),
             "ImmExporter_PaintSetMaxRepeatCount group-layer rejection",
+        )
+
+        # Spawn-area authoring: a sphere viewpoint with X/Z locomotion, then a
+        # second one promoted to the sequence default.
+        viewpoint_transform = Transform(2.0, 1.5, -3.0, 0.0, 0.0, 0.0, 1.0, 1.0)
+        first_viewpoint = require(
+            create_spawn_area_layer(sequence, None, FIRST_VIEWPOINT_NAME, ctypes.byref(viewpoint_transform), 1),
+            "ImmExporter_CreateSpawnAreaLayer",
+        )
+        require(
+            spawn_area_set_properties(first_viewpoint, 0, 0.0, 0.0, 0.0, 1.25, 0.0, 0.0, 5),
+            "ImmExporter_SpawnAreaSetProperties (sphere, X/Z locomotion)",
+        )
+        second_viewpoint = require(
+            create_spawn_area_layer(sequence, None, SECOND_VIEWPOINT_NAME, ctypes.byref(identity), 0),
+            "ImmExporter_CreateSpawnAreaLayer (second)",
+        )
+        require(
+            spawn_area_set_properties(second_viewpoint, 1, 0.0, 0.0, 0.0, 1.0, 2.0, 0.5, 7),
+            "ImmExporter_SpawnAreaSetProperties (box, all axes)",
+        )
+        require(
+            set_initial_spawn_area(sequence, second_viewpoint),
+            "ImmExporter_SetInitialSpawnArea",
+        )
+        require(
+            not set_initial_spawn_area(sequence, layer),
+            "ImmExporter_SetInitialSpawnArea non-spawn rejection",
+        )
+        require(
+            not spawn_area_set_properties(layer, 0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0),
+            "ImmExporter_SpawnAreaSetProperties non-spawn rejection",
         )
         drawing = require(create_drawing(layer), "ImmExporter_CreateDrawing")
         drawing_index = get_drawing_index(drawing)
@@ -573,6 +640,57 @@ def _verify_export_round_trip(reader: ctypes.CDLL, staging: Path, output_path: P
             1.0 <= biggest <= 1.1,
             f"StrokeReader_GetDrawingBiggestStroke ({biggest} outside the authored 1.0-1.1 span)",
         )
+
+        # Spawn areas authored through the exporter must come back as spawn-area
+        # layers with the promoted one marked as the default viewpoint.
+        get_authoring_transform = bind(
+            reader,
+            "StrokeReader_GetAuthoringLayerTransform",
+            ctypes.c_bool,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.POINTER(LayerTransform),
+            ctypes.POINTER(LayerTransform),
+        )
+        viewpoints = {}
+        for layer_index in range(get_authoring_layer_count(document_id)):
+            layer_info = AuthoringLayerInfo()
+            if not get_authoring_layer_info(document_id, layer_index, ctypes.byref(layer_info)):
+                continue
+            name = layer_info.legacy.name.split(b"\0", 1)[0]
+            if name in (FIRST_VIEWPOINT_NAME, SECOND_VIEWPOINT_NAME):
+                viewpoints[name] = (layer_index, layer_info)
+
+        require(len(viewpoints) == 2, f"both authored viewpoints round-trip ({sorted(viewpoints)})")
+        for name, (layer_index, layer_info) in viewpoints.items():
+            require(
+                layer_info.legacy.type == SPAWN_AREA_LAYER_TYPE,
+                f"{name.decode()} layer type ({layer_info.legacy.type})",
+            )
+
+        first_index, first_info = viewpoints[FIRST_VIEWPOINT_NAME]
+        second_index, second_info = viewpoints[SECOND_VIEWPOINT_NAME]
+        require(
+            second_info.legacy.isDefaultSpawn == 1,
+            "SetInitialSpawnArea makes the promoted viewpoint the default",
+        )
+        require(
+            first_info.legacy.isDefaultSpawn == 0,
+            "the demoted viewpoint is no longer the default",
+        )
+
+        local = LayerTransform()
+        world = LayerTransform()
+        require(
+            get_authoring_transform(document_id, first_index, ctypes.byref(local), ctypes.byref(world)),
+            "StrokeReader_GetAuthoringLayerTransform",
+        )
+        for axis_index, expected in enumerate(VIEWPOINT_TRANSLATION):
+            actual = local.translation[axis_index]
+            require(
+                abs(actual - expected) < 1e-3,
+                f"viewpoint translation[{axis_index}] ({actual} != {expected})",
+            )
     finally:
         unload(document_id)
         end()
