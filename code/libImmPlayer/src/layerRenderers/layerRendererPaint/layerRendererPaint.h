@@ -33,6 +33,16 @@ namespace ImmPlayer
 		virtual void GlobalWork(ImmCore::piRenderer *renderer, ImmCore::piSoundEngine *sound, ImmCore::piLog *log, ImmImporter::Layer *la,
 								float masterVolume) override = 0;
 
+		// Live editing: rebuild one drawing's CPU draw info in place, on the pool slot it
+		// already owns. The layer-wide LoadInCPU allocates a slot for every drawing on every
+		// call, so it must not be used to refresh an edited layer. Renderers that cannot do this
+		// per drawing return false.
+		virtual bool RefreshDrawingInCPU(ImmImporter::Layer * la, unsigned int drawingID, ImmCore::piLog * log)
+		{
+			(void)la; (void)drawingID; (void)log;
+			return false;
+		}
+
 		virtual void PrepareForDisplay(StereoMode stereoMode) override = 0;
 
 		virtual void

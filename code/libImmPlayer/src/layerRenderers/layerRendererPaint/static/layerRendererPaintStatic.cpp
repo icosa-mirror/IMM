@@ -522,6 +522,29 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
 
     }
 
+    bool LayerRendererPaintStatic::RefreshDrawingInCPU(Layer* la, unsigned int drawingID, piLog* log)
+    {
+        LayerPaint* lp = (LayerPaint*)la->GetImplementation();
+        if (lp == nullptr || drawingID >= lp->GetNumDrawings())
+            return false;
+
+        Drawing* dr = lp->GetDrawing(drawingID);
+        if (dr == nullptr)
+            return false;
+
+        const int id = dr->GetGpuId();
+        if (id == -1)
+            return false; // never loaded, so there is no slot to rebuild
+
+        iSLayerDrawInfoStatic* me = (iSLayerDrawInfoStatic*)mLayerInfo.GetAddress(id);
+        if (me == nullptr)
+            return false;
+
+        // Same pool slot, rebuilt from the drawing's current geometry: no allocation, so the
+        // pool neither grows nor moves under the renderer.
+        return me->Init(dr);
+    }
+
     void LayerRendererPaintStatic::PrepareForDisplay(StereoMode stereoMode)
     {
         mStereoMode = stereoMode;
