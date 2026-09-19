@@ -2007,6 +2007,29 @@ struct ImmAuthoringPointC
     float time;
 };
 
+struct ImmAuthoringRevisionsC
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    uint64_t requested;
+    uint64_t prepared;
+    uint64_t presented;
+};
+
+struct ImmAuthoringCommitStatusC
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    uint64_t revision;
+    int32_t state;
+    int32_t result;
+    uint32_t failingCommand;
+    uint32_t reserved;
+    uint64_t object;
+};
+
+static constexpr uint32_t kImmAuthoringStructVersion = 1;
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int docId)
 {
     return iPlayer().AttachEditing(docId) ? 0 : -1;
@@ -2019,11 +2042,59 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttache
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int docId, unsigned long long *revisionOut)
 {
-    const uint64_t revision = iPlayer().CommitEdits(docId);
+    int32_t result = 0;
+    const uint64_t revision = iPlayer().CommitEdits(docId, &result);
     if (revision == 0)
-        return -4; // not attached
+        return result != 0 ? result : -4;
     if (revisionOut != nullptr)
         *revisionOut = revision;
+    return 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisions(
+    int docId, ImmAuthoringRevisionsC *revisionsOut)
+{
+    if (revisionsOut == nullptr || revisionsOut->structVersion != kImmAuthoringStructVersion ||
+        revisionsOut->structSize < sizeof(ImmAuthoringRevisionsC))
+        return -2;
+
+    ImmPlayer::Document::AuthoringRevisions revisions;
+    if (!iPlayer().GetAuthoringRevisions(docId, revisions))
+        return -1;
+    revisionsOut->requested = revisions.mRequested;
+    revisionsOut->prepared = revisions.mPrepared;
+    revisionsOut->presented = revisions.mPresented;
+    return 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommitStatus(
+    int docId, unsigned long long revision, ImmAuthoringCommitStatusC *statusOut)
+{
+    if (statusOut == nullptr || statusOut->structVersion != kImmAuthoringStructVersion ||
+        statusOut->structSize < sizeof(ImmAuthoringCommitStatusC))
+        return -2;
+
+    ImmPlayer::Document::AuthoringCommitStatus status;
+    if (!iPlayer().GetAuthoringCommitStatus(docId, revision, status))
+        return -1;
+    statusOut->revision = status.mRevision;
+    statusOut->state = static_cast<int32_t>(status.mState);
+    statusOut->result = status.mResult;
+    statusOut->failingCommand = status.mFailingCommand;
+    statusOut->reserved = 0;
+    statusOut->object = status.mObject;
+    return 0;
+}
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
+    int docId, int layerId, int drawingIndex, unsigned long long *drawingIdOut)
+{
+    if (drawingIdOut == nullptr || layerId < 0 || drawingIndex < 0)
+        return -2;
+    uint64_t drawingId = 0;
+    if (!iPlayer().GetDrawingHandle(docId, layerId, drawingIndex, drawingId))
+        return -1;
+    *drawingIdOut = drawingId;
     return 0;
 }
 
@@ -2032,72 +2103,25 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAd
     const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace, int frameIndex,
     int *drawingIndexOut)
 {
-    if (points == nullptr)
-        return -2;
-    if (numPoints < 2 || numPoints > 8192)
-        return -2;
-    if (brush <= static_cast<int>(ImmImporter::Element::BrushSectionType::Point) ||
-        brush >= static_cast<int>(ImmImporter::Element::BrushSectionType::Count))
-        return -3;
-
-    if (biggestStroke <= 0.0f)
-    {
-        for (int i = 0; i < numPoints; i++)
-        {
-            if (points[i].width > biggestStroke)
-                biggestStroke = points[i].width;
-        }
-        if (biggestStroke <= 0.0f)
-            return -2;
-    }
-
-    ImmImporter::Element *element = new (std::nothrow) ImmImporter::Element();
-    if (element == nullptr)
-        return -5;
-
-    std::vector<ImmImporter::Element::PointSource> sources(numPoints);
-    for (int i = 0; i < numPoints; i++)
-    {
-        const ImmAuthoringPointC &src = points[i];
-        ImmImporter::Element::PointSource &dst = sources[i];
-        dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
-        dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
-        dst.mDir = ImmCore::vec3(src.dx, src.dy, src.dz);
-        dst.mCol = ImmCore::vec3(src.r, src.g, src.b);
-        dst.mAlpha = src.alpha;
-        dst.mWidth = src.width;
-        dst.mLength = src.length;
-        dst.mTime = src.time;
-    }
-
-    const bool built = element->Set(sources.data(), numPoints,
-        static_cast<ImmImporter::Element::BrushSectionType>(brush),
-        static_cast<ImmImporter::Element::VisibilityType>(visible),
-        biggestStroke);
-
-    int drawingIndex = -1;
-    const bool added = built && iPlayer().AddDrawing(
-        docId, layerId, element, 1,
-        static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), false, biggestStroke,
-        frameIndex, &drawingIndex);
-
-    delete element;
-
-    if (added && drawingIndexOut != nullptr)
-        *drawingIndexOut = drawingIndex;
-    return added ? 0 : -1;
+    (void)docId; (void)layerId; (void)brush; (void)visible; (void)points;
+    (void)numPoints; (void)biggestStroke; (void)colorSpace; (void)frameIndex;
+    (void)drawingIndexOut;
+    return -3; // creation needs reserved handles and replacement-layer preparation
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
     int docId, int layerId, int frameIndex, int drawingIndex)
 {
-    return iPlayer().SetFrameDrawing(docId, layerId, frameIndex, drawingIndex) ? 0 : -1;
+    (void)docId; (void)layerId; (void)frameIndex; (void)drawingIndex;
+    return -3; // frame remapping joins the batch model after stable created handles
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
-    int docId, int layerId, int drawingIndex, int brush, int visible,
+    int docId, int layerId, unsigned long long drawingId, int brush, int visible,
     const ImmAuthoringPointC *points, int numPoints, float biggestStroke, int colorSpace)
 {
+    if (layerId < 0 || drawingId == 0)
+        return -2;
     if (points == nullptr)
         return -2;
     if (numPoints < 2 || numPoints > 8192) // Element holds a fixed 8192-point array
@@ -2148,8 +2172,8 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSe
         return -2;
     }
 
-    const bool replaced = iPlayer().ReplaceDrawingGeometry(
-        docId, layerId, drawingIndex, element, 1,
+    const bool replaced = iPlayer().QueueDrawingGeometry(
+        docId, static_cast<uint32_t>(layerId), drawingId, element, 1,
         static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), false, biggestStroke);
 
     delete element;

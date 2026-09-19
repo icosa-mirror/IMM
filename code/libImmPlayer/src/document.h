@@ -1,5 +1,7 @@
 #pragma once
 
+#include <deque>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -86,7 +88,8 @@ namespace ImmPlayer {
                 Resume = 8,
                 Restart = 9,
                 Continue = 10,
-                SetChapter = 11
+                SetChapter = 11,
+                AuthoringCommit = 12
             }mType;
             const uint8_t* mMemoryData = nullptr;
             uint64_t mMemorySize = 0;
@@ -167,32 +170,109 @@ namespace ImmPlayer {
 
         bool AttachEditing(void);
         bool IsEditing(void) const { return mEditing; }
-        uint64_t GetRevision(void) const { return mRevision; }
+        uint64_t GetRevision(void) const { return mPresentedRevision; }
+
+        enum class AuthoringCommitState : int32_t
+        {
+            Unknown = 0,
+            Queued = 1,
+            Preparing = 2,
+            Prepared = 3,
+            Presented = 4,
+            Rejected = 5
+        };
+
+        struct AuthoringRevisions
+        {
+            uint64_t mRequested = 0;
+            uint64_t mPrepared = 0;
+            uint64_t mPresented = 0;
+        };
+
+        struct AuthoringCommitStatus
+        {
+            uint64_t mRevision = 0;
+            AuthoringCommitState mState = AuthoringCommitState::Unknown;
+            int32_t mResult = 0;
+            uint32_t mFailingCommand = 0;
+            uint64_t mObject = 0;
+        };
+
+        bool GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const;
+        bool QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
+            const ImmImporter::Element * elements, int numElements,
+            ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
+        bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
+        bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
+        bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
 
         // Queue one layer for per-layer regeneration: the next CPU pass rebuilds its
         // geometry, the following GPU pass re-uploads it, and no other layer is touched.
-        void MarkLayerGeometryDirty(ImmImporter::Layer * layer);
+        void MarkLayerGeometryDirty(ImmImporter::Layer * layer, uint64_t revision = 0);
         bool HasPendingEdits(void) const { return !mDirtyCPU.empty() || !mDirtyGPU.empty(); }
 
         // Publish queued edits. The revision advances once the queues have been applied.
-        uint64_t CommitEdits(void);
+        uint64_t CommitEdits(int32_t * resultOut = nullptr);
 
     private:
         bool mEditing = false;
-        bool mCommitRequested = false;
-        uint64_t mRevision = 0;
+        uint64_t mRequestedRevision = 0;
+        uint64_t mPreparedRevision = 0;
+        uint64_t mPresentedRevision = 0;
+
+        struct DrawingHandleEntry
+        {
+            uint64_t mHandle = 0;
+            ImmImporter::Layer * mLayer = nullptr;
+            uint32_t mDrawingIndex = 0;
+        };
+
+        struct GeometryEdit
+        {
+            uint32_t mLayerId = 0;
+            uint64_t mDrawingId = 0;
+            std::unique_ptr<ImmImporter::Element[]> mElements;
+            int mNumElements = 0;
+            ImmImporter::Drawing::ColorSpace mColorSpace = ImmImporter::Drawing::ColorSpace::Linear;
+            bool mFlipped = false;
+            float mBiggestStroke = 0.0f;
+        };
+
+        struct SealedBatch
+        {
+            uint64_t mRevision = 0;
+            std::vector<GeometryEdit> mGeometryEdits;
+        };
+
+        std::vector<DrawingHandleEntry> mDrawingHandles;
+        uint64_t mNextDrawingHandle = 1;
+        std::vector<GeometryEdit> mOpenGeometryEdits;
+        std::deque<SealedBatch> mSealedBatches;
+        std::vector<AuthoringCommitStatus> mCommitStatuses;
+        static constexpr size_t kMaxSealedBatches = 1;
 
         // A GPU refresh waits for the frames still in flight that referenced the old buffers.
         struct PendingGpuRefresh
         {
             ImmImporter::Layer * mLayer;
             uint64_t mNotBeforeFrame;
+            uint64_t mRevision;
+        };
+        struct PendingCpuRefresh
+        {
+            ImmImporter::Layer * mLayer;
+            uint64_t mRevision;
         };
         uint64_t mFrameCounter = 0;
-        std::vector<ImmImporter::Layer *> mDirtyCPU;
+        std::vector<PendingCpuRefresh> mDirtyCPU;
         std::vector<PendingGpuRefresh> mDirtyGPU;
         static constexpr uint64_t kGpuRefreshDelayFrames = 3;
 
+        void iBuildDrawingHandleMap(ImmImporter::Layer * layer);
+        const DrawingHandleEntry * iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const;
+        AuthoringCommitStatus * iFindCommitStatus(uint64_t revision);
+        void iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object);
+        void iPrepareAuthoringCommit(void);
         void iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, ImmCore::piLog * log);
         void iApplyDirtyGPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture,
             LayerRendererModel * layerRenderModel, ImmCore::piRenderer * renderer, ImmCore::piLog * log,

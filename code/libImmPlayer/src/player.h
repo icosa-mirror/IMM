@@ -124,22 +124,20 @@ namespace ImmPlayer {
 
         bool AttachEditing(int docId);
         bool IsEditing(int docId);
-        uint64_t CommitEdits(int docId);
+        uint64_t CommitEdits(int docId, int32_t * resultOut = nullptr);
+        bool GetAuthoringRevisions(int docId, Document::AuthoringRevisions & revisionsOut);
+        bool GetAuthoringCommitStatus(int docId, uint64_t revision, Document::AuthoringCommitStatus & statusOut);
+        bool GetDrawingHandle(int docId, int layerId, int drawingIndex, uint64_t & drawingIdOut);
 
-        // Replace one drawing's geometry with the given elements. The elements stay owned by
-        // the caller: they are only read while the drawing rebuilds its own buffers.
-        bool ReplaceDrawingGeometry(int docId, int layerId, int drawingIndex,
+        bool QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
             const ImmImporter::Element * elements, int numElements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
 
-        // Append a drawing with the given geometry, optionally mapping a frame onto it, and
-        // return its index. Existing drawings keep their indices.
-        bool AddDrawing(int docId, int layerId, const ImmImporter::Element * elements, int numElements,
-            ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke,
-            int frameIndex, int * drawingIndexOut);
-
-        // Point a frame at a drawing of the same layer.
-        bool SetFrameDrawing(int docId, int layerId, int frameIndex, int drawingIndex);
+        // Legacy index-based entry point used by the viewer harness. It resolves the session
+        // handle and copies the geometry into the current open authoring batch.
+        bool ReplaceDrawingGeometry(int docId, int layerId, int drawingIndex,
+            const ImmImporter::Element * elements, int numElements,
+            ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
 
         struct LayerDiagnostics
         {

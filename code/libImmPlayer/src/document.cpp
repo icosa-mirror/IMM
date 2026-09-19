@@ -55,11 +55,22 @@ namespace ImmPlayer
         mMemorySize = 0;
         mMemoryView = nullptr;
         mSequenceReady = false;
+        mEditing = false;
+        mRequestedRevision = 0;
+        mPreparedRevision = 0;
+        mPresentedRevision = 0;
+        mNextDrawingHandle = 1;
         return true;
     }
 
     void Document::End(void)
     {
+        mOpenGeometryEdits.clear();
+        mSealedBatches.clear();
+        mCommitStatuses.clear();
+        mDrawingHandles.clear();
+        mDirtyCPU.clear();
+        mDirtyGPU.clear();
         delete mMemoryView;
         mMemoryView = nullptr;
         mFileName.End();
@@ -193,8 +204,12 @@ namespace ImmPlayer
         piSoundEngine* soundEngine, piLog *log, const piTick now,
         const Command * command)
     {
-        // Live edits are applied only to a fully loaded document; while a load or unload is
-        // in flight they stay queued so the loader is never raced.
+        // Authoring work enters through the same per-document command slot as playback and
+        // loading commands. ABI mutation calls only copy into the open batch.
+        if (mEditing && mState.mLoadingState == LoadingState::Loaded && command != nullptr &&
+            command->mType == Command::Type::AuthoringCommit)
+            iPrepareAuthoringCommit();
+
         if (mEditing && mState.mLoadingState == LoadingState::Loaded)
             iApplyDirtyCPU(layerPaintRender, layerRenderPicture, log);
 
@@ -495,18 +510,182 @@ namespace ImmPlayer
             mState.mLoadingState != LoadingState::UnloadingCompleted)
             return false;
 
+        if (mEditing)
+            return true;
+
+        mDrawingHandles.clear();
+        mNextDrawingHandle = 1;
+        iBuildDrawingHandleMap(mSequence.GetRoot());
         mEditing = true;
         return true;
     }
 
-    void Document::MarkLayerGeometryDirty(ImmImporter::Layer * layer)
+    void Document::iBuildDrawingHandleMap(ImmImporter::Layer * layer)
+    {
+        if (layer == nullptr)
+            return;
+
+        if (layer->GetType() == Layer::Type::Paint)
+        {
+            LayerPaint * paint = (LayerPaint *)layer->GetImplementation();
+            if (paint != nullptr)
+            {
+                for (uint32_t drawingIndex = 0; drawingIndex < paint->GetNumDrawings(); drawingIndex++)
+                {
+                    mDrawingHandles.push_back(DrawingHandleEntry{ mNextDrawingHandle++, layer, drawingIndex });
+                }
+            }
+        }
+
+        for (uint32_t childIndex = 0; childIndex < layer->GetNumChildren(); childIndex++)
+            iBuildDrawingHandleMap(layer->GetChild(childIndex));
+    }
+
+    const Document::DrawingHandleEntry * Document::iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const
+    {
+        for (const DrawingHandleEntry & entry : mDrawingHandles)
+        {
+            if (entry.mHandle == drawingId && entry.mLayer != nullptr && entry.mLayer->GetID() == layerId)
+                return &entry;
+        }
+        return nullptr;
+    }
+
+    bool Document::GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const
+    {
+        if (!mEditing || drawingIdOut == nullptr)
+            return false;
+
+        for (const DrawingHandleEntry & entry : mDrawingHandles)
+        {
+            if (entry.mLayer != nullptr && entry.mLayer->GetID() == layerId && entry.mDrawingIndex == drawingIndex)
+            {
+                *drawingIdOut = entry.mHandle;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool Document::QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
+        const Element * elements, int numElements, Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
+    {
+        if (!mEditing || elements == nullptr || numElements <= 0 || biggestStroke <= 0.0f)
+            return false;
+        if (iFindDrawingHandle(layerId, drawingId) == nullptr)
+            return false;
+
+        // This first vertical slice intentionally permits one replacement per batch. It keeps
+        // failure atomic until replacement layer bundles support multi-command preparation.
+        if (!mOpenGeometryEdits.empty())
+            return false;
+
+        std::unique_ptr<Element[]> copiedElements(new (std::nothrow) Element[numElements]);
+        if (!copiedElements)
+            return false;
+        for (int i = 0; i < numElements; i++)
+            copiedElements[i] = elements[i];
+
+        GeometryEdit edit;
+        edit.mLayerId = layerId;
+        edit.mDrawingId = drawingId;
+        edit.mElements = std::move(copiedElements);
+        edit.mNumElements = numElements;
+        edit.mColorSpace = colorSpace;
+        edit.mFlipped = flipped;
+        edit.mBiggestStroke = biggestStroke;
+        mOpenGeometryEdits.push_back(std::move(edit));
+        return true;
+    }
+
+    bool Document::GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const
+    {
+        if (!mEditing || revisionsOut == nullptr)
+            return false;
+        revisionsOut->mRequested = mRequestedRevision;
+        revisionsOut->mPrepared = mPreparedRevision;
+        revisionsOut->mPresented = mPresentedRevision;
+        return true;
+    }
+
+    bool Document::GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const
+    {
+        if (!mEditing || statusOut == nullptr)
+            return false;
+        for (const AuthoringCommitStatus & status : mCommitStatuses)
+        {
+            if (status.mRevision == revision)
+            {
+                *statusOut = status;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    Document::AuthoringCommitStatus * Document::iFindCommitStatus(uint64_t revision)
+    {
+        for (AuthoringCommitStatus & status : mCommitStatuses)
+        {
+            if (status.mRevision == revision)
+                return &status;
+        }
+        return nullptr;
+    }
+
+    void Document::iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object)
+    {
+        AuthoringCommitStatus * status = iFindCommitStatus(revision);
+        if (status == nullptr)
+            return;
+        status->mState = AuthoringCommitState::Rejected;
+        status->mResult = result;
+        status->mFailingCommand = failingCommand;
+        status->mObject = object;
+    }
+
+    void Document::iPrepareAuthoringCommit(void)
+    {
+        if (mSealedBatches.empty())
+            return;
+
+        SealedBatch batch = std::move(mSealedBatches.front());
+        mSealedBatches.pop_front();
+        AuthoringCommitStatus * status = iFindCommitStatus(batch.mRevision);
+        if (status != nullptr)
+            status->mState = AuthoringCommitState::Preparing;
+
+        for (uint32_t commandIndex = 0; commandIndex < batch.mGeometryEdits.size(); commandIndex++)
+        {
+            GeometryEdit & edit = batch.mGeometryEdits[commandIndex];
+            const DrawingHandleEntry * entry = iFindDrawingHandle(edit.mLayerId, edit.mDrawingId);
+            if (entry == nullptr || entry->mLayer == nullptr)
+            {
+                iRejectCommit(batch.mRevision, -1, commandIndex, edit.mDrawingId);
+                return;
+            }
+
+            LayerPaint * paint = (LayerPaint *)entry->mLayer->GetImplementation();
+            Drawing * drawing = paint != nullptr ? paint->GetDrawing(static_cast<int>(entry->mDrawingIndex)) : nullptr;
+            if (drawing == nullptr || !drawing->ReplaceGeometry(edit.mElements.get(), edit.mNumElements,
+                edit.mColorSpace, edit.mFlipped, edit.mBiggestStroke))
+            {
+                iRejectCommit(batch.mRevision, -5, commandIndex, edit.mDrawingId);
+                return;
+            }
+
+            MarkLayerGeometryDirty(entry->mLayer, batch.mRevision);
+        }
+    }
+
+    void Document::MarkLayerGeometryDirty(ImmImporter::Layer * layer, uint64_t revision)
     {
         if (!mEditing || layer == nullptr)
             return;
 
-        for (const ImmImporter::Layer * queued : mDirtyCPU)
+        for (const PendingCpuRefresh & queued : mDirtyCPU)
         {
-            if (queued == layer)
+            if (queued.mLayer == layer)
                 return; // already waiting for its CPU pass
         }
 
@@ -520,15 +699,35 @@ namespace ImmPlayer
             }
         }
 
-        mDirtyCPU.push_back(layer);
+        mDirtyCPU.push_back(PendingCpuRefresh{ layer, revision });
     }
 
-    uint64_t Document::CommitEdits(void)
+    uint64_t Document::CommitEdits(int32_t * resultOut)
     {
-        // The revision advances here; the queued layers reach the renderer over the next CPU
-        // and GPU passes, which is what HasPendingEdits() reports.
-        mRevision++;
-        return mRevision;
+        if (resultOut != nullptr)
+            *resultOut = 0;
+        if (!mEditing || mOpenGeometryEdits.empty())
+        {
+            if (resultOut != nullptr)
+                *resultOut = -4;
+            return 0;
+        }
+        if (mSealedBatches.size() >= kMaxSealedBatches || !mDirtyCPU.empty() || !mDirtyGPU.empty())
+        {
+            if (resultOut != nullptr)
+                *resultOut = -7;
+            return 0;
+        }
+
+        SealedBatch batch;
+        batch.mRevision = ++mRequestedRevision;
+        batch.mGeometryEdits.swap(mOpenGeometryEdits);
+        mSealedBatches.push_back(std::move(batch));
+        mCommitStatuses.push_back(AuthoringCommitStatus{
+            mRequestedRevision, AuthoringCommitState::Queued, 0, 0, 0 });
+        if (mCommitStatuses.size() > 64)
+            mCommitStatuses.erase(mCommitStatuses.begin());
+        return mRequestedRevision;
     }
 
     void Document::iApplyDirtyCPU(LayerRendererPaint * layerPaintRender, LayerRendererPicture * layerRenderPicture, piLog * log)
@@ -536,17 +735,19 @@ namespace ImmPlayer
         if (mDirtyCPU.empty())
             return;
 
-        std::vector<ImmImporter::Layer *> layers;
+        std::vector<PendingCpuRefresh> layers;
         layers.swap(mDirtyCPU);
 
-        for (ImmImporter::Layer * layer : layers)
+        for (const PendingCpuRefresh & pending : layers)
         {
+            ImmImporter::Layer * layer = pending.mLayer;
             if (layer == nullptr)
                 continue;
 
             const auto refreshStart = std::chrono::steady_clock::now();
 
             const Layer::Type layerType = layer->GetType();
+            bool rebuilt = false;
             if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
             {
                 // Per drawing, releasing and re-allocating only the slots of the drawings this
@@ -561,21 +762,30 @@ namespace ImmPlayer
                         refreshed++;
                 }
 
-                if (drawingCount == 0 || refreshed == 0)
+                rebuilt = drawingCount > 0 && refreshed == drawingCount;
+                if (!rebuilt)
                 {
                     layerPaintRender->UnloadInCPU(log, layer);
-                    if (!layerPaintRender->LoadInCPU(log, layer))
+                    rebuilt = layerPaintRender->LoadInCPU(log, layer);
+                    if (!rebuilt)
                         log->Printf(LT_ERROR, L"Live edit: CPU geometry rebuild failed for layer %d", static_cast<int>(layer->GetID()));
                 }
             }
             else if (layerType == Layer::Type::Picture && layerRenderPicture != nullptr)
             {
                 layerRenderPicture->UnloadInCPU(log, layer);
-                layerRenderPicture->LoadInCPU(log, layer);
+                rebuilt = layerRenderPicture->LoadInCPU(log, layer);
             }
             else
             {
                 log->Printf(LT_ERROR, L"Live edit: layer %d of type %d cannot be refreshed", static_cast<int>(layer->GetID()), static_cast<int>(layerType));
+                iRejectCommit(pending.mRevision, -10, 0, static_cast<uint64_t>(layer->GetID()));
+                continue;
+            }
+
+            if (!rebuilt)
+            {
+                iRejectCommit(pending.mRevision, -10, 0, static_cast<uint64_t>(layer->GetID()));
                 continue;
             }
 
@@ -586,7 +796,7 @@ namespace ImmPlayer
 
             // The GPU pass waits: the frames still in flight may reference the buffers the
             // refresh is about to destroy, which hangs the renderer if it happens immediately.
-            mDirtyGPU.push_back(PendingGpuRefresh{ layer, mFrameCounter + kGpuRefreshDelayFrames });
+            mDirtyGPU.push_back(PendingGpuRefresh{ layer, mFrameCounter + kGpuRefreshDelayFrames, pending.mRevision });
         }
     }
 
@@ -619,21 +829,45 @@ namespace ImmPlayer
             const auto refreshStart = std::chrono::steady_clock::now();
 
             const Layer::Type layerType = layer->GetType();
+            bool uploaded = false;
             if (layerType == Layer::Type::Paint && layerPaintRender != nullptr)
             {
                 layerPaintRender->UnloadInGPU(renderer, nullptr, log, layer);
-                if (!layerPaintRender->LoadInGPU(renderer, nullptr, log, layer))
+                uploaded = layerPaintRender->LoadInGPU(renderer, nullptr, log, layer);
+                if (!uploaded)
                     log->Printf(LT_ERROR, L"Live edit: GPU upload failed for layer %d", static_cast<int>(layer->GetID()));
             }
             else if (layerType == Layer::Type::Picture && layerRenderPicture != nullptr)
             {
                 layerRenderPicture->UnloadInGPU(renderer, nullptr, log, layer);
-                layerRenderPicture->LoadInGPU(renderer, nullptr, log, layer);
+                uploaded = layerRenderPicture->LoadInGPU(renderer, nullptr, log, layer);
             }
             else
             {
                 log->Printf(LT_ERROR, L"Live edit: layer %d of type %d cannot be re-uploaded", static_cast<int>(layer->GetID()), static_cast<int>(layerType));
+                iRejectCommit(pending.mRevision, -10, 0, static_cast<uint64_t>(layer->GetID()));
                 continue;
+            }
+
+            if (!uploaded)
+            {
+                iRejectCommit(pending.mRevision, -10, 0, static_cast<uint64_t>(layer->GetID()));
+                continue;
+            }
+
+            if (pending.mRevision != 0)
+            {
+                AuthoringCommitStatus * status = iFindCommitStatus(pending.mRevision);
+                if (status != nullptr)
+                {
+                    status->mState = AuthoringCommitState::Prepared;
+                    mPreparedRevision = pending.mRevision;
+
+                    // This remains the prototype presentation point. The next slice replaces
+                    // the unload/reload pair with an atomic renderer-owned bundle swap.
+                    status->mState = AuthoringCommitState::Presented;
+                    mPresentedRevision = pending.mRevision;
+                }
             }
 
             const auto refreshEnd = std::chrono::steady_clock::now();
