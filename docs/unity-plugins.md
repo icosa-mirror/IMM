@@ -17,6 +17,12 @@ The tool reads the `[DllImport]` entry points out of the C# packages and the exp
 tables out of the shipped binaries (PE, ELF, Mach-O and static archives, no external
 tools required). It exits 1 on drift.
 
+There are no known platform gaps left, so the check is expected to pass for all four
+platforms. Right after changing native plugin source it will fail for the platforms whose
+committed binaries have not been rebuilt yet (CI rebuilds Android, iOS and macOS and the
+`sync-binaries` job commits the results); use `--platform windows` or `--platform android`
+to check only what was built locally.
+
 ---
 
 ## 1. Plugin inventory
@@ -38,8 +44,11 @@ iOS and macOS the plugins are built without an export map or `-fvisibility=hidde
 every C++ symbol of the statically linked `libImmCore` / `libImmImporter` / `libImmPlayer`
 is exported as well. Only the `extern "C"` names are a supported interface.
 
-Windows is the only fully-featured platform: the 21 `ImmExporter_*` entry points exist
-only there (see [G3](#g3--exporter-api-exists-only-in-the-windows-binary)).
+Every platform now builds the full API: the 21 `ImmExporter_*` entry points are part of
+the Android, iOS and macOS binaries as well, since `libImmExporter` (with the vendored
+libopusenc for Opus audio) is wired into all four build systems. The counts above are from
+the binary sync that followed the exporter enablement for Windows and Android; iOS and
+macOS pick the new entry points up in the next binary sync.
 
 Local build outputs under the `exe/` folders (not shipped; only the stroke reader DLL here
 is tracked in git):
@@ -64,7 +73,7 @@ This is why the READMEs require installing the stroke reader first (see
 
 ## 2. ImmUnityPlugin
 
-Source: `code/appImmUnity/src/main.cpp` (2791 lines) plus the shared engine bridge
+Source: `code/appImmUnity/src/main.cpp` (~3100 lines) plus the shared engine bridge
 `code/appImmShared/src/imm_engine_bridge.cpp` — the same bridge file is compiled into the
 Godot plugin, so plugin-side changes affect both engines.
 
@@ -83,7 +92,7 @@ Godot plugin, so plugin-side changes affect both engines.
 6. Paint authoring and export (`ImmExporter_*`), Windows only.
 7. Runtime flag plumbing (`SetRuntimeFlag`) so raw `getenv` toggles work on Android.
 
-### 2.2 Native API (81 entry points)
+### 2.2 Native API (97 entry points)
 
 `C#` column: `Native` = `Runtime/ImmNativePlugin.cs`, `Export` = `Runtime/ImmExporter.cs`.
 "callers" lists managed code that actually invokes it; `—` means the P/Invoke exists but
@@ -161,16 +170,33 @@ triggered from C# by `ImmUnityRegisterRenderingPlugin()` (iOS-only `#if` in
 |---|---|---|
 | `ImmExporter_CreateSequence` / `DestroySequence` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_CreatePaintLayer` / `CreateGroupLayer` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
-| `ImmExporter_CreateSpawnAreaLayer` | **not declared** | — |
+| `ImmExporter_CreateSpawnAreaLayer` | Export | `ExportSequence` |
+| `ImmExporter_SetInitialSpawnArea` / `SpawnAreaSetProperties` | Export | `ExportSpawnAreaLayer`, `ImmAuthoringCompiler` |
 | `ImmExporter_CreateDrawing` / `DestroyDrawing` / `GetDrawingIndex` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_DrawingInit` / `DrawingGetElement` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_ElementInit` / `ElementSetPoint` / `ElementSetPoints` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_ComputeElementBounds` / `ComputeDrawingBounds` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
 | `ImmExporter_PaintAddFrame` | Export | `ImmExporter`, `ImmAuthoringCompiler` |
-| `ImmExporter_LayerAddAnimationKey` | Export | `ImmAuthoringCompiler` — **no native symbol** |
-| `ImmExporter_PaintSetMaxRepeatCount` | Export | `ImmAuthoringCompiler` — **no native symbol** |
+| `ImmExporter_LayerAddAnimationKey` | Export | `ImmAuthoringCompiler` |
+| `ImmExporter_PaintSetMaxRepeatCount` | Export | `ImmAuthoringCompiler` |
 | `ImmExporter_ExportToFile` / `ExportToMemory` | Export | `ImmExporter` |
 | `ImmExporter_GetMemoryData` / `GetMemorySize` / `DestroyMemory` | Export | `ImmExporter` |
+
+#### Entry points added by the gap fixes
+
+| Export | Managed surface |
+|---|---|
+| `GlobalWorkEx(enabled, budgetMicroseconds)` | `ImmPlayerManager.GlobalWorkBudgetMicroseconds` |
+| `SetCameraViewportEx(cameraID, x, y, width, height, minDepth, maxDepth, forceViewport)` / `ClearCameraViewport` | `ImmPlayerManager.SetCameraViewport` / `ClearCameraViewport` |
+| `GetChapterInfoEx(id, int64_t* lengths, int maxChapters, int* hasPlays)` | `ImmDocument.TryGetChapterInfo` |
+| `GetDocumentHasAudio` / `CancelDocumentLoad` / `PauseAt` / `ResumeAt` | `ImmDocument.HasAudio` / `CancelLoading` / `PauseAt` / `ResumeAt` |
+| `GetLoadTimeInMs` / `UnloadAll(sync)` | `ImmPlayerManager.LastLoadTimeMs` / `UnloadAllDocuments` |
+| `SetPerformanceMeasurementEnabled` / `GetPerformanceInfo` | `ImmPlayerManager.SetPerformanceMeasurementEnabled` / `GetPerformanceInfo` |
+| `ImmExporter_LayerAddAnimationKey` / `ImmExporter_PaintSetMaxRepeatCount` | `ImmAuthoringCompiler` |
+| `ImmExporter_CreateSpawnAreaLayer` / `ImmExporter_SetInitialSpawnArea` / `ImmExporter_SpawnAreaSetProperties` | `ExportSequence.CreateSpawnAreaLayer` / `SetInitialSpawnArea`, `ExportSpawnAreaLayer.SetVolume`, `ImmAuthoringDocument.CreateSpawnAreaLayer` |
+| `StrokeReader_GetBuildId` | `ImmStrokeReader.GetBuildId()` |
+| `StrokeReader_GetDrawingBiggestStroke` | `StrokeReaderDocument.TryGetDrawingBiggestStroke` |
+| `StrokeReader_GetLayerSpawnAreaInfo` | `StrokeReaderDocument.GetLayerSpawnAreaInfo`, `ImmAuthoringImporter` |
 
 ### 2.3 Renderer / platform behaviour worth knowing
 
@@ -186,11 +212,11 @@ triggered from C# by `ImmUnityRegisterRenderingPlugin()` (iOS-only `#if` in
 - **Apple**: Metal with `metalUnityProjectionAdjusted`, `reverseDepthBuffer`,
   `overrideFrontIsCCW = true`; OpenGL core is the only alternative. Unsupported renderers
   return `-1` from `Init`.
-- **`GlobalWork`** always passes a 9000 µs work budget to the engine bridge — the bridge
-  accepts a budget parameter, the export does not (see [G5](#g5--per-frame-work-budget-is-hardcoded)).
+- **`GlobalWork`** passes the historical 9000 µs work budget; `GlobalWorkEx` (and
+  `ImmPlayerManager.GlobalWorkBudgetMicroseconds`) carry an explicit one.
 - **`SetCameraViewport`** only stores width/height and only on `__APPLE__`
-  (`main.cpp:1602`); the bridge's `ViewportInfo` has x, y, minDepth, maxDepth and
-  forceViewport, none of which is reachable (see [G6](#g6--camera-viewport-is-widthheight-only)).
+  (`main.cpp:1602`); `SetCameraViewportEx` sets origin, sub-rect size, depth range and the
+  force flag on every platform, and `ClearCameraViewport` restores the default.
 
 ### 2.4 Data structures (ABI verified against the native definitions)
 
@@ -247,7 +273,7 @@ Source: `code/appImmStrokeReader/src/main.cpp` + `strokeStore.cpp/.h`. It links 
 file into a plain in-memory stroke/layer graph. All 37 entry points exist on all four
 platforms.
 
-### 3.1 Native API (37 entry points)
+### 3.1 Native API (38 entry points)
 
 All are declared in `Runtime/ImmStrokeReader.cs` except where noted.
 
@@ -339,142 +365,94 @@ Existing CI verification only checks that the Windows plugin exists, is non-empt
 
 ## 6. Gaps
 
-Severity: **S1** breaks a shipped code path, **S2** capability the binary has and the
-wrapper cannot reach, **S3** integration/packaging/documentation defect.
+Severity: **S1** broke a shipped code path, **S2** capability the binary had and the
+wrapper could not reach, **S3** integration/packaging/documentation defect.
 
-| # | Severity | Gap | Area |
+All S1 and S2 gaps are fixed (see the fix log below); the S3 defects that remain open
+are kept in full detail after it.
+
+| # | Severity | Gap | Status |
 |---|---|---|---|
-| [G1](#g1--impexporter_layeraddanimationkey-is-declared-and-called-but-does-not-exist) | S1 | `ImmExporter_LayerAddAnimationKey` called by C#, absent from every binary and from native source | exporter |
-| [G2](#g2--impexporter_paintsetmaxrepeatcount-same) | S1 | `ImmExporter_PaintSetMaxRepeatCount` — same | exporter |
-| [G3](#g3--exporter-api-exists-only-in-the-windows-binary) | S2 | 21 exporter entry points exist only on Windows; C# is compiled on every platform | exporter |
-| [G4](#g4--impexporter_createspawnarealayer-is-not-wrapped) | S2 | `ImmExporter_CreateSpawnAreaLayer` exported, no C# binding at all | exporter |
-| [G5](#g5--per-frame-work-budget-is-hardcoded) | S2 | `GlobalWork` budget hardcoded to 9000 µs | playback |
-| [G6](#g6--camera-viewport-is-widthheight-only) | S2 | viewport x/y/minDepth/maxDepth/forceViewport unreachable; export is Apple-only | rendering |
-| [G7](#g7--no-native-frame-pose--needs-update-consumer) | S2 | `GetSpawnAreaPose`, `GetSpawnAreaNeedsUpdate`/`SetSpawnAreaNeedsUpdate` wrapped but never called | spawn areas |
-| [G8](#g8--spawn-area-screenshot-is-returned-but-never-consumed) | S2 | screenshot pointer/format/size returned by `GetSpawnAreaInfo`, dropped by the managed wrapper | spawn areas |
-| [G9](#g9--player-capabilities-with-no-unity-entry-point) | S2 | chapter lengths, audio presence, cancel-loading, load time, perf counters, unload-all, pause/resume-at-tick not exposed | playback |
-| [G10](#g10--imm-unity-depends-on-the-stroke-reader-package-for-its-windows-dll-dependencies) | S3 | `ImmUnityPlugin.dll` imports DLLs only the stroke-reader package ships | packaging |
-| [G11](#g11--strokereader_getbuildid-is-not-wrapped) | S2 | stroke-reader build id not reachable from C# | stroke reader |
-| [G12](#g12--strokereader_getdrawingbiggeststroke-is-not-wrapped) | S2 | biggest-stroke query not reachable from C# | stroke reader |
-| [G13](#g13--strokereader_end-is-never-called) | S3 | managed code never shuts the stroke reader down | lifecycle |
-| [G14](#g14--debug-is-unused) | S3 | `Debug()` unused | diagnostics |
-| [G15](#g15--stale-tracked-stroke-reader-dll) | S3 | `code/appImmStrokeReader/exe/ImmStrokeReader.dll` is 9 entry points behind | packaging |
-| [G16](#g16--no-automated-export-vs-dllimport-check) | S3 | CI does not compare P/Invokes against exports | process |
-| [G17](#g17--undocumented-native-surface-and-flags) | S3 | no reference doc for the 81/37 entry points or the 25 runtime flags | docs |
-| [G18](#g18--immstrokereaderupm-is-a-broken-package-skeleton) | S3 | `code/ImmStrokeReaderUPM/` looks installable but is empty | packaging |
+| [G1](#fix-log) | S1 | `ImmExporter_LayerAddAnimationKey` called by C#, absent from every binary and from native source | Fixed |
+| [G2](#fix-log) | S1 | `ImmExporter_PaintSetMaxRepeatCount` — same | Fixed |
+| [G3](#fix-log) | S2 | 21 exporter entry points existed only on Windows | Fixed |
+| [G4](#fix-log) | S2 | `ImmExporter_CreateSpawnAreaLayer` exported, no C# binding, no authoring layer type | Fixed |
+| [G5](#fix-log) | S2 | `GlobalWork` budget hardcoded to 9000 µs | Fixed |
+| [G6](#fix-log) | S2 | viewport x/y/minDepth/maxDepth/forceViewport unreachable; export was Apple-only | Fixed |
+| [G7](#fix-log) | S2 | `GetSpawnAreaPose`, `GetSpawnAreaNeedsUpdate`/`SetSpawnAreaNeedsUpdate` wrapped but never called | Fixed |
+| [G8](#fix-log) | S2 | screenshot pointer/format/size returned by `GetSpawnAreaInfo`, dropped by the wrapper | Fixed |
+| [G9](#fix-log) | S2 | chapter lengths, audio presence, cancel-loading, load time, perf counters, unload-all, pause/resume-at-tick not exposed | Fixed |
+| G10 | S3 | `ImmUnityPlugin.dll` imports DLLs only the stroke-reader package ships | Open |
+| [G11](#fix-log) | S2 | stroke-reader build id not reachable from C# | Fixed |
+| [G12](#fix-log) | S2 | biggest-stroke query not reachable from C# | Fixed |
+| G13 | S3 | managed code never calls `StrokeReader_End` | Open |
+| G14 | S3 | `Debug()` unused | Open |
+| G15 | S3 | `code/appImmStrokeReader/exe/ImmStrokeReader.dll` was 9 entry points behind | Fixed |
+| G16 | S3 | CI does not compare P/Invokes against exports | Tool added, CI wiring open |
+| G17 | S3 | no reference doc for the entry points or the runtime flags | Fixed (this document) |
+| G18 | S3 | `code/ImmStrokeReaderUPM/` is an empty package skeleton | Open |
 
-### G1 — `ImmExporter_LayerAddAnimationKey` is declared and called but does not exist
+### Fix log
 
-- Declared: `Runtime/ImmExporter.cs:560`.
-- Called: `Runtime/Authoring/ImmAuthoringCompiler.cs:347`, once per animation key of every
-  layer during `ExportToMemory`/`ExportToFile`.
-- Absent from: the 81-name export table of the shipped Windows DLL, both local build
-  outputs, all other platform binaries, and every native source file at this revision
-  (`git grep LayerAddAnimationKey HEAD -- *.cpp *.h` → no match).
-- Introduced by `72959afe` ("Add supported paint import and round trip") in C# only;
-  binaries were refreshed afterwards in `300f8fdc` without the symbol appearing.
+Each entry names the change that closed the gap. Commits are on `main` in the order
+listed.
 
-Impact: any runtime-authoring export that reaches an animation key throws
-`EntryPointNotFoundException` instead of returning a structured
-`ImmAuthoringErrorCode`. Nothing in CI catches it (`--platform windows` in the verifier
-reports it).
-
-Fix options: implement `ImmExporter_LayerAddAnimationKey` in `main.cpp`. The native work is
-bounded — `libImmExporter::Layer` already exposes the public setter
-`AddKey(piTick, AnimProperty, const AnimValue&, InterpolationType)`
-(`code/libImmExporter/src/document/layer.h:153`) and the shipped `ImmExporter_CreatePaintLayer` /
-`CreateGroupLayer` already take a `maxRepeatCount` argument. Alternatively delete both C#
-declarations and their calls and return `ImmAuthoringErrorCode.Unsupported`.
-
-### G2 — `ImmExporter_PaintSetMaxRepeatCount` same
-
-- Declared: `Runtime/ImmExporter.cs:610`; called: `ImmAuthoringCompiler.cs:387` for every
-  paint layer, **before** the first drawing is created — so this fires earlier than G1 and
-  affects even simple paint documents.
-- Same evidence as G1: never defined natively, not exported, not detected by CI.
-- Fix: `libImmExporter::Layer::SetMaxRepeatCount` is public
-  (`code/libImmExporter/src/document/layer.h:146`) and `ImmExporter_CreatePaintLayer`
-  already accepts `maxRepeatCount`, so the export is a thin forwarder — or the call can be
-  dropped, since the repeat count is already supplied at layer creation.
-
-### G3 — exporter API exists only in the Windows binary
-
-The whole exporter block in `code/appImmUnity/src/main.cpp` is inside
-`#if defined(WINDOWS)` (lines 2347–2791), and `libImmExporter` is referenced only by
-`appImmUnity.vcxproj` and `imm.sln`. Result: 60 of 81 API entry points on Android, iOS and
-macOS.
-
-The C# side knows this (`ImmAuthoringRuntime.Capabilities` reports authoring support for
-Windows x64 only, `ImmAuthoringRuntime.cs:48-69`) but `ImmExporter.cs` has no
-`#if` guards, so the types are callable and fail at first P/Invoke on device. The verifier
-tracks this as a documented platform gap (`KNOWN_PLATFORM_GAPS`).
-
-Suggested: make `ImmAuthoringRuntime.Capabilities` the enforced gate (throw a managed
-`NotSupportedException`/capability error before any exporter P/Invoke) so device builds
-fail predictably instead of with `DllNotFoundException`/`EntryPointNotFoundException`.
-
-### G4 — `ImmExporter_CreateSpawnAreaLayer` is not wrapped
-
-Exported (`main.cpp:2514`), present in the shipped Windows DLL, but no C# declaration
-anywhere. Consequence: `ImmAuthoringDocument` cannot create spawn-area layers, so an IMM
-file authored at runtime can never carry viewpoints — the runtime authoring graph only
-produces group and paint layers. Fix: add the binding plus an
-`ImmAuthoringLayerType.SpawnArea` path (transform + floorLevel), or document that runtime
-authoring is playback-only.
-
-### G5 — per-frame work budget is hardcoded
-
-`GlobalWork(int enabled)` calls `mBridge.GlobalWork(enabled == 1, 9000)` (`main.cpp:1566`).
-The bridge signature is `GlobalWork(bool, int budgetMicroseconds = 9000)`
-(`imm_engine_bridge.h:62`), and `Player::GlobalWork(bool, uint32_t microsecondsBudget)`
-accepts the budget. No C# API or flag can change it, so hosts cannot trade frame time
-against load progress on device.
-
-### G6 — camera viewport is width/height only
-
-`SetCameraViewport(int cameraID, int width, int height)` (`main.cpp:1602`) stores two
-ints, and only under `#if defined(__APPLE__)`; on Windows/Android the call is a no-op.
-The bridge's `ViewportInfo` carries `x`, `y`, `minDepth`, `maxDepth` and `forceViewport`
-(`imm_engine_bridge.h:43-52`), none of which is reachable. Sub-rectangle rendering,
-depth-range control and forced viewports therefore cannot be requested from Unity, and
-managed code gets no error when the call does nothing.
-
-### G7 — no native frame-pose / needs-update consumer
-
-`GetSpawnAreaPose` and `GetSpawnAreaNeedsUpdate` are declared in
-`ImmNativePlugin.cs:296`/`:287` with comments describing their intended use (cheap
-per-frame pose, timeline "make default" re-anchor signal), but nothing in the repository
-calls either. `ImmDocument` instead re-derives poses through the heavier
-`GetSpawnAreaInfo` path (`ImmDocument.cs:445-497`), and the needs-update signal is never
-consumed — so a Quill MakeDefault keyframe cannot re-anchor a rig through the shipped C#
-API. `SetSpawnAreaNeedsUpdate` has no caller either (the only match is its own comment).
-
-### G8 — spawn-area screenshot is returned but never consumed
-
-`GetSpawnAreaInfo` fills `SerializedSpawnArea.screenshot` (format, width, height, pixel
-pointer — `main.cpp:2249-2263`) and C# mirrors the struct, but `grep -r screenshot` over
-both packages matches only the struct definition: `SpawnAreaInfo` (the managed projection)
-deliberately omits it (`ImmDocument.cs:461-471`) and no code turns the pixels into a
-`Texture2D`. Spawn-area thumbnails are therefore unavailable to Unity even though the
-plugin delivers them.
-
-### G9 — player capabilities with no Unity entry point
-
-These exist on `ImmPlayer::Player` (`code/libImmPlayer/src/player.h`) and are reachable
-inside the plugin through `ImmEngineBridge::GetPlayer()` (`imm_engine_bridge.h:75`), but no
-entry point exposes them, so Unity cannot use them. The standalone viewer calls several
-directly (`code/appImmViewer/src/viewer.cpp`: `GetLoadTimeInMs`, `CancelLoading`,
-`UnloadAllSync`), which is the clearest evidence that they are product-relevant:
-
-| Capability | Native API | Why it matters |
-|---|---|---|
-| Chapter lengths + `hasPlays` | `GetChapterInfo(numChapters, chapterLengths, hasPlays, id)` | chapter UI can only show an index, not duration or whether markers are real plays |
-| Audio presence | `GetHasAudio(id)` | `GetSound` returns volume only; cannot tell "silent" from "muted" |
-| Cancel an in-flight load | `CancelLoading(id)` | long loads can only be waited out or unloaded |
-| Load time measurement | `GetLoadTimeInMs()` | no load telemetry |
-| Performance counters | `EnablePerformanceMeasurement(bool)` + `PerformanceInfo` | draw calls, triangles and culled counts unavailable to Unity profiling |
-| Unload everything | `UnloadAll()`, `UnloadAllSync()` | multi-document hosts must iterate ids |
-| Pause/resume at a tick | `Pause(id, stopTicks)`, `Resume(id, startTicks)` | frame-accurate stop/start not expressible |
+- **G1 / G2 (S1).** `ImmExporter_LayerAddAnimationKey` and
+  `ImmExporter_PaintSetMaxRepeatCount` are implemented in `appImmUnity/src/main.cpp` on
+  top of the public `libImmExporter` API (`Layer::AddKey`, `Layer::SetMaxRepeatCount`),
+  with null-handle, property-range and interpolation-range validation plus a paint-only
+  guard for the repeat count. `code/appImmUnity/tests/exporter_bridge_smoke.py` exercises
+  the positive and rejection paths and re-reads the exported file through
+  `ImmStrokeReader` to confirm the repeat count and both key values survive
+  serialization.
+- **G3 (S2).** The exporter block and its includes are no longer Windows-only. The
+  libopusenc 0.2.1 sources are vendored under `thirdparty/libopusenc-src` (the
+  pre-existing `thirdparty/libopusenc` holds Windows binaries only) with a CMake target;
+  `piWaveOPUS.cpp` and opus/opusenc are part of the Android, iOS and macOS core builds;
+  `libImmExporter` has an Android gradle/CMake module and is linked into the iOS archive
+  merge and the macOS bundle. `toImmersiveLayer.cpp` needed a `MAX` case in its animation
+  property switch, which clang's `-Wswitch` rejects under `-Werror`.
+  `ImmAuthoringRuntime.Capabilities` now reports the authoring features on every platform.
+- **G4 (S2).** `ExportSequence.CreateSpawnAreaLayer` / `SetInitialSpawnArea` and an
+  `ExportSpawnAreaLayer` wrapper (sphere or box volume, offset, radii, per-axis
+  locomotion) expose the native entry points, and the new
+  `ImmExporter_SetInitialSpawnArea` / `ImmExporter_SpawnAreaSetProperties` exports give the
+  host explicit control; creating a spawn area now claims the sequence default only while
+  none is set. On the authoring side `ImmAuthoringLayerType.SpawnArea` is a first-class
+  layer with viewpoint properties, validation, compiler support (including default
+  selection), importer support and structural comparison. The smoke test authors two
+  viewpoints and verifies tracking level, radii, locomotion masks and default selection
+  round-trip.
+- **G5 (S2).** `GlobalWorkEx(enabled, budgetMicroseconds)` (negative budgets clamped to 0)
+  and `ImmPlayerManager.GlobalWorkBudgetMicroseconds` replace the hardcoded 9000.
+- **G6 (S2).** `SetCameraViewportEx(cameraID, x, y, width, height, minDepth, maxDepth,
+  forceViewport)` and `ClearCameraViewport` work on every platform through a resolver that
+  reproduces the previous viewport exactly when no override is set; the Vulkan
+  render-buffer paths keep the bound buffer's size and only take origin, depth range and
+  the force flag.
+- **G7 (S2).** `ImmDocument` exposes `TryGetSpawnAreaPose`, `TryGetActiveSpawnAreaPose`,
+  `GetSpawnAreaNeedsUpdate`, `SetSpawnAreaNeedsUpdate` and `ConsumeSpawnAreaNeedsUpdate`,
+  and the world/view-target pose helpers now use the cheap pose query instead of the
+  name-and-screenshot `GetSpawnAreaInfo` path.
+- **G8 (S2).** `ImmDocument.TryGetSpawnAreaThumbnail` copies the native screenshot pixels
+  into a `Texture2D` with the matching Unity format.
+- **G9 (S2).** New entry points `GetChapterInfoEx` (chapter lengths in ticks plus
+  `hasPlays`, releasing the temporary array `Player::GetChapterInfo` allocates),
+  `GetDocumentHasAudio`, `CancelDocumentLoad`, `GetLoadTimeInMs`, `UnloadAll(sync)`,
+  `PauseAt`/`ResumeAt` and `SetPerformanceMeasurementEnabled`/`GetPerformanceInfo` with a
+  marshaled numeric `PerformanceInfo` subset, surfaced as `ImmDocument.TryGetChapterInfo`,
+  `HasAudio`, `CancelLoading`, `PauseAt`/`ResumeAt` and
+  `ImmPlayerManager.LastLoadTimeMs`, `UnloadAllDocuments`,
+  `SetPerformanceMeasurementEnabled`, `GetPerformanceInfo`.
+- **G11 / G12 (S2).** `ImmStrokeReader.GetBuildId()` and
+  `StrokeReaderDocument.TryGetDrawingBiggestStroke` wrap the two entry points that had no
+  binding; the smoke test asserts the build-id prefix and re-reads the drawing's
+  biggest-stroke value (the largest element bounding-box extent the format stores per
+  drawing — not a brush width, which the first draft of these docs claimed).
+- **G15 (S3).** Rebuilding `appImmStrokeReader` refreshed the tracked
+  `code/appImmStrokeReader/exe/ImmStrokeReader.dll`, which was nine entry points behind.
+- **G17 (S3).** This document is the reference for the entry points, the ABI structs, the
+  render-event contract and the runtime flags.
 
 ### G10 — imm-unity depends on the stroke-reader package for its Windows DLL dependencies
 
@@ -486,20 +464,6 @@ imm-unity without the stroke reader leaves a Windows player that cannot load the
 The dependency is declared in `package.json` and in the README, but nothing verifies it —
 and the two packages use different plugin folder conventions (`OSX/*.bundle` vs
 `macOS/*.dylib`, `Android/libs/arm64-v8a` vs `Android/arm64-v8a`).
-
-### G11 — `StrokeReader_GetBuildId` is not wrapped
-
-Exported on all four platforms (`main.cpp:37`), absent from `ImmStrokeReader.cs` (36 of 37
-entry points declared). Managed code therefore cannot verify which native stroke reader
-build is loaded — exactly what the function exists for.
-
-### G12 — `StrokeReader_GetDrawingBiggestStroke` is not wrapped
-
-Exported on all four platforms (`main.cpp:438`, backed by
-`StrokeStore::GetDrawingBiggestStroke`), absent from the C# wrapper. It is the query used
-by the web decoder's paint-geometry builder
-(`code/projects/web/decoder/src/imm_web_scene.cpp`, `buildPaintGeometry`), so Unity cannot
-reproduce the same geometry-sizing decisions from the managed API.
 
 ### G13 — `StrokeReader_End` is never called
 
@@ -514,29 +478,14 @@ the static `ImmStrokeReader` binding class offers no shutdown path that calls
 `ImmNativePlugin.Debug()` (`main.cpp:1515` logs renderer initialisation state) has no
 caller. Useful when diagnosing "plugin loaded but renderer absent" on device.
 
-### G15 — stale tracked stroke reader DLL
-
-`code/appImmStrokeReader/exe/ImmStrokeReader.dll` is tracked and clean but predates the
-nine `StrokeReader_GetAuthoring*` entry points (28 of the current 37 exports); the package
-copy has all 37. Anyone pointing a test harness at the `exe\` path gets an incomplete API.
-The file is not covered by `.gitignore` (only its `.pdb`/`.exp`/`.lib` siblings are).
-
 ### G16 — no automated export-vs-DllImport check
 
 `ci-engine.yml:99-126` asserts three export names via `dumpbin`;
-`tests/tools/verify_package_layout.py` checks existence and non-zero size. Nothing links
-the C# `[DllImport]` set to the binary's export table, which is why G1/G2 survived CI.
-`tests/tools/verify_unity_plugin_exports.py` now does that check offline for all four
-platforms; wiring it into the "Verify Unity native plugin exports" step (plus the stroke
-reader binary) would close the loop.
-
-### G17 — undocumented native surface and flags
-
-The 81 + 37 entry points, the ABI structs, the render-event protocol and the runtime flags
-listed in [§2.5](#25-runtime-flags) had no reference outside the sources and the package
-READMEs; this document is the first consolidated list. The flags in particular are
-discoverable only by reading `main.cpp`, and they are the only way to reach several
-diagnostic and Vulkan/Metal workarounds.
+`tests/tools/verify_package_layout.py` checks existence and non-zero size.
+`tests/tools/verify_unity_plugin_exports.py` now performs the missing check offline for
+all four platforms (and found G1/G2 and the stale Android binaries), but it is still not
+invoked by a workflow: wiring it into the "Verify Unity native plugin exports" step, plus
+the stroke reader binary, would close the loop.
 
 ### G18 — `ImmStrokeReaderUPM/` is a broken package skeleton
 
@@ -557,47 +506,48 @@ the shipped package, but it sits at a plausible install path.
 
 ## 7. Appendix — full export lists
 
-`ImmUnityPlugin` (81, identical on Windows; 60 on Android/iOS/macOS with all
-`ImmExporter_*` absent):
+`ImmUnityPlugin` (97 on Windows, same API set on Android, iOS and macOS):
 
 ```
-ClearLayerTransformOverride ClearLayerVisibilityOverride ConfigureVulkanRenderEvent Continue
-Debug End GetActiveSpawnAreaId GetBoundingBox GetChapterCount GetCurrentChapter
-GetDocumentInfoEx GetDocumentState GetInitialSpawnAreaId GetLayerCount GetLayerDiagnostics
-GetLayerInfoByIndex GetPlayTime GetPlayerInfo GetRenderEventAndDataFunc GetRenderEventFunc
-GetSound GetSpawnAreaCount GetSpawnAreaInfo GetSpawnAreaList GetSpawnAreaNeedsUpdate
-GetSpawnAreaPose GetTime GlobalWork Hide
-ImmExporter_ComputeDrawingBounds ImmExporter_ComputeElementBounds ImmExporter_CreateDrawing
-ImmExporter_CreateGroupLayer ImmExporter_CreatePaintLayer ImmExporter_CreateSequence
-ImmExporter_CreateSpawnAreaLayer ImmExporter_DestroyDrawing ImmExporter_DestroyMemory
-ImmExporter_DestroySequence ImmExporter_DrawingGetElement ImmExporter_DrawingInit
-ImmExporter_ElementInit ImmExporter_ElementSetPoint ImmExporter_ElementSetPoints
-ImmExporter_ExportToFile ImmExporter_ExportToMemory ImmExporter_GetDrawingIndex
-ImmExporter_GetMemoryData ImmExporter_GetMemorySize ImmExporter_PaintAddFrame
-Init IsDocumentActive IsReadyForDocumentLoad IsSequenceReady LoadFromFile LoadFromMemory
-Pause PrepareCamera Restart Resume SetActiveSpawnAreaId SetCameraViewport SetChapter
-SetDocumentToWorld SetLayerOpacity SetLayerTransform SetLayerVisible SetMatrices
-SetRuntimeFlag SetSound SetSpawnAreaNeedsUpdate SetTime SetVulkanCameraEyeRenderBuffers
-SetVulkanCameraRenderBuffers SetVulkanDedicatedQueueAllowed Show SkipBack SkipForward
-UnityPluginLoad UnityPluginUnload Unload
+CancelDocumentLoad ClearCameraViewport ClearLayerTransformOverride ClearLayerVisibilityOverride
+ConfigureVulkanRenderEvent Continue Debug End
+GetActiveSpawnAreaId GetBoundingBox GetChapterCount GetChapterInfoEx
+GetCurrentChapter GetDocumentHasAudio GetDocumentInfoEx GetDocumentState
+GetInitialSpawnAreaId GetLayerCount GetLayerDiagnostics GetLayerInfoByIndex
+GetLoadTimeInMs GetPerformanceInfo GetPlayTime GetPlayerInfo
+GetRenderEventAndDataFunc GetRenderEventFunc GetSound GetSpawnAreaCount
+GetSpawnAreaInfo GetSpawnAreaList GetSpawnAreaNeedsUpdate GetSpawnAreaPose
+GetTime GlobalWork GlobalWorkEx Hide
+ImmExporter_ComputeDrawingBounds ImmExporter_ComputeElementBounds ImmExporter_CreateDrawing ImmExporter_CreateGroupLayer
+ImmExporter_CreatePaintLayer ImmExporter_CreateSequence ImmExporter_CreateSpawnAreaLayer ImmExporter_DestroyDrawing
+ImmExporter_DestroyMemory ImmExporter_DestroySequence ImmExporter_DrawingGetElement ImmExporter_DrawingInit
+ImmExporter_ElementInit ImmExporter_ElementSetPoint ImmExporter_ElementSetPoints ImmExporter_ExportToFile
+ImmExporter_ExportToMemory ImmExporter_GetDrawingIndex ImmExporter_GetMemoryData ImmExporter_GetMemorySize
+ImmExporter_LayerAddAnimationKey ImmExporter_PaintAddFrame ImmExporter_PaintSetMaxRepeatCount ImmExporter_SetInitialSpawnArea
+ImmExporter_SpawnAreaSetProperties Init IsDocumentActive IsReadyForDocumentLoad
+IsSequenceReady LoadFromFile LoadFromMemory Pause
+PauseAt PrepareCamera Restart Resume
+ResumeAt SetActiveSpawnAreaId SetCameraViewport SetCameraViewportEx
+SetChapter SetDocumentToWorld SetLayerOpacity SetLayerTransform
+SetLayerVisible SetMatrices SetPerformanceMeasurementEnabled SetRuntimeFlag
+SetSound SetSpawnAreaNeedsUpdate SetTime SetVulkanCameraEyeRenderBuffers
+SetVulkanCameraRenderBuffers SetVulkanDedicatedQueueAllowed Show SkipBack
+SkipForward UnityPluginLoad UnityPluginUnload Unload
+UnloadAll
 ```
 
-`ImmStrokeReader` (37, identical on all four platforms):
+`ImmStrokeReader` (38, identical on all four platforms):
 
 ```
-StrokeReader_End StrokeReader_GetAuthoringDrawingCount StrokeReader_GetAuthoringFrameBuffer
-StrokeReader_GetAuthoringLayerAnimationInfo StrokeReader_GetAuthoringLayerCount
-StrokeReader_GetAuthoringLayerInfo StrokeReader_GetAuthoringLayerTransform
-StrokeReader_GetAuthoringStrokeCount StrokeReader_GetAuthoringStrokeInfo
-StrokeReader_GetAuthoringStrokePoints StrokeReader_GetBuildId StrokeReader_GetChapterCount
-StrokeReader_GetChapterCountFromFile StrokeReader_GetCurrentChapter
-StrokeReader_GetDocumentCount StrokeReader_GetDocumentInfo
-StrokeReader_GetDrawingBiggestStroke StrokeReader_GetDrawingCount
-StrokeReader_GetDrawingIndexForChapter StrokeReader_GetFrameBuffer
-StrokeReader_GetLayerAnimationInfo StrokeReader_GetLayerAnimationKey
-StrokeReader_GetLayerAnimationKeyCount StrokeReader_GetLayerCount StrokeReader_GetLayerInfo
-StrokeReader_GetLayerTransform StrokeReader_GetPictureInfo StrokeReader_GetPicturePixelData
-StrokeReader_GetStrokeCount StrokeReader_GetStrokeInfo StrokeReader_GetStrokePoints
-StrokeReader_Init StrokeReader_IsInitialized StrokeReader_LoadFromFile
-StrokeReader_LoadFromMemory StrokeReader_SetChapter StrokeReader_Unload
+StrokeReader_End StrokeReader_GetAuthoringDrawingCount StrokeReader_GetAuthoringFrameBuffer StrokeReader_GetAuthoringLayerAnimationInfo
+StrokeReader_GetAuthoringLayerCount StrokeReader_GetAuthoringLayerInfo StrokeReader_GetAuthoringLayerTransform StrokeReader_GetAuthoringStrokeCount
+StrokeReader_GetAuthoringStrokeInfo StrokeReader_GetAuthoringStrokePoints StrokeReader_GetBuildId StrokeReader_GetChapterCount
+StrokeReader_GetChapterCountFromFile StrokeReader_GetCurrentChapter StrokeReader_GetDocumentCount StrokeReader_GetDocumentInfo
+StrokeReader_GetDrawingBiggestStroke StrokeReader_GetDrawingCount StrokeReader_GetDrawingIndexForChapter StrokeReader_GetFrameBuffer
+StrokeReader_GetLayerAnimationInfo StrokeReader_GetLayerAnimationKey StrokeReader_GetLayerAnimationKeyCount StrokeReader_GetLayerCount
+StrokeReader_GetLayerInfo StrokeReader_GetLayerSpawnAreaInfo StrokeReader_GetLayerTransform StrokeReader_GetPictureInfo
+StrokeReader_GetPicturePixelData StrokeReader_GetStrokeCount StrokeReader_GetStrokeInfo StrokeReader_GetStrokePoints
+StrokeReader_Init StrokeReader_IsInitialized StrokeReader_LoadFromFile StrokeReader_LoadFromMemory
+StrokeReader_SetChapter StrokeReader_Unload
 ```
+

@@ -359,12 +359,36 @@ This target requires `picture360DrawCalls>=1` and writes PNG captures under `bui
 
 | What to change | File |
 |---|---|
+| Unity plugin native API | `code/appImmUnity/src/main.cpp` (+ `code/appImmShared/src/imm_engine_bridge.cpp`) |
+| Unity plugin C# bindings | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/*.cs` |
 | Reader native API | `code/appImmStrokeReader/src/main.cpp`, `strokeStore.cpp`, `strokeStore.h` |
 | Reader C# bindings | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime/ImmStrokeReader.cs` |
 | Reader IMM→SharpQuill | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-reader/Runtime/SharpQuillCompat.cs` |
 | Writer native API | `code/appImmStrokeWriter/src/main.cpp` |
 | Writer C# bindings | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-writer/Runtime/ImmStrokeWriter.cs` |
 | Writer high-level API | `code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-stroke-writer/Runtime/ImmStrokeWriterDocument.cs` |
+
+## Native library build coverage
+
+`libImmExporter` and the Opus encoder are part of every Unity plugin build, so the
+authoring API exists on all four platforms:
+
+| Library | Windows | Android | iOS | macOS |
+|---|---|---|---|---|
+| `libImmCore` | `libImmCore.vcxproj` | `code/libImmCore/CMakeLists.txt` (gradle module) | `code/projects/ios/CMakeLists.txt` | `code/projects/macos/CMakeLists.txt` |
+| `libImmImporter` | `libImmImporter.vcxproj` | `code/libImmImporter/CMakeLists.txt` | " | " |
+| `libImmPlayer` | `libImmPlayer.vcxproj` | `code/libImmPlayer/CMakeLists.txt` | " | " |
+| `libImmExporter` | `libImmExporter.vcxproj` | `code/libImmExporter/CMakeLists.txt` (gradle module) | " | " |
+| libopus / libopusenc | `thirdparty/opus`, `thirdparty/libopusenc` (vcpkg binaries) | `thirdparty/opus-src`, `thirdparty/libopusenc-src` (sources) | " | " |
+
+`thirdparty/libopusenc-src` holds the vendored libopusenc 0.2.1 sources with a CMake
+target; upstream ships autotools only, so the target compiles the same source set the
+Windows binaries were built from. Verify the C# bindings still match the binaries with:
+
+```powershell
+python tests\tools\verify_unity_plugin_exports.py
+```
+
 
 ## Publishing changes
 
