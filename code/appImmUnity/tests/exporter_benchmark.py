@@ -4,7 +4,8 @@ Answers the question the engine plan leaves open: *where* the compile-and-reload
 time actually goes. It builds the three corpus cases defined in
 `docs/runtime-authoring-engine-contract.md` (Small / Medium / Large) through the
 real ImmUnityPlugin.dll, timing each stage separately, then decodes the generated
-file through ImmStrokeReader.dll to time that side too.
+bytes through ImmStrokeReader.dll — from the file and from the exported buffer — so
+the in-memory handoff an editor preview uses can be compared with a file round trip.
 
 Corpus shape mirrors `Samples~/RuntimeAuthoring/ImmAuthoringBenchmark.cs`:
 per layer, `StrokesPerLayer` drawings each holding one stroke of
@@ -18,9 +19,13 @@ Stages reported (milliseconds):
     points      ImmExporter_ElementSetPoints x strokes (batch point transfer)
     bounds      ComputeElementBounds + ComputeDrawingBounds
     frames      ImmExporter_PaintAddFrame x frames
-    export-mem  ImmExporter_ExportToMemory + size/data copy + DestroyMemory
-    export-file ImmExporter_ExportToFile + file size
-    decode      StrokeReader_LoadFromFile of the same bytes (parse + store)
+    export-mem   ImmExporter_ExportToMemory + size/data query + DestroyMemory
+    handoff-copy memmove of the exported buffer (proxy for Marshal.AllocHGlobal + Copy)
+    read-mem     StrokeReader_LoadFromMemory of that buffer (parse + store)
+    export-file  ImmExporter_ExportToFile + file size
+
+The summary then adds the two end-to-end paths up: mem-path = export-mem +
+handoff-copy + read-mem, file-path = export-file + StrokeReader_LoadFromFile.
 
 Usage:
     python code/appImmUnity/tests/exporter_benchmark.py
@@ -108,15 +113,23 @@ class Exporter:
         self.destroy_memory = smoke.bind(library, "ImmExporter_DestroyMemory", None, ctypes.c_void_p)
 
 
-def build_case(exporter: Exporter, case: dict, output_path: Path) -> dict:
-    """Build one corpus case, returning per-stage milliseconds and byte sizes."""
+def build_case(exporter: Exporter, case: dict, output_path: Path, reader: ctypes.CDLL) -> dict:
+    """Build one corpus case, returning per-stage milliseconds and byte sizes.
+
+    Also times the two ways a caller can hand the compiled bytes back to a reader:
+    the in-memory handoff (managed code copies the exporter buffer, then
+    StrokeReader_LoadFromMemory parses it) and the file round trip measured separately
+    in decode_case. "handoff-copy" is a plain memmove of the produced buffer, which is
+    the same work Marshal.AllocHGlobal + Marshal.Copy performs for a preview load.
+    """
     layers = case["layers"]
     strokes = case["strokes"]
     point_count = case["points"]
     frames = case["frames"]
 
     stages = {name: 0.0 for name in
-              ("create", "layers", "drawings", "points", "bounds", "frames", "export-mem", "export-file")}
+              ("create", "layers", "drawings", "points", "bounds", "frames",
+               "export-mem", "handoff-copy", "read-mem", "export-file")}
     identity = Transform(0, 0, 0, 0, 0, 0, 1, 1)
 
     start = time.perf_counter()
@@ -167,8 +180,14 @@ def build_case(exporter: Exporter, case: dict, output_path: Path) -> dict:
         memory_bytes = int(exporter.get_memory_size(memory))
         data = exporter.get_memory_data(memory)
         smoke.require(data != 0, "ImmExporter_GetMemoryData")
-        exporter.destroy_memory(memory)
         stages["export-mem"] = (time.perf_counter() - start) * 1000.0
+
+        payload = ctypes.create_string_buffer(memory_bytes)
+        start = time.perf_counter()
+        ctypes.memmove(payload, data, memory_bytes)
+        stages["handoff-copy"] = (time.perf_counter() - start) * 1000.0
+        stages["read-mem"] = decode_memory_case(reader, payload, memory_bytes)
+        exporter.destroy_memory(memory)
 
         start = time.perf_counter()
         smoke.require(exporter.export_to_file(sequence, os.fsencode(output_path), 96000, 0),
@@ -198,6 +217,18 @@ def decode_case(reader: ctypes.CDLL, output_path: Path) -> float:
     document_id = load(os.fsencode(output_path))
     elapsed = (time.perf_counter() - start) * 1000.0
     smoke.require(document_id > 0, f"StrokeReader_LoadFromFile ({document_id})")
+    unload(document_id)
+    return elapsed
+
+
+def decode_memory_case(reader: ctypes.CDLL, payload, size: int) -> float:
+    """Time StrokeReader_LoadFromMemory over an already-materialized buffer."""
+    load = smoke.bind(reader, "StrokeReader_LoadFromMemory", ctypes.c_int, ctypes.c_void_p, ctypes.c_int)
+    unload = smoke.bind(reader, "StrokeReader_Unload", None, ctypes.c_int)
+    start = time.perf_counter()
+    document_id = load(ctypes.cast(payload, ctypes.c_void_p), size)
+    elapsed = (time.perf_counter() - start) * 1000.0
+    smoke.require(document_id > 0, f"StrokeReader_LoadFromMemory ({document_id})")
     unload(document_id)
     return elapsed
 
@@ -275,7 +306,7 @@ def main() -> int:
                 samples = []
                 for iteration in range(arguments.repeat):
                     output = (keep_dir / f"{name}.imm") if keep_dir else (staging / f"{name}-{iteration}.imm")
-                    samples.append(build_case(exporter, case, output))
+                    samples.append(build_case(exporter, case, output, reader))
 
                 merged = {stage: summarize([s["stages"][stage] for s in samples])
                           for stage in samples[0]["stages"]}
@@ -305,21 +336,40 @@ def main() -> int:
 
     print(f"reference binary: {plugin}")
     print(f"iterations per case: {arguments.repeat}\n")
+    stage_columns = ("create", "layers", "drawings", "points", "bounds", "frames",
+                     "export-mem", "handoff-copy", "read-mem", "export-file")
     header = f"{'case':7s} {'draw':>6s} {'points':>8s} {'KB':>7s} " + " ".join(
-        f"{s:>10s}" for s in ("create", "layers", "drawings", "points", "bounds", "frames", "exp-mem", "exp-file", "decode"))
+        f"{s:>10s}" for s in stage_columns)
     print(header)
     print("-" * len(header))
     for name, data in results.items():
         stages = data["stages"]
         row = (f"{name:7s} {data['drawings']:6d} {data['points']:8d} "
                f"{data['bytes'] / 1024.0:7.1f} ")
-        row += " ".join(f"{stages[s]['median']:10.2f}" for s in
-                        ("create", "layers", "drawings", "points", "bounds", "frames", "export-mem", "export-file"))
-        row += f" {data['decode']['median']:10.2f}"
+        row += " ".join(f"{stages[s]['median']:10.2f}" for s in stage_columns)
         print(row)
 
-    print("\nmedians in ms; exp-mem/exp-file include graph walk + compression;")
-    print("decode is StrokeReader_LoadFromFile (importer parse + stroke store) of the same bytes.")
+    print("\nmedians in ms; export-mem/export-file include graph walk + compression;")
+    print("handoff-copy is a memmove of the exported buffer (a proxy for Marshal.Copy);")
+    print("read-mem is StrokeReader_LoadFromMemory, read-file is StrokeReader_LoadFromFile.\n")
+
+    handoff_header = (f"{'case':7s} {'mem-path':>10s} {'file-path':>10s} {'saved':>10s} "
+                      f"{'saved%':>8s}")
+    print(handoff_header)
+    print("-" * len(handoff_header))
+    for name, data in results.items():
+        stages = data["stages"]
+
+        def median_of(key):
+            return stages[key]["median"]
+
+        mem_path = median_of("export-mem") + median_of("handoff-copy") + median_of("read-mem")
+        file_path = median_of("export-file") + data["decode"]["median"]
+        saved = file_path - mem_path
+        print(f"{name:7s} {mem_path:10.2f} {file_path:10.2f} {saved:10.2f} "
+              f"{100.0 * saved / file_path:7.1f}%")
+    print("\nmem-path = export-mem + handoff-copy + read-mem;")
+    print("file-path = export-file + read-file (StrokeReader_LoadFromFile).")
 
     if arguments.json is not None:
         arguments.json.parent.mkdir(parents=True, exist_ok=True)

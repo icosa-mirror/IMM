@@ -178,49 +178,79 @@ Rules that follow from this split:
 `code/appImmUnity/tests/exporter_benchmark.py` drives the shipped Windows plugin through
 its C ABI and times each stage of the compile-and-reload pipeline, using the same corpus
 shape as `ImmAuthoringBenchmark` (per layer: one drawing per stroke, `Frames` mappings
-round-robined over those drawings) and the batch point-transfer path. It also times
-`StrokeReader_LoadFromFile` for the same bytes, which is the synchronous
-parse-plus-store cost of an import.
+round-robined over those drawings) and the batch point-transfer path. It times both ways a
+caller can hand the compiled bytes back to a reader — `StrokeReader_LoadFromMemory` over the
+exported buffer and `StrokeReader_LoadFromFile` over a file written from the same graph — so
+the in-memory handoff an editor preview uses can be compared with a file round trip. The
+"handoff copy" column is a `memmove` of the exported buffer, the same work
+`Marshal.AllocHGlobal` + `Marshal.Copy` performs for a preview load.
 
 Machine: AMD Ryzen 7 7800X3D (8 cores / 16 threads) - the Phase 0 reference CPU - with
-Windows 11 and the Release plugin build. Medians of 3 iterations, milliseconds:
+Windows 11 and the Release plugin build. Medians of 9 iterations, milliseconds:
 
-| Case | Drawings | Points | Bytes | Graph build* | Export to memory | Export to file | Decode (reader) | Player load (CPU) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Small | 10 | 160 | 3.1 KB | 0.07 | 0.40 | 2.23 | 1.61 | 3 |
-| Medium | 400 | 12,800 | 91.5 KB | 1.64 | 9.85 | 67.03 | 52.92 | 78 |
-| Large | 4,000 | 256,000 | 956.7 KB | 17.96 | 120.26 | 510.16 | 431.50 | 240 |
+| Case | Drawings | Points | Bytes | Graph build* | Export to memory | Handoff copy | Reader from memory | Export to file | Reader from file |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Small | 10 | 160 | 3.1 KB | 0.05 | 0.37 | 0.00 | 1.40 | 1.50 | 1.58 |
+| Medium | 400 | 12,800 | 91.4 KB | 1.69 | 10.09 | 0.00 | 35.07 | 41.07 | 38.92 |
+| Large | 4,000 | 256,000 | 956.7 KB | 18.52 | 134.02 | 0.04 | 400.65 | 449.43 | 423.54 |
 
 \* Graph build is the sum of sequence, layer, drawing, batch-point, bounds and
 frame-mapping stages.
 
-The last column comes from a captured `appImmViewer` run over the same files
-(validation mode, 900-frame budget so the asynchronous load completes) and is the
-player's own "Loaded in CPU" figure: parse, decompress and CPU geometry build. Its
-"Loaded in GPU" figure reported 0 ms for this corpus because the generated strokes do
-not put anything in the validation camera's view, so per-drawing upload is never forced;
-the GPU stage needs a corpus that actually renders to be measured.
+Adding the two handoff paths up gives the number that decides the architecture:
+
+| Case | In-memory handoff | File round trip | Saved | Saved % |
+|---|---:|---:|---:|---:|
+| Small | 1.78 | 3.08 | 1.30 | 42.2% |
+| Medium | 45.17 | 79.99 | 34.82 | 43.5% |
+| Large | 534.70 | 872.96 | 338.26 | 38.7% |
+
+In-memory handoff is `export to memory + handoff copy + reader from memory`; the file round
+trip is `export to file + reader from file`.
+
+The player's own CPU load is not in the C-ABI table above; it comes from a captured
+`appImmViewer` run over the same files (validation mode, 900-frame budget so the asynchronous
+load completes) and is the player's "Loaded in CPU" figure: parse, decompress and CPU geometry
+build — 3 ms / 78 ms / 240 ms for Small / Medium / Large. Its "Loaded in GPU" figure reported
+0 ms for this corpus because the generated strokes do not put anything in the validation
+camera's view, so per-drawing upload is never forced; the GPU stage needs a corpus that
+actually renders to be measured. `ImmAuthoringBenchmark` (the opt-in
+`Samples~/RuntimeAuthoring` scene) now records `exportMemoryMs` and `loadMemoryReadyMs` next
+to its file-path `exportMs`/`loadReadyMs`, so the same comparison can be reproduced inside
+Unity on a machine with a GPU.
 
 What the split says:
 
 - **Graph construction is not the cost.** Building 4,000 drawings, 256,000 points and
   2,400 frame mappings takes ~18 ms, about 2% of the Large pipeline.
-- **Serialization dominates.** Exporting the same graph costs 120 ms to memory and
-  510 ms to a file. The 390 ms gap between the two is the file-writer path, not
-  compression, so the preview path must use memory export (the preview coordinator
-  already does) and applications that write a file first pay roughly four times more for
-  the same bytes. These figures reproduce the Phase 0 "file export" column (466 ms for
-  Large) within build-to-build variation.
+- **Serialization dominates.** Exporting the same graph costs 134 ms to memory and
+  449 ms to a file. The ~315 ms gap between the two is the file-writer path, not
+  compression, so the preview path must use memory export (the preview coordinator already
+  does) and applications that write a file first pay roughly three times more for the same
+  bytes. These figures reproduce the Phase 0 "file export" column (466 ms for Large) within
+  build-to-build variation.
 - **Decode is the second cost, and the synchronous reader import is the most expensive
   single operation measured.** The player's own CPU load is 240 ms for Large - consistent
-  with the recorded 202 ms load-to-sequence-ready - while `StrokeReader_LoadFromFile`
-  takes 431 ms, because it builds the whole graph and copies every point into the stroke
-  store. Importing into the mutable model keeps a second copy of all points on top of
-  that, so import is the stage to optimise before adding more authoring features.
+  with the recorded 202 ms load-to-sequence-ready - while the stroke reader takes 401 ms to
+  parse the exported bytes in memory and 424 ms from a file, because it builds the whole
+  graph and copies every point into the stroke store. Importing into the mutable model keeps a
+  second copy of all points on top of that, so import is the stage to optimise before adding
+  more authoring features.
+- **The in-memory handoff is worth about 39% of the whole reload path, and copying is not
+  what costs.** On Large it removes 338 ms of 873 ms; on Medium 35 ms of 80 ms. Of that
+  saving, exactly none comes from the buffer copy: moving the 957 KB payload costs 0.04 ms,
+  so `Marshal.AllocHGlobal` + `Marshal.Copy` in `LoadDocumentFromMemory` is free at this
+  scale and does not need optimising. What the handoff removes is the file write plus the
+  second parse, and what remains afterwards - 134 ms of serialization and 401 ms of parse
+  and store - is intrinsic to re-encoding and re-reading the whole document. Removing more
+  of it needs per-layer dirty caching or a narrower incremental format, not fewer copies.
+- **Measured spread matters more than the memory path's detail.** Repeated runs move
+  `export to file` for Large between 449 and 510 ms and `export to memory` between 120 and
+  134 ms, so treat differences under ~10% as noise and re-measure before claiming a win.
 - **Consequence for the two known pitfalls.** Serialization and decode - not graph
-  construction - are what an in-memory handoff or per-layer caching would remove, and
-  what incremental GPU mutation would *not* help with. Any optimisation should target
-  those two stages and be measured with this harness.
+  construction - are what the in-memory handoff removes, and what per-layer caching would
+  remove further; incremental GPU mutation would help with neither. Any optimisation should
+  target those two stages and be measured with this harness.
 
 Reproduce with:
 

@@ -66,10 +66,29 @@ namespace ImmPlayer.Samples
             Stopwatch exportTimer = Stopwatch.StartNew();
             bool exported = sequence.ExportToFile(outputPath);
             exportTimer.Stop();
+
+            // The editor preview hands the compiled document to the player in memory
+            // (ImmAuthoringCompiler.ExportToMemory + ImmPlayerManager.LoadDocumentFromMemory),
+            // so measure that path next to the file round trip above.
+            byte[] memoryData = null;
+            double exportMemoryMilliseconds = -1;
+            if (loadWithPlayer)
+            {
+                Stopwatch memoryExportTimer = Stopwatch.StartNew();
+                memoryData = sequence.ExportToMemory();
+                memoryExportTimer.Stop();
+                exportMemoryMilliseconds = memoryExportTimer.Elapsed.TotalMilliseconds;
+            }
+
             sequence.Dispose();
             if (!exported)
             {
                 Debug.LogError($"{LogPrefix} case={benchmarkCase.Name} failed=export");
+                yield break;
+            }
+            if (loadWithPlayer && (memoryData == null || memoryData.Length == 0))
+            {
+                Debug.LogError($"{LogPrefix} case={benchmarkCase.Name} failed=export-memory");
                 yield break;
             }
 
@@ -78,6 +97,7 @@ namespace ImmPlayer.Samples
             long workingSetAfterExport = Process.GetCurrentProcess().WorkingSet64;
             double loadMilliseconds = -1;
             double firstFrameMilliseconds = -1;
+            double loadMemoryMilliseconds = -1;
 
             if (loadWithPlayer)
             {
@@ -109,6 +129,31 @@ namespace ImmPlayer.Samples
                 firstFrameTimer.Stop();
                 firstFrameMilliseconds = firstFrameTimer.Elapsed.TotalMilliseconds;
                 manager.UnloadDocument(document);
+
+                Stopwatch memoryLoadTimer = Stopwatch.StartNew();
+                ImmDocument memoryDocument = manager.LoadDocumentFromMemory(
+                    memoryData,
+                    $"imm-authoring-{benchmarkCase.Name}-memory.imm");
+                if (memoryDocument == null)
+                {
+                    Debug.LogError($"{LogPrefix} case={benchmarkCase.Name} failed=player-load-memory-start");
+                    yield break;
+                }
+
+                float memoryDeadline = Time.realtimeSinceStartup + loadTimeoutSeconds;
+                while (!IsPlaybackReady(memoryDocument) && Time.realtimeSinceStartup < memoryDeadline)
+                    yield return null;
+                memoryLoadTimer.Stop();
+
+                if (!IsPlaybackReady(memoryDocument))
+                {
+                    manager.UnloadDocument(memoryDocument);
+                    Debug.LogError($"{LogPrefix} case={benchmarkCase.Name} failed=player-load-memory-timeout timeoutSec={loadTimeoutSeconds:F1}");
+                    yield break;
+                }
+
+                loadMemoryMilliseconds = memoryLoadTimer.Elapsed.TotalMilliseconds;
+                manager.UnloadDocument(memoryDocument);
             }
 
             Debug.Log(
@@ -116,7 +161,9 @@ namespace ImmPlayer.Samples
                 $"strokesPerLayer={benchmarkCase.StrokesPerLayer} pointsPerStroke={benchmarkCase.PointsPerStroke} " +
                 $"frames={benchmarkCase.Frames} constructionMs={constructionTimer.Elapsed.TotalMilliseconds:F3} " +
                 $"exportMs={exportTimer.Elapsed.TotalMilliseconds:F3} loadReadyMs={loadMilliseconds:F3} " +
-                $"firstFrameMs={firstFrameMilliseconds:F3} outputBytes={outputBytes} " +
+                $"firstFrameMs={firstFrameMilliseconds:F3} " +
+                $"exportMemoryMs={exportMemoryMilliseconds:F3} loadMemoryReadyMs={loadMemoryMilliseconds:F3} " +
+                $"outputBytes={outputBytes} " +
                 $"managedDeltaBytes={managedAfterExport - managedBefore} " +
                 $"workingSetDeltaBytes={workingSetAfterExport - workingSetBefore}");
         }
