@@ -329,7 +329,7 @@ namespace ImmPlayer
             }
             if (_isInitialized)
             {
-                ImmNativePlugin.GlobalWork(1);
+                ImmNativePlugin.GlobalWorkEx(1, _globalWorkBudgetMicroseconds);
                 ProcessPendingDocumentUnloads();
                 IssueNativeUnloadDrainEvent();
                 CompleteFinishedNativeUnloads();
@@ -488,6 +488,65 @@ namespace ImmPlayer
 
         public int PendingUnloadDocumentCount => _pendingUnloadDocuments.Count;
 
+        /// <summary>
+        /// Microseconds of native state-machine work each per-frame GlobalWork call may spend.
+        /// </summary>
+        /// <remarks>
+        /// Defaults to the historical 9000. Lower values cap the per-frame hitch at the cost of
+        /// slower streaming and load progress; 0 disables the work for that call. Negative values
+        /// are clamped to 0.
+        /// </remarks>
+        public int GlobalWorkBudgetMicroseconds
+        {
+            get => _globalWorkBudgetMicroseconds;
+            set => _globalWorkBudgetMicroseconds = value > 0 ? value : 0;
+        }
+
+        private int _globalWorkBudgetMicroseconds = 9000;
+
+        #endregion
+
+        #region Camera Viewport
+
+        /// <summary>
+        /// Place a camera's viewport at an explicit origin with an optional sub-rect size and depth range.
+        /// </summary>
+        /// <param name="width">Sub-rect width in pixels; &lt;= 0 keeps the size the render path would use</param>
+        /// <param name="height">Sub-rect height in pixels; &lt;= 0 keeps the size the render path would use</param>
+        /// <remarks>
+        /// Vulkan render-buffer paths always render at the bound Unity render buffer's size and only
+        /// take the origin, depth range and force flag from this call.
+        /// </remarks>
+        public void SetCameraViewport(
+            int cameraId,
+            float x,
+            float y,
+            int width,
+            int height,
+            float minDepth = 0.0f,
+            float maxDepth = 1.0f,
+            bool forceViewport = true)
+        {
+            ImmNativePlugin.SetCameraViewportEx(
+                cameraId,
+                x,
+                y,
+                width,
+                height,
+                minDepth,
+                maxDepth,
+                forceViewport ? 1 : 0);
+        }
+
+        /// <summary>
+        /// Drop a <see cref="SetCameraViewport(int, float, float, int, int, float, float, bool)"/>
+        /// override and return the camera to its default viewport.
+        /// </summary>
+        public void ClearCameraViewport(int cameraId)
+        {
+            ImmNativePlugin.ClearCameraViewport(cameraId);
+        }
+
         #endregion
 
         #region Document Management
@@ -516,7 +575,7 @@ namespace ImmPlayer
             Log($"Loaded document: {filePath} (ID: {docId})");
 
             // Kick the native state machine once so the load command is processed promptly.
-            ImmNativePlugin.GlobalWork(1);
+            ImmNativePlugin.GlobalWorkEx(1, _globalWorkBudgetMicroseconds);
             return doc;
         }
 
@@ -554,7 +613,7 @@ namespace ImmPlayer
             Log($"Loaded document from memory: {fileName} (ID: {docId})");
 
             // Kick the native state machine once so the load command is processed promptly.
-            ImmNativePlugin.GlobalWork(1);
+            ImmNativePlugin.GlobalWorkEx(1, _globalWorkBudgetMicroseconds);
             return doc;
         }
 

@@ -243,6 +243,20 @@ struct ImmUnityPlugin
 	        int mViewportHeight = 0;
 	    } mMetalCameraViewport[256];
 #endif
+
+	    // Optional per-camera viewport override (SetCameraViewportEx). Unset
+	    // entries leave every render path on exactly the viewport it used before
+	    // that entry point existed.
+	    struct
+	    {
+	        float mX = 0.0f;
+	        float mY = 0.0f;
+	        float mMinDepth = 0.0f;
+	        float mMaxDepth = 1.0f;
+	        int mWidth = 0;
+	        int mHeight = 0;
+	        bool mSet = false;
+	    } mCameraViewport[256];
 	};
 
 // ----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -258,6 +272,35 @@ static Player &iPlayer()
 static piLog &iLog()
 {
     return *gImmUnityPlugin.mBridge.GetLog();
+}
+
+// Resolve the viewport a render path should use. Without a SetCameraViewportEx
+// override this returns the defaults the caller passed in, so render behaviour
+// is unchanged for every host that does not use the new entry point.
+//
+// allowSizeOverride is false on the Vulkan paths: there the width/height must
+// match the Unity render buffer that is bound for this frame, so only the
+// origin, depth range and force flag are taken from the override.
+static ImmShared::ImmEngineBridge::ViewportInfo iResolveCameraViewport(
+    int cameraID,
+    float defaultX, float defaultY, float defaultWidth, float defaultHeight,
+    float defaultMinDepth, float defaultMaxDepth, bool defaultForce,
+    bool allowSizeOverride = true)
+{
+    const auto &override = gImmUnityPlugin.mCameraViewport[cameraID];
+    if (!override.mSet)
+    {
+        return { defaultX, defaultY, defaultWidth, defaultHeight, defaultMinDepth, defaultMaxDepth, defaultForce };
+    }
+
+    const float width = (allowSizeOverride && override.mWidth > 0)
+        ? static_cast<float>(override.mWidth)
+        : defaultWidth;
+    const float height = (allowSizeOverride && override.mHeight > 0)
+        ? static_cast<float>(override.mHeight)
+        : defaultHeight;
+
+    return { override.mX, override.mY, width, height, override.mMinDepth, override.mMaxDepth, true };
 }
 
 #if defined(__APPLE__)
@@ -715,9 +758,11 @@ static void UNITY_INTERFACE_API iUnityVulkanQueueRenderCallback(int event_id, vo
         return;
     }
 
-    const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
-        0.0f, 0.0f, static_cast<float>(context->width), static_cast<float>(context->height), 0.0f, 1.0f, true
-    };
+    const ImmShared::ImmEngineBridge::ViewportInfo viewport = iResolveCameraViewport(
+        context->cameraID,
+        0.0f, 0.0f, static_cast<float>(context->width), static_cast<float>(context->height),
+        0.0f, 1.0f, true,
+        false);
     const int eyeID = context->eventID & 1;
     // Per-eye logging is ~180 logcat lines/s at full rate (3 lines x 60 eyes):
     // it wraps the ring buffer and costs real time on the render thread. Keep
@@ -1007,9 +1052,11 @@ static bool iRenderUnityVulkanCameraInHostRenderPass(int cameraID, int event_id,
         iLog().Printf(LT_MESSAGE, L"[IMM_UNITY_VK_HOST_CLEAR_20260612] camera=%d cleared=%d", cameraID, cleared ? 1 : 0);
     }
 
-    const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
-        0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 1.0f, true
-    };
+    const ImmShared::ImmEngineBridge::ViewportInfo viewport = iResolveCameraViewport(
+        cameraID,
+        0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height),
+        0.0f, 1.0f, true,
+        false);
     const int eyeID = event_id & 1;
     const bool beginEndOnly = iEnvFlagEnabled("IMM_UNITY_VK_BEGIN_END_ONLY");
     const bool debugClearOnly = iEnvFlagEnabled("IMM_UNITY_VK_DEBUG_HOST_CLEAR_ONLY");
@@ -1401,10 +1448,10 @@ static void UNITY_INTERFACE_API iOnRenderEvent(int event_id)
 	glDisable(GL_SCISSOR_TEST);
 #endif
 
-    const ImmShared::ImmEngineBridge::ViewportInfo viewport = {
+    const ImmShared::ImmEngineBridge::ViewportInfo viewport = iResolveCameraViewport(
+        cameraID,
         oldVp[0], oldVp[1], oldVp[2], oldVp[3], oldVp[4], oldVp[5],
-        true
-	    };
+        true);
     const int eyeID = event_id & 1;
 
     const bool rendered = gImmUnityPlugin.mBridge.RenderCamera(cameraID, viewport, eyeID, true);
@@ -1566,6 +1613,15 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWork(int enable
     gImmUnityPlugin.mBridge.GlobalWork(enabled == 1, 9000);
 }
 
+// Same as GlobalWork, with the per-call time budget the engine bridge hands to
+// Player::GlobalWork. A negative budget would wrap into an unbounded slice once
+// it reaches the uint32_t parameter, so it is clamped to 0.
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GlobalWorkEx(int enabled, int budgetMicroseconds)
+{
+    const int budget = budgetMicroseconds > 0 ? budgetMicroseconds : 0;
+    gImmUnityPlugin.mBridge.GlobalWork(enabled == 1, budget);
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API PrepareCamera(int cameraID)
 {
     if (cameraID < 0 || cameraID > 255)
@@ -1606,6 +1662,53 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetCameraViewport(int
     IMM_UNITY_NATIVE_LOCK();
     gImmUnityPlugin.mMetalCameraViewport[cameraID].mViewportWidth = width;
     gImmUnityPlugin.mMetalCameraViewport[cameraID].mViewportHeight = height;
+#endif
+}
+
+// Full viewport control: origin, sub-rect size, depth range and whether the
+// viewport should be forced onto the renderer. width/height <= 0 keep the size
+// the render path would have used on its own; the Vulkan render-buffer paths
+// always keep the bound buffer's size (see iResolveCameraViewport).
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetCameraViewportEx(
+    int cameraID,
+    float x,
+    float y,
+    int width,
+    int height,
+    float minDepth,
+    float maxDepth,
+    int forceViewport)
+{
+    if (cameraID < 0 || cameraID > 255) return;
+
+    IMM_UNITY_NATIVE_LOCK();
+    auto &override = gImmUnityPlugin.mCameraViewport[cameraID];
+    override.mX = x;
+    override.mY = y;
+    override.mWidth = width;
+    override.mHeight = height;
+    override.mMinDepth = minDepth;
+    override.mMaxDepth = maxDepth;
+    override.mSet = true;
+#if defined(__APPLE__)
+    // Keep the Metal encoder size in sync when an explicit size was requested;
+    // this mirrors what the legacy SetCameraViewport does.
+    if (width > 0)
+        gImmUnityPlugin.mMetalCameraViewport[cameraID].mViewportWidth = width;
+    if (height > 0)
+        gImmUnityPlugin.mMetalCameraViewport[cameraID].mViewportHeight = height;
+#endif
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ClearCameraViewport(int cameraID)
+{
+    if (cameraID < 0 || cameraID > 255) return;
+
+    IMM_UNITY_NATIVE_LOCK();
+    gImmUnityPlugin.mCameraViewport[cameraID] = {};
+#if defined(__APPLE__)
+    gImmUnityPlugin.mMetalCameraViewport[cameraID].mViewportWidth = 0;
+    gImmUnityPlugin.mMetalCameraViewport[cameraID].mViewportHeight = 0;
 #endif
 }
 

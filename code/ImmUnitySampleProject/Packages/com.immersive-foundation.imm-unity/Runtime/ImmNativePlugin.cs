@@ -70,6 +70,14 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void GlobalWork(int enabled);
 
+        /// <summary>
+        /// Global work with an explicit time budget for this call.
+        /// </summary>
+        /// <param name="enabled">1 to enable, 0 to disable</param>
+        /// <param name="budgetMicroseconds">Microseconds of work the native state machine may spend (negative values are clamped to 0)</param>
+        [DllImport(DllName)]
+        public static extern void GlobalWorkEx(int enabled, int budgetMicroseconds);
+
         [DllImport(DllName)]
         public static extern int PrepareCamera(int cameraID);
 
@@ -89,6 +97,32 @@ namespace ImmPlayer
 
         [DllImport(DllName)]
         public static extern void SetCameraViewport(int cameraID, int width, int height);
+
+        /// <summary>
+        /// Set the full camera viewport: origin, sub-rect size, depth range and whether it is forced.
+        /// </summary>
+        /// <param name="width">Sub-rect width in pixels; &lt;= 0 keeps the size the render path would use</param>
+        /// <param name="height">Sub-rect height in pixels; &lt;= 0 keeps the size the render path would use</param>
+        /// <remarks>
+        /// Vulkan render-buffer paths always keep the bound Unity render buffer's size and only take
+        /// the origin, depth range and force flag from this call.
+        /// </remarks>
+        [DllImport(DllName)]
+        public static extern void SetCameraViewportEx(
+            int cameraID,
+            float x,
+            float y,
+            int width,
+            int height,
+            float minDepth,
+            float maxDepth,
+            int forceViewport);
+
+        /// <summary>
+        /// Drop any SetCameraViewportEx override and return the camera to its default viewport.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void ClearCameraViewport(int cameraID);
 
         [DllImport(DllName)]
         public static extern void SetVulkanCameraRenderBuffers(int cameraID, IntPtr colorRenderBuffer, IntPtr depthRenderBuffer, int width, int height, int samples);
