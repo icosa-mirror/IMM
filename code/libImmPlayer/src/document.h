@@ -270,6 +270,7 @@ namespace ImmPlayer {
         const DrawingHandleEntry * iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const;
         AuthoringCommitStatus * iFindCommitStatus(uint64_t revision);
         void iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object);
+        void iInvalidateAuthoringSession(void);
         void iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, ImmCore::piLog * log);
         void iDiscardPendingPresentation(LayerRendererPaint * layerPaintRender,
             ImmCore::piRenderer * renderer, ImmCore::piLog * log);

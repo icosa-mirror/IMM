@@ -222,6 +222,7 @@ namespace ImmPlayer
             {
                 if (mState.mLoadingState == Document::LoadingState::LoadingPending || mState.mLoadingState == Document::LoadingState::UnloadingCompleted)
                 {
+                    iInvalidateAuthoringSession();
                     mState.mLoadingState = LoadingState::LoadingPending;
                     mMemoryData = command->mMemoryData;
                     mMemorySize = command->mMemorySize;
@@ -234,6 +235,7 @@ namespace ImmPlayer
             {
                 if (mState.mLoadingState == Document::LoadingState::Loaded)
                 {
+                    iInvalidateAuthoringSession();
                     if (IsLoadingAsync())
                     {
                         StopLoadingAsync();
@@ -526,7 +528,7 @@ namespace ImmPlayer
         {
             if (mPendingPresentation.mRevision != 0)
             {
-                iRejectCommit(mPendingPresentation.mRevision, -4, 0, mPendingPresentation.mObject);
+                iRejectCommit(mPendingPresentation.mRevision, -9, 0, mPendingPresentation.mObject);
                 iDiscardPendingPresentation(layerPaintRender, renderer, log);
             }
             iUnloadGPU(layerPaintRender, layerRenderPicture, layerRenderModel, renderer, log);
@@ -565,6 +567,7 @@ namespace ImmPlayer
             return false;
 
         mDrawingHandles.clear();
+        mCommitStatuses.clear();
         mEditing = false;
         return true;
     }
@@ -695,6 +698,18 @@ namespace ImmPlayer
         status->mResult = result;
         status->mFailingCommand = failingCommand;
         status->mObject = object;
+    }
+
+    void Document::iInvalidateAuthoringSession(void)
+    {
+        if (!mEditing)
+            return;
+
+        mOpenGeometryEdits.clear();
+        mSealedBatches.clear();
+        mCommitStatuses.clear();
+        mDrawingHandles.clear();
+        mEditing = false;
     }
 
     void Document::iPrepareAuthoringCommit(LayerRendererPaint * layerPaintRender, piLog * log)
@@ -830,6 +845,7 @@ namespace ImmPlayer
         piLog *log,
         const piTick now)
     {
+        iInvalidateAuthoringSession();
         if (IsLoadingAsync())
         {
             StopLoadingAsync();
