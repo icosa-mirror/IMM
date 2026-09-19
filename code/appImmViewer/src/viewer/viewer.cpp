@@ -44,6 +44,8 @@ bool Viewer::Init(const char *appID_DELETE_ME_THIS_IS_A_HACK, piRenderer* render
     conf.colorSpace = mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::GLES ?
         Drawing::ColorSpace::Gamma : Drawing::ColorSpace::Linear;
     conf.multisamplingLevel = AA;
+    // Conservative fallback used by the standalone backend validation paths.
+    conf.maxFramesInFlight = 3;
     conf.depthBuffer = DepthBuffer::Linear01;
     conf.clipDepth = (mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::GL || mPlayerSettings->mRendering.mRenderingAPI == Settings::Rendering::API::GLES) ?
         ClipSpaceDepth::FromNegativeOneToOne : ClipSpaceDepth::FromZeroToOne;

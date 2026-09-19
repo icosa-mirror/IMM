@@ -641,7 +641,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         // Ownership transfers only after model geometry and renderer identity have both moved.
         mRetiredDrawings.push_back(RetiredDrawing{
             replacementStatic, static_cast<uint64_t>(oldToken),
-            mRetirementFrame + kRetirementFramesInFlight });
+            mRetirementFrame + mResourceRetirementFrames });
         log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] renderer swap activeToken=%llu retiredToken=%d",
             static_cast<unsigned long long>(token), oldToken);
         return true;
@@ -687,6 +687,11 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
             }
             mRetiredDrawings.erase(mRetiredDrawings.begin() + i);
         }
+    }
+
+    void LayerRendererPaintStatic::SetResourceRetirementFrames(uint32_t maxFramesInFlight)
+    {
+        mResourceRetirementFrames = maxFramesInFlight > 0 ? maxFramesInFlight : 1;
     }
 
     void LayerRendererPaintStatic::PrepareForDisplay(StereoMode stereoMode)

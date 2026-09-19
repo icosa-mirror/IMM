@@ -35,6 +35,7 @@ namespace ImmPlayer {
             ClipSpaceDepth projectionMatrix;
             bool           frontIsCCW;
             ImmImporter::Drawing::PaintRenderingTechnique paintRenderingTechnique = Drawing::Static;
+            uint32_t maxFramesInFlight = 3;
         };
 
         bool Init(ImmCore::piRenderer* renderer, ImmCore::piSoundEngine* sound, ImmCore::piLog* log, ImmCore::piTimer *timer, const Configuration * configuration);

@@ -215,6 +215,7 @@ namespace ImmPlayer
                 return false;
         }
 
+        mLayerPaintRender->SetResourceRetirementFrames(configuration->maxFramesInFlight);
         if (!mLayerPaintRender->Init(renderer, log, mColorSpace, configuration->frontIsCCW)) { log->Printf(LT_ERROR, L"Could not Init LayerPaintRender");   return false; };
         if (!mLayerRenderPicture.Init(renderer, log, mColorSpace, configuration->frontIsCCW)) { log->Printf(LT_ERROR, L"Could not Init LayerRenderPicture"); return false; };
         if (!mLayerRenderSound.Init(renderer, log, mColorSpace, configuration->frontIsCCW)) { log->Printf(LT_ERROR, L"Could not Init LayerRenderSound"); return false; };
