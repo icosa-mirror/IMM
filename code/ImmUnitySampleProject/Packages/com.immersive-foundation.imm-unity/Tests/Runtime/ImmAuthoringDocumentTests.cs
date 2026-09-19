@@ -114,6 +114,46 @@ namespace ImmPlayer.Tests
         }
 
         [Test]
+        public void SpawnVolumeRulesApplyOnlyToSpawnAreaLayers()
+        {
+            using (ImmAuthoringDocument document = CreateDocument())
+            {
+                // The spawn-volume fields live on the shared properties struct, so a paint
+                // layer carrying non-positive values in them must still be accepted: nothing
+                // reads those fields for a paint layer.
+                ImmAuthoringLayerProperties paint = ImmAuthoringLayerProperties.Default("Paint");
+                paint.SpawnAreaVolume = ExportSpawnAreaVolume.Box;
+                paint.SpawnAreaVolumeExtent = Vector3.zero;
+                long paintLayer = Require(document.CreatePaintLayer(0, paint));
+
+                paint.SpawnAreaVolumeExtent = new Vector3(-1f, -1f, -1f);
+                Require(document.SetLayerProperties(paintLayer, paint));
+                Assert.That(document.Validate().Succeeded, Is.True);
+
+                // A spawn-area layer does validate them, on create and on update.
+                ImmAuthoringLayerProperties spawn = ImmAuthoringLayerProperties.Default("Spawn");
+                spawn.SpawnAreaVolume = ExportSpawnAreaVolume.Box;
+                spawn.SpawnAreaVolumeExtent = new Vector3(0f, 1f, 1f);
+                ImmAuthoringResult<long> rejected = document.CreateSpawnAreaLayer(0, spawn);
+                Assert.That(rejected.ErrorCode, Is.EqualTo(ImmAuthoringErrorCode.InvalidArgument));
+
+                spawn.SpawnAreaVolumeExtent = new Vector3(1f, 1f, 1f);
+                long spawnLayer = Require(document.CreateSpawnAreaLayer(0, spawn));
+
+                spawn.SpawnAreaVolumeExtent = new Vector3(1f, 0f, 1f);
+                Assert.That(
+                    document.SetLayerProperties(spawnLayer, spawn).ErrorCode,
+                    Is.EqualTo(ImmAuthoringErrorCode.InvalidArgument));
+
+                // Spherical volumes only read x, so a flat y/z is fine there.
+                spawn.SpawnAreaVolume = ExportSpawnAreaVolume.Sphere;
+                spawn.SpawnAreaVolumeExtent = new Vector3(1f, 0f, 0f);
+                Require(document.SetLayerProperties(spawnLayer, spawn));
+                Assert.That(document.Validate().Succeeded, Is.True);
+            }
+        }
+
+        [Test]
         public void ValidationRejectsInvalidDataWithoutAdvancingRevision()
         {
             using (ImmAuthoringDocument document = CreateDocument())
