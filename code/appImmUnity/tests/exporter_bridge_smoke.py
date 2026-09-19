@@ -93,6 +93,26 @@ class AnimationKey(ctypes.Structure):
     ]
 
 
+class PerformanceInfo(ctypes.Structure):
+    """Mirror of the native ImmUnityPerformanceInfo."""
+
+    _fields_ = [
+        ("cpuLoadTimeMS", ctypes.c_int),
+        ("numDrawCalls", ctypes.c_int),
+        ("numDrawCallsCulled", ctypes.c_int),
+        ("numPaintDrawCalls", ctypes.c_int),
+        ("numPictureDrawCalls", ctypes.c_int),
+        ("numPicture2DDrawCalls", ctypes.c_int),
+        ("numPicture360DrawCalls", ctypes.c_int),
+        ("numPicture360EquirectDrawCalls", ctypes.c_int),
+        ("numPicture360CubemapDrawCalls", ctypes.c_int),
+        ("numModelDrawCalls", ctypes.c_int),
+        ("numTriangles", ctypes.c_int),
+        ("numTrianglesCulled", ctypes.c_int),
+        ("gpuTimeAverageMs", ctypes.c_float),
+    ]
+
+
 # Layer::AnimProperty / Layer::InterpolationType, mirrored by the managed enums.
 PROPERTY_VISIBILITY = 0
 PROPERTY_DRAW_IN_TIME = 5
@@ -548,6 +568,53 @@ def release_runtime_dependencies(repo_root: Path) -> None:
             kernel32.FreeLibrary(dependency_handle)
 
 
+def verify_capability_exports(library: ctypes.CDLL) -> None:
+    """Exercise the read-only player capability exports that are safe before Init.
+
+    Document-scoped commands (UnloadAll, PauseAt, CancelDocumentLoad) are skipped:
+    they index the player's document table, which only exists after Init.
+    """
+    get_load_time = bind(library, "GetLoadTimeInMs", ctypes.c_int)
+    set_perf_enabled = bind(library, "SetPerformanceMeasurementEnabled", None, ctypes.c_int)
+    get_perf_info = bind(library, "GetPerformanceInfo", None, ctypes.POINTER(PerformanceInfo))
+    get_chapter_info = bind(
+        library,
+        "GetChapterInfoEx",
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int64),
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_int),
+    )
+    get_has_audio = bind(library, "GetDocumentHasAudio", ctypes.c_bool, ctypes.c_int)
+
+    # Only meaningful after a load (it measures from the load start time, which is
+    # never set before Init), so this only proves the entry point resolves.
+    get_load_time()
+
+    set_perf_enabled(1)
+    performance = PerformanceInfo()
+    get_perf_info(ctypes.byref(performance))
+    require(
+        performance.numDrawCalls == 0 and performance.numTriangles == 0,
+        "GetPerformanceInfo reports no counters before any render",
+    )
+
+    # An unknown document id must resolve to zero chapters without leaking the
+    # temporary chapter-length array the export allocates.
+    has_plays = ctypes.c_int(1)
+    lengths = (ctypes.c_int64 * 4)()
+    count = get_chapter_info(-1, lengths, len(lengths), ctypes.byref(has_plays))
+    require(count == 0, f"GetChapterInfoEx unknown document ({count})")
+    require(has_plays.value == 0, "GetChapterInfoEx clears hasPlays for an unknown document")
+    require(
+        get_chapter_info(-1, None, 0, None) == 0,
+        "GetChapterInfoEx tolerates a null output buffer",
+    )
+
+    require(not get_has_audio(-1), "GetDocumentHasAudio unknown document")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--plugin", type=Path)
@@ -582,6 +649,7 @@ def main() -> int:
         library_handle = library._handle
         try:
             export_smoke_file(library, output_path)
+            verify_capability_exports(library)
         finally:
             del library
             _ctypes.FreeLibrary(library_handle)

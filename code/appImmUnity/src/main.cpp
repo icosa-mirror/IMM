@@ -2035,6 +2035,39 @@ extern "C" int UNITY_INTERFACE_EXPORT GetChapterCount(int id)
     return iPlayer().GetChapterCount(id);
 }
 
+// Chapter count plus the per-chapter lengths in ticks and whether chapters come
+// from real Play markers. Player::GetChapterInfo allocates into the piTArray it
+// is handed, so the temporary array is released before returning.
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetChapterInfoEx(
+    int id,
+    int64_t* chapterLengths,
+    int maxChapters,
+    int* hasPlays)
+{
+    size_t numChapters = 0;
+    bool hasPlaysValue = false;
+    ImmCore::piTArray<ImmCore::piTick> lengths;
+    lengths.Init(16, true);
+    iPlayer().GetChapterInfo(numChapters, lengths, hasPlaysValue, id);
+
+    if (hasPlays != nullptr)
+        *hasPlays = hasPlaysValue ? 1 : 0;
+
+    const int count = static_cast<int>(numChapters);
+    if (chapterLengths != nullptr && maxChapters > 0)
+    {
+        const uint64_t available = lengths.GetLength();
+        const uint64_t copy = (static_cast<uint64_t>(maxChapters) < available)
+            ? static_cast<uint64_t>(maxChapters)
+            : available;
+        for (uint64_t i = 0; i < copy; ++i)
+            chapterLengths[i] = ImmCore::piTick::CastInt(*lengths.GetAddress(i));
+    }
+
+    lengths.End();
+    return count;
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT GetCurrentChapter(int id)
 {
     return iPlayer().GetCurrentChapter(id);
@@ -2085,6 +2118,43 @@ extern "C" void UNITY_INTERFACE_EXPORT SetSound(int id, float volume)
     iPlayer().SetDocumentVolume(id, volume);
 }
 
+extern "C" bool UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetDocumentHasAudio(int id)
+{
+    return iPlayer().GetHasAudio(id);
+}
+
+// Abandon an in-flight load instead of waiting for it or unloading the document.
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API CancelDocumentLoad(int id)
+{
+    iPlayer().CancelLoading(id);
+}
+
+// Time the last document load took, as measured inside the player.
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetLoadTimeInMs()
+{
+    return iPlayer().GetLoadTimeInMs();
+}
+
+// Unload every document in one call; sync waits for the unloads to complete.
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnloadAll(int sync)
+{
+    if (sync != 0)
+        iPlayer().UnloadAllSync();
+    else
+        iPlayer().UnloadAll();
+}
+
+// Frame-accurate playback control: pause at a stop tick, resume at a start tick.
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API PauseAt(int id, int64_t stopTicks)
+{
+    iPlayer().Pause(id, static_cast<uint64_t>(stopTicks));
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ResumeAt(int id, int64_t startTicks)
+{
+    iPlayer().Resume(id, static_cast<uint64_t>(startTicks));
+}
+
 extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 {
     bound = d2f(iPlayer().GetDocumentBBox(id));
@@ -2111,6 +2181,52 @@ extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 extern "C" bool UNITY_INTERFACE_EXPORT IsSequenceReady(int docId)
 {
     return iPlayer().IsSequenceReady(docId);
+}
+
+// Numeric subset of Player::PerformanceInfo (the paint rendering strategy string
+// is deliberately not marshaled). Populated after the render call it describes.
+struct ImmUnityPerformanceInfo
+{
+    int cpuLoadTimeMS;
+    int numDrawCalls;
+    int numDrawCallsCulled;
+    int numPaintDrawCalls;
+    int numPictureDrawCalls;
+    int numPicture2DDrawCalls;
+    int numPicture360DrawCalls;
+    int numPicture360EquirectDrawCalls;
+    int numPicture360CubemapDrawCalls;
+    int numModelDrawCalls;
+    int numTriangles;
+    int numTrianglesCulled;
+    float gpuTimeAverageMs;
+};
+
+// Performance measurement is off by default; enable it before querying.
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API SetPerformanceMeasurementEnabled(int enabled)
+{
+    iPlayer().EnablePerformanceMeasurement(enabled != 0);
+}
+
+extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetPerformanceInfo(ImmUnityPerformanceInfo* info)
+{
+    if (info == nullptr)
+        return;
+
+    const Player::PerformanceInfo& perf = iPlayer().GetPerformanceInfoForFrame();
+    info->cpuLoadTimeMS = perf.cpuLoadTimeMS;
+    info->numDrawCalls = perf.numDrawCalls;
+    info->numDrawCallsCulled = perf.numDrawCallsCulled;
+    info->numPaintDrawCalls = perf.numPaintDrawCalls;
+    info->numPictureDrawCalls = perf.numPictureDrawCalls;
+    info->numPicture2DDrawCalls = perf.numPicture2DDrawCalls;
+    info->numPicture360DrawCalls = perf.numPicture360DrawCalls;
+    info->numPicture360EquirectDrawCalls = perf.numPicture360EquirectDrawCalls;
+    info->numPicture360CubemapDrawCalls = perf.numPicture360CubemapDrawCalls;
+    info->numModelDrawCalls = perf.numModelDrawCalls;
+    info->numTriangles = perf.numTriangles;
+    info->numTrianglesCulled = perf.numTrianglesCulled;
+    info->gpuTimeAverageMs = perf.gpuTimeAverageMs;
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT GetLayerCount(int docId)

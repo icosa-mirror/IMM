@@ -36,6 +36,18 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern void SetVulkanDedicatedQueueAllowed(int allowed);
 
+        /// <summary>
+        /// Turn native render-measurement collection on or off (off by default).
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void SetPerformanceMeasurementEnabled(int enabled);
+
+        /// <summary>
+        /// Render counters for the last rendered frame; see <see cref="PerformanceInfoNative"/>.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void GetPerformanceInfo(out PerformanceInfoNative info);
+
 #if UNITY_IOS && !UNITY_EDITOR
         [DllImport(DllName)]
         public static extern void ImmUnityRegisterRenderingPlugin();
@@ -242,6 +254,16 @@ namespace ImmPlayer
         [DllImport(DllName)]
         public static extern int GetCurrentChapter(int id);
 
+        /// <summary>
+        /// Chapter count plus per-chapter lengths in ticks and whether chapters come from real Play markers.
+        /// </summary>
+        /// <param name="chapterLengths">Receives up to maxChapters chapter lengths; may be null</param>
+        /// <param name="maxChapters">Capacity of chapterLengths</param>
+        /// <param name="hasPlays">Receives 1 when chapters are defined by Play markers, 0 when by Stop markers; may be null</param>
+        /// <returns>The document's chapter count, even when chapterLengths is too small</returns>
+        [DllImport(DllName)]
+        public static extern int GetChapterInfoEx(int id, long[] chapterLengths, int maxChapters, out int hasPlays);
+
         #endregion
 
         #region Time Control
@@ -277,6 +299,44 @@ namespace ImmPlayer
 
         [DllImport(DllName)]
         public static extern void SetSound(int id, float volume);
+
+        /// <summary>
+        /// Whether the document contains any audio at all (volume alone cannot tell
+        /// "silent" from "muted").
+        /// </summary>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool GetDocumentHasAudio(int id);
+
+        /// <summary>
+        /// Abandon an in-flight document load instead of waiting for it or unloading the document.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void CancelDocumentLoad(int id);
+
+        /// <summary>
+        /// Time the last document load took, measured inside the player.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern int GetLoadTimeInMs();
+
+        /// <summary>
+        /// Unload every document; pass 1 to wait for the unloads to complete.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void UnloadAll(int sync);
+
+        /// <summary>
+        /// Pause when playback reaches stopTicks.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void PauseAt(int id, long stopTicks);
+
+        /// <summary>
+        /// Resume when playback reaches startTicks.
+        /// </summary>
+        [DllImport(DllName)]
+        public static extern void ResumeAt(int id, long startTicks);
 
         #endregion
 
@@ -360,6 +420,28 @@ namespace ImmPlayer
     {
         public int loadingState;
         public int playbackState;
+    }
+
+    /// <summary>
+    /// Mirror of the native ImmUnityPerformanceInfo: the numeric subset of
+    /// Player::PerformanceInfo, filled after the render call it describes.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PerformanceInfoNative
+    {
+        public int cpuLoadTimeMS;
+        public int numDrawCalls;
+        public int numDrawCallsCulled;
+        public int numPaintDrawCalls;
+        public int numPictureDrawCalls;
+        public int numPicture2DDrawCalls;
+        public int numPicture360DrawCalls;
+        public int numPicture360EquirectDrawCalls;
+        public int numPicture360CubemapDrawCalls;
+        public int numModelDrawCalls;
+        public int numTriangles;
+        public int numTrianglesCulled;
+        public float gpuTimeAverageMs;
     }
 
     // Mirror of the native SerializedSpawnAreaPose (main.cpp): the spawn area's

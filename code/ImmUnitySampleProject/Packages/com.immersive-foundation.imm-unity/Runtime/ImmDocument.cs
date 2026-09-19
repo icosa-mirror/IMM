@@ -231,6 +231,46 @@ namespace ImmPlayer
             return ImmNativePlugin.GetCurrentChapter(DocumentId);
         }
 
+        /// <summary>
+        /// Chapter count, per-chapter lengths and whether chapters are defined by real Play markers.
+        /// </summary>
+        public struct ChapterInfo
+        {
+            public int Count;
+            /// <summary>Length of each chapter in IMM ticks (same unit as <see cref="GetPlayTime"/>).</summary>
+            public long[] Lengths;
+            /// <summary>True when chapters come from Play markers, false when from Stop markers.</summary>
+            public bool HasPlays;
+        }
+
+        /// <summary>
+        /// Read the full chapter layout. Unlike the bare count this distinguishes real
+        /// Play-marker chapters from Stop-marker ones and exposes each chapter's duration.
+        /// </summary>
+        public bool TryGetChapterInfo(out ChapterInfo chapterInfo)
+        {
+            chapterInfo = default;
+            if (!IsLoaded)
+                return false;
+
+            int count = ImmNativePlugin.GetChapterCount(DocumentId);
+            if (count <= 0)
+                return false;
+
+            long[] lengths = new long[count];
+            int resolved = ImmNativePlugin.GetChapterInfoEx(DocumentId, lengths, lengths.Length, out int hasPlays);
+            if (resolved > 0 && resolved < lengths.Length)
+                Array.Resize(ref lengths, resolved);
+
+            chapterInfo = new ChapterInfo
+            {
+                Count = resolved > 0 ? resolved : count,
+                Lengths = lengths,
+                HasPlays = hasPlays != 0
+            };
+            return true;
+        }
+
         #endregion
 
         #region Time Control
@@ -342,6 +382,43 @@ namespace ImmPlayer
         {
             if (!IsLoaded) return;
             ImmNativePlugin.SetSound(DocumentId, Mathf.Clamp01(volume));
+        }
+
+        /// <summary>
+        /// Whether the document carries any audio at all. Volume alone cannot tell a
+        /// silent document from a muted one.
+        /// </summary>
+        public bool HasAudio()
+        {
+            if (!IsLoaded) return false;
+            return ImmNativePlugin.GetDocumentHasAudio(DocumentId);
+        }
+
+        /// <summary>
+        /// Abandon an in-flight load. The document stays registered but loading stops.
+        /// </summary>
+        public void CancelLoading()
+        {
+            if (!IsLoaded) return;
+            ImmNativePlugin.CancelDocumentLoad(DocumentId);
+        }
+
+        /// <summary>
+        /// Pause when playback reaches <paramref name="stopTicks"/> instead of pausing immediately.
+        /// </summary>
+        public void PauseAt(long stopTicks)
+        {
+            if (!IsLoaded) return;
+            ImmNativePlugin.PauseAt(DocumentId, stopTicks);
+        }
+
+        /// <summary>
+        /// Resume when playback reaches <paramref name="startTicks"/> instead of resuming immediately.
+        /// </summary>
+        public void ResumeAt(long startTicks)
+        {
+            if (!IsLoaded) return;
+            ImmNativePlugin.ResumeAt(DocumentId, startTicks);
         }
 
         #endregion

@@ -482,6 +482,43 @@ namespace ImmPlayer
 
         public int LoadedDocumentCount => _loadedDocuments.Count;
 
+        /// <summary>
+        /// How long the last document load took, as measured inside the native player.
+        /// </summary>
+        public int LastLoadTimeMs => ImmNativePlugin.GetLoadTimeInMs();
+
+        /// <summary>
+        /// Unload every document this manager owns, in one native call.
+        /// </summary>
+        /// <param name="synchronous">Wait for the unloads to complete before returning.</param>
+        public void UnloadAllDocuments(bool synchronous = false)
+        {
+            foreach (ImmDocument document in new List<ImmDocument>(_loadedDocuments.Values))
+            {
+                UnloadDocument(document);
+            }
+
+            ImmNativePlugin.UnloadAll(synchronous ? 1 : 0);
+        }
+
+        /// <summary>
+        /// Turn native render-measurement collection on or off. Off by default because
+        /// the counters cost work on every rendered frame.
+        /// </summary>
+        public void SetPerformanceMeasurementEnabled(bool enabled)
+        {
+            ImmNativePlugin.SetPerformanceMeasurementEnabled(enabled ? 1 : 0);
+        }
+
+        /// <summary>
+        /// Render counters for the last rendered frame (draw calls, triangles, culling).
+        /// </summary>
+        public PerformanceInfoNative GetPerformanceInfo()
+        {
+            ImmNativePlugin.GetPerformanceInfo(out PerformanceInfoNative info);
+            return info;
+        }
+
         public bool IsInitialized => _isInitialized;
 
         public int OwnedInputBufferCount => _documentMemoryPtrs.Count;
