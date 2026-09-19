@@ -80,6 +80,11 @@ namespace ImmExporter
                     case Layer::AnimProperty::Transform:
                         iWriteTrans3d(fp, key->mValue.mTransform);
                         break;
+                    // Sentinel only: every real property is handled above. Listed
+                    // explicitly so -Wswitch (an error on the iOS/Android builds)
+                    // still flags a newly added property that is not serialized.
+                    case Layer::AnimProperty::MAX:
+                        break;
                     }
                 }
             }

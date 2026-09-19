@@ -44,6 +44,15 @@ add_library(libImmPlayer STATIC IMPORTED)
 set_target_properties(libImmPlayer PROPERTIES IMPORTED_LOCATION
     ${imm-player-build-dir}/libs/${ANDROID_ABI}/liblibImmPlayer.a)
 
+# Add libImmExporter dependency (scene-graph to IMM authoring; Windows links it
+# through appImmUnity.vcxproj, other platforms through this entry).
+set(imm-exporter-dir ${appImmUnity-dir}/../libImmExporter)
+set(imm-exporter-build-dir ${imm-exporter-dir}/build)
+
+add_library(libImmExporter STATIC IMPORTED)
+set_target_properties(libImmExporter PROPERTIES IMPORTED_LOCATION
+    ${imm-exporter-build-dir}/libs/${ANDROID_ABI}/liblibImmExporter.a)
+
 # OGG/Vorbis from thirdparty
 set(ogg-third-party ${THIRDPARTY_DIR}/ogg)
 include_directories(
@@ -70,6 +79,17 @@ add_library(vorbis-lib STATIC IMPORTED)
 set_target_properties(vorbis-lib PROPERTIES IMPORTED_LOCATION
     ${core-build-dir}/libs/${ANDROID_ABI}/libvorbis.a)
 
+# Opus + libopusenc (built by libImmCore): libImmCore's Opus writer uses them and
+# the exporter writes Opus audio. Imported static archives do not propagate their
+# own dependencies, so they are listed explicitly here too.
+add_library(opus-lib STATIC IMPORTED)
+set_target_properties(opus-lib PROPERTIES IMPORTED_LOCATION
+    ${core-build-dir}/libs/${ANDROID_ABI}/libopus.a)
+
+add_library(opusenc-lib STATIC IMPORTED)
+set_target_properties(opusenc-lib PROPERTIES IMPORTED_LOCATION
+    ${core-build-dir}/libs/${ANDROID_ABI}/libopusenc.a)
+
 add_library(ogg-lib STATIC IMPORTED)
 set_target_properties(ogg-lib PROPERTIES IMPORTED_LOCATION
     ${core-build-dir}/libs/${ANDROID_ABI}/libogg.a)
@@ -89,7 +109,10 @@ target_link_libraries(
     ImmUnityPlugin
     libImmPlayer
     libImmImporter
+    libImmExporter
     libImmCore
+    opusenc-lib
+    opus-lib
     vorbis-lib
     ogg-lib
     png-lib

@@ -44,6 +44,10 @@ set(OPUS_MAY_HAVE_NEON OFF CACHE BOOL "" FORCE)
 set(OPUS_PRESUME_NEON OFF CACHE BOOL "" FORCE)
 add_subdirectory(${THIRDPARTY_DIR}/opus-src ${CMAKE_BINARY_DIR}/opus-build)
 
+# libopusenc (vendored sources) - needed by libImmCore's Opus writer, which the
+# exporter uses for authored audio.
+add_subdirectory(${THIRDPARTY_DIR}/libopusenc-src ${CMAKE_BINARY_DIR}/libopusenc-build)
+
 set(ENABLE_SHARED OFF CACHE BOOL "" FORCE)
 set(ENABLE_STATIC ON CACHE BOOL "" FORCE)
 set(WITH_TURBOJPEG ON CACHE BOOL "" FORCE)
@@ -83,6 +87,7 @@ set(IMMCORE_UNITY_SOURCES
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOPUS.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSound.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSoundEngineNULL.cpp
     ${CODE_DIR}/libImmCore/src/libSound/macos/piSoundEngineAVFoundation.mm
@@ -95,6 +100,7 @@ target_include_directories(libImmCoreUnity
         ${CODE_DIR}
         ${THIRDPARTY_DIR}/ogg/include
         ${THIRDPARTY_DIR}/opus-src/include
+        ${THIRDPARTY_DIR}/libopusenc-src/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include/vorbis
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/lib
@@ -109,6 +115,7 @@ target_link_libraries(libImmCoreUnity
         ogg
         vorbis
         opus
+        opusenc
         png_static
         turbojpeg-static
         ZLIB::ZLIB
@@ -216,6 +223,33 @@ target_compile_definitions(libImmPlayerUnity PUBLIC IMM_IOS=1)
 target_include_directories(libImmPlayerUnity PUBLIC ${CODE_DIR})
 target_link_libraries(libImmPlayerUnity PUBLIC libImmImporterUnity libImmCoreUnity)
 
+# libImmExporter - scene-graph to IMM authoring library used by the Unity plugin.
+set(IMMEXPORTER_SOURCES
+    ${CODE_DIR}/libImmExporter/src/document/sequence.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layer.cpp
+    ${CODE_DIR}/libImmExporter/src/document/behaviors/keepalive.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerModel3d.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPicture.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerSound.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerSpawnArea.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPaint.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPaint/drawing.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPaint/element.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersive.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayer.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerModel.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerPaint.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerPicture.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerSound.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerSpawnArea.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveUtils.cpp
+)
+
+add_library(libImmExporterUnity STATIC ${IMMEXPORTER_SOURCES})
+target_compile_definitions(libImmExporterUnity PUBLIC IMM_IOS=1)
+target_include_directories(libImmExporterUnity PUBLIC ${CODE_DIR})
+target_link_libraries(libImmExporterUnity PUBLIC libImmCoreUnity)
+
 add_custom_target(
     ShadersModel
     COMMAND ${CMAKE_COMMAND}
@@ -304,7 +338,7 @@ add_library(ImmUnity STATIC
 )
 target_compile_definitions(ImmUnity PUBLIC IMM_IOS=1)
 target_include_directories(ImmUnity PUBLIC ${CODE_DIR})
-target_link_libraries(ImmUnity PRIVATE libImmPlayerUnity libImmImporterUnity libImmCoreUnity)
+target_link_libraries(ImmUnity PRIVATE libImmPlayerUnity libImmImporterUnity libImmExporterUnity libImmCoreUnity)
 set_target_properties(ImmUnity PROPERTIES
     OUTPUT_NAME "ImmUnityPlugin"
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/unity-objects
@@ -322,10 +356,12 @@ add_custom_command(TARGET ImmUnity POST_BUILD
         "$<TARGET_FILE:ImmUnity>"
         "$<TARGET_FILE:libImmPlayerUnity>"
         "$<TARGET_FILE:libImmImporterUnity>"
+        "$<TARGET_FILE:libImmExporterUnity>"
         "$<TARGET_FILE:libImmCoreUnity>"
         "$<TARGET_FILE:ogg>"
         "$<TARGET_FILE:vorbis>"
         "$<TARGET_FILE:opus>"
+        "$<TARGET_FILE:opusenc>"
         "$<TARGET_FILE:png_static>"
         "$<TARGET_FILE:turbojpeg-static>"
 )

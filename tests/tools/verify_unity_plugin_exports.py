@@ -74,17 +74,11 @@ PREPROCESSOR_RE = re.compile(r"^\s*#\s*(?P<directive>if|ifdef|ifndef|elif|else|e
 # Entry points that are intentionally absent from a shipped platform binary.
 # Each entry is (plugin, platform) -> {name or prefix: reason}. Anything not
 # listed here is treated as drift and fails the check.
-KNOWN_PLATFORM_GAPS = {
-    ("ImmUnityPlugin", "android"): {
-        "ImmExporter_": "exporter API is compiled only on Windows (#if defined(WINDOWS) in code/appImmUnity/src/main.cpp)",
-    },
-    ("ImmUnityPlugin", "ios"): {
-        "ImmExporter_": "exporter API is compiled only on Windows (#if defined(WINDOWS) in code/appImmUnity/src/main.cpp)",
-    },
-    ("ImmUnityPlugin", "macos"): {
-        "ImmExporter_": "exporter API is compiled only on Windows (#if defined(WINDOWS) in code/appImmUnity/src/main.cpp)",
-    },
-}
+#
+# Empty today: the exporter is built for every platform (Windows through
+# appImmUnity.vcxproj, Android/iOS/macOS through their CMake targets), so every
+# declared entry point is expected in every shipped binary.
+KNOWN_PLATFORM_GAPS = {}
 
 # Symbols a platform provides outside the plugin binary itself.
 PLATFORM_PROVIDED = {

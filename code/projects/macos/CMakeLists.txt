@@ -49,6 +49,10 @@ set(OPUS_MAY_HAVE_NEON OFF CACHE BOOL "" FORCE)
 set(OPUS_PRESUME_NEON OFF CACHE BOOL "" FORCE)
 add_subdirectory(${THIRDPARTY_DIR}/opus-src ${CMAKE_BINARY_DIR}/opus-build)
 
+# libopusenc (vendored sources) - needed by libImmCore's Opus writer, which the
+# exporter uses for authored audio.
+add_subdirectory(${THIRDPARTY_DIR}/libopusenc-src ${CMAKE_BINARY_DIR}/libopusenc-build)
+
 set(ENABLE_SHARED OFF CACHE BOOL "" FORCE)
 set(ENABLE_STATIC ON CACHE BOOL "" FORCE)
 set(WITH_TURBOJPEG ON CACHE BOOL "" FORCE)
@@ -86,6 +90,7 @@ set(IMMCORE_SOURCES
     ${CODE_DIR}/libImmCore/src/libWave/piWave.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveWAV.cpp
     ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOGG.cpp
+    ${CODE_DIR}/libImmCore/src/libWave/formats/piWaveOPUS.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSound.cpp
     ${CODE_DIR}/libImmCore/src/libSound/piSoundEngineNULL.cpp
     ${CODE_DIR}/libImmCore/src/libSound/macos/piSoundEngineAVFoundation.mm
@@ -97,6 +102,7 @@ target_include_directories(libImmCore
         ${CODE_DIR}
         ${THIRDPARTY_DIR}/ogg/include
         ${THIRDPARTY_DIR}/opus-src/include
+        ${THIRDPARTY_DIR}/libopusenc-src/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/include/vorbis
         ${THIRDPARTY_DIR}/ogg/libvorbis-1.3.7/lib
@@ -111,6 +117,7 @@ target_link_libraries(libImmCore
         ogg
         vorbis
         opus
+        opusenc
         png_static
         turbojpeg-static
         ZLIB::ZLIB
@@ -226,6 +233,33 @@ add_library(libImmPlayer STATIC ${IMMPLAYER_SOURCES})
 target_include_directories(libImmPlayer PUBLIC ${CODE_DIR})
 target_link_libraries(libImmPlayer PUBLIC libImmImporter libImmCore)
 
+# libImmExporter - scene-graph to IMM authoring library, used by the Unity plugin
+# on every platform (the Windows build has its own vcxproj).
+set(IMMEXPORTER_SOURCES
+    ${CODE_DIR}/libImmExporter/src/document/sequence.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layer.cpp
+    ${CODE_DIR}/libImmExporter/src/document/behaviors/keepalive.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerModel3d.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPicture.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerSound.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerSpawnArea.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPaint.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPaint/drawing.cpp
+    ${CODE_DIR}/libImmExporter/src/document/layerPaint/element.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersive.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayer.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerModel.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerPaint.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerPicture.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerSound.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveLayerSpawnArea.cpp
+    ${CODE_DIR}/libImmExporter/src/toImmersive/toImmersiveUtils.cpp
+)
+
+add_library(libImmExporter STATIC ${IMMEXPORTER_SOURCES})
+target_include_directories(libImmExporter PUBLIC ${CODE_DIR})
+target_link_libraries(libImmExporter PUBLIC libImmCore)
+
 add_custom_target(
     ShadersModel
     COMMAND ${CMAKE_COMMAND}
@@ -250,7 +284,7 @@ add_library(ImmUnity MODULE
     ${CODE_DIR}/appImmShared/src/imm_engine_bridge.cpp
 )
 target_include_directories(ImmUnity PUBLIC ${CODE_DIR})
-target_link_libraries(ImmUnity PRIVATE libImmPlayer libImmImporter libImmCore)
+target_link_libraries(ImmUnity PRIVATE libImmPlayer libImmImporter libImmExporter libImmCore)
 set_target_properties(ImmUnity PROPERTIES
     BUNDLE TRUE
     OUTPUT_NAME "ImmUnityPlugin"

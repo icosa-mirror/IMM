@@ -366,6 +366,10 @@ jobs:
       working-directory: code/projects/android
       run: ./gradlew :libImmPlayer:assembleDebug
 
+    - name: Build libImmExporter
+      working-directory: code/projects/android
+      run: ./gradlew :libImmExporter:assembleDebug
+
     - name: Build appImmUnity
       working-directory: code/projects/android
       run: ./gradlew :appImmUnity:assembleDebug

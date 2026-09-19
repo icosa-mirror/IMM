@@ -88,13 +88,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#if defined(WINDOWS)
+// The exporter is linked on every platform, so its headers are unconditional now.
 #include "libImmExporter/src/document/sequence.h"
 #include "libImmExporter/src/document/layerPaint.h"
 #include "libImmExporter/src/document/layerPaint/element.h"
 #include "libImmExporter/src/document/layerSpawnArea.h"
 #include "libImmExporter/src/toImmersive/toImmersive.h"
 #include "libImmExporter/src/toImmersive/toImmersiveLayerSound.h"
+#if defined(WINDOWS)
 #include <windows.h>
 #include <array>
 #include <string>
@@ -2562,8 +2563,9 @@ struct ImmExporterPointC
     float time;
 };
 
-// Exporter functionality - not available on Android
-#if defined(WINDOWS)
+// Exporter functionality. Every platform links libImmExporter now (Windows through
+// appImmUnity.vcxproj, Android/iOS/macOS through their CMake targets), so the
+// authoring and paint-export entry points below are part of the plugin everywhere.
 
 struct ImmExporterDrawingHandle
 {
@@ -3111,5 +3113,3 @@ extern "C" UNITY_INTERFACE_EXPORT void UNITY_INTERFACE_API ImmExporter_DestroyMe
     handle->data.End();
     delete handle;
 }
-
-#endif // WINDOWS - End of exporter functionality

@@ -7,6 +7,9 @@ project(':libImmImporter').projectDir = file('../../libImmImporter')
 include 'libImmPlayer'
 project(':libImmPlayer').projectDir = file('../../libImmPlayer')
 
+include 'libImmExporter'
+project(':libImmExporter').projectDir = file('../../libImmExporter')
+
 include 'appImmUnity'
 project(':appImmUnity').projectDir = file('../../appImmUnity/Projects/Android/app')
 

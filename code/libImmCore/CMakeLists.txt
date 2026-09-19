@@ -31,6 +31,7 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/piWave.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveWAV.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOGG.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/libWave/formats/piWaveOPUS.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSound.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/piSoundEngineNULL.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/libSound/android/piSoundEngineAndroid.cpp
@@ -44,11 +45,26 @@ set(THIRDPARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../thirdparty)
 set(ogg-third-party ${THIRDPARTY_DIR}/ogg)
 add_subdirectory(${ogg-third-party} ${CMAKE_BINARY_DIR}/ogg-build)
 
+# Opus + libopusenc from thirdparty: piWaveOPUS.cpp needs the encoder, and the
+# Unity exporter uses it for authored audio.
+set(OPUS_BUILD_SHARED_LIBRARY OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+set(OPUS_DISABLE_INTRINSICS ON CACHE BOOL "" FORCE)
+set(OPUS_MAY_HAVE_NEON OFF CACHE BOOL "" FORCE)
+set(OPUS_PRESUME_NEON OFF CACHE BOOL "" FORCE)
+add_subdirectory(${THIRDPARTY_DIR}/opus-src ${CMAKE_BINARY_DIR}/opus-build)
+add_subdirectory(${THIRDPARTY_DIR}/libopusenc-src ${CMAKE_BINARY_DIR}/libopusenc-build)
+
 include_directories(
     ${ogg-third-party}/include
     ${ogg-third-party}/libvorbis-1.3.7/include
     ${ogg-third-party}/libvorbis-1.3.7/include/vorbis
     ${ogg-third-party}/libvorbis-1.3.7/lib
+    ${THIRDPARTY_DIR}/opus-src/include
+    ${THIRDPARTY_DIR}/libopusenc-src/include
 )
 
 # libpng from thirdparty (build from source)
@@ -103,6 +119,8 @@ find_library(dl-lib dl)
 target_link_libraries(
     libImmCore
     vorbis
+    opus
+    opusenc
     png_static
     jpeg-lib
     ${log-lib}
@@ -125,4 +143,8 @@ set_target_properties(ogg PROPERTIES
 set_target_properties(vorbis PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
 set_target_properties(png_static PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
+set_target_properties(opus PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
+set_target_properties(opusenc PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/libs/${ANDROID_ABI})
