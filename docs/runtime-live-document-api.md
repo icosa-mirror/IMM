@@ -73,13 +73,21 @@ interactive path.
 Implemented so far (M1a-M1c): `ImmAuthoring_Attach`, `ImmAuthoring_IsAttached`,
 `ImmAuthoring_Commit`, `ImmAuthoring_DrawingSetGeometry`, `ImmAuthoring_DrawingAdd` and
 `ImmAuthoring_FrameSet`. Appending a drawing keeps every existing index valid, so frame
-mappings and GPU ids are untouched; destroying one is not implemented yet because it shifts
-`mDrawings` indices and needs either a tombstone or a remap of both. Geometry replacement
-works on static paint drawings (`DrawingStatic::ReplaceGeometry`); pretessellated drawings
-refuse, so the Android/GLES path that uses them reports failure rather than silently
-ignoring the edit. The points are quantised with the exporter's own helpers (`bits8` alpha,
-`bits15` width against `biggestStroke`) so a live edit and an export of the same points
-describe the same pixels.
+mappings and GPU ids are untouched. Geometry replacement works on static paint drawings
+(`DrawingStatic::ReplaceGeometry`); pretessellated drawings refuse, so the Android/GLES path
+that uses them reports failure rather than silently ignoring the edit. The points are
+quantised with the exporter's own helpers (`bits8` alpha, `bits15` width against
+`biggestStroke`) so a live edit and an export of the same points describe the same pixels.
+
+**Drawing destruction is not implemented, and two designs have now failed.** Erasing from
+`mDrawings` was rejected on paper: it shifts the indices that both the frame buffer and the
+renderer's GPU pool are addressed by. Emptying the drawing instead (clear its vertices,
+indices and chunks, keep its index) was tried and **hung `appImmViewer`** in the same frame
+as the other edits. The cause is not yet pinned down — a drawing with zero geometry chunks
+going through the layer renderer's load path is the prime suspect, rather than the timing
+that the deferred refresh already handles. The next attempt should keep the drawing's GPU
+resources valid (a tombstone the renderer can still load, or an explicit per-drawing GPU
+release) instead of clearing geometry underneath it.
 
 Animation and spawn areas:
 
