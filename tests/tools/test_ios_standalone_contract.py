@@ -20,6 +20,7 @@ def main() -> int:
         "add_executable(appImmViewerIOS MACOSX_BUNDLE",
         "appImmViewer/src/ios/main.mm",
         "appImmViewer/src/apple/metal_player_core.cpp",
+        "appImmViewer/src/viewer/liveEditValidation.cpp",
         "appImmViewerIOS-settings.json",
         "exampleImmFiles/sample1.imm",
         '"-framework UIKit"',

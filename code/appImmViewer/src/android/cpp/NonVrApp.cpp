@@ -9,6 +9,7 @@
 #include "libImmPlayer/src/player.h"
 
 #include "../../viewer/viewer.h"
+#include "../../viewer/liveEditValidation.h"
 #include "../../settings.h"
 
 #include <android_native_app_glue.h>
@@ -64,6 +65,7 @@ struct EngineState {
     double validationFixedDt = -1.0;
     uint64_t validationPlayerFrame = 0;
     bool validationPlayerFrameEnabled = false;
+    bool validationLiveEditEnabled = false;
     bool hasWindow = false;
     bool running = false;
     bool useVulkan = false;
@@ -82,6 +84,7 @@ struct EngineState {
     bool firstFrame = true;
     uint32_t frameCount = 0;
     bool validationCaptureWritten = false;
+    LiveEditValidation liveEditValidation;
 
     std::wstring playerSpawnLocation = L"Default";
     ExePlayer::Settings::Rendering::Technique renderingTechnique =
@@ -997,6 +1000,7 @@ bool loadPath(const std::wstring& path) {
     gEngine.firstFrame = true;
     gEngine.frameCount = 0;
     gEngine.validationCaptureWritten = false;
+    gEngine.liveEditValidation.Reset();
     ALOGV("IMMAVAL loadPath result=%d settings=%p", success ? 1 : 0, settings);
     return success;
 }
@@ -1066,6 +1070,8 @@ void renderFrame() {
     if (!gEngine.useVulkan) {
         writeValidationCaptureIfReady(perf);
     }
+    gEngine.liveEditValidation.Tick(*gEngine.viewer, gEngine.log, gEngine.frameCount,
+                                    gEngine.validationLiveEditEnabled && gEngine.validationCaptureWritten, 0);
     if (gEngine.frameCount == 0 || gEngine.frameCount == 60) {
         ALOGV("IMMAVAL renderFrame frame=%u playerFrame=%llu drawCalls=%d paintDrawCalls=%d pictureDrawCalls=%d triangles=%d size=%dx%d renderer=%s firstFrame=%d renderTarget=%p colorTexture=%p",
               gEngine.frameCount,
@@ -1361,9 +1367,11 @@ void Java_org_linuxfoundation_imm_player_MainActivity_nativeSetValidationPlaybac
     if (playerFrame >= 0) {
         gEngine.validationPlayerFrame = static_cast<uint64_t>(playerFrame);
         gEngine.validationPlayerFrameEnabled = true;
+        gEngine.validationLiveEditEnabled = true;
         char playerFrameText[32];
         snprintf(playerFrameText, sizeof(playerFrameText), "%llu", static_cast<unsigned long long>(gEngine.validationPlayerFrame));
         setenv("IMM_VIEWER_VALIDATE_PLAYER_FRAME", playerFrameText, 1);
+        setenv("IMM_LIVE_EDIT_TRACE_FRAMES", "1", 1);
     }
     ALOGV("IMMAVAL validation playback fixedDt=%.9f targetPlayerFrame=%llu enabled=%d",
           gEngine.validationFixedDt,

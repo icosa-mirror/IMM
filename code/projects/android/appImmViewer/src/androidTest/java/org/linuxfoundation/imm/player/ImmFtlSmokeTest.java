@@ -69,6 +69,8 @@ public final class ImmFtlSmokeTest {
         requireMarker(logcat, "IMMAVAL validation playback");
         requireMarker(logcat, "IMMAVAL loadPath result=1");
         requireMarker(logcat, "IMMAVAL native render capture written");
+        requireMarker(logcat, "[IMM_LIVE_EDIT] frame=");
+        requireMarker(logcat, "revision=1 status=4 result=0 drawingBBoxUnchanged=0");
         requireMarker(logcat, "Loaded in CPU");
         requireMarker(logcat, "Loaded in GPU");
 
@@ -85,6 +87,7 @@ public final class ImmFtlSmokeTest {
         forbidMarker(logcat, "Could not initialize piRenderer");
         forbidMarker(logcat, "Failed to load IMM");
         forbidMarker(logcat, "Fatal signal");
+        forbidMarker(logcat, "geometryMatch=0");
 
         File sampleCapture = new File(artifactDir, "sample-native-render-after.ppm");
         Files.copy(nativeCapture.toPath(), sampleCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
@@ -115,6 +118,7 @@ public final class ImmFtlSmokeTest {
         writeText(new File(artifactDir, "face-orientation-logcat.txt"), faceLogcat);
         requireMarker(faceLogcat, "IMMAVAL loadPath result=1");
         requireMarker(faceLogcat, "IMMAVAL native render capture written");
+        requireMarker(faceLogcat, "status=4 result=0 drawingBBoxUnchanged=0");
         forbidMarker(faceLogcat, "Failed to load IMM");
         forbidMarker(faceLogcat, "Fatal signal");
 
@@ -144,7 +148,9 @@ public final class ImmFtlSmokeTest {
         String logcat = "";
         while (SystemClock.elapsedRealtime() < deadline) {
             logcat = runShell(device, "logcat -d");
-            if (capture.isFile() && capture.length() > 0L && logcat.contains("IMMAVAL native render capture written")) {
+            if (capture.isFile() && capture.length() > 0L &&
+                    logcat.contains("IMMAVAL native render capture written") &&
+                    logcat.contains("status=4 result=0 drawingBBoxUnchanged=0")) {
                 return logcat;
             }
             SystemClock.sleep(500L);

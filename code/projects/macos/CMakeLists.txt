@@ -435,6 +435,7 @@ if(IMM_BUILD_VIEWER)
         ${CODE_DIR}/appImmViewer/src/mymain.cpp
         ${CODE_DIR}/appImmViewer/src/resolve.cpp
         ${CODE_DIR}/appImmViewer/src/settings.cpp
+        ${CODE_DIR}/appImmViewer/src/viewer/liveEditValidation.cpp
         ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
         ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
         ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
@@ -456,6 +457,7 @@ if(IMM_BUILD_VIEWER)
         ${CODE_DIR}/../exampleImmFiles/sample1.imm
         ${CODE_DIR}/appImmViewer/src/resolve.cpp
         ${CODE_DIR}/appImmViewer/src/settings.cpp
+        ${CODE_DIR}/appImmViewer/src/viewer/liveEditValidation.cpp
         ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
         ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
         ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp

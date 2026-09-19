@@ -9,6 +9,7 @@
 #include "appImmViewer/src/resolve.h"
 #include "appImmViewer/src/settings.h"
 #include "appImmViewer/src/viewer/viewer.h"
+#include "appImmViewer/src/viewer/liveEditValidation.h"
 
 #include <stdint.h>
 
@@ -69,6 +70,7 @@ private:
     ImmCore::piTimer mTimer;
     Settings mSettings;
     Viewer mViewer;
+    LiveEditValidation mLiveEditValidation;
     Resolve mResolve;
     ImmCore::piRendererMetal *mRenderer = nullptr;
     ImmCore::piSoundEngineBackend *mSoundBackend = nullptr;
@@ -80,6 +82,7 @@ private:
     double mTimeBase = 0.0;
     double mLastTime = 0.0;
     uint64_t mFrameIndex = 0;
+    uint64_t mLiveEditFrame = ~0ull;
     bool mFirstFrame = true;
     bool mReady = false;
     bool mSuspended = false;

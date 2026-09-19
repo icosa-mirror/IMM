@@ -115,6 +115,7 @@
     <ClCompile Include="src\simpleJSON\JSON.cpp" />
     <ClCompile Include="src\simpleJSON\JSONValue.cpp" />
     <ClCompile Include="src\viewer\piCameraD.cpp" />
+    <ClCompile Include="src\viewer\liveEditValidation.cpp" />
     <ClCompile Include="src\viewer\viewer.cpp" />
     <ClCompile Include="src\settings.cpp" />
     <ClCompile Include="src\windows\main.cpp" />

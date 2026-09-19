@@ -114,6 +114,8 @@ bool MetalPlayerCore::InitializeViewer(const char *temporaryDirectory)
     mTimeBase = mTimer.GetTime();
     mLastTime = 0.0;
     mFrameIndex = 0;
+    mLiveEditFrame = LiveEditValidation::RequestedFrameFromEnvironment();
+    mLiveEditValidation.Reset();
     memset(&mEvents, 0, sizeof(mEvents));
     return true;
 }
@@ -182,6 +184,8 @@ bool MetalPlayerCore::Draw(void *renderPassDescriptor, void *drawable, void *cap
     mRenderer->Clear(clear, nullptr, nullptr, nullptr, true);
     mViewer.GlobalRender(head, ImmCore::vec4(0.0f));
     mViewer.RenderMono(mRenderSize, head, 0);
+    mLiveEditValidation.Tick(mViewer, &mLog, mFrameIndex,
+        mLiveEditFrame != ~0ull, mLiveEditFrame);
     mResolve.Do(mRenderer, nullptr, viewport, 0, 1.0f, mColorTexture);
     mSoundBackend->Tick();
     if (captureTexture && !mRenderer->CopyNativeDrawableToTexture(captureTexture))

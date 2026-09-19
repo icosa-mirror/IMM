@@ -283,6 +283,7 @@ add_executable(appImmViewerIOS MACOSX_BUNDLE
     ${CODE_DIR}/appImmViewer/src/apple/metal_player_core.cpp
     ${CODE_DIR}/appImmViewer/src/resolve.cpp
     ${CODE_DIR}/appImmViewer/src/settings.cpp
+    ${CODE_DIR}/appImmViewer/src/viewer/liveEditValidation.cpp
     ${CODE_DIR}/appImmViewer/src/viewer/viewer.cpp
     ${CODE_DIR}/appImmViewer/src/viewer/piCameraD.cpp
     ${CODE_DIR}/appImmViewer/src/simpleJSON/JSON.cpp
