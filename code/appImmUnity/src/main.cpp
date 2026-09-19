@@ -1997,41 +1997,60 @@ extern "C" bool UNITY_INTERFACE_EXPORT GetLayerDiagnostics(int docId, int layerI
 // attaching changes no behaviour of the ordinary load and playback paths.
 //----------------------------------------------------------------------------
 
+static int32_t iRequireAttachedAuthoringDocument(int32_t docId)
+{
+    bool attached = false;
+    if (!iPlayer().GetEditingState(docId, attached))
+        return IMM_AUTHORING_NOT_FOUND;
+    return attached ? IMM_AUTHORING_OK : IMM_AUTHORING_INVALID_STATE;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int32_t docId)
 {
-    return iPlayer().AttachEditing(docId) ? 0 : -1;
+    bool attached = false;
+    if (!iPlayer().GetEditingState(docId, attached))
+        return IMM_AUTHORING_NOT_FOUND;
+    if (attached)
+        return IMM_AUTHORING_OK;
+    return iPlayer().AttachEditing(docId) ? IMM_AUTHORING_OK : IMM_AUTHORING_INVALID_STATE;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_IsAttached(int32_t docId, int32_t *attachedOut)
 {
     if (attachedOut == nullptr)
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
     bool editing = false;
     if (!iPlayer().GetEditingState(docId, editing))
-        return -1;
+        return IMM_AUTHORING_NOT_FOUND;
     *attachedOut = editing ? 1 : 0;
-    return 0;
+    return IMM_AUTHORING_OK;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Detach(int32_t docId)
 {
-    return iPlayer().DetachEditing(docId) ? 0 : -4;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
+    return iPlayer().DetachEditing(docId) ? IMM_AUTHORING_OK : IMM_AUTHORING_INVALID_STATE;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DiscardPending(int32_t docId)
 {
-    return iPlayer().DiscardPendingEdits(docId) ? 0 : -4;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
+    return iPlayer().DiscardPendingEdits(docId) ? IMM_AUTHORING_OK : IMM_AUTHORING_INVALID_STATE;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Commit(int32_t docId, uint64_t *revisionOut)
 {
-    int32_t result = 0;
+    int32_t result = IMM_AUTHORING_OK;
     const uint64_t revision = iPlayer().CommitEdits(docId, &result);
     if (revision == 0)
-        return result != 0 ? result : -4;
+        return result != IMM_AUTHORING_OK ? result : IMM_AUTHORING_INVALID_STATE;
     if (revisionOut != nullptr)
         *revisionOut = revision;
-    return 0;
+    return IMM_AUTHORING_OK;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRevisions(
@@ -2039,15 +2058,19 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetRe
 {
     if (revisionsOut == nullptr || revisionsOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
         revisionsOut->structSize < sizeof(ImmAuthoringRevisions))
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
 
     ImmPlayer::Document::AuthoringRevisions revisions;
     if (!iPlayer().GetAuthoringRevisions(docId, revisions))
-        return -1;
+        return IMM_AUTHORING_NOT_FOUND;
     revisionsOut->requested = revisions.mRequested;
     revisionsOut->prepared = revisions.mPrepared;
     revisionsOut->presented = revisions.mPresented;
-    return 0;
+    return IMM_AUTHORING_OK;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCommitStatus(
@@ -2055,30 +2078,37 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCo
 {
     if (statusOut == nullptr || statusOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
         statusOut->structSize < sizeof(ImmAuthoringCommitStatus))
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
 
     ImmPlayer::Document::AuthoringCommitStatus status;
     if (!iPlayer().GetAuthoringCommitStatus(docId, revision, status))
-        return -1;
+        return IMM_AUTHORING_NOT_FOUND;
     statusOut->revision = status.mRevision;
     statusOut->state = static_cast<int32_t>(status.mState);
     statusOut->result = status.mResult;
     statusOut->failingCommand = status.mFailingCommand;
     statusOut->reserved = 0;
     statusOut->object = status.mObject;
-    return 0;
+    return IMM_AUTHORING_OK;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {
     if (drawingIdOut == nullptr || layerId < 0 || drawingIndex < 0)
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
     uint64_t drawingId = 0;
     if (!iPlayer().GetDrawingHandle(docId, layerId, drawingIndex, drawingId))
-        return -1;
+        return IMM_AUTHORING_NOT_FOUND;
     *drawingIdOut = drawingId;
-    return 0;
+    return IMM_AUTHORING_OK;
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
@@ -2089,31 +2119,31 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
     (void)docId; (void)layerId; (void)brush; (void)visible; (void)points;
     (void)numPoints; (void)biggestStroke; (void)colorSpace; (void)frameIndex;
     (void)drawingIndexOut;
-    return -3; // creation needs reserved handles and replacement-layer preparation
+    return IMM_AUTHORING_UNSUPPORTED; // creation needs reserved handles and replacement-layer preparation
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSet(
     int32_t docId, int32_t layerId, int32_t frameIndex, int32_t drawingIndex)
 {
     (void)docId; (void)layerId; (void)frameIndex; (void)drawingIndex;
-    return -3; // frame remapping joins the batch model after stable created handles
+    return IMM_AUTHORING_UNSUPPORTED; // frame remapping joins the batch model after stable created handles
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
     int32_t docId, int32_t layerId, uint64_t drawingId, const ImmAuthoringDrawingGeometry *geometry)
 {
     if (layerId < 0 || drawingId == 0 || geometry == nullptr)
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
     if (geometry->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
-        return -3;
+        return IMM_AUTHORING_UNSUPPORTED;
     if (geometry->structSize < sizeof(ImmAuthoringDrawingGeometry) ||
         geometry->elementCount == 0 || geometry->elementCount > IMM_AUTHORING_MAX_ELEMENTS_PER_DRAWING ||
         geometry->elements == nullptr || geometry->reserved0 != 0 || geometry->reserved1 != 0)
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
     if (geometry->colorSpace < static_cast<int32_t>(ImmImporter::Drawing::ColorSpace::Linear) ||
         geometry->colorSpace > static_cast<int32_t>(ImmImporter::Drawing::ColorSpace::Gamma) ||
         (geometry->flipped != 0 && geometry->flipped != 1))
-        return -2;
+        return IMM_AUTHORING_INVALID_ARGUMENT;
 
     try
     {
@@ -2127,22 +2157,22 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
         {
             const ImmAuthoringElementGeometry &sourceElement = geometry->elements[elementIndex];
             if (sourceElement.structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
-                return -3;
+                return IMM_AUTHORING_UNSUPPORTED;
             if (sourceElement.structSize < sizeof(ImmAuthoringElementGeometry) ||
                 sourceElement.reserved != 0 || sourceElement.points == nullptr ||
                 sourceElement.pointCount < IMM_AUTHORING_MIN_POINTS_PER_ELEMENT ||
                 sourceElement.pointCount > IMM_AUTHORING_MAX_POINTS_PER_ELEMENT)
-                return -2;
+                return IMM_AUTHORING_INVALID_ARGUMENT;
             if (sourceElement.brush <= static_cast<int32_t>(ImmImporter::Element::BrushSectionType::Point) ||
                 sourceElement.brush >= static_cast<int32_t>(ImmImporter::Element::BrushSectionType::Count))
-                return -3; // point sections are not representable in the paint exporter or runtime
+                return IMM_AUTHORING_UNSUPPORTED; // point sections are not representable in the paint exporter or runtime
             if (sourceElement.visibility < static_cast<int32_t>(ImmImporter::Element::VisibilityType::FadePow2) ||
                 sourceElement.visibility > static_cast<int32_t>(ImmImporter::Element::VisibilityType::Always))
-                return -2;
+                return IMM_AUTHORING_INVALID_ARGUMENT;
 
             totalPoints += sourceElement.pointCount;
             if (totalPoints > IMM_AUTHORING_MAX_POINTS_PER_DRAWING)
-                return -2;
+                return IMM_AUTHORING_INVALID_ARGUMENT;
 
             ImmPlayer::Document::AuthoringElementGeometry element;
             element.mBrush = static_cast<ImmImporter::Element::BrushSectionType>(sourceElement.brush);
@@ -2158,7 +2188,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
                     !std::isfinite(src.alpha) || !std::isfinite(src.width) ||
                     !std::isfinite(src.length) || !std::isfinite(src.time) ||
                     src.alpha < 0.0f || src.alpha > 1.0f || src.width < 0.0f)
-                    return -6;
+                    return IMM_AUTHORING_VALIDATION_FAILED;
                 ImmImporter::Element::PointSource &dst = element.mPoints[pointIndex];
                 dst.mPos = ImmCore::vec3(src.px, src.py, src.pz);
                 dst.mNor = ImmCore::vec3(src.nx, src.ny, src.nz);
@@ -2177,9 +2207,9 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
         if (biggestStroke <= 0.0f)
             biggestStroke = maximumPointWidth;
         if (!std::isfinite(biggestStroke) || biggestStroke <= 0.0f)
-            return -2;
+            return IMM_AUTHORING_INVALID_ARGUMENT;
         if (biggestStroke < maximumPointWidth)
-            return -6;
+            return IMM_AUTHORING_VALIDATION_FAILED;
 
         return iPlayer().QueueDrawingGeometry(
             docId, static_cast<uint32_t>(layerId), drawingId, std::move(elements),
@@ -2188,7 +2218,7 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
     }
     catch (const std::bad_alloc &)
     {
-        return -5;
+        return IMM_AUTHORING_OUT_OF_MEMORY;
     }
 }
 
