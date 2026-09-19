@@ -89,6 +89,16 @@ that the deferred refresh already handles. The next attempt should keep the draw
 resources valid (a tombstone the renderer can still load, or an explicit per-drawing GPU
 release) instead of clearing geometry underneath it.
 
+**Mechanism finding (round 6), which also explains the M1b hang.**
+`LayerRendererPaintStatic::LoadInCPU` allocates a *new* draw-info slot for every drawing in
+the layer on every call (`mLayerInfo.Alloc(&isNew, &id, true)` then `me->Init(dr)`), and
+`LoadInGPU` is a no-op on this path. So refreshing a layer by calling `UnloadInCPU` +
+`LoadInCPU` is not a rebuild of existing state — it re-allocates the layer's draw info. Any
+per-edit refresh must work per drawing on its existing pool slot (or free that one slot and
+re-init it), never re-run the whole layer's CPU load. That is the change M2 needs, and it is
+also the likely reason a zero-chunk drawing hung: it entered a load path that expects to
+build draw info for every drawing it is given.
+
 Animation and spawn areas:
 
 | Function | Purpose |
