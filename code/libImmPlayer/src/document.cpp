@@ -24,6 +24,26 @@ using namespace ImmImporter;
 
 namespace ImmPlayer
 {
+    Document::PreparedLayerFullName::~PreparedLayerFullName()
+    {
+        if (mInitialized)
+            mFullName.End();
+    }
+
+    bool Document::PreparedLayerFullName::Init(Layer * layer, const wchar_t * fullName)
+    {
+        mLayer = layer;
+        mInitialized = true;
+        return mFullName.InitCopyW(fullName);
+    }
+
+    void Document::PreparedLayerFullName::Publish(void)
+    {
+        piAssert(mLayer != nullptr && mInitialized);
+        mLayer->PublishPreparedFullName(&mFullName);
+        mInitialized = false;
+    }
+
     static bool iEnvFlagEnabled(const char *name)
     {
         const char *value = getenv(name);
@@ -525,23 +545,51 @@ namespace ImmPlayer
             {
                 Layer * layer = mPendingPresentation.mLayer;
                 Layer * parent = mPendingPresentation.mLayerCreationParent;
+                Layer * previousParent = mPendingPresentation.mLayerPreviousParent;
                 const uint64_t layerId = mPendingPresentation.mObject;
-                if (layer == nullptr || parent == nullptr ||
-                    !parent->ReorderPublishedChild(
-                        layer, mPendingPresentation.mLayerChildIndex))
+                bool published = layer != nullptr && parent != nullptr &&
+                    previousParent != nullptr;
+                if (published && parent == previousParent)
+                {
+                    published = parent->ReorderPublishedChild(
+                        layer, mPendingPresentation.mLayerChildIndex);
+                }
+                else if (published)
+                {
+                    const bool removed = previousParent->RemovePublishedChild(layer);
+                    published = removed;
+                    if (removed)
+                    {
+                        layer->SetPublishedParent(parent);
+                        published = parent->InsertPreparedChild(
+                            layer, mPendingPresentation.mLayerChildIndex);
+                    }
+                    if (!published && removed)
+                    {
+                        layer->SetPublishedParent(previousParent);
+                        previousParent->InsertPreparedChild(
+                            layer, mPendingPresentation.mLayerPreviousChildIndex);
+                    }
+                }
+                if (!published)
                 {
                     iRejectCommit(revision, -6, 0, layerId);
                     mPendingPresentation = PendingPresentation{};
                 }
                 else
                 {
+                    for (const std::unique_ptr<PreparedLayerFullName> & prepared :
+                        mPendingPresentation.mPreparedLayerFullNames)
+                        prepared->Publish();
+                    const bool changedParent = parent != previousParent;
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         status->mState = AuthoringCommitState::Presented;
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] presented revision=%llu reorderedLayer=%llu",
+                        L"[IMM_LIVE_EDIT] presented revision=%llu %lsLayer=%llu",
                         static_cast<unsigned long long>(revision),
+                        changedParent ? L"reparented" : L"reordered",
                         static_cast<unsigned long long>(layerId));
                 }
             }
@@ -1465,9 +1513,17 @@ namespace ImmPlayer
         Layer * parent = iFindAuthoringLayerById(mSequence.GetRoot(), parentLayerId);
         if (layer == nullptr || parent == nullptr)
             return -1;
-        if (layer == mSequence.GetRoot() || layer->GetParent() != parent ||
-            parent->GetType() != Layer::Type::Group || childIndex >= parent->GetNumChildren())
+        if (layer == mSequence.GetRoot() || parent->GetType() != Layer::Type::Group)
             return -3;
+        for (Layer * ancestor = parent; ancestor != nullptr; ancestor = ancestor->GetParent())
+        {
+            if (ancestor == layer)
+                return -3;
+        }
+        const bool sameParent = layer->GetParent() == parent;
+        if ((sameParent && childIndex >= parent->GetNumChildren()) ||
+            (!sameParent && childIndex > parent->GetNumChildren()))
+            return -2;
         mOpenLayerReparents.push_back(LayerReparent{ layerId, parentLayerId, childIndex });
         return 0;
     }
@@ -1567,12 +1623,85 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, reparent.mLayerId);
                 return;
             }
-            if (layer == mSequence.GetRoot() || layer->GetParent() != parent ||
-                parent->GetType() != Layer::Type::Group ||
-                reparent.mChildIndex >= parent->GetNumChildren())
+            if (layer == mSequence.GetRoot() || parent->GetType() != Layer::Type::Group)
             {
                 iRejectCommit(batch.mRevision, -3, 0, reparent.mLayerId);
                 return;
+            }
+            for (Layer * ancestor = parent; ancestor != nullptr;
+                ancestor = ancestor->GetParent())
+            {
+                if (ancestor == layer)
+                {
+                    iRejectCommit(batch.mRevision, -3, 0, reparent.mLayerId);
+                    return;
+                }
+            }
+            Layer * previousParent = layer->GetParent();
+            if (previousParent == nullptr)
+            {
+                iRejectCommit(batch.mRevision, -3, 0, reparent.mLayerId);
+                return;
+            }
+            uint32_t previousChildIndex = UINT32_MAX;
+            for (uint32_t index = 0; index < previousParent->GetNumChildren(); index++)
+            {
+                if (previousParent->GetChild(index) == layer)
+                {
+                    previousChildIndex = index;
+                    break;
+                }
+            }
+            if (previousChildIndex == UINT32_MAX)
+            {
+                iRejectCommit(batch.mRevision, -6, 0, reparent.mLayerId);
+                return;
+            }
+            const bool sameParent = previousParent == parent;
+            if ((sameParent && reparent.mChildIndex >= parent->GetNumChildren()) ||
+                (!sameParent && reparent.mChildIndex > parent->GetNumChildren()))
+            {
+                iRejectCommit(batch.mRevision, -2, 0, reparent.mLayerId);
+                return;
+            }
+            std::vector<std::unique_ptr<PreparedLayerFullName>> preparedFullNames;
+            if (!sameParent)
+            {
+                if (!parent->PrepareChildPublication())
+                {
+                    iRejectCommit(batch.mRevision, -5, 0, reparent.mLayerId);
+                    return;
+                }
+                try
+                {
+                    std::function<bool(Layer *, const std::wstring &)> prepareSubtree;
+                    prepareSubtree = [&](Layer * current, const std::wstring & prefix)
+                    {
+                        std::wstring fullName = prefix;
+                        fullName.push_back(L'/');
+                        fullName.append(current->GetName().GetS());
+                        auto prepared = std::make_unique<PreparedLayerFullName>();
+                        if (!prepared->Init(current, fullName.c_str()))
+                            return false;
+                        preparedFullNames.push_back(std::move(prepared));
+                        for (uint32_t index = 0; index < current->GetNumChildren(); index++)
+                        {
+                            if (!prepareSubtree(current->GetChild(index), fullName))
+                                return false;
+                        }
+                        return true;
+                    };
+                    if (!prepareSubtree(layer, parent->GetFullName()->GetS()))
+                    {
+                        iRejectCommit(batch.mRevision, -5, 0, reparent.mLayerId);
+                        return;
+                    }
+                }
+                catch (const std::bad_alloc &)
+                {
+                    iRejectCommit(batch.mRevision, -5, 0, reparent.mLayerId);
+                    return;
+                }
             }
             if (status != nullptr)
             {
@@ -1585,7 +1714,10 @@ namespace ImmPlayer
             mPendingPresentation.mIsLayerReparent = true;
             mPendingPresentation.mLayer = layer;
             mPendingPresentation.mLayerCreationParent = parent;
+            mPendingPresentation.mLayerPreviousParent = previousParent;
             mPendingPresentation.mLayerChildIndex = reparent.mChildIndex;
+            mPendingPresentation.mLayerPreviousChildIndex = previousChildIndex;
+            mPendingPresentation.mPreparedLayerFullNames = std::move(preparedFullNames);
             return;
         }
 

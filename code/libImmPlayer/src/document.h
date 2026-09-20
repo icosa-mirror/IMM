@@ -342,6 +342,17 @@ namespace ImmPlayer {
             uint32_t mChildIndex = 0;
         };
 
+        struct PreparedLayerFullName
+        {
+            ImmImporter::Layer * mLayer = nullptr;
+            ImmCore::piString mFullName;
+            bool mInitialized = false;
+
+            ~PreparedLayerFullName();
+            bool Init(ImmImporter::Layer * layer, const wchar_t * fullName);
+            void Publish(void);
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -395,7 +406,10 @@ namespace ImmPlayer {
                 ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
             ImmCore::trans3d mSpawnAreaTransform = ImmCore::trans3d::identity();
             ImmImporter::Layer * mLayerCreationParent = nullptr;
+            ImmImporter::Layer * mLayerPreviousParent = nullptr;
             uint32_t mLayerChildIndex = 0;
+            uint32_t mLayerPreviousChildIndex = 0;
+            std::vector<std::unique_ptr<PreparedLayerFullName>> mPreparedLayerFullNames;
             std::unique_ptr<ImmImporter::Layer> mCreatedLayer;
             ImmImporter::Layer::AnimProperty mAnimationProperty =
                 ImmImporter::Layer::AnimProperty::Visibility;

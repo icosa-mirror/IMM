@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -209,6 +210,61 @@ namespace ExePlayer
             return;
         }
 
+        if (mGroupLayerCrossParentQueued)
+        {
+            if (frame < mGroupLayerCrossParentFrame + 3)
+                return;
+            ImmPlayer::Document::AuthoringCommitStatus reparentStatus;
+            const bool hasReparentStatus = mGroupLayerCrossParentRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mGroupLayerCrossParentRevision, reparentStatus);
+            bool hierarchyMatch = false;
+            std::wstring expectedFullName;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (!player->GetLayerInfoByIndex(mDocumentId, i, info))
+                    continue;
+                if (info.id == mGroupLayerReparentTargetId)
+                    expectedFullName = std::wstring(info.fullName) + L"/LiveEditGroup";
+            }
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
+                    info.id == mCreatedGroupLayerId)
+                {
+                    hierarchyMatch = info.parentId == mGroupLayerReparentTargetId &&
+                        info.childIndex == 0 && !expectedFullName.empty() &&
+                        expectedFullName == info.fullName;
+                    break;
+                }
+            }
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_CROSS_PARENT] frame=%llu revision=%llu status=%d result=%d hierarchyMatch=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mGroupLayerCrossParentRevision),
+                hasReparentStatus ? static_cast<int>(reparentStatus.mState) : -1,
+                hasReparentStatus ? reparentStatus.mResult : -1,
+                hierarchyMatch ? 1 : 0);
+            const bool reparentSucceeded = hasReparentStatus &&
+                reparentStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                reparentStatus.mResult == 0 && hierarchyMatch;
+            const int32_t deletionResult = reparentSucceeded ?
+                player->QueueLayerDeletion(
+                    mDocumentId, static_cast<uint32_t>(mCreatedGroupLayerId)) : -4;
+            const uint64_t deletionRevision = deletionResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu layer=%d deleteResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mCreatedGroupLayerId,
+                deletionResult, static_cast<unsigned long long>(deletionRevision));
+            mGroupLayerDeletionQueued = true;
+            mGroupLayerDeletionFrame = frame;
+            mGroupLayerDeletionRevision = deletionRevision;
+            return;
+        }
+
         if (mGroupLayerReorderQueued)
         {
             if (frame < mGroupLayerReorderFrame + 3)
@@ -239,18 +295,20 @@ namespace ExePlayer
             const bool reorderSucceeded = hasReorderStatus &&
                 reorderStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
                 reorderStatus.mResult == 0 && orderMatch;
-            const int32_t deletionResult = reorderSucceeded ?
-                player->QueueLayerDeletion(
-                    mDocumentId, static_cast<uint32_t>(mCreatedGroupLayerId)) : -4;
-            const uint64_t deletionRevision = deletionResult == 0 ?
+            const int32_t reparentResult = reorderSucceeded ?
+                player->QueueLayerReparent(mDocumentId,
+                    static_cast<uint32_t>(mCreatedGroupLayerId),
+                    static_cast<uint32_t>(mGroupLayerReparentTargetId), 0) : -4;
+            const uint64_t reparentRevision = reparentResult == 0 ?
                 player->CommitEdits(mDocumentId) : 0;
             log->Printf(LT_MESSAGE,
-                L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu layer=%d deleteResult=%d revision=%llu",
+                L"[IMM_LIVE_EDIT_LAYER_CROSS_PARENT] frame=%llu layer=%d parent=%d childIndex=0 reparentResult=%d revision=%llu",
                 static_cast<unsigned long long>(frame), mCreatedGroupLayerId,
-                deletionResult, static_cast<unsigned long long>(deletionRevision));
-            mGroupLayerDeletionQueued = true;
-            mGroupLayerDeletionFrame = frame;
-            mGroupLayerDeletionRevision = deletionRevision;
+                mGroupLayerReparentTargetId, reparentResult,
+                static_cast<unsigned long long>(reparentRevision));
+            mGroupLayerCrossParentQueued = true;
+            mGroupLayerCrossParentFrame = frame;
+            mGroupLayerCrossParentRevision = reparentRevision;
             return;
         }
 
@@ -329,6 +387,7 @@ namespace ExePlayer
                 spawnStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
                 spawnStatus.mResult == 0 && spawnAreaMatch;
             int parentLayerId = -1;
+            int reparentTargetId = -1;
             const int layerCount = player->GetLayerCount(mDocumentId);
             for (int i = 0; spawnSucceeded && i < layerCount; i++)
             {
@@ -336,11 +395,16 @@ namespace ExePlayer
                 if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
                     info.type == static_cast<int>(ImmImporter::Layer::Type::Group))
                 {
-                    parentLayerId = info.id;
-                    break;
+                    if (parentLayerId < 0)
+                        parentLayerId = info.id;
+                    else
+                    {
+                        reparentTargetId = info.id;
+                        break;
+                    }
                 }
             }
-            if (parentLayerId < 0)
+            if (parentLayerId < 0 || reparentTargetId < 0)
             {
                 mMeasured = true;
                 return;
@@ -360,6 +424,7 @@ namespace ExePlayer
             mGroupLayerRevision = createRevision;
             mCreatedGroupLayerId = static_cast<int>(createdLayerId);
             mCreatedGroupParentId = parentLayerId;
+            mGroupLayerReparentTargetId = reparentTargetId;
             mLayerCountBeforeGroupCreation = layerCount;
             return;
         }

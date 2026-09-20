@@ -430,6 +430,13 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 			mChildren.Append(child, false);
 	}
 
+	bool Layer::InsertPreparedChild(Layer * child, uint32_t childIndex)
+	{
+		return mType == Type::Group && child != nullptr && child->mParent == this &&
+			childIndex <= mChildren.GetLength() &&
+			mChildren.InsertAndShift(&child, childIndex, false) != nullptr;
+	}
+
 	bool Layer::RemovePublishedChild(Layer * child)
 	{
 		if (mType != Type::Group || child == nullptr || child->mParent != this)
@@ -460,6 +467,14 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 			return mChildren.InsertAndShift(&child, childIndex, false) != nullptr;
 		}
 		return false;
+	}
+
+	void Layer::SetPublishedParent(Layer * parent) { mParent = parent; }
+
+	void Layer::PublishPreparedFullName(piString * fullName)
+	{
+		piAssert(fullName != nullptr);
+		mFullName = std::move(*fullName);
 	}
 
 	Layer* Layer::GetParent() const { return mParent; }

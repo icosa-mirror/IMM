@@ -1044,7 +1044,12 @@ run_case() {
             tail -n 80 "$log_path" >&2
             exit 1
         fi
-        if ! grep -Eq "\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=11 status=4 result=0 layerMissing=1 countRestored=1" "$log_path"; then
+        if ! grep -Eq "\[IMM_LIVE_EDIT_LAYER_CROSS_PARENT\].*revision=11 status=4 result=0 hierarchyMatch=1" "$log_path"; then
+            echo "$name did not present the cross-parent group-layer revision" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+        if ! grep -Eq "\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=12 status=4 result=0 layerMissing=1 countRestored=1" "$log_path"; then
             echo "$name did not present the empty group-layer deletion revision" >&2
             tail -n 80 "$log_path" >&2
             exit 1
