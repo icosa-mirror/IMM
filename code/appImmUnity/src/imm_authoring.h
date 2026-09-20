@@ -56,7 +56,8 @@ enum
 typedef enum ImmAuthoringLayerPropertyMask
 {
     IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY = 1u << 0,
-    IMM_AUTHORING_LAYER_PROPERTY_OPACITY = 1u << 1
+    IMM_AUTHORING_LAYER_PROPERTY_OPACITY = 1u << 1,
+    IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM = 1u << 2
 } ImmAuthoringLayerPropertyMask;
 
 typedef struct ImmAuthoringPoint
@@ -124,6 +125,9 @@ typedef struct ImmAuthoringLayerProperties
     uint32_t reserved0;
     int32_t visible;
     float opacity;
+    float tx, ty, tz;
+    float qx, qy, qz, qw;
+    float scale;
     uint32_t reserved1[2];
 } ImmAuthoringLayerProperties;
 
@@ -143,7 +147,7 @@ static_assert(sizeof(ImmAuthoringDrawingGeometry) == 32 + sizeof(void *),
     "ImmAuthoringDrawingGeometry ABI changed");
 static_assert(sizeof(ImmAuthoringRevisions) == 32, "ImmAuthoringRevisions ABI changed");
 static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus ABI changed");
-static_assert(sizeof(ImmAuthoringLayerProperties) == 32,
+static_assert(sizeof(ImmAuthoringLayerProperties) == 64,
     "ImmAuthoringLayerProperties ABI changed");
 #endif
 

@@ -50,6 +50,7 @@ def main() -> int:
             "ImmAuthoring_LayerSetProperties",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",
+            "IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM",
             "uint64_t * drawingIdOut",
         ],
     )
@@ -67,6 +68,7 @@ def main() -> int:
             "drawingCountAfter=%d handleMatch=%d",
             "referencedDeletionRejected=%d",
             "canonicalOpacityChanged=%d",
+            "canonicalTransformChanged=%d",
         ],
     )
     require_tokens(

@@ -511,6 +511,8 @@ namespace ImmPlayer
                         layer->SetCanonicalVisible(mPendingPresentation.mLayerVisible);
                     if (mPendingPresentation.mSetLayerOpacity)
                         layer->SetCanonicalOpacity(mPendingPresentation.mLayerOpacity);
+                    if (mPendingPresentation.mSetLayerTransform)
+                        layer->SetCanonicalTransform(mPendingPresentation.mLayerTransform);
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         status->mState = AuthoringCommitState::Presented;
@@ -944,7 +946,8 @@ namespace ImmPlayer
     }
 
     int32_t Document::QueueLayerProperties(uint32_t layerId,
-        bool setVisibility, bool visible, bool setOpacity, float opacity)
+        bool setVisibility, bool visible, bool setOpacity, float opacity,
+        bool setTransform, const trans3d & transform)
     {
         if (!mEditing)
             return -4;
@@ -955,12 +958,31 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        if (!setVisibility && !setOpacity)
+        if (!setVisibility && !setOpacity && !setTransform)
             return -2;
         if (setOpacity && (!std::isfinite(opacity) || opacity < 0.0f || opacity > 1.0f))
             return -2;
+        if (setTransform)
+        {
+            const double quaternionLengthSquared =
+                transform.mRotation.x * transform.mRotation.x +
+                transform.mRotation.y * transform.mRotation.y +
+                transform.mRotation.z * transform.mRotation.z +
+                transform.mRotation.w * transform.mRotation.w;
+            if (!std::isfinite(transform.mTranslation.x) ||
+                !std::isfinite(transform.mTranslation.y) ||
+                !std::isfinite(transform.mTranslation.z) ||
+                !std::isfinite(transform.mRotation.x) ||
+                !std::isfinite(transform.mRotation.y) ||
+                !std::isfinite(transform.mRotation.z) ||
+                !std::isfinite(transform.mRotation.w) ||
+                !std::isfinite(transform.mScale) || transform.mScale <= 0.0 ||
+                std::fabs(quaternionLengthSquared - 1.0) > 0.001 ||
+                transform.mFlip != flip3::N)
+                return -2;
+        }
         mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{
-            layerId, setVisibility, visible, setOpacity, opacity });
+            layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform });
         return 0;
     }
 
@@ -1061,6 +1083,8 @@ namespace ImmPlayer
             mPendingPresentation.mLayerVisible = edit.mVisible;
             mPendingPresentation.mSetLayerOpacity = edit.mSetOpacity;
             mPendingPresentation.mLayerOpacity = edit.mOpacity;
+            mPendingPresentation.mSetLayerTransform = edit.mSetTransform;
+            mPendingPresentation.mLayerTransform = edit.mTransform;
             mPendingPresentation.mLayer = layer;
             return;
         }

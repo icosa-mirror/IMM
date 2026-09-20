@@ -54,6 +54,7 @@ namespace ImmImporter
 	mPotentiallyVisible = visible;
 		mImplementation = nullptr;
 		mTransform = transform;
+		mCanonicalTransform = transform;
         mPivotTransform = pivot;
 		mOpacity = opacity;
 		mCanonicalOpacity = opacity;
@@ -308,9 +309,20 @@ const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformO
 	}
 
 trans3d Layer::GetTransform(void) const { return mTransformOverrideEnabled ? mTransformOverrideValue : mTransform; }
+trans3d Layer::GetCanonicalTransform(void) const { return mCanonicalTransform; }
 trans3d Layer::GetPivot(void) const { return mPivotTransform; }
 
-void Layer::SetTransform(const trans3d & mat) { mTransform = mat; }
+void Layer::SetTransform(const trans3d & mat)
+{
+    mCanonicalTransform = mat;
+    mTransform = mat;
+}
+void Layer::SetCanonicalTransform(const trans3d & mat)
+{
+    mCanonicalTransform = mat;
+    if (GetNumAnimKeys(AnimProperty::Transform) == 0)
+        mTransform = mat;
+}
 void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 {
     mTransformOverrideEnabled = enabled;

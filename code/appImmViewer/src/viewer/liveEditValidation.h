@@ -48,6 +48,8 @@ namespace ExePlayer
         bool mTargetCanonicalVisible = false;
         float mOriginalEffectiveOpacity = 1.0f;
         float mTargetCanonicalOpacity = 1.0f;
+        ImmCore::trans3d mOriginalEffectiveTransform = ImmCore::trans3d::identity();
+        ImmCore::trans3d mTargetCanonicalTransform = ImmCore::trans3d::identity();
         int mDrawingCountBeforeCreation = -1;
         ImmCore::bound3 mDrawingBoxBefore;
     };

@@ -142,7 +142,8 @@ namespace ImmPlayer {
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         int32_t QueueFrameMapping(int docId, uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
         int32_t QueueLayerProperties(int docId, uint32_t layerId,
-            bool setVisibility, bool visible, bool setOpacity, float opacity);
+            bool setVisibility, bool visible, bool setOpacity, float opacity,
+            bool setTransform, const ImmCore::trans3d & transform);
 
         struct LayerDiagnostics
         {
@@ -161,6 +162,9 @@ namespace ImmPlayer {
             int visibilityOverrideValue = 0;
             int hasTransformKeys = 0;
             int transformOverrideEnabled = 0;
+            ImmCore::trans3d transform = ImmCore::trans3d::identity();
+            ImmCore::trans3d canonicalTransform = ImmCore::trans3d::identity();
+            ImmCore::trans3d transformOverride = ImmCore::trans3d::identity();
         };
 
         bool GetLayerDiagnostics(int docId, int layerId, LayerDiagnostics & outDiag) const;

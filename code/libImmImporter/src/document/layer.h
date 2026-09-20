@@ -132,6 +132,7 @@ namespace ImmImporter
         float   GetWorldOpacity(void) const;
 
 		ImmCore::trans3d GetTransform(void) const;
+		ImmCore::trans3d GetCanonicalTransform(void) const;
 		ImmCore::trans3d GetPivot(void) const;
 		bool    HasBBox(void) const;
 		const ImmCore::bound3d GetBBox(void);
@@ -169,6 +170,7 @@ namespace ImmImporter
 		void SetStopTime(ImmCore::piTick time);
 		void SetDrawInTime(double v);
 		void SetTransform(const ImmCore::trans3d & t);
+		void SetCanonicalTransform(const ImmCore::trans3d & t);
         void SetTransformOverride(bool enabled, const ImmCore::trans3d & t);
 		void SetPlaying(bool playing);
 		void    SetPosition(const ImmCore::vec3d& pos);
@@ -219,6 +221,7 @@ namespace ImmImporter
 		bool mOpacityOverrideEnabled;
 		float mOpacityOverrideValue;
 		ImmCore::trans3d mTransform;
+		ImmCore::trans3d mCanonicalTransform;
         ImmCore::trans3d mPivotTransform;
 
 		double mDrawInTime;

@@ -2106,7 +2106,8 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
         properties->reserved1[1] != 0)
         return IMM_AUTHORING_INVALID_ARGUMENT;
     const uint32_t supportedMask = IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY |
-        IMM_AUTHORING_LAYER_PROPERTY_OPACITY;
+        IMM_AUTHORING_LAYER_PROPERTY_OPACITY |
+        IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM;
     if (properties->updateMask == 0 || (properties->updateMask & ~supportedMask) != 0)
         return IMM_AUTHORING_UNSUPPORTED;
     if ((properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY) != 0 &&
@@ -2116,6 +2117,27 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
         (!std::isfinite(properties->opacity) || properties->opacity < 0.0f ||
             properties->opacity > 1.0f))
         return IMM_AUTHORING_INVALID_ARGUMENT;
+    ImmCore::trans3d transform = ImmCore::trans3d::identity();
+    if ((properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM) != 0)
+    {
+        if (!std::isfinite(properties->tx) || !std::isfinite(properties->ty) ||
+            !std::isfinite(properties->tz) || !std::isfinite(properties->qx) ||
+            !std::isfinite(properties->qy) || !std::isfinite(properties->qz) ||
+            !std::isfinite(properties->qw) || !std::isfinite(properties->scale) ||
+            properties->scale <= 0.0f)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        const double quaternionLengthSquared =
+            static_cast<double>(properties->qx) * properties->qx +
+            static_cast<double>(properties->qy) * properties->qy +
+            static_cast<double>(properties->qz) * properties->qz +
+            static_cast<double>(properties->qw) * properties->qw;
+        if (std::fabs(quaternionLengthSquared - 1.0) > 0.001)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        transform = ImmCore::trans3d(
+            ImmCore::quatd(properties->qx, properties->qy, properties->qz, properties->qw),
+            properties->scale, ImmCore::flip3::N,
+            ImmCore::vec3d(properties->tx, properties->ty, properties->tz));
+    }
     try
     {
         return iPlayer().QueueLayerProperties(
@@ -2123,7 +2145,9 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
             (properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY) != 0,
             properties->visible != 0,
             (properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_OPACITY) != 0,
-            properties->opacity);
+            properties->opacity,
+            (properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM) != 0,
+            transform);
     }
     catch (const std::bad_alloc &)
     {

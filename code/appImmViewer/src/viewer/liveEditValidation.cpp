@@ -13,6 +13,19 @@
 
 namespace ExePlayer
 {
+    static bool iTransformsMatch(const ImmCore::trans3d & a, const ImmCore::trans3d & b)
+    {
+        constexpr double epsilon = 0.000001;
+        return std::fabs(a.mTranslation.x - b.mTranslation.x) < epsilon &&
+            std::fabs(a.mTranslation.y - b.mTranslation.y) < epsilon &&
+            std::fabs(a.mTranslation.z - b.mTranslation.z) < epsilon &&
+            std::fabs(a.mRotation.x - b.mRotation.x) < epsilon &&
+            std::fabs(a.mRotation.y - b.mRotation.y) < epsilon &&
+            std::fabs(a.mRotation.z - b.mRotation.z) < epsilon &&
+            std::fabs(a.mRotation.w - b.mRotation.w) < epsilon &&
+            std::fabs(a.mScale - b.mScale) < epsilon && a.mFlip == b.mFlip;
+    }
+
     uint64_t LiveEditValidation::RequestedFrameFromEnvironment(void)
     {
         const char * value = std::getenv("IMM_VIEWER_LIVE_EDIT");
@@ -169,17 +182,27 @@ namespace ExePlayer
                 std::fabs(diagnostics.opacityOverrideValue - mOriginalEffectiveOpacity) < 0.0001f;
             const bool opacityEffectivePreserved = hasDiagnostics &&
                 std::fabs(diagnostics.opacity - mOriginalEffectiveOpacity) < 0.0001f;
+            const bool canonicalTransformChanged = hasDiagnostics &&
+                iTransformsMatch(diagnostics.canonicalTransform, mTargetCanonicalTransform);
+            const bool transformOverridePreserved = hasDiagnostics &&
+                diagnostics.transformOverrideEnabled == 1 &&
+                iTransformsMatch(diagnostics.transformOverride, mOriginalEffectiveTransform);
+            const bool transformEffectivePreserved = hasDiagnostics &&
+                iTransformsMatch(diagnostics.transform, mOriginalEffectiveTransform);
             log->Printf(LT_MESSAGE,
                 L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu revision=%llu status=%d result=%d "
                 L"canonicalChanged=%d overridePreserved=%d effectivePreserved=%d "
-                L"canonicalOpacityChanged=%d opacityOverridePreserved=%d opacityEffectivePreserved=%d",
+                L"canonicalOpacityChanged=%d opacityOverridePreserved=%d opacityEffectivePreserved=%d "
+                L"canonicalTransformChanged=%d transformOverridePreserved=%d transformEffectivePreserved=%d",
                 static_cast<unsigned long long>(frame),
                 static_cast<unsigned long long>(mPropertyRevision),
                 hasPropertyStatus ? static_cast<int>(propertyStatus.mState) : -1,
                 hasPropertyStatus ? propertyStatus.mResult : -1,
                 canonicalChanged ? 1 : 0, overridePreserved ? 1 : 0,
                 effectivePreserved ? 1 : 0, canonicalOpacityChanged ? 1 : 0,
-                opacityOverridePreserved ? 1 : 0, opacityEffectivePreserved ? 1 : 0);
+                opacityOverridePreserved ? 1 : 0, opacityEffectivePreserved ? 1 : 0,
+                canonicalTransformChanged ? 1 : 0, transformOverridePreserved ? 1 : 0,
+                transformEffectivePreserved ? 1 : 0);
             return;
         }
 
@@ -244,12 +267,18 @@ namespace ExePlayer
             mTargetCanonicalVisible = !mOriginalCanonicalVisible;
             mOriginalEffectiveOpacity = diagnostics.opacity;
             mTargetCanonicalOpacity = diagnostics.canonicalOpacity > 0.5f ? 0.25f : 0.75f;
+            mOriginalEffectiveTransform = diagnostics.transform;
+            mTargetCanonicalTransform = diagnostics.canonicalTransform;
+            mTargetCanonicalTransform.mTranslation.x += 0.125;
             const bool overrideSet = player->SetLayerVisible(
                 mDocumentId, mLayerId, mOriginalCanonicalVisible) &&
-                player->SetLayerOpacity(mDocumentId, mLayerId, mOriginalEffectiveOpacity);
+                player->SetLayerOpacity(mDocumentId, mLayerId, mOriginalEffectiveOpacity) &&
+                player->SetLayerTransform(
+                    mDocumentId, mLayerId, mOriginalEffectiveTransform);
             const int32_t propertyResult = overrideSet ? player->QueueLayerProperties(
                 mDocumentId, static_cast<uint32_t>(mLayerId), true,
-                mTargetCanonicalVisible, true, mTargetCanonicalOpacity) : -4;
+                mTargetCanonicalVisible, true, mTargetCanonicalOpacity, true,
+                mTargetCanonicalTransform) : -4;
             const uint64_t propertyRevision = propertyResult == 0 ?
                 player->CommitEdits(mDocumentId) : 0;
             log->Printf(LT_MESSAGE,

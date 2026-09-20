@@ -703,14 +703,15 @@ namespace ImmPlayer
     }
 
     int32_t Player::QueueLayerProperties(int docId, uint32_t layerId,
-        bool setVisibility, bool visible, bool setOpacity, float opacity)
+        bool setVisibility, bool visible, bool setOpacity, float opacity,
+        bool setTransform, const ImmCore::trans3d & transform)
     {
         std::lock_guard<std::mutex> guard(mMutex);
         Document * doc = (Document *)mDocuments.GetAddress(docId);
         if (doc == nullptr)
             return -1;
         return doc->QueueLayerProperties(
-            layerId, setVisibility, visible, setOpacity, opacity);
+            layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform);
     }
 
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
@@ -810,6 +811,9 @@ namespace ImmPlayer
         outDiag.visibilityOverrideValue = layer->GetVisibilityOverrideValue() ? 1 : 0;
         outDiag.hasTransformKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Transform) > 0) ? 1 : 0;
         outDiag.transformOverrideEnabled = layer->GetTransformOverrideEnabled() ? 1 : 0;
+        outDiag.transform = layer->GetTransform();
+        outDiag.canonicalTransform = layer->GetCanonicalTransform();
+        outDiag.transformOverride = layer->GetTransformOverrideValue();
         return true;
     }
 
