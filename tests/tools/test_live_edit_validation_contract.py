@@ -52,6 +52,7 @@ def main() -> int:
             "ImmAuthoring_LayerSetProperties",
             "ImmAuthoring_KeySet",
             "ImmAuthoring_KeyRemove",
+            "ImmAuthoring_SetInitialSpawnArea",
             "ImmAuthoringKey",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",
@@ -78,6 +79,7 @@ def main() -> int:
             "canonicalTransformChanged=%d",
             'L"[IMM_LIVE_EDIT_KEY_SET] frame=%llu revision=%llu status=%d result=%d keyCountChanged=%d"',
             'L"[IMM_LIVE_EDIT_KEY_REMOVE] frame=%llu revision=%llu status=%d result=%d keyCountRestored=%d"',
+            'L"[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=%llu revision=%llu status=%d result=%d initialLayerMatch=%d"',
         ],
     )
     require_tokens(
@@ -88,6 +90,7 @@ def main() -> int:
             r"\[IMM_LIVE_EDIT_PROPERTY\].*revision=4 status=4 result=0",
             r"\[IMM_LIVE_EDIT_KEY_SET\].*revision=5 status=4 result=0 keyCountChanged=1",
             r"\[IMM_LIVE_EDIT_KEY_REMOVE\].*revision=6 status=4 result=0 keyCountRestored=1",
+            r"\[IMM_LIVE_EDIT_INITIAL_SPAWN\].*revision=7 status=4 result=0 initialLayerMatch=1",
         ],
     )
     require_tokens(

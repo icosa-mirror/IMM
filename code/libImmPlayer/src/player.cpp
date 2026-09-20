@@ -735,6 +735,15 @@ namespace ImmPlayer
         return doc->QueueAnimationKeyRemoval(layerId, property, time);
     }
 
+    int32_t Player::QueueInitialSpawnArea(int docId, uint32_t layerId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueInitialSpawnArea(layerId);
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);
@@ -986,6 +995,15 @@ namespace ImmPlayer
             return 0;
         }
         return doc->GetInitialSpawnArea();
+    }
+
+    int Player::GetInitialSpawnAreaLayerId(int docId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->GetInitialSpawnAreaLayerId();
     }
 
     void Player::SetSpawnArea(int docId, int spawnAreaId)

@@ -80,6 +80,7 @@ public final class ImmFtlSmokeTest {
         requireMarker(logcat, "revision=4 status=4 result=0 canonicalChanged=1 overridePreserved=1 effectivePreserved=1 canonicalOpacityChanged=1 opacityOverridePreserved=1 opacityEffectivePreserved=1 canonicalTransformChanged=1 transformOverridePreserved=1 transformEffectivePreserved=1");
         requireMarker(logcat, "revision=5 status=4 result=0 keyCountChanged=1");
         requireMarker(logcat, "revision=6 status=4 result=0 keyCountRestored=1");
+        requireMarker(logcat, "revision=7 status=4 result=0 initialLayerMatch=1");
         requireMarker(logcat, "Loaded in CPU");
         requireMarker(logcat, "Loaded in GPU");
 
@@ -178,7 +179,10 @@ public final class ImmFtlSmokeTest {
                             "opacityEffectivePreserved=1 canonicalTransformChanged=1 " +
                             "transformOverridePreserved=1 transformEffectivePreserved=1") &&
                     logcat.contains("revision=5 status=4 result=0 keyCountChanged=1") &&
-                    logcat.contains("revision=6 status=4 result=0 keyCountRestored=1")) {
+                    logcat.contains("revision=6 status=4 result=0 keyCountRestored=1") &&
+                    (logcat.contains("revision=7 status=4 result=0 initialLayerMatch=1") ||
+                            logcat.contains("[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=") &&
+                            logcat.contains("available=0"))) {
                 return logcat;
             }
             SystemClock.sleep(500L);

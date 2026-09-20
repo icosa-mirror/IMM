@@ -2301,6 +2301,21 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRe
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_SetInitialSpawnArea(
+    int32_t docId, int32_t layerId)
+{
+    if (layerId < 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    try
+    {
+        return iPlayer().QueueInitialSpawnArea(docId, static_cast<uint32_t>(layerId));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {

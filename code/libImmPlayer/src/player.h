@@ -81,6 +81,7 @@ namespace ImmPlayer {
         int  GetSpawnAreaCount(int docId);
         int  GetSpawnArea(int docId);
         int  GetInitialSpawnArea(int docId);
+        int  GetInitialSpawnAreaLayerId(int docId);
         void SetSpawnArea(int docId, int spawnAreaId);
         bool GetSpawnAreaNeedsUpdate(int docId);
         void SetSpawnAreaNeedsUpdate(int docId, bool state);
@@ -150,6 +151,7 @@ namespace ImmPlayer {
             ImmImporter::Layer::InterpolationType interpolation);
         int32_t QueueAnimationKeyRemoval(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time);
+        int32_t QueueInitialSpawnArea(int docId, uint32_t layerId);
 
         struct LayerDiagnostics
         {

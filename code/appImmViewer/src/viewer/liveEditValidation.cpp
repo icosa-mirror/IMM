@@ -156,11 +156,31 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mInitialSpawnAreaQueued)
+        {
+            if (frame < mInitialSpawnAreaFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus spawnStatus;
+            const bool hasSpawnStatus = mInitialSpawnAreaRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mInitialSpawnAreaRevision, spawnStatus);
+            const bool initialLayerMatch = player->GetInitialSpawnAreaLayerId(mDocumentId) ==
+                mInitialSpawnAreaLayerId;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=%llu revision=%llu status=%d result=%d initialLayerMatch=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mInitialSpawnAreaRevision),
+                hasSpawnStatus ? static_cast<int>(spawnStatus.mState) : -1,
+                hasSpawnStatus ? spawnStatus.mResult : -1,
+                initialLayerMatch ? 1 : 0);
+            return;
+        }
+
         if (mKeyRemovalQueued)
         {
             if (frame < mKeyRemovalFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus removalStatus;
             const bool hasRemovalStatus = mKeyRemovalRevision != 0 &&
                 player->GetAuthoringCommitStatus(
@@ -177,6 +197,46 @@ namespace ExePlayer
                 hasRemovalStatus ? static_cast<int>(removalStatus.mState) : -1,
                 hasRemovalStatus ? removalStatus.mResult : -1,
                 keyCountRestored ? 1 : 0);
+            const bool removalSucceeded = hasRemovalStatus &&
+                removalStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                removalStatus.mResult == 0 && keyCountRestored;
+            if (!removalSucceeded)
+            {
+                mMeasured = true;
+                return;
+            }
+            int spawnLayerId = -1;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
+                    info.type == static_cast<int>(ImmImporter::Layer::Type::SpawnArea))
+                {
+                    spawnLayerId = info.id;
+                    break;
+                }
+            }
+            if (spawnLayerId < 0)
+            {
+                mMeasured = true;
+                log->Printf(LT_MESSAGE,
+                    L"[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=%llu available=0",
+                    static_cast<unsigned long long>(frame));
+                return;
+            }
+            const int32_t spawnResult = spawnLayerId >= 0 ?
+                player->QueueInitialSpawnArea(
+                    mDocumentId, static_cast<uint32_t>(spawnLayerId)) : -1;
+            const uint64_t spawnRevision = spawnResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=%llu layer=%d setResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), spawnLayerId, spawnResult,
+                static_cast<unsigned long long>(spawnRevision));
+            mInitialSpawnAreaQueued = true;
+            mInitialSpawnAreaFrame = frame;
+            mInitialSpawnAreaRevision = spawnRevision;
+            mInitialSpawnAreaLayerId = spawnLayerId;
             return;
         }
 

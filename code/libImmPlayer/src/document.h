@@ -147,6 +147,7 @@ namespace ImmPlayer {
         int  GetSpawnAreaCount();
         int  GetSpawnArea();
         int  GetInitialSpawnArea();
+        int  GetInitialSpawnAreaLayerId() const;
         void SetSpawnArea(int spawnAreaId);
         const ImmCore::piImage* GetSpawnAreaScreenshot(int spawnAreaId);
         void GetSpawnAreaInfo(SpawnAreaInfo &info, int spawnAreaId);
@@ -223,6 +224,7 @@ namespace ImmPlayer {
             ImmImporter::Layer::InterpolationType interpolation);
         int32_t QueueAnimationKeyRemoval(uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time);
+        int32_t QueueInitialSpawnArea(uint32_t layerId);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -297,6 +299,11 @@ namespace ImmPlayer {
             bool mRemove = false;
         };
 
+        struct InitialSpawnAreaEdit
+        {
+            uint32_t mLayerId = 0;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -306,6 +313,7 @@ namespace ImmPlayer {
             std::vector<DrawingDeletion> mDrawingDeletions;
             std::vector<LayerPropertyEdit> mLayerPropertyEdits;
             std::vector<AnimationKeyEdit> mAnimationKeyEdits;
+            std::vector<InitialSpawnAreaEdit> mInitialSpawnAreaEdits;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -316,6 +324,7 @@ namespace ImmPlayer {
         std::vector<DrawingDeletion> mOpenDrawingDeletions;
         std::vector<LayerPropertyEdit> mOpenLayerPropertyEdits;
         std::vector<AnimationKeyEdit> mOpenAnimationKeyEdits;
+        std::vector<InitialSpawnAreaEdit> mOpenInitialSpawnAreaEdits;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -329,6 +338,7 @@ namespace ImmPlayer {
             bool mIsDeletion = false;
             bool mIsLayerPropertyEdit = false;
             bool mIsAnimationKeyEdit = false;
+            bool mIsInitialSpawnAreaEdit = false;
             ImmImporter::Layer::AnimProperty mAnimationProperty =
                 ImmImporter::Layer::AnimProperty::Visibility;
             std::vector<ImmImporter::Layer::AnimKey> mAnimationKeys;

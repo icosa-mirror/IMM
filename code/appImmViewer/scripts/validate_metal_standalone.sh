@@ -1024,6 +1024,11 @@ run_case() {
             tail -n 80 "$log_path" >&2
             exit 1
         fi
+        if ! grep -Eq "\[IMM_LIVE_EDIT_INITIAL_SPAWN\].*revision=7 status=4 result=0 initialLayerMatch=1" "$log_path"; then
+            echo "$name did not present the initial spawn-area revision" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
         if grep -q "\[IMM_LIVE_EDIT_FRAME\].*geometryMatch=0" "$log_path"; then
             echo "$name observed mismatched model and renderer geometry during live edit" >&2
             tail -n 80 "$log_path" >&2
