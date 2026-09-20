@@ -84,6 +84,7 @@ namespace ImmPlayer
     {
 		mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
+        mOpenFrameMappings.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
         mDrawingHandles.clear();
@@ -492,7 +493,33 @@ namespace ImmPlayer
         {
             const uint64_t revision = mPendingPresentation.mRevision;
             AuthoringCommitStatus * status = iFindCommitStatus(revision);
-            if (layerPaintRender == nullptr ||
+            if (mPendingPresentation.mIsFrameMapping)
+            {
+                LayerPaint * paint = mPendingPresentation.mLayer != nullptr ?
+                    (LayerPaint *)mPendingPresentation.mLayer->GetImplementation() : nullptr;
+                uint32_t * frames = paint != nullptr ? paint->GetFrameBuffer() : nullptr;
+                if (frames == nullptr || mPendingPresentation.mFrameIndex >= paint->GetNumFrames() ||
+                    mPendingPresentation.mDrawingIndex >= paint->GetNumDrawings())
+                {
+                    iRejectCommit(revision, -6, 0, mPendingPresentation.mObject);
+                    mPendingPresentation = PendingPresentation{};
+                }
+                else
+                {
+                    frames[mPendingPresentation.mFrameIndex] = mPendingPresentation.mDrawingIndex;
+                    const uint32_t presentedFrame = mPendingPresentation.mFrameIndex;
+                    const uint64_t presentedDrawing = mPendingPresentation.mObject;
+                    mPendingPresentation = PendingPresentation{};
+                    if (status != nullptr)
+                        status->mState = AuthoringCommitState::Presented;
+                    mPresentedRevision = revision;
+                    log->Printf(LT_MESSAGE,
+                        L"[IMM_LIVE_EDIT] presented revision=%llu frame=%u drawing=%llu",
+                        static_cast<unsigned long long>(revision), presentedFrame,
+                        static_cast<unsigned long long>(presentedDrawing));
+                }
+            }
+            else if (layerPaintRender == nullptr ||
                 !layerPaintRender->PrepareDrawingReplacementInGPU(
                     renderer, mPendingPresentation.mRendererToken, log))
             {
@@ -611,7 +638,8 @@ namespace ImmPlayer
 
     bool Document::DetachEditing(void)
     {
-        if (!mEditing || !mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() || !mSealedBatches.empty() ||
+        if (!mEditing || !mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty() || !mSealedBatches.empty() ||
             mPendingPresentation.mRevision != 0)
             return false;
 
@@ -627,6 +655,7 @@ namespace ImmPlayer
             return false;
         mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
+        mOpenFrameMappings.clear();
         return true;
     }
 
@@ -688,13 +717,31 @@ namespace ImmPlayer
         return false;
     }
 
+    bool Document::GetFrameDrawingHandle(
+        uint32_t layerId, uint32_t frameIndex, uint64_t * drawingIdOut) const
+    {
+        if (!mEditing || drawingIdOut == nullptr)
+            return false;
+        Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
+        if (layer == nullptr || layer->GetType() != Layer::Type::Paint)
+            return false;
+        LayerPaint * paint = (LayerPaint *)layer->GetImplementation();
+        if (paint == nullptr || frameIndex >= paint->GetNumFrames())
+            return false;
+        const uint32_t * frames = paint->GetFrameBuffer();
+        if (frames == nullptr)
+            return false;
+        return GetDrawingHandle(layerId, frames[frameIndex], drawingIdOut);
+    }
+
     int32_t Document::QueueDrawingCreation(uint32_t layerId, uint64_t * drawingIdOut)
     {
         if (!mEditing)
             return -4;
         if (drawingIdOut == nullptr)
             return -2;
-        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty())
+        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty())
             return -7;
 
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
@@ -735,6 +782,31 @@ namespace ImmPlayer
         edit.mFlipped = flipped;
         edit.mBiggestStroke = biggestStroke;
         mOpenGeometryEdits.push_back(std::move(edit));
+        return 0;
+    }
+
+    int32_t Document::QueueFrameMapping(
+        uint32_t layerId, uint32_t frameIndex, uint64_t drawingId)
+    {
+        if (!mEditing)
+            return -4;
+        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty())
+            return -7;
+
+        const DrawingHandleEntry * entry = iFindDrawingHandle(layerId, drawingId);
+        if (entry == nullptr || entry->mLayer == nullptr)
+            return -1;
+        LayerPaint * paint = entry->mLayer->GetType() == Layer::Type::Paint ?
+            (LayerPaint *)entry->mLayer->GetImplementation() : nullptr;
+        if (paint == nullptr || entry->mDrawingIndex >= paint->GetNumDrawings() ||
+            dynamic_cast<DrawingStatic *>(
+            paint->GetDrawing(static_cast<int>(entry->mDrawingIndex))) == nullptr)
+            return -3;
+        if (frameIndex >= paint->GetNumFrames())
+            return -2;
+
+        mOpenFrameMappings.push_back(FrameMapping{ layerId, frameIndex, drawingId });
         return 0;
     }
 
@@ -791,6 +863,7 @@ namespace ImmPlayer
 
         mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
+        mOpenFrameMappings.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
         mDrawingHandles.clear();
@@ -808,7 +881,39 @@ namespace ImmPlayer
         if (status != nullptr)
             status->mState = AuthoringCommitState::Preparing;
 
-        if (batch.mGeometryEdits.size() != 1 || batch.mDrawingCreations.size() > 1 ||
+        if (batch.mFrameMappings.size() == 1 && batch.mGeometryEdits.empty() &&
+            batch.mDrawingCreations.empty())
+        {
+            const FrameMapping & mapping = batch.mFrameMappings[0];
+            const DrawingHandleEntry * entry = iFindDrawingHandle(
+                mapping.mLayerId, mapping.mDrawingId);
+            LayerPaint * paint = entry != nullptr && entry->mLayer != nullptr &&
+                entry->mLayer->GetType() == Layer::Type::Paint ?
+                (LayerPaint *)entry->mLayer->GetImplementation() : nullptr;
+            if (paint == nullptr || mapping.mFrameIndex >= paint->GetNumFrames() ||
+                entry->mDrawingIndex >= paint->GetNumDrawings())
+            {
+                iRejectCommit(batch.mRevision, -6, 0, mapping.mDrawingId);
+                return;
+            }
+
+            if (status != nullptr)
+            {
+                status->mState = AuthoringCommitState::Prepared;
+                status->mObject = mapping.mDrawingId;
+            }
+            mPreparedRevision = batch.mRevision;
+            mPendingPresentation.mRevision = batch.mRevision;
+            mPendingPresentation.mObject = mapping.mDrawingId;
+            mPendingPresentation.mIsFrameMapping = true;
+            mPendingPresentation.mLayer = entry->mLayer;
+            mPendingPresentation.mDrawingIndex = entry->mDrawingIndex;
+            mPendingPresentation.mFrameIndex = mapping.mFrameIndex;
+            return;
+        }
+
+        if (!batch.mFrameMappings.empty() || batch.mGeometryEdits.size() != 1 ||
+            batch.mDrawingCreations.size() > 1 ||
             layerPaintRender == nullptr)
         {
             iRejectCommit(batch.mRevision, -3, 0, 0);
@@ -909,7 +1014,10 @@ namespace ImmPlayer
     {
         if (resultOut != nullptr)
             *resultOut = 0;
-        if (!mEditing || mOpenGeometryEdits.empty() ||
+        const bool hasGeometryEdit = mOpenGeometryEdits.size() == 1 && mOpenFrameMappings.empty();
+        const bool hasFrameMapping = mOpenFrameMappings.size() == 1 &&
+            mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty();
+        if (!mEditing || (!hasGeometryEdit && !hasFrameMapping) ||
             (!mOpenDrawingCreations.empty() &&
                 (mOpenDrawingCreations.size() != 1 ||
                     mOpenDrawingCreations[0].mLayerId != mOpenGeometryEdits[0].mLayerId ||
@@ -930,6 +1038,7 @@ namespace ImmPlayer
         batch.mRevision = ++mRequestedRevision;
         batch.mDrawingCreations.swap(mOpenDrawingCreations);
         batch.mGeometryEdits.swap(mOpenGeometryEdits);
+        batch.mFrameMappings.swap(mOpenFrameMappings);
         mSealedBatches.push_back(std::move(batch));
         mCommitStatuses.push_back(AuthoringCommitStatus{
             mRequestedRevision, AuthoringCommitState::Queued, 0, 0, 0 });
@@ -943,7 +1052,7 @@ namespace ImmPlayer
     {
         if (mPendingPresentation.mRevision == 0)
             return;
-        if (layerPaintRender != nullptr)
+        if (layerPaintRender != nullptr && !mPendingPresentation.mIsFrameMapping)
             layerPaintRender->CancelDrawingReplacement(
                 renderer, mPendingPresentation.mRendererToken, log);
         if (mPendingPresentation.mReplacement)

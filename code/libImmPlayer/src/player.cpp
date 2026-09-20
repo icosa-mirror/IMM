@@ -634,6 +634,15 @@ namespace ImmPlayer
             doc->GetDrawingHandle(static_cast<uint32_t>(layerId), static_cast<uint32_t>(drawingIndex), &drawingIdOut);
     }
 
+    bool Player::GetFrameDrawingHandle(int docId, int layerId, int frameIndex, uint64_t & drawingIdOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        return doc != nullptr && layerId >= 0 && frameIndex >= 0 &&
+            doc->GetFrameDrawingHandle(static_cast<uint32_t>(layerId),
+                static_cast<uint32_t>(frameIndex), &drawingIdOut);
+    }
+
     bool Player::GetDrawingBBox(int docId, int layerId, int drawingIndex, bound3 & bboxOut)
     {
         std::lock_guard<std::mutex> guard(mMutex);
@@ -672,6 +681,16 @@ namespace ImmPlayer
             return -1;
         return doc->QueueDrawingGeometry(
             layerId, drawingId, std::move(elements), colorSpace, flipped, biggestStroke);
+    }
+
+    int32_t Player::QueueFrameMapping(
+        int docId, uint32_t layerId, uint32_t frameIndex, uint64_t drawingId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document *doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueFrameMapping(layerId, frameIndex, drawingId);
     }
 
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)

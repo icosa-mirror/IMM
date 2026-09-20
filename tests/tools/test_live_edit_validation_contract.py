@@ -50,8 +50,18 @@ def main() -> int:
         "code/appImmViewer/src/viewer/liveEditValidation.cpp",
         [
             "player->QueueDrawingCreation(",
+            "player->QueueFrameMapping(",
             'L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "',
+            'L"[IMM_LIVE_EDIT_FRAME_SET] frame=%llu revision=%llu status=%d result=%d handleMatch=%d"',
             "drawingCountAfter=%d handleMatch=%d",
+        ],
+    )
+    require_tokens(
+        "code/appImmUnity/src/imm_authoring.h",
+        [
+            "ImmAuthoring_FrameSetHandle",
+            "int32_t frameIndex, uint64_t drawingId",
+            "int32_t frameIndex, int32_t drawingIndex",
         ],
     )
     require_tokens(

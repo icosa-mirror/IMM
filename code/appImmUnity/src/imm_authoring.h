@@ -150,6 +150,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingAdd(int32_t 
     float biggestStroke, int32_t colorSpace, int32_t frameIndex, int32_t * drawingIndexOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_FrameSet(int32_t docId, int32_t layerId,
     int32_t frameIndex, int32_t drawingIndex);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_FrameSetHandle(int32_t docId, int32_t layerId,
+    int32_t frameIndex, uint64_t drawingId);
 
 #ifdef __cplusplus
 }

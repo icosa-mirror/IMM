@@ -131,6 +131,7 @@ namespace ImmPlayer {
         bool GetAuthoringRevisions(int docId, Document::AuthoringRevisions & revisionsOut);
         bool GetAuthoringCommitStatus(int docId, uint64_t revision, Document::AuthoringCommitStatus & statusOut);
         bool GetDrawingHandle(int docId, int layerId, int drawingIndex, uint64_t & drawingIdOut);
+        bool GetFrameDrawingHandle(int docId, int layerId, int frameIndex, uint64_t & drawingIdOut);
         bool GetDrawingBBox(int docId, int layerId, int drawingIndex, ImmCore::bound3 & bboxOut);
 
         int32_t QueueDrawingCreation(int docId, uint32_t layerId, uint64_t & drawingIdOut);
@@ -138,6 +139,7 @@ namespace ImmPlayer {
         int32_t QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
             std::vector<Document::AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
+        int32_t QueueFrameMapping(int docId, uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
 
         struct LayerDiagnostics
         {

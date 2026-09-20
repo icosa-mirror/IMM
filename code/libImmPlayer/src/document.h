@@ -208,10 +208,12 @@ namespace ImmPlayer {
         };
 
         bool GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const;
+        bool GetFrameDrawingHandle(uint32_t layerId, uint32_t frameIndex, uint64_t * drawingIdOut) const;
         int32_t QueueDrawingCreation(uint32_t layerId, uint64_t * drawingIdOut);
         int32_t QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
+        int32_t QueueFrameMapping(uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -250,17 +252,26 @@ namespace ImmPlayer {
             uint64_t mDrawingId = 0;
         };
 
+        struct FrameMapping
+        {
+            uint32_t mLayerId = 0;
+            uint32_t mFrameIndex = 0;
+            uint64_t mDrawingId = 0;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
             std::vector<DrawingCreation> mDrawingCreations;
             std::vector<GeometryEdit> mGeometryEdits;
+            std::vector<FrameMapping> mFrameMappings;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
         uint64_t mNextDrawingHandle = 1;
         std::vector<DrawingCreation> mOpenDrawingCreations;
         std::vector<GeometryEdit> mOpenGeometryEdits;
+        std::vector<FrameMapping> mOpenFrameMappings;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -270,8 +281,10 @@ namespace ImmPlayer {
             uint64_t mRevision = 0;
             uint64_t mObject = 0;
             bool mIsCreation = false;
+            bool mIsFrameMapping = false;
             ImmImporter::Layer * mLayer = nullptr;
             uint32_t mDrawingIndex = 0;
+            uint32_t mFrameIndex = 0;
             ImmImporter::Drawing * mActive = nullptr;
             std::unique_ptr<ImmImporter::Drawing> mReplacement;
             uint64_t mRendererToken = 0;

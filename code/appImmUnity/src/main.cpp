@@ -2146,7 +2146,16 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Frame
     int32_t docId, int32_t layerId, int32_t frameIndex, int32_t drawingIndex)
 {
     (void)docId; (void)layerId; (void)frameIndex; (void)drawingIndex;
-    return IMM_AUTHORING_UNSUPPORTED; // frame remapping joins the batch model after stable created handles
+    return IMM_AUTHORING_UNSUPPORTED;
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSetHandle(
+    int32_t docId, int32_t layerId, int32_t frameIndex, uint64_t drawingId)
+{
+    if (layerId < 0 || frameIndex < 0 || drawingId == 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    return iPlayer().QueueFrameMapping(docId, static_cast<uint32_t>(layerId),
+        static_cast<uint32_t>(frameIndex), drawingId);
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingSetGeometry(
