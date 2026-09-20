@@ -157,6 +157,7 @@ namespace ImmImporter
 		bool PrepareChildPublication(void);
 		bool PublishPreparedChild(Layer * child);
 		bool RemovePublishedChild(Layer * child);
+		bool ReorderPublishedChild(Layer * child, uint32_t childIndex);
 		uint32_t GetNumAnimKeys(AnimProperty property) const;
 		const AnimKey* GetAnimKey(AnimProperty property, unsigned int index) const;
         bool GetLoaded(void) const;

@@ -1039,7 +1039,12 @@ run_case() {
             tail -n 80 "$log_path" >&2
             exit 1
         fi
-        if ! grep -Eq "\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=10 status=4 result=0 layerMissing=1 countRestored=1" "$log_path"; then
+        if ! grep -Eq "\[IMM_LIVE_EDIT_LAYER_REPARENT\].*revision=10 status=4 result=0 orderMatch=1" "$log_path"; then
+            echo "$name did not present the group-layer reorder revision" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
+        if ! grep -Eq "\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=11 status=4 result=0 layerMissing=1 countRestored=1" "$log_path"; then
             echo "$name did not present the empty group-layer deletion revision" >&2
             tail -n 80 "$log_path" >&2
             exit 1

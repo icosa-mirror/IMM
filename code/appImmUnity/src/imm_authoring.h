@@ -240,6 +240,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerCreate(int32_t
     int32_t * layerIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerDestroy(int32_t docId,
     int32_t layerId);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerReparent(int32_t docId,
+    int32_t layerId, int32_t parentLayerId, int32_t childIndex);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetProperties(int32_t docId, int32_t layerId,
     ImmAuthoringLayerProperties * propertiesOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetProperties(int32_t docId, int32_t layerId,

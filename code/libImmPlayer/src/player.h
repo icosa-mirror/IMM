@@ -159,6 +159,8 @@ namespace ImmPlayer {
         int32_t QueueGroupLayerCreation(int docId, uint32_t parentLayerId,
             std::wstring name, uint32_t & layerIdOut);
         int32_t QueueLayerDeletion(int docId, uint32_t layerId);
+        int32_t QueueLayerReparent(int docId, uint32_t layerId,
+            uint32_t parentLayerId, uint32_t childIndex);
 
         struct SpawnAreaDiagnostics
         {
@@ -270,6 +272,7 @@ namespace ImmPlayer {
             int id = -1;
             int type = 0;
             int parentId = -1;
+            int childIndex = -1;
             int isTimeline = 0;
             int isLoaded = 0;
             int isVisible = 0;

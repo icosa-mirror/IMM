@@ -83,7 +83,8 @@ public final class ImmFtlSmokeTest {
         requireMarker(logcat, "revision=7 status=4 result=0 initialLayerMatch=1");
         requireMarker(logcat, "revision=8 status=4 result=0 spawnAreaMatch=1");
         requireMarker(logcat, "revision=9 status=4 result=0 layerMatch=1 countChanged=1");
-        requireMarker(logcat, "revision=10 status=4 result=0 layerMissing=1 countRestored=1");
+        requireMarker(logcat, "revision=10 status=4 result=0 orderMatch=1");
+        requireMarker(logcat, "revision=11 status=4 result=0 layerMissing=1 countRestored=1");
         requireMarker(logcat, "Loaded in CPU");
         requireMarker(logcat, "Loaded in GPU");
 
@@ -183,7 +184,7 @@ public final class ImmFtlSmokeTest {
                             "transformOverridePreserved=1 transformEffectivePreserved=1") &&
                     logcat.contains("revision=5 status=4 result=0 keyCountChanged=1") &&
                     logcat.contains("revision=6 status=4 result=0 keyCountRestored=1") &&
-                    (logcat.contains("revision=10 status=4 result=0 layerMissing=1 countRestored=1") ||
+                    (logcat.contains("revision=11 status=4 result=0 layerMissing=1 countRestored=1") ||
                             logcat.contains("[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=") &&
                             logcat.contains("available=0"))) {
                 return logcat;

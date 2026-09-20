@@ -233,6 +233,8 @@ namespace ImmPlayer {
         int32_t QueueGroupLayerCreation(uint32_t parentLayerId, std::wstring name,
             uint32_t * layerIdOut);
         int32_t QueueLayerDeletion(uint32_t layerId);
+        int32_t QueueLayerReparent(uint32_t layerId, uint32_t parentLayerId,
+            uint32_t childIndex);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -333,6 +335,13 @@ namespace ImmPlayer {
             uint32_t mLayerId = 0;
         };
 
+        struct LayerReparent
+        {
+            uint32_t mLayerId = 0;
+            uint32_t mParentLayerId = 0;
+            uint32_t mChildIndex = 0;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -346,6 +355,7 @@ namespace ImmPlayer {
             std::vector<SpawnAreaEdit> mSpawnAreaEdits;
             std::vector<LayerCreation> mLayerCreations;
             std::vector<LayerDeletion> mLayerDeletions;
+            std::vector<LayerReparent> mLayerReparents;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -361,6 +371,7 @@ namespace ImmPlayer {
         std::vector<SpawnAreaEdit> mOpenSpawnAreaEdits;
         std::vector<LayerCreation> mOpenLayerCreations;
         std::vector<LayerDeletion> mOpenLayerDeletions;
+        std::vector<LayerReparent> mOpenLayerReparents;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -378,11 +389,13 @@ namespace ImmPlayer {
             bool mIsSpawnAreaEdit = false;
             bool mIsLayerCreation = false;
             bool mIsLayerDeletion = false;
+            bool mIsLayerReparent = false;
             ImmImporter::LayerSpawnArea::Volume mSpawnAreaVolume = {};
             ImmImporter::LayerSpawnArea::TrackingLevel mSpawnAreaTracking =
                 ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
             ImmCore::trans3d mSpawnAreaTransform = ImmCore::trans3d::identity();
             ImmImporter::Layer * mLayerCreationParent = nullptr;
+            uint32_t mLayerChildIndex = 0;
             std::unique_ptr<ImmImporter::Layer> mCreatedLayer;
             ImmImporter::Layer::AnimProperty mAnimationProperty =
                 ImmImporter::Layer::AnimProperty::Visibility;

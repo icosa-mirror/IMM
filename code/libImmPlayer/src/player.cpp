@@ -429,11 +429,13 @@ namespace ImmPlayer
             return false;
         int current = 0;
         Layer *target = nullptr;
+        int targetChildIndex = -1;
         sq->Recurse([&](Layer* layer, int level, int child, bool instance) -> bool
             {
                 if (current == index)
                 {
                     target = layer;
+                    targetChildIndex = child;
                     return false;
                 }
                 current++;
@@ -448,6 +450,7 @@ namespace ImmPlayer
         info.type = (int)target->GetType();
         Layer *parent = target->GetParent();
         info.parentId = parent ? (int)parent->GetID() : -1;
+        info.childIndex = targetChildIndex;
         info.isTimeline = target->GetIsTimeline() ? 1 : 0;
         info.isLoaded = target->GetLoaded() ? 1 : 0;
         info.isVisible = target->GetWorldVisible() ? 1 : 0;
@@ -790,6 +793,16 @@ namespace ImmPlayer
         if (doc == nullptr)
             return -1;
         return doc->QueueLayerDeletion(layerId);
+    }
+
+    int32_t Player::QueueLayerReparent(int docId, uint32_t layerId,
+        uint32_t parentLayerId, uint32_t childIndex)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueLayerReparent(layerId, parentLayerId, childIndex);
     }
 
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)

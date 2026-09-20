@@ -104,6 +104,7 @@ namespace ImmPlayer
         mOpenSpawnAreaEdits.clear();
         mOpenLayerCreations.clear();
         mOpenLayerDeletions.clear();
+        mOpenLayerReparents.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
         mDrawingHandles.clear();
@@ -520,7 +521,31 @@ namespace ImmPlayer
         {
             const uint64_t revision = mPendingPresentation.mRevision;
             AuthoringCommitStatus * status = iFindCommitStatus(revision);
-            if (mPendingPresentation.mIsLayerDeletion)
+            if (mPendingPresentation.mIsLayerReparent)
+            {
+                Layer * layer = mPendingPresentation.mLayer;
+                Layer * parent = mPendingPresentation.mLayerCreationParent;
+                const uint64_t layerId = mPendingPresentation.mObject;
+                if (layer == nullptr || parent == nullptr ||
+                    !parent->ReorderPublishedChild(
+                        layer, mPendingPresentation.mLayerChildIndex))
+                {
+                    iRejectCommit(revision, -6, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
+                }
+                else
+                {
+                    mPendingPresentation = PendingPresentation{};
+                    if (status != nullptr)
+                        status->mState = AuthoringCommitState::Presented;
+                    mPresentedRevision = revision;
+                    log->Printf(LT_MESSAGE,
+                        L"[IMM_LIVE_EDIT] presented revision=%llu reorderedLayer=%llu",
+                        static_cast<unsigned long long>(revision),
+                        static_cast<unsigned long long>(layerId));
+                }
+            }
+            else if (mPendingPresentation.mIsLayerDeletion)
             {
                 Layer * layer = mPendingPresentation.mLayer;
                 Layer * parent = mPendingPresentation.mLayerCreationParent;
@@ -914,6 +939,7 @@ namespace ImmPlayer
             !mOpenSpawnAreaEdits.empty() ||
             !mOpenLayerCreations.empty() ||
             !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty() ||
             mPendingPresentation.mRevision != 0)
             return false;
 
@@ -937,6 +963,7 @@ namespace ImmPlayer
         mOpenSpawnAreaEdits.clear();
         mOpenLayerCreations.clear();
         mOpenLayerDeletions.clear();
+        mOpenLayerReparents.clear();
         return true;
     }
 
@@ -1025,7 +1052,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
 
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
@@ -1049,7 +1077,8 @@ namespace ImmPlayer
             mOpenFrameMappings.size() > 1 || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
 
         const DrawingHandleEntry * entry = iFindDrawingHandle(layerId, drawingId);
@@ -1095,7 +1124,8 @@ namespace ImmPlayer
         if (!mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
 
         // This first vertical slice intentionally permits one replacement per batch. It keeps
@@ -1122,7 +1152,8 @@ namespace ImmPlayer
         if (!mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
 
         if (!mOpenDrawingCreations.empty())
@@ -1173,7 +1204,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
@@ -1215,7 +1247,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
@@ -1266,7 +1299,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         if (iFindAuthoringLayerById(mSequence.GetRoot(), layerId) == nullptr)
             return -1;
@@ -1291,7 +1325,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
@@ -1312,7 +1347,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
@@ -1374,7 +1410,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         Layer * parent = iFindAuthoringLayerById(mSequence.GetRoot(), parentLayerId);
         if (parent == nullptr)
@@ -1399,7 +1436,8 @@ namespace ImmPlayer
             !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
             !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
-            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty())
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
             return -7;
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
@@ -1408,6 +1446,29 @@ namespace ImmPlayer
             layer->GetNumChildren() != 0 || layer->GetParent() == nullptr)
             return -3;
         mOpenLayerDeletions.push_back(LayerDeletion{ layerId });
+        return 0;
+    }
+
+    int32_t Document::QueueLayerReparent(uint32_t layerId, uint32_t parentLayerId,
+        uint32_t childIndex)
+    {
+        if (!mEditing)
+            return -4;
+        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty() ||
+            !mOpenInitialSpawnAreaEdits.empty() || !mOpenSpawnAreaEdits.empty() ||
+            !mOpenLayerCreations.empty() || !mOpenLayerDeletions.empty() ||
+            !mOpenLayerReparents.empty())
+            return -7;
+        Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
+        Layer * parent = iFindAuthoringLayerById(mSequence.GetRoot(), parentLayerId);
+        if (layer == nullptr || parent == nullptr)
+            return -1;
+        if (layer == mSequence.GetRoot() || layer->GetParent() != parent ||
+            parent->GetType() != Layer::Type::Group || childIndex >= parent->GetNumChildren())
+            return -3;
+        mOpenLayerReparents.push_back(LayerReparent{ layerId, parentLayerId, childIndex });
         return 0;
     }
 
@@ -1472,6 +1533,7 @@ namespace ImmPlayer
         mOpenSpawnAreaEdits.clear();
         mOpenLayerCreations.clear();
         mOpenLayerDeletions.clear();
+        mOpenLayerReparents.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
         mDrawingHandles.clear();
@@ -1489,7 +1551,46 @@ namespace ImmPlayer
         if (status != nullptr)
             status->mState = AuthoringCommitState::Preparing;
 
+        if (batch.mLayerReparents.size() == 1 && batch.mLayerDeletions.empty() &&
+            batch.mLayerCreations.empty() && batch.mSpawnAreaEdits.empty() &&
+            batch.mInitialSpawnAreaEdits.empty() && batch.mAnimationKeyEdits.empty() &&
+            batch.mLayerPropertyEdits.empty() && batch.mDrawingDeletions.empty() &&
+            batch.mFrameMappings.empty() && batch.mGeometryEdits.empty() &&
+            batch.mDrawingCreations.empty())
+        {
+            const LayerReparent & reparent = batch.mLayerReparents[0];
+            Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), reparent.mLayerId);
+            Layer * parent = iFindAuthoringLayerById(
+                mSequence.GetRoot(), reparent.mParentLayerId);
+            if (layer == nullptr || parent == nullptr)
+            {
+                iRejectCommit(batch.mRevision, -1, 0, reparent.mLayerId);
+                return;
+            }
+            if (layer == mSequence.GetRoot() || layer->GetParent() != parent ||
+                parent->GetType() != Layer::Type::Group ||
+                reparent.mChildIndex >= parent->GetNumChildren())
+            {
+                iRejectCommit(batch.mRevision, -3, 0, reparent.mLayerId);
+                return;
+            }
+            if (status != nullptr)
+            {
+                status->mState = AuthoringCommitState::Prepared;
+                status->mObject = reparent.mLayerId;
+            }
+            mPreparedRevision = batch.mRevision;
+            mPendingPresentation.mRevision = batch.mRevision;
+            mPendingPresentation.mObject = reparent.mLayerId;
+            mPendingPresentation.mIsLayerReparent = true;
+            mPendingPresentation.mLayer = layer;
+            mPendingPresentation.mLayerCreationParent = parent;
+            mPendingPresentation.mLayerChildIndex = reparent.mChildIndex;
+            return;
+        }
+
         if (batch.mLayerDeletions.size() == 1 && batch.mLayerCreations.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mSpawnAreaEdits.empty() && batch.mInitialSpawnAreaEdits.empty() &&
             batch.mAnimationKeyEdits.empty() && batch.mLayerPropertyEdits.empty() &&
             batch.mDrawingDeletions.empty() && batch.mFrameMappings.empty() &&
@@ -1525,6 +1626,7 @@ namespace ImmPlayer
 
         if (batch.mLayerCreations.size() == 1 && batch.mSpawnAreaEdits.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mInitialSpawnAreaEdits.empty() && batch.mAnimationKeyEdits.empty() &&
             batch.mLayerPropertyEdits.empty() && batch.mDrawingDeletions.empty() &&
             batch.mFrameMappings.empty() && batch.mGeometryEdits.empty() &&
@@ -1575,6 +1677,7 @@ namespace ImmPlayer
         if (batch.mSpawnAreaEdits.size() == 1 &&
             batch.mLayerCreations.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mInitialSpawnAreaEdits.empty() && batch.mAnimationKeyEdits.empty() &&
             batch.mLayerPropertyEdits.empty() && batch.mDrawingDeletions.empty() &&
             batch.mFrameMappings.empty() && batch.mGeometryEdits.empty() &&
@@ -1613,6 +1716,7 @@ namespace ImmPlayer
             batch.mSpawnAreaEdits.empty() &&
             batch.mLayerCreations.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mAnimationKeyEdits.empty() && batch.mLayerPropertyEdits.empty() &&
             batch.mDrawingDeletions.empty() && batch.mFrameMappings.empty() &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
@@ -1647,6 +1751,7 @@ namespace ImmPlayer
             batch.mSpawnAreaEdits.empty() &&
             batch.mLayerCreations.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mDrawingDeletions.empty() && batch.mFrameMappings.empty() &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
@@ -1697,6 +1802,7 @@ namespace ImmPlayer
             batch.mSpawnAreaEdits.empty() &&
             batch.mLayerCreations.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mDrawingDeletions.empty() &&
             batch.mFrameMappings.empty() && batch.mGeometryEdits.empty() &&
             batch.mDrawingCreations.empty())
@@ -1733,6 +1839,7 @@ namespace ImmPlayer
             batch.mSpawnAreaEdits.empty() &&
             batch.mLayerCreations.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const DrawingDeletion & deletion = batch.mDrawingDeletions[0];
@@ -1801,6 +1908,7 @@ namespace ImmPlayer
             batch.mSpawnAreaEdits.empty() &&
             batch.mLayerCreations.empty() &&
             batch.mLayerDeletions.empty() &&
+            batch.mLayerReparents.empty() &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const FrameMapping & mapping = batch.mFrameMappings[0];
@@ -1840,6 +1948,7 @@ namespace ImmPlayer
             !batch.mSpawnAreaEdits.empty() ||
             !batch.mLayerCreations.empty() ||
             !batch.mLayerDeletions.empty() ||
+            !batch.mLayerReparents.empty() ||
             !batch.mDrawingDeletions.empty() ||
             (!batch.mFrameMappings.empty() && !hasCreationFrameMapping) ||
             batch.mGeometryEdits.size() != 1 ||
@@ -1965,60 +2074,67 @@ namespace ImmPlayer
             mOpenSpawnAreaEdits.empty() &&
             mOpenLayerCreations.empty() &&
             mOpenLayerDeletions.empty() &&
+            mOpenLayerReparents.empty() &&
             (mOpenFrameMappings.empty() || creationTargetsMapping);
         const bool hasFrameMapping = mOpenFrameMappings.size() == 1 &&
             mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
             mOpenDrawingDeletions.size() <= 1 && mOpenLayerPropertyEdits.empty() &&
             mOpenAnimationKeyEdits.empty() && mOpenInitialSpawnAreaEdits.empty() &&
             mOpenSpawnAreaEdits.empty() && mOpenLayerCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasDrawingDeletion = mOpenDrawingDeletions.size() == 1 &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
             mOpenDrawingCreations.empty() && mOpenLayerPropertyEdits.empty() &&
             mOpenAnimationKeyEdits.empty() && mOpenInitialSpawnAreaEdits.empty() &&
             mOpenSpawnAreaEdits.empty() && mOpenLayerCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasLayerPropertyEdit = mOpenLayerPropertyEdits.size() == 1 &&
             mOpenDrawingDeletions.empty() && mOpenFrameMappings.empty() &&
             mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
             mOpenAnimationKeyEdits.empty() && mOpenInitialSpawnAreaEdits.empty() &&
             mOpenSpawnAreaEdits.empty() && mOpenLayerCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasAnimationKeyEdit = mOpenAnimationKeyEdits.size() == 1 &&
             mOpenLayerPropertyEdits.empty() && mOpenDrawingDeletions.empty() &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
             mOpenDrawingCreations.empty() && mOpenInitialSpawnAreaEdits.empty() &&
             mOpenSpawnAreaEdits.empty() && mOpenLayerCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasInitialSpawnAreaEdit = mOpenInitialSpawnAreaEdits.size() == 1 &&
             mOpenAnimationKeyEdits.empty() && mOpenLayerPropertyEdits.empty() &&
             mOpenDrawingDeletions.empty() && mOpenFrameMappings.empty() &&
             mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
             mOpenSpawnAreaEdits.empty() && mOpenLayerCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasSpawnAreaEdit = mOpenSpawnAreaEdits.size() == 1 &&
             mOpenInitialSpawnAreaEdits.empty() && mOpenAnimationKeyEdits.empty() &&
             mOpenLayerPropertyEdits.empty() && mOpenDrawingDeletions.empty() &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
             mOpenDrawingCreations.empty() && mOpenLayerCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasLayerCreation = mOpenLayerCreations.size() == 1 &&
             mOpenSpawnAreaEdits.empty() && mOpenInitialSpawnAreaEdits.empty() &&
             mOpenAnimationKeyEdits.empty() && mOpenLayerPropertyEdits.empty() &&
             mOpenDrawingDeletions.empty() && mOpenFrameMappings.empty() &&
             mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
-            mOpenLayerDeletions.empty();
+            mOpenLayerDeletions.empty() && mOpenLayerReparents.empty();
         const bool hasLayerDeletion = mOpenLayerDeletions.size() == 1 &&
             mOpenLayerCreations.empty() && mOpenSpawnAreaEdits.empty() &&
             mOpenInitialSpawnAreaEdits.empty() && mOpenAnimationKeyEdits.empty() &&
             mOpenLayerPropertyEdits.empty() && mOpenDrawingDeletions.empty() &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
-            mOpenDrawingCreations.empty();
+            mOpenDrawingCreations.empty() && mOpenLayerReparents.empty();
+        const bool hasLayerReparent = mOpenLayerReparents.size() == 1 &&
+            mOpenLayerCreations.empty() && mOpenLayerDeletions.empty() &&
+            mOpenSpawnAreaEdits.empty() && mOpenInitialSpawnAreaEdits.empty() &&
+            mOpenAnimationKeyEdits.empty() && mOpenLayerPropertyEdits.empty() &&
+            mOpenDrawingDeletions.empty() && mOpenFrameMappings.empty() &&
+            mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty();
         if (!mEditing ||
             (!hasGeometryEdit && !hasFrameMapping && !hasDrawingDeletion &&
                 !hasLayerPropertyEdit && !hasAnimationKeyEdit &&
                 !hasInitialSpawnAreaEdit && !hasSpawnAreaEdit && !hasLayerCreation &&
-                !hasLayerDeletion) ||
+                !hasLayerDeletion && !hasLayerReparent) ||
             (!mOpenDrawingCreations.empty() &&
                 (!creationTargetsGeometry || !creationTargetsMapping)))
         {
@@ -2045,6 +2161,7 @@ namespace ImmPlayer
         batch.mSpawnAreaEdits.swap(mOpenSpawnAreaEdits);
         batch.mLayerCreations.swap(mOpenLayerCreations);
         batch.mLayerDeletions.swap(mOpenLayerDeletions);
+        batch.mLayerReparents.swap(mOpenLayerReparents);
         mSealedBatches.push_back(std::move(batch));
         mCommitStatuses.push_back(AuthoringCommitStatus{
             mRequestedRevision, AuthoringCommitState::Queued, 0, 0, 0 });
@@ -2064,7 +2181,8 @@ namespace ImmPlayer
             !mPendingPresentation.mIsInitialSpawnAreaEdit &&
             !mPendingPresentation.mIsSpawnAreaEdit &&
             !mPendingPresentation.mIsLayerCreation &&
-            !mPendingPresentation.mIsLayerDeletion)
+            !mPendingPresentation.mIsLayerDeletion &&
+            !mPendingPresentation.mIsLayerReparent)
             layerPaintRender->CancelDrawingReplacement(
                 renderer, mPendingPresentation.mRendererToken, log);
         if (mPendingPresentation.mReplacement)
