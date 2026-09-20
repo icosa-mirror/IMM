@@ -88,9 +88,10 @@ def main() -> int:
             'L"[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=%llu revision=%llu status=%d result=%d initialLayerMatch=%d"',
             'L"[IMM_LIVE_EDIT_SPAWN_AREA] frame=%llu revision=%llu status=%d result=%d spawnAreaMatch=%d"',
             'L"[IMM_LIVE_EDIT_LAYER_CREATE] frame=%llu revision=%llu status=%d result=%d layerMatch=%d countChanged=%d"',
+            'L"[IMM_LIVE_EDIT_LAYER_CHILD_CREATE] frame=%llu revision=%llu status=%d result=%d childMatch=%d countChanged=%d"',
             'L"[IMM_LIVE_EDIT_LAYER_REPARENT] frame=%llu revision=%llu status=%d result=%d orderMatch=%d"',
             'L"[IMM_LIVE_EDIT_LAYER_CROSS_PARENT] frame=%llu revision=%llu status=%d result=%d hierarchyMatch=%d"',
-            'L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu revision=%llu status=%d result=%d layerMissing=%d countRestored=%d"',
+            'L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu revision=%llu status=%d result=%d subtreeMissing=%d countRestored=%d"',
         ],
     )
     require_tokens(
@@ -104,9 +105,10 @@ def main() -> int:
             r"\[IMM_LIVE_EDIT_INITIAL_SPAWN\].*revision=7 status=4 result=0 initialLayerMatch=1",
             r"\[IMM_LIVE_EDIT_SPAWN_AREA\].*revision=8 status=4 result=0 spawnAreaMatch=1",
             r"\[IMM_LIVE_EDIT_LAYER_CREATE\].*revision=9 status=4 result=0 layerMatch=1 countChanged=1",
-            r"\[IMM_LIVE_EDIT_LAYER_REPARENT\].*revision=10 status=4 result=0 orderMatch=1",
-            r"\[IMM_LIVE_EDIT_LAYER_CROSS_PARENT\].*revision=11 status=4 result=0 hierarchyMatch=1",
-            r"\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=12 status=4 result=0 layerMissing=1 countRestored=1",
+            r"\[IMM_LIVE_EDIT_LAYER_CHILD_CREATE\].*revision=10 status=4 result=0 childMatch=1 countChanged=1",
+            r"\[IMM_LIVE_EDIT_LAYER_REPARENT\].*revision=11 status=4 result=0 orderMatch=1",
+            r"\[IMM_LIVE_EDIT_LAYER_CROSS_PARENT\].*revision=12 status=4 result=0 hierarchyMatch=1",
+            r"\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=13 status=4 result=0 subtreeMissing=1 countRestored=1",
         ],
     )
     require_tokens(

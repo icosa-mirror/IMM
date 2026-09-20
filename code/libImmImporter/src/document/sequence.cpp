@@ -131,6 +131,51 @@ bool Sequence::RemovePublishedLayer(Layer * layer)
     return false;
 }
 
+bool Sequence::RemovePublishedLayers(Layer * const * layers, uint32_t count)
+{
+    if (layers == nullptr || count == 0)
+        return false;
+    for (uint32_t candidateIndex = 0; candidateIndex < count; candidateIndex++)
+    {
+        Layer * candidate = layers[candidateIndex];
+        if (candidate == nullptr || candidate == mRoot)
+            return false;
+        bool found = false;
+        for (uint64_t layerIndex = 0; layerIndex < mLayers.GetLength(); layerIndex++)
+        {
+            if (mLayers.Get(layerIndex) == candidate)
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            return false;
+    }
+
+    uint64_t writeIndex = 0;
+    for (uint64_t layerIndex = 0; layerIndex < mLayers.GetLength(); layerIndex++)
+    {
+        Layer * current = mLayers.Get(layerIndex);
+        bool remove = false;
+        for (uint32_t candidateIndex = 0; candidateIndex < count; candidateIndex++)
+        {
+            if (layers[candidateIndex] == current)
+            {
+                remove = true;
+                break;
+            }
+        }
+        if (!remove)
+        {
+            mLayers.Set(current, writeIndex);
+            writeIndex++;
+        }
+    }
+    mLayers.SetLength(writeIndex);
+    return true;
+}
+
 uint32_t Sequence::GetLayerStorageCount(void) const
 {
     return static_cast<uint32_t>(mLayers.GetLength());

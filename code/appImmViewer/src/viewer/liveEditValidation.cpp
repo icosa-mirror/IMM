@@ -187,26 +187,27 @@ namespace ExePlayer
             const bool hasDeletionStatus = mGroupLayerDeletionRevision != 0 &&
                 player->GetAuthoringCommitStatus(
                     mDocumentId, mGroupLayerDeletionRevision, deletionStatus);
-            bool layerMissing = true;
+            bool subtreeMissing = true;
             for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
             {
                 ImmPlayer::Player::LayerInfo info;
                 if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
-                    info.id == mCreatedGroupLayerId)
+                    (info.id == mCreatedGroupLayerId ||
+                        info.id == mCreatedGroupChildLayerId))
                 {
-                    layerMissing = false;
+                    subtreeMissing = false;
                     break;
                 }
             }
             const bool countRestored = player->GetLayerCount(mDocumentId) ==
                 mLayerCountBeforeGroupCreation;
             log->Printf(LT_MESSAGE,
-                L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu revision=%llu status=%d result=%d layerMissing=%d countRestored=%d",
+                L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu revision=%llu status=%d result=%d subtreeMissing=%d countRestored=%d",
                 static_cast<unsigned long long>(frame),
                 static_cast<unsigned long long>(mGroupLayerDeletionRevision),
                 hasDeletionStatus ? static_cast<int>(deletionStatus.mState) : -1,
                 hasDeletionStatus ? deletionStatus.mResult : -1,
-                layerMissing ? 1 : 0, countRestored ? 1 : 0);
+                subtreeMissing ? 1 : 0, countRestored ? 1 : 0);
             return;
         }
 
@@ -312,6 +313,56 @@ namespace ExePlayer
             return;
         }
 
+        if (mGroupLayerChildQueued)
+        {
+            if (frame < mGroupLayerChildFrame + 3)
+                return;
+            ImmPlayer::Document::AuthoringCommitStatus childStatus;
+            const bool hasChildStatus = mGroupLayerChildRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mGroupLayerChildRevision, childStatus);
+            bool childMatch = false;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
+                    info.id == mCreatedGroupChildLayerId)
+                {
+                    childMatch = info.type == static_cast<int>(
+                        ImmImporter::Layer::Type::Group) &&
+                        info.parentId == mCreatedGroupLayerId;
+                    break;
+                }
+            }
+            const bool countChanged = player->GetLayerCount(mDocumentId) ==
+                mLayerCountBeforeGroupCreation + 2;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_CHILD_CREATE] frame=%llu revision=%llu status=%d result=%d childMatch=%d countChanged=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mGroupLayerChildRevision),
+                hasChildStatus ? static_cast<int>(childStatus.mState) : -1,
+                hasChildStatus ? childStatus.mResult : -1,
+                childMatch ? 1 : 0, countChanged ? 1 : 0);
+            const bool childSucceeded = hasChildStatus &&
+                childStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                childStatus.mResult == 0 && childMatch && countChanged;
+            const int32_t reorderResult = childSucceeded ?
+                player->QueueLayerReparent(mDocumentId,
+                    static_cast<uint32_t>(mCreatedGroupLayerId),
+                    static_cast<uint32_t>(mCreatedGroupParentId), 0) : -4;
+            const uint64_t reorderRevision = reorderResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_REPARENT] frame=%llu layer=%d parent=%d childIndex=0 reparentResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mCreatedGroupLayerId,
+                mCreatedGroupParentId, reorderResult,
+                static_cast<unsigned long long>(reorderRevision));
+            mGroupLayerReorderQueued = true;
+            mGroupLayerReorderFrame = frame;
+            mGroupLayerReorderRevision = reorderRevision;
+            return;
+        }
+
         if (mGroupLayerQueued)
         {
             if (frame < mGroupLayerFrame + 3)
@@ -345,20 +396,21 @@ namespace ExePlayer
             const bool creationSucceeded = hasCreationStatus &&
                 creationStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
                 creationStatus.mResult == 0 && layerMatch && countChanged;
-            const int32_t reorderResult = creationSucceeded ?
-                player->QueueLayerReparent(mDocumentId,
+            uint32_t childLayerId = 0;
+            const int32_t childResult = creationSucceeded ?
+                player->QueueGroupLayerCreation(mDocumentId,
                     static_cast<uint32_t>(mCreatedGroupLayerId),
-                    static_cast<uint32_t>(mCreatedGroupParentId), 0) : -4;
-            const uint64_t reorderRevision = reorderResult == 0 ?
+                    L"LiveEditChildGroup", childLayerId) : -4;
+            const uint64_t childRevision = childResult == 0 ?
                 player->CommitEdits(mDocumentId) : 0;
             log->Printf(LT_MESSAGE,
-                L"[IMM_LIVE_EDIT_LAYER_REPARENT] frame=%llu layer=%d parent=%d childIndex=0 reparentResult=%d revision=%llu",
+                L"[IMM_LIVE_EDIT_LAYER_CHILD_CREATE] frame=%llu parent=%d layer=%u createResult=%d revision=%llu",
                 static_cast<unsigned long long>(frame), mCreatedGroupLayerId,
-                mCreatedGroupParentId, reorderResult,
-                static_cast<unsigned long long>(reorderRevision));
-            mGroupLayerReorderQueued = true;
-            mGroupLayerReorderFrame = frame;
-            mGroupLayerReorderRevision = reorderRevision;
+                childLayerId, childResult, static_cast<unsigned long long>(childRevision));
+            mGroupLayerChildQueued = true;
+            mGroupLayerChildFrame = frame;
+            mGroupLayerChildRevision = childRevision;
+            mCreatedGroupChildLayerId = static_cast<int>(childLayerId);
             return;
         }
 

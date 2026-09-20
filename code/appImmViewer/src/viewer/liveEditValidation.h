@@ -34,6 +34,7 @@ namespace ExePlayer
         bool mInitialSpawnAreaQueued = false;
         bool mSpawnAreaQueued = false;
         bool mGroupLayerQueued = false;
+        bool mGroupLayerChildQueued = false;
         bool mGroupLayerReorderQueued = false;
         bool mGroupLayerCrossParentQueued = false;
         bool mGroupLayerDeletionQueued = false;
@@ -65,11 +66,14 @@ namespace ExePlayer
         ImmCore::trans3d mTargetSpawnAreaTransform = ImmCore::trans3d::identity();
         uint64_t mGroupLayerFrame = 0;
         uint64_t mGroupLayerRevision = 0;
+        uint64_t mGroupLayerChildFrame = 0;
+        uint64_t mGroupLayerChildRevision = 0;
         uint64_t mGroupLayerReorderFrame = 0;
         uint64_t mGroupLayerReorderRevision = 0;
         uint64_t mGroupLayerCrossParentFrame = 0;
         uint64_t mGroupLayerCrossParentRevision = 0;
         int mCreatedGroupLayerId = -1;
+        int mCreatedGroupChildLayerId = -1;
         int mCreatedGroupParentId = -1;
         int mGroupLayerReparentTargetId = -1;
         int mLayerCountBeforeGroupCreation = 0;

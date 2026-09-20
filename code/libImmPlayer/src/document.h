@@ -421,6 +421,7 @@ namespace ImmPlayer {
             bool mSetLayerTransform = false;
             ImmCore::trans3d mLayerTransform = ImmCore::trans3d::identity();
             ImmImporter::Layer * mLayer = nullptr;
+            std::vector<ImmImporter::Layer *> mDeletedLayers;
             uint32_t mDrawingIndex = 0;
             uint32_t mFrameIndex = 0;
             uint32_t mMappedDrawingIndex = 0;

@@ -599,10 +599,14 @@ namespace ImmPlayer
                 Layer * parent = mPendingPresentation.mLayerCreationParent;
                 const uint64_t layerId = mPendingPresentation.mObject;
                 bool removed = layer != nullptr && parent != nullptr &&
-                    mSequence.RemovePublishedLayer(layer);
-                if (removed && !parent->RemovePublishedChild(layer))
+                    !mPendingPresentation.mDeletedLayers.empty() &&
+                    parent->RemovePublishedChild(layer);
+                if (removed && !mSequence.RemovePublishedLayers(
+                    mPendingPresentation.mDeletedLayers.data(),
+                    static_cast<uint32_t>(mPendingPresentation.mDeletedLayers.size())))
                 {
-                    mSequence.PublishPreparedLayer(layer);
+                    parent->InsertPreparedChild(
+                        layer, mPendingPresentation.mLayerPreviousChildIndex);
                     removed = false;
                 }
                 if (!removed)
@@ -613,15 +617,19 @@ namespace ImmPlayer
                 else
                 {
                     layer->Deinit(log);
-                    delete layer;
+                    const uint32_t deletedLayerCount = static_cast<uint32_t>(
+                        mPendingPresentation.mDeletedLayers.size());
+                    for (auto deleted = mPendingPresentation.mDeletedLayers.rbegin();
+                        deleted != mPendingPresentation.mDeletedLayers.rend(); deleted++)
+                        delete *deleted;
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         status->mState = AuthoringCommitState::Presented;
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] presented revision=%llu deletedGroupLayer=%llu",
+                        L"[IMM_LIVE_EDIT] presented revision=%llu deletedGroupLayer=%llu subtreeLayers=%u",
                         static_cast<unsigned long long>(revision),
-                        static_cast<unsigned long long>(layerId));
+                        static_cast<unsigned long long>(layerId), deletedLayerCount);
                 }
             }
             else if (mPendingPresentation.mIsLayerCreation)
@@ -1490,8 +1498,21 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        if (layer == mSequence.GetRoot() || layer->GetType() != Layer::Type::Group ||
-            layer->GetNumChildren() != 0 || layer->GetParent() == nullptr)
+        if (layer == mSequence.GetRoot() || layer->GetParent() == nullptr)
+            return -3;
+        std::function<bool(Layer *)> isDeletableGroupSubtree;
+        isDeletableGroupSubtree = [&](Layer * current)
+        {
+            if (current->GetType() != Layer::Type::Group || current->GetIsTimeline())
+                return false;
+            for (uint32_t index = 0; index < current->GetNumChildren(); index++)
+            {
+                if (!isDeletableGroupSubtree(current->GetChild(index)))
+                    return false;
+            }
+            return true;
+        };
+        if (!isDeletableGroupSubtree(layer))
             return -3;
         mOpenLayerDeletions.push_back(LayerDeletion{ layerId });
         return 0;
@@ -1736,10 +1757,46 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, deletion.mLayerId);
                 return;
             }
-            if (layer == mSequence.GetRoot() || layer->GetType() != Layer::Type::Group ||
-                layer->GetNumChildren() != 0 || parent == nullptr)
+            if (layer == mSequence.GetRoot() || parent == nullptr)
             {
                 iRejectCommit(batch.mRevision, -3, 0, deletion.mLayerId);
+                return;
+            }
+            uint32_t previousChildIndex = UINT32_MAX;
+            for (uint32_t index = 0; index < parent->GetNumChildren(); index++)
+            {
+                if (parent->GetChild(index) == layer)
+                {
+                    previousChildIndex = index;
+                    break;
+                }
+            }
+            std::vector<Layer *> deletedLayers;
+            try
+            {
+                std::function<bool(Layer *)> collectSubtree;
+                collectSubtree = [&](Layer * current)
+                {
+                    if (current->GetType() != Layer::Type::Group ||
+                        current->GetIsTimeline())
+                        return false;
+                    deletedLayers.push_back(current);
+                    for (uint32_t index = 0; index < current->GetNumChildren(); index++)
+                    {
+                        if (!collectSubtree(current->GetChild(index)))
+                            return false;
+                    }
+                    return true;
+                };
+                if (previousChildIndex == UINT32_MAX || !collectSubtree(layer))
+                {
+                    iRejectCommit(batch.mRevision, -3, 0, deletion.mLayerId);
+                    return;
+                }
+            }
+            catch (const std::bad_alloc &)
+            {
+                iRejectCommit(batch.mRevision, -5, 0, deletion.mLayerId);
                 return;
             }
             if (status != nullptr)
@@ -1753,6 +1810,8 @@ namespace ImmPlayer
             mPendingPresentation.mIsLayerDeletion = true;
             mPendingPresentation.mLayer = layer;
             mPendingPresentation.mLayerCreationParent = parent;
+            mPendingPresentation.mLayerPreviousChildIndex = previousChildIndex;
+            mPendingPresentation.mDeletedLayers = std::move(deletedLayers);
             return;
         }
 

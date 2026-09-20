@@ -47,6 +47,7 @@ public:
     bool PublishPreparedLayer(Layer * layer);
     bool RollbackPreparedLayer(Layer * layer);
     bool RemovePublishedLayer(Layer * layer);
+    bool RemovePublishedLayers(Layer * const * layers, uint32_t count);
     uint32_t GetLayerStorageCount(void) const;
     Layer* FindLayerByFullName(const wchar_t* name);
 	bool   AddAsset(uint64_t offset, uint64_t size);
