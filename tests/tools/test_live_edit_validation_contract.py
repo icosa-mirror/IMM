@@ -48,6 +48,7 @@ def main() -> int:
             "ImmAuthoring_DrawingCreate",
             "ImmAuthoring_DrawingDestroy",
             "ImmAuthoring_FrameGetDrawingHandle",
+            "ImmAuthoring_LayerGetProperties",
             "ImmAuthoring_LayerSetProperties",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",

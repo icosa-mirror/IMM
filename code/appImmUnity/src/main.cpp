@@ -2096,6 +2096,40 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCo
     return IMM_AUTHORING_OK;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetProperties(
+    int32_t docId, int32_t layerId, ImmAuthoringLayerProperties *propertiesOut)
+{
+    if (layerId < 0 || propertiesOut == nullptr ||
+        propertiesOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
+        propertiesOut->structSize < sizeof(ImmAuthoringLayerProperties))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
+
+    Player::LayerDiagnostics diagnostics;
+    if (!iPlayer().GetLayerDiagnostics(docId, layerId, diagnostics))
+        return IMM_AUTHORING_NOT_FOUND;
+    const ImmCore::trans3d &transform = diagnostics.canonicalTransform;
+    propertiesOut->updateMask = IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY |
+        IMM_AUTHORING_LAYER_PROPERTY_OPACITY |
+        IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM;
+    propertiesOut->reserved0 = 0;
+    propertiesOut->visible = diagnostics.canonicalVisible;
+    propertiesOut->opacity = diagnostics.canonicalOpacity;
+    propertiesOut->tx = static_cast<float>(transform.mTranslation.x);
+    propertiesOut->ty = static_cast<float>(transform.mTranslation.y);
+    propertiesOut->tz = static_cast<float>(transform.mTranslation.z);
+    propertiesOut->qx = static_cast<float>(transform.mRotation.x);
+    propertiesOut->qy = static_cast<float>(transform.mRotation.y);
+    propertiesOut->qz = static_cast<float>(transform.mRotation.z);
+    propertiesOut->qw = static_cast<float>(transform.mRotation.w);
+    propertiesOut->scale = static_cast<float>(transform.mScale);
+    propertiesOut->reserved1[0] = 0;
+    propertiesOut->reserved1[1] = 0;
+    return IMM_AUTHORING_OK;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerSetProperties(
     int32_t docId, int32_t layerId, const ImmAuthoringLayerProperties * properties)
 {
