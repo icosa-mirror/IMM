@@ -2005,6 +2005,67 @@ static int32_t iRequireAttachedAuthoringDocument(int32_t docId)
     return attached ? IMM_AUTHORING_OK : IMM_AUTHORING_INVALID_STATE;
 }
 
+static bool iDecodeAuthoringUtf8(const char * data, uint32_t length, std::wstring & result)
+{
+    result.clear();
+    for (uint32_t offset = 0; offset < length;)
+    {
+        const uint8_t first = static_cast<uint8_t>(data[offset++]);
+        uint32_t codePoint = 0;
+        uint32_t continuationCount = 0;
+        uint32_t minimum = 0;
+        if (first < 0x80)
+        {
+            codePoint = first;
+        }
+        else if ((first & 0xe0) == 0xc0)
+        {
+            codePoint = first & 0x1f;
+            continuationCount = 1;
+            minimum = 0x80;
+        }
+        else if ((first & 0xf0) == 0xe0)
+        {
+            codePoint = first & 0x0f;
+            continuationCount = 2;
+            minimum = 0x800;
+        }
+        else if ((first & 0xf8) == 0xf0)
+        {
+            codePoint = first & 0x07;
+            continuationCount = 3;
+            minimum = 0x10000;
+        }
+        else
+        {
+            return false;
+        }
+        if (offset + continuationCount > length)
+            return false;
+        for (uint32_t i = 0; i < continuationCount; i++)
+        {
+            const uint8_t next = static_cast<uint8_t>(data[offset++]);
+            if ((next & 0xc0) != 0x80)
+                return false;
+            codePoint = (codePoint << 6) | (next & 0x3f);
+        }
+        if (codePoint < minimum || codePoint == 0 || codePoint > 0x10ffff ||
+            (codePoint >= 0xd800 && codePoint <= 0xdfff))
+            return false;
+        if (sizeof(wchar_t) == 2 && codePoint > 0xffff)
+        {
+            codePoint -= 0x10000;
+            result.push_back(static_cast<wchar_t>(0xd800 + (codePoint >> 10)));
+            result.push_back(static_cast<wchar_t>(0xdc00 + (codePoint & 0x3ff)));
+        }
+        else
+        {
+            result.push_back(static_cast<wchar_t>(codePoint));
+        }
+    }
+    return !result.empty();
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Attach(int32_t docId)
 {
     bool attached = false;
@@ -2094,6 +2155,33 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCo
     statusOut->reserved = 0;
     statusOut->object = status.mObject;
     return IMM_AUTHORING_OK;
+}
+
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerCreate(
+    int32_t docId, int32_t parentLayerId, int32_t layerType, const char * nameUtf8,
+    uint32_t nameLength, int32_t * layerIdOut)
+{
+    if (parentLayerId < 0 || nameUtf8 == nullptr || nameLength == 0 ||
+        nameLength > 4096 || layerIdOut == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (layerType != IMM_AUTHORING_LAYER_GROUP)
+        return IMM_AUTHORING_UNSUPPORTED;
+    try
+    {
+        std::wstring name;
+        if (!iDecodeAuthoringUtf8(nameUtf8, nameLength, name))
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        uint32_t layerId = 0;
+        const int32_t result = iPlayer().QueueGroupLayerCreation(
+            docId, static_cast<uint32_t>(parentLayerId), std::move(name), layerId);
+        if (result == IMM_AUTHORING_OK)
+            *layerIdOut = static_cast<int32_t>(layerId);
+        return result;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
 }
 
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetProperties(

@@ -3,6 +3,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include "libImmCore/src/libBasics/piMutex.h"
@@ -229,6 +230,8 @@ namespace ImmPlayer {
             const ImmImporter::LayerSpawnArea::Volume & volume,
             ImmImporter::LayerSpawnArea::TrackingLevel tracking,
             const ImmCore::trans3d & transform);
+        int32_t QueueGroupLayerCreation(uint32_t parentLayerId, std::wstring name,
+            uint32_t * layerIdOut);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -317,6 +320,13 @@ namespace ImmPlayer {
             ImmCore::trans3d mTransform = ImmCore::trans3d::identity();
         };
 
+        struct LayerCreation
+        {
+            uint32_t mLayerId = 0;
+            uint32_t mParentLayerId = 0;
+            std::wstring mName;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -328,10 +338,12 @@ namespace ImmPlayer {
             std::vector<AnimationKeyEdit> mAnimationKeyEdits;
             std::vector<InitialSpawnAreaEdit> mInitialSpawnAreaEdits;
             std::vector<SpawnAreaEdit> mSpawnAreaEdits;
+            std::vector<LayerCreation> mLayerCreations;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
         uint64_t mNextDrawingHandle = 1;
+        uint32_t mNextLayerHandle = 1;
         std::vector<DrawingCreation> mOpenDrawingCreations;
         std::vector<GeometryEdit> mOpenGeometryEdits;
         std::vector<FrameMapping> mOpenFrameMappings;
@@ -340,6 +352,7 @@ namespace ImmPlayer {
         std::vector<AnimationKeyEdit> mOpenAnimationKeyEdits;
         std::vector<InitialSpawnAreaEdit> mOpenInitialSpawnAreaEdits;
         std::vector<SpawnAreaEdit> mOpenSpawnAreaEdits;
+        std::vector<LayerCreation> mOpenLayerCreations;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -355,10 +368,13 @@ namespace ImmPlayer {
             bool mIsAnimationKeyEdit = false;
             bool mIsInitialSpawnAreaEdit = false;
             bool mIsSpawnAreaEdit = false;
+            bool mIsLayerCreation = false;
             ImmImporter::LayerSpawnArea::Volume mSpawnAreaVolume = {};
             ImmImporter::LayerSpawnArea::TrackingLevel mSpawnAreaTracking =
                 ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
             ImmCore::trans3d mSpawnAreaTransform = ImmCore::trans3d::identity();
+            ImmImporter::Layer * mLayerCreationParent = nullptr;
+            std::unique_ptr<ImmImporter::Layer> mCreatedLayer;
             ImmImporter::Layer::AnimProperty mAnimationProperty =
                 ImmImporter::Layer::AnimProperty::Visibility;
             std::vector<ImmImporter::Layer::AnimKey> mAnimationKeys;

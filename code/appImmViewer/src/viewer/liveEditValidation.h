@@ -33,6 +33,7 @@ namespace ExePlayer
         bool mKeyRemovalQueued = false;
         bool mInitialSpawnAreaQueued = false;
         bool mSpawnAreaQueued = false;
+        bool mGroupLayerQueued = false;
         bool mReferencedDeletionRejected = false;
         int mDocumentId = -1;
         int mLayerId = -1;
@@ -59,6 +60,11 @@ namespace ExePlayer
         ImmImporter::LayerSpawnArea::TrackingLevel mTargetSpawnAreaTracking =
             ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
         ImmCore::trans3d mTargetSpawnAreaTransform = ImmCore::trans3d::identity();
+        uint64_t mGroupLayerFrame = 0;
+        uint64_t mGroupLayerRevision = 0;
+        int mCreatedGroupLayerId = -1;
+        int mCreatedGroupParentId = -1;
+        int mLayerCountBeforeGroupCreation = 0;
         bool mOriginalCanonicalVisible = false;
         bool mTargetCanonicalVisible = false;
         float mOriginalEffectiveOpacity = 1.0f;

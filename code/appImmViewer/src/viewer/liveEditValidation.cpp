@@ -177,11 +177,44 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mGroupLayerQueued)
+        {
+            if (frame < mGroupLayerFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus creationStatus;
+            const bool hasCreationStatus = mGroupLayerRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mGroupLayerRevision, creationStatus);
+            bool layerMatch = false;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
+                    info.id == mCreatedGroupLayerId)
+                {
+                    layerMatch = info.type == static_cast<int>(
+                        ImmImporter::Layer::Type::Group) &&
+                        info.parentId == mCreatedGroupParentId;
+                    break;
+                }
+            }
+            const bool countChanged = player->GetLayerCount(mDocumentId) ==
+                mLayerCountBeforeGroupCreation + 1;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_CREATE] frame=%llu revision=%llu status=%d result=%d layerMatch=%d countChanged=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mGroupLayerRevision),
+                hasCreationStatus ? static_cast<int>(creationStatus.mState) : -1,
+                hasCreationStatus ? creationStatus.mResult : -1,
+                layerMatch ? 1 : 0, countChanged ? 1 : 0);
+            return;
+        }
+
         if (mSpawnAreaQueued)
         {
             if (frame < mSpawnAreaFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus spawnStatus;
             const bool hasSpawnStatus = mSpawnAreaRevision != 0 &&
                 player->GetAuthoringCommitStatus(mDocumentId, mSpawnAreaRevision, spawnStatus);
@@ -199,6 +232,42 @@ namespace ExePlayer
                 hasSpawnStatus ? static_cast<int>(spawnStatus.mState) : -1,
                 hasSpawnStatus ? spawnStatus.mResult : -1,
                 spawnAreaMatch ? 1 : 0);
+            const bool spawnSucceeded = hasSpawnStatus &&
+                spawnStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                spawnStatus.mResult == 0 && spawnAreaMatch;
+            int parentLayerId = -1;
+            const int layerCount = player->GetLayerCount(mDocumentId);
+            for (int i = 0; spawnSucceeded && i < layerCount; i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
+                    info.type == static_cast<int>(ImmImporter::Layer::Type::Group))
+                {
+                    parentLayerId = info.id;
+                    break;
+                }
+            }
+            if (parentLayerId < 0)
+            {
+                mMeasured = true;
+                return;
+            }
+            uint32_t createdLayerId = 0;
+            const int32_t createResult = player->QueueGroupLayerCreation(
+                mDocumentId, static_cast<uint32_t>(parentLayerId),
+                L"LiveEditGroup", createdLayerId);
+            const uint64_t createRevision = createResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_CREATE] frame=%llu parent=%d layer=%u createResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), parentLayerId, createdLayerId,
+                createResult, static_cast<unsigned long long>(createRevision));
+            mGroupLayerQueued = true;
+            mGroupLayerFrame = frame;
+            mGroupLayerRevision = createRevision;
+            mCreatedGroupLayerId = static_cast<int>(createdLayerId);
+            mCreatedGroupParentId = parentLayerId;
+            mLayerCountBeforeGroupCreation = layerCount;
             return;
         }
 

@@ -45,6 +45,7 @@ public:
     Layer* CreateLayer(Layer* parent);
     bool PrepareLayerPublication(void);
     bool PublishPreparedLayer(Layer * layer);
+    bool RollbackPreparedLayer(Layer * layer);
     uint32_t GetLayerStorageCount(void) const;
     Layer* FindLayerByFullName(const wchar_t* name);
 	bool   AddAsset(uint64_t offset, uint64_t size);

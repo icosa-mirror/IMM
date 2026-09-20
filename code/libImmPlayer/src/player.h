@@ -156,6 +156,8 @@ namespace ImmPlayer {
             const ImmImporter::LayerSpawnArea::Volume & volume,
             ImmImporter::LayerSpawnArea::TrackingLevel tracking,
             const ImmCore::trans3d & transform);
+        int32_t QueueGroupLayerCreation(int docId, uint32_t parentLayerId,
+            std::wstring name, uint32_t & layerIdOut);
 
         struct SpawnAreaDiagnostics
         {

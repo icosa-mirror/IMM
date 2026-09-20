@@ -60,6 +60,11 @@ typedef enum ImmAuthoringLayerPropertyMask
     IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM = 1u << 2
 } ImmAuthoringLayerPropertyMask;
 
+typedef enum ImmAuthoringLayerType
+{
+    IMM_AUTHORING_LAYER_GROUP = 0
+} ImmAuthoringLayerType;
+
 typedef enum ImmAuthoringAnimProperty
 {
     IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY = 0,
@@ -230,6 +235,9 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Commit(int32_t docI
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetRevisions(int32_t docId, ImmAuthoringRevisions * revisionsOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int32_t docId, uint64_t revision,
     ImmAuthoringCommitStatus * statusOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerCreate(int32_t docId,
+    int32_t parentLayerId, int32_t layerType, const char * nameUtf8, uint32_t nameLength,
+    int32_t * layerIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetProperties(int32_t docId, int32_t layerId,
     ImmAuthoringLayerProperties * propertiesOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetProperties(int32_t docId, int32_t layerId,

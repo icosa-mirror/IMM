@@ -772,6 +772,17 @@ namespace ImmPlayer
         return true;
     }
 
+    int32_t Player::QueueGroupLayerCreation(int docId, uint32_t parentLayerId,
+        std::wstring name, uint32_t & layerIdOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueGroupLayerCreation(
+            parentLayerId, std::move(name), &layerIdOut);
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);

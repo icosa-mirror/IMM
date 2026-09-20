@@ -107,6 +107,15 @@ bool Sequence::PublishPreparedLayer(Layer * layer)
     return layer != nullptr && mLayers.Append(layer, false);
 }
 
+bool Sequence::RollbackPreparedLayer(Layer * layer)
+{
+    const uint64_t length = mLayers.GetLength();
+    if (layer == nullptr || length == 0 || mLayers.Get(length - 1) != layer)
+        return false;
+    mLayers.RemoveAndShift(length - 1);
+    return true;
+}
+
 uint32_t Sequence::GetLayerStorageCount(void) const
 {
     return static_cast<uint32_t>(mLayers.GetLength());
