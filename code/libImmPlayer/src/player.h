@@ -133,6 +133,8 @@ namespace ImmPlayer {
         bool GetDrawingHandle(int docId, int layerId, int drawingIndex, uint64_t & drawingIdOut);
         bool GetDrawingBBox(int docId, int layerId, int drawingIndex, ImmCore::bound3 & bboxOut);
 
+        int32_t QueueDrawingCreation(int docId, uint32_t layerId, uint64_t & drawingIdOut);
+
         int32_t QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
             std::vector<Document::AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);

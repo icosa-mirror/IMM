@@ -14,6 +14,7 @@
 #include "layerPaint/drawingStatic.h"
 
 #include <vector>
+#include <memory>
 
 namespace ImmImporter
 {
@@ -56,11 +57,14 @@ namespace ImmImporter
 		// Live editing: append a drawing. Existing drawings keep their indices, so frame
 		// mappings pointing at them stay valid.
 		Drawing * AddDrawing(void) override;
+		bool RemoveLastDrawing(Drawing * expected) override;
 
 
 	private:
 		// static data
-		std::vector<DrawingStatic> mDrawings;
+		// Drawings are individually allocated so appending a live-authored drawing cannot move
+		// existing objects that are referenced by the player and renderer.
+		std::vector<std::unique_ptr<DrawingStatic>> mDrawings;
 		ImmCore::piArray mFrames;
 		uint32_t mFrameRate;	 // in FPS
 		uint32_t mMaxRepeatCount; // 0 repeats forever

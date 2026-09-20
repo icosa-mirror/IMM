@@ -208,6 +208,7 @@ namespace ImmPlayer {
         };
 
         bool GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const;
+        int32_t QueueDrawingCreation(uint32_t layerId, uint64_t * drawingIdOut);
         int32_t QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
@@ -243,14 +244,22 @@ namespace ImmPlayer {
             float mBiggestStroke = 0.0f;
         };
 
+        struct DrawingCreation
+        {
+            uint32_t mLayerId = 0;
+            uint64_t mDrawingId = 0;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
+            std::vector<DrawingCreation> mDrawingCreations;
             std::vector<GeometryEdit> mGeometryEdits;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
         uint64_t mNextDrawingHandle = 1;
+        std::vector<DrawingCreation> mOpenDrawingCreations;
         std::vector<GeometryEdit> mOpenGeometryEdits;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
@@ -260,6 +269,9 @@ namespace ImmPlayer {
         {
             uint64_t mRevision = 0;
             uint64_t mObject = 0;
+            bool mIsCreation = false;
+            ImmImporter::Layer * mLayer = nullptr;
+            uint32_t mDrawingIndex = 0;
             ImmImporter::Drawing * mActive = nullptr;
             std::unique_ptr<ImmImporter::Drawing> mReplacement;
             uint64_t mRendererToken = 0;
@@ -268,6 +280,7 @@ namespace ImmPlayer {
 
         void iBuildDrawingHandleMap(ImmImporter::Layer * layer);
         const DrawingHandleEntry * iFindDrawingHandle(uint32_t layerId, uint64_t drawingId) const;
+        const DrawingCreation * iFindOpenDrawingCreation(uint32_t layerId, uint64_t drawingId) const;
         AuthoringCommitStatus * iFindCommitStatus(uint64_t revision);
         void iRejectCommit(uint64_t revision, int32_t result, uint32_t failingCommand, uint64_t object);
         void iInvalidateAuthoringSession(void);

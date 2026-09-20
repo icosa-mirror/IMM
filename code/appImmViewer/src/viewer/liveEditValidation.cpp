@@ -138,10 +138,47 @@ namespace ExePlayer
             return;
         }
 
-        if (mMeasured || frame < mAppliedFrame + 3)
+        if (mMeasured)
             return;
 
-        mMeasured = true;
+        if (mCreationQueued)
+        {
+            if (frame < mCreationFrame + 3)
+                return;
+
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus creationStatus;
+            const bool hasCreationStatus = mCreationRevision != 0 &&
+                player->GetAuthoringCommitStatus(mDocumentId, mCreationRevision, creationStatus);
+            int drawingCountAfter = -1;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) && info.id == mLayerId)
+                {
+                    drawingCountAfter = info.paintNumDrawings;
+                    break;
+                }
+            }
+            uint64_t resolvedCreatedId = 0;
+            const bool resolvedCreated = mDrawingCountBeforeCreation >= 0 &&
+                player->GetDrawingHandle(mDocumentId, mLayerId, mDrawingCountBeforeCreation,
+                    resolvedCreatedId);
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "
+                L"drawingCountBefore=%d drawingCountAfter=%d handleMatch=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mCreationRevision),
+                hasCreationStatus ? static_cast<int>(creationStatus.mState) : -1,
+                hasCreationStatus ? creationStatus.mResult : -1,
+                mDrawingCountBeforeCreation, drawingCountAfter,
+                resolvedCreated && resolvedCreatedId == mCreatedDrawingId ? 1 : 0);
+            return;
+        }
+
+        if (frame < mAppliedFrame + 3)
+            return;
+
         ImmCore::bound3 drawingBoxAfter;
         const bool hasDrawingBox = player->GetDrawingBBox(
             mDocumentId, mLayerId, 0, drawingBoxAfter);
@@ -166,5 +203,62 @@ namespace ExePlayer
             hasStatus ? status.mResult : -1, drawingBoxUnchanged ? 1 : 0,
             boxAfter.mMinX, boxAfter.mMinY, boxAfter.mMinZ,
             boxAfter.mMaxX, boxAfter.mMaxY, boxAfter.mMaxZ);
+
+        if (!hasStatus || status.mState != ImmPlayer::Document::AuthoringCommitState::Presented ||
+            status.mResult != 0)
+        {
+            mMeasured = true;
+            return;
+        }
+
+        for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+        {
+            ImmPlayer::Player::LayerInfo info;
+            if (player->GetLayerInfoByIndex(mDocumentId, i, info) && info.id == mLayerId)
+            {
+                mDrawingCountBeforeCreation = info.paintNumDrawings;
+                break;
+            }
+        }
+
+        uint64_t createdDrawingId = 0;
+        const int32_t createResult = player->QueueDrawingCreation(
+            mDocumentId, static_cast<uint32_t>(mLayerId), createdDrawingId);
+        constexpr int creationPointCount = 8;
+        constexpr float creationBiggestStroke = 0.015f;
+        ImmPlayer::Document::AuthoringElementGeometry creationElement;
+        creationElement.mBrush = ImmImporter::Element::BrushSectionType::Circle;
+        creationElement.mVisibility = ImmImporter::Element::VisibilityType::Always;
+        creationElement.mPoints.resize(creationPointCount);
+        for (int i = 0; i < creationPointCount; i++)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(creationPointCount - 1);
+            ImmImporter::Element::PointSource & point = creationElement.mPoints[i];
+            point.mPos = ImmCore::vec3(-2.0f + t * 0.4f, 1.0f, 0.0f);
+            point.mNor = ImmCore::vec3(0.0f, 1.0f, 0.0f);
+            point.mDir = ImmCore::vec3(0.0f, 0.0f, 1.0f);
+            point.mCol = ImmCore::vec3(1.0f, 1.0f, 1.0f);
+            point.mAlpha = 1.0f;
+            point.mWidth = creationBiggestStroke;
+            point.mLength = t;
+            point.mTime = t;
+        }
+        std::vector<ImmPlayer::Document::AuthoringElementGeometry> creationElements;
+        creationElements.push_back(std::move(creationElement));
+        const int32_t geometryResult = createResult == 0 ? player->QueueDrawingGeometry(
+            mDocumentId, static_cast<uint32_t>(mLayerId), createdDrawingId,
+            std::move(creationElements), ImmImporter::Drawing::ColorSpace::Gamma, false,
+            creationBiggestStroke) : createResult;
+        const uint64_t creationRevision = geometryResult == 0 ?
+            player->CommitEdits(mDocumentId) : 0;
+        log->Printf(LT_MESSAGE,
+            L"[IMM_LIVE_EDIT_CREATE] frame=%llu drawing=%llu createResult=%d geometryResult=%d revision=%llu",
+            static_cast<unsigned long long>(frame),
+            static_cast<unsigned long long>(createdDrawingId), createResult, geometryResult,
+            static_cast<unsigned long long>(creationRevision));
+        mCreationQueued = true;
+        mCreationFrame = frame;
+        mCreationRevision = creationRevision;
+        mCreatedDrawingId = createdDrawingId;
     }
 }

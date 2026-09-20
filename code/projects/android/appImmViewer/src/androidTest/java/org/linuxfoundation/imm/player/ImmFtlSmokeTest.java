@@ -71,6 +71,9 @@ public final class ImmFtlSmokeTest {
         requireMarker(logcat, "IMMAVAL native render capture written");
         requireMarker(logcat, "[IMM_LIVE_EDIT] frame=");
         requireMarker(logcat, "revision=1 status=4 result=0 drawingBBoxUnchanged=0");
+        requireMarker(logcat, "[IMM_LIVE_EDIT_CREATE]");
+        requireMarker(logcat, "revision=2 status=4 result=0 drawingCountBefore=");
+        requireMarker(logcat, "handleMatch=1");
         requireMarker(logcat, "Loaded in CPU");
         requireMarker(logcat, "Loaded in GPU");
 
@@ -119,6 +122,8 @@ public final class ImmFtlSmokeTest {
         requireMarker(faceLogcat, "IMMAVAL loadPath result=1");
         requireMarker(faceLogcat, "IMMAVAL native render capture written");
         requireMarker(faceLogcat, "status=4 result=0 drawingBBoxUnchanged=0");
+        requireMarker(faceLogcat, "revision=2 status=4 result=0 drawingCountBefore=");
+        requireMarker(faceLogcat, "handleMatch=1");
         forbidMarker(faceLogcat, "Failed to load IMM");
         forbidMarker(faceLogcat, "Fatal signal");
 
@@ -150,7 +155,9 @@ public final class ImmFtlSmokeTest {
             logcat = runShell(device, "logcat -d");
             if (capture.isFile() && capture.length() > 0L &&
                     logcat.contains("IMMAVAL native render capture written") &&
-                    logcat.contains("status=4 result=0 drawingBBoxUnchanged=0")) {
+                    logcat.contains("status=4 result=0 drawingBBoxUnchanged=0") &&
+                    logcat.contains("revision=2 status=4 result=0 drawingCountBefore=") &&
+                    logcat.contains("handleMatch=1")) {
                 return logcat;
             }
             SystemClock.sleep(500L);

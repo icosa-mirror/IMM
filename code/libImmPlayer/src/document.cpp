@@ -9,6 +9,7 @@
 #include "libImmImporter/src/document/layerEffect.h"
 #include "libImmImporter/src/document/layerInstance.h"
 #include "libImmImporter/src/document/layerPaint.h"
+#include "libImmImporter/src/document/layerPaintStatic.h"
 #include "libImmImporter/src/document/layerSound.h"
 #include "libImmImporter/src/document/layerSpawnArea.h"
 #include "libImmImporter/src/document/layerPaint/drawingStatic.h"
@@ -26,6 +27,21 @@ namespace ImmPlayer
     {
         const char *value = getenv(name);
         return value != nullptr && value[0] != '\0' && value[0] != '0';
+    }
+
+    static Layer * iFindAuthoringLayerById(Layer * layer, uint32_t layerId)
+    {
+        if (layer == nullptr)
+            return nullptr;
+        if (layer->GetID() == layerId)
+            return layer;
+        for (uint32_t childIndex = 0; childIndex < layer->GetNumChildren(); childIndex++)
+        {
+            Layer * result = iFindAuthoringLayerById(layer->GetChild(childIndex), layerId);
+            if (result != nullptr)
+                return result;
+        }
+        return nullptr;
     }
 
     Document::Document() {}
@@ -66,6 +82,7 @@ namespace ImmPlayer
 
     void Document::End(void)
     {
+		mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
@@ -489,18 +506,50 @@ namespace ImmPlayer
                 mPreparedRevision = revision;
 
                 Drawing * replacement = mPendingPresentation.mReplacement.get();
-                if (!layerPaintRender->PresentDrawingReplacement(
-                    mPendingPresentation.mActive, replacement,
-                    mPendingPresentation.mRendererToken, revision, log))
+                Drawing * created = nullptr;
+                if (mPendingPresentation.mIsCreation)
                 {
+                    LayerPaint * paint = mPendingPresentation.mLayer != nullptr ?
+                        (LayerPaint *)mPendingPresentation.mLayer->GetImplementation() : nullptr;
+                    created = paint != nullptr ? paint->AddDrawing() : nullptr;
+                    if (created == nullptr)
+                    {
+                        iRejectCommit(revision, -5, 0, mPendingPresentation.mObject);
+                        iDiscardPendingPresentation(layerPaintRender, renderer, log);
+                        return true;
+                    }
+                }
+
+                const bool presented = mPendingPresentation.mIsCreation ?
+                    layerPaintRender->PresentDrawingCreation(created, replacement,
+                        mPendingPresentation.mRendererToken, revision, log) :
+                    layerPaintRender->PresentDrawingReplacement(mPendingPresentation.mActive,
+                        replacement, mPendingPresentation.mRendererToken, revision, log);
+                if (!presented)
+                {
+                    if (created != nullptr)
+                    {
+                        LayerPaint * paint = (LayerPaint *)mPendingPresentation.mLayer->GetImplementation();
+                        paint->RemoveLastDrawing(created);
+                    }
                     iRejectCommit(revision, -10, 0, mPendingPresentation.mObject);
                     iDiscardPendingPresentation(layerPaintRender, renderer, log);
                 }
                 else
                 {
-                    // PresentDrawingReplacement now owns the object containing the retired
-                    // geometry and keeps it alive until its renderer retirement policy fires.
-                    mPendingPresentation.mReplacement.release();
+                    if (mPendingPresentation.mIsCreation)
+                    {
+                        mDrawingHandles.push_back(DrawingHandleEntry{
+                            mPendingPresentation.mObject, mPendingPresentation.mLayer,
+                            mPendingPresentation.mDrawingIndex });
+                        mPendingPresentation.mReplacement->Deinit();
+                    }
+                    else
+                    {
+                        // Replacement presentation owns the object containing the retired
+                        // geometry until the renderer retirement policy fires.
+                        mPendingPresentation.mReplacement.release();
+                    }
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         status->mState = AuthoringCommitState::Presented;
@@ -562,7 +611,7 @@ namespace ImmPlayer
 
     bool Document::DetachEditing(void)
     {
-        if (!mEditing || !mOpenGeometryEdits.empty() || !mSealedBatches.empty() ||
+        if (!mEditing || !mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() || !mSealedBatches.empty() ||
             mPendingPresentation.mRevision != 0)
             return false;
 
@@ -576,6 +625,7 @@ namespace ImmPlayer
     {
         if (!mEditing)
             return false;
+        mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
         return true;
     }
@@ -611,6 +661,17 @@ namespace ImmPlayer
         return nullptr;
     }
 
+    const Document::DrawingCreation * Document::iFindOpenDrawingCreation(
+        uint32_t layerId, uint64_t drawingId) const
+    {
+        for (const DrawingCreation & creation : mOpenDrawingCreations)
+        {
+            if (creation.mLayerId == layerId && creation.mDrawingId == drawingId)
+                return &creation;
+        }
+        return nullptr;
+    }
+
     bool Document::GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const
     {
         if (!mEditing || drawingIdOut == nullptr)
@@ -627,6 +688,28 @@ namespace ImmPlayer
         return false;
     }
 
+    int32_t Document::QueueDrawingCreation(uint32_t layerId, uint64_t * drawingIdOut)
+    {
+        if (!mEditing)
+            return -4;
+        if (drawingIdOut == nullptr)
+            return -2;
+        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty())
+            return -7;
+
+        Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
+        if (layer == nullptr)
+            return -1;
+        if (layer->GetType() != Layer::Type::Paint ||
+            dynamic_cast<LayerPaintStatic *>((LayerPaint *)layer->GetImplementation()) == nullptr)
+            return -3;
+
+        const uint64_t drawingId = mNextDrawingHandle++;
+        mOpenDrawingCreations.push_back(DrawingCreation{ layerId, drawingId });
+        *drawingIdOut = drawingId;
+        return 0;
+    }
+
     int32_t Document::QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
         std::vector<AuthoringElementGeometry> elements,
         Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke)
@@ -635,7 +718,8 @@ namespace ImmPlayer
             return -4;
         if (elements.empty() || biggestStroke <= 0.0f)
             return -2;
-        if (iFindDrawingHandle(layerId, drawingId) == nullptr)
+        if (iFindDrawingHandle(layerId, drawingId) == nullptr &&
+            iFindOpenDrawingCreation(layerId, drawingId) == nullptr)
             return -1;
 
         // This first vertical slice intentionally permits one replacement per batch. It keeps
@@ -705,6 +789,7 @@ namespace ImmPlayer
         if (!mEditing)
             return;
 
+        mOpenDrawingCreations.clear();
         mOpenGeometryEdits.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
@@ -723,7 +808,8 @@ namespace ImmPlayer
         if (status != nullptr)
             status->mState = AuthoringCommitState::Preparing;
 
-        if (batch.mGeometryEdits.size() != 1 || layerPaintRender == nullptr)
+        if (batch.mGeometryEdits.size() != 1 || batch.mDrawingCreations.size() > 1 ||
+            layerPaintRender == nullptr)
         {
             iRejectCommit(batch.mRevision, -3, 0, 0);
             return;
@@ -732,17 +818,27 @@ namespace ImmPlayer
         GeometryEdit & edit = batch.mGeometryEdits[0];
         if (status != nullptr)
             status->mObject = edit.mDrawingId;
+        const DrawingCreation * creation = nullptr;
+        if (!batch.mDrawingCreations.empty() &&
+            batch.mDrawingCreations[0].mLayerId == edit.mLayerId &&
+            batch.mDrawingCreations[0].mDrawingId == edit.mDrawingId)
+            creation = &batch.mDrawingCreations[0];
+
         const DrawingHandleEntry * entry = iFindDrawingHandle(edit.mLayerId, edit.mDrawingId);
-        if (entry == nullptr || entry->mLayer == nullptr)
+        Layer * layer = creation != nullptr ?
+            iFindAuthoringLayerById(mSequence.GetRoot(), creation->mLayerId) :
+            (entry != nullptr ? entry->mLayer : nullptr);
+        if (layer == nullptr)
         {
             iRejectCommit(batch.mRevision, -1, 0, edit.mDrawingId);
             return;
         }
 
-        LayerPaint * paint = (LayerPaint *)entry->mLayer->GetImplementation();
-        Drawing * active = paint != nullptr ? paint->GetDrawing(static_cast<int>(entry->mDrawingIndex)) : nullptr;
+        LayerPaint * paint = (LayerPaint *)layer->GetImplementation();
+        Drawing * active = creation == nullptr && paint != nullptr ?
+            paint->GetDrawing(static_cast<int>(entry->mDrawingIndex)) : nullptr;
         DrawingStatic * activeStatic = dynamic_cast<DrawingStatic *>(active);
-        if (activeStatic == nullptr)
+        if (paint == nullptr || (creation == nullptr && activeStatic == nullptr))
         {
             iRejectCommit(batch.mRevision, -3, 0, edit.mDrawingId);
             return;
@@ -775,7 +871,21 @@ namespace ImmPlayer
             return;
         }
         replacement->StopAdding();
-        replacement->SetLoaded(activeStatic->GetLoaded());
+        replacement->SetLoaded(activeStatic != nullptr ? activeStatic->GetLoaded() : true);
+
+        if (creation != nullptr)
+        {
+            try
+            {
+                mDrawingHandles.reserve(mDrawingHandles.size() + 1);
+            }
+            catch (const std::bad_alloc &)
+            {
+                replacement->Deinit();
+                iRejectCommit(batch.mRevision, -5, 0, edit.mDrawingId);
+                return;
+            }
+        }
 
         uint64_t rendererToken = 0;
         if (!layerPaintRender->PrepareDrawingReplacementInCPU(replacement.get(), &rendererToken, log))
@@ -787,6 +897,9 @@ namespace ImmPlayer
 
         mPendingPresentation.mRevision = batch.mRevision;
         mPendingPresentation.mObject = edit.mDrawingId;
+        mPendingPresentation.mIsCreation = creation != nullptr;
+        mPendingPresentation.mLayer = layer;
+        mPendingPresentation.mDrawingIndex = creation != nullptr ? paint->GetNumDrawings() : entry->mDrawingIndex;
         mPendingPresentation.mActive = activeStatic;
         mPendingPresentation.mReplacement = std::move(replacement);
         mPendingPresentation.mRendererToken = rendererToken;
@@ -796,7 +909,11 @@ namespace ImmPlayer
     {
         if (resultOut != nullptr)
             *resultOut = 0;
-        if (!mEditing || mOpenGeometryEdits.empty())
+        if (!mEditing || mOpenGeometryEdits.empty() ||
+            (!mOpenDrawingCreations.empty() &&
+                (mOpenDrawingCreations.size() != 1 ||
+                    mOpenDrawingCreations[0].mLayerId != mOpenGeometryEdits[0].mLayerId ||
+                    mOpenDrawingCreations[0].mDrawingId != mOpenGeometryEdits[0].mDrawingId)))
         {
             if (resultOut != nullptr)
                 *resultOut = -4;
@@ -811,6 +928,7 @@ namespace ImmPlayer
 
         SealedBatch batch;
         batch.mRevision = ++mRequestedRevision;
+        batch.mDrawingCreations.swap(mOpenDrawingCreations);
         batch.mGeometryEdits.swap(mOpenGeometryEdits);
         mSealedBatches.push_back(std::move(batch));
         mCommitStatuses.push_back(AuthoringCommitStatus{

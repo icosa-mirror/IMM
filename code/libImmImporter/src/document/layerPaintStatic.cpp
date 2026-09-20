@@ -19,7 +19,15 @@ namespace ImmImporter
 		mMaxRepeatCount = maxRepeatCount;
         mVersion = version;
 
-		mDrawings = std::vector<DrawingStatic>(static_cast<size_t>(numDrawings));
+		mDrawings.clear();
+		mDrawings.reserve(static_cast<size_t>(numDrawings));
+		for (int i = 0; i < numDrawings; i++)
+		{
+			std::unique_ptr<DrawingStatic> drawing(new (std::nothrow) DrawingStatic());
+			if (!drawing)
+				return false;
+			mDrawings.push_back(std::move(drawing));
+		}
 
 		if (!mFrames.Init(numFrames, sizeof(uint32_t), true))
 			return false;
@@ -31,7 +39,7 @@ namespace ImmImporter
 	{
 		for (uint64_t i = 0, max = mDrawings.size(); i < max; i++)
 		{
-			Drawing* drawing = &mDrawings[i];
+			Drawing* drawing = mDrawings[i].get();
 			drawing->Deinit();
 		}
 		mDrawings.clear();
@@ -41,14 +49,14 @@ namespace ImmImporter
 	const bound3& LayerPaintStatic::GetBBox(void) const
 	{
 		const uint32_t drawing = mFrames.GetSInt32(mCurrentFrame);
-		const Drawing* dr = &mDrawings[drawing];
+		const Drawing* dr = mDrawings[drawing].get();
 		return dr->GetBBox();
 	}
 
 	const bool LayerPaintStatic::HasBBox(void) const
 	{
 		const uint32_t drawing = mFrames.GetSInt32(mCurrentFrame);
-		const Drawing* dr = &mDrawings[drawing];
+		const Drawing* dr = mDrawings[drawing].get();
 		return dr->GetNumStrokes() > 0;
 	}
 
@@ -109,7 +117,7 @@ namespace ImmImporter
 	const Drawing * LayerPaintStatic::GetCurrentDrawing(void) const
 	{
 		const uint32_t drawing = mFrames.GetSInt32(mCurrentFrame);
-		return &mDrawings[drawing];
+		return mDrawings[drawing].get();
 	}
 
     Drawing * LayerPaintStatic::NewDrawing(void)
@@ -121,23 +129,31 @@ namespace ImmImporter
     {
         // Existing drawings keep their indices: the frame buffer stores indices, and the GPU
         // pool is addressed by each drawing's own gpu id, so appending invalidates neither.
-        mDrawings.push_back(DrawingStatic());
+		std::unique_ptr<DrawingStatic> drawing(new (std::nothrow) DrawingStatic());
+		if (!drawing || !drawing->Init(1))
+		{
+			return nullptr;
+		}
 
-        DrawingStatic & drawing = mDrawings.back();
-        if (!drawing.Init(1))
-        {
-            mDrawings.pop_back();
-            return nullptr;
-        }
+		drawing->SetGpuId(-1);
+		drawing->SetLoaded(false);
+		DrawingStatic * result = drawing.get();
+		mDrawings.push_back(std::move(drawing));
+		return result;
+	}
 
-        drawing.SetGpuId(-1);
-        drawing.SetLoaded(false);
-        return &drawing;
-    }
+	bool LayerPaintStatic::RemoveLastDrawing(Drawing * expected)
+	{
+		if (mDrawings.empty() || mDrawings.back().get() != expected)
+			return false;
+		mDrawings.back()->Deinit();
+		mDrawings.pop_back();
+		return true;
+	}
 
 	Drawing * LayerPaintStatic::GetDrawing(int drawing) const
 	{
-		return const_cast<DrawingStatic*>(&mDrawings[drawing]);
+		return mDrawings[drawing].get();
 	}
 
 	uint32_t * LayerPaintStatic::GetFrameBuffer(void)

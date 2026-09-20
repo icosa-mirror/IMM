@@ -2111,6 +2111,26 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
     return IMM_AUTHORING_OK;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingCreate(
+    int32_t docId, int32_t layerId, uint64_t *drawingIdOut)
+{
+    if (layerId < 0 || drawingIdOut == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    try
+    {
+        uint64_t drawingId = 0;
+        const int32_t result = iPlayer().QueueDrawingCreation(
+            docId, static_cast<uint32_t>(layerId), drawingId);
+        if (result == IMM_AUTHORING_OK)
+            *drawingIdOut = drawingId;
+        return result;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
     int32_t docId, int32_t layerId, int32_t brush, int32_t visible,
     const ImmAuthoringPoint *points, int32_t numPoints, float biggestStroke, int32_t colorSpace,

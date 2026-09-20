@@ -58,6 +58,14 @@ namespace ImmPlayer
 			return false;
 		}
 
+		virtual bool PresentDrawingCreation(ImmImporter::Drawing * created,
+			ImmImporter::Drawing * prepared, uint64_t token, uint64_t revision,
+			ImmCore::piLog * log)
+		{
+			(void)created; (void)prepared; (void)token; (void)revision; (void)log;
+			return false;
+		}
+
 		virtual void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
 			uint64_t token, ImmCore::piLog * log)
 		{

@@ -138,11 +138,13 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int
     ImmAuthoringCommitStatus * statusOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32_t docId, int32_t layerId,
+    uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
     uint64_t drawingId, const ImmAuthoringDrawingGeometry * geometry);
 
-// Reserved exports retained while creation and frame mapping are implemented on the batch
-// model. Both currently return IMM_AUTHORING_UNSUPPORTED.
+// Legacy index-based creation is retained as an unsupported export. New callers reserve a
+// stable handle with ImmAuthoring_DrawingCreate and supply geometry in the same open batch.
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingAdd(int32_t docId, int32_t layerId,
     int32_t brush, int32_t visible, const ImmAuthoringPoint * points, int32_t numPoints,
     float biggestStroke, int32_t colorSpace, int32_t frameIndex, int32_t * drawingIndexOut);

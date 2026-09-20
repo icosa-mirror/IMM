@@ -651,6 +651,34 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         return true;
     }
 
+    bool LayerRendererPaintStatic::PresentDrawingCreation(Drawing * created,
+        Drawing * prepared, uint64_t token, uint64_t revision, piLog * log)
+    {
+        if (std::getenv("IMM_LIVE_EDIT_FAIL_PRESENT") != nullptr)
+        {
+            log->Printf(LT_ERROR, L"[IMM_LIVE_EDIT] injected creation presentation failure token=%llu",
+                static_cast<unsigned long long>(token));
+            return false;
+        }
+
+        DrawingStatic * createdStatic = dynamic_cast<DrawingStatic *>(created);
+        DrawingStatic * preparedStatic = dynamic_cast<DrawingStatic *>(prepared);
+        if (createdStatic == nullptr || preparedStatic == nullptr ||
+            token >= mLayerInfo.GetMaxLength() || !mLayerInfo.IsUsed(token))
+            return false;
+
+        iSLayerDrawInfoStatic * info = (iSLayerDrawInfoStatic *)mLayerInfo.GetAddress(token);
+        if (info == nullptr || !info->mUploaded || !createdStatic->SwapGeometry(preparedStatic))
+            return false;
+
+        info->mGeometry = createdStatic->GetGeometry();
+        createdStatic->SetGpuId(static_cast<int>(token));
+        createdStatic->SetLoaded(preparedStatic->GetLoaded());
+        createdStatic->SetAuthoringRevision(revision);
+        preparedStatic->SetGpuId(-1);
+        return true;
+    }
+
     void LayerRendererPaintStatic::CancelDrawingReplacement(piRenderer * renderer,
         uint64_t token, piLog * log)
     {

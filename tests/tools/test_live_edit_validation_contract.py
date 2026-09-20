@@ -43,6 +43,25 @@ def main() -> int:
         ["gEngine.liveEditValidation.Tick(*gEngine.viewer, gEngine.log, gEngine.frameCount"],
     )
     require_tokens(
+        "code/appImmUnity/src/imm_authoring.h",
+        ["ImmAuthoring_DrawingCreate", "uint64_t * drawingIdOut"],
+    )
+    require_tokens(
+        "code/appImmViewer/src/viewer/liveEditValidation.cpp",
+        [
+            "player->QueueDrawingCreation(",
+            'L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "',
+            "drawingCountAfter=%d handleMatch=%d",
+        ],
+    )
+    require_tokens(
+        "code/libImmImporter/src/document/layerPaintStatic.h",
+        [
+            "std::vector<std::unique_ptr<DrawingStatic>> mDrawings",
+            "bool RemoveLastDrawing(Drawing * expected) override",
+        ],
+    )
+    require_tokens(
         "code/libImmCore/src/libRender/metal/piMetal_Renderer.mm",
         [
             "A host-owned external command buffer may have been created with unretained references.",

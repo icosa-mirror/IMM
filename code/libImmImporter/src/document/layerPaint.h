@@ -38,9 +38,11 @@ namespace ImmImporter
         // for deserializing... (ugly!)
         virtual Drawing * NewDrawing(void) = 0;
 
-        // Live editing: append a drawing with no geometry and no GPU resources yet. The caller
-        // fills it (Drawing::ReplaceGeometry) and then marks the layer dirty.
+		// Live editing: append a drawing with no geometry and no GPU resources yet. The caller
+		// fills it through the authoring presentation boundary. Implementations must keep the
+		// addresses of existing drawings stable when appending.
         virtual Drawing * AddDrawing(void) { return nullptr; }
+		virtual bool RemoveLastDrawing(Drawing * expected) { (void)expected; return false; }
 
 		// for gpu unloading... (ugly!)
 		virtual Drawing * GetDrawing(int drawing) const = 0;
