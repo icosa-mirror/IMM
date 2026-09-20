@@ -46,6 +46,7 @@ namespace ImmImporter
 		mType = type;
         mLoaded = false;
 	mVisible = visible;
+	mCanonicalVisible = visible;
     mVisibilityOverrideEnabled = false;
     mVisibilityOverrideValue = visible;
     mTransformOverrideEnabled = false;
@@ -215,7 +216,7 @@ trans3d Layer::GetTransformToWorld(void) const
 		mImplementation = implementation;
 	}
 
-	bool* Layer::GetVisibleRef(void) { return &mVisible; }
+	bool* Layer::GetVisibleRef(void) { return &mCanonicalVisible; }
 
 	float * Layer::GetOpacityRef(void)
 	{
@@ -223,6 +224,7 @@ trans3d Layer::GetTransformToWorld(void) const
 	}
 
 	bool Layer::GetVisible(void) const { return mVisibilityOverrideEnabled ? mVisibilityOverrideValue : mVisible; }
+	bool Layer::GetCanonicalVisible(void) const { return mCanonicalVisible; }
 	bool Layer::GetPotentiallyVisible(void) const { return mPotentiallyVisible; }
     bool Layer::GetWorldVisible(void) const
     {
@@ -244,7 +246,17 @@ bool Layer::GetTransformOverrideEnabled(void) const { return mTransformOverrideE
 const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformOverrideValue; }
 
 
-	void Layer::SetVisible(bool visible) { mVisible = visible; }
+	void Layer::SetVisible(bool visible)
+	{
+		mCanonicalVisible = visible;
+		mVisible = visible;
+	}
+	void Layer::SetCanonicalVisible(bool visible)
+	{
+		mCanonicalVisible = visible;
+		if (GetNumAnimKeys(AnimProperty::Visibility) == 0)
+			mVisible = visible;
+	}
     void Layer::SetVisibilityOverride(bool enabled, bool visible)
     {
         mVisibilityOverrideEnabled = enabled;

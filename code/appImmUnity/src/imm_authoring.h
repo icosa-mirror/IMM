@@ -53,6 +53,11 @@ enum
     IMM_AUTHORING_MAX_POINTS_PER_DRAWING = 1048576
 };
 
+typedef enum ImmAuthoringLayerPropertyMask
+{
+    IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY = 1u << 0
+} ImmAuthoringLayerPropertyMask;
+
 typedef struct ImmAuthoringPoint
 {
     float px, py, pz;
@@ -110,6 +115,16 @@ typedef struct ImmAuthoringCommitStatus
     uint64_t object;
 } ImmAuthoringCommitStatus;
 
+typedef struct ImmAuthoringLayerProperties
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    uint32_t updateMask;
+    uint32_t reserved0;
+    int32_t visible;
+    uint32_t reserved1[3];
+} ImmAuthoringLayerProperties;
+
 #ifdef __cplusplus
 // These layouts cross the native-library boundary. Keep the assertions beside the
 // public declarations so every C++ target catches an accidental ABI change.
@@ -126,6 +141,8 @@ static_assert(sizeof(ImmAuthoringDrawingGeometry) == 32 + sizeof(void *),
     "ImmAuthoringDrawingGeometry ABI changed");
 static_assert(sizeof(ImmAuthoringRevisions) == 32, "ImmAuthoringRevisions ABI changed");
 static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus ABI changed");
+static_assert(sizeof(ImmAuthoringLayerProperties) == 32,
+    "ImmAuthoringLayerProperties ABI changed");
 #endif
 
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Attach(int32_t docId);
@@ -136,6 +153,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Commit(int32_t docI
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetRevisions(int32_t docId, ImmAuthoringRevisions * revisionsOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_GetCommitStatus(int32_t docId, uint64_t revision,
     ImmAuthoringCommitStatus * statusOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetProperties(int32_t docId, int32_t layerId,
+    const ImmAuthoringLayerProperties * properties);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32_t docId, int32_t layerId,

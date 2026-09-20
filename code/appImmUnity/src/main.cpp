@@ -2096,6 +2096,29 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_GetCo
     return IMM_AUTHORING_OK;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerSetProperties(
+    int32_t docId, int32_t layerId, const ImmAuthoringLayerProperties * properties)
+{
+    if (layerId < 0 || properties == nullptr ||
+        properties->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
+        properties->structSize < sizeof(ImmAuthoringLayerProperties) ||
+        properties->reserved0 != 0 || properties->reserved1[0] != 0 ||
+        properties->reserved1[1] != 0 || properties->reserved1[2] != 0 ||
+        (properties->visible != 0 && properties->visible != 1))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (properties->updateMask != IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY)
+        return IMM_AUTHORING_UNSUPPORTED;
+    try
+    {
+        return iPlayer().QueueLayerVisibility(
+            docId, static_cast<uint32_t>(layerId), properties->visible != 0);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {

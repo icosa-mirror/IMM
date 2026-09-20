@@ -1009,6 +1009,11 @@ run_case() {
             tail -n 80 "$log_path" >&2
             exit 1
         fi
+        if ! grep -Eq "\[IMM_LIVE_EDIT_PROPERTY\].*revision=5 status=4 result=0 canonicalChanged=1 overridePreserved=1 effectivePreserved=1" "$log_path"; then
+            echo "$name did not preserve the playback override while changing canonical visibility" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
         if grep -q "\[IMM_LIVE_EDIT_FRAME\].*geometryMatch=0" "$log_path"; then
             echo "$name observed mismatched model and renderer geometry during live edit" >&2
             tail -n 80 "$log_path" >&2

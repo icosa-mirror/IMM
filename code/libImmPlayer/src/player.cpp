@@ -702,6 +702,15 @@ namespace ImmPlayer
         return doc->QueueFrameMapping(layerId, frameIndex, drawingId);
     }
 
+    int32_t Player::QueueLayerVisibility(int docId, uint32_t layerId, bool visible)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueLayerVisibility(layerId, visible);
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);
@@ -786,6 +795,7 @@ namespace ImmPlayer
         outDiag.hasVisibilityKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) > 0) ? 1 : 0;
         outDiag.hasOpacityKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Opacity) > 0) ? 1 : 0;
         outDiag.isVisible = layer->GetVisible() ? 1 : 0;
+        outDiag.canonicalVisible = layer->GetCanonicalVisible() ? 1 : 0;
         outDiag.opacity = layer->GetOpacity();
         outDiag.isWorldVisible = layer->GetWorldVisible() ? 1 : 0;
         outDiag.worldOpacity = layer->GetWorldOpacity();

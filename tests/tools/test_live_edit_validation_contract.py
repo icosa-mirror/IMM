@@ -47,6 +47,8 @@ def main() -> int:
         [
             "ImmAuthoring_DrawingCreate",
             "ImmAuthoring_DrawingDestroy",
+            "ImmAuthoring_LayerSetProperties",
+            "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "uint64_t * drawingIdOut",
         ],
     )
@@ -55,10 +57,12 @@ def main() -> int:
         [
             "player->QueueDrawingCreation(",
             "player->QueueDrawingDeletion(",
+            "player->QueueLayerVisibility(",
             "player->QueueFrameMapping(",
             'L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "',
             'L"[IMM_LIVE_EDIT_FRAME_SET] frame=%llu revision=%llu status=%d result=%d handleMatch=%d"',
             'L"[IMM_LIVE_EDIT_DELETE] frame=%llu revision=%llu status=%d result=%d "',
+            'L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu revision=%llu status=%d result=%d "',
             "drawingCountAfter=%d handleMatch=%d",
             "referencedDeletionRejected=%d",
         ],

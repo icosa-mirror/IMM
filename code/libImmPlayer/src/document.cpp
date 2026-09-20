@@ -86,6 +86,7 @@ namespace ImmPlayer
         mOpenGeometryEdits.clear();
         mOpenFrameMappings.clear();
         mOpenDrawingDeletions.clear();
+        mOpenLayerPropertyEdits.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
         mDrawingHandles.clear();
@@ -494,7 +495,30 @@ namespace ImmPlayer
         {
             const uint64_t revision = mPendingPresentation.mRevision;
             AuthoringCommitStatus * status = iFindCommitStatus(revision);
-            if (mPendingPresentation.mIsDeletion)
+            if (mPendingPresentation.mIsLayerPropertyEdit)
+            {
+                Layer * layer = mPendingPresentation.mLayer;
+                const uint64_t layerId = mPendingPresentation.mObject;
+                if (layer == nullptr)
+                {
+                    iRejectCommit(revision, -1, 0, layerId);
+                    mPendingPresentation = PendingPresentation{};
+                }
+                else
+                {
+                    layer->SetCanonicalVisible(mPendingPresentation.mLayerVisible);
+                    mPendingPresentation = PendingPresentation{};
+                    if (status != nullptr)
+                        status->mState = AuthoringCommitState::Presented;
+                    mPresentedRevision = revision;
+                    log->Printf(LT_MESSAGE,
+                        L"[IMM_LIVE_EDIT] presented revision=%llu layer=%llu canonicalVisible=%d",
+                        static_cast<unsigned long long>(revision),
+                        static_cast<unsigned long long>(layerId),
+                        layer->GetCanonicalVisible() ? 1 : 0);
+                }
+            }
+            else if (mPendingPresentation.mIsDeletion)
             {
                 LayerPaint * paint = mPendingPresentation.mLayer != nullptr ?
                     (LayerPaint *)mPendingPresentation.mLayer->GetImplementation() : nullptr;
@@ -698,6 +722,7 @@ namespace ImmPlayer
         if (!mEditing || !mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
             !mOpenFrameMappings.empty() || !mSealedBatches.empty() ||
             !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty() ||
             mPendingPresentation.mRevision != 0)
             return false;
 
@@ -715,6 +740,7 @@ namespace ImmPlayer
         mOpenGeometryEdits.clear();
         mOpenFrameMappings.clear();
         mOpenDrawingDeletions.clear();
+        mOpenLayerPropertyEdits.clear();
         return true;
     }
 
@@ -800,7 +826,8 @@ namespace ImmPlayer
         if (drawingIdOut == nullptr)
             return -2;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
-            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty())
+            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty())
             return -7;
 
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
@@ -821,7 +848,8 @@ namespace ImmPlayer
         if (!mEditing)
             return -4;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
-            mOpenFrameMappings.size() > 1 || !mOpenDrawingDeletions.empty())
+            mOpenFrameMappings.size() > 1 || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty())
             return -7;
 
         const DrawingHandleEntry * entry = iFindDrawingHandle(layerId, drawingId);
@@ -864,7 +892,8 @@ namespace ImmPlayer
         if (iFindDrawingHandle(layerId, drawingId) == nullptr &&
             iFindOpenDrawingCreation(layerId, drawingId) == nullptr)
             return -1;
-        if (!mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty())
+        if (!mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty())
             return -7;
 
         // This first vertical slice intentionally permits one replacement per batch. It keeps
@@ -889,7 +918,8 @@ namespace ImmPlayer
         if (!mEditing)
             return -4;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
-            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty())
+            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty())
             return -7;
 
         const DrawingHandleEntry * entry = iFindDrawingHandle(layerId, drawingId);
@@ -905,6 +935,21 @@ namespace ImmPlayer
             return -2;
 
         mOpenFrameMappings.push_back(FrameMapping{ layerId, frameIndex, drawingId });
+        return 0;
+    }
+
+    int32_t Document::QueueLayerVisibility(uint32_t layerId, bool visible)
+    {
+        if (!mEditing)
+            return -4;
+        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty())
+            return -7;
+        Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
+        if (layer == nullptr)
+            return -1;
+        mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{ layerId, visible });
         return 0;
     }
 
@@ -963,6 +1008,7 @@ namespace ImmPlayer
         mOpenGeometryEdits.clear();
         mOpenFrameMappings.clear();
         mOpenDrawingDeletions.clear();
+        mOpenLayerPropertyEdits.clear();
         mSealedBatches.clear();
         mCommitStatuses.clear();
         mDrawingHandles.clear();
@@ -980,7 +1026,33 @@ namespace ImmPlayer
         if (status != nullptr)
             status->mState = AuthoringCommitState::Preparing;
 
+        if (batch.mLayerPropertyEdits.size() == 1 && batch.mDrawingDeletions.empty() &&
+            batch.mFrameMappings.empty() && batch.mGeometryEdits.empty() &&
+            batch.mDrawingCreations.empty())
+        {
+            const LayerPropertyEdit & edit = batch.mLayerPropertyEdits[0];
+            Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), edit.mLayerId);
+            if (layer == nullptr)
+            {
+                iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
+                return;
+            }
+            if (status != nullptr)
+            {
+                status->mState = AuthoringCommitState::Prepared;
+                status->mObject = edit.mLayerId;
+            }
+            mPreparedRevision = batch.mRevision;
+            mPendingPresentation.mRevision = batch.mRevision;
+            mPendingPresentation.mObject = edit.mLayerId;
+            mPendingPresentation.mIsLayerPropertyEdit = true;
+            mPendingPresentation.mLayerVisible = edit.mVisible;
+            mPendingPresentation.mLayer = layer;
+            return;
+        }
+
         if (batch.mDrawingDeletions.size() == 1 && batch.mFrameMappings.size() <= 1 &&
+            batch.mLayerPropertyEdits.empty() &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const DrawingDeletion & deletion = batch.mDrawingDeletions[0];
@@ -1044,6 +1116,7 @@ namespace ImmPlayer
         }
 
         if (batch.mFrameMappings.size() == 1 && batch.mDrawingDeletions.empty() &&
+            batch.mLayerPropertyEdits.empty() &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const FrameMapping & mapping = batch.mFrameMappings[0];
@@ -1074,7 +1147,8 @@ namespace ImmPlayer
             return;
         }
 
-        if (!batch.mDrawingDeletions.empty() || !batch.mFrameMappings.empty() ||
+        if (!batch.mLayerPropertyEdits.empty() || !batch.mDrawingDeletions.empty() ||
+            !batch.mFrameMappings.empty() ||
             batch.mGeometryEdits.size() != 1 ||
             batch.mDrawingCreations.size() > 1 ||
             layerPaintRender == nullptr)
@@ -1178,14 +1252,20 @@ namespace ImmPlayer
         if (resultOut != nullptr)
             *resultOut = 0;
         const bool hasGeometryEdit = mOpenGeometryEdits.size() == 1 &&
-            mOpenFrameMappings.empty() && mOpenDrawingDeletions.empty();
+            mOpenFrameMappings.empty() && mOpenDrawingDeletions.empty() &&
+            mOpenLayerPropertyEdits.empty();
         const bool hasFrameMapping = mOpenFrameMappings.size() == 1 &&
             mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
-            mOpenDrawingDeletions.size() <= 1;
+            mOpenDrawingDeletions.size() <= 1 && mOpenLayerPropertyEdits.empty();
         const bool hasDrawingDeletion = mOpenDrawingDeletions.size() == 1 &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
-            mOpenDrawingCreations.empty();
-        if (!mEditing || (!hasGeometryEdit && !hasFrameMapping && !hasDrawingDeletion) ||
+            mOpenDrawingCreations.empty() && mOpenLayerPropertyEdits.empty();
+        const bool hasLayerPropertyEdit = mOpenLayerPropertyEdits.size() == 1 &&
+            mOpenDrawingDeletions.empty() && mOpenFrameMappings.empty() &&
+            mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty();
+        if (!mEditing ||
+            (!hasGeometryEdit && !hasFrameMapping && !hasDrawingDeletion &&
+                !hasLayerPropertyEdit) ||
             (!mOpenDrawingCreations.empty() &&
                 (mOpenDrawingCreations.size() != 1 ||
                     mOpenDrawingCreations[0].mLayerId != mOpenGeometryEdits[0].mLayerId ||
@@ -1208,6 +1288,7 @@ namespace ImmPlayer
         batch.mGeometryEdits.swap(mOpenGeometryEdits);
         batch.mFrameMappings.swap(mOpenFrameMappings);
         batch.mDrawingDeletions.swap(mOpenDrawingDeletions);
+        batch.mLayerPropertyEdits.swap(mOpenLayerPropertyEdits);
         mSealedBatches.push_back(std::move(batch));
         mCommitStatuses.push_back(AuthoringCommitStatus{
             mRequestedRevision, AuthoringCommitState::Queued, 0, 0, 0 });
@@ -1222,7 +1303,7 @@ namespace ImmPlayer
         if (mPendingPresentation.mRevision == 0)
             return;
         if (layerPaintRender != nullptr && !mPendingPresentation.mIsFrameMapping &&
-            !mPendingPresentation.mIsDeletion)
+            !mPendingPresentation.mIsDeletion && !mPendingPresentation.mIsLayerPropertyEdit)
             layerPaintRender->CancelDrawingReplacement(
                 renderer, mPendingPresentation.mRendererToken, log);
         if (mPendingPresentation.mReplacement)

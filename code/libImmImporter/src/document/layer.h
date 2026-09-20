@@ -118,6 +118,7 @@ namespace ImmImporter
 		const   ImmCore::piString& GetName(void) const;
 		const   ImmCore::piString* GetFullName(void) const;
 		bool    GetVisible(void) const;
+		bool    GetCanonicalVisible(void) const;
 		bool    GetPotentiallyVisible(void) const;
         bool    GetWorldVisible(void) const; // recurses parents
         bool    GetVisibilityOverrideEnabled(void) const;
@@ -156,6 +157,7 @@ namespace ImmImporter
 		// hm, do we really need these?
 		void SetOpacity(float opacity);
 		void SetVisible(bool visible);
+		void SetCanonicalVisible(bool visible);
         void SetVisibilityOverride(bool enabled, bool visible);
 		void SetPotentiallyVisible(bool visible);
 		void SetStartTime(ImmCore::piTick time);
@@ -198,6 +200,7 @@ namespace ImmImporter
 		uint32_t mID;
 		Type mType;
 		bool mVisible;
+		bool mCanonicalVisible;
         bool mVisibilityOverrideEnabled;
         bool mVisibilityOverrideValue;
         bool mTransformOverrideEnabled;

@@ -142,11 +142,41 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mPropertyQueued)
+        {
+            if (frame < mPropertyFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus propertyStatus;
+            const bool hasPropertyStatus = mPropertyRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mPropertyRevision, propertyStatus);
+            ImmPlayer::Player::LayerDiagnostics diagnostics;
+            const bool hasDiagnostics = player->GetLayerDiagnostics(
+                mDocumentId, mLayerId, diagnostics);
+            const bool canonicalChanged = hasDiagnostics &&
+                diagnostics.canonicalVisible == (mTargetCanonicalVisible ? 1 : 0);
+            const bool overridePreserved = hasDiagnostics &&
+                diagnostics.visibilityOverrideEnabled == 1 &&
+                diagnostics.visibilityOverrideValue == (mOriginalCanonicalVisible ? 1 : 0);
+            const bool effectivePreserved = hasDiagnostics &&
+                diagnostics.isVisible == (mOriginalCanonicalVisible ? 1 : 0);
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu revision=%llu status=%d result=%d "
+                L"canonicalChanged=%d overridePreserved=%d effectivePreserved=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mPropertyRevision),
+                hasPropertyStatus ? static_cast<int>(propertyStatus.mState) : -1,
+                hasPropertyStatus ? propertyStatus.mResult : -1,
+                canonicalChanged ? 1 : 0, overridePreserved ? 1 : 0,
+                effectivePreserved ? 1 : 0);
+            return;
+        }
+
         if (mDeletionQueued)
         {
             if (frame < mDeletionFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus deletionStatus;
             const bool hasDeletionStatus = mDeletionRevision != 0 &&
                 player->GetAuthoringCommitStatus(mDocumentId, mDeletionRevision, deletionStatus);
@@ -188,6 +218,36 @@ namespace ExePlayer
                 drawingCountAfter == mDrawingCountBeforeCreation ? 1 : 0,
                 deletedHandleMissing ? 1 : 0, originalHandleStable ? 1 : 0,
                 mReferencedDeletionRejected ? 1 : 0);
+            const bool deletionSucceeded = hasDeletionStatus &&
+                deletionStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                deletionStatus.mResult == 0 &&
+                drawingCountAfter == mDrawingCountBeforeCreation && deletedHandleMissing &&
+                originalHandleStable && restored && mReferencedDeletionRejected;
+            ImmPlayer::Player::LayerDiagnostics diagnostics;
+            if (!deletionSucceeded ||
+                !player->GetLayerDiagnostics(mDocumentId, mLayerId, diagnostics))
+            {
+                mMeasured = true;
+                return;
+            }
+            mOriginalCanonicalVisible = diagnostics.canonicalVisible != 0;
+            mTargetCanonicalVisible = !mOriginalCanonicalVisible;
+            const bool overrideSet = player->SetLayerVisible(
+                mDocumentId, mLayerId, mOriginalCanonicalVisible);
+            const int32_t propertyResult = overrideSet ? player->QueueLayerVisibility(
+                mDocumentId, static_cast<uint32_t>(mLayerId),
+                mTargetCanonicalVisible) : -4;
+            const uint64_t propertyRevision = propertyResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu layer=%d visible=%d overrideSet=%d "
+                L"propertyResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mLayerId,
+                mTargetCanonicalVisible ? 1 : 0, overrideSet ? 1 : 0,
+                propertyResult, static_cast<unsigned long long>(propertyRevision));
+            mPropertyQueued = true;
+            mPropertyFrame = frame;
+            mPropertyRevision = propertyRevision;
             return;
         }
 

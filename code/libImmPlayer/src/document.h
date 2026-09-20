@@ -215,6 +215,7 @@ namespace ImmPlayer {
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         int32_t QueueFrameMapping(uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
+        int32_t QueueLayerVisibility(uint32_t layerId, bool visible);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -266,6 +267,12 @@ namespace ImmPlayer {
             uint64_t mDrawingId = 0;
         };
 
+        struct LayerPropertyEdit
+        {
+            uint32_t mLayerId = 0;
+            bool mVisible = false;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -273,6 +280,7 @@ namespace ImmPlayer {
             std::vector<GeometryEdit> mGeometryEdits;
             std::vector<FrameMapping> mFrameMappings;
             std::vector<DrawingDeletion> mDrawingDeletions;
+            std::vector<LayerPropertyEdit> mLayerPropertyEdits;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -281,6 +289,7 @@ namespace ImmPlayer {
         std::vector<GeometryEdit> mOpenGeometryEdits;
         std::vector<FrameMapping> mOpenFrameMappings;
         std::vector<DrawingDeletion> mOpenDrawingDeletions;
+        std::vector<LayerPropertyEdit> mOpenLayerPropertyEdits;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -292,6 +301,8 @@ namespace ImmPlayer {
             bool mIsCreation = false;
             bool mIsFrameMapping = false;
             bool mIsDeletion = false;
+            bool mIsLayerPropertyEdit = false;
+            bool mLayerVisible = false;
             ImmImporter::Layer * mLayer = nullptr;
             uint32_t mDrawingIndex = 0;
             uint32_t mFrameIndex = 0;
