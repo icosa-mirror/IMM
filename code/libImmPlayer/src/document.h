@@ -295,6 +295,8 @@ namespace ImmPlayer {
             ImmImporter::Layer * mLayer = nullptr;
             uint32_t mDrawingIndex = 0;
             uint32_t mFrameIndex = 0;
+            uint32_t mMappedDrawingIndex = 0;
+            uint32_t mPreviousFrameDrawingIndex = 0;
             ImmImporter::Drawing * mActive = nullptr;
             std::unique_ptr<ImmImporter::Drawing> mReplacement;
             uint64_t mRendererToken = 0;

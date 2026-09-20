@@ -498,10 +498,23 @@ namespace ImmPlayer
             {
                 LayerPaint * paint = mPendingPresentation.mLayer != nullptr ?
                     (LayerPaint *)mPendingPresentation.mLayer->GetImplementation() : nullptr;
+                uint32_t * frames = paint != nullptr ? paint->GetFrameBuffer() : nullptr;
+                const bool hasValidMapping = !mPendingPresentation.mIsFrameMapping ||
+                    (frames != nullptr &&
+                        mPendingPresentation.mFrameIndex < paint->GetNumFrames() &&
+                        mPendingPresentation.mMappedDrawingIndex < paint->GetNumDrawings());
+                if (hasValidMapping && mPendingPresentation.mIsFrameMapping)
+                    frames[mPendingPresentation.mFrameIndex] =
+                        mPendingPresentation.mMappedDrawingIndex;
                 Drawing * removed = paint != nullptr && layerPaintRender != nullptr ?
-                    paint->ExtractDrawing(mPendingPresentation.mDrawingIndex) : nullptr;
+                    (hasValidMapping ? paint->ExtractDrawing(
+                        mPendingPresentation.mDrawingIndex) : nullptr) : nullptr;
                 if (removed == nullptr)
                 {
+                    if (frames != nullptr && mPendingPresentation.mIsFrameMapping &&
+                        mPendingPresentation.mFrameIndex < paint->GetNumFrames())
+                        frames[mPendingPresentation.mFrameIndex] =
+                            mPendingPresentation.mPreviousFrameDrawingIndex;
                     iRejectCommit(revision, layerPaintRender == nullptr ? -10 : -6, 0,
                         mPendingPresentation.mObject);
                     mPendingPresentation = PendingPresentation{};
@@ -511,6 +524,8 @@ namespace ImmPlayer
                     const uint64_t deletedHandle = mPendingPresentation.mObject;
                     Layer * deletedLayer = mPendingPresentation.mLayer;
                     const uint32_t deletedIndex = mPendingPresentation.mDrawingIndex;
+                    const bool presentedMapping = mPendingPresentation.mIsFrameMapping;
+                    const uint32_t presentedFrame = mPendingPresentation.mFrameIndex;
                     layerPaintRender->PresentDrawingDeletion(removed, log);
                     for (size_t handleIndex = 0; handleIndex < mDrawingHandles.size();)
                     {
@@ -529,9 +544,10 @@ namespace ImmPlayer
                         status->mState = AuthoringCommitState::Presented;
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] presented revision=%llu deletedDrawing=%llu",
+                        L"[IMM_LIVE_EDIT] presented revision=%llu deletedDrawing=%llu remappedFrame=%d frame=%u",
                         static_cast<unsigned long long>(revision),
-                        static_cast<unsigned long long>(deletedHandle));
+                        static_cast<unsigned long long>(deletedHandle),
+                        presentedMapping ? 1 : 0, presentedFrame);
                 }
             }
             else if (mPendingPresentation.mIsFrameMapping)
@@ -805,7 +821,7 @@ namespace ImmPlayer
         if (!mEditing)
             return -4;
         if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
-            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty())
+            mOpenFrameMappings.size() > 1 || !mOpenDrawingDeletions.empty())
             return -7;
 
         const DrawingHandleEntry * entry = iFindDrawingHandle(layerId, drawingId);
@@ -817,10 +833,19 @@ namespace ImmPlayer
             dynamic_cast<DrawingStatic *>(
                 paint->GetDrawing(static_cast<int>(entry->mDrawingIndex))) == nullptr)
             return -3;
+        const FrameMapping * mapping = mOpenFrameMappings.empty() ?
+            nullptr : &mOpenFrameMappings[0];
+        const DrawingHandleEntry * mappedEntry = mapping != nullptr ?
+            iFindDrawingHandle(mapping->mLayerId, mapping->mDrawingId) : nullptr;
+        if (mapping != nullptr && (mapping->mLayerId != layerId || mappedEntry == nullptr ||
+            mappedEntry->mLayer != entry->mLayer ||
+            mappedEntry->mDrawingIndex == entry->mDrawingIndex))
+            return -6;
         const uint32_t * frames = paint->GetFrameBuffer();
         for (uint32_t frameIndex = 0; frameIndex < paint->GetNumFrames(); frameIndex++)
         {
-            if (frames == nullptr || frames[frameIndex] == entry->mDrawingIndex)
+            const bool remapped = mapping != nullptr && mapping->mFrameIndex == frameIndex;
+            if (frames == nullptr || (!remapped && frames[frameIndex] == entry->mDrawingIndex))
                 return -6;
         }
 
@@ -955,7 +980,7 @@ namespace ImmPlayer
         if (status != nullptr)
             status->mState = AuthoringCommitState::Preparing;
 
-        if (batch.mDrawingDeletions.size() == 1 && batch.mFrameMappings.empty() &&
+        if (batch.mDrawingDeletions.size() == 1 && batch.mFrameMappings.size() <= 1 &&
             batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const DrawingDeletion & deletion = batch.mDrawingDeletions[0];
@@ -967,14 +992,31 @@ namespace ImmPlayer
             Drawing * active = paint != nullptr && entry->mDrawingIndex < paint->GetNumDrawings() ?
                 paint->GetDrawing(static_cast<int>(entry->mDrawingIndex)) : nullptr;
             const uint32_t * frames = paint != nullptr ? paint->GetFrameBuffer() : nullptr;
+            const FrameMapping * mapping = batch.mFrameMappings.empty() ?
+                nullptr : &batch.mFrameMappings[0];
+            const DrawingHandleEntry * mappedEntry = mapping != nullptr ?
+                iFindDrawingHandle(mapping->mLayerId, mapping->mDrawingId) : nullptr;
+            const bool validMapping = mapping == nullptr ||
+                (paint != nullptr && mappedEntry != nullptr &&
+                    mapping->mLayerId == deletion.mLayerId &&
+                    mappedEntry->mLayer == entry->mLayer &&
+                    mapping->mFrameIndex < paint->GetNumFrames() &&
+                    mappedEntry->mDrawingIndex < paint->GetNumDrawings() &&
+                    mappedEntry->mDrawingIndex != entry->mDrawingIndex);
             bool referenced = frames == nullptr;
             for (uint32_t frameIndex = 0;
                 paint != nullptr && frameIndex < paint->GetNumFrames(); frameIndex++)
-                referenced = referenced || frames[frameIndex] == entry->mDrawingIndex;
-            if (paint == nullptr || referenced || layerPaintRender == nullptr ||
+            {
+                const bool remapped = validMapping && mapping != nullptr &&
+                    mapping->mFrameIndex == frameIndex;
+                referenced = referenced ||
+                    (!remapped && frames[frameIndex] == entry->mDrawingIndex);
+            }
+            if (paint == nullptr || !validMapping || referenced || layerPaintRender == nullptr ||
                 !layerPaintRender->PrepareDrawingDeletion(active, log))
             {
-                iRejectCommit(batch.mRevision, referenced ? -6 : -10, 0, deletion.mDrawingId);
+                iRejectCommit(batch.mRevision,
+                    (!validMapping || referenced) ? -6 : -10, 0, deletion.mDrawingId);
                 return;
             }
 
@@ -987,14 +1029,22 @@ namespace ImmPlayer
             mPendingPresentation.mRevision = batch.mRevision;
             mPendingPresentation.mObject = deletion.mDrawingId;
             mPendingPresentation.mIsDeletion = true;
+            mPendingPresentation.mIsFrameMapping = mapping != nullptr;
             mPendingPresentation.mLayer = entry->mLayer;
             mPendingPresentation.mDrawingIndex = entry->mDrawingIndex;
+            if (mapping != nullptr)
+            {
+                mPendingPresentation.mFrameIndex = mapping->mFrameIndex;
+                mPendingPresentation.mMappedDrawingIndex = mappedEntry->mDrawingIndex;
+                mPendingPresentation.mPreviousFrameDrawingIndex =
+                    frames[mapping->mFrameIndex];
+            }
             mPendingPresentation.mActive = active;
             return;
         }
 
-        if (batch.mFrameMappings.size() == 1 && batch.mGeometryEdits.empty() &&
-            batch.mDrawingCreations.empty())
+        if (batch.mFrameMappings.size() == 1 && batch.mDrawingDeletions.empty() &&
+            batch.mGeometryEdits.empty() && batch.mDrawingCreations.empty())
         {
             const FrameMapping & mapping = batch.mFrameMappings[0];
             const DrawingHandleEntry * entry = iFindDrawingHandle(
@@ -1127,9 +1177,11 @@ namespace ImmPlayer
     {
         if (resultOut != nullptr)
             *resultOut = 0;
-        const bool hasGeometryEdit = mOpenGeometryEdits.size() == 1 && mOpenFrameMappings.empty();
+        const bool hasGeometryEdit = mOpenGeometryEdits.size() == 1 &&
+            mOpenFrameMappings.empty() && mOpenDrawingDeletions.empty();
         const bool hasFrameMapping = mOpenFrameMappings.size() == 1 &&
-            mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty();
+            mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
+            mOpenDrawingDeletions.size() <= 1;
         const bool hasDrawingDeletion = mOpenDrawingDeletions.size() == 1 &&
             mOpenFrameMappings.empty() && mOpenGeometryEdits.empty() &&
             mOpenDrawingCreations.empty();

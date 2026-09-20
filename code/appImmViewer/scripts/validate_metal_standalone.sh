@@ -1004,7 +1004,7 @@ run_case() {
             tail -n 80 "$log_path" >&2
             exit 1
         fi
-        if ! grep -Eq "\[IMM_LIVE_EDIT_DELETE\].*revision=5 status=4 result=0 countRestored=1 deletedHandleMissing=1 originalHandleStable=1 referencedDeletionRejected=1" "$log_path"; then
+        if ! grep -Eq "\[IMM_LIVE_EDIT_DELETE\].*revision=4 status=4 result=0 countRestored=1 deletedHandleMissing=1 originalHandleStable=1 referencedDeletionRejected=1" "$log_path"; then
             echo "$name did not reject referenced deletion and then delete the unreferenced drawing" >&2
             tail -n 80 "$log_path" >&2
             exit 1
