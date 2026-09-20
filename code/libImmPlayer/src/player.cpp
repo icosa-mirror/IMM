@@ -783,6 +783,15 @@ namespace ImmPlayer
             parentLayerId, std::move(name), &layerIdOut);
     }
 
+    int32_t Player::QueueLayerDeletion(int docId, uint32_t layerId)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueLayerDeletion(layerId);
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);

@@ -34,6 +34,7 @@ namespace ExePlayer
         bool mInitialSpawnAreaQueued = false;
         bool mSpawnAreaQueued = false;
         bool mGroupLayerQueued = false;
+        bool mGroupLayerDeletionQueued = false;
         bool mReferencedDeletionRejected = false;
         int mDocumentId = -1;
         int mLayerId = -1;
@@ -65,6 +66,8 @@ namespace ExePlayer
         int mCreatedGroupLayerId = -1;
         int mCreatedGroupParentId = -1;
         int mLayerCountBeforeGroupCreation = 0;
+        uint64_t mGroupLayerDeletionFrame = 0;
+        uint64_t mGroupLayerDeletionRevision = 0;
         bool mOriginalCanonicalVisible = false;
         bool mTargetCanonicalVisible = false;
         float mOriginalEffectiveOpacity = 1.0f;

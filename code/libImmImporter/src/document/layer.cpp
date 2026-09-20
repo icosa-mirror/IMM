@@ -430,6 +430,21 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 			mChildren.Append(child, false);
 	}
 
+	bool Layer::RemovePublishedChild(Layer * child)
+	{
+		if (mType != Type::Group || child == nullptr || child->mParent != this)
+			return false;
+		for (uint64_t index = 0; index < mChildren.GetLength(); index++)
+		{
+			if (mChildren.Get(index) == child)
+			{
+				mChildren.RemoveAndShift(index);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	Layer* Layer::GetParent() const { return mParent; }
 
 	bool Layer::Recurse(VisitorF func, int level, unsigned int child, bool instance, bool doNotRecurseCollapsedGroups, bool doNotRecurseHiddenGroups, bool doNotRecurseLockedGroups, bool doPostExec)

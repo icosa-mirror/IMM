@@ -177,11 +177,42 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mGroupLayerDeletionQueued)
+        {
+            if (frame < mGroupLayerDeletionFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus deletionStatus;
+            const bool hasDeletionStatus = mGroupLayerDeletionRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mGroupLayerDeletionRevision, deletionStatus);
+            bool layerMissing = true;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) &&
+                    info.id == mCreatedGroupLayerId)
+                {
+                    layerMissing = false;
+                    break;
+                }
+            }
+            const bool countRestored = player->GetLayerCount(mDocumentId) ==
+                mLayerCountBeforeGroupCreation;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu revision=%llu status=%d result=%d layerMissing=%d countRestored=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mGroupLayerDeletionRevision),
+                hasDeletionStatus ? static_cast<int>(deletionStatus.mState) : -1,
+                hasDeletionStatus ? deletionStatus.mResult : -1,
+                layerMissing ? 1 : 0, countRestored ? 1 : 0);
+            return;
+        }
+
         if (mGroupLayerQueued)
         {
             if (frame < mGroupLayerFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus creationStatus;
             const bool hasCreationStatus = mGroupLayerRevision != 0 &&
                 player->GetAuthoringCommitStatus(
@@ -208,6 +239,21 @@ namespace ExePlayer
                 hasCreationStatus ? static_cast<int>(creationStatus.mState) : -1,
                 hasCreationStatus ? creationStatus.mResult : -1,
                 layerMatch ? 1 : 0, countChanged ? 1 : 0);
+            const bool creationSucceeded = hasCreationStatus &&
+                creationStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                creationStatus.mResult == 0 && layerMatch && countChanged;
+            const int32_t deletionResult = creationSucceeded ?
+                player->QueueLayerDeletion(
+                    mDocumentId, static_cast<uint32_t>(mCreatedGroupLayerId)) : -4;
+            const uint64_t deletionRevision = deletionResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu layer=%d deleteResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mCreatedGroupLayerId,
+                deletionResult, static_cast<unsigned long long>(deletionRevision));
+            mGroupLayerDeletionQueued = true;
+            mGroupLayerDeletionFrame = frame;
+            mGroupLayerDeletionRevision = deletionRevision;
             return;
         }
 

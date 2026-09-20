@@ -2184,6 +2184,21 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerDestroy(
+    int32_t docId, int32_t layerId)
+{
+    if (layerId < 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    try
+    {
+        return iPlayer().QueueLayerDeletion(docId, static_cast<uint32_t>(layerId));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_LayerGetProperties(
     int32_t docId, int32_t layerId, ImmAuthoringLayerProperties *propertiesOut)
 {

@@ -158,6 +158,7 @@ namespace ImmPlayer {
             const ImmCore::trans3d & transform);
         int32_t QueueGroupLayerCreation(int docId, uint32_t parentLayerId,
             std::wstring name, uint32_t & layerIdOut);
+        int32_t QueueLayerDeletion(int docId, uint32_t layerId);
 
         struct SpawnAreaDiagnostics
         {

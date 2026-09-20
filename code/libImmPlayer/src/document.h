@@ -232,6 +232,7 @@ namespace ImmPlayer {
             const ImmCore::trans3d & transform);
         int32_t QueueGroupLayerCreation(uint32_t parentLayerId, std::wstring name,
             uint32_t * layerIdOut);
+        int32_t QueueLayerDeletion(uint32_t layerId);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -327,6 +328,11 @@ namespace ImmPlayer {
             std::wstring mName;
         };
 
+        struct LayerDeletion
+        {
+            uint32_t mLayerId = 0;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -339,6 +345,7 @@ namespace ImmPlayer {
             std::vector<InitialSpawnAreaEdit> mInitialSpawnAreaEdits;
             std::vector<SpawnAreaEdit> mSpawnAreaEdits;
             std::vector<LayerCreation> mLayerCreations;
+            std::vector<LayerDeletion> mLayerDeletions;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -353,6 +360,7 @@ namespace ImmPlayer {
         std::vector<InitialSpawnAreaEdit> mOpenInitialSpawnAreaEdits;
         std::vector<SpawnAreaEdit> mOpenSpawnAreaEdits;
         std::vector<LayerCreation> mOpenLayerCreations;
+        std::vector<LayerDeletion> mOpenLayerDeletions;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -369,6 +377,7 @@ namespace ImmPlayer {
             bool mIsInitialSpawnAreaEdit = false;
             bool mIsSpawnAreaEdit = false;
             bool mIsLayerCreation = false;
+            bool mIsLayerDeletion = false;
             ImmImporter::LayerSpawnArea::Volume mSpawnAreaVolume = {};
             ImmImporter::LayerSpawnArea::TrackingLevel mSpawnAreaTracking =
                 ImmImporter::LayerSpawnArea::TrackingLevel::Floor;

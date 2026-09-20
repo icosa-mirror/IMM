@@ -116,6 +116,21 @@ bool Sequence::RollbackPreparedLayer(Layer * layer)
     return true;
 }
 
+bool Sequence::RemovePublishedLayer(Layer * layer)
+{
+    if (layer == nullptr || layer == mRoot)
+        return false;
+    for (uint64_t index = 0; index < mLayers.GetLength(); index++)
+    {
+        if (mLayers.Get(index) == layer)
+        {
+            mLayers.RemoveAndShift(index);
+            return true;
+        }
+    }
+    return false;
+}
+
 uint32_t Sequence::GetLayerStorageCount(void) const
 {
     return static_cast<uint32_t>(mLayers.GetLength());

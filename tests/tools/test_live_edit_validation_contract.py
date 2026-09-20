@@ -51,6 +51,7 @@ def main() -> int:
             "ImmAuthoring_LayerGetProperties",
             "ImmAuthoring_LayerSetProperties",
             "ImmAuthoring_LayerCreate",
+            "ImmAuthoring_LayerDestroy",
             "ImmAuthoring_KeySet",
             "ImmAuthoring_KeyRemove",
             "ImmAuthoring_SetInitialSpawnArea",
@@ -86,6 +87,7 @@ def main() -> int:
             'L"[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=%llu revision=%llu status=%d result=%d initialLayerMatch=%d"',
             'L"[IMM_LIVE_EDIT_SPAWN_AREA] frame=%llu revision=%llu status=%d result=%d spawnAreaMatch=%d"',
             'L"[IMM_LIVE_EDIT_LAYER_CREATE] frame=%llu revision=%llu status=%d result=%d layerMatch=%d countChanged=%d"',
+            'L"[IMM_LIVE_EDIT_LAYER_DESTROY] frame=%llu revision=%llu status=%d result=%d layerMissing=%d countRestored=%d"',
         ],
     )
     require_tokens(
@@ -99,6 +101,7 @@ def main() -> int:
             r"\[IMM_LIVE_EDIT_INITIAL_SPAWN\].*revision=7 status=4 result=0 initialLayerMatch=1",
             r"\[IMM_LIVE_EDIT_SPAWN_AREA\].*revision=8 status=4 result=0 spawnAreaMatch=1",
             r"\[IMM_LIVE_EDIT_LAYER_CREATE\].*revision=9 status=4 result=0 layerMatch=1 countChanged=1",
+            r"\[IMM_LIVE_EDIT_LAYER_DESTROY\].*revision=10 status=4 result=0 layerMissing=1 countRestored=1",
         ],
     )
     require_tokens(
