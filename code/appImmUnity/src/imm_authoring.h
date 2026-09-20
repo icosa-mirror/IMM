@@ -55,7 +55,8 @@ enum
 
 typedef enum ImmAuthoringLayerPropertyMask
 {
-    IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY = 1u << 0
+    IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY = 1u << 0,
+    IMM_AUTHORING_LAYER_PROPERTY_OPACITY = 1u << 1
 } ImmAuthoringLayerPropertyMask;
 
 typedef struct ImmAuthoringPoint
@@ -122,7 +123,8 @@ typedef struct ImmAuthoringLayerProperties
     uint32_t updateMask;
     uint32_t reserved0;
     int32_t visible;
-    uint32_t reserved1[3];
+    float opacity;
+    uint32_t reserved1[2];
 } ImmAuthoringLayerProperties;
 
 #ifdef __cplusplus

@@ -6,6 +6,7 @@
 #include "libImmPlayer/src/player.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <utility>
 #include <vector>
@@ -161,15 +162,24 @@ namespace ExePlayer
                 diagnostics.visibilityOverrideValue == (mOriginalCanonicalVisible ? 1 : 0);
             const bool effectivePreserved = hasDiagnostics &&
                 diagnostics.isVisible == (mOriginalCanonicalVisible ? 1 : 0);
+            const bool canonicalOpacityChanged = hasDiagnostics &&
+                std::fabs(diagnostics.canonicalOpacity - mTargetCanonicalOpacity) < 0.0001f;
+            const bool opacityOverridePreserved = hasDiagnostics &&
+                diagnostics.opacityOverrideEnabled == 1 &&
+                std::fabs(diagnostics.opacityOverrideValue - mOriginalEffectiveOpacity) < 0.0001f;
+            const bool opacityEffectivePreserved = hasDiagnostics &&
+                std::fabs(diagnostics.opacity - mOriginalEffectiveOpacity) < 0.0001f;
             log->Printf(LT_MESSAGE,
                 L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu revision=%llu status=%d result=%d "
-                L"canonicalChanged=%d overridePreserved=%d effectivePreserved=%d",
+                L"canonicalChanged=%d overridePreserved=%d effectivePreserved=%d "
+                L"canonicalOpacityChanged=%d opacityOverridePreserved=%d opacityEffectivePreserved=%d",
                 static_cast<unsigned long long>(frame),
                 static_cast<unsigned long long>(mPropertyRevision),
                 hasPropertyStatus ? static_cast<int>(propertyStatus.mState) : -1,
                 hasPropertyStatus ? propertyStatus.mResult : -1,
                 canonicalChanged ? 1 : 0, overridePreserved ? 1 : 0,
-                effectivePreserved ? 1 : 0);
+                effectivePreserved ? 1 : 0, canonicalOpacityChanged ? 1 : 0,
+                opacityOverridePreserved ? 1 : 0, opacityEffectivePreserved ? 1 : 0);
             return;
         }
 
@@ -232,18 +242,22 @@ namespace ExePlayer
             }
             mOriginalCanonicalVisible = diagnostics.canonicalVisible != 0;
             mTargetCanonicalVisible = !mOriginalCanonicalVisible;
+            mOriginalEffectiveOpacity = diagnostics.opacity;
+            mTargetCanonicalOpacity = diagnostics.canonicalOpacity > 0.5f ? 0.25f : 0.75f;
             const bool overrideSet = player->SetLayerVisible(
-                mDocumentId, mLayerId, mOriginalCanonicalVisible);
-            const int32_t propertyResult = overrideSet ? player->QueueLayerVisibility(
-                mDocumentId, static_cast<uint32_t>(mLayerId),
-                mTargetCanonicalVisible) : -4;
+                mDocumentId, mLayerId, mOriginalCanonicalVisible) &&
+                player->SetLayerOpacity(mDocumentId, mLayerId, mOriginalEffectiveOpacity);
+            const int32_t propertyResult = overrideSet ? player->QueueLayerProperties(
+                mDocumentId, static_cast<uint32_t>(mLayerId), true,
+                mTargetCanonicalVisible, true, mTargetCanonicalOpacity) : -4;
             const uint64_t propertyRevision = propertyResult == 0 ?
                 player->CommitEdits(mDocumentId) : 0;
             log->Printf(LT_MESSAGE,
-                L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu layer=%d visible=%d overrideSet=%d "
+                L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu layer=%d visible=%d opacity=%.3f overrideSet=%d "
                 L"propertyResult=%d revision=%llu",
                 static_cast<unsigned long long>(frame), mLayerId,
-                mTargetCanonicalVisible ? 1 : 0, overrideSet ? 1 : 0,
+                mTargetCanonicalVisible ? 1 : 0, mTargetCanonicalOpacity,
+                overrideSet ? 1 : 0,
                 propertyResult, static_cast<unsigned long long>(propertyRevision));
             mPropertyQueued = true;
             mPropertyFrame = frame;

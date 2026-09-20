@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <thread>
 #include <chrono>
+#include <cmath>
 
 
 #include "libImmCore/src/libBasics/piDebug.h"
@@ -506,16 +507,20 @@ namespace ImmPlayer
                 }
                 else
                 {
-                    layer->SetCanonicalVisible(mPendingPresentation.mLayerVisible);
+                    if (mPendingPresentation.mSetLayerVisibility)
+                        layer->SetCanonicalVisible(mPendingPresentation.mLayerVisible);
+                    if (mPendingPresentation.mSetLayerOpacity)
+                        layer->SetCanonicalOpacity(mPendingPresentation.mLayerOpacity);
                     mPendingPresentation = PendingPresentation{};
                     if (status != nullptr)
                         status->mState = AuthoringCommitState::Presented;
                     mPresentedRevision = revision;
                     log->Printf(LT_MESSAGE,
-                        L"[IMM_LIVE_EDIT] presented revision=%llu layer=%llu canonicalVisible=%d",
+                        L"[IMM_LIVE_EDIT] presented revision=%llu layer=%llu canonicalVisible=%d canonicalOpacity=%.3f",
                         static_cast<unsigned long long>(revision),
                         static_cast<unsigned long long>(layerId),
-                        layer->GetCanonicalVisible() ? 1 : 0);
+                        layer->GetCanonicalVisible() ? 1 : 0,
+                        layer->GetCanonicalOpacity());
                 }
             }
             else if (mPendingPresentation.mIsDeletion)
@@ -938,7 +943,8 @@ namespace ImmPlayer
         return 0;
     }
 
-    int32_t Document::QueueLayerVisibility(uint32_t layerId, bool visible)
+    int32_t Document::QueueLayerProperties(uint32_t layerId,
+        bool setVisibility, bool visible, bool setOpacity, float opacity)
     {
         if (!mEditing)
             return -4;
@@ -949,7 +955,12 @@ namespace ImmPlayer
         Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
         if (layer == nullptr)
             return -1;
-        mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{ layerId, visible });
+        if (!setVisibility && !setOpacity)
+            return -2;
+        if (setOpacity && (!std::isfinite(opacity) || opacity < 0.0f || opacity > 1.0f))
+            return -2;
+        mOpenLayerPropertyEdits.push_back(LayerPropertyEdit{
+            layerId, setVisibility, visible, setOpacity, opacity });
         return 0;
     }
 
@@ -1046,7 +1057,10 @@ namespace ImmPlayer
             mPendingPresentation.mRevision = batch.mRevision;
             mPendingPresentation.mObject = edit.mLayerId;
             mPendingPresentation.mIsLayerPropertyEdit = true;
+            mPendingPresentation.mSetLayerVisibility = edit.mSetVisibility;
             mPendingPresentation.mLayerVisible = edit.mVisible;
+            mPendingPresentation.mSetLayerOpacity = edit.mSetOpacity;
+            mPendingPresentation.mLayerOpacity = edit.mOpacity;
             mPendingPresentation.mLayer = layer;
             return;
         }

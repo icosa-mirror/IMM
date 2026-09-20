@@ -141,7 +141,8 @@ namespace ImmPlayer {
             std::vector<Document::AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         int32_t QueueFrameMapping(int docId, uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
-        int32_t QueueLayerVisibility(int docId, uint32_t layerId, bool visible);
+        int32_t QueueLayerProperties(int docId, uint32_t layerId,
+            bool setVisibility, bool visible, bool setOpacity, float opacity);
 
         struct LayerDiagnostics
         {
@@ -150,6 +151,9 @@ namespace ImmPlayer {
             int isVisible = 0;
             int canonicalVisible = 0;
             float opacity = 0.0f;
+            float canonicalOpacity = 0.0f;
+            int opacityOverrideEnabled = 0;
+            float opacityOverrideValue = 0.0f;
             int isWorldVisible = 0;
             float worldOpacity = 0.0f;
             int parentId = -1;

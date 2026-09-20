@@ -49,6 +49,7 @@ def main() -> int:
             "ImmAuthoring_DrawingDestroy",
             "ImmAuthoring_LayerSetProperties",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
+            "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",
             "uint64_t * drawingIdOut",
         ],
     )
@@ -57,7 +58,7 @@ def main() -> int:
         [
             "player->QueueDrawingCreation(",
             "player->QueueDrawingDeletion(",
-            "player->QueueLayerVisibility(",
+            "player->QueueLayerProperties(",
             "player->QueueFrameMapping(",
             'L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "',
             'L"[IMM_LIVE_EDIT_FRAME_SET] frame=%llu revision=%llu status=%d result=%d handleMatch=%d"',
@@ -65,6 +66,7 @@ def main() -> int:
             'L"[IMM_LIVE_EDIT_PROPERTY] frame=%llu revision=%llu status=%d result=%d "',
             "drawingCountAfter=%d handleMatch=%d",
             "referencedDeletionRejected=%d",
+            "canonicalOpacityChanged=%d",
         ],
     )
     require_tokens(

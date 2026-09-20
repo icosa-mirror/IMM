@@ -215,7 +215,8 @@ namespace ImmPlayer {
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
         int32_t QueueFrameMapping(uint32_t layerId, uint32_t frameIndex, uint64_t drawingId);
-        int32_t QueueLayerVisibility(uint32_t layerId, bool visible);
+        int32_t QueueLayerProperties(uint32_t layerId, bool setVisibility, bool visible,
+            bool setOpacity, float opacity);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -270,7 +271,10 @@ namespace ImmPlayer {
         struct LayerPropertyEdit
         {
             uint32_t mLayerId = 0;
+            bool mSetVisibility = false;
             bool mVisible = false;
+            bool mSetOpacity = false;
+            float mOpacity = 1.0f;
         };
 
         struct SealedBatch
@@ -302,7 +306,10 @@ namespace ImmPlayer {
             bool mIsFrameMapping = false;
             bool mIsDeletion = false;
             bool mIsLayerPropertyEdit = false;
+            bool mSetLayerVisibility = false;
             bool mLayerVisible = false;
+            bool mSetLayerOpacity = false;
+            float mLayerOpacity = 1.0f;
             ImmImporter::Layer * mLayer = nullptr;
             uint32_t mDrawingIndex = 0;
             uint32_t mFrameIndex = 0;

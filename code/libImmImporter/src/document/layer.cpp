@@ -56,6 +56,9 @@ namespace ImmImporter
 		mTransform = transform;
         mPivotTransform = pivot;
 		mOpacity = opacity;
+		mCanonicalOpacity = opacity;
+		mOpacityOverrideEnabled = false;
+		mOpacityOverrideValue = opacity;
 		mIsTimeline = isTimeLine;
 		mDuration = duration;
 		mMaxRepeatCount = maxRepeatCount;
@@ -220,7 +223,7 @@ trans3d Layer::GetTransformToWorld(void) const
 
 	float * Layer::GetOpacityRef(void)
 	{
-		return &mOpacity;
+		return &mCanonicalOpacity;
 	}
 
 	bool Layer::GetVisible(void) const { return mVisibilityOverrideEnabled ? mVisibilityOverrideValue : mVisible; }
@@ -269,10 +272,13 @@ const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformO
 
 	const piString& Layer::GetName(void) const { return mName; }
 
-	float Layer::GetOpacity(void) const { return mOpacity; }
+	float Layer::GetOpacity(void) const { return mOpacityOverrideEnabled ? mOpacityOverrideValue : mOpacity; }
+	float Layer::GetCanonicalOpacity(void) const { return mCanonicalOpacity; }
+	bool Layer::GetOpacityOverrideEnabled(void) const { return mOpacityOverrideEnabled; }
+	float Layer::GetOpacityOverrideValue(void) const { return mOpacityOverrideValue; }
     float Layer::GetWorldOpacity(void) const
     {
-        float opacity = mOpacity;
+        float opacity = GetOpacity();
 
         Layer* tmpLa = mParent;
         while (tmpLa)
@@ -286,7 +292,19 @@ const trans3d &Layer::GetTransformOverrideValue(void) const { return mTransformO
 
 	void Layer::SetOpacity(float opacity)
 	{
+		mCanonicalOpacity = opacity;
 		mOpacity = opacity;
+	}
+	void Layer::SetCanonicalOpacity(float opacity)
+	{
+		mCanonicalOpacity = opacity;
+		if (GetNumAnimKeys(AnimProperty::Opacity) == 0)
+			mOpacity = opacity;
+	}
+	void Layer::SetOpacityOverride(bool enabled, float opacity)
+	{
+		mOpacityOverrideEnabled = enabled;
+		mOpacityOverrideValue = opacity;
 	}
 
 trans3d Layer::GetTransform(void) const { return mTransformOverrideEnabled ? mTransformOverrideValue : mTransform; }

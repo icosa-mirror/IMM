@@ -46,6 +46,8 @@ namespace ExePlayer
         uint64_t mPropertyRevision = 0;
         bool mOriginalCanonicalVisible = false;
         bool mTargetCanonicalVisible = false;
+        float mOriginalEffectiveOpacity = 1.0f;
+        float mTargetCanonicalOpacity = 1.0f;
         int mDrawingCountBeforeCreation = -1;
         ImmCore::bound3 mDrawingBoxBefore;
     };

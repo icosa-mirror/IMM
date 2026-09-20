@@ -702,13 +702,15 @@ namespace ImmPlayer
         return doc->QueueFrameMapping(layerId, frameIndex, drawingId);
     }
 
-    int32_t Player::QueueLayerVisibility(int docId, uint32_t layerId, bool visible)
+    int32_t Player::QueueLayerProperties(int docId, uint32_t layerId,
+        bool setVisibility, bool visible, bool setOpacity, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);
         Document * doc = (Document *)mDocuments.GetAddress(docId);
         if (doc == nullptr)
             return -1;
-        return doc->QueueLayerVisibility(layerId, visible);
+        return doc->QueueLayerProperties(
+            layerId, setVisibility, visible, setOpacity, opacity);
     }
 
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
@@ -724,7 +726,7 @@ namespace ImmPlayer
         if (!layer)
             return false;
 
-        layer->SetOpacity(opacity);
+        layer->SetOpacityOverride(true, opacity);
         return true;
     }
 
@@ -797,6 +799,9 @@ namespace ImmPlayer
         outDiag.isVisible = layer->GetVisible() ? 1 : 0;
         outDiag.canonicalVisible = layer->GetCanonicalVisible() ? 1 : 0;
         outDiag.opacity = layer->GetOpacity();
+        outDiag.canonicalOpacity = layer->GetCanonicalOpacity();
+        outDiag.opacityOverrideEnabled = layer->GetOpacityOverrideEnabled() ? 1 : 0;
+        outDiag.opacityOverrideValue = layer->GetOpacityOverrideValue();
         outDiag.isWorldVisible = layer->GetWorldVisible() ? 1 : 0;
         outDiag.worldOpacity = layer->GetWorldOpacity();
         Layer *parent = layer->GetParent();

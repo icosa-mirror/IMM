@@ -2103,15 +2103,27 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
         properties->structVersion != IMM_AUTHORING_STRUCT_VERSION_1 ||
         properties->structSize < sizeof(ImmAuthoringLayerProperties) ||
         properties->reserved0 != 0 || properties->reserved1[0] != 0 ||
-        properties->reserved1[1] != 0 || properties->reserved1[2] != 0 ||
-        (properties->visible != 0 && properties->visible != 1))
+        properties->reserved1[1] != 0)
         return IMM_AUTHORING_INVALID_ARGUMENT;
-    if (properties->updateMask != IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY)
+    const uint32_t supportedMask = IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY |
+        IMM_AUTHORING_LAYER_PROPERTY_OPACITY;
+    if (properties->updateMask == 0 || (properties->updateMask & ~supportedMask) != 0)
         return IMM_AUTHORING_UNSUPPORTED;
+    if ((properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY) != 0 &&
+        properties->visible != 0 && properties->visible != 1)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if ((properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_OPACITY) != 0 &&
+        (!std::isfinite(properties->opacity) || properties->opacity < 0.0f ||
+            properties->opacity > 1.0f))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
     try
     {
-        return iPlayer().QueueLayerVisibility(
-            docId, static_cast<uint32_t>(layerId), properties->visible != 0);
+        return iPlayer().QueueLayerProperties(
+            docId, static_cast<uint32_t>(layerId),
+            (properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY) != 0,
+            properties->visible != 0,
+            (properties->updateMask & IMM_AUTHORING_LAYER_PROPERTY_OPACITY) != 0,
+            properties->opacity);
     }
     catch (const std::bad_alloc &)
     {

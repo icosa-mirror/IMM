@@ -126,6 +126,9 @@ namespace ImmImporter
         bool    GetTransformOverrideEnabled(void) const;
         const ImmCore::trans3d &GetTransformOverrideValue(void) const;
 		float   GetOpacity(void) const;
+		float   GetCanonicalOpacity(void) const;
+		bool    GetOpacityOverrideEnabled(void) const;
+		float   GetOpacityOverrideValue(void) const;
         float   GetWorldOpacity(void) const;
 
 		ImmCore::trans3d GetTransform(void) const;
@@ -156,6 +159,8 @@ namespace ImmImporter
 
 		// hm, do we really need these?
 		void SetOpacity(float opacity);
+		void SetCanonicalOpacity(float opacity);
+		void SetOpacityOverride(bool enabled, float opacity);
 		void SetVisible(bool visible);
 		void SetCanonicalVisible(bool visible);
         void SetVisibilityOverride(bool enabled, bool visible);
@@ -210,6 +215,9 @@ namespace ImmImporter
 		ImmCore::piString mName;
 		ImmCore::piString mFullName;
 		float mOpacity;
+		float mCanonicalOpacity;
+		bool mOpacityOverrideEnabled;
+		float mOpacityOverrideValue;
 		ImmCore::trans3d mTransform;
         ImmCore::trans3d mPivotTransform;
 
