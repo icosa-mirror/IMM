@@ -2316,6 +2316,92 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_SetIn
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_SpawnAreaSet(
+    int32_t docId, int32_t layerId, const ImmAuthoringSpawnArea * spawnArea)
+{
+    if (layerId < 0 || spawnArea == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (spawnArea->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
+        return IMM_AUTHORING_UNSUPPORTED;
+    if (spawnArea->structSize < sizeof(ImmAuthoringSpawnArea) ||
+        spawnArea->reserved0 != 0 || spawnArea->reserved1[0] != 0 ||
+        spawnArea->reserved1[1] != 0 || spawnArea->reserved1[2] != 0 ||
+        spawnArea->reserved1[3] != 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    constexpr uint32_t supportedTranslationMask = IMM_AUTHORING_SPAWN_TRANSLATION_X |
+        IMM_AUTHORING_SPAWN_TRANSLATION_Y | IMM_AUTHORING_SPAWN_TRANSLATION_Z;
+    if ((spawnArea->translationMask & ~supportedTranslationMask) != 0 ||
+        (spawnArea->trackingLevel != IMM_AUTHORING_SPAWN_TRACKING_FLOOR &&
+            spawnArea->trackingLevel != IMM_AUTHORING_SPAWN_TRACKING_EYE))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const float values[] = {
+        spawnArea->sphereX, spawnArea->sphereY, spawnArea->sphereZ,
+        spawnArea->sphereRadius, spawnArea->boxMinX, spawnArea->boxMinY,
+        spawnArea->boxMinZ, spawnArea->boxMaxX, spawnArea->boxMaxY,
+        spawnArea->boxMaxZ, spawnArea->tx, spawnArea->ty, spawnArea->tz,
+        spawnArea->qx, spawnArea->qy, spawnArea->qz, spawnArea->qw,
+        spawnArea->scale };
+    for (float value : values)
+        if (!std::isfinite(value))
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+
+    ImmImporter::LayerSpawnArea::Volume volume = {};
+    if (spawnArea->volumeType == IMM_AUTHORING_SPAWN_VOLUME_SPHERE)
+    {
+        if (spawnArea->sphereRadius <= 0.0f)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        volume.mType = ImmImporter::LayerSpawnArea::Volume::Type::Sphere;
+        volume.mShape.mSphere = ImmCore::vec4(
+            spawnArea->sphereX, spawnArea->sphereY, spawnArea->sphereZ,
+            spawnArea->sphereRadius);
+    }
+    else if (spawnArea->volumeType == IMM_AUTHORING_SPAWN_VOLUME_BOX)
+    {
+        if (spawnArea->boxMinX >= spawnArea->boxMaxX ||
+            spawnArea->boxMinY >= spawnArea->boxMaxY ||
+            spawnArea->boxMinZ >= spawnArea->boxMaxZ)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        volume.mType = ImmImporter::LayerSpawnArea::Volume::Type::Box;
+        volume.mShape.mBox = ImmCore::bound3(
+            ImmCore::vec3(spawnArea->boxMinX, spawnArea->boxMinY, spawnArea->boxMinZ),
+            ImmCore::vec3(spawnArea->boxMaxX, spawnArea->boxMaxY, spawnArea->boxMaxZ));
+    }
+    else
+    {
+        return IMM_AUTHORING_UNSUPPORTED;
+    }
+    volume.mAllowTranslationX =
+        (spawnArea->translationMask & IMM_AUTHORING_SPAWN_TRANSLATION_X) != 0;
+    volume.mAllowTranslationY =
+        (spawnArea->translationMask & IMM_AUTHORING_SPAWN_TRANSLATION_Y) != 0;
+    volume.mAllowTranslationZ =
+        (spawnArea->translationMask & IMM_AUTHORING_SPAWN_TRANSLATION_Z) != 0;
+
+    const double quaternionLengthSquared =
+        static_cast<double>(spawnArea->qx) * spawnArea->qx +
+        static_cast<double>(spawnArea->qy) * spawnArea->qy +
+        static_cast<double>(spawnArea->qz) * spawnArea->qz +
+        static_cast<double>(spawnArea->qw) * spawnArea->qw;
+    if (spawnArea->scale <= 0.0f || std::fabs(quaternionLengthSquared - 1.0) > 0.001)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const ImmCore::trans3d transform(
+        ImmCore::quatd(spawnArea->qx, spawnArea->qy, spawnArea->qz, spawnArea->qw),
+        spawnArea->scale, ImmCore::flip3::N,
+        ImmCore::vec3d(spawnArea->tx, spawnArea->ty, spawnArea->tz));
+    try
+    {
+        return iPlayer().QueueSpawnArea(
+            docId, static_cast<uint32_t>(layerId), volume,
+            static_cast<ImmImporter::LayerSpawnArea::TrackingLevel>(
+                spawnArea->trackingLevel),
+            transform);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {

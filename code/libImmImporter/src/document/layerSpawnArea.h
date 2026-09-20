@@ -52,6 +52,7 @@ namespace ImmImporter
         const int      GetVersion(void) const;
         const TrackingLevel GetTracking(void) const;
         const Volume & GetVolume(void) const;
+        void SetCanonical(const Volume & volume, TrackingLevel tracking);
         const ImmCore::piImage* GetScreenshot(void) const;
         const Volume::Type& GetVolumeType(void) const;
         const ImmCore::vec4& GetVolumeSphere(void) const;

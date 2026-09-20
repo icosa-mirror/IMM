@@ -78,6 +78,25 @@ typedef enum ImmAuthoringInterpolation
     IMM_AUTHORING_INTERPOLATION_AUTO = 6
 } ImmAuthoringInterpolation;
 
+typedef enum ImmAuthoringSpawnVolumeType
+{
+    IMM_AUTHORING_SPAWN_VOLUME_SPHERE = 0,
+    IMM_AUTHORING_SPAWN_VOLUME_BOX = 1
+} ImmAuthoringSpawnVolumeType;
+
+typedef enum ImmAuthoringSpawnTrackingLevel
+{
+    IMM_AUTHORING_SPAWN_TRACKING_FLOOR = 0,
+    IMM_AUTHORING_SPAWN_TRACKING_EYE = 1
+} ImmAuthoringSpawnTrackingLevel;
+
+typedef enum ImmAuthoringSpawnTranslationMask
+{
+    IMM_AUTHORING_SPAWN_TRANSLATION_X = 1u << 0,
+    IMM_AUTHORING_SPAWN_TRANSLATION_Y = 1u << 1,
+    IMM_AUTHORING_SPAWN_TRANSLATION_Z = 1u << 2
+} ImmAuthoringSpawnTranslationMask;
+
 typedef struct ImmAuthoringPoint
 {
     float px, py, pz;
@@ -164,6 +183,23 @@ typedef struct ImmAuthoringKey
     uint32_t reserved[4];
 } ImmAuthoringKey;
 
+typedef struct ImmAuthoringSpawnArea
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    int32_t volumeType;
+    int32_t trackingLevel;
+    uint32_t translationMask;
+    uint32_t reserved0;
+    float sphereX, sphereY, sphereZ, sphereRadius;
+    float boxMinX, boxMinY, boxMinZ;
+    float boxMaxX, boxMaxY, boxMaxZ;
+    float tx, ty, tz;
+    float qx, qy, qz, qw;
+    float scale;
+    uint32_t reserved1[4];
+} ImmAuthoringSpawnArea;
+
 #ifdef __cplusplus
 // These layouts cross the native-library boundary. Keep the assertions beside the
 // public declarations so every C++ target catches an accidental ABI change.
@@ -183,6 +219,7 @@ static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus 
 static_assert(sizeof(ImmAuthoringLayerProperties) == 64,
     "ImmAuthoringLayerProperties ABI changed");
 static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
+static_assert(sizeof(ImmAuthoringSpawnArea) == 112, "ImmAuthoringSpawnArea ABI changed");
 #endif
 
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Attach(int32_t docId);
@@ -203,6 +240,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeyRemove(int32_t d
     int32_t property, double timeSeconds);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SetInitialSpawnArea(int32_t docId,
     int32_t layerId);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SpawnAreaSet(int32_t docId,
+    int32_t layerId, const ImmAuthoringSpawnArea * spawnArea);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32_t docId, int32_t layerId,

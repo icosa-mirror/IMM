@@ -54,6 +54,12 @@ namespace ImmImporter
         return mVolume;
     }
 
+    void LayerSpawnArea::SetCanonical(const Volume & volume, TrackingLevel tracking)
+    {
+        mVolume = volume;
+        mTracking = tracking;
+    }
+
     const piImage* LayerSpawnArea::GetScreenshot(void) const
     {
         if (!mHasAsset)

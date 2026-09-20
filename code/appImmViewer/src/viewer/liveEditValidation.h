@@ -1,6 +1,7 @@
 #pragma once
 
 #include "libImmCore/src/libBasics/piVecTypes.h"
+#include "libImmImporter/src/document/layerSpawnArea.h"
 
 #include <stdint.h>
 
@@ -31,6 +32,7 @@ namespace ExePlayer
         bool mKeyQueued = false;
         bool mKeyRemovalQueued = false;
         bool mInitialSpawnAreaQueued = false;
+        bool mSpawnAreaQueued = false;
         bool mReferencedDeletionRejected = false;
         int mDocumentId = -1;
         int mLayerId = -1;
@@ -51,6 +53,12 @@ namespace ExePlayer
         uint64_t mInitialSpawnAreaFrame = 0;
         uint64_t mInitialSpawnAreaRevision = 0;
         int mInitialSpawnAreaLayerId = -1;
+        uint64_t mSpawnAreaFrame = 0;
+        uint64_t mSpawnAreaRevision = 0;
+        ImmImporter::LayerSpawnArea::Volume mTargetSpawnAreaVolume = {};
+        ImmImporter::LayerSpawnArea::TrackingLevel mTargetSpawnAreaTracking =
+            ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+        ImmCore::trans3d mTargetSpawnAreaTransform = ImmCore::trans3d::identity();
         bool mOriginalCanonicalVisible = false;
         bool mTargetCanonicalVisible = false;
         float mOriginalEffectiveOpacity = 1.0f;

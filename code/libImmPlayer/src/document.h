@@ -225,6 +225,10 @@ namespace ImmPlayer {
         int32_t QueueAnimationKeyRemoval(uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time);
         int32_t QueueInitialSpawnArea(uint32_t layerId);
+        int32_t QueueSpawnArea(uint32_t layerId,
+            const ImmImporter::LayerSpawnArea::Volume & volume,
+            ImmImporter::LayerSpawnArea::TrackingLevel tracking,
+            const ImmCore::trans3d & transform);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -304,6 +308,15 @@ namespace ImmPlayer {
             uint32_t mLayerId = 0;
         };
 
+        struct SpawnAreaEdit
+        {
+            uint32_t mLayerId = 0;
+            ImmImporter::LayerSpawnArea::Volume mVolume = {};
+            ImmImporter::LayerSpawnArea::TrackingLevel mTracking =
+                ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+            ImmCore::trans3d mTransform = ImmCore::trans3d::identity();
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -314,6 +327,7 @@ namespace ImmPlayer {
             std::vector<LayerPropertyEdit> mLayerPropertyEdits;
             std::vector<AnimationKeyEdit> mAnimationKeyEdits;
             std::vector<InitialSpawnAreaEdit> mInitialSpawnAreaEdits;
+            std::vector<SpawnAreaEdit> mSpawnAreaEdits;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -325,6 +339,7 @@ namespace ImmPlayer {
         std::vector<LayerPropertyEdit> mOpenLayerPropertyEdits;
         std::vector<AnimationKeyEdit> mOpenAnimationKeyEdits;
         std::vector<InitialSpawnAreaEdit> mOpenInitialSpawnAreaEdits;
+        std::vector<SpawnAreaEdit> mOpenSpawnAreaEdits;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -339,6 +354,11 @@ namespace ImmPlayer {
             bool mIsLayerPropertyEdit = false;
             bool mIsAnimationKeyEdit = false;
             bool mIsInitialSpawnAreaEdit = false;
+            bool mIsSpawnAreaEdit = false;
+            ImmImporter::LayerSpawnArea::Volume mSpawnAreaVolume = {};
+            ImmImporter::LayerSpawnArea::TrackingLevel mSpawnAreaTracking =
+                ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+            ImmCore::trans3d mSpawnAreaTransform = ImmCore::trans3d::identity();
             ImmImporter::Layer::AnimProperty mAnimationProperty =
                 ImmImporter::Layer::AnimProperty::Visibility;
             std::vector<ImmImporter::Layer::AnimKey> mAnimationKeys;

@@ -152,6 +152,20 @@ namespace ImmPlayer {
         int32_t QueueAnimationKeyRemoval(int docId, uint32_t layerId,
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time);
         int32_t QueueInitialSpawnArea(int docId, uint32_t layerId);
+        int32_t QueueSpawnArea(int docId, uint32_t layerId,
+            const ImmImporter::LayerSpawnArea::Volume & volume,
+            ImmImporter::LayerSpawnArea::TrackingLevel tracking,
+            const ImmCore::trans3d & transform);
+
+        struct SpawnAreaDiagnostics
+        {
+            ImmImporter::LayerSpawnArea::Volume volume = {};
+            ImmImporter::LayerSpawnArea::TrackingLevel tracking =
+                ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+            ImmCore::trans3d transform = ImmCore::trans3d::identity();
+        };
+        bool GetSpawnAreaDiagnostics(int docId, int layerId,
+            SpawnAreaDiagnostics & diagnosticsOut);
 
         struct LayerDiagnostics
         {

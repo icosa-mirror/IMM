@@ -744,6 +744,34 @@ namespace ImmPlayer
         return doc->QueueInitialSpawnArea(layerId);
     }
 
+    int32_t Player::QueueSpawnArea(int docId, uint32_t layerId,
+        const LayerSpawnArea::Volume & volume, LayerSpawnArea::TrackingLevel tracking,
+        const trans3d & transform)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueSpawnArea(layerId, volume, tracking, transform);
+    }
+
+    bool Player::GetSpawnAreaDiagnostics(int docId, int layerId,
+        SpawnAreaDiagnostics & diagnosticsOut)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        Layer * layer = doc != nullptr ? iFindLayerById(doc->GetSequence(), layerId) : nullptr;
+        LayerSpawnArea * spawnArea = layer != nullptr &&
+            layer->GetType() == Layer::Type::SpawnArea ?
+            (LayerSpawnArea *)layer->GetImplementation() : nullptr;
+        if (spawnArea == nullptr)
+            return false;
+        diagnosticsOut.volume = spawnArea->GetVolume();
+        diagnosticsOut.tracking = spawnArea->GetTracking();
+        diagnosticsOut.transform = layer->GetCanonicalTransform();
+        return true;
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);

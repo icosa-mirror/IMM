@@ -26,6 +26,27 @@ namespace ExePlayer
             std::fabs(a.mScale - b.mScale) < epsilon && a.mFlip == b.mFlip;
     }
 
+    static bool iSpawnVolumesMatch(const ImmImporter::LayerSpawnArea::Volume & a,
+        const ImmImporter::LayerSpawnArea::Volume & b)
+    {
+        constexpr float epsilon = 0.000001f;
+        if (a.mType != b.mType || a.mAllowTranslationX != b.mAllowTranslationX ||
+            a.mAllowTranslationY != b.mAllowTranslationY ||
+            a.mAllowTranslationZ != b.mAllowTranslationZ)
+            return false;
+        if (a.mType == ImmImporter::LayerSpawnArea::Volume::Type::Sphere)
+            return std::fabs(a.mShape.mSphere.x - b.mShape.mSphere.x) < epsilon &&
+                std::fabs(a.mShape.mSphere.y - b.mShape.mSphere.y) < epsilon &&
+                std::fabs(a.mShape.mSphere.z - b.mShape.mSphere.z) < epsilon &&
+                std::fabs(a.mShape.mSphere.w - b.mShape.mSphere.w) < epsilon;
+        return std::fabs(a.mShape.mBox.mMinX - b.mShape.mBox.mMinX) < epsilon &&
+            std::fabs(a.mShape.mBox.mMinY - b.mShape.mBox.mMinY) < epsilon &&
+            std::fabs(a.mShape.mBox.mMinZ - b.mShape.mBox.mMinZ) < epsilon &&
+            std::fabs(a.mShape.mBox.mMaxX - b.mShape.mBox.mMaxX) < epsilon &&
+            std::fabs(a.mShape.mBox.mMaxY - b.mShape.mBox.mMaxY) < epsilon &&
+            std::fabs(a.mShape.mBox.mMaxZ - b.mShape.mBox.mMaxZ) < epsilon;
+    }
+
     uint64_t LiveEditValidation::RequestedFrameFromEnvironment(void)
     {
         const char * value = std::getenv("IMM_VIEWER_LIVE_EDIT");
@@ -156,11 +177,35 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mSpawnAreaQueued)
+        {
+            if (frame < mSpawnAreaFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus spawnStatus;
+            const bool hasSpawnStatus = mSpawnAreaRevision != 0 &&
+                player->GetAuthoringCommitStatus(mDocumentId, mSpawnAreaRevision, spawnStatus);
+            ImmPlayer::Player::SpawnAreaDiagnostics diagnostics;
+            const bool hasDiagnostics = player->GetSpawnAreaDiagnostics(
+                mDocumentId, mInitialSpawnAreaLayerId, diagnostics);
+            const bool spawnAreaMatch = hasDiagnostics &&
+                iSpawnVolumesMatch(diagnostics.volume, mTargetSpawnAreaVolume) &&
+                diagnostics.tracking == mTargetSpawnAreaTracking &&
+                iTransformsMatch(diagnostics.transform, mTargetSpawnAreaTransform);
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_SPAWN_AREA] frame=%llu revision=%llu status=%d result=%d spawnAreaMatch=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mSpawnAreaRevision),
+                hasSpawnStatus ? static_cast<int>(spawnStatus.mState) : -1,
+                hasSpawnStatus ? spawnStatus.mResult : -1,
+                spawnAreaMatch ? 1 : 0);
+            return;
+        }
+
         if (mInitialSpawnAreaQueued)
         {
             if (frame < mInitialSpawnAreaFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus spawnStatus;
             const bool hasSpawnStatus = mInitialSpawnAreaRevision != 0 &&
                 player->GetAuthoringCommitStatus(
@@ -174,6 +219,43 @@ namespace ExePlayer
                 hasSpawnStatus ? static_cast<int>(spawnStatus.mState) : -1,
                 hasSpawnStatus ? spawnStatus.mResult : -1,
                 initialLayerMatch ? 1 : 0);
+            const bool initialSpawnSucceeded = hasSpawnStatus &&
+                spawnStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                spawnStatus.mResult == 0 && initialLayerMatch;
+            ImmPlayer::Player::SpawnAreaDiagnostics diagnostics;
+            if (!initialSpawnSucceeded || !player->GetSpawnAreaDiagnostics(
+                mDocumentId, mInitialSpawnAreaLayerId, diagnostics))
+            {
+                mMeasured = true;
+                return;
+            }
+            mTargetSpawnAreaVolume = diagnostics.volume;
+            mTargetSpawnAreaVolume.mAllowTranslationX =
+                !mTargetSpawnAreaVolume.mAllowTranslationX;
+            if (mTargetSpawnAreaVolume.mType ==
+                ImmImporter::LayerSpawnArea::Volume::Type::Sphere)
+                mTargetSpawnAreaVolume.mShape.mSphere.w += 0.125f;
+            else
+                mTargetSpawnAreaVolume.mShape.mBox.mMaxX += 0.125f;
+            mTargetSpawnAreaTracking = diagnostics.tracking ==
+                ImmImporter::LayerSpawnArea::TrackingLevel::Floor ?
+                ImmImporter::LayerSpawnArea::TrackingLevel::Eye :
+                ImmImporter::LayerSpawnArea::TrackingLevel::Floor;
+            mTargetSpawnAreaTransform = diagnostics.transform;
+            mTargetSpawnAreaTransform.mTranslation.y += 0.125;
+            const int32_t setResult = player->QueueSpawnArea(
+                mDocumentId, static_cast<uint32_t>(mInitialSpawnAreaLayerId),
+                mTargetSpawnAreaVolume, mTargetSpawnAreaTracking,
+                mTargetSpawnAreaTransform);
+            const uint64_t setRevision = setResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_SPAWN_AREA] frame=%llu layer=%d setResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mInitialSpawnAreaLayerId,
+                setResult, static_cast<unsigned long long>(setRevision));
+            mSpawnAreaQueued = true;
+            mSpawnAreaFrame = frame;
+            mSpawnAreaRevision = setRevision;
             return;
         }
 
