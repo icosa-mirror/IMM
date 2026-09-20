@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 #include "libImmCore/src/libBasics/piArray.h"
 #include "libImmCore/src/libBasics/piString.h"
@@ -194,6 +195,8 @@ namespace ImmImporter
 
         bool AddKey(ImmCore::piTick time, AnimProperty property, const AnimValue& value, InterpolationType interpolation);
         const AnimKey* GetAnimKeyAt(AnimProperty property, ImmCore::piTick time) const;
+        bool CopyAnimKeys(AnimProperty property, std::vector<AnimKey> & keysOut) const;
+        void ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys);
 
 		typedef std::function<bool(Layer* layer, int level, int child, bool instance)> VisitorF;
 
@@ -234,7 +237,7 @@ namespace ImmImporter
 		bool mIsPlaying;
 		bool mIsTimeline;
 		uint32_t mMaxRepeatCount;
-		ImmCore::piTArray<AnimKey> mAnimKeys[static_cast<int>(AnimProperty::MAX)];
+		std::vector<AnimKey> mAnimKeys[static_cast<int>(AnimProperty::MAX)];
 
 		LayerImplementation mImplementation; // if not group
 		ImmCore::piTArray<Layer*> mChildren;          // if group

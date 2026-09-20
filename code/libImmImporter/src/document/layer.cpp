@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <algorithm>
+#include <new>
 
 #include "layer.h"
 #include "layerInstance.h"
@@ -93,14 +95,6 @@ namespace ImmImporter
 			mImplementation = nullptr;
 		}
 
-		// Initialize an array of keys for each property
-		const int maxProps = static_cast<int>(AnimProperty::MAX);
-		for (int i = 0; i < maxProps; i++)
-		{
-			if (!mAnimKeys[i].Init(1, true))
-				return false;
-		}
-
 		return true;
 	}
 
@@ -121,9 +115,7 @@ namespace ImmImporter
 
         const int maxProps = static_cast<int>(AnimProperty::MAX);
         for (int i = 0; i < maxProps; i++)
-        {
-            mAnimKeys[i].End();
-        }
+            std::vector<AnimKey>().swap(mAnimKeys[i]);
 
         mName.End();
 
@@ -342,7 +334,7 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
 	bool Layer::GetLayerUsesDrawin(void) const
 	{
-		return mAnimKeys[static_cast<int>(AnimProperty::DrawInTime)].GetLength() > 0;
+		return !mAnimKeys[static_cast<int>(AnimProperty::DrawInTime)].empty();
 	}
 
 
@@ -550,15 +542,15 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
 	uint32_t Layer::GetNumAnimKeys(AnimProperty property) const
 	{
-		return static_cast<uint32_t>(mAnimKeys[static_cast<int>(property)].GetLength());
+		return static_cast<uint32_t>(mAnimKeys[static_cast<int>(property)].size());
 	}
 
 	const Layer::AnimKey* Layer::GetAnimKey(AnimProperty property, unsigned int index) const
 	{
-		if (index >= mAnimKeys[static_cast<int>(property)].GetLength())
+		if (index >= mAnimKeys[static_cast<int>(property)].size())
 			return nullptr;
 
-		return mAnimKeys[static_cast<int>(property)].GetAddress(index);
+		return &mAnimKeys[static_cast<int>(property)][index];
 	}
 
     bool Layer::GetLoaded(void) const
@@ -570,10 +562,10 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
     const Layer::AnimKey * Layer::GetAnimKeyAt(AnimProperty property, piTick time) const
     {
         const int propIndex = static_cast<int>(property);
-        const uint64_t numKeys = mAnimKeys[propIndex].GetLength();
-        for (uint64_t i = 0; i < numKeys; i++)
+        const size_t numKeys = mAnimKeys[propIndex].size();
+        for (size_t i = 0; i < numKeys; i++)
         {
-            AnimKey * key = mAnimKeys[propIndex].GetAddress(i);
+            const AnimKey * key = &mAnimKeys[propIndex][i];
             if (key->mTime == time)
                 return key;
         }
@@ -582,46 +574,44 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
 	bool Layer::AddKey(piTick time, AnimProperty property, const AnimValue& value, InterpolationType interpolation)
 	{
-		AnimKey* key;
 		const int propIndex = static_cast<int>(property);
-
-		// Find the key
-		int64_t keyIndex = -1;
-		bool found = false;
-		const uint64_t numKeys = mAnimKeys[propIndex].GetLength();
-		for (uint64_t i = 0; i < numKeys; i++)
-		{
-			AnimKey * key = mAnimKeys[propIndex].GetAddress(i);
-
-			if (key->mTime == time)
-				found = true;
-
-			if (key->mTime >= time)
+		std::vector<AnimKey> & keys = mAnimKeys[propIndex];
+		auto key = std::lower_bound(keys.begin(), keys.end(), time,
+			[](const AnimKey & candidate, piTick target)
 			{
-				keyIndex = i;
-				break;
-			}
-		}
-
-		if (found)
+				return candidate.mTime < target;
+			});
+		try
 		{
-			key = mAnimKeys[propIndex].GetAddress(keyIndex);
+			if (key == keys.end() || key->mTime != time)
+				key = keys.insert(key, AnimKey{});
 		}
-		else
+		catch (const std::bad_alloc &)
 		{
-			// Insert in place so the list stays sorted
-			AnimKey newkey;
-			if (keyIndex == -1)
-				key = mAnimKeys[propIndex].Append(&newkey, true);
-			else
-				key = mAnimKeys[propIndex].InsertAndShift(&newkey, keyIndex, true);
+			return false;
 		}
-
 		key->mTime = time;
 		key->mValue = value;
 		key->mInterpolation = interpolation;
-
 		return true;
+	}
+
+	bool Layer::CopyAnimKeys(AnimProperty property, std::vector<AnimKey> & keysOut) const
+	{
+		try
+		{
+			keysOut = mAnimKeys[static_cast<int>(property)];
+			return true;
+		}
+		catch (const std::bad_alloc &)
+		{
+			return false;
+		}
+	}
+
+	void Layer::ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys)
+	{
+		mAnimKeys[static_cast<int>(property)].swap(keys);
 	}
 
     void Layer::SetStateAt(piTick now, piLog* log)
