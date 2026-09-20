@@ -118,7 +118,6 @@ namespace ImmImporter
             std::vector<AnimKey>().swap(mAnimKeys[i]);
 
         mName.End();
-        mFullName.End();
 
         if (mType == Type::Group)
         {
