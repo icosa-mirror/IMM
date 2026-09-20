@@ -210,6 +210,7 @@ namespace ImmPlayer {
         bool GetDrawingHandle(uint32_t layerId, uint32_t drawingIndex, uint64_t * drawingIdOut) const;
         bool GetFrameDrawingHandle(uint32_t layerId, uint32_t frameIndex, uint64_t * drawingIdOut) const;
         int32_t QueueDrawingCreation(uint32_t layerId, uint64_t * drawingIdOut);
+        int32_t QueueDrawingDeletion(uint32_t layerId, uint64_t drawingId);
         int32_t QueueDrawingGeometry(uint32_t layerId, uint64_t drawingId,
             std::vector<AuthoringElementGeometry> elements,
             ImmImporter::Drawing::ColorSpace colorSpace, bool flipped, float biggestStroke);
@@ -259,12 +260,19 @@ namespace ImmPlayer {
             uint64_t mDrawingId = 0;
         };
 
+        struct DrawingDeletion
+        {
+            uint32_t mLayerId = 0;
+            uint64_t mDrawingId = 0;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
             std::vector<DrawingCreation> mDrawingCreations;
             std::vector<GeometryEdit> mGeometryEdits;
             std::vector<FrameMapping> mFrameMappings;
+            std::vector<DrawingDeletion> mDrawingDeletions;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -272,6 +280,7 @@ namespace ImmPlayer {
         std::vector<DrawingCreation> mOpenDrawingCreations;
         std::vector<GeometryEdit> mOpenGeometryEdits;
         std::vector<FrameMapping> mOpenFrameMappings;
+        std::vector<DrawingDeletion> mOpenDrawingDeletions;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -282,6 +291,7 @@ namespace ImmPlayer {
             uint64_t mObject = 0;
             bool mIsCreation = false;
             bool mIsFrameMapping = false;
+            bool mIsDeletion = false;
             ImmImporter::Layer * mLayer = nullptr;
             uint32_t mDrawingIndex = 0;
             uint32_t mFrameIndex = 0;

@@ -135,18 +135,96 @@ namespace ExePlayer
             mLayerId = layerId;
             mAppliedFrame = frame;
             mRevision = revision;
+            mOriginalDrawingId = drawingId;
             return;
         }
 
         if (mMeasured)
             return;
 
+        if (mDeletionQueued)
+        {
+            if (frame < mDeletionFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus deletionStatus;
+            const bool hasDeletionStatus = mDeletionRevision != 0 &&
+                player->GetAuthoringCommitStatus(mDocumentId, mDeletionRevision, deletionStatus);
+            int drawingCountAfter = -1;
+            for (int i = 0; i < player->GetLayerCount(mDocumentId); i++)
+            {
+                ImmPlayer::Player::LayerInfo info;
+                if (player->GetLayerInfoByIndex(mDocumentId, i, info) && info.id == mLayerId)
+                {
+                    drawingCountAfter = info.paintNumDrawings;
+                    break;
+                }
+            }
+            uint64_t deletedIndexHandle = 0;
+            const bool deletedHandleMissing = !player->GetDrawingHandle(
+                mDocumentId, mLayerId, mDrawingCountBeforeCreation, deletedIndexHandle);
+            uint64_t originalHandle = 0;
+            const bool originalHandleStable = player->GetDrawingHandle(
+                mDocumentId, mLayerId, 0, originalHandle) &&
+                originalHandle == mOriginalDrawingId;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_DELETE] frame=%llu revision=%llu status=%d result=%d "
+                L"countRestored=%d deletedHandleMissing=%d originalHandleStable=%d "
+                L"referencedDeletionRejected=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mDeletionRevision),
+                hasDeletionStatus ? static_cast<int>(deletionStatus.mState) : -1,
+                hasDeletionStatus ? deletionStatus.mResult : -1,
+                drawingCountAfter == mDrawingCountBeforeCreation ? 1 : 0,
+                deletedHandleMissing ? 1 : 0, originalHandleStable ? 1 : 0,
+                mReferencedDeletionRejected ? 1 : 0);
+            return;
+        }
+
+        if (mRestoreMappingQueued)
+        {
+            if (frame < mRestoreMappingFrame + 3)
+                return;
+            ImmPlayer::Document::AuthoringCommitStatus restoreStatus;
+            const bool hasRestoreStatus = mRestoreMappingRevision != 0 &&
+                player->GetAuthoringCommitStatus(mDocumentId, mRestoreMappingRevision, restoreStatus);
+            uint64_t mappedDrawingId = 0;
+            const bool restored = player->GetFrameDrawingHandle(
+                mDocumentId, mLayerId, 0, mappedDrawingId) &&
+                mappedDrawingId == mOriginalDrawingId;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_FRAME_RESTORE] frame=%llu revision=%llu status=%d result=%d handleMatch=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mRestoreMappingRevision),
+                hasRestoreStatus ? static_cast<int>(restoreStatus.mState) : -1,
+                hasRestoreStatus ? restoreStatus.mResult : -1, restored ? 1 : 0);
+            if (!hasRestoreStatus ||
+                restoreStatus.mState != ImmPlayer::Document::AuthoringCommitState::Presented ||
+                restoreStatus.mResult != 0 || !restored)
+            {
+                mMeasured = true;
+                return;
+            }
+            const int32_t deletionResult = player->QueueDrawingDeletion(
+                mDocumentId, static_cast<uint32_t>(mLayerId), mCreatedDrawingId);
+            const uint64_t deletionRevision = deletionResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_DELETE] frame=%llu drawing=%llu deletionResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mCreatedDrawingId), deletionResult,
+                static_cast<unsigned long long>(deletionRevision));
+            mDeletionQueued = true;
+            mDeletionFrame = frame;
+            mDeletionRevision = deletionRevision;
+            return;
+        }
+
         if (mFrameMappingQueued)
         {
             if (frame < mFrameMappingFrame + 3)
                 return;
 
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus mappingStatus;
             const bool hasMappingStatus = mFrameMappingRevision != 0 &&
                 player->GetAuthoringCommitStatus(
@@ -161,6 +239,28 @@ namespace ExePlayer
                 hasMappingStatus ? static_cast<int>(mappingStatus.mState) : -1,
                 hasMappingStatus ? mappingStatus.mResult : -1,
                 resolvedMapping && mappedDrawingId == mCreatedDrawingId ? 1 : 0);
+            if (!hasMappingStatus ||
+                mappingStatus.mState != ImmPlayer::Document::AuthoringCommitState::Presented ||
+                mappingStatus.mResult != 0 || !resolvedMapping ||
+                mappedDrawingId != mCreatedDrawingId)
+            {
+                mMeasured = true;
+                return;
+            }
+            mReferencedDeletionRejected = player->QueueDrawingDeletion(
+                mDocumentId, static_cast<uint32_t>(mLayerId), mCreatedDrawingId) == -6;
+            const int32_t restoreResult = player->QueueFrameMapping(
+                mDocumentId, static_cast<uint32_t>(mLayerId), 0, mOriginalDrawingId);
+            const uint64_t restoreRevision = restoreResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_FRAME_RESTORE] frame=%llu drawing=%llu mappingResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mOriginalDrawingId), restoreResult,
+                static_cast<unsigned long long>(restoreRevision));
+            mRestoreMappingQueued = true;
+            mRestoreMappingFrame = frame;
+            mRestoreMappingRevision = restoreRevision;
             return;
         }
 

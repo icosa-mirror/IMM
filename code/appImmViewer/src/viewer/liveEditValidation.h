@@ -27,6 +27,9 @@ namespace ExePlayer
         bool mMeasured = false;
         bool mCreationQueued = false;
         bool mFrameMappingQueued = false;
+        bool mRestoreMappingQueued = false;
+        bool mDeletionQueued = false;
+        bool mReferencedDeletionRejected = false;
         int mDocumentId = -1;
         int mLayerId = -1;
         uint64_t mAppliedFrame = 0;
@@ -34,8 +37,13 @@ namespace ExePlayer
         uint64_t mCreationFrame = 0;
         uint64_t mCreationRevision = 0;
         uint64_t mCreatedDrawingId = 0;
+        uint64_t mOriginalDrawingId = 0;
         uint64_t mFrameMappingFrame = 0;
         uint64_t mFrameMappingRevision = 0;
+        uint64_t mRestoreMappingFrame = 0;
+        uint64_t mRestoreMappingRevision = 0;
+        uint64_t mDeletionFrame = 0;
+        uint64_t mDeletionRevision = 0;
         int mDrawingCountBeforeCreation = -1;
         ImmCore::bound3 mDrawingBoxBefore;
     };

@@ -135,6 +135,7 @@ namespace ImmPlayer {
         bool GetDrawingBBox(int docId, int layerId, int drawingIndex, ImmCore::bound3 & bboxOut);
 
         int32_t QueueDrawingCreation(int docId, uint32_t layerId, uint64_t & drawingIdOut);
+        int32_t QueueDrawingDeletion(int docId, uint32_t layerId, uint64_t drawingId);
 
         int32_t QueueDrawingGeometry(int docId, uint32_t layerId, uint64_t drawingId,
             std::vector<Document::AuthoringElementGeometry> elements,

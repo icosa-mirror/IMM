@@ -151,6 +151,29 @@ namespace ImmImporter
 		return true;
 	}
 
+	Drawing * LayerPaintStatic::ExtractDrawing(uint32_t drawingIndex)
+	{
+		if (drawingIndex >= mDrawings.size())
+			return nullptr;
+		uint32_t * frames = GetFrameBuffer();
+		if (GetNumFrames() > 0 && frames == nullptr)
+			return nullptr;
+		for (uint32_t frameIndex = 0; frameIndex < GetNumFrames(); frameIndex++)
+		{
+			if (frames[frameIndex] == drawingIndex)
+				return nullptr;
+		}
+
+		DrawingStatic * removed = mDrawings[drawingIndex].release();
+		mDrawings.erase(mDrawings.begin() + drawingIndex);
+		for (uint32_t frameIndex = 0; frameIndex < GetNumFrames(); frameIndex++)
+		{
+			if (frames[frameIndex] > drawingIndex)
+				frames[frameIndex]--;
+		}
+		return removed;
+	}
+
 	Drawing * LayerPaintStatic::GetDrawing(int drawing) const
 	{
 		return mDrawings[drawing].get();

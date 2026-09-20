@@ -66,6 +66,19 @@ namespace ImmPlayer
 			return false;
 		}
 
+		virtual bool PrepareDrawingDeletion(ImmImporter::Drawing * active,
+			ImmCore::piLog * log)
+		{
+			(void)active; (void)log;
+			return false;
+		}
+
+		virtual void PresentDrawingDeletion(ImmImporter::Drawing * removed,
+			ImmCore::piLog * log)
+		{
+			(void)removed; (void)log;
+		}
+
 		virtual void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
 			uint64_t token, ImmCore::piLog * log)
 		{

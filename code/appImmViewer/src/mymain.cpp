@@ -1256,8 +1256,8 @@ extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 //--------------------------------------------------------------------------------------
 // Live-edit validation probe.
 //
-// IMM_VIEWER_LIVE_EDIT=<frame> applies one geometry replacement and then creates one
-// unreferenced drawing in the first paint layer through the same API an editor uses.
+// IMM_VIEWER_LIVE_EDIT=<frame> replaces geometry, creates a drawing, maps and restores a
+// frame, then deletes the again-unreferenced drawing through the same API an editor uses.
 // This is the harness for milestone M1: it measures an edit against a document that is
 // actually loaded and rendering, instead of extrapolating from a static benchmark.
 //--------------------------------------------------------------------------------------

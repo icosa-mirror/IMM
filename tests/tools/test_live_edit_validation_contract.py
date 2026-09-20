@@ -44,16 +44,23 @@ def main() -> int:
     )
     require_tokens(
         "code/appImmUnity/src/imm_authoring.h",
-        ["ImmAuthoring_DrawingCreate", "uint64_t * drawingIdOut"],
+        [
+            "ImmAuthoring_DrawingCreate",
+            "ImmAuthoring_DrawingDestroy",
+            "uint64_t * drawingIdOut",
+        ],
     )
     require_tokens(
         "code/appImmViewer/src/viewer/liveEditValidation.cpp",
         [
             "player->QueueDrawingCreation(",
+            "player->QueueDrawingDeletion(",
             "player->QueueFrameMapping(",
             'L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "',
             'L"[IMM_LIVE_EDIT_FRAME_SET] frame=%llu revision=%llu status=%d result=%d handleMatch=%d"',
+            'L"[IMM_LIVE_EDIT_DELETE] frame=%llu revision=%llu status=%d result=%d "',
             "drawingCountAfter=%d handleMatch=%d",
+            "referencedDeletionRejected=%d",
         ],
     )
     require_tokens(
@@ -69,6 +76,7 @@ def main() -> int:
         [
             "std::vector<std::unique_ptr<DrawingStatic>> mDrawings",
             "bool RemoveLastDrawing(Drawing * expected) override",
+            "Drawing * ExtractDrawing(uint32_t drawingIndex) override",
         ],
     )
     require_tokens(

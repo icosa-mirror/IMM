@@ -58,6 +58,7 @@ namespace ImmImporter
 		// mappings pointing at them stay valid.
 		Drawing * AddDrawing(void) override;
 		bool RemoveLastDrawing(Drawing * expected) override;
+		Drawing * ExtractDrawing(uint32_t drawingIndex) override;
 
 
 	private:

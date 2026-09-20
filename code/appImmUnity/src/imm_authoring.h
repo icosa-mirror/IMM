@@ -140,6 +140,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(in
     int32_t drawingIndex, uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32_t docId, int32_t layerId,
     uint64_t * drawingIdOut);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingDestroy(int32_t docId, int32_t layerId,
+    uint64_t drawingId);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingSetGeometry(int32_t docId, int32_t layerId,
     uint64_t drawingId, const ImmAuthoringDrawingGeometry * geometry);
 

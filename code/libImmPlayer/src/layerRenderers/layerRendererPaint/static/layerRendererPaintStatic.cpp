@@ -679,6 +679,29 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         return true;
     }
 
+    bool LayerRendererPaintStatic::PrepareDrawingDeletion(Drawing * active, piLog * log)
+    {
+        DrawingStatic * activeStatic = dynamic_cast<DrawingStatic *>(active);
+        const int token = activeStatic != nullptr ? activeStatic->GetGpuId() : -1;
+        if (token < 0 || !mLayerInfo.IsUsed(static_cast<uint64_t>(token)))
+        {
+            log->Printf(LT_ERROR, L"Live edit: deleted drawing has no renderer slot");
+            return false;
+        }
+        return true;
+    }
+
+    void LayerRendererPaintStatic::PresentDrawingDeletion(Drawing * removed, piLog * log)
+    {
+        DrawingStatic * removedStatic = dynamic_cast<DrawingStatic *>(removed);
+        const int token = removedStatic != nullptr ? removedStatic->GetGpuId() : -1;
+        if (token < 0)
+            return;
+        mRetiredDrawings.push_back(RetiredDrawing{
+            removedStatic, static_cast<uint64_t>(token), mRetirementFrame + 1 });
+        log->Printf(LT_MESSAGE, L"[IMM_LIVE_EDIT] renderer delete retiredToken=%d", token);
+    }
+
     void LayerRendererPaintStatic::CancelDrawingReplacement(piRenderer * renderer,
         uint64_t token, piLog * log)
     {

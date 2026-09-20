@@ -2131,6 +2131,15 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Drawi
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingDestroy(
+    int32_t docId, int32_t layerId, uint64_t drawingId)
+{
+    if (layerId < 0 || drawingId == 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    return iPlayer().QueueDrawingDeletion(
+        docId, static_cast<uint32_t>(layerId), drawingId);
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingAdd(
     int32_t docId, int32_t layerId, int32_t brush, int32_t visible,
     const ImmAuthoringPoint *points, int32_t numPoints, float biggestStroke, int32_t colorSpace,

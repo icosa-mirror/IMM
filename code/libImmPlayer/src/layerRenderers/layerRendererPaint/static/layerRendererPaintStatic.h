@@ -34,6 +34,10 @@ namespace ImmPlayer
 		bool PresentDrawingCreation(ImmImporter::Drawing * created,
 			ImmImporter::Drawing * prepared, uint64_t token, uint64_t revision,
 			ImmCore::piLog * log) override;
+		bool PrepareDrawingDeletion(ImmImporter::Drawing * active,
+			ImmCore::piLog * log) override;
+		void PresentDrawingDeletion(ImmImporter::Drawing * removed,
+			ImmCore::piLog * log) override;
 		void CancelDrawingReplacement(ImmCore::piRenderer * renderer,
 			uint64_t token, ImmCore::piLog * log) override;
 		void AdvanceDrawingRetirement(ImmCore::piRenderer * renderer, ImmCore::piLog * log) override;

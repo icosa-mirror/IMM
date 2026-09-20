@@ -43,6 +43,9 @@ namespace ImmImporter
 		// addresses of existing drawings stable when appending.
         virtual Drawing * AddDrawing(void) { return nullptr; }
 		virtual bool RemoveLastDrawing(Drawing * expected) { (void)expected; return false; }
+		// Removes an unreferenced drawing and transfers ownership to the caller. Implementations
+		// compact their private frame indices while preserving every remaining drawing address.
+		virtual Drawing * ExtractDrawing(uint32_t drawingIndex) { (void)drawingIndex; return nullptr; }
 
 		// for gpu unloading... (ugly!)
 		virtual Drawing * GetDrawing(int drawing) const = 0;
