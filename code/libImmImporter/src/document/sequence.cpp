@@ -97,6 +97,21 @@ Layer* Sequence::CreateLayer(Layer* parent)
     return la;
 }
 
+bool Sequence::PrepareLayerPublication(void)
+{
+    return mLayers.SetMaxLengthNoShrink(mLayers.GetLength() + 1);
+}
+
+bool Sequence::PublishPreparedLayer(Layer * layer)
+{
+    return layer != nullptr && mLayers.Append(layer, false);
+}
+
+uint32_t Sequence::GetLayerStorageCount(void) const
+{
+    return static_cast<uint32_t>(mLayers.GetLength());
+}
+
 
 bool Sequence::Recurse(VisitorF v, bool doNotRecurseCollapsedGroups, bool doNotRecurseHiddenGroups, bool doNotRecurseLockedGroups, bool doPostExec)
 {

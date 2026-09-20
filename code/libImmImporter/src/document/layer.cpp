@@ -43,7 +43,7 @@ namespace ImmImporter
 
 	Layer::~Layer() {}
 
-	bool Layer::Init(Type type, const wchar_t* name, bool visible, const trans3d & transform, const trans3d& pivot, float opacity, bool isTimeLine, piTick duration, uint32_t maxRepeatCount, uint32_t assetID, piLog *log)
+	bool Layer::Init(Type type, const wchar_t* name, bool visible, const trans3d & transform, const trans3d& pivot, float opacity, bool isTimeLine, piTick duration, uint32_t maxRepeatCount, uint32_t assetID, piLog *log, bool publishToParent)
 	{
 		mType = type;
         mLoaded = false;
@@ -79,7 +79,7 @@ namespace ImmImporter
 
 		//log->Printf(LT_MESSAGE, mName.GetS());
 
-		if (mParent != nullptr)
+		if (publishToParent && mParent != nullptr)
 		{
 			if (!mParent->mChildren.Append(this, true))
 				return false;
@@ -417,6 +417,18 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 	uint32_t Layer::GetNumChildren(void) const { return static_cast<uint32_t>(mChildren.GetLength()); }
 
 	Layer* Layer::GetChild(uint32_t id) { return mChildren.Get(id); }
+
+	bool Layer::PrepareChildPublication(void)
+	{
+		return mType == Type::Group &&
+			mChildren.SetMaxLengthNoShrink(mChildren.GetLength() + 1);
+	}
+
+	bool Layer::PublishPreparedChild(Layer * child)
+	{
+		return mType == Type::Group && child != nullptr && child->mParent == this &&
+			mChildren.Append(child, false);
+	}
 
 	Layer* Layer::GetParent() const { return mParent; }
 

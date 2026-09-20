@@ -107,7 +107,7 @@ namespace ImmImporter
 
 
 
-		bool Init(Type type, const wchar_t* name, bool visible, const ImmCore::trans3d & transform, const ImmCore::trans3d& pivot, float opacity, bool isTimeLine, ImmCore::piTick duration, uint32_t maxRepeatCount, uint32_t assetID, ImmCore::piLog *log);
+		bool Init(Type type, const wchar_t* name, bool visible, const ImmCore::trans3d & transform, const ImmCore::trans3d& pivot, float opacity, bool isTimeLine, ImmCore::piTick duration, uint32_t maxRepeatCount, uint32_t assetID, ImmCore::piLog *log, bool publishToParent = true);
 		void Deinit(ImmCore::piLog *log);
 
 		uint32_t GetID(void) const;
@@ -154,6 +154,8 @@ namespace ImmImporter
 		ImmCore::piTick GetStartTime() const;
 		uint32_t GetNumChildren(void) const;                    // if group
 		Layer* GetChild(uint32_t id);                           // if group
+		bool PrepareChildPublication(void);
+		bool PublishPreparedChild(Layer * child);
 		uint32_t GetNumAnimKeys(AnimProperty property) const;
 		const AnimKey* GetAnimKey(AnimProperty property, unsigned int index) const;
         bool GetLoaded(void) const;

@@ -43,6 +43,9 @@ public:
 
 	// pure memory manager. Does not handle hierarchy or resource allocations
     Layer* CreateLayer(Layer* parent);
+    bool PrepareLayerPublication(void);
+    bool PublishPreparedLayer(Layer * layer);
+    uint32_t GetLayerStorageCount(void) const;
     Layer* FindLayerByFullName(const wchar_t* name);
 	bool   AddAsset(uint64_t offset, uint64_t size);
 	const Asset* GetAsset(uint32_t assetID) const;
