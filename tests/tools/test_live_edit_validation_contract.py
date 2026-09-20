@@ -50,6 +50,8 @@ def main() -> int:
             "ImmAuthoring_FrameGetDrawingHandle",
             "ImmAuthoring_LayerGetProperties",
             "ImmAuthoring_LayerSetProperties",
+            "ImmAuthoring_KeySet",
+            "ImmAuthoringKey",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",
             "IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM",
@@ -73,6 +75,7 @@ def main() -> int:
             "referencedDeletionRejected=%d",
             "canonicalOpacityChanged=%d",
             "canonicalTransformChanged=%d",
+            'L"[IMM_LIVE_EDIT_KEY_SET] frame=%llu revision=%llu status=%d result=%d keyCountChanged=%d"',
         ],
     )
     require_tokens(
@@ -81,6 +84,7 @@ def main() -> int:
             r"\[IMM_LIVE_EDIT_FRAME_SET\].*revision=2 status=4 result=0 handleMatch=1",
             r"\[IMM_LIVE_EDIT_DELETE\].*revision=3 status=4 result=0",
             r"\[IMM_LIVE_EDIT_PROPERTY\].*revision=4 status=4 result=0",
+            r"\[IMM_LIVE_EDIT_KEY_SET\].*revision=5 status=4 result=0 keyCountChanged=1",
         ],
     )
     require_tokens(

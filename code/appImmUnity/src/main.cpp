@@ -2189,6 +2189,80 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Layer
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySet(
+    int32_t docId, int32_t layerId, const ImmAuthoringKey *key)
+{
+    if (layerId < 0 || key == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (key->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
+        return IMM_AUTHORING_UNSUPPORTED;
+    const double maximumTimeSeconds = static_cast<double>(INT64_MAX) /
+        static_cast<double>(ImmCore::piTick::FromOneSecond());
+    if (key->structSize < sizeof(ImmAuthoringKey) || !std::isfinite(key->timeSeconds) ||
+        key->timeSeconds < 0.0 || key->timeSeconds >= maximumTimeSeconds ||
+        key->reserved[0] != 0 || key->reserved[1] != 0 ||
+        key->reserved[2] != 0 || key->reserved[3] != 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (key->interpolation < IMM_AUTHORING_INTERPOLATION_NONE ||
+        key->interpolation > IMM_AUTHORING_INTERPOLATION_AUTO)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+
+    ImmImporter::Layer::AnimProperty property;
+    ImmImporter::Layer::AnimValue value;
+    value.init();
+    switch (key->property)
+    {
+    case IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY:
+        if ((key->boolValue != 0 && key->boolValue != 1) ||
+            key->interpolation != IMM_AUTHORING_INTERPOLATION_NONE)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::Visibility;
+        value.mBool = key->boolValue != 0;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_OPACITY:
+        if (!std::isfinite(key->floatValue) || key->floatValue < 0.0f ||
+            key->floatValue > 1.0f)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::Opacity;
+        value.mFloat = key->floatValue;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM:
+    {
+        if (!std::isfinite(key->tx) || !std::isfinite(key->ty) ||
+            !std::isfinite(key->tz) || !std::isfinite(key->qx) ||
+            !std::isfinite(key->qy) || !std::isfinite(key->qz) ||
+            !std::isfinite(key->qw) || !std::isfinite(key->scale) || key->scale <= 0.0f)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        const double quaternionLengthSquared =
+            static_cast<double>(key->qx) * key->qx +
+            static_cast<double>(key->qy) * key->qy +
+            static_cast<double>(key->qz) * key->qz +
+            static_cast<double>(key->qw) * key->qw;
+        if (std::fabs(quaternionLengthSquared - 1.0) > 0.001)
+            return IMM_AUTHORING_INVALID_ARGUMENT;
+        property = ImmImporter::Layer::AnimProperty::Transform;
+        value.mTransform = ImmCore::trans3d(
+            ImmCore::quatd(key->qx, key->qy, key->qz, key->qw), key->scale,
+            ImmCore::flip3::N, ImmCore::vec3d(key->tx, key->ty, key->tz));
+        break;
+    }
+    default:
+        return IMM_AUTHORING_UNSUPPORTED;
+    }
+
+    try
+    {
+        return iPlayer().QueueAnimationKey(
+            docId, static_cast<uint32_t>(layerId), property,
+            ImmCore::piTick::FromSeconds(key->timeSeconds), value,
+            static_cast<ImmImporter::Layer::InterpolationType>(key->interpolation));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {

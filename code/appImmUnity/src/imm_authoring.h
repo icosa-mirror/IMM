@@ -60,6 +60,24 @@ typedef enum ImmAuthoringLayerPropertyMask
     IMM_AUTHORING_LAYER_PROPERTY_TRANSFORM = 1u << 2
 } ImmAuthoringLayerPropertyMask;
 
+typedef enum ImmAuthoringAnimProperty
+{
+    IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY = 0,
+    IMM_AUTHORING_ANIM_PROPERTY_OPACITY = 1,
+    IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM = 9
+} ImmAuthoringAnimProperty;
+
+typedef enum ImmAuthoringInterpolation
+{
+    IMM_AUTHORING_INTERPOLATION_NONE = 0,
+    IMM_AUTHORING_INTERPOLATION_LINEAR = 1,
+    IMM_AUTHORING_INTERPOLATION_SMOOTHSTEP = 2,
+    IMM_AUTHORING_INTERPOLATION_EASE_IN = 3,
+    IMM_AUTHORING_INTERPOLATION_EASE_OUT = 4,
+    IMM_AUTHORING_INTERPOLATION_SPLINE = 5,
+    IMM_AUTHORING_INTERPOLATION_AUTO = 6
+} ImmAuthoringInterpolation;
+
 typedef struct ImmAuthoringPoint
 {
     float px, py, pz;
@@ -131,6 +149,21 @@ typedef struct ImmAuthoringLayerProperties
     uint32_t reserved1[2];
 } ImmAuthoringLayerProperties;
 
+typedef struct ImmAuthoringKey
+{
+    uint32_t structSize;
+    uint32_t structVersion;
+    int32_t property;
+    int32_t interpolation;
+    double timeSeconds;
+    int32_t boolValue;
+    float floatValue;
+    float tx, ty, tz;
+    float qx, qy, qz, qw;
+    float scale;
+    uint32_t reserved[4];
+} ImmAuthoringKey;
+
 #ifdef __cplusplus
 // These layouts cross the native-library boundary. Keep the assertions beside the
 // public declarations so every C++ target catches an accidental ABI change.
@@ -149,6 +182,7 @@ static_assert(sizeof(ImmAuthoringRevisions) == 32, "ImmAuthoringRevisions ABI ch
 static_assert(sizeof(ImmAuthoringCommitStatus) == 40, "ImmAuthoringCommitStatus ABI changed");
 static_assert(sizeof(ImmAuthoringLayerProperties) == 64,
     "ImmAuthoringLayerProperties ABI changed");
+static_assert(sizeof(ImmAuthoringKey) == 80, "ImmAuthoringKey ABI changed");
 #endif
 
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_Attach(int32_t docId);
@@ -163,6 +197,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerGetProperties(
     ImmAuthoringLayerProperties * propertiesOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_LayerSetProperties(int32_t docId, int32_t layerId,
     const ImmAuthoringLayerProperties * properties);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_KeySet(int32_t docId, int32_t layerId,
+    const ImmAuthoringKey * key);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32_t docId, int32_t layerId,

@@ -1259,7 +1259,7 @@ extern "C" _declspec(dllexport) unsigned int NvOptimusEnablement = 0x00000001;
 // IMM_VIEWER_LIVE_EDIT=<frame> replaces geometry, atomically creates and frame-maps a drawing,
 // then restores the frame and deletes the again-unreferenced drawing in a second atomic batch
 // through the same API an editor uses. It then changes canonical visibility, opacity, and
-// transform while preserving playback overrides.
+// transform while preserving playback overrides, and inserts a prepared visibility key.
 // This is the harness for milestone M1: it measures an edit against a document that is
 // actually loaded and rendering, instead of extrapolating from a static benchmark.
 //--------------------------------------------------------------------------------------

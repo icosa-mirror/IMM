@@ -195,6 +195,8 @@ namespace ImmImporter
 
         bool AddKey(ImmCore::piTick time, AnimProperty property, const AnimValue& value, InterpolationType interpolation);
         const AnimKey* GetAnimKeyAt(AnimProperty property, ImmCore::piTick time) const;
+        static bool SetAnimKey(std::vector<AnimKey> & keys, ImmCore::piTick time,
+            const AnimValue & value, InterpolationType interpolation);
         bool CopyAnimKeys(AnimProperty property, std::vector<AnimKey> & keysOut) const;
         void ReplaceAnimKeys(AnimProperty property, std::vector<AnimKey> && keys);
 

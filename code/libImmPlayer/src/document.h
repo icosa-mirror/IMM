@@ -218,6 +218,9 @@ namespace ImmPlayer {
         int32_t QueueLayerProperties(uint32_t layerId, bool setVisibility, bool visible,
             bool setOpacity, float opacity, bool setTransform,
             const ImmCore::trans3d & transform);
+        int32_t QueueAnimationKey(uint32_t layerId, ImmImporter::Layer::AnimProperty property,
+            ImmCore::piTick time, const ImmImporter::Layer::AnimValue & value,
+            ImmImporter::Layer::InterpolationType interpolation);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -280,6 +283,17 @@ namespace ImmPlayer {
             ImmCore::trans3d mTransform = ImmCore::trans3d::identity();
         };
 
+        struct AnimationKeyEdit
+        {
+            uint32_t mLayerId = 0;
+            ImmImporter::Layer::AnimProperty mProperty =
+                ImmImporter::Layer::AnimProperty::Visibility;
+            ImmCore::piTick mTime = ImmCore::piTick(0);
+            ImmImporter::Layer::AnimValue mValue;
+            ImmImporter::Layer::InterpolationType mInterpolation =
+                ImmImporter::Layer::InterpolationType::None;
+        };
+
         struct SealedBatch
         {
             uint64_t mRevision = 0;
@@ -288,6 +302,7 @@ namespace ImmPlayer {
             std::vector<FrameMapping> mFrameMappings;
             std::vector<DrawingDeletion> mDrawingDeletions;
             std::vector<LayerPropertyEdit> mLayerPropertyEdits;
+            std::vector<AnimationKeyEdit> mAnimationKeyEdits;
         };
 
         std::vector<DrawingHandleEntry> mDrawingHandles;
@@ -297,6 +312,7 @@ namespace ImmPlayer {
         std::vector<FrameMapping> mOpenFrameMappings;
         std::vector<DrawingDeletion> mOpenDrawingDeletions;
         std::vector<LayerPropertyEdit> mOpenLayerPropertyEdits;
+        std::vector<AnimationKeyEdit> mOpenAnimationKeyEdits;
         std::deque<SealedBatch> mSealedBatches;
         std::vector<AuthoringCommitStatus> mCommitStatuses;
         static constexpr size_t kMaxSealedBatches = 1;
@@ -309,6 +325,10 @@ namespace ImmPlayer {
             bool mIsFrameMapping = false;
             bool mIsDeletion = false;
             bool mIsLayerPropertyEdit = false;
+            bool mIsAnimationKeyEdit = false;
+            ImmImporter::Layer::AnimProperty mAnimationProperty =
+                ImmImporter::Layer::AnimProperty::Visibility;
+            std::vector<ImmImporter::Layer::AnimKey> mAnimationKeys;
             bool mSetLayerVisibility = false;
             bool mLayerVisible = false;
             bool mSetLayerOpacity = false;

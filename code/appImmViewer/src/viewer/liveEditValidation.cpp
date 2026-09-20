@@ -156,11 +156,32 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mKeyQueued)
+        {
+            if (frame < mKeyFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus keyStatus;
+            const bool hasKeyStatus = mKeyRevision != 0 &&
+                player->GetAuthoringCommitStatus(mDocumentId, mKeyRevision, keyStatus);
+            ImmPlayer::Player::LayerDiagnostics diagnostics;
+            const bool hasDiagnostics = player->GetLayerDiagnostics(
+                mDocumentId, mLayerId, diagnostics);
+            const bool keyCountChanged = hasDiagnostics &&
+                diagnostics.visibilityKeyCount == mVisibilityKeyCountBefore + 1;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_KEY_SET] frame=%llu revision=%llu status=%d result=%d keyCountChanged=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mKeyRevision),
+                hasKeyStatus ? static_cast<int>(keyStatus.mState) : -1,
+                hasKeyStatus ? keyStatus.mResult : -1, keyCountChanged ? 1 : 0);
+            return;
+        }
+
         if (mPropertyQueued)
         {
             if (frame < mPropertyFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus propertyStatus;
             const bool hasPropertyStatus = mPropertyRevision != 0 &&
                 player->GetAuthoringCommitStatus(
@@ -203,6 +224,35 @@ namespace ExePlayer
                 opacityOverridePreserved ? 1 : 0, opacityEffectivePreserved ? 1 : 0,
                 canonicalTransformChanged ? 1 : 0, transformOverridePreserved ? 1 : 0,
                 transformEffectivePreserved ? 1 : 0);
+            const bool propertySucceeded = hasPropertyStatus &&
+                propertyStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                propertyStatus.mResult == 0 && canonicalChanged && overridePreserved &&
+                effectivePreserved && canonicalOpacityChanged && opacityOverridePreserved &&
+                opacityEffectivePreserved && canonicalTransformChanged &&
+                transformOverridePreserved && transformEffectivePreserved;
+            if (!propertySucceeded)
+            {
+                mMeasured = true;
+                return;
+            }
+            mVisibilityKeyCountBefore = diagnostics.visibilityKeyCount;
+            ImmImporter::Layer::AnimValue value;
+            value.init();
+            value.mBool = mTargetCanonicalVisible;
+            const int32_t keyResult = player->QueueAnimationKey(
+                mDocumentId, static_cast<uint32_t>(mLayerId),
+                ImmImporter::Layer::AnimProperty::Visibility,
+                ImmCore::piTick::FromSeconds(3600.0), value,
+                ImmImporter::Layer::InterpolationType::None);
+            const uint64_t keyRevision = keyResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_KEY_SET] frame=%llu layer=%d keyResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mLayerId, keyResult,
+                static_cast<unsigned long long>(keyRevision));
+            mKeyQueued = true;
+            mKeyFrame = frame;
+            mKeyRevision = keyRevision;
             return;
         }
 

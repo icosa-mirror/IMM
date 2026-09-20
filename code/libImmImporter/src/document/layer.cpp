@@ -574,8 +574,12 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 
 	bool Layer::AddKey(piTick time, AnimProperty property, const AnimValue& value, InterpolationType interpolation)
 	{
-		const int propIndex = static_cast<int>(property);
-		std::vector<AnimKey> & keys = mAnimKeys[propIndex];
+		return SetAnimKey(mAnimKeys[static_cast<int>(property)], time, value, interpolation);
+	}
+
+	bool Layer::SetAnimKey(std::vector<AnimKey> & keys, piTick time,
+		const AnimValue & value, InterpolationType interpolation)
+	{
 		auto key = std::lower_bound(keys.begin(), keys.end(), time,
 			[](const AnimKey & candidate, piTick target)
 			{

@@ -28,6 +28,7 @@ namespace ExePlayer
         bool mCreationQueued = false;
         bool mDeletionQueued = false;
         bool mPropertyQueued = false;
+        bool mKeyQueued = false;
         bool mReferencedDeletionRejected = false;
         int mDocumentId = -1;
         int mLayerId = -1;
@@ -41,6 +42,8 @@ namespace ExePlayer
         uint64_t mDeletionRevision = 0;
         uint64_t mPropertyFrame = 0;
         uint64_t mPropertyRevision = 0;
+        uint64_t mKeyFrame = 0;
+        uint64_t mKeyRevision = 0;
         bool mOriginalCanonicalVisible = false;
         bool mTargetCanonicalVisible = false;
         float mOriginalEffectiveOpacity = 1.0f;
@@ -48,6 +51,7 @@ namespace ExePlayer
         ImmCore::trans3d mOriginalEffectiveTransform = ImmCore::trans3d::identity();
         ImmCore::trans3d mTargetCanonicalTransform = ImmCore::trans3d::identity();
         int mDrawingCountBeforeCreation = -1;
+        int mVisibilityKeyCountBefore = 0;
         ImmCore::bound3 mDrawingBoxBefore;
     };
 }

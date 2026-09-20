@@ -714,6 +714,17 @@ namespace ImmPlayer
             layerId, setVisibility, visible, setOpacity, opacity, setTransform, transform);
     }
 
+    int32_t Player::QueueAnimationKey(int docId, uint32_t layerId,
+        Layer::AnimProperty property, piTick time, const Layer::AnimValue & value,
+        Layer::InterpolationType interpolation)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueAnimationKey(layerId, property, time, value, interpolation);
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);
@@ -796,6 +807,8 @@ namespace ImmPlayer
             return false;
 
         outDiag.hasVisibilityKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Visibility) > 0) ? 1 : 0;
+        outDiag.visibilityKeyCount = static_cast<int>(
+            layer->GetNumAnimKeys(Layer::AnimProperty::Visibility));
         outDiag.hasOpacityKeys = (layer->GetNumAnimKeys(Layer::AnimProperty::Opacity) > 0) ? 1 : 0;
         outDiag.isVisible = layer->GetVisible() ? 1 : 0;
         outDiag.canonicalVisible = layer->GetCanonicalVisible() ? 1 : 0;
