@@ -242,6 +242,8 @@ IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SetInitialSpawnArea
     int32_t layerId);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SpawnAreaSet(int32_t docId,
     int32_t layerId, const ImmAuthoringSpawnArea * spawnArea);
+IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_SpawnAreaGet(int32_t docId,
+    int32_t layerId, ImmAuthoringSpawnArea * spawnAreaOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingGetHandle(int32_t docId, int32_t layerId,
     int32_t drawingIndex, uint64_t * drawingIdOut);
 IMM_AUTHORING_EXPORT int32_t IMM_AUTHORING_CALL ImmAuthoring_DrawingCreate(int32_t docId, int32_t layerId,

@@ -54,6 +54,7 @@ def main() -> int:
             "ImmAuthoring_KeyRemove",
             "ImmAuthoring_SetInitialSpawnArea",
             "ImmAuthoring_SpawnAreaSet",
+            "ImmAuthoring_SpawnAreaGet",
             "ImmAuthoringSpawnArea",
             "ImmAuthoringKey",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",

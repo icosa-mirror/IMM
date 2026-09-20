@@ -2402,6 +2402,76 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Spawn
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_SpawnAreaGet(
+    int32_t docId, int32_t layerId, ImmAuthoringSpawnArea * spawnAreaOut)
+{
+    if (layerId < 0 || spawnAreaOut == nullptr)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    if (spawnAreaOut->structVersion != IMM_AUTHORING_STRUCT_VERSION_1)
+        return IMM_AUTHORING_UNSUPPORTED;
+    if (spawnAreaOut->structSize < sizeof(ImmAuthoringSpawnArea))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
+
+    Player::SpawnAreaDiagnostics diagnostics;
+    if (!iPlayer().GetSpawnAreaDiagnostics(docId, layerId, diagnostics))
+        return IMM_AUTHORING_NOT_FOUND;
+    const ImmImporter::LayerSpawnArea::Volume & volume = diagnostics.volume;
+    spawnAreaOut->volumeType = volume.mType ==
+        ImmImporter::LayerSpawnArea::Volume::Type::Sphere ?
+        IMM_AUTHORING_SPAWN_VOLUME_SPHERE : IMM_AUTHORING_SPAWN_VOLUME_BOX;
+    spawnAreaOut->trackingLevel = diagnostics.tracking ==
+        ImmImporter::LayerSpawnArea::TrackingLevel::Floor ?
+        IMM_AUTHORING_SPAWN_TRACKING_FLOOR : IMM_AUTHORING_SPAWN_TRACKING_EYE;
+    spawnAreaOut->translationMask =
+        (volume.mAllowTranslationX ? IMM_AUTHORING_SPAWN_TRANSLATION_X : 0) |
+        (volume.mAllowTranslationY ? IMM_AUTHORING_SPAWN_TRANSLATION_Y : 0) |
+        (volume.mAllowTranslationZ ? IMM_AUTHORING_SPAWN_TRANSLATION_Z : 0);
+    spawnAreaOut->reserved0 = 0;
+    spawnAreaOut->sphereX = 0.0f;
+    spawnAreaOut->sphereY = 0.0f;
+    spawnAreaOut->sphereZ = 0.0f;
+    spawnAreaOut->sphereRadius = 0.0f;
+    spawnAreaOut->boxMinX = 0.0f;
+    spawnAreaOut->boxMinY = 0.0f;
+    spawnAreaOut->boxMinZ = 0.0f;
+    spawnAreaOut->boxMaxX = 0.0f;
+    spawnAreaOut->boxMaxY = 0.0f;
+    spawnAreaOut->boxMaxZ = 0.0f;
+    if (volume.mType == ImmImporter::LayerSpawnArea::Volume::Type::Sphere)
+    {
+        spawnAreaOut->sphereX = volume.mShape.mSphere.x;
+        spawnAreaOut->sphereY = volume.mShape.mSphere.y;
+        spawnAreaOut->sphereZ = volume.mShape.mSphere.z;
+        spawnAreaOut->sphereRadius = volume.mShape.mSphere.w;
+    }
+    else
+    {
+        spawnAreaOut->boxMinX = volume.mShape.mBox.mMinX;
+        spawnAreaOut->boxMinY = volume.mShape.mBox.mMinY;
+        spawnAreaOut->boxMinZ = volume.mShape.mBox.mMinZ;
+        spawnAreaOut->boxMaxX = volume.mShape.mBox.mMaxX;
+        spawnAreaOut->boxMaxY = volume.mShape.mBox.mMaxY;
+        spawnAreaOut->boxMaxZ = volume.mShape.mBox.mMaxZ;
+    }
+    const ImmCore::trans3d & transform = diagnostics.transform;
+    spawnAreaOut->tx = static_cast<float>(transform.mTranslation.x);
+    spawnAreaOut->ty = static_cast<float>(transform.mTranslation.y);
+    spawnAreaOut->tz = static_cast<float>(transform.mTranslation.z);
+    spawnAreaOut->qx = static_cast<float>(transform.mRotation.x);
+    spawnAreaOut->qy = static_cast<float>(transform.mRotation.y);
+    spawnAreaOut->qz = static_cast<float>(transform.mRotation.z);
+    spawnAreaOut->qw = static_cast<float>(transform.mRotation.w);
+    spawnAreaOut->scale = static_cast<float>(transform.mScale);
+    spawnAreaOut->reserved1[0] = 0;
+    spawnAreaOut->reserved1[1] = 0;
+    spawnAreaOut->reserved1[2] = 0;
+    spawnAreaOut->reserved1[3] = 0;
+    return IMM_AUTHORING_OK;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {
