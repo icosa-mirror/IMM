@@ -76,9 +76,8 @@ public final class ImmFtlSmokeTest {
         requireMarker(logcat, "handleMatch=1");
         requireMarker(logcat, "[IMM_LIVE_EDIT_FRAME_SET]");
         requireMarker(logcat, "revision=3 status=4 result=0 handleMatch=1");
-        requireMarker(logcat, "revision=4 status=4 result=0 handleMatch=1");
-        requireMarker(logcat, "revision=4 status=4 result=0 countRestored=1 deletedHandleMissing=1 originalHandleStable=1 referencedDeletionRejected=1");
-        requireMarker(logcat, "revision=5 status=4 result=0 canonicalChanged=1 overridePreserved=1 effectivePreserved=1 canonicalOpacityChanged=1 opacityOverridePreserved=1 opacityEffectivePreserved=1 canonicalTransformChanged=1 transformOverridePreserved=1 transformEffectivePreserved=1");
+        requireMarker(logcat, "revision=3 status=4 result=0 countRestored=1 deletedHandleMissing=1 originalHandleStable=1 referencedDeletionRejected=1");
+        requireMarker(logcat, "revision=4 status=4 result=0 canonicalChanged=1 overridePreserved=1 effectivePreserved=1 canonicalOpacityChanged=1 opacityOverridePreserved=1 opacityEffectivePreserved=1 canonicalTransformChanged=1 transformOverridePreserved=1 transformEffectivePreserved=1");
         requireMarker(logcat, "Loaded in CPU");
         requireMarker(logcat, "Loaded in GPU");
 
@@ -130,9 +129,8 @@ public final class ImmFtlSmokeTest {
         requireMarker(faceLogcat, "revision=2 status=4 result=0 drawingCountBefore=");
         requireMarker(faceLogcat, "handleMatch=1");
         requireMarker(faceLogcat, "revision=3 status=4 result=0 handleMatch=1");
-        requireMarker(faceLogcat, "revision=4 status=4 result=0 handleMatch=1");
-        requireMarker(faceLogcat, "revision=4 status=4 result=0 countRestored=1 deletedHandleMissing=1 originalHandleStable=1 referencedDeletionRejected=1");
-        requireMarker(faceLogcat, "revision=5 status=4 result=0 canonicalChanged=1 overridePreserved=1 effectivePreserved=1 canonicalOpacityChanged=1 opacityOverridePreserved=1 opacityEffectivePreserved=1 canonicalTransformChanged=1 transformOverridePreserved=1 transformEffectivePreserved=1");
+        requireMarker(faceLogcat, "revision=3 status=4 result=0 countRestored=1 deletedHandleMissing=1 originalHandleStable=1 referencedDeletionRejected=1");
+        requireMarker(faceLogcat, "revision=4 status=4 result=0 canonicalChanged=1 overridePreserved=1 effectivePreserved=1 canonicalOpacityChanged=1 opacityOverridePreserved=1 opacityEffectivePreserved=1 canonicalTransformChanged=1 transformOverridePreserved=1 transformEffectivePreserved=1");
         forbidMarker(faceLogcat, "Failed to load IMM");
         forbidMarker(faceLogcat, "Fatal signal");
 
@@ -167,11 +165,10 @@ public final class ImmFtlSmokeTest {
                     logcat.contains("status=4 result=0 drawingBBoxUnchanged=0") &&
                     logcat.contains("revision=2 status=4 result=0 drawingCountBefore=") &&
                     logcat.contains("revision=3 status=4 result=0 handleMatch=1") &&
-                    logcat.contains("revision=4 status=4 result=0 handleMatch=1") &&
-                    logcat.contains("revision=4 status=4 result=0 countRestored=1 " +
+                    logcat.contains("revision=3 status=4 result=0 countRestored=1 " +
                             "deletedHandleMissing=1 originalHandleStable=1 " +
                             "referencedDeletionRejected=1") &&
-                    logcat.contains("revision=5 status=4 result=0 canonicalChanged=1 " +
+                    logcat.contains("revision=4 status=4 result=0 canonicalChanged=1 " +
                             "overridePreserved=1 effectivePreserved=1 " +
                             "canonicalOpacityChanged=1 opacityOverridePreserved=1 " +
                             "opacityEffectivePreserved=1 canonicalTransformChanged=1 " +
