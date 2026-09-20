@@ -221,6 +221,8 @@ namespace ImmPlayer {
         int32_t QueueAnimationKey(uint32_t layerId, ImmImporter::Layer::AnimProperty property,
             ImmCore::piTick time, const ImmImporter::Layer::AnimValue & value,
             ImmImporter::Layer::InterpolationType interpolation);
+        int32_t QueueAnimationKeyRemoval(uint32_t layerId,
+            ImmImporter::Layer::AnimProperty property, ImmCore::piTick time);
         bool GetAuthoringRevisions(AuthoringRevisions * revisionsOut) const;
         bool GetAuthoringCommitStatus(uint64_t revision, AuthoringCommitStatus * statusOut) const;
         bool HasQueuedAuthoringCommit(void) const { return !mSealedBatches.empty(); }
@@ -292,6 +294,7 @@ namespace ImmPlayer {
             ImmImporter::Layer::AnimValue mValue;
             ImmImporter::Layer::InterpolationType mInterpolation =
                 ImmImporter::Layer::InterpolationType::None;
+            bool mRemove = false;
         };
 
         struct SealedBatch

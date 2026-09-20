@@ -148,6 +148,8 @@ namespace ImmPlayer {
             ImmImporter::Layer::AnimProperty property, ImmCore::piTick time,
             const ImmImporter::Layer::AnimValue & value,
             ImmImporter::Layer::InterpolationType interpolation);
+        int32_t QueueAnimationKeyRemoval(int docId, uint32_t layerId,
+            ImmImporter::Layer::AnimProperty property, ImmCore::piTick time);
 
         struct LayerDiagnostics
         {

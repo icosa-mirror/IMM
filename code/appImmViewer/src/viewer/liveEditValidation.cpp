@@ -156,11 +156,34 @@ namespace ExePlayer
         if (mMeasured)
             return;
 
+        if (mKeyRemovalQueued)
+        {
+            if (frame < mKeyRemovalFrame + 3)
+                return;
+            mMeasured = true;
+            ImmPlayer::Document::AuthoringCommitStatus removalStatus;
+            const bool hasRemovalStatus = mKeyRemovalRevision != 0 &&
+                player->GetAuthoringCommitStatus(
+                    mDocumentId, mKeyRemovalRevision, removalStatus);
+            ImmPlayer::Player::LayerDiagnostics diagnostics;
+            const bool hasDiagnostics = player->GetLayerDiagnostics(
+                mDocumentId, mLayerId, diagnostics);
+            const bool keyCountRestored = hasDiagnostics &&
+                diagnostics.visibilityKeyCount == mVisibilityKeyCountBefore;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_KEY_REMOVE] frame=%llu revision=%llu status=%d result=%d keyCountRestored=%d",
+                static_cast<unsigned long long>(frame),
+                static_cast<unsigned long long>(mKeyRemovalRevision),
+                hasRemovalStatus ? static_cast<int>(removalStatus.mState) : -1,
+                hasRemovalStatus ? removalStatus.mResult : -1,
+                keyCountRestored ? 1 : 0);
+            return;
+        }
+
         if (mKeyQueued)
         {
             if (frame < mKeyFrame + 3)
                 return;
-            mMeasured = true;
             ImmPlayer::Document::AuthoringCommitStatus keyStatus;
             const bool hasKeyStatus = mKeyRevision != 0 &&
                 player->GetAuthoringCommitStatus(mDocumentId, mKeyRevision, keyStatus);
@@ -175,6 +198,27 @@ namespace ExePlayer
                 static_cast<unsigned long long>(mKeyRevision),
                 hasKeyStatus ? static_cast<int>(keyStatus.mState) : -1,
                 hasKeyStatus ? keyStatus.mResult : -1, keyCountChanged ? 1 : 0);
+            const bool keySucceeded = hasKeyStatus &&
+                keyStatus.mState == ImmPlayer::Document::AuthoringCommitState::Presented &&
+                keyStatus.mResult == 0 && keyCountChanged;
+            if (!keySucceeded)
+            {
+                mMeasured = true;
+                return;
+            }
+            const int32_t removalResult = player->QueueAnimationKeyRemoval(
+                mDocumentId, static_cast<uint32_t>(mLayerId),
+                ImmImporter::Layer::AnimProperty::Visibility,
+                ImmCore::piTick::FromSeconds(3600.0));
+            const uint64_t removalRevision = removalResult == 0 ?
+                player->CommitEdits(mDocumentId) : 0;
+            log->Printf(LT_MESSAGE,
+                L"[IMM_LIVE_EDIT_KEY_REMOVE] frame=%llu layer=%d removeResult=%d revision=%llu",
+                static_cast<unsigned long long>(frame), mLayerId, removalResult,
+                static_cast<unsigned long long>(removalRevision));
+            mKeyRemovalQueued = true;
+            mKeyRemovalFrame = frame;
+            mKeyRemovalRevision = removalRevision;
             return;
         }
 

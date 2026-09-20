@@ -1095,7 +1095,31 @@ namespace ImmPlayer
                 return -2;
         }
         mOpenAnimationKeyEdits.push_back(AnimationKeyEdit{
-            layerId, property, time, value, interpolation });
+            layerId, property, time, value, interpolation, false });
+        return 0;
+    }
+
+    int32_t Document::QueueAnimationKeyRemoval(uint32_t layerId,
+        Layer::AnimProperty property, piTick time)
+    {
+        if (!mEditing)
+            return -4;
+        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
+            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+            !mOpenLayerPropertyEdits.empty() || !mOpenAnimationKeyEdits.empty())
+            return -7;
+        if (iFindAuthoringLayerById(mSequence.GetRoot(), layerId) == nullptr)
+            return -1;
+        if (property != Layer::AnimProperty::Visibility &&
+            property != Layer::AnimProperty::Opacity &&
+            property != Layer::AnimProperty::Transform)
+            return -3;
+        if (time < piTick(0))
+            return -2;
+        Layer::AnimValue value;
+        value.init();
+        mOpenAnimationKeyEdits.push_back(AnimationKeyEdit{
+            layerId, property, time, value, Layer::InterpolationType::None, true });
         return 0;
     }
 
@@ -1185,8 +1209,21 @@ namespace ImmPlayer
                 iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
                 return;
             }
-            if (!layer->CopyAnimKeys(edit.mProperty, keys) ||
-                !Layer::SetAnimKey(keys, edit.mTime, edit.mValue, edit.mInterpolation))
+            if (!layer->CopyAnimKeys(edit.mProperty, keys))
+            {
+                iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId);
+                return;
+            }
+            if (edit.mRemove)
+            {
+                if (!Layer::RemoveAnimKey(keys, edit.mTime))
+                {
+                    iRejectCommit(batch.mRevision, -1, 0, edit.mLayerId);
+                    return;
+                }
+            }
+            else if (!Layer::SetAnimKey(
+                keys, edit.mTime, edit.mValue, edit.mInterpolation))
             {
                 iRejectCommit(batch.mRevision, -5, 0, edit.mLayerId);
                 return;

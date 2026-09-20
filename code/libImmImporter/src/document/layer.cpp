@@ -600,6 +600,19 @@ void Layer::SetTransformOverride(bool enabled, const trans3d & mat)
 		return true;
 	}
 
+	bool Layer::RemoveAnimKey(std::vector<AnimKey> & keys, piTick time)
+	{
+		auto key = std::lower_bound(keys.begin(), keys.end(), time,
+			[](const AnimKey & candidate, piTick target)
+			{
+				return candidate.mTime < target;
+			});
+		if (key == keys.end() || key->mTime != time)
+			return false;
+		keys.erase(key);
+		return true;
+	}
+
 	bool Layer::CopyAnimKeys(AnimProperty property, std::vector<AnimKey> & keysOut) const
 	{
 		try

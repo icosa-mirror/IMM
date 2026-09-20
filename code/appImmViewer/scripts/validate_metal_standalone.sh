@@ -1019,6 +1019,11 @@ run_case() {
             tail -n 80 "$log_path" >&2
             exit 1
         fi
+        if ! grep -Eq "\[IMM_LIVE_EDIT_KEY_REMOVE\].*revision=6 status=4 result=0 keyCountRestored=1" "$log_path"; then
+            echo "$name did not present the animation-key removal revision" >&2
+            tail -n 80 "$log_path" >&2
+            exit 1
+        fi
         if grep -q "\[IMM_LIVE_EDIT_FRAME\].*geometryMatch=0" "$log_path"; then
             echo "$name observed mismatched model and renderer geometry during live edit" >&2
             tail -n 80 "$log_path" >&2

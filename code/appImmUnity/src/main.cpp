@@ -2263,6 +2263,44 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeySe
     }
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_KeyRemove(
+    int32_t docId, int32_t layerId, int32_t propertyValue, double timeSeconds)
+{
+    if (layerId < 0 || !std::isfinite(timeSeconds))
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const double maximumTimeSeconds = static_cast<double>(INT64_MAX) /
+        static_cast<double>(ImmCore::piTick::FromOneSecond());
+    if (timeSeconds < 0.0 || timeSeconds >= maximumTimeSeconds)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+
+    ImmImporter::Layer::AnimProperty property;
+    switch (propertyValue)
+    {
+    case IMM_AUTHORING_ANIM_PROPERTY_VISIBILITY:
+        property = ImmImporter::Layer::AnimProperty::Visibility;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_OPACITY:
+        property = ImmImporter::Layer::AnimProperty::Opacity;
+        break;
+    case IMM_AUTHORING_ANIM_PROPERTY_TRANSFORM:
+        property = ImmImporter::Layer::AnimProperty::Transform;
+        break;
+    default:
+        return IMM_AUTHORING_UNSUPPORTED;
+    }
+
+    try
+    {
+        return iPlayer().QueueAnimationKeyRemoval(
+            docId, static_cast<uint32_t>(layerId), property,
+            ImmCore::piTick::FromSeconds(timeSeconds));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return IMM_AUTHORING_OUT_OF_MEMORY;
+    }
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_DrawingGetHandle(
     int32_t docId, int32_t layerId, int32_t drawingIndex, uint64_t *drawingIdOut)
 {

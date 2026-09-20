@@ -29,6 +29,7 @@ namespace ExePlayer
         bool mDeletionQueued = false;
         bool mPropertyQueued = false;
         bool mKeyQueued = false;
+        bool mKeyRemovalQueued = false;
         bool mReferencedDeletionRejected = false;
         int mDocumentId = -1;
         int mLayerId = -1;
@@ -44,6 +45,8 @@ namespace ExePlayer
         uint64_t mPropertyRevision = 0;
         uint64_t mKeyFrame = 0;
         uint64_t mKeyRevision = 0;
+        uint64_t mKeyRemovalFrame = 0;
+        uint64_t mKeyRemovalRevision = 0;
         bool mOriginalCanonicalVisible = false;
         bool mTargetCanonicalVisible = false;
         float mOriginalEffectiveOpacity = 1.0f;

@@ -51,6 +51,7 @@ def main() -> int:
             "ImmAuthoring_LayerGetProperties",
             "ImmAuthoring_LayerSetProperties",
             "ImmAuthoring_KeySet",
+            "ImmAuthoring_KeyRemove",
             "ImmAuthoringKey",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",
@@ -76,6 +77,7 @@ def main() -> int:
             "canonicalOpacityChanged=%d",
             "canonicalTransformChanged=%d",
             'L"[IMM_LIVE_EDIT_KEY_SET] frame=%llu revision=%llu status=%d result=%d keyCountChanged=%d"',
+            'L"[IMM_LIVE_EDIT_KEY_REMOVE] frame=%llu revision=%llu status=%d result=%d keyCountRestored=%d"',
         ],
     )
     require_tokens(
@@ -85,6 +87,7 @@ def main() -> int:
             r"\[IMM_LIVE_EDIT_DELETE\].*revision=3 status=4 result=0",
             r"\[IMM_LIVE_EDIT_PROPERTY\].*revision=4 status=4 result=0",
             r"\[IMM_LIVE_EDIT_KEY_SET\].*revision=5 status=4 result=0 keyCountChanged=1",
+            r"\[IMM_LIVE_EDIT_KEY_REMOVE\].*revision=6 status=4 result=0 keyCountRestored=1",
         ],
     )
     require_tokens(

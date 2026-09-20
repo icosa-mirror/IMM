@@ -725,6 +725,16 @@ namespace ImmPlayer
         return doc->QueueAnimationKey(layerId, property, time, value, interpolation);
     }
 
+    int32_t Player::QueueAnimationKeyRemoval(int docId, uint32_t layerId,
+        Layer::AnimProperty property, piTick time)
+    {
+        std::lock_guard<std::mutex> guard(mMutex);
+        Document * doc = (Document *)mDocuments.GetAddress(docId);
+        if (doc == nullptr)
+            return -1;
+        return doc->QueueAnimationKeyRemoval(layerId, property, time);
+    }
+
     bool Player::SetLayerOpacity(int docId, int layerId, float opacity)
     {
         std::lock_guard<std::mutex> guard(mMutex);
