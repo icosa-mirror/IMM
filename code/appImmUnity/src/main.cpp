@@ -2217,6 +2217,21 @@ extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_Frame
     return IMM_AUTHORING_UNSUPPORTED;
 }
 
+extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameGetDrawingHandle(
+    int32_t docId, int32_t layerId, int32_t frameIndex, uint64_t *drawingIdOut)
+{
+    if (drawingIdOut == nullptr || layerId < 0 || frameIndex < 0)
+        return IMM_AUTHORING_INVALID_ARGUMENT;
+    const int32_t stateResult = iRequireAttachedAuthoringDocument(docId);
+    if (stateResult != IMM_AUTHORING_OK)
+        return stateResult;
+    uint64_t drawingId = 0;
+    if (!iPlayer().GetFrameDrawingHandle(docId, layerId, frameIndex, drawingId))
+        return IMM_AUTHORING_NOT_FOUND;
+    *drawingIdOut = drawingId;
+    return IMM_AUTHORING_OK;
+}
+
 extern "C" int32_t UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ImmAuthoring_FrameSetHandle(
     int32_t docId, int32_t layerId, int32_t frameIndex, uint64_t drawingId)
 {

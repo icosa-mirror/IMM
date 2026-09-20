@@ -47,6 +47,7 @@ def main() -> int:
         [
             "ImmAuthoring_DrawingCreate",
             "ImmAuthoring_DrawingDestroy",
+            "ImmAuthoring_FrameGetDrawingHandle",
             "ImmAuthoring_LayerSetProperties",
             "IMM_AUTHORING_LAYER_PROPERTY_VISIBILITY",
             "IMM_AUTHORING_LAYER_PROPERTY_OPACITY",
@@ -85,6 +86,7 @@ def main() -> int:
         "code/appImmUnity/src/imm_authoring.h",
         [
             "ImmAuthoring_FrameSetHandle",
+            "ImmAuthoring_FrameGetDrawingHandle",
             "int32_t frameIndex, uint64_t drawingId",
             "int32_t frameIndex, int32_t drawingIndex",
         ],
