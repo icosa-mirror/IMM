@@ -61,6 +61,8 @@ def main() -> int:
             "player->QueueDrawingDeletion(",
             "player->QueueLayerProperties(",
             "player->QueueFrameMapping(",
+            "geometryResult == 0 ? player->QueueFrameMapping(",
+            "mappingResult=%d revision=%llu",
             'L"[IMM_LIVE_EDIT_CREATE] frame=%llu revision=%llu status=%d result=%d "',
             'L"[IMM_LIVE_EDIT_FRAME_SET] frame=%llu revision=%llu status=%d result=%d handleMatch=%d"',
             'L"[IMM_LIVE_EDIT_DELETE] frame=%llu revision=%llu status=%d result=%d "',
@@ -69,6 +71,14 @@ def main() -> int:
             "referencedDeletionRejected=%d",
             "canonicalOpacityChanged=%d",
             "canonicalTransformChanged=%d",
+        ],
+    )
+    require_tokens(
+        "code/appImmViewer/scripts/validate_metal_standalone.sh",
+        [
+            r"\[IMM_LIVE_EDIT_FRAME_SET\].*revision=2 status=4 result=0 handleMatch=1",
+            r"\[IMM_LIVE_EDIT_DELETE\].*revision=3 status=4 result=0",
+            r"\[IMM_LIVE_EDIT_PROPERTY\].*revision=4 status=4 result=0",
         ],
     )
     require_tokens(

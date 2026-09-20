@@ -581,7 +581,8 @@ namespace ImmPlayer
                         presentedMapping ? 1 : 0, presentedFrame);
                 }
             }
-            else if (mPendingPresentation.mIsFrameMapping)
+            else if (mPendingPresentation.mIsFrameMapping &&
+                !mPendingPresentation.mIsCreation)
             {
                 LayerPaint * paint = mPendingPresentation.mLayer != nullptr ?
                     (LayerPaint *)mPendingPresentation.mLayer->GetImplementation() : nullptr;
@@ -622,10 +623,20 @@ namespace ImmPlayer
 
                 Drawing * replacement = mPendingPresentation.mReplacement.get();
                 Drawing * created = nullptr;
+                uint32_t * creationFrames = nullptr;
                 if (mPendingPresentation.mIsCreation)
                 {
                     LayerPaint * paint = mPendingPresentation.mLayer != nullptr ?
                         (LayerPaint *)mPendingPresentation.mLayer->GetImplementation() : nullptr;
+                    creationFrames = paint != nullptr ? paint->GetFrameBuffer() : nullptr;
+                    if (mPendingPresentation.mIsFrameMapping &&
+                        (creationFrames == nullptr ||
+                            mPendingPresentation.mFrameIndex >= paint->GetNumFrames()))
+                    {
+                        iRejectCommit(revision, -6, 0, mPendingPresentation.mObject);
+                        iDiscardPendingPresentation(layerPaintRender, renderer, log);
+                        return true;
+                    }
                     created = paint != nullptr ? paint->AddDrawing() : nullptr;
                     if (created == nullptr)
                     {
@@ -657,6 +668,9 @@ namespace ImmPlayer
                         mDrawingHandles.push_back(DrawingHandleEntry{
                             mPendingPresentation.mObject, mPendingPresentation.mLayer,
                             mPendingPresentation.mDrawingIndex });
+                        if (mPendingPresentation.mIsFrameMapping)
+                            creationFrames[mPendingPresentation.mFrameIndex] =
+                                mPendingPresentation.mDrawingIndex;
                         mPendingPresentation.mReplacement->Deinit();
                     }
                     else
@@ -924,9 +938,30 @@ namespace ImmPlayer
     {
         if (!mEditing)
             return -4;
-        if (!mOpenDrawingCreations.empty() || !mOpenGeometryEdits.empty() ||
-            !mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
+        if (!mOpenFrameMappings.empty() || !mOpenDrawingDeletions.empty() ||
             !mOpenLayerPropertyEdits.empty())
+            return -7;
+
+        if (!mOpenDrawingCreations.empty())
+        {
+            if (mOpenDrawingCreations.size() != 1 || mOpenGeometryEdits.size() != 1 ||
+                mOpenDrawingCreations[0].mLayerId != layerId ||
+                mOpenDrawingCreations[0].mDrawingId != drawingId ||
+                mOpenGeometryEdits[0].mLayerId != layerId ||
+                mOpenGeometryEdits[0].mDrawingId != drawingId)
+                return -7;
+            Layer * layer = iFindAuthoringLayerById(mSequence.GetRoot(), layerId);
+            LayerPaint * paint = layer != nullptr && layer->GetType() == Layer::Type::Paint ?
+                (LayerPaint *)layer->GetImplementation() : nullptr;
+            if (paint == nullptr)
+                return -3;
+            if (frameIndex >= paint->GetNumFrames())
+                return -2;
+
+            mOpenFrameMappings.push_back(FrameMapping{ layerId, frameIndex, drawingId });
+            return 0;
+        }
+        if (!mOpenGeometryEdits.empty())
             return -7;
 
         const DrawingHandleEntry * entry = iFindDrawingHandle(layerId, drawingId);
@@ -1185,8 +1220,12 @@ namespace ImmPlayer
             return;
         }
 
+        const bool hasCreationFrameMapping = batch.mFrameMappings.size() == 1 &&
+            batch.mDrawingCreations.size() == 1 &&
+            batch.mFrameMappings[0].mLayerId == batch.mDrawingCreations[0].mLayerId &&
+            batch.mFrameMappings[0].mDrawingId == batch.mDrawingCreations[0].mDrawingId;
         if (!batch.mLayerPropertyEdits.empty() || !batch.mDrawingDeletions.empty() ||
-            !batch.mFrameMappings.empty() ||
+            (!batch.mFrameMappings.empty() && !hasCreationFrameMapping) ||
             batch.mGeometryEdits.size() != 1 ||
             batch.mDrawingCreations.size() > 1 ||
             layerPaintRender == nullptr)
@@ -1218,9 +1257,13 @@ namespace ImmPlayer
         Drawing * active = creation == nullptr && paint != nullptr ?
             paint->GetDrawing(static_cast<int>(entry->mDrawingIndex)) : nullptr;
         DrawingStatic * activeStatic = dynamic_cast<DrawingStatic *>(active);
-        if (paint == nullptr || (creation == nullptr && activeStatic == nullptr))
+        const FrameMapping * creationMapping = hasCreationFrameMapping ?
+            &batch.mFrameMappings[0] : nullptr;
+        if (paint == nullptr || (creation == nullptr && activeStatic == nullptr) ||
+            (creationMapping != nullptr && creationMapping->mFrameIndex >= paint->GetNumFrames()))
         {
-            iRejectCommit(batch.mRevision, -3, 0, edit.mDrawingId);
+            iRejectCommit(batch.mRevision,
+                creationMapping != nullptr ? -6 : -3, 0, edit.mDrawingId);
             return;
         }
 
@@ -1278,8 +1321,11 @@ namespace ImmPlayer
         mPendingPresentation.mRevision = batch.mRevision;
         mPendingPresentation.mObject = edit.mDrawingId;
         mPendingPresentation.mIsCreation = creation != nullptr;
+        mPendingPresentation.mIsFrameMapping = creationMapping != nullptr;
         mPendingPresentation.mLayer = layer;
         mPendingPresentation.mDrawingIndex = creation != nullptr ? paint->GetNumDrawings() : entry->mDrawingIndex;
+        if (creationMapping != nullptr)
+            mPendingPresentation.mFrameIndex = creationMapping->mFrameIndex;
         mPendingPresentation.mActive = activeStatic;
         mPendingPresentation.mReplacement = std::move(replacement);
         mPendingPresentation.mRendererToken = rendererToken;
@@ -1289,9 +1335,17 @@ namespace ImmPlayer
     {
         if (resultOut != nullptr)
             *resultOut = 0;
+        const bool creationTargetsGeometry = mOpenDrawingCreations.size() == 1 &&
+            mOpenGeometryEdits.size() == 1 &&
+            mOpenDrawingCreations[0].mLayerId == mOpenGeometryEdits[0].mLayerId &&
+            mOpenDrawingCreations[0].mDrawingId == mOpenGeometryEdits[0].mDrawingId;
+        const bool creationTargetsMapping = mOpenFrameMappings.empty() ||
+            (mOpenFrameMappings.size() == 1 && creationTargetsGeometry &&
+                mOpenFrameMappings[0].mLayerId == mOpenDrawingCreations[0].mLayerId &&
+                mOpenFrameMappings[0].mDrawingId == mOpenDrawingCreations[0].mDrawingId);
         const bool hasGeometryEdit = mOpenGeometryEdits.size() == 1 &&
-            mOpenFrameMappings.empty() && mOpenDrawingDeletions.empty() &&
-            mOpenLayerPropertyEdits.empty();
+            mOpenDrawingDeletions.empty() && mOpenLayerPropertyEdits.empty() &&
+            (mOpenFrameMappings.empty() || creationTargetsMapping);
         const bool hasFrameMapping = mOpenFrameMappings.size() == 1 &&
             mOpenGeometryEdits.empty() && mOpenDrawingCreations.empty() &&
             mOpenDrawingDeletions.size() <= 1 && mOpenLayerPropertyEdits.empty();
@@ -1305,9 +1359,7 @@ namespace ImmPlayer
             (!hasGeometryEdit && !hasFrameMapping && !hasDrawingDeletion &&
                 !hasLayerPropertyEdit) ||
             (!mOpenDrawingCreations.empty() &&
-                (mOpenDrawingCreations.size() != 1 ||
-                    mOpenDrawingCreations[0].mLayerId != mOpenGeometryEdits[0].mLayerId ||
-                    mOpenDrawingCreations[0].mDrawingId != mOpenGeometryEdits[0].mDrawingId)))
+                (!creationTargetsGeometry || !creationTargetsMapping)))
         {
             if (resultOut != nullptr)
                 *resultOut = -4;

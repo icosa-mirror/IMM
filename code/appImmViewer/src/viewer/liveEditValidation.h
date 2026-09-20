@@ -26,7 +26,6 @@ namespace ExePlayer
         bool mApplied = false;
         bool mMeasured = false;
         bool mCreationQueued = false;
-        bool mFrameMappingQueued = false;
         bool mDeletionQueued = false;
         bool mPropertyQueued = false;
         bool mReferencedDeletionRejected = false;
@@ -38,8 +37,6 @@ namespace ExePlayer
         uint64_t mCreationRevision = 0;
         uint64_t mCreatedDrawingId = 0;
         uint64_t mOriginalDrawingId = 0;
-        uint64_t mFrameMappingFrame = 0;
-        uint64_t mFrameMappingRevision = 0;
         uint64_t mDeletionFrame = 0;
         uint64_t mDeletionRevision = 0;
         uint64_t mPropertyFrame = 0;
