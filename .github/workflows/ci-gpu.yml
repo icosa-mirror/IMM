@@ -132,7 +132,7 @@ jobs:
             Where-Object { $_.Extension -in @(".exe", ".dll") } |
             Copy-Item -Destination code\appImmViewer\exe -Force
 
-      - name: Install Mesa lavapipe
+      - name: Set up MSYS2 Vulkan tools
         id: msys2-standalone-vulkan
         uses: msys2/setup-msys2@v2
         with:
@@ -142,6 +142,10 @@ jobs:
             mingw-w64-x86_64-glslang
             mingw-w64-x86_64-mesa
             mingw-w64-x86_64-spirv-tools
+
+      - name: Install pinned Mesa lavapipe
+        shell: msys2 {0}
+        run: bash ./tests/tools/install_windows_lavapipe_msys2.sh
 
       - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
@@ -647,7 +651,7 @@ jobs:
             $sources | Copy-Item -Destination $destination -Force
           }
 
-      - name: Install Mesa lavapipe
+      - name: Set up MSYS2 Vulkan tools
         id: msys2-godot-vulkan
         uses: msys2/setup-msys2@v2
         with:
@@ -657,6 +661,10 @@ jobs:
             mingw-w64-x86_64-glslang
             mingw-w64-x86_64-mesa
             mingw-w64-x86_64-spirv-tools
+
+      - name: Install pinned Mesa lavapipe
+        shell: msys2 {0}
+        run: bash ./tests/tools/install_windows_lavapipe_msys2.sh
 
       - name: Configure Mesa lavapipe Vulkan ICD
         shell: pwsh
