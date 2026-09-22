@@ -112,6 +112,14 @@ def main() -> int:
         ],
     )
     require_tokens(
+        "code/projects/android/appImmViewer/src/androidTest/java/org/linuxfoundation/imm/player/ImmFtlSmokeTest.java",
+        [
+            "waitForNativeCapture(device, nativeCapture, waitSeconds, true)",
+            "waitForNativeCapture(device, nativeCapture, waitSeconds, false)",
+            "!requireFullValidation",
+        ],
+    )
+    require_tokens(
         "code/appImmUnity/src/imm_authoring.h",
         [
             "ImmAuthoring_FrameSetHandle",

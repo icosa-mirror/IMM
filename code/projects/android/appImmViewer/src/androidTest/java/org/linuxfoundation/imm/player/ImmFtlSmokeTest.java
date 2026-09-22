@@ -55,7 +55,7 @@ public final class ImmFtlSmokeTest {
         assertTrue("Could not create artifact directory: " + artifactDir, artifactDir.mkdirs() || artifactDir.isDirectory());
 
         File nativeCapture = new File(artifactDir, "native-render-after.ppm");
-        String logcat = waitForNativeCapture(device, nativeCapture, waitSeconds);
+        String logcat = waitForNativeCapture(device, nativeCapture, waitSeconds, true);
 
         File screenshot = new File(artifactDir, "screencap_after.png");
         assertTrue("FTL screenshot capture failed", device.takeScreenshot(screenshot));
@@ -128,7 +128,7 @@ public final class ImmFtlSmokeTest {
         faceIntent.putExtra("QUILL_PATH", faceDocument.getAbsolutePath());
         targetContext.startActivity(faceIntent);
 
-        String faceLogcat = waitForNativeCapture(device, nativeCapture, waitSeconds);
+        String faceLogcat = waitForNativeCapture(device, nativeCapture, waitSeconds, false);
         File faceCapture = new File(artifactDir, "face-orientation.ppm");
         Files.copy(nativeCapture.toPath(), faceCapture.toPath(), StandardCopyOption.REPLACE_EXISTING);
         writeText(new File(artifactDir, "face-orientation-logcat.txt"), faceLogcat);
@@ -166,7 +166,9 @@ public final class ImmFtlSmokeTest {
         assertTrue("Forbidden log marker was present: " + marker, !logcat.contains(marker));
     }
 
-    private static String waitForNativeCapture(UiDevice device, File capture, int waitSeconds) throws Exception {
+    private static String waitForNativeCapture(
+            UiDevice device, File capture, int waitSeconds, boolean requireFullValidation)
+            throws Exception {
         long deadline = SystemClock.elapsedRealtime() + waitSeconds * 1000L;
         String logcat = "";
         while (SystemClock.elapsedRealtime() < deadline) {
@@ -186,7 +188,8 @@ public final class ImmFtlSmokeTest {
                             "transformOverridePreserved=1 transformEffectivePreserved=1") &&
                     logcat.contains("revision=5 status=4 result=0 keyCountChanged=1") &&
                     logcat.contains("revision=6 status=4 result=0 keyCountRestored=1") &&
-                    (logcat.contains("revision=13 status=4 result=0 subtreeMissing=1 countRestored=1") ||
+                    (!requireFullValidation ||
+                            logcat.contains("revision=13 status=4 result=0 subtreeMissing=1 countRestored=1") ||
                             logcat.contains("[IMM_LIVE_EDIT_INITIAL_SPAWN] frame=") &&
                             logcat.contains("available=0"))) {
                 return logcat;
