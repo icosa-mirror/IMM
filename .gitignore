@@ -118,8 +118,8 @@ code/appImmGodotGDExtension/*.pdb
 /code/ImmUnitySampleProject/Assets/Samples
 code/ImmUnitySampleProject/Assets/Samples.meta
 /code/ImmUnitySampleProject/Assets/StreamingAssets
-/LLM Docs
 /LLM Scripts
 /quillplayer_decompiled
 /.codex-temp/
 /code/projects/android/appImmViewer/build_gles_codex
+/exampleImmFiles
