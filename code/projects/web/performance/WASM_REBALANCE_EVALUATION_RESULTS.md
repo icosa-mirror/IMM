@@ -137,11 +137,17 @@ These short playback samples show no measurable frame-rate improvement: both
 paths remain approximately 60 fps. Their small update-cost differences are not
 evidence of a broad speed-up. They establish that Gallery uses the reusable
 path with matching evaluation and rendered work. The earlier browser-app loading
-results do not establish Gallery loading performance or performance on the upper
-workload. Those require separate measurements; so do longer playback, later
-chapters, and GPU-heavy views.
+results do not establish Gallery loading performance. The subsequent visible
+Gallery loading comparison is in `WASM_REBALANCE_GALLERY_LOADING_RESULTS.md`;
+its upper bounded median improvement was about 7% with substantial variation.
+Longer playback, later chapters, and GPU-heavy views remain unmeasured.
 
 Run `node tests/gallery-viewer-performance.mjs --workload medium` from the IMM
 web app directory. `--gallery <checkout>` selects a Gallery Viewer checkout; the
 default is the sibling `gallery-viewer` directory. Omit `--workload` for
 `sample1.imm`. Private workload paths remain in the ignored corpus mapping.
+
+The subsequent sustained, populated-scene comparison on matching Three.js versions
+is documented in `WASM_REBALANCE_MATCHED_SCENE_RESULTS.md`. Use its Gallery
+measurements when discussing steady playback, rather than the early browser-app
+loading percentage.
