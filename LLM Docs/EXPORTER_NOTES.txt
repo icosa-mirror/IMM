@@ -1,0 +1,15 @@
+Paint Layer Structure (Exporter)
+
+In this codebase a paint layer is not just a flat list of strokes. The structure is:
+
+LayerPaint
+  Drawing[]
+    Element[]  (each Element is one stroke)
+      Point[]  (stroke samples)
+
+Key point: a Drawing exists to support animation. The layer stores a frame->drawing map.
+
+- Still scene: use 1 Drawing that contains all strokes.
+- Animated scene: use multiple Drawings and map each frame to a Drawing index.
+
+So, without animation you only need a single Drawing per paint layer.
