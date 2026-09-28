@@ -16,6 +16,11 @@ namespace ImmPlayer
         [DllImport(DllName)]
         private static extern IntPtr StrokeReader_GetBuildId();
 
+        /// <summary>
+        /// Native build identifier (for example "IMM_STROKE_READER_BUILD_ID=2026-07-19-PHASE5"),
+        /// the intended way to confirm which stroke reader library a player actually loaded.
+        /// </summary>
+        /// <returns>The native build id string, or null when the plugin reports none.</returns>
         public static string GetBuildId()
         {
             IntPtr p = StrokeReader_GetBuildId();
@@ -189,6 +194,33 @@ namespace ImmPlayer
         public static extern int StrokeReader_GetAuthoringStrokeCount(int docId, int layerIdx, int drawingIdx);
 
         /// <summary>
+        /// Viewpoint data of a spawn-area layer (floor level, locomotion volume, locomotion mask).
+        /// </summary>
+        /// <param name="docId">Document ID</param>
+        /// <param name="layerIdx">Layer index</param>
+        /// <param name="info">Output viewpoint struct</param>
+        /// <returns>False when the layer is not a spawn area or the indices are invalid</returns>
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool StrokeReader_GetLayerSpawnAreaInfo(
+            int docId, int layerIdx, out StrokeSpawnAreaInfo info);
+
+        /// <summary>
+        /// Largest single-element bounding-box extent in a drawing, in document units.
+        /// </summary>
+        /// <param name="docId">Document ID</param>
+        /// <param name="layerIdx">Layer index</param>
+        /// <param name="drawingIdx">Drawing index</param>
+        /// <returns>Largest element extent, or 0 if the indices are invalid</returns>
+        /// <remarks>
+        /// This is the value the IMM format itself stores per drawing (it normalizes stroke
+        /// positions and widths by it), which makes it a cheap geometry-budget estimate:
+        /// how much document space the drawing occupies.
+        /// </remarks>
+        [DllImport(DllName)]
+        public static extern float StrokeReader_GetDrawingBiggestStroke(int docId, int layerIdx, int drawingIdx);
+
+        /// <summary>
         /// Get information about a stroke (brush type, visibility, point count, bounding box).
         /// </summary>
         /// <param name="docId">Document ID</param>
@@ -317,6 +349,33 @@ namespace ImmPlayer
         public float pivotTransX => legacy.pivotTransX;
         public float pivotTransY => legacy.pivotTransY;
         public float pivotTransZ => legacy.pivotTransZ;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StrokeSpawnAreaInfo
+    {
+        /// <summary>1 when the viewpoint is floor level, 0 for eye level.</summary>
+        public int isFloorLevel;
+
+        /// <summary>0 = sphere volume, 1 = box volume.</summary>
+        public int volumeType;
+
+        public float volumeOffsetX;
+        public float volumeOffsetY;
+        public float volumeOffsetZ;
+
+        /// <summary>Sphere radius in X for a sphere volume; the three radii for a box volume.</summary>
+        public float volumeExtentX;
+        public float volumeExtentY;
+        public float volumeExtentZ;
+
+        /// <summary>Locomotion mask: bit2 = allow X, bit1 = allow Y, bit0 = allow Z.</summary>
+        public int locomotion;
+
+        public bool IsFloorLevel => isFloorLevel != 0;
+        public bool AllowTranslationX => (locomotion & 4) != 0;
+        public bool AllowTranslationY => (locomotion & 2) != 0;
+        public bool AllowTranslationZ => (locomotion & 1) != 0;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -638,6 +697,38 @@ namespace ImmPlayer
             return _docId > 0 && ImmStrokeReader.StrokeReader_GetAuthoringLayerInfo(_docId, layerIdx, out info);
         }
 
+        /// <summary>
+        /// Picture metadata for a picture layer; false for any other layer type or when the
+        /// layer holds no picture. Read the pixels with
+        /// <see cref="ImmStrokeReader.StrokeReader_GetPicturePixelData"/>.
+        /// </summary>
+        public bool GetPictureInfo(int layerIdx, out StrokePictureInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetPictureInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>
+        /// Viewpoint data of a spawn-area layer. Returns false for any other layer type.
+        /// </summary>
+        public bool GetLayerSpawnAreaInfo(int layerIdx, out StrokeSpawnAreaInfo info)
+        {
+            info = default;
+            return _docId > 0 && ImmStrokeReader.StrokeReader_GetLayerSpawnAreaInfo(_docId, layerIdx, out info);
+        }
+
+        /// <summary>
+        /// Local and world transform of a layer as the document stores it. The authoring array
+        /// has its own view of the same layer: see <see cref="GetAuthoringLayerTransform"/>.
+        /// </summary>
+        public bool GetLayerTransform(int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world)
+        {
+            local = default;
+            world = default;
+            if (_docId <= 0) return false;
+            return ImmStrokeReader.StrokeReader_GetLayerTransform(_docId, layerIdx, out local, out world);
+        }
+
         public bool GetAuthoringLayerTransform(int layerIdx, out StrokeLayerTransform local, out StrokeLayerTransform world)
         {
             local = default;
@@ -711,6 +802,21 @@ namespace ImmPlayer
         public int GetStrokeCount(int layerIdx, int drawingIdx)
         {
             return _docId > 0 ? ImmStrokeReader.StrokeReader_GetStrokeCount(_docId, layerIdx, drawingIdx) : 0;
+        }
+
+        /// <summary>
+        /// Largest single-element bounding-box extent in a drawing, in document units: the
+        /// value the IMM format stores per drawing to normalize stroke positions and widths,
+        /// usable as a cheap geometry-budget estimate.
+        /// </summary>
+        public bool TryGetDrawingBiggestStroke(int layerIdx, int drawingIdx, out float biggestStroke)
+        {
+            biggestStroke = 0.0f;
+            if (_docId <= 0)
+                return false;
+
+            biggestStroke = ImmStrokeReader.StrokeReader_GetDrawingBiggestStroke(_docId, layerIdx, drawingIdx);
+            return true;
         }
 
         /// <summary>

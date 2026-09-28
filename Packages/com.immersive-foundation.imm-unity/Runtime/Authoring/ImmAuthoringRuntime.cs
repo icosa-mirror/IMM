@@ -45,7 +45,9 @@ namespace ImmPlayer.Authoring
         private static ImmAuthoringCapabilities DetectCapabilities()
         {
             string architecture = IntPtr.Size == 8 ? "x64" : "x86";
-#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            // The runtime authoring surface (mutable graph, native exporter, paint
+            // import, preview) is built for every platform these packages support;
+            // only the 64-bit pointer width is required by the native exporter.
             ImmAuthoringFeature features = ImmAuthoringFeature.Playback;
             if (IntPtr.Size == 8)
             {
@@ -57,15 +59,21 @@ namespace ImmPlayer.Authoring
                             ImmAuthoringFeature.ProgressReporting |
                             ImmAuthoringFeature.Cancellation;
             }
-            return new ImmAuthoringCapabilities("Windows", architecture, features);
+            return new ImmAuthoringCapabilities(ResolvePlatformName(), architecture, features);
+        }
+
+        private static string ResolvePlatformName()
+        {
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            return "Windows";
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
-            return new ImmAuthoringCapabilities("macOS", architecture, ImmAuthoringFeature.Playback);
+            return "macOS";
 #elif UNITY_ANDROID
-            return new ImmAuthoringCapabilities("Android", architecture, ImmAuthoringFeature.Playback);
+            return "Android";
 #elif UNITY_IOS
-            return new ImmAuthoringCapabilities("iOS", architecture, ImmAuthoringFeature.Playback);
+            return "iOS";
 #else
-            return new ImmAuthoringCapabilities(UnityEngine.Application.platform.ToString(), architecture, ImmAuthoringFeature.None);
+            return UnityEngine.Application.platform.ToString();
 #endif
         }
     }

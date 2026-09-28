@@ -32,6 +32,12 @@ namespace ImmPlayer.Exporter
         Always = 1
     }
 
+    public enum ExportSpawnAreaVolume
+    {
+        Sphere = 0,
+        Box = 1
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct ExportRequirements
     {
@@ -241,6 +247,44 @@ namespace ImmPlayer.Exporter
             return new ExportPaintLayer(layerHandle);
         }
 
+        /// <summary>
+        /// Create a spawn-area (viewpoint) layer. The first spawn area created becomes the
+        /// sequence default unless <see cref="SetInitialSpawnArea"/> overrides it.
+        /// </summary>
+        /// <param name="floorLevel">True for a floor-level viewpoint, false for eye level.</param>
+        public ExportSpawnAreaLayer CreateSpawnAreaLayer(
+            string name,
+            Transform transform = null,
+            bool floorLevel = false,
+            ExportGroupLayer parent = null)
+        {
+            if (!IsValid)
+                return null;
+
+            TransformNative t = TransformUtils.ToNativeTransform(transform);
+            IntPtr layerHandle = Native.ImmExporter_CreateSpawnAreaLayer(
+                Handle,
+                parent != null && parent.IsValid ? parent.Handle : IntPtr.Zero,
+                name ?? "Spawn Area",
+                ref t,
+                floorLevel ? 1 : 0);
+
+            if (layerHandle == IntPtr.Zero)
+                return null;
+
+            return new ExportSpawnAreaLayer(Handle, layerHandle);
+        }
+
+        /// <summary>
+        /// Choose which spawn-area layer the sequence treats as its default viewpoint.
+        /// </summary>
+        public bool SetInitialSpawnArea(ExportSpawnAreaLayer spawnArea)
+        {
+            if (!IsValid || spawnArea == null || !spawnArea.IsValid)
+                return false;
+            return Native.ImmExporter_SetInitialSpawnArea(Handle, spawnArea.Handle);
+        }
+
         public bool ExportToFile(string filePath, int opusBitrate = 96000, ExportAudioType audioType = ExportAudioType.Opus)
         {
             if (!IsValid || string.IsNullOrEmpty(filePath))
@@ -283,6 +327,64 @@ namespace ImmPlayer.Exporter
             GC.SuppressFinalize(this);
         }
 
+    }
+
+    public sealed class ExportSpawnAreaLayer
+    {
+        internal IntPtr SequenceHandle { get; }
+        internal IntPtr Handle { get; }
+        public bool IsValid => Handle != IntPtr.Zero;
+
+        internal ExportSpawnAreaLayer(IntPtr sequenceHandle, IntPtr layerHandle)
+        {
+            SequenceHandle = sequenceHandle;
+            Handle = layerHandle;
+        }
+
+        /// <summary>
+        /// Set the locomotion volume. A sphere uses <paramref name="radius"/>; a box uses
+        /// <paramref name="extent"/> as its radii.
+        /// </summary>
+        /// <param name="volume">Sphere or box volume anchored at the spawn-area transform.</param>
+        /// <param name="offset">Volume centre offset from the spawn area.</param>
+        /// <param name="radius">Sphere radius (ignored for a box volume).</param>
+        /// <param name="extent">Box radii (ignored for a sphere volume).</param>
+        /// <param name="allowTranslationX">Whether the viewer may translate along X inside the volume.</param>
+        /// <param name="allowTranslationY">Whether the viewer may translate along Y inside the volume.</param>
+        /// <param name="allowTranslationZ">Whether the viewer may translate along Z inside the volume.</param>
+        public bool SetVolume(
+            ExportSpawnAreaVolume volume,
+            Vector3 offset = default,
+            float radius = 0.01f,
+            Vector3 extent = default,
+            bool allowTranslationX = false,
+            bool allowTranslationY = false,
+            bool allowTranslationZ = false)
+        {
+            if (!IsValid)
+                return false;
+
+            int locomotionMask = 0;
+            if (allowTranslationX) locomotionMask |= 4;
+            if (allowTranslationY) locomotionMask |= 2;
+            if (allowTranslationZ) locomotionMask |= 1;
+
+            bool box = volume == ExportSpawnAreaVolume.Box;
+            float extentX = box ? extent.x : radius;
+            float extentY = box ? extent.y : radius;
+            float extentZ = box ? extent.z : radius;
+
+            return Native.ImmExporter_SpawnAreaSetProperties(
+                Handle,
+                (int)volume,
+                offset.x,
+                offset.y,
+                offset.z,
+                extentX,
+                extentY,
+                extentZ,
+                locomotionMask);
+        }
     }
 
     public sealed class ExportGroupLayer
@@ -556,6 +658,31 @@ namespace ImmPlayer.Exporter
             int isTimeline,
             long durationTicks,
             uint maxRepeatCount);
+
+        [DllImport(DllName, CharSet = CharSet.Ansi)]
+        public static extern IntPtr ImmExporter_CreateSpawnAreaLayer(
+            IntPtr sequenceHandle,
+            IntPtr parentLayerHandle,
+            string name,
+            ref TransformNative transform,
+            int floorLevel);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SetInitialSpawnArea(IntPtr sequenceHandle, IntPtr layerHandle);
+
+        [DllImport(DllName)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ImmExporter_SpawnAreaSetProperties(
+            IntPtr layerHandle,
+            int volumeType,
+            float offsetX,
+            float offsetY,
+            float offsetZ,
+            float extentX,
+            float extentY,
+            float extentZ,
+            int locomotionMask);
 
         [DllImport(DllName)]
         [return: MarshalAs(UnmanagedType.I1)]

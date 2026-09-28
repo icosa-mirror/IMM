@@ -118,12 +118,16 @@ namespace ImmPlayer.Authoring
             ImmAuthoringLayerProperties properties,
             int siblingIndex = -1) => CreateLayer(ImmAuthoringLayerType.Paint, parentId, properties, siblingIndex);
 
+        /// <summary>
+        /// Create a viewpoint layer (tracking level, locomotion volume, optional document default).
+        /// </summary>
+        public ImmAuthoringResult<long> CreateSpawnAreaLayer(
+            long parentId,
+            ImmAuthoringLayerProperties properties,
+            int siblingIndex = -1) => CreateLayer(ImmAuthoringLayerType.SpawnArea, parentId, properties, siblingIndex);
+
         public ImmAuthoringResult SetLayerProperties(long layerId, ImmAuthoringLayerProperties properties)
         {
-            ImmAuthoringResult validation = ValidateLayerProperties(properties, layerId);
-            if (!validation.Succeeded)
-                return validation;
-
             ImmAuthoringChange change;
             lock (_gate)
             {
@@ -131,6 +135,9 @@ namespace ImmPlayer.Authoring
                     return Disposed();
                 if (!_state.Layers.TryGetValue(layerId, out LayerNode layer))
                     return NotFound("Layer", layerId);
+                ImmAuthoringResult validation = ValidateLayerProperties(properties, layer.Type, layerId);
+                if (!validation.Succeeded)
+                    return validation;
                 layer.Properties = properties;
                 change = AdvanceRevision(new[] { layerId });
             }
@@ -754,7 +761,7 @@ namespace ImmPlayer.Authoring
             ImmAuthoringLayerProperties properties,
             int siblingIndex)
         {
-            ImmAuthoringResult validation = ValidateLayerProperties(properties);
+            ImmAuthoringResult validation = ValidateLayerProperties(properties, type);
             if (!validation.Succeeded)
                 return ImmAuthoringResult<long>.Failure(validation.ErrorCode, validation.Message, validation.ObjectId);
 
@@ -935,7 +942,10 @@ namespace ImmPlayer.Authoring
             return ImmAuthoringResult.Success();
         }
 
-        private static ImmAuthoringResult ValidateLayerProperties(ImmAuthoringLayerProperties properties, long objectId = 0)
+        private static ImmAuthoringResult ValidateLayerProperties(
+            ImmAuthoringLayerProperties properties,
+            ImmAuthoringLayerType type,
+            long objectId = 0)
         {
             if (string.IsNullOrWhiteSpace(properties.Name))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer name cannot be empty.", objectId);
@@ -945,6 +955,18 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer transform and pivot must be finite with positive scale.", objectId);
             if (properties.DurationTicks < 0)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Layer duration cannot be negative.", objectId);
+            // The spawn-volume fields exist on every layer because the properties struct is
+            // shared, so their rules are checked only for the layer type that owns them.
+            // Applying them to paint, group or viewpoint layers would report a spawn-area
+            // error for values those layers never read.
+            if (type != ImmAuthoringLayerType.SpawnArea)
+                return ImmAuthoringResult.Success();
+            if (!IsFinite(properties.SpawnAreaVolumeOffset) || !IsFinite(properties.SpawnAreaVolumeExtent))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Spawn-area volume offset and extent must be finite.", objectId);
+            if (properties.SpawnAreaVolumeExtent.x <= 0f ||
+                (properties.SpawnAreaVolume == ExportSpawnAreaVolume.Box &&
+                 (properties.SpawnAreaVolumeExtent.y <= 0f || properties.SpawnAreaVolumeExtent.z <= 0f)))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidArgument, "Spawn-area volume extents must be positive.", objectId);
             return ImmAuthoringResult.Success();
         }
 
@@ -1119,12 +1141,15 @@ namespace ImmPlayer.Authoring
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.HierarchyCycle, "Layer appears more than once in the hierarchy.", layerId);
             if (layer.ParentId != expectedParentId)
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.ValidationFailed, "Layer parent does not match its owner's child list.", layerId);
-            ImmAuthoringResult properties = ValidateLayerProperties(layer.Properties, layerId);
+            ImmAuthoringResult properties = ValidateLayerProperties(layer.Properties, layer.Type, layerId);
             if (!properties.Succeeded)
                 return properties;
             if (layer.Type == ImmAuthoringLayerType.Group &&
                 (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
                 return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Group layer contains paint data.", layerId);
+            if (layer.Type == ImmAuthoringLayerType.SpawnArea &&
+                (layer.DrawingIds.Count != 0 || layer.FrameIds.Count != 0 || layer.FrameDrawingIds.Count != 0))
+                return ImmAuthoringResult.Failure(ImmAuthoringErrorCode.InvalidOwner, "Spawn-area layer contains paint data.", layerId);
             if (layer.Type == ImmAuthoringLayerType.Paint)
             {
                 foreach (long drawingId in layer.DrawingIds)

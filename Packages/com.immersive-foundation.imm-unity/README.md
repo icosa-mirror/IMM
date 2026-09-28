@@ -32,9 +32,9 @@ internal render and composition captures are diagnostic; passing requires the
 external device video to contain a stable frame that satisfies the perceptual
 baseline contract.
 
-The production authoring surface is currently available on Windows x64. Query
-`ImmAuthoringRuntime.Capabilities` at runtime instead of inferring support from
-the presence of a playback plugin. Detailed ownership, threading, limits,
+The production authoring surface is available on Windows, macOS, Android and iOS
+(64-bit). Query `ImmAuthoringRuntime.Capabilities` at runtime instead of inferring
+support from the presence of a playback plugin. Detailed ownership, threading, limits,
 progress, cancellation, and recovery behavior is documented in
 `Documentation~/runtime-authoring.md`.
 
