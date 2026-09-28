@@ -9,22 +9,78 @@ the default *Single Pass Instanced* render mode) cannot display IMM content corr
 headset.
 
 We need first-class URP support: a renderer feature that submits IMM inside URP's frame,
-renders both eyes in one pass into Unity's texture-array eye target, and depth-tests against
-(and composites with) Unity geometry.
+renders both eyes with one native draw sequence, and integrates colour and depth with Unity
+geometry. Both direct rendering into Unity's texture-array eye target and a layered offscreen
+render followed by one stereo composite are permitted under the contracts below.
+
+Windows D3D12 support is a prerequisite workstream: IMM currently implements a D3D11
+renderer, not a D3D12 renderer. The existing D3D12 device-discovery hook does not provide
+working D3D12 rendering. Scope and estimates must include that backend work as well as
+URP integration and layered stereo.
+
+The CI validation workflow is critical to delivery. Every implementation stage must add
+or update its automated validation and fix CI regressions as they arise. The difficulty of
+automating headset VR validation does not exempt non-VR changes from CI.
 
 ## Motivation
 
-Open Brush (Unity 6000.6, URP 17.6, OpenXR `renderMode: SinglePassInstanced`, targets PC VR
-on D3D11, Quest on Vulkan/GLES, and flat macOS/iOS on Metal) already imports `.imm` files via
-`imm-stroke-reader` and converts them to its own strokes. We want to add an option to keep
-imported documents as native IMM objects played back by `imm-unity`, placed in the scene
-alongside Open Brush strokes, models and images. That requires the player to work in a URP
-XR app on the same terms as in the Built-in pipeline.
+URP applications need to place native IMM documents alongside Unity geometry in flat and
+XR scenes. Open Brush is one motivating consumer: it currently converts imported `.imm`
+documents into strokes and could also offer native IMM playback. The package must provide
+a general URP integration; its API, platform contract and acceptance tests must not depend
+on Open Brush's project settings, custom renderer features or checkout.
+
+## Scope and constraints
+
+1. The required URP matrix is Windows D3D12, macOS Metal, iOS Metal and Android Vulkan,
+   as detailed below. Metal is required, not optional follow-up work. D3D11, OpenGL and GLES
+   are not required in the new URP integration. This does not require deleting existing
+   native backends or dropping standalone/other-engine CI coverage. Inventory existing
+   checks in `tests/matrix_status.json` and `.github/workflows/ci-{engine,gpu,device,ios}.yml`;
+   migrate affected Unity checks to the new contract while retaining their rendering
+   assertions. Existing D3D11 evidence does not satisfy D3D12 acceptance. Distinguish build,
+   simulator, synthetic-stereo and physical-device evidence; an existing job is not proof
+   that the new URP path works.
+2. Require RenderGraph for Unity integration, with flat mono and single-pass instanced or
+   multiview XR. URP Multi-pass and legacy double-wide stereo are out of scope.
+3. There are no existing package users requiring backwards compatibility. The package may
+   require URP and a specific supported Unity/URP version, change managed/native APIs,
+   and replace Built-in hooks and legacy Unity stereo paths. Update the sample and relevant
+   CI harnesses together. Preserve platform coverage and rendering correctness, not old
+   Unity integration mechanisms. Shared renderer changes must retain existing standalone
+   and other-engine CI functionality.
+4. Implement one rendering route per backend: direct rendering or one layered offscreen
+   render plus stereo composite. Do not expose a route selector or require both routes on
+   each backend. The existing dedicated-queue design is not a compatibility requirement.
+5. Use the fixed insertion point `AfterRenderingOpaques`. Verify general URP composition
+   with opaque/alpha-tested geometry, transparent geometry, a skybox and later renderer
+   features. Do not expose an arbitrary `RenderPassEvent` setting or require application-
+   specific renderer hooks. Consumer integration checks may supplement the package sample.
+6. Depth-of-field and other effects that sample camera depth are deferred. The required
+   depth contract covers opaque intersections and occlusion of later Unity transparents.
+7. The Windows native C++ player and Godot plugin remain on Vulkan for their primary
+   rendering path. Implement D3D12 in IMM's shared C++ renderer with a Unity-specific
+   adapter for Unity's device, attachments and command submission. Shared scene/stereo
+   improvements can benefit all hosts; this plan does not require a D3D12 migration for
+   the standalone player or Godot. Preserve their existing backend validation.
+
+| Platform | Required graphics API | Required rendering modes |
+| --- | --- | --- |
+| Windows | Direct3D 12 | Flat mono and OpenXR single-pass instanced stereo |
+| macOS | Metal | Flat mono |
+| iOS | Metal | Flat mono |
+| Android | Vulkan | Flat mono and OpenXR multiview stereo on Quest |
+
+Use Unity 6.6 / URP 17.6 / OpenXR 1.18 as the initial integration and validation baseline.
+Supporting earlier package versions is not required. Unity OpenXR 1.17 changed the preferred
+Windows API from DX11 to DX12 for Oculus PC/Link and SteamVR; the installed 1.18 documentation
+retains that recommendation. Windows D3D12 is therefore an explicit target, not shorthand
+for either DirectX backend. New URP support for other APIs or Metal stereo is separate work.
 
 ## Current behaviour
 
-Observed in `Runtime/ImmPlayerManager.cs` and `appImmUnity` / `appImmShared` at `upm`
-(`36a8161f`):
+The original pipeline/stereo observations were made at `upm` (`36a8161f`) and checked
+against `main` (`fc859f51`) during this review, including the Windows renderer dispatch:
 
 1. **No pipeline hook under URP.** `OnEnable` sets `_useCommandBufferRendering` and
    subscribes `Camera.onPreCull` only when `GraphicsSettings.currentRenderPipeline == null`.
@@ -47,52 +103,92 @@ Observed in `Runtime/ImmPlayerManager.cs` and `appImmUnity` / `appImmShared` at 
    (GLSL) to place each eye in half of a single 2D target. Unity's instanced single-pass target
    is a 2-slice `Texture2DArray` (or a multiview framebuffer on Quest), where each eye is a
    separate layer at full viewport size.
+5. **The Windows DirectX backend is D3D11.** `piRenderer::Create(API::DX)` constructs
+   `piRendererDX11`. Unity build automation selects `Direct3D11`, and the DirectX CI runtime
+   uses `-force-d3d11`. `appImmUnity` also retrieves a device for `kUnityGfxRendererD3D12`,
+   but routes it into `API::DX`, whose implementation treats the device as `ID3D11Device`.
+   This is not a D3D12 implementation and must not be used as evidence of D3D12 support.
 
 ## Requested changes
 
 ### 1. URP renderer feature (package side)
 
-Ship an `ImmRendererFeature : ScriptableRendererFeature` (in its own assembly, conditionally
-compiled on `com.unity.render-pipelines.universal`, so Built-in users are unaffected) that:
+Ship an `ImmRendererFeature : ScriptableRendererFeature` in a package that may depend
+directly on `com.unity.render-pipelines.universal`, with an internal integration API, that:
 
-- Enqueues an `ImmRenderPass` at a configurable `RenderPassEvent`, defaulting to
-  `AfterRenderingOpaques` so Unity transparents blend over IMM and IMM occludes/is occluded
-  by Unity opaques.
-- Supports the RenderGraph API (mandatory path in Unity 6 / URP 17). Use an unsafe pass,
-  since `IssuePluginEvent` needs a raw `CommandBuffer`, that declares read/write on the
-  active camera colour and depth attachments so RenderGraph does not cull, reorder or merge
-  it away. A Compatibility Mode `Execute` path is optional.
-- Issues the plugin event via `cmd.IssuePluginEvent(renderEventFunc, eventId)` rather than
-  `GL.IssuePluginEvent`, so it is ordered inside URP's command stream.
-- Passes the *actual* URP camera attachments (native colour/depth pointers, size, sample
-  count, slice count) to the native side each frame. Generalise the existing
-  `SetVulkanCameraRenderBuffers` / `SetVulkanCameraEyeRenderBuffers` idea to all backends.
-  Under URP the bound target is an intermediate texture, not the backbuffer, and on
-  Vulkan/Metal the plugin cannot infer it.
-- Leaves the active render target, viewport and pipeline state as URP expects after the event
-  (or documents which state it clobbers so the pass can restore it).
-- Filters cameras: a camera allow-list or layer/tag rule, plus skipping Preview, Reflection
-  and SceneView cameras by default. Apps typically have extra cameras (thumbnails, snapshots,
-  spectator views) that must not each pay for an IMM render.
+1. Enqueues an `ImmRenderPass` at `AfterRenderingOpaques`.
+   IMM tests against Unity opaque depth and writes visible opaque IMM depth so
+   subsequent Unity transparents are occluded correctly.
+2. Implements the URP integration exclusively through RenderGraph (`RecordRenderGraph`).
+   RenderGraph must be enabled; do not implement a Compatibility Mode `Execute` fallback.
+   If Compatibility Mode is enabled, report clearly that the feature requires RenderGraph.
+   Use an unsafe pass to obtain the raw `CommandBuffer` needed for the plugin event. Declare the
+   actual texture reads/writes to establish dependencies, explicitly disable pass culling
+   for the native event's side effects, and bind the attachments in the execution function.
+   Resource declarations alone do not guarantee that a pass cannot be culled.
+3. Issues the plugin event through the pass's command buffer, using `IssuePluginEvent` or
+   `IssuePluginEventAndData` as required by the submission-data lifetime contract, rather
+   than immediate `GL.IssuePluginEvent`.
+4. Resolves the *actual* URP camera attachments during RenderGraph pass execution and
+   passes backend-specific colour/depth handles to the native side. Generalise the existing
+   `SetVulkanCameraRenderBuffers` / `SetVulkanCameraEyeRenderBuffers` idea to all backends.
+   Do not assume that URP always uses an intermediate texture or that a Unity render-buffer
+   handle is interchangeable with a native texture or image-view pointer. Include formats,
+   allocated dimensions, viewport origin and extent, render scale, sample count, slice count
+   and XR view-to-layer mapping. Reacquire resources when targets are recreated or resized.
+5. Defines ownership and lifetime through native event execution and GPU completion.
+   Each queued submission must retain immutable camera, XR-pass, matrix and attachment
+   metadata until consumed; subsequent camera/eye submissions must not overwrite it.
+   Define backend resource transitions, queue synchronization and release/reuse rules, and
+   keep RenderGraph resources alive for every operation that uses them. A dedicated native
+   queue must complete or synchronize its writes before URP consumes them.
+6. Leaves the active render target, viewport and pipeline state as URP expects after the
+   event. Document clobbered state and implement any required restoration in the pass.
+7. Renders only cameras carrying an explicit opt-in component (for example `ImmCamera`).
+   Applications register the main view and any thumbnail, snapshot or spectator cameras
+   that need IMM by adding this component. Preview, Reflection and SceneView cameras are
+   excluded. Do not add parallel allow-list, layer or tag filtering mechanisms.
 
-`ImmPlayerManager` should detect URP and defer to the feature instead of silently doing
-nothing, and log a clear warning if URP is active but the feature is missing from the active
-renderer.
+The renderer feature owns render submission. Document its required setup and supply a
+configured sample; automatic detection of a missing feature is out of scope. Report
+unsupported configurations encountered by the installed feature clearly, once per condition.
 
 ### 2. Per-eye matrices from URP's XR pass
 
-- Take view and projection per eye from URP's XR pass (`cameraData.xr.GetViewMatrix(i)` /
-  `GetProjMatrix(i)`, `viewCount`) so IMM uses exactly the pose URP renders with, including
-  asymmetric Quest frusta.
-- Keep the existing one-pose-per-frame guarantee (`ImmCameraMatrixFrameGate`).
-- Use the render-into-texture projection convention (`GL.GetGPUProjectionMatrix(p, true)`)
-  where URP renders to an intermediate target, and handle the Y-flip once, in one place.
-  Today this is resolved by `ImmProjectionDestinationResolver` for Built-in cases only.
-- Expose a public `SetStereoCameraMatrices` overload that also sets the viewport, and a public
-  way to allocate and release a camera ID. Apps currently cannot reach `GetOrCreateCameraInfo`
-  / `_cameras` / `_renderEventFunc`.
+1. Take per-eye views and view/layer identities from URP's active XR pass so IMM uses the
+   pose URP renders with, including asymmetric Quest frusta. Handle mono and the supported
+   two-view single-pass layout explicitly; reject unsupported XR layouts.
+2. Capture both eyes together from that XR pass and retain their matrices and layer mapping
+   in one submission. Do not independently poll a new XR pose between eyes. The existing
+   `ImmCameraMatrixFrameGate` implementation need not be preserved.
+3. Use the applicable URP camera-data GPU projection accessor, such as
+   `UniversalCameraData.GetGPUProjectionMatrix(viewIndex)`, so target-dependent Y-flip,
+   reverse-Z and applicable jitter agree with URP. Apply any further IMM coordinate
+   conversion exactly once. Do not apply `GL.GetGPUProjectionMatrix` again to an already
+   converted GPU projection or hard-code `renderIntoTexture = true` for every URP target.
+4. Keep camera registration/release, matrices, viewport and native event access in an
+   internal bridge used by the feature. Applications configure documents and opt cameras
+   in; they do not allocate native camera IDs or issue render events themselves.
+5. Provide a reusable, allocation-free submission API for the renderer feature. The current
+   public matrix setters allocate arrays and cannot be the per-frame path unchanged.
 
-### 3. Native texture-array / multiview stereo (plugin side)
+### 3. Native backend and layered stereo (plugin side)
+
+#### Windows D3D12 prerequisite
+
+1. Implement a working D3D12 backend in the shared C++ renderer, with explicit backend
+   selection and a Unity-specific host adapter. Do not pass an
+   `ID3D12Device` into the existing D3D11 renderer. Until the D3D12 path is available,
+   reject it clearly rather than entering the incompatible renderer.
+2. Define the Unity D3D12 integration for command recording/submission, resource states,
+   descriptors, pipeline state and fences. Honour Unity resource ownership and retain
+   transient resources until GPU completion. This is backend implementation work, not
+   just a shader change or replacement enum value.
+3. Establish flat D3D12 rendering with all required IMM layer types and Unity colour/depth
+   composition before adding layered stereo. Reuse the backend's resource and submission
+   contract for the single-pass implementation.
+4. Add explicit D3D12 CI build and render checks. Record the actual runtime graphics API
+   and fail if it is not D3D12; a successful D3D11 fallback cannot pass these checks.
 
 #### What "single pass" means here
 
@@ -100,101 +196,192 @@ The point of this mode is that CPU and driver cost stay close to mono: the scene
 once and each draw is submitted once for both eyes. An implementation meets this only if all
 of the following hold for a stereo camera in a frame:
 
-- **One plugin event** per camera per frame, not one per eye.
-- **One traversal** of layers, one visibility/LOD/culling decision set (against a combined
-  frustum covering both eyes), and one set of state and buffer updates.
-- **One submission per draw.** Each draw call (or indirect draw) reaches both eyes by
-  hardware broadcast: multiview (`VK_KHR_multiview`, `GL_OVR_multiview2`, Metal vertex
-  amplification) or instancing where the eye is derived from the instance index and routed
-  to a layer (`SV_RenderTargetArrayIndex`, `gl_Layer`, `render_target_array_index`). For
-  draws that are already instanced, double the instance count and derive
-  `eye = instanceID & 1` and `instance = instanceID >> 1`, as Unity does.
-- **One render pass / framebuffer** bound to both layers of the eye target for the whole
-  IMM draw sequence.
+1. **One plugin event** per camera per frame, not one per eye.
+2. **One traversal** of layers, one visibility/LOD/culling decision set (against a combined
+   frustum covering both eyes), and one set of state and buffer updates.
+3. **One submission per draw.** Each draw call (or indirect draw) reaches both eyes by
+   Vulkan multiview or D3D12 instancing where the eye is derived from the instance index
+   and routed to a layer with `SV_RenderTargetArrayIndex`. For
+   draws that are already instanced, double the instance count and derive
+   `eye = instanceID & 1` and `instance = instanceID >> 1`, as Unity does.
+4. **One native scene render pass / framebuffer** bound to both layers for the whole IMM
+   scene draw sequence. This can be Unity's eye target or IMM's layered offscreen target.
+   The offscreen route additionally permits one stereo composite draw in a separate pass;
+   it must not repeat scene traversal or scene draws. Account for that draw separately.
 
 The following do **not** count as single pass and must not be shipped under this stereo
 mode, even if the result looks identical:
 
-- Looping over eyes on the native side within one event, re-issuing the draw list, or calling
-  `RenderStereoMultiPass` (or equivalent) twice.
-- Binding each array slice or per-layer image view in turn and rendering into it separately.
-- Rendering to two separate per-eye targets (or two halves of a wide target) and then
-  copying or blitting into the array slices.
-- Issuing two draws per object (one per eye) inside the same render pass.
-- Falling back silently to any of the above on a backend or device that lacks the required
-  extension. If broadcast is unavailable, the plugin must report that single-pass is
-  unsupported so the app can pick Multi-pass, and log it once.
+1. Looping over eyes on the native side within one event, re-issuing the draw list, or calling
+   `RenderStereoMultiPass` (or equivalent) twice.
+2. Binding each array slice or per-layer image view in turn and rendering into it separately.
+3. Rendering to two separate per-eye targets (or two halves of a wide target) and then
+   copying or blitting into the array slices.
+4. Issuing two draws per object (one per eye) inside the same render pass.
+5. Falling back silently to any of the above on a backend or device that lacks the required
+   extension. If broadcast is unavailable, the plugin must report that single-pass is
+   unsupported and log it once. Do not fall back to Multi-pass.
 
-Add a new stereo type (e.g. `StereoMode.SinglePassInstanced = 3`) distinct from double-wide:
+Define an explicit layered single-pass stereo mode. Legacy Unity enum values and entry
+points need not be preserved; update managed/native callers together. The following are
+backend requirements follow the platform matrix:
 
-- **D3D11 / D3D12:** instance ×2 and write `SV_RenderTargetArrayIndex = instanceID` into a
-  2-slice array RTV and DSV at full per-eye viewport, instead of doubling the viewport and
-  splitting with `SV_ClipDistance0`. The target must be created or bound as an array view
-  from the pointer Unity supplies.
-- **OpenGL / GLES:** write `gl_Layer` on desktop GL. On GLES/Quest use `GL_OVR_multiview2`
-  with `gl_ViewID_OVR` (the `appImmViewer` Android path and several `*.es.glsl` shaders
-  already reference multiview), matching Unity's multiview framebuffer.
-- **Vulkan (Quest):** render with `VK_KHR_multiview` (`viewMask = 0b11`) in a single render
-  pass whose attachments are 2-layer image views of Unity's eye image. Reconcile this with
-  the current offscreen-target, dedicated-queue and composite-quad path, which was built
-  around `TwoPass` and renders each eye separately.
-- **Metal:** `render_target_array_index` (or vertex amplification where available).
-- All paint brush types (static and pretessellated), pictures (2D, equirect, cubemap 360) and
-  models need the layered variant, since each currently has its own `STEREOMODE==2` code.
-- Honour the attachment's MSAA sample count (URP's MSAA is on in Open Brush), or define
-  the resolve contract if the native renderer requires its own MSAA target.
-- Reverse-Z and depth format must match Unity's attachment so depth testing works both ways.
+1. **D3D12:** instance ×2 and derive `eye = instanceID & 1` and
+   `instance = instanceID >> 1`; route the eye through the supplied layer mapping to
+   `SV_RenderTargetArrayIndex`. Use array RTV/DSV views at full per-eye viewport size.
+   Check device support for the selected shader-stage array-index output; otherwise use
+   a supported route that still submits each draw once or report the mode unsupported.
+   Create compatible views of the supplied resource, respecting its
+   format and subresources; do not create replacement Unity eye textures.
+2. **Vulkan (Android/Quest):** use enabled Vulkan multiview support (`viewMask = 0b11` for two
+   adjacent views) in one scene render pass with compatible layered attachments, either
+   Unity's images or the permitted IMM offscreen images. Reconcile this with
+   the current offscreen-target, dedicated-queue and composite-quad path. Replace its
+   per-eye approach as needed; retaining that queue architecture is not required.
+3. **Metal (macOS/iOS):** integrate the existing native Metal renderer with the URP
+   mono colour/depth attachments and submission lifecycle. Layered Metal shaders and
+   vertex amplification are not required for the flat-only Metal scope.
+4. All paint brush types (static and pretessellated), pictures (2D, equirect, cubemap 360) and
+   models must render on every required backend. D3D12 and Vulkan also need their layered
+   variants; do not implement stereo for paint alone.
+5. Honour the attachment's MSAA sample count, or define
+   the colour/depth resolve contract if the native renderer requires its own MSAA target.
+   The offscreen route must preserve correct coverage and depth at intersections; resolving
+   IMM colour and then copying one depth value is not assumed equivalent to shared MSAA.
+6. Reverse-Z and depth format must match Unity's attachment so depth testing works both ways.
 
-`ResolveStereoMode` should then map `SinglePassInstanced` and `SinglePassMultiview` to the new
-mode, and keep `TwoPass` for URP *Multi-pass*, which the renderer feature should also support
-by issuing one event per XR pass or eye.
+#### Colour and depth contract
+
+1. Visible opaque and alpha-tested IMM surfaces must update the active Unity depth
+   attachment before Unity transparents render. In the direct route, preserve existing
+   Unity opaque colour/depth and use compatible depth testing and writing. In the offscreen
+   route, the stereo composite must compare depths and write the winning visible opaque
+   depth as well as colour, while preserving Unity depth where IMM has no opaque coverage.
+2. The existing `ImmVulkanDepthComposite` uses `ZWrite Off` and outputs only colour.
+   A URP variant therefore needs depth output as well as texture-array sampling; a sampling
+   conversion alone does not meet this contract.
+3. Translucent IMM surfaces must not acquire opaque depth writes merely to satisfy the
+   integration. Preserve their intended blending/depth-write policy and document limits on
+   interleaving translucent IMM layers with Unity transparents. This feature does not
+   promise per-object transparency sorting across the two renderers.
+4. Active attachment depth and URP's sampled camera depth texture are separate concerns.
+   This feature requires the active attachment contract only. Sampled-depth effects are
+   deferred and must be documented as unsupported for IMM until separately implemented.
+   Depth writing provides occlusion; it does not change Unity's transparent object sorting.
+
+Resolve mono and supported single-pass XR from the active URP pass. Report Multi-pass and
+legacy double-wide configurations as unsupported; do not retain a two-pass URP path.
 
 ### 4. Documentation and sample
 
-- A URP sample scene (flat and XR) with the renderer feature configured, and README
-  instructions for adding it to a URP Renderer asset.
-- Document supported combinations explicitly: pipeline × stereo mode × graphics API.
+1. A URP sample scene (flat and XR) with RenderGraph enabled and the renderer feature
+   configured, and README instructions for enabling RenderGraph, adding the feature to
+   a URP Renderer asset and opting cameras in.
+2. Document supported combinations explicitly: pipeline × stereo mode × graphics API,
+   including tested Unity/URP versions, direct/offscreen route, MSAA and depth-effect limits.
+
+## CI validation throughout implementation
+
+1. Treat `.github/workflows/ci-validation.yml` and its build, engine, GPU, device and iOS
+   workflows as part of the implementation, not a final verification task. Record the
+   starting CI state and coverage in `tests/matrix_status.json`; distinguish pre-existing
+   failures and deferred hardware checks from regressions introduced by this work.
+2. Validate all non-VR changes in CI as they are introduced. Update or add the necessary
+   build, package-import, native-backend and rendering checks alongside the code. Cover
+   Windows D3D12, macOS/iOS Metal and Android Vulkan, including scene content, colour/depth
+   composition and MSAA. A successful build alone does not validate rendering behaviour.
+3. Stage the work so each substantial change has CI evidence before the next stage depends
+   on it: establish flat D3D12 rendering, integrate URP colour/depth submission, then add
+   layered stereo. Run relevant shared-renderer regression checks for the standalone
+   player and Godot, including their Windows Vulkan paths, throughout these stages.
+4. Investigate and fix CI regressions as they occur. Do not accumulate known regressions
+   for an end-of-project cleanup, disable failing checks, weaken assertions, or relabel
+   failures as unsupported to obtain a passing result. Intentional changes to the Unity
+   API/pipeline contract require corresponding test migrations that retain the underlying
+   rendering checks. Update visual baselines only for reviewed, intentional output changes.
+5. Automated VR validation remains difficult. Keep available synthetic-stereo and
+   hardware-backed automation, and validate stereo code, shaders and submission behaviour
+   in CI wherever feasible. Clearly record the remaining headset checks, device/runtime
+   requirements and evidence gaps. Flat or synthetic tests do not prove headset pose,
+   fusion or runtime correctness; use explicit hardware validation for those criteria.
+   A blocked headset check must not block independent non-VR validation or excuse failures
+   in that validation, and must not be reported as a VR pass.
+6. Associate CI evidence with the tested commit and native plugin artifacts. Retain runtime
+   API identification, captures, metrics and logs so failures can be traced to the actual
+   build. Require passing non-VR CI for completion, with remaining VR evidence reported
+   separately and the headset acceptance criteria still outstanding until demonstrated.
 
 ## Acceptance criteria
 
-1. In a URP 17 / Unity 6 project with the renderer feature added and no app-side render code,
-   a loaded `ImmDocument` renders in the Game view (flat) and in a headset (OpenXR, Single Pass
-   Instanced).
+1. On the specified Unity/URP baseline with RenderGraph enabled, the renderer feature added,
+   camera opt-in configured and no app-side render code, a loaded `ImmDocument` renders in
+   the Game view (flat) and in a headset using the required single-pass XR mode.
 2. Stereo is correct in both eyes: correct IPD and fusion, no head-locked content, no eye
-   swap, tested on Quest 3 (Vulkan and GLES) and PC VR (D3D11).
-3. An opaque Unity cube intersecting IMM strokes occludes and is occluded correctly in both
-   directions. A transparent Unity object at `BeforeRenderingTransparents` or later blends
-   over IMM.
+   swap, tested on Quest 3 with Vulkan and PC VR with D3D12.
+3. An opaque Unity cube intersecting opaque IMM strokes occludes and is occluded correctly
+   in both directions. A Unity transparent object drawn afterwards blends over IMM when in
+   front and is rejected by IMM depth when behind. Test both eyes and the direct/offscreen
+   route selected for each backend. Use the standalone URP package sample to verify
+   opaque/alpha-tested and transparent geometry, skybox ordering and subsequent renderer
+   features. No Open Brush-specific scene or configuration is required for acceptance.
 4. With URP MSAA enabled, IMM strokes are antialiased and depth-tested against the MSAA
    attachment without validation errors.
-5. The single-pass mode really is single pass, verified on each backend:
-   - A GPU capture (RenderDoc on D3D11 and Vulkan, Xcode on Metal) of one stereo frame shows
-     one IMM render pass bound to both eye layers, with each IMM draw appearing once,
-     instanced ×2 or multiview. There is no second per-eye draw sequence, no per-slice render
-     pass and no copy or blit into the eye texture.
-   - IMM draw-call count in `GetPerformanceInfo` for a stereo frame equals the mono count
-     for the same view, within a small fixed overhead that is documented. It is not roughly
-     double.
-   - Exactly one IMM plugin event per stereo camera per frame.
-   - On a device without the required broadcast support, the plugin reports single-pass as
-     unsupported rather than rendering per eye.
-6. Multi-pass XR under URP also renders correctly, using the per-eye `TwoPass` path.
-7. Secondary cameras excluded by the filter do not trigger IMM renders, measured via
-   `GetPerformanceInfo`.
+5. The single-pass mode really is single pass on D3D12 and Vulkan:
+   A GPU capture using RenderDoc or an equivalent tool shows each IMM scene draw once,
+   instanced ×2 or multiview, together with both-eye visual verification. Record the tool
+   and device. Metal acceptance is mono and does not require a stereo capture.
+   The direct route has one IMM scene pass targeting both Unity eye layers and no composite.
+   The offscreen route has one layered IMM scene pass plus exactly one stereo composite
+   draw into Unity's eye target, with correct colour and depth. Neither route has a second
+   per-eye scene sequence, per-slice pass or per-eye copy/blit.
+
+   Compare scene draw counts using a fixed fixture entirely visible to both eyes, with
+   matched LOD and identical visible draw sets in mono and stereo. Counts must match;
+   report the offscreen composite separately. Stereo may legitimately draw more objects
+   than mono for other fixtures because its combined frustum covers both eyes.
+
+   Add submission counters or trace markers keyed by camera, frame and XR pass/eye to
+   verify exactly one native scene event for each included single-pass stereo camera.
+   `GetPerformanceInfo` alone lacks that attribution. On a device without the required
+   broadcast support, report single-pass unsupported rather than rendering per eye.
+6. Multi-pass XR and legacy double-wide stereo produce an unsupported-configuration
+   diagnostic and no incorrect fallback rendering.
+7. Cameras without the opt-in component produce no IMM submissions, verified using the
+   camera-attributed counters/markers. Exercise multiple opted-in cameras in the same
+   frame to verify queued matrices and targets cannot overwrite each other.
 8. No managed allocations per frame in the pass, and no RenderGraph warnings or culled-pass
-   issues.
-9. The Built-in pipeline behaviour is unchanged.
+   issues. All URP rendering acceptance checks run with RenderGraph enabled. Enabling
+   Compatibility Mode produces a clear unsupported-configuration diagnostic without
+   activating an alternative rendering path.
+9. Migrate affected Unity samples and CI harnesses to the new platform/API contract while
+   retaining their composition, depth and content checks. Do not preserve Built-in behaviour
+   or legacy package APIs solely for compatibility. Shared renderer changes continue to
+   pass relevant standalone and other-engine validation on their existing backends.
+10. The minimum URP matrix (Windows D3D12, macOS Metal, iOS Metal and Android Vulkan)
+    has explicit build and rendering evidence. Windows checks prove the runtime uses D3D12,
+    rather than accepting D3D11 fallback. Both macOS and iOS have Metal render evidence;
+    compilation alone is insufficient. Migrate Unity CI as above; existing standalone and
+    other-engine D3D11/GL/GLES checks do not impose those APIs on the new URP feature.
+    Record flat versus XR coverage explicitly; a flat test does not establish stereo support.
+    Do not drop required combinations or classify them as optional to reduce implementation.
+11. The CI validation workflow passes for all affected non-VR paths, with no unresolved
+    regressions introduced by this work. New backend and URP behaviour has automated
+    coverage added during implementation. Existing standalone/Godot validation remains
+    passing, and VR automation limitations and outstanding hardware checks are explicit.
 
 ## Open questions
 
-- Should the native side render directly into Unity's attachments (preferred, lowest cost) or
-  into its own layered target that the pass then composites with a depth-aware blit, as the
-  Android Vulkan Built-in path does today? If composite, the IMM render into that target must
-  itself meet the single-pass rules above, being a layered target rendered by broadcast. The
-  composite must also be a single instanced or multiview draw covering both layers, using a
-  texture-array, URP-compatible variant of `ImmVulkanDepthComposite`, not one blit per eye.
-- On Quest Vulkan, can the dedicated-queue model coexist with rendering inside URP's render
-  pass, or does the URP path need to use the host queue?
-- Does the native renderer need depth *written* into Unity's buffer, for Unity transparents to
-  sort against IMM and for post-effects such as depth of field, or is depth *test only*
-  sufficient?
+1. Which backends can use direct rendering, and which require the permitted layered
+   offscreen route? Select one route per backend. Prefer direct rendering where verified;
+   measure the cost of any offscreen allocation, synchronization, resolve and composite
+   before selecting it.
+2. On Quest Vulkan, can the dedicated-queue model meet the resource lifetime and
+   synchronization contract, or does the URP path need to use Unity's host queue?
+
+## API references
+
+1. [Unity 6.0 URP unsafe render passes](https://docs.unity3d.com/6000.0/Documentation/Manual/urp/render-graph-unsafe-pass.html).
+2. [URP 17 UniversalCameraData GPU projection API](https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@17.0/api/UnityEngine.Rendering.Universal.UniversalCameraData.html).
+3. [RenderGraph pass culling control](https://docs.unity3d.com/Packages/com.unity.render-pipelines.core@17.0/api/UnityEngine.Rendering.RenderGraphModule.RenderGraphBuilder.html).
+4. [Unity 6.6 DirectX feature comparison](https://docs.unity3d.com/6000.6/Documentation/Manual/UsingDX11GL3Features.html).
+5. [Unity OpenXR 1.17 preferred graphics APIs](https://docs.unity3d.com/Packages/com.unity.xr.openxr@1.17/manual/index.html#runtimes).
