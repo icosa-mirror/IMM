@@ -75,6 +75,21 @@ jobs:
       # checkout and make an incremental build package an old DLL.
       run: msbuild imm.sln /t:Rebuild /p:Configuration=Release /p:Platform=x64 /m
 
+    - name: Validate D3D12 submission and GPU readback
+      id: d3d12_submission
+      timeout-minutes: 5
+      shell: pwsh
+      run: .\code\projects\windows\test-d3d12-submission.ps1 -Configuration Release
+
+    - name: Upload D3D12 submission evidence
+      if: always() && steps.d3d12_submission.outcome != 'skipped'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Windows-D3D12-Submission
+        path: artifacts/d3d12-submission
+        if-no-files-found: error
+        retention-days: 14
+
     - name: Capture Windows DirectX standalone baseline
       shell: pwsh
       run: .\code\appImmViewer\scripts\capture_windows_directx_baseline.ps1 -Configuration Release -SkipBuild -OutputPath .\build\baseline-captures\windows-directx-playerframe60.ppm

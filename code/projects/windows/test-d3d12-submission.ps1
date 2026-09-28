@@ -1,0 +1,57 @@
+param(
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Release'
+)
+
+$ErrorActionPreference = 'Stop'
+$repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+$sourceDirectory = Join-Path $repoRoot 'code/libImmCore/tests/d3d12'
+$outputDirectory = Join-Path $repoRoot 'artifacts/d3d12-submission'
+$buildDirectory = Join-Path $repoRoot 'build/d3d12-submission'
+New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+# Never leave a previous pass report beside a failed build from this invocation.
+foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm')) {
+    $previousResult = Join-Path $outputDirectory $name
+    if (Test-Path -LiteralPath $previousResult) { Remove-Item -LiteralPath $previousResult }
+}
+
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+$visualStudio = & $vswhere -latest -products '*' -version '[17.0,18.0)' `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if (-not $visualStudio) { throw 'Visual Studio 2022 C++ tools are required for this smoke test.' }
+
+$configureLog = Join-Path $outputDirectory 'configure.log'
+$buildLog = Join-Path $outputDirectory 'build.log'
+$testLog = Join-Path $outputDirectory 'test.log'
+& cmake -S $sourceDirectory -B $buildDirectory -G 'Visual Studio 17 2022' -A x64 `
+    "-DCMAKE_GENERATOR_INSTANCE=$visualStudio" *> $configureLog
+if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke configuration failed; see $configureLog" }
+& cmake --build $buildDirectory --config $Configuration --parallel 2 *> $buildLog
+if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke compilation failed; see $buildLog" }
+
+# CTest bounds GPU/fence failures with a timeout. Results are copied only after
+# a successful test so an old capture cannot masquerade as current evidence.
+& ctest --test-dir $buildDirectory -C $Configuration --output-on-failure *> $testLog
+if ($LASTEXITCODE -ne 0) { throw "D3D12 submission smoke failed; see $testLog" }
+foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm')) {
+    Copy-Item -LiteralPath (Join-Path $buildDirectory $name) -Destination $outputDirectory -Force
+}
+$result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Raw | ConvertFrom-Json
+if ($result.status -ne 'pass' -or $result.api -ne 'D3D12' -or $result.frames_verified -ne 9) {
+    throw 'D3D12 smoke did not produce the required readback evidence.'
+}
+$result | Add-Member -NotePropertyName source_revision -NotePropertyValue ((& git -C $repoRoot rev-parse HEAD).Trim())
+$smokeExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_submission_smoke.exe"
+$result | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $smokeExecutable -Algorithm SHA256).Hash
+$sourceHashes = [ordered]@{}
+foreach ($relativePath in @(
+    'code/libImmCore/src/libRender/directx12/piDX12_CommandContext.h',
+    'code/libImmCore/src/libRender/directx12/piDX12_CommandContext.cpp',
+    'code/libImmCore/tests/d3d12/submission_smoke.cpp',
+    'code/libImmCore/tests/d3d12/CMakeLists.txt'
+)) {
+    $sourceHashes[$relativePath] = (Get-FileHash -LiteralPath (Join-Path $repoRoot $relativePath) -Algorithm SHA256).Hash
+}
+$result | Add-Member -NotePropertyName source_sha256 -NotePropertyValue $sourceHashes
+$result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Encoding utf8
+Write-Host "IMM_DX12_PHASE1 PASS: D3D12/WARP draw and reversed-Z readback; evidence in $outputDirectory"

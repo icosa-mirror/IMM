@@ -378,6 +378,35 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
 2. On Quest Vulkan, can the dedicated-queue model meet the resource lifetime and
    synchronization contract, or does the URP path need to use Unity's host queue?
 
+## Phase 1 progress: D3D12 foundation
+
+1. **Baseline:** implementation started from `dd0a5f82` on 2026-09-28. The preceding
+   [CI validation run](https://github.com/icosa-mirror/IMM/actions/runs/36437592444)
+   completed successfully. The
+   [baseline-commit run](https://github.com/icosa-mirror/IMM/actions/runs/36438018979)
+   was still running when inspected, with no failed jobs at that point; Windows build and
+   standalone D3D11/Vulkan/OpenGL validation had passed. This is baseline evidence, not
+   evidence for the new uncommitted code.
+2. **First increment:** shared `piDX12CommandContext` provides typed D3D12 device/queue
+   validation, three reusable command allocators/lists, completion fences, explicit resource
+   transitions and GPU-lifetime retention. It is submission infrastructure, not a completed
+   `piRenderer` backend or Unity host adapter. Managed and native Unity initialization now
+   reject D3D12 explicitly instead of entering the incompatible D3D11 renderer.
+3. **Local evidence:** the WARP D3D12 smoke renders and reads back nine submissions,
+   verifies reversed-Z occlusion and distinct frame data, exercises allocator reuse and
+   fence-timeout recovery, and passes with the D3D12 debug layer enabled. The production
+   shared-core and Unity native source compile checks and workflow matrix verifier pass.
+   Reproduce with `code/projects/windows/test-d3d12-submission.ps1`; evidence, source and
+   executable hashes are written under `artifacts/d3d12-submission/`.
+4. **CI integration:** the Windows build workflow now runs this smoke unconditionally and
+   uploads its capture, result and logs as `Windows-D3D12-Submission`. The workflow matrix
+   verifier requires these steps. Hosted execution of this increment is still pending;
+   local success does not establish a CI pass. Existing rendering jobs remain in place.
+5. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+   Unity submission/target adapter, render all IMM layer types with colour/depth composition,
+   and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
+   guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
+
 ## API references
 
 1. [Unity 6.0 URP unsafe render passes](https://docs.unity3d.com/6000.0/Documentation/Manual/urp/render-graph-unsafe-pass.html).

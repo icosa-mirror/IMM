@@ -12,7 +12,7 @@ from pathlib import Path
 
 REQUIRED_JOBS = {
     ".github/workflows/build.yml": {
-        "build-windows": ["Verify IMM content baseline", "Record Windows DirectX render metrics", "Compare Windows Vulkan render metrics against committed DirectX baseline", "Write Windows DirectX render report", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
+        "build-windows": ["Validate D3D12 submission and GPU readback", "Upload D3D12 submission evidence", "Verify IMM content baseline", "Record Windows DirectX render metrics", "Compare Windows Vulkan render metrics against committed DirectX baseline", "Write Windows DirectX render report", "Write Windows viewer artifact manifest", "Collect Windows viewer artifact summary"],
         "build-android": ["Write Android viewer artifact manifest", "Collect Android viewer artifact summary"],
         "build-macos": ["Smoke macOS Metal standalone viewer", "Validate macOS Metal standalone audio", "Record macOS Metal render metrics", "Write macOS Metal render report", "Write macOS viewer artifact manifest", "Collect macOS viewer artifact summary"],
         "build-ios": ["Link-check iOS Unity plugin", "Verify iOS Unity audio pipeline contract"],

@@ -1,0 +1,56 @@
+#pragma once
+
+#include <d3d12.h>
+#include <wrl/client.h>
+#include <array>
+#include <cstdint>
+#include <vector>
+
+namespace ImmCore
+{
+// One caller/recording thread. The device and direct queue belong to the host.
+// This is submission infrastructure, not a piRenderer implementation. A Unity
+// adapter must supply Unity-approved submission before this is used in Unity.
+class piDX12CommandContext final
+{
+public:
+    static constexpr size_t FrameCount = 3;
+
+    piDX12CommandContext() = default;
+    ~piDX12CommandContext();
+    piDX12CommandContext(const piDX12CommandContext&) = delete;
+    piDX12CommandContext& operator=(const piDX12CommandContext&) = delete;
+
+    HRESULT Initialize(ID3D12Device* device, ID3D12CommandQueue* queue);
+    // Drains submitted work before releasing allocators and retained objects.
+    // On a live-device drain failure, keeps resources intact so the host can retry.
+    HRESULT Shutdown();
+    HRESULT Begin(ID3D12GraphicsCommandList** commands, DWORD timeoutMilliseconds = 10000);
+    HRESULT Retain(IUnknown* object);
+    HRESULT Transition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before,
+                       D3D12_RESOURCE_STATES after,
+                       UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
+    HRESULT Submit(uint64_t* completionValue);
+    HRESULT Cancel();
+    HRESULT Wait(uint64_t completionValue, DWORD timeoutMilliseconds = 10000);
+
+private:
+    struct Frame
+    {
+        Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+        Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commands;
+        std::vector<Microsoft::WRL::ComPtr<IUnknown>> retained;
+        uint64_t completionValue = 0;
+    };
+
+    std::array<Frame, FrameCount> mFrames;
+    Microsoft::WRL::ComPtr<ID3D12Device> mDevice;
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> mQueue;
+    Microsoft::WRL::ComPtr<ID3D12Fence> mFence;
+    HANDLE mFenceEvent = nullptr;
+    uint64_t mLastSubmitted = 0;
+    size_t mFrameIndex = 0;
+    bool mRecording = false;
+    bool mFailed = false;
+};
+}
