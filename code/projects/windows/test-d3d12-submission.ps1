@@ -16,15 +16,25 @@ foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm')) {
 }
 
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-$visualStudio = & $vswhere -latest -products '*' -version '[17.0,18.0)' `
-    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-if (-not $visualStudio) { throw 'Visual Studio 2022 C++ tools are required for this smoke test.' }
+$toolchainLog = Join-Path $outputDirectory 'toolchain.log'
+$installations = & $vswhere -latest -products '*' -version '[17.0,)' `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -format json
+$installations | Set-Content -LiteralPath $toolchainLog
+$visualStudio = @($installations | ConvertFrom-Json) | Select-Object -First 1
+if (-not $visualStudio) { throw 'Visual Studio 2022 or newer C++ tools are required for this smoke test.' }
+$majorVersion = ([version]$visualStudio.installationVersion).Major
+$buildDirectory = Join-Path $buildDirectory "vs$majorVersion"
+$generators = (& cmake -E capabilities | ConvertFrom-Json).generators
+$generator = $generators | Where-Object { $_.name -match "^Visual Studio $majorVersion " } | Select-Object -First 1
+if (-not $generator) { throw "CMake has no generator for installed Visual Studio $majorVersion; see $toolchainLog" }
+$generatorName = $generator.name
+"Selected CMake generator: $generatorName" | Add-Content -LiteralPath $toolchainLog
 
 $configureLog = Join-Path $outputDirectory 'configure.log'
 $buildLog = Join-Path $outputDirectory 'build.log'
 $testLog = Join-Path $outputDirectory 'test.log'
-& cmake -S $sourceDirectory -B $buildDirectory -G 'Visual Studio 17 2022' -A x64 `
-    "-DCMAKE_GENERATOR_INSTANCE=$visualStudio" *> $configureLog
+& cmake -S $sourceDirectory -B $buildDirectory -G $generatorName -A x64 `
+    "-DCMAKE_GENERATOR_INSTANCE=$($visualStudio.installationPath)" *> $configureLog
 if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke configuration failed; see $configureLog" }
 & cmake --build $buildDirectory --config $Configuration --parallel 2 *> $buildLog
 if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke compilation failed; see $buildLog" }
