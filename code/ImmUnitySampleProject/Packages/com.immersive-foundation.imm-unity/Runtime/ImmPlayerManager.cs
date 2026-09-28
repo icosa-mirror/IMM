@@ -377,6 +377,14 @@ namespace ImmPlayer
 
             Log("=== IMM Player Initialization Started ===");
 
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12)
+            {
+                LogError("IMM_DX12_PHASE1: D3D12 scene rendering is not implemented yet; initialization is disabled to prevent using a D3D12 device with the D3D11 renderer.");
+                return false;
+            }
+#endif
+
 #if UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX || UNITY_IOS
             if (SystemInfo.graphicsDeviceType != UnityEngine.Rendering.GraphicsDeviceType.Metal)
             {

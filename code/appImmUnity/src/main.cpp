@@ -92,6 +92,7 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 // The exporter is linked on every platform, so its headers are unconditional now.
 #include "libImmExporter/src/document/sequence.h"
@@ -116,7 +117,6 @@
 #endif
 #if defined(WINDOWS)
 #include "IUnityGraphicsD3D11.h"
-#include "IUnityGraphicsD3D12.h"
 #endif
 #if defined(IMM_UNITY_VULKAN)
 #include "IUnityGraphicsVulkanMinimal.h"
@@ -368,8 +368,9 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 		}
 		else if (apiType == kUnityGfxRendererD3D12)
 		{
-			IUnityGraphicsD3D12v2* ud3d = gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsD3D12v2>();
-			gImmUnityPlugin.UnityAPI.mDevice = ud3d->GetDevice();
+            // D3D12 is not a D3D11 device. Init rejects this backend until the
+            // shared D3D12 renderer and Unity submission adapter are ready.
+            gImmUnityPlugin.UnityAPI.mDevice = nullptr;
 		}
 		else if(apiType == kUnityGfxRendererOpenGLCore || apiType == kUnityGfxRendererOpenGLES20 || apiType == kUnityGfxRendererOpenGLES30)
 		{
@@ -1752,6 +1753,14 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 											char *logFileName,
 											char *tmpFolferName)
 {
+#if defined(WINDOWS)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12)
+    {
+        std::fprintf(stderr, "IMM_DX12_PHASE1 Init rejected: D3D12 scene rendering is not implemented; refusing the incompatible D3D11 renderer.\n");
+        std::fflush(stderr);
+        return -1;
+    }
+#endif
     ImmShared::ImmEngineBridge::InitConfig config = {};
     config.colorSpace = colorSpace;
     config.antialiasing = antialiasing;
