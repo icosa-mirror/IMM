@@ -450,8 +450,9 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Texture API integration, complete render states and layer rendering remain incomplete;
    this backend remains unregistered.
 10. **CI follow-up:** full validation run `36933435201` failed Android standalone GLES after
-   a capture was written but the final edit-validation marker was not observed. A same-commit
-   rerun is pending; the device failure is not waived. Run `36935570560` also reported a web
+   a capture was written but the final edit-validation marker was not observed. The Android
+   GLES job passed on same-commit attempt 2 (job `110618594429`); the intermittent marker
+   failure's cause remains unresolved and assertions are unchanged. Run `36935570560` also reported a web
    visual failure whose scene capture included the browser XR-availability button. Visual-test
    mode now hides that overlay, retaining the existing scene thresholds; the full local
    browser harness passes. Hosted extended web validation passed for the separate fix in
