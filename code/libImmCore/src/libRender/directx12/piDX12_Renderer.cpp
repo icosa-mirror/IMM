@@ -6,6 +6,7 @@
 #include <tuple>
 #include <cmath>
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <unordered_set>
@@ -15,6 +16,35 @@ namespace ImmCore
 {
 namespace
 {
+D3D12_RASTERIZER_DESC RasterDescription()
+{
+    D3D12_RASTERIZER_DESC desc = {};
+    desc.FillMode = D3D12_FILL_MODE_SOLID;
+    desc.CullMode = D3D12_CULL_MODE_NONE;
+    desc.FrontCounterClockwise = TRUE;
+    desc.DepthClipEnable = TRUE;
+    return desc;
+}
+D3D12_BLEND_DESC BlendDescription()
+{
+    D3D12_BLEND_DESC desc = {};
+    auto& target = desc.RenderTarget[0];
+    target.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+    target.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+    target.BlendOp = target.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+    target.SrcBlendAlpha = D3D12_BLEND_ONE;
+    target.DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
+    target.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+    return desc;
+}
+D3D12_DEPTH_STENCIL_DESC DepthDescription()
+{
+    D3D12_DEPTH_STENCIL_DESC desc = {};
+    desc.DepthEnable = TRUE;
+    desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    desc.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+    return desc;
+}
 bool SamplerDescription(piRenderer::TextureFilter filter, piRenderer::TextureWrap wrap, float anisotropy,
                         D3D12_SAMPLER_DESC& desc)
 {
@@ -98,7 +128,7 @@ struct piRendererDX12::State
     struct Shader
     {
         std::vector<uint8_t> vs, hs, ds, gs, ps;
-        using Key = std::tuple<DXGI_FORMAT, DXGI_FORMAT, UINT, UINT, D3D12_PRIMITIVE_TOPOLOGY_TYPE, bool, bool, uint64_t>;
+        using Key = std::tuple<DXGI_FORMAT, DXGI_FORMAT, UINT, UINT, D3D12_PRIMITIVE_TOPOLOGY_TYPE, bool, bool, uint64_t, std::array<UINT, 15>>;
         struct Pipeline { Key key; Microsoft::WRL::ComPtr<ID3D12PipelineState> object; };
         std::vector<Pipeline> pipelines;
     };
@@ -107,6 +137,13 @@ struct piRendererDX12::State
     piDX12ShaderBindings bindings;
     ExternalTarget target;
     bool colorWrite = true, depthWrite = true;
+    D3D12_RASTERIZER_DESC raster = RasterDescription();
+    D3D12_BLEND_DESC blend = BlendDescription();
+    D3D12_DEPTH_STENCIL_DESC depth = DepthDescription();
+    std::unordered_set<D3D12_RASTERIZER_DESC*> rasterStates;
+    std::unordered_set<D3D12_BLEND_DESC*> blendStates;
+    std::unordered_set<D3D12_DEPTH_STENCIL_DESC*> depthStates;
+    piVertexArray quad = nullptr;
     D3D12_VIEWPORT viewport = {};
     piDX12CommandContext context;
     Microsoft::WRL::ComPtr<ID3D12Device> device;
@@ -196,6 +233,8 @@ bool piRendererDX12::InitializeExternal(ID3D12Device* device, ID3D12CommandQueue
     if (m->device || FAILED(m->context.Initialize(device, queue))) return false;
     if (FAILED(m->bindings.Initialize(device))) { m->context.Shutdown(); return false; }
     m->device = device;
+    m->raster = RasterDescription(); m->blend = BlendDescription(); m->depth = DepthDescription();
+    m->colorWrite = m->depthWrite = true;
     return true;
 }
 
@@ -218,6 +257,11 @@ void piRendererDX12::Deinitialize()
     for (auto* array : m->arrays) delete array;
     m->arrays.clear();
     m->array = nullptr;
+    m->quad = nullptr;
+    for (auto* state : m->rasterStates) delete state;
+    for (auto* state : m->blendStates) delete state;
+    for (auto* state : m->depthStates) delete state;
+    m->rasterStates.clear(); m->blendStates.clear(); m->depthStates.clear();
     for (auto* texture : m->textures) delete texture;
     m->textures.clear();
     for (auto* sampler : m->samplers) delete sampler;
@@ -489,7 +533,8 @@ void piRendererDX12::Clear(const float* color0, const float* color1, const float
     if (!m->commands || !m->target.color || color1 || color2 || color3)
         throw std::invalid_argument("IMM_DX12: invalid clear target");
     if (color0) m->commands->ClearRenderTargetView(m->target.rtv, color0, 0, nullptr);
-    if (depth0 && m->target.depth) m->commands->ClearDepthStencilView(m->target.dsv, D3D12_CLEAR_FLAG_DEPTH, 0, 0, 0, nullptr);
+    if (depth0 && m->target.depth) m->commands->ClearDepthStencilView(m->target.dsv, D3D12_CLEAR_FLAG_DEPTH,
+        m->depth.DepthFunc == D3D12_COMPARISON_FUNC_LESS_EQUAL ? 1.0f : 0.0f, 0, 0, nullptr);
 }
 
 void piRendererDX12::PrepareDraw(PrimitiveType primitive)
@@ -510,8 +555,13 @@ void piRendererDX12::PrepareDraw(PrimitiveType primitive)
     auto& shader = *m->shader;
     const auto samples = m->target.color->GetDesc().SampleDesc;
     const auto depthFormat = m->target.depth ? m->target.depthFormat : DXGI_FORMAT_UNKNOWN;
+    const auto& blend = m->blend.RenderTarget[0];
+    const std::array<UINT, 15> states = {UINT(m->raster.FillMode), UINT(m->raster.CullMode), UINT(m->raster.FrontCounterClockwise),
+        UINT(m->raster.DepthClipEnable), UINT(m->raster.MultisampleEnable), UINT(blend.BlendEnable), UINT(m->blend.AlphaToCoverageEnable),
+        UINT(blend.SrcBlend), UINT(blend.DestBlend), UINT(blend.BlendOp), UINT(blend.SrcBlendAlpha), UINT(blend.DestBlendAlpha),
+        UINT(blend.BlendOpAlpha), UINT(m->depth.DepthEnable), UINT(m->depth.DepthFunc)};
     const State::Shader::Key key = {m->target.colorFormat, depthFormat, samples.Count, samples.Quality,
-        topologyType, m->colorWrite, m->depthWrite, m->array ? m->array->id : 0};
+        topologyType, m->colorWrite, m->depthWrite, m->array ? m->array->id : 0, states};
     ID3D12PipelineState* pipeline = nullptr;
     for (const auto& entry : shader.pipelines) if (entry.key == key) { pipeline = entry.object.Get(); break; }
     if (!pipeline)
@@ -522,14 +572,13 @@ void piRendererDX12::PrepareDraw(PrimitiveType primitive)
         desc.VS = bytecode(shader.vs); desc.HS = bytecode(shader.hs); desc.DS = bytecode(shader.ds);
         desc.GS = bytecode(shader.gs); desc.PS = bytecode(shader.ps);
         if (m->array) desc.InputLayout = {m->array->elements.data(), static_cast<UINT>(m->array->elements.size())};
+        desc.BlendState = m->blend;
         desc.BlendState.RenderTarget[0].RenderTargetWriteMask = m->colorWrite ? D3D12_COLOR_WRITE_ENABLE_ALL : 0;
         desc.SampleMask = UINT_MAX;
-        desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-        desc.RasterizerState.DepthClipEnable = TRUE;
-        desc.DepthStencilState.DepthEnable = m->target.depth != nullptr;
+        desc.RasterizerState = m->raster;
+        desc.DepthStencilState = m->depth;
+        desc.DepthStencilState.DepthEnable = m->target.depth != nullptr && m->depth.DepthEnable;
         desc.DepthStencilState.DepthWriteMask = m->depthWrite ? D3D12_DEPTH_WRITE_MASK_ALL : D3D12_DEPTH_WRITE_MASK_ZERO;
-        desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
         desc.PrimitiveTopologyType = topologyType;
         desc.NumRenderTargets = 1;
         desc.RTVFormats[0] = m->target.colorFormat;
@@ -751,6 +800,135 @@ piTexture piRendererDX12::CreateTexture(const wchar_t* key, const TextureInfo* i
     }
     m->textures.insert(texture.get());
     return reinterpret_cast<piTexture>(texture.release());
+}
+piRasterState piRendererDX12::CreateRasterState(bool wireframe, bool frontIsCCW, CullMode cull, bool depthClamp, bool multisample)
+{
+    if (!m->device || (cull != CullMode::NONE && cull != CullMode::FRONT && cull != CullMode::BACK)) return nullptr;
+    auto* state = new D3D12_RASTERIZER_DESC(RasterDescription());
+    state->FillMode = wireframe ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
+    state->FrontCounterClockwise = frontIsCCW;
+    state->CullMode = cull == CullMode::NONE ? D3D12_CULL_MODE_NONE : cull == CullMode::FRONT ? D3D12_CULL_MODE_FRONT : D3D12_CULL_MODE_BACK;
+    state->DepthClipEnable = !depthClamp;
+    state->MultisampleEnable = multisample;
+    m->rasterStates.insert(state);
+    return reinterpret_cast<piRasterState>(state);
+}
+void piRendererDX12::SetRasterState(piRasterState handle)
+{
+    auto* state = reinterpret_cast<D3D12_RASTERIZER_DESC*>(handle);
+    if (m->rasterStates.find(state) == m->rasterStates.end()) throw std::invalid_argument("IMM_DX12: foreign raster state");
+    m->raster = *state;
+}
+void piRendererDX12::DestroyRasterState(piRasterState handle)
+{
+    if (!handle) return;
+    auto* state = reinterpret_cast<D3D12_RASTERIZER_DESC*>(handle);
+    if (!m->rasterStates.erase(state)) throw std::invalid_argument("IMM_DX12: foreign raster state");
+    delete state;
+}
+piBlendState piRendererDX12::CreateBlendState(bool alphaToCoverage, bool enabled)
+{
+    if (!m->device) return nullptr;
+    auto* state = new D3D12_BLEND_DESC(BlendDescription());
+    state->AlphaToCoverageEnable = alphaToCoverage;
+    state->RenderTarget[0].BlendEnable = enabled;
+    m->blendStates.insert(state);
+    return reinterpret_cast<piBlendState>(state);
+}
+void piRendererDX12::SetBlendState(piBlendState handle)
+{
+    auto* state = reinterpret_cast<D3D12_BLEND_DESC*>(handle);
+    if (m->blendStates.find(state) == m->blendStates.end()) throw std::invalid_argument("IMM_DX12: foreign blend state");
+    m->blend = *state;
+}
+void piRendererDX12::DestroyBlendState(piBlendState handle)
+{
+    if (!handle) return;
+    auto* state = reinterpret_cast<D3D12_BLEND_DESC*>(handle);
+    if (!m->blendStates.erase(state)) throw std::invalid_argument("IMM_DX12: foreign blend state");
+    delete state;
+}
+piDepthState piRendererDX12::CreateDepthState(bool enabled, bool lessEqual)
+{
+    if (!m->device) return nullptr;
+    auto* state = new D3D12_DEPTH_STENCIL_DESC(DepthDescription());
+    state->DepthEnable = enabled;
+    state->DepthFunc = lessEqual ? D3D12_COMPARISON_FUNC_LESS_EQUAL : D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+    m->depthStates.insert(state);
+    return reinterpret_cast<piDepthState>(state);
+}
+void piRendererDX12::SetDepthState(piDepthState handle)
+{
+    auto* state = reinterpret_cast<D3D12_DEPTH_STENCIL_DESC*>(handle);
+    if (m->depthStates.find(state) == m->depthStates.end()) throw std::invalid_argument("IMM_DX12: foreign depth state");
+    m->depth = *state;
+}
+void piRendererDX12::DestroyDepthState(piDepthState handle)
+{
+    if (!handle) return;
+    auto* state = reinterpret_cast<D3D12_DEPTH_STENCIL_DESC*>(handle);
+    if (!m->depthStates.erase(state)) throw std::invalid_argument("IMM_DX12: foreign depth state");
+    delete state;
+}
+void piRendererDX12::SetState(piState state, bool value)
+{
+    switch (state)
+    {
+    case piSTATE_CULL_FACE: m->raster.CullMode = value ? D3D12_CULL_MODE_BACK : D3D12_CULL_MODE_NONE; break;
+    case piSTATE_DEPTH_TEST: m->depth.DepthEnable = value; break;
+    case piSTATE_WIREFRAME: m->raster.FillMode = value ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID; break;
+    case piSTATE_FRONT_FACE: m->raster.FrontCounterClockwise = value; break;
+    case piSTATE_BLEND: m->blend.RenderTarget[0].BlendEnable = value; break;
+    case piSTATE_ALPHA_TO_COVERAGE: m->blend.AlphaToCoverageEnable = value; break;
+    case piSTATE_DEPTH_CLAMP: m->raster.DepthClipEnable = !value; break;
+    default: Unsupported("IMM_DX12: unsupported raster flag");
+    }
+}
+void piRendererDX12::SetBlending(int target, BlendEquation rgb, BlendOperations srcRGB, BlendOperations dstRGB,
+    BlendEquation alpha, BlendOperations srcAlpha, BlendOperations dstAlpha)
+{
+    if (target != 0) throw std::invalid_argument("IMM_DX12: blend attachment");
+    const D3D12_BLEND factors[] = {D3D12_BLEND_ONE,D3D12_BLEND_SRC_ALPHA,D3D12_BLEND_SRC_COLOR,D3D12_BLEND_INV_SRC_COLOR,
+        D3D12_BLEND_INV_SRC_ALPHA,D3D12_BLEND_DEST_ALPHA,D3D12_BLEND_INV_DEST_ALPHA,D3D12_BLEND_DEST_COLOR,
+        D3D12_BLEND_INV_DEST_COLOR,D3D12_BLEND_SRC_ALPHA_SAT,D3D12_BLEND_ZERO};
+    const D3D12_BLEND_OP equations[] = {D3D12_BLEND_OP_ADD,D3D12_BLEND_OP_SUBTRACT,D3D12_BLEND_OP_REV_SUBTRACT,D3D12_BLEND_OP_MIN,D3D12_BLEND_OP_MAX};
+    auto factor = [&](BlendOperations value) { if (UINT(value) >= 11) throw std::invalid_argument("IMM_DX12: blend factor"); return factors[UINT(value)]; };
+    auto equation = [&](BlendEquation value) { if (UINT(value) >= 5) throw std::invalid_argument("IMM_DX12: blend equation"); return equations[UINT(value)]; };
+    auto alphaFactor = [&](BlendOperations value) {
+        const auto mapped = factor(value);
+        switch (mapped)
+        {
+        case D3D12_BLEND_SRC_COLOR: return D3D12_BLEND_SRC_ALPHA;
+        case D3D12_BLEND_INV_SRC_COLOR: return D3D12_BLEND_INV_SRC_ALPHA;
+        case D3D12_BLEND_DEST_COLOR: return D3D12_BLEND_DEST_ALPHA;
+        case D3D12_BLEND_INV_DEST_COLOR: return D3D12_BLEND_INV_DEST_ALPHA;
+        case D3D12_BLEND_SRC_ALPHA_SAT: return D3D12_BLEND_ONE;
+        default: return mapped;
+        }
+    };
+    auto blend = m->blend.RenderTarget[0];
+    blend.SrcBlend = factor(srcRGB); blend.DestBlend = factor(dstRGB); blend.BlendOp = equation(rgb);
+    blend.SrcBlendAlpha = alphaFactor(srcAlpha); blend.DestBlendAlpha = alphaFactor(dstAlpha); blend.BlendOpAlpha = equation(alpha);
+    m->blend.RenderTarget[0] = blend;
+}
+void piRendererDX12::DrawUnitQuad_XY(int instances)
+{
+    if (instances < 0) throw std::invalid_argument("IMM_DX12: negative instance count");
+    if (instances == 0) return;
+    if (!m->quad)
+    {
+        const float vertices[][2] = {{-1,-1},{1,-1},{-1,1},{1,1}};
+        auto buffer = CreateBuffer(vertices, sizeof(vertices), BufferType::Static, BufferUse::Vertex);
+        if (!buffer) throw std::runtime_error("IMM_DX12: unit quad buffer creation failed");
+        ArrayLayout2 layout = {};
+        layout.mNumElements = 1;
+        std::memcpy(layout.mEntry[0].mName, "POSITION", sizeof("POSITION"));
+        layout.mEntry[0].mFormat = Format::C2_32_FLOAT;
+        m->quad = CreateVertexArray2(1, buffer, &layout, nullptr, nullptr, nullptr, 0, nullptr, IndexArrayFormat::UINT_16);
+        if (!m->quad) { DestroyBuffer(buffer); throw std::runtime_error("IMM_DX12: unit quad layout creation failed"); }
+    }
+    AttachVertexArray2(m->quad);
+    DrawPrimitiveNotIndexed(PrimitiveType::TriangleStrip, 0, 4, instances);
 }
 void piRendererDX12::DestroyTexture(piTexture handle)
 {

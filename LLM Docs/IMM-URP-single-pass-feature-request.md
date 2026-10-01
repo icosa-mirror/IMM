@@ -448,7 +448,7 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    resource states are restored at frame end. Indexed readback covers 16/32-bit indices,
    separate vertex/instance streams and nonzero base vertex, instance and index offsets.
    Complete render states and layer rendering remain incomplete; this backend remains
-   unregistered. Hosted validation of the draw increment is tracked in
+   unregistered. The draw increment's hosted pipeline completed successfully in
    [run 36937569488](https://github.com/icosa-mirror/IMM/actions/runs/36937569488).
 10. **CI follow-up:** full validation run `36933435201` failed Android standalone GLES after
    a capture was written but the final edit-validation marker was not observed. The Android
@@ -464,7 +464,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Nine local frames verify a sampled mip whose value differs from the base-level texel.
    Volume/cube textures, texture updates and complete layer initialization remain unfinished.
    Hosted validation of this increment is pending.
-12. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+12. **Render-state increment (local):** raster/depth/blend state objects, common state
+   flags, separate RGB/alpha blend equations and the picture unit quad are implemented.
+   Pipeline variants include these state values. Nine readback frames verify disabled
+   depth testing and additive blending through the unit-quad path, alongside the existing
+   occlusion checks. Hosted validation is pending; this is not complete layer coverage.
+13. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

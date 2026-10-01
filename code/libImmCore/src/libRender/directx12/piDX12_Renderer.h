@@ -55,20 +55,20 @@ public:
     void SetShadingSamples(int shadingSamples) override { (void)shadingSamples; Unsupported("SetShadingSamples"); }
     void RenderTargetGetDefaultSampleLocation(piRTarget vdst, const int id, float *location) override { (void)vdst; (void)id; (void)location; Unsupported("RenderTargetGetDefaultSampleLocation"); }
     void Clear(const float *color0, const float *color1, const float *color2, const float *color3, const bool depth0) override;
-    void SetState(piState state, bool value) override { (void)state; (void)value; Unsupported("SetState"); }
-    void SetBlending(int buf, BlendEquation equRGB, BlendOperations srcRGB, BlendOperations dstRGB, BlendEquation equALP, BlendOperations srcALP, BlendOperations dstALP) override { (void)buf; (void)equRGB; (void)srcRGB; (void)dstRGB; (void)equALP; (void)srcALP; (void)dstALP; Unsupported("SetBlending"); }
+    void SetState(piState state, bool value) override;
+    void SetBlending(int buf, BlendEquation equRGB, BlendOperations srcRGB, BlendOperations dstRGB, BlendEquation equALP, BlendOperations srcALP, BlendOperations dstALP) override;
     void SetViewport(int id, const int *vp) override;
     void SetViewports(int num, const float *viewports) override;
     void GetViewports(int *num, float *viewports) override;
-    piRasterState CreateRasterState(bool wireframe, bool frontIsCounterClockWise, CullMode cullMode, bool depthClamp, bool multiSample) override { (void)wireframe; (void)frontIsCounterClockWise; (void)cullMode; (void)depthClamp; (void)multiSample; Unsupported("CreateRasterState"); }
-    void SetRasterState(const piRasterState vme) override { (void)vme; Unsupported("SetRasterState"); }
-    void DestroyRasterState(piRasterState vme) override { (void)vme; Unsupported("DestroyRasterState"); }
-    piBlendState CreateBlendState(bool alphaToCoverage, bool enabled0) override { (void)alphaToCoverage; (void)enabled0; Unsupported("CreateBlendState"); }
-    void SetBlendState(const piBlendState vme) override { (void)vme; Unsupported("SetBlendState"); }
-    void DestroyBlendState(piBlendState vme) override { (void)vme; Unsupported("DestroyBlendState"); }
-    piDepthState CreateDepthState(bool alphaToCoverage, bool lessEqual) override { (void)alphaToCoverage; (void)lessEqual; Unsupported("CreateDepthState"); }
-    void SetDepthState(const piDepthState vme) override { (void)vme; Unsupported("SetDepthState"); }
-    void DestroyDepthState(piDepthState vme) override { (void)vme; Unsupported("DestroyDepthState"); }
+    piRasterState CreateRasterState(bool wireframe, bool frontIsCounterClockWise, CullMode cullMode, bool depthClamp, bool multiSample) override;
+    void SetRasterState(const piRasterState vme) override;
+    void DestroyRasterState(piRasterState vme) override;
+    piBlendState CreateBlendState(bool alphaToCoverage, bool enabled0) override;
+    void SetBlendState(const piBlendState vme) override;
+    void DestroyBlendState(piBlendState vme) override;
+    piDepthState CreateDepthState(bool alphaToCoverage, bool lessEqual) override;
+    void SetDepthState(const piDepthState vme) override;
+    void DestroyDepthState(piDepthState vme) override;
     piTexture CreateTexture(const wchar_t *key, const TextureInfo *info, bool compress, TextureFilter filter, TextureWrap wrap, float aniso, const void *buffer) override;
     piTexture CreateTexture2(const wchar_t *key, const TextureInfo *info, bool compress, TextureFilter filter, TextureWrap wrap1, float aniso, const void *buffer, int bindUsage) override { (void)key; (void)info; (void)compress; (void)filter; (void)wrap1; (void)aniso; (void)buffer; (void)bindUsage; Unsupported("CreateTexture2"); }
     void DestroyTexture(piTexture obj) override;
@@ -143,7 +143,7 @@ public:
     void DettachIndirectBuffer() override { Unsupported("DettachIndirectBuffer"); }
     void DrawUnitCube_XYZ_NOR(int numInstanced) override { (void)numInstanced; Unsupported("DrawUnitCube_XYZ_NOR"); }
     void DrawUnitCube_XYZ(int numInstanced) override { (void)numInstanced; Unsupported("DrawUnitCube_XYZ"); }
-    void DrawUnitQuad_XY(int numInstanced) override { (void)numInstanced; Unsupported("DrawUnitQuad_XY"); }
+    void DrawUnitQuad_XY(int numInstanced) override;
     void ExecuteCompute(int ngx, int ngy, int ngz, int gsx, int gsy, int gsz) override { (void)ngx; (void)ngy; (void)ngz; (void)gsx; (void)gsy; (void)gsz; Unsupported("ExecuteCompute"); }
     void CreateSyncObject(piBuffer &buffer) override { (void)buffer; Unsupported("CreateSyncObject"); }
     bool CheckSyncObject(piBuffer &buffer) override { (void)buffer; Unsupported("CheckSyncObject"); }

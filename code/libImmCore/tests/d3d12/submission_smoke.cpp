@@ -226,6 +226,17 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
     const uint16_t indices16[] = {0,0,0,2,1,0};
     const uint32_t indices32[] = {0,0,0,2,1,0};
     using Renderer = ImmCore::piRenderer;
+    const char* quadVS = R"(
+        cbuffer Draw : register(b0) { float4 color; float depth; };
+        float4 main(float2 position : POSITION) : SV_Position { return float4(position,depth,1); })";
+    auto quadShader = api.CreateShader(nullptr, quadVS, nullptr, nullptr, nullptr, rendererPS, nullptr);
+    auto rasterState = api.CreateRasterState(false, true, Renderer::CullMode::NONE, false, false);
+    auto depthState = api.CreateDepthState(true, false);
+    auto noDepthState = api.CreateDepthState(false, false);
+    auto opaqueState = api.CreateBlendState(false, false);
+    auto blendState = api.CreateBlendState(false, true);
+    Require(quadShader && rasterState && depthState && noDepthState && opaqueState && blendState,
+            "Renderer draw state creation failed");
     const unsigned char imagePixels[] = {0,0,0,255, 255,255,255,255, 255,255,255,255, 0,0,0,255};
     Renderer::TextureInfo imageInfo = {Renderer::TextureType::T2D, Renderer::Format::C4_8_UNORM, 2, 2, 1, 1, 0, 0};
     auto sampledImage = api.CreateTexture(nullptr, &imageInfo, false, Renderer::TextureFilter::MIPMAP,
@@ -310,6 +321,9 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         Check(renderer.SetExternalTarget(target), "Set renderer host attachments");
         const float blue[] = {0, 0, 1, 1};
         api.Clear(blue, nullptr, nullptr, nullptr, true);
+        api.SetRasterState(rasterState);
+        api.SetDepthState(depthState);
+        api.SetBlendState(opaqueState);
         const float nearData[] = {float(frame % 2), 1, 0, 1, 0.8f};
         api.UpdateBuffer(drawConstants, nearData, 0, sizeof(nearData), false);
         api.AttachShader(indexedShader);
@@ -320,6 +334,17 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         api.AttachShader(shader);
         api.DettachVertexArray();
         api.DrawPrimitiveNotIndexed(ImmCore::piRenderer::PrimitiveType::Triangle, 0, 3, 1);
+        const int cornerViewport[] = {48, 0, 16, 16};
+        const D3D12_RECT cornerRect = {48, 0, 64, 16};
+        commands->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1, 0, 1, &cornerRect);
+        api.SetViewport(0, cornerViewport);
+        api.SetDepthState(noDepthState);
+        api.SetBlendState(blendState);
+        api.SetBlending(0, Renderer::BlendEquation::piBLEND_ADD, Renderer::BlendOperations::piBLEND_ONE,
+            Renderer::BlendOperations::piBLEND_ONE, Renderer::BlendEquation::piBLEND_ADD,
+            Renderer::BlendOperations::piBLEND_ONE, Renderer::BlendOperations::piBLEND_ONE);
+        api.AttachShader(quadShader);
+        api.DrawUnitQuad_XY(1);
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition.pResource = color.Get();
@@ -358,6 +383,12 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
             for (auto index : indexBuffers) api.DestroyBuffer(index);
             api.DestroyTexture(sampledImage);
             api.DestroySampler(imageSampler);
+            api.DestroyShader(quadShader);
+            api.DestroyRasterState(rasterState);
+            api.DestroyDepthState(depthState);
+            api.DestroyDepthState(noDepthState);
+            api.DestroyBlendState(opaqueState);
+            api.DestroyBlendState(blendState);
         }
         Check(renderer.EndFrame(&lastCompletion), "Submit renderer buffer versions");
     }
@@ -384,6 +415,9 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         Require(center[0] == (frame % 2 ? 128 : 0) && center[1] == 128 && center[2] == 0,
                 "piRenderer draw constants/depth failed");
         Require(pixels[0] == 0 && pixels[1] == 0 && pixels[2] == 255, "piRenderer clear failed");
+        const auto* corner = pixels + 8 * pitch + 56 * 4;
+        Require(corner[0] == 128 && corner[1] == 0 && corner[2] == 255,
+                "piRenderer depth-disable/additive blend/unit quad failed");
         images[frame]->Unmap(0, &noWrites);
     }
 }
@@ -720,6 +754,7 @@ int Run()
            << "\"renderer_draw_frames_verified\":9,"
            << "\"renderer_indexed_frames_verified\":9,"
            << "\"renderer_sampled_mip_frames_verified\":9,"
+           << "\"renderer_state_frames_verified\":9,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

@@ -74,6 +74,9 @@ if ($result.renderer_indexed_frames_verified -ne 9) {
 if ($result.renderer_sampled_mip_frames_verified -ne 9) {
     throw 'D3D12 smoke is missing sampled mip-chain evidence.'
 }
+if ($result.renderer_state_frames_verified -ne 9) {
+    throw 'D3D12 smoke is missing renderer state/unit-quad evidence.'
+}
 $result | Add-Member -NotePropertyName source_revision -NotePropertyValue ((& git -C $repoRoot rev-parse HEAD).Trim())
 $smokeExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_submission_smoke.exe"
 $result | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $smokeExecutable -Algorithm SHA256).Hash
