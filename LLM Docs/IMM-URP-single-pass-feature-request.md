@@ -499,7 +499,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    requires this check and uploads its log, result, executable hash, and native-library
    hashes. This exercises layer initialization; document loading and scene rendering are
    still unverified. The native Windows solution must be built before running this harness.
-18. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+18. **Document lifecycle increment (local):** the headless player check now loads
+   `exampleImmFiles/sample1.imm` through `GlobalRender`/`GlobalWork`, verifies the loaded
+   state and nonempty layer list, and unloads it in all four paint/colour configurations.
+   The test exposed and fixed a null sound-engine dereference during sound-layer updates.
+   Local checks pass with no D3D12 debug errors. CI requires four completed loads and
+   records the fixture hash. This does not yet call `RenderMono` or verify scene pixels;
+   resources whose upload is deferred until drawing remain outside this evidence.
+19. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

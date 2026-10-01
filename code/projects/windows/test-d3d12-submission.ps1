@@ -50,8 +50,8 @@ foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d
     Copy-Item -LiteralPath (Join-Path $buildDirectory $name) -Destination $outputDirectory -Force
 }
 $playerResult = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Raw | ConvertFrom-Json
-if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or -not $playerResult.debug_layer_enabled) {
-    throw 'D3D12 player initialization evidence is incomplete.'
+if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or -not $playerResult.debug_layer_enabled) {
+    throw 'D3D12 player document-loading evidence is incomplete.'
 }
 $result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Raw | ConvertFrom-Json
 if ($result.status -ne 'pass' -or $result.api -ne 'D3D12' -or $result.frames_verified -ne 9) {
@@ -124,6 +124,7 @@ foreach ($library in @('libImmPlayer', 'libImmImporter', 'libImmExporter', 'libI
     $libraryHashes[$library] = (Get-FileHash -LiteralPath $libraryPath -Algorithm SHA256).Hash
 }
 $playerResult | Add-Member -NotePropertyName library_sha256 -NotePropertyValue $libraryHashes
+$playerResult | Add-Member -NotePropertyName fixture_sha256 -NotePropertyValue (Get-FileHash -LiteralPath (Join-Path $repoRoot 'exampleImmFiles/sample1.imm') -Algorithm SHA256).Hash
 $playerResult | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Encoding utf8
 $result | Add-Member -NotePropertyName source_sha256 -NotePropertyValue $sourceHashes
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Encoding utf8

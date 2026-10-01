@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <vector>
 #include <fstream>
+#include <chrono>
+#include <thread>
 #include "../../src/libRender/directx12/piDX12_Renderer.h"
 #include "libImmPlayer/src/player.h"
 
@@ -49,6 +51,24 @@ int main()
             configuration.frontIsCCW = true;
             if (!player.Init(&renderer, nullptr, &log, &timer, &configuration))
                 throw std::runtime_error("Player initialization failed; see d3d12-player.log");
+            const int document = player.Load(IMM_D3D12_SAMPLE_FILE);
+            if (document < 0) throw std::runtime_error("Queue sample document load");
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+            for (;;)
+            {
+                player.GlobalRender(ImmCore::trans3d::identity(), ImmCore::trans3d::identity(),
+                    ImmCore::mat4x4::identity(), ImmPlayer::StereoMode::None);
+                player.GlobalWork(true, 10000);
+                ImmPlayer::Player::DocumentState state;
+                player.GetDocumentState(state, document);
+                if (state.mLoadingState == ImmPlayer::Player::LoadingState::Loaded) break;
+                if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed ||
+                    std::chrono::steady_clock::now() >= deadline)
+                    throw std::runtime_error("Load sample document failed or timed out");
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+            if (player.GetLayerCount(document) <= 0) throw std::runtime_error("Loaded sample has no layers");
+            player.UnloadAllSync();
             player.Deinit();
         }
         renderer.Deinitialize();
@@ -70,10 +90,10 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-initialization","configurations_verified":4,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-document-loading","configurations_verified":4,"documents_loaded":4,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
-        std::puts("IMM_DX12_PLAYER PASS initialization and cleanup; scene rendering not tested");
+        std::puts("IMM_DX12_PLAYER PASS initialization, document loading and cleanup; scene rendering not tested");
         return 0;
     }
     catch (const std::exception& error)
