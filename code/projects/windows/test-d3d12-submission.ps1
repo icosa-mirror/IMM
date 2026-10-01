@@ -50,6 +50,11 @@ $result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission
 if ($result.status -ne 'pass' -or $result.api -ne 'D3D12' -or $result.frames_verified -ne 9) {
     throw 'D3D12 smoke did not produce the required readback evidence.'
 }
+foreach ($bufferType in @('vertex', 'index', 'constant', 'structured')) {
+    if ($bufferType -notin $result.buffer_uploads) {
+        throw "D3D12 smoke is missing $bufferType buffer upload evidence."
+    }
+}
 $result | Add-Member -NotePropertyName source_revision -NotePropertyValue ((& git -C $repoRoot rev-parse HEAD).Trim())
 $smokeExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_submission_smoke.exe"
 $result | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $smokeExecutable -Algorithm SHA256).Hash

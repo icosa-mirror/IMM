@@ -1,6 +1,17 @@
 {
   "schema": "imm-testing-matrix-status-v1",
-  "updated": "2026-08-12",
+  "updated": "2026-10-01",
+  "implementation_baselines": {
+    "urp_single_pass": {
+      "plan": "LLM Docs/IMM-URP-single-pass-feature-request.md",
+      "starting_revision": "dd0a5f82",
+      "foundation_revision": "9ec939a81000c2f2067692700964d2e0b781895d",
+      "foundation_run": "https://github.com/icosa-mirror/IMM/actions/runs/36443675062",
+      "foundation_run_conclusion": "success",
+      "verified_scope": "Push pipeline platform builds, core and web checks, plus nine D3D12/WARP submission readbacks. Does not establish full engine/GPU matrix, IMM D3D12 scene rendering, URP or headset correctness.",
+      "remaining": "IMM D3D12 renderer, RenderGraph integration on all required platforms, single-pass stereo and scene-level CI/headset evidence."
+    }
+  },
   "audio_pipelines": [
     {
       "product": "standalone",

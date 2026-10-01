@@ -135,20 +135,34 @@ int Run()
     Require(context.Initialize(device.Get(), queue.Get()) == E_UNEXPECTED, "Double initialization accepted");
     uint64_t completion = 0;
     Require(context.Submit(&completion) == E_UNEXPECTED, "Submit without Begin accepted");
+    ComPtr<ID3D12Resource> invalidUpload;
+    const uint32_t uploadValue = 42;
+    Require(context.UploadBuffer(&uploadValue, sizeof(uploadValue), &invalidUpload) == E_UNEXPECTED,
+            "Upload outside recording accepted");
     ID3D12GraphicsCommandList* commands = nullptr;
     Check(context.Begin(&commands), "Begin cancelled frame");
     ID3D12GraphicsCommandList* duplicate = nullptr;
     Require(context.Begin(&duplicate) == E_UNEXPECTED && duplicate == nullptr, "Nested Begin accepted");
+    Require(context.UploadBuffer(nullptr, sizeof(uploadValue), &invalidUpload) == E_INVALIDARG && !invalidUpload,
+            "Null upload data accepted");
+    Require(context.UploadBuffer(&uploadValue, 0, &invalidUpload) == E_INVALIDARG && !invalidUpload,
+            "Empty upload accepted");
+    Check(context.UploadBuffer(&uploadValue, sizeof(uploadValue), &invalidUpload), "Upload before cancellation");
     Check(context.Cancel(), "Cancel frame");
+    invalidUpload.Reset();
     Require(context.Wait(1, 0) == E_INVALIDARG, "Unsubmitted fence accepted");
 
-    D3D12_ROOT_PARAMETER parameter = {};
-    parameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-    parameter.Constants.Num32BitValues = 5; // Colour and clip-space depth.
-    parameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    D3D12_ROOT_PARAMETER parameters[2] = {};
+    parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+    parameters[0].Descriptor.ShaderRegister = 0;
+    parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+    parameters[1].Descriptor.ShaderRegister = 8; // IMM paint's structured-buffer slot.
+    parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     D3D12_ROOT_SIGNATURE_DESC signatureDesc = {};
-    signatureDesc.NumParameters = 1;
-    signatureDesc.pParameters = &parameter;
+    signatureDesc.NumParameters = 2;
+    signatureDesc.pParameters = parameters;
+    signatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     ComPtr<ID3DBlob> serialized;
     ComPtr<ID3DBlob> errors;
     Check(D3D12SerializeRootSignature(&signatureDesc, D3D_ROOT_SIGNATURE_VERSION_1,
@@ -158,11 +172,11 @@ int Run()
         IID_PPV_ARGS(&signature)), "Create root signature");
     const char* source = R"(
         cbuffer Draw : register(b0) { float4 color; float depth; };
-        float4 VS(uint vertex : SV_VertexID) : SV_Position {
-            const float2 points[3] = { float2(-0.75, -0.75), float2(0, 0.75), float2(0.75, -0.75) };
-            return float4(points[vertex], depth, 1);
+        StructuredBuffer<float4> tint : register(t8);
+        float4 VS(float2 position : POSITION) : SV_Position {
+            return float4(position, depth, 1);
         }
-        float4 PS() : SV_Target { return color; }
+        float4 PS() : SV_Target { return color * tint[0]; }
     )";
     const auto vs = Shader(source, "VS", "vs_5_0");
     const auto ps = Shader(source, "PS", "ps_5_0");
@@ -170,6 +184,9 @@ int Run()
     pipelineDesc.pRootSignature = signature.Get();
     pipelineDesc.VS = {vs->GetBufferPointer(), vs->GetBufferSize()};
     pipelineDesc.PS = {ps->GetBufferPointer(), ps->GetBufferSize()};
+    const D3D12_INPUT_ELEMENT_DESC position = {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,
+        0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0};
+    pipelineDesc.InputLayout = {&position, 1};
     pipelineDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
     pipelineDesc.SampleMask = UINT_MAX;
     pipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
@@ -216,6 +233,36 @@ int Run()
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbacks[frame])), "Create readback");
 
         Check(context.Begin(&commands), "Begin frame");
+        // Deliberately destroy the CPU data and caller's COM references before
+        // Submit. Only the context keeps these copied buffers alive for the GPU.
+        D3D12_GPU_VIRTUAL_ADDRESS nearAddress = 0, farAddress = 0, tintAddress = 0;
+        D3D12_VERTEX_BUFFER_VIEW vertexView = {};
+        D3D12_INDEX_BUFFER_VIEW indexView = {};
+        {
+            const float vertices[][2] = {{-0.75f, -0.75f}, {0, 0.75f}, {0.75f, -0.75f}};
+            const uint16_t indices[] = {2, 1, 0};
+            struct DrawData
+            {
+                float color[4];
+                float depth;
+                float padding[59];
+            };
+            static_assert(sizeof(DrawData) == D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT);
+            const DrawData nearData = {{1, 1, 1, 1}, 0.8f, {}};
+            const DrawData farData = {{1, 0, 0, 1}, 0.2f, {}};
+            const float tint[] = {static_cast<float>(frame % 2), 1, 0, 1};
+            ComPtr<ID3D12Resource> vertexBuffer, indexBuffer, nearBuffer, farBuffer, tintBuffer;
+            Check(context.UploadBuffer(vertices, sizeof(vertices), &vertexBuffer), "Upload vertices");
+            Check(context.UploadBuffer(indices, sizeof(indices), &indexBuffer), "Upload indices");
+            Check(context.UploadBuffer(&nearData, sizeof(nearData), &nearBuffer), "Upload near constants");
+            Check(context.UploadBuffer(&farData, sizeof(farData), &farBuffer), "Upload far constants");
+            Check(context.UploadBuffer(tint, sizeof(tint), &tintBuffer), "Upload structured data");
+            vertexView = {vertexBuffer->GetGPUVirtualAddress(), sizeof(vertices), sizeof(vertices[0])};
+            indexView = {indexBuffer->GetGPUVirtualAddress(), sizeof(indices), DXGI_FORMAT_R16_UINT};
+            nearAddress = nearBuffer->GetGPUVirtualAddress();
+            farAddress = farBuffer->GetGPUVirtualAddress();
+            tintAddress = tintBuffer->GetGPUVirtualAddress();
+        }
         Check(context.Retain(pipeline.Get()), "Retain pipeline");
         Check(context.Retain(signature.Get()), "Retain signature");
         Check(context.Retain(rtvHeap.Get()), "Retain RTV heap");
@@ -237,13 +284,14 @@ int Run()
         commands->SetPipelineState(pipeline.Get());
         commands->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         // Different near colours prove per-submission data survives ring reuse.
-        const float nearColor[] = {static_cast<float>(frame % 2), 1, 0, 1, 0.8f};
-        commands->SetGraphicsRoot32BitConstants(0, 5, nearColor, 0);
-        commands->DrawInstanced(3, 1, 0, 0);
+        commands->IASetVertexBuffers(0, 1, &vertexView);
+        commands->IASetIndexBuffer(&indexView);
+        commands->SetGraphicsRootShaderResourceView(1, tintAddress);
+        commands->SetGraphicsRootConstantBufferView(0, nearAddress);
+        commands->DrawIndexedInstanced(3, 1, 0, 0, 0);
         // Submitted later, but must fail reversed-Z depth testing.
-        const float farColor[] = {1, 0, 0, 1, 0.2f};
-        commands->SetGraphicsRoot32BitConstants(0, 5, farColor, 0);
-        commands->DrawInstanced(3, 1, 0, 0);
+        commands->SetGraphicsRootConstantBufferView(0, farAddress);
+        commands->DrawIndexedInstanced(3, 1, 0, 0, 0);
         Check(context.Transition(color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
             D3D12_RESOURCE_STATE_COPY_SOURCE), "Transition readback source");
         D3D12_TEXTURE_COPY_LOCATION destination = {};
@@ -311,6 +359,7 @@ int Run()
     std::ofstream report("d3d12-submission-result.json");
     report << "{\"status\":\"pass\",\"api\":\"D3D12\",\"adapter\":\"WARP\","
            << "\"scope\":\"submission-context\",\"imm_scene_renderer\":false,"
+           << "\"buffer_uploads\":[\"vertex\",\"index\",\"constant\",\"structured\"],"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

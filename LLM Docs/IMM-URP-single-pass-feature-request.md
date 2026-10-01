@@ -404,9 +404,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    `9ec939a8` in [run 36443675062](https://github.com/icosa-mirror/IMM/actions/runs/36443675062):
    nine D3D12/WARP submissions verified with the debug layer enabled. The initial CI run
    exposed a Visual Studio 2022-only toolchain assumption; the script now selects the
-   installed Visual Studio version and matching CMake generator. The broader pipeline was
-   still running when this result was recorded. Existing rendering jobs remain in place.
-5. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+   installed Visual Studio version and matching CMake generator. That pipeline completed
+   successfully. Existing rendering jobs remain in place; this run does not establish
+   Unity RenderGraph or headset support.
+5. **Buffer upload increment:** `UploadBuffer` records CPU-to-default-heap copies and
+   retains staging and destination resources through fence completion. The indexed-draw
+   smoke consumes uploaded vertex, index, constant and structured buffers, with caller
+   references released before submission. Nine readbacks verify depth and per-frame data.
+   This helper is for immutable resource initialization; per-frame streaming allocation,
+   textures, IMM shader bindings and the scene renderer remain to be implemented.
+   Local validation passes; hosted validation of this increment is pending.
+6. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

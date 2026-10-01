@@ -2,6 +2,7 @@
 
 #include <limits>
 #include <cstdio>
+#include <cstring>
 
 namespace ImmCore
 {
@@ -128,6 +129,53 @@ HRESULT piDX12CommandContext::Transition(ID3D12Resource* resource, D3D12_RESOURC
     barrier.Transition.StateAfter = after;
     barrier.Transition.Subresource = subresource;
     mFrames[mFrameIndex].commands->ResourceBarrier(1, &barrier);
+    return S_OK;
+}
+
+HRESULT piDX12CommandContext::UploadBuffer(const void* data, size_t bytes, ID3D12Resource** buffer)
+{
+    if (!buffer) return E_POINTER;
+    *buffer = nullptr;
+    if (!mRecording || mFailed) return E_UNEXPECTED;
+    if (!data || bytes == 0) return E_INVALIDARG;
+
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = bytes;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    Microsoft::WRL::ComPtr<ID3D12Resource> staging;
+    HRESULT result = mDevice->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&staging));
+    if (FAILED(result)) return result;
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    Microsoft::WRL::ComPtr<ID3D12Resource> destination;
+    result = mDevice->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&destination));
+    if (FAILED(result)) return result;
+
+    void* mapped = nullptr;
+    const D3D12_RANGE noReads = {0, 0};
+    result = staging->Map(0, &noReads, &mapped);
+    if (FAILED(result)) return result;
+    std::memcpy(mapped, data, bytes);
+    const D3D12_RANGE written = {0, bytes};
+    staging->Unmap(0, &written);
+
+    // Retain before recording any GPU reference. No CPU pointer escapes this call.
+    result = Retain(staging.Get());
+    if (FAILED(result)) return result;
+    result = Retain(destination.Get());
+    if (FAILED(result)) return result;
+    mFrames[mFrameIndex].commands->CopyBufferRegion(destination.Get(), 0, staging.Get(), 0, bytes);
+    result = Transition(destination.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+    if (FAILED(result)) return result;
+    *buffer = destination.Detach();
     return S_OK;
 }
 

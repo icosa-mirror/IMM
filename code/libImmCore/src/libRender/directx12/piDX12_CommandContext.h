@@ -27,6 +27,13 @@ public:
     HRESULT Shutdown();
     HRESULT Begin(ID3D12GraphicsCommandList** commands, DWORD timeoutMilliseconds = 10000);
     HRESULT Retain(IUnknown* object);
+    // Copies CPU data immediately, then records an upload into a new DEFAULT-heap
+    // buffer. Valid only while recording. The returned buffer is GENERIC_READ
+    // after execution; Cancel discards its initialization. Both GPU resources
+    // survive until completion, even if the caller releases the returned reference.
+    // Callers supply any layout/padding required by their view (e.g. CBV alignment).
+    // Intended for immutable geometry/data, not a per-frame streaming allocator.
+    HRESULT UploadBuffer(const void* data, size_t bytes, ID3D12Resource** buffer);
     HRESULT Transition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before,
                        D3D12_RESOURCE_STATES after,
                        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
