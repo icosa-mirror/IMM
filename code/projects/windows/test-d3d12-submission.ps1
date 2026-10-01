@@ -55,6 +55,10 @@ foreach ($bufferType in @('vertex', 'index', 'constant', 'structured')) {
         throw "D3D12 smoke is missing $bufferType buffer upload evidence."
     }
 }
+if ($result.texture_subresources_verified -ne 8 -or
+    'rgba8' -notin $result.texture_uploads -or 'bc1' -notin $result.texture_uploads) {
+    throw 'D3D12 smoke is missing texture mip/array readback evidence.'
+}
 $result | Add-Member -NotePropertyName source_revision -NotePropertyValue ((& git -C $repoRoot rev-parse HEAD).Trim())
 $smokeExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_submission_smoke.exe"
 $result | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $smokeExecutable -Algorithm SHA256).Hash

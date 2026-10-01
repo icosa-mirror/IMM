@@ -179,6 +179,94 @@ HRESULT piDX12CommandContext::UploadBuffer(const void* data, size_t bytes, ID3D1
     return S_OK;
 }
 
+HRESULT piDX12CommandContext::UploadTexture2D(const D3D12_RESOURCE_DESC& description,
+    const TextureData* sources, UINT sourceCount, ID3D12Resource** texture)
+{
+    if (!texture) return E_POINTER;
+    *texture = nullptr;
+    if (!mRecording || mFailed) return E_UNEXPECTED;
+    if (!sources || description.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+        description.Width == 0 || description.Height == 0 || description.MipLevels == 0 ||
+        description.DepthOrArraySize == 0 || description.SampleDesc.Count != 1 ||
+        description.SampleDesc.Quality != 0 || description.Flags != D3D12_RESOURCE_FLAG_NONE ||
+        description.Layout != D3D12_TEXTURE_LAYOUT_UNKNOWN ||
+        sourceCount != UINT(description.MipLevels) * description.DepthOrArraySize)
+        return E_INVALIDARG;
+    D3D12_FEATURE_DATA_FORMAT_INFO format = {description.Format, 0};
+    HRESULT result = mDevice->CheckFeatureSupport(D3D12_FEATURE_FORMAT_INFO, &format, sizeof(format));
+    if (FAILED(result)) return result;
+    if (format.PlaneCount != 1) return E_INVALIDARG;
+
+    // Let the device validate the resource description before allocating footprint arrays.
+    D3D12_HEAP_PROPERTIES heap = {};
+    heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    Microsoft::WRL::ComPtr<ID3D12Resource> destination;
+    result = mDevice->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &description,
+        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&destination));
+    if (FAILED(result)) return result;
+    std::vector<D3D12_PLACED_SUBRESOURCE_FOOTPRINT> footprints(sourceCount);
+    std::vector<UINT> rows(sourceCount);
+    std::vector<UINT64> rowBytes(sourceCount);
+    UINT64 totalBytes = 0;
+    mDevice->GetCopyableFootprints(&description, 0, sourceCount, 0,
+        footprints.data(), rows.data(), rowBytes.data(), &totalBytes);
+    if (totalBytes == 0 || totalBytes == (std::numeric_limits<UINT64>::max)() ||
+        totalBytes > (std::numeric_limits<size_t>::max)()) return E_INVALIDARG;
+    for (UINT i = 0; i < sourceCount; ++i)
+    {
+        const auto& source = sources[i];
+        // Division avoids overflow when rejecting malformed source pitches/sizes.
+        if (!source.data || rows[i] == 0 || source.rowPitch < rowBytes[i] ||
+            source.bytes < rowBytes[i] || source.rowPitch == 0 ||
+            rows[i] - 1 > (source.bytes - rowBytes[i]) / source.rowPitch)
+            return E_INVALIDARG;
+    }
+    D3D12_RESOURCE_DESC stagingDesc = {};
+    stagingDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    stagingDesc.Width = totalBytes;
+    stagingDesc.Height = 1;
+    stagingDesc.DepthOrArraySize = 1;
+    stagingDesc.MipLevels = 1;
+    stagingDesc.SampleDesc.Count = 1;
+    stagingDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    Microsoft::WRL::ComPtr<ID3D12Resource> staging;
+    result = mDevice->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &stagingDesc,
+        D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&staging));
+    if (FAILED(result)) return result;
+    unsigned char* mapped = nullptr;
+    const D3D12_RANGE noReads = {0, 0};
+    result = staging->Map(0, &noReads, reinterpret_cast<void**>(&mapped));
+    if (FAILED(result)) return result;
+    for (UINT i = 0; i < sourceCount; ++i)
+        for (UINT row = 0; row < rows[i]; ++row)
+            std::memcpy(mapped + footprints[i].Offset + size_t(row) * footprints[i].Footprint.RowPitch,
+                static_cast<const unsigned char*>(sources[i].data) + size_t(row) * sources[i].rowPitch,
+                static_cast<size_t>(rowBytes[i]));
+    const D3D12_RANGE written = {0, static_cast<size_t>(totalBytes)};
+    staging->Unmap(0, &written);
+    result = Retain(staging.Get());
+    if (FAILED(result)) return result;
+    result = Retain(destination.Get());
+    if (FAILED(result)) return result;
+    for (UINT i = 0; i < sourceCount; ++i)
+    {
+        D3D12_TEXTURE_COPY_LOCATION source = {};
+        source.pResource = staging.Get();
+        source.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        source.PlacedFootprint = footprints[i];
+        D3D12_TEXTURE_COPY_LOCATION target = {};
+        target.pResource = destination.Get();
+        target.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        target.SubresourceIndex = i;
+        mFrames[mFrameIndex].commands->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
+    }
+    result = Transition(destination.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_GENERIC_READ);
+    if (FAILED(result)) return result;
+    *texture = destination.Detach();
+    return S_OK;
+}
+
 HRESULT piDX12CommandContext::Submit(uint64_t* completionValue)
 {
     if (!completionValue) return E_POINTER;

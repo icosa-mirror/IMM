@@ -412,9 +412,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    smoke consumes uploaded vertex, index, constant and structured buffers, with caller
    references released before submission. Nine readbacks verify depth and per-frame data.
    This helper is for immutable resource initialization; per-frame streaming allocation,
-   textures, IMM shader bindings and the scene renderer remain to be implemented.
-   Local validation passes; hosted validation of this increment is pending.
-6. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+   IMM shader bindings and the scene renderer remain to be implemented. Local validation
+   passes; full hosted validation of `f96c95bc` is tracked in
+   [run 36933435201](https://github.com/icosa-mirror/IMM/actions/runs/36933435201).
+6. **Texture upload increment:** `UploadTexture2D` initializes single-plane 2D textures,
+   including mip chains, arrays and block-compressed formats, using device-calculated
+   copy footprints. Local RGBA8/BC1 readback checks verify eight subresources with padded
+   CPU rows after source data is overwritten and caller texture references are released.
+   This establishes transfer correctness only; sampled picture rendering remains pending.
+   Hosted validation of this increment is pending.
+7. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

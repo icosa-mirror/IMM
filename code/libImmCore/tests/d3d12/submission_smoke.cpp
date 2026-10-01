@@ -103,6 +103,96 @@ void CheckDebugMessages(ID3D12InfoQueue* messages)
     }
 }
 
+void CheckTextureUploads(ID3D12Device* device, ID3D12CommandQueue* queue)
+{
+    piDX12CommandContext context;
+    Check(context.Initialize(device, queue), "Initialize texture upload context");
+    for (const auto format : {DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_BC1_UNORM})
+    {
+        D3D12_RESOURCE_DESC description = {};
+        description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        description.Width = format == DXGI_FORMAT_BC1_UNORM ? 12 : 7;
+        description.Height = format == DXGI_FORMAT_BC1_UNORM ? 12 : 5;
+        description.DepthOrArraySize = 2;
+        description.MipLevels = 2;
+        description.Format = format;
+        description.SampleDesc.Count = 1;
+        constexpr UINT count = 4;
+        std::array<D3D12_PLACED_SUBRESOURCE_FOOTPRINT, count> footprints;
+        std::array<UINT, count> rows;
+        std::array<UINT64, count> rowBytes;
+        UINT64 totalBytes = 0;
+        device->GetCopyableFootprints(&description, 0, count, 0,
+            footprints.data(), rows.data(), rowBytes.data(), &totalBytes);
+        std::array<std::vector<unsigned char>, count> pixels;
+        std::array<piDX12CommandContext::TextureData, count> sources;
+        for (UINT i = 0; i < count; ++i)
+        {
+            // Deliberately padded CPU rows differ from D3D12's 256-byte pitch.
+            const size_t pitch = static_cast<size_t>(rowBytes[i]) + 13;
+            pixels[i].resize(pitch * rows[i], 0xcd);
+            for (UINT row = 0; row < rows[i]; ++row)
+                for (size_t column = 0; column < rowBytes[i]; ++column)
+                    pixels[i][row * pitch + column] = static_cast<unsigned char>(i * 41 + row * 7 + column);
+            sources[i] = {pixels[i].data(), pixels[i].size(), pitch};
+        }
+        ID3D12GraphicsCommandList* commands = nullptr;
+        Check(context.Begin(&commands), "Begin texture upload");
+        ComPtr<ID3D12Resource> texture;
+        auto invalid = sources;
+        invalid[1].bytes = 1;
+        Require(context.UploadTexture2D(description, invalid.data(), count, &texture) == E_INVALIDARG && !texture,
+                "Undersized mip data accepted");
+        Require(context.UploadTexture2D(description, sources.data(), count - 1, &texture) == E_INVALIDARG,
+                "Missing array/mip data accepted");
+        Check(context.UploadTexture2D(description, sources.data(), count, &texture), "Upload texture array mips");
+        // Overwrite the sources before submission to prove Upload copied CPU data.
+        for (auto& data : pixels) std::memset(data.data(), 0xee, data.size());
+        D3D12_RESOURCE_DESC readbackDescription = {};
+        readbackDescription.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        readbackDescription.Width = totalBytes;
+        readbackDescription.Height = 1;
+        readbackDescription.DepthOrArraySize = 1;
+        readbackDescription.MipLevels = 1;
+        readbackDescription.SampleDesc.Count = 1;
+        readbackDescription.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        const auto readbackHeap = Heap(D3D12_HEAP_TYPE_READBACK);
+        ComPtr<ID3D12Resource> readback;
+        Check(device->CreateCommittedResource(&readbackHeap, D3D12_HEAP_FLAG_NONE, &readbackDescription,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback)), "Create texture readback");
+        Check(context.Retain(readback.Get()), "Retain texture readback");
+        Check(context.Transition(texture.Get(), D3D12_RESOURCE_STATE_GENERIC_READ,
+            D3D12_RESOURCE_STATE_COPY_SOURCE), "Transition texture for readback");
+        for (UINT i = 0; i < count; ++i)
+        {
+            D3D12_TEXTURE_COPY_LOCATION source = {};
+            source.pResource = texture.Get();
+            source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            source.SubresourceIndex = i;
+            D3D12_TEXTURE_COPY_LOCATION target = {};
+            target.pResource = readback.Get();
+            target.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            target.PlacedFootprint = footprints[i];
+            commands->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
+        }
+        texture.Reset();
+        uint64_t completion = 0;
+        Check(context.Submit(&completion), "Submit texture copies");
+        Check(context.Wait(completion), "Wait for texture readback");
+        const D3D12_RANGE range = {0, static_cast<size_t>(totalBytes)};
+        unsigned char* mapped = nullptr;
+        Check(readback->Map(0, &range, reinterpret_cast<void**>(&mapped)), "Map texture readback");
+        for (UINT i = 0; i < count; ++i)
+            for (UINT row = 0; row < rows[i]; ++row)
+                for (size_t column = 0; column < rowBytes[i]; ++column)
+                    Require(mapped[footprints[i].Offset + size_t(row) * footprints[i].Footprint.RowPitch + column] ==
+                        static_cast<unsigned char>(i * 41 + row * 7 + column), "Texture mip/array/row data mismatch");
+        const D3D12_RANGE noWrites = {0, 0};
+        readback->Unmap(0, &noWrites);
+    }
+    Check(context.Shutdown(), "Drain texture uploads");
+}
+
 int Run()
 {
     ComPtr<ID3D12Debug> debug;
@@ -355,11 +445,13 @@ int Run()
     Check(context.Begin(&commands), "Begin after reinitialize");
     Check(context.Submit(&completion), "Submit after reinitialize");
     Check(context.Shutdown(), "Drain final submission");
+    CheckTextureUploads(device.Get(), queue.Get());
     CheckDebugMessages(messages.Get());
     std::ofstream report("d3d12-submission-result.json");
     report << "{\"status\":\"pass\",\"api\":\"D3D12\",\"adapter\":\"WARP\","
            << "\"scope\":\"submission-context\",\"imm_scene_renderer\":false,"
            << "\"buffer_uploads\":[\"vertex\",\"index\",\"constant\",\"structured\"],"
+           << "\"texture_uploads\":[\"rgba8\",\"bc1\"],\"texture_subresources_verified\":8,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

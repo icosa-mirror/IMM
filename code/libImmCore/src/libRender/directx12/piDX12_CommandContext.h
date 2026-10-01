@@ -34,6 +34,18 @@ public:
     // Callers supply any layout/padding required by their view (e.g. CBV alignment).
     // Intended for immutable geometry/data, not a per-frame streaming allocator.
     HRESULT UploadBuffer(const void* data, size_t bytes, ID3D12Resource** buffer);
+    struct TextureData
+    {
+        const void* data;
+        size_t bytes;
+        size_t rowPitch;
+    };
+    // Immutable, single-plane 2D textures, including mip chains, arrays and BC
+    // formats. Supply one source per D3D12 subresource (mip varies fastest).
+    // Uses the same recording/cancellation/lifetime contract as UploadBuffer.
+    HRESULT UploadTexture2D(const D3D12_RESOURCE_DESC& description,
+                            const TextureData* sources, UINT sourceCount,
+                            ID3D12Resource** texture);
     HRESULT Transition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before,
                        D3D12_RESOURCE_STATES after,
                        UINT subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
