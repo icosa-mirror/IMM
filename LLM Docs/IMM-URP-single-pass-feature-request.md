@@ -486,7 +486,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    DXGI formats. Three GPU-readback frames exercise a padded vertex stream and a separate
    instance stream; the Windows CI harness requires this evidence. This closes the model
    mesh vertex-array API gap, but does not establish model-layer or scene-level rendering.
-16. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+16. **Panoramic shader interface increment (local):** corrected the equirectangular
+   HLSL vertex/fragment direction semantic and two invalid HLSL identifiers in the stereo
+   image branch. Four D3D12 pipeline checks compile and link the real shaders for mono and
+   top/bottom stereo images in linear/gamma colour modes; CI requires their result and
+   records the shader source hashes. The native player library also builds cleanly. These
+   are pipeline checks, not panoramic scene readback or headset single-pass evidence.
+17. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

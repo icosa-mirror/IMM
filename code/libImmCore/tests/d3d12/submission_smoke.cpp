@@ -581,6 +581,38 @@ int Run()
     Check(device->CreateGraphicsPipelineState(&picturePipelineDesc, IID_PPV_ARGS(&picturePipeline)),
         "Create production picture pipeline");
 
+    // Verify the real panoramic shader interface, including top/bottom stereo images.
+    // This is pipeline validation, not headset single-pass or scene readback evidence.
+    for (const char* stereoImage : {"0", "1"})
+        for (const char* colorSpace : {"0", "1"})
+        {
+            const D3D_SHADER_MACRO options[] = {{"STEREOMODE", "0"}, {"FORMAT_IS_STEREO", stereoImage},
+                {"COLOR_SPACE", colorSpace}, {nullptr, nullptr}};
+            ComPtr<ID3DBlob> panoramaVS, panoramaPS;
+            auto compilePanorama = [&](const wchar_t* path, const char* target, ID3DBlob** binary) {
+                pictureErrors.Reset();
+                const HRESULT result = D3DCompileFromFile(path, options, nullptr, "main", target,
+                    D3DCOMPILE_WARNINGS_ARE_ERRORS, 0, binary, &pictureErrors);
+                if (FAILED(result) && pictureErrors)
+                    std::fprintf(stderr, "IMM_DX12_PHASE1 panorama shader: %.1024s\n",
+                        static_cast<const char*>(pictureErrors->GetBufferPointer()));
+                Check(result, "Compile production panorama shader");
+            };
+            compilePanorama(IMM_PICTURE_SHADER_DIRECTORY L"shader_pip360Equirect_vs.hlsl", "vs_5_0", &panoramaVS);
+            compilePanorama(IMM_PICTURE_SHADER_DIRECTORY L"shader_pip360Equirect_fs.hlsl", "ps_5_0", &panoramaPS);
+            auto panoramaDesc = picturePipelineDesc;
+            const D3D12_INPUT_ELEMENT_DESC inputs[] = {
+                {"CHANA", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+                {"CHANB", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}};
+            panoramaDesc.InputLayout = {inputs, 2};
+            panoramaDesc.VS = {panoramaVS->GetBufferPointer(), panoramaVS->GetBufferSize()};
+            panoramaDesc.PS = {panoramaPS->GetBufferPointer(), panoramaPS->GetBufferSize()};
+            ComPtr<ID3D12PipelineState> panoramaPipeline;
+            const HRESULT pipelineResult = device->CreateGraphicsPipelineState(&panoramaDesc, IID_PPV_ARGS(&panoramaPipeline));
+            CheckDebugMessages(messages.Get());
+            Check(pipelineResult, "Create production panorama pipeline");
+        }
+
     const auto rtvHeap = Descriptors(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     const auto dsvHeap = Descriptors(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
     std::array<ComPtr<ID3D12Resource>, Frames> readbacks;
@@ -786,6 +818,7 @@ int Run()
            << "\"buffer_uploads\":[\"vertex\",\"index\",\"constant\",\"structured\"],"
            << "\"texture_uploads\":[\"rgba8\",\"bc1\"],\"texture_subresources_verified\":8,"
            << "\"production_picture_shader\":true,"
+           << "\"production_panorama_pipelines_verified\":4,"
            << "\"renderer_buffer_versions_verified\":18,"
            << "\"renderer_draw_frames_verified\":9,"
            << "\"renderer_indexed_frames_verified\":9,"

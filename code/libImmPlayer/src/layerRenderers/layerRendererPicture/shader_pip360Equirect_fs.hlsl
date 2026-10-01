@@ -38,7 +38,7 @@ float4 main(
 #if STEREOMODE==2	
 	float clip : SV_ClipDistance0,
 #endif
-	float3 inNor : NORMAL,
+	float3 inNor : V2P_DIR,
 #if FORMAT_IS_STEREO==1
 	float4 scale_offset : V2P_SCO,
 #endif
@@ -55,7 +55,7 @@ float4 main(
     float2 uv2 = float2(0.5 + 0.5*atan2(nor.x, abs(nor.z)) / k_pi, uv.y); // compute UVs again without seams for correct gradient computation
 
     #if FORMAT_IS_STEREO==1
-    uv = clamp(uv * in_data.scale_offset.xy, float2(0.0,0.0), float2(1.0,0.5)) + in_data.scale_offset.zw;
+    uv = clamp(uv * scale_offset.xy, float2(0.0,0.0), float2(1.0,0.5)) + scale_offset.zw;
     #endif
 
     float4 color = Texture.SampleGrad(Sampler, uv, ddx(uv2), ddy(uv2));

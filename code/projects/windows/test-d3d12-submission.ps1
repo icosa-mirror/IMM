@@ -68,6 +68,9 @@ if ($result.renderer_buffer_versions_verified -ne 18) {
 if ($result.renderer_draw_frames_verified -ne 9) {
     throw 'D3D12 smoke is missing piRenderer draw/depth evidence.'
 }
+if ($result.production_panorama_pipelines_verified -ne 4) {
+    throw "D3D12 production panorama shader pipeline evidence is incomplete."
+}
 if ($result.renderer_mesh_layout_frames_verified -ne 3) {
     throw "D3D12 mesh layout GPU readback evidence is incomplete."
 }
@@ -97,6 +100,8 @@ foreach ($relativePath in @(
     'code/libImmCore/src/libRender/piRenderer.h',
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pi2D_vs.hlsl',
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pi2D_fs.hlsl',
+    'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pip360Equirect_vs.hlsl',
+    'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pip360Equirect_fs.hlsl',
     'code/libImmCore/tests/d3d12/submission_smoke.cpp',
     'code/libImmCore/tests/d3d12/CMakeLists.txt'
 )) {

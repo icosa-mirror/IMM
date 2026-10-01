@@ -86,7 +86,7 @@ void main(float3 pos : CHANA,
 	oDir = normalize(pos);
 
 #if FORMAT_IS_STEREO==1
-	scale_offset = vec4( 1.0, 0.5, 0.0, 0.5*float(iid) );
+	scale_offset = float4( 1.0, 0.5, 0.0, 0.5*float(iid) );
 #endif
 
 	float4x4 mat = display.mEye[iid].mMatrix_CamPrj;
