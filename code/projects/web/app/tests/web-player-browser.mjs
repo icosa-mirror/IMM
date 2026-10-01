@@ -241,6 +241,8 @@ try {
     assert.equal(desktopMetrics.audio.ambisonicSupported, false);
     assert.equal(desktopMetrics.audio.userEnabled, true);
     assert.deepEqual(errors, []);
+    assert.equal(await desktop.locator("#VRButton").isVisible(), false,
+        "Visual reference captures must exclude the browser's XR availability button");
     await desktop.screenshot({ path: resolve(artifactDirectory, "sample1-web-1280x720.png") });
     execFileSync("python", [
         resolve(repositoryRoot, "tests/tools/compare_render_metrics.py"),

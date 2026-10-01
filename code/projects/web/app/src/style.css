@@ -153,7 +153,8 @@ h1 {
     left: auto !important;
 }
 
-body.visual-test #panel {
+body.visual-test #panel,
+body.visual-test #VRButton {
     display: none;
 }
 
