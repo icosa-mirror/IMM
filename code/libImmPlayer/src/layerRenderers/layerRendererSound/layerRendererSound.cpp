@@ -239,6 +239,7 @@ namespace ImmPlayer
    
 	void LayerRendererSound::GlobalWork(piRenderer* renderer, piSoundEngine* soundEngine, piLog* log, Layer* la, float masterVolume)
 	{
+        if (soundEngine == nullptr) return;
         LayerSound *ls = (LayerSound *) la->GetImplementation();
         if (!la->GetLoaded()) return;
          
