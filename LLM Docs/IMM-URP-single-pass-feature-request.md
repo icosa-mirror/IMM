@@ -515,7 +515,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    comparison, complete layer coverage, or a host-depth composition test. An orthographic
    test camera initially produced no draws because the existing projection conversion
    assumes perspective; orthographic camera support remains unverified.
-20. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+20. **Native host-depth composition (local):** four additional MSAA scene captures
+   prefill the left half of the host depth attachment at the nearest reversed-Z value.
+   IMM leaves that half untouched while rendering in the other half. Four further captures
+   draw host geometry at far depth after IMM; the host background appears while IMM's
+   scene pixels remain in front. All twelve scene checks pass with no D3D12 debug errors,
+   and CI requires both depth checks and their captures. This establishes native sample
+   paint depth interaction; Unity-owned targets, all layer types, and XR remain unverified.
+21. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

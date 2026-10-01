@@ -19,9 +19,11 @@ static void Check(HRESULT result, const char* label)
 {
     if (FAILED(result)) throw std::runtime_error(label);
 }
-static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture)
+enum class DepthProbe { None, HostOcclusion, ImmWrites };
+static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None)
 {
     constexpr UINT size = 256;
+    const bool hostDepth = probe == DepthProbe::HostOcclusion;
     D3D12_HEAP_PROPERTIES gpu = {}; gpu.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC desc = {};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -69,6 +71,14 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
         D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE};
     Check(renderer.SetExternalTarget(target), "Set scene target");
     const float black[] = {0,0,0,0}; renderer.Clear(black, nullptr, nullptr, nullptr, true);
+    auto* commands = static_cast<ID3D12GraphicsCommandList*>(renderer.GetContext());
+    if (hostDepth)
+    {
+        // Simulate opaque host content in front of IMM on the left half. With
+        // reversed Z, 1 is the nearest depth. The right half remains at far depth 0.
+        const D3D12_RECT left = {0, 0, size/2, size};
+        commands->ClearDepthStencilView(target.dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 1, &left);
+    }
     player.SetTime(document, ImmCore::piTick::FromSeconds(3.0), ImmCore::piTick(0));
     player.GlobalWork(true, 10000);
     player.GlobalRender(ImmCore::trans3d::identity(), view, projection, ImmPlayer::StereoMode::None);
@@ -76,7 +86,18 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
     const auto& perf = player.GetPerformanceInfoForFrame();
     std::printf("IMM_DX12_PLAYER draws=%d paint=%d triangles=%d\n", perf.numDrawCalls, perf.numPaintDrawCalls, perf.numTriangles);
     if (perf.numPaintDrawCalls <= 0 || perf.numTriangles <= 0) throw std::runtime_error("Scene submitted no paint geometry");
-    auto* commands = static_cast<ID3D12GraphicsCommandList*>(renderer.GetContext());
+    if (probe == DepthProbe::ImmWrites)
+    {
+        const char* vs = "float4 main(float2 p : POSITION) : SV_Position { return float4(p,0,1); }";
+        const char* ps = "float4 main() : SV_Target { return float4(1,1,1,1); }";
+        auto shader = renderer.CreateShader(nullptr, vs, nullptr, nullptr, nullptr, ps, nullptr);
+        if (!shader) throw std::runtime_error("Create host background shader");
+        renderer.AttachShader(shader);
+        renderer.SetState(ImmCore::piSTATE_CULL_FACE, false);
+        renderer.SetState(ImmCore::piSTATE_BLEND, false);
+        renderer.DrawUnitQuad_XY(1);
+        renderer.DestroyShader(shader);
+    }
     auto transition = [&](ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
         D3D12_RESOURCE_BARRIER barrier = {}; barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition = {resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, before, after};
@@ -94,19 +115,28 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
     Check(renderer.WaitForFrame(completion), "Wait for scene frame");
     void* data = nullptr; D3D12_RANGE range = {0, static_cast<SIZE_T>(bytes)};
     Check(readback->Map(0, &range, &data), "Map scene pixels");
-    UINT visible = 0;
+    UINT visible = 0, occludedPixels = 0, retainedScenePixels = 0, backgroundPixels = 0;
     std::ofstream image(capture, std::ios::binary);
     image << "P6\n256 256\n255\n";
     for (UINT y = 0; y < size; ++y) for (UINT x = 0; x < size; ++x)
     {
         const auto* pixel = static_cast<const unsigned char*>(data) + footprint.Offset + y*footprint.Footprint.RowPitch + x*4;
-        if (pixel[0] || pixel[1] || pixel[2]) ++visible;
+        if (pixel[0] || pixel[1] || pixel[2])
+        {
+            ++visible;
+            if (x < size/2) ++occludedPixels;
+        }
+        if (pixel[0] == 255 && pixel[1] == 255 && pixel[2] == 255) ++backgroundPixels;
+        else if (pixel[0] || pixel[1] || pixel[2]) ++retainedScenePixels;
         image.write(reinterpret_cast<const char*>(pixel), 3);
     }
     D3D12_RANGE written = {}; readback->Unmap(0, &written);
     image.close();
     if (!image || visible < 100) throw std::runtime_error("Scene readback is empty or capture failed");
-    std::printf("IMM_DX12_PLAYER scene pixels=%u\n", visible);
+    if (hostDepth && occludedPixels != 0) throw std::runtime_error("IMM overwrote host-occluded pixels");
+    if (probe == DepthProbe::ImmWrites && (retainedScenePixels < 100 || backgroundPixels < 100))
+        throw std::runtime_error("IMM depth failed to preserve scene in front of later host geometry");
+    std::printf("IMM_DX12_PLAYER scene pixels=%u depth_probe=%d\n", visible, int(probe));
 }
 
 int main()
@@ -163,6 +193,12 @@ int main()
             const char* captures[2][2] = {{"d3d12-player-scene-static-linear.ppm", "d3d12-player-scene-static-gamma.ppm"},
                 {"d3d12-player-scene-pretessellated-linear.ppm", "d3d12-player-scene-pretessellated-gamma.ppm"}};
             RenderScene(renderer, device.Get(), player, document, captures[int(technique)][int(colorSpace)]);
+            const char* depthCaptures[2][2] = {{"d3d12-player-depth-static-linear.ppm", "d3d12-player-depth-static-gamma.ppm"},
+                {"d3d12-player-depth-pretessellated-linear.ppm", "d3d12-player-depth-pretessellated-gamma.ppm"}};
+            RenderScene(renderer, device.Get(), player, document, depthCaptures[int(technique)][int(colorSpace)], DepthProbe::HostOcclusion);
+            const char* writeCaptures[2][2] = {{"d3d12-player-depth-write-static-linear.ppm", "d3d12-player-depth-write-static-gamma.ppm"},
+                {"d3d12-player-depth-write-pretessellated-linear.ppm", "d3d12-player-depth-write-pretessellated-gamma.ppm"}};
+            RenderScene(renderer, device.Get(), player, document, writeCaptures[int(technique)][int(colorSpace)], DepthProbe::ImmWrites);
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -185,10 +221,10 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":4,"msaa_samples":8,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
-        std::puts("IMM_DX12_PLAYER PASS four sample scene readbacks and cleanup; complete layer coverage not tested");
+        std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
         return 0;
     }
     catch (const std::exception& error)
