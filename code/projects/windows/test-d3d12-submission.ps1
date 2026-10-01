@@ -62,6 +62,9 @@ if ($result.texture_subresources_verified -ne 8 -or
 if ($result.production_picture_shader -ne $true) {
     throw 'D3D12 smoke is missing production picture shader evidence.'
 }
+if ($result.renderer_buffer_versions_verified -ne 18) {
+    throw 'D3D12 smoke is missing piRenderer buffer-version evidence.'
+}
 $result | Add-Member -NotePropertyName source_revision -NotePropertyValue ((& git -C $repoRoot rev-parse HEAD).Trim())
 $smokeExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_submission_smoke.exe"
 $result | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $smokeExecutable -Algorithm SHA256).Hash
@@ -71,6 +74,9 @@ foreach ($relativePath in @(
     'code/libImmCore/src/libRender/directx12/piDX12_CommandContext.cpp',
     'code/libImmCore/src/libRender/directx12/piDX12_ShaderBindings.h',
     'code/libImmCore/src/libRender/directx12/piDX12_ShaderBindings.cpp',
+    'code/libImmCore/src/libRender/directx12/piDX12_Renderer.h',
+    'code/libImmCore/src/libRender/directx12/piDX12_Renderer.cpp',
+    'code/libImmCore/src/libRender/piRenderer.h',
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pi2D_vs.hlsl',
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pi2D_fs.hlsl',
     'code/libImmCore/tests/d3d12/submission_smoke.cpp',

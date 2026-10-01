@@ -420,14 +420,28 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    copy footprints. Local RGBA8/BC1 readback checks verify eight subresources with padded
    CPU rows after source data is overwritten and caller texture references are released.
    This establishes transfer correctness only; sampled picture rendering remains pending.
-   Hosted validation of this increment is pending.
+   The hosted D3D12 smoke passed at `c0f76c63` in
+   [run 36933955915](https://github.com/icosa-mirror/IMM/actions/runs/36933955915),
+   verifying all four buffer uses and eight texture subresources with the debug layer
+   enabled. The remaining platform pipeline jobs were still running when recorded.
 7. **Shader binding increment:** `piDX12ShaderBindings` maps IMM's existing HLSL constant,
    resource and sampler registers to D3D12 descriptor tables. Each bind retains an immutable
    descriptor snapshot and its resources through GPU completion. Local validation compiles
    the production 2D picture vertex/fragment shaders and verifies sampled colours across
    nine submissions alongside the independent buffer/depth checks. This is shader-level
-   evidence, not a completed picture layer or IMM scene renderer. Hosted validation is pending.
-8. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+   evidence, not a completed picture layer or IMM scene renderer. The hosted smoke passed
+   at `7936bfa1` in [run 36934540139](https://github.com/icosa-mirror/IMM/actions/runs/36934540139),
+   with all nine frames and the production picture-shader assertion verified and the debug
+   layer enabled. The broader pipeline was still running when recorded.
+8. **Renderer adapter started:** `piRendererDX12` implements typed device/queue setup and
+   `piRenderer` buffer creation, mapping, partial updates and constant/structured bindings.
+   Resource creation works outside a frame; updates retain distinct queued GPU versions.
+   Local readback verifies 18 versions of one logical buffer through the `piRenderer` API.
+   Missing operations currently fail explicitly, and the backend is not registered in
+   `piRenderer::Create`. Draws, texture methods, streaming allocation and full layer support
+   remain incomplete; the initial buffer allocation strategy is not a performance result.
+   Hosted validation of this adapter increment is pending.
+9. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

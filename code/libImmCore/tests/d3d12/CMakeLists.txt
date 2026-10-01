@@ -7,6 +7,7 @@ endif()
 add_executable(imm_d3d12_submission_smoke
     submission_smoke.cpp
     ../../src/libRender/directx12/piDX12_ShaderBindings.cpp
+    ../../src/libRender/directx12/piDX12_Renderer.cpp
     ../../src/libRender/directx12/piDX12_CommandContext.cpp)
 target_compile_features(imm_d3d12_submission_smoke PRIVATE cxx_std_17)
 target_compile_definitions(imm_d3d12_submission_smoke PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)

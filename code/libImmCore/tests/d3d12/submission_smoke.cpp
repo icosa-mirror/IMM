@@ -1,5 +1,6 @@
 #include "../../src/libRender/directx12/piDX12_CommandContext.h"
 #include "../../src/libRender/directx12/piDX12_ShaderBindings.h"
+#include "../../src/libRender/directx12/piDX12_Renderer.h"
 
 #include <d3dcompiler.h>
 #include <d3d12sdklayers.h>
@@ -192,6 +193,63 @@ void CheckTextureUploads(ID3D12Device* device, ID3D12CommandQueue* queue)
         readback->Unmap(0, &noWrites);
     }
     Check(context.Shutdown(), "Drain texture uploads");
+}
+
+void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
+{
+    ImmCore::piRendererDX12 renderer;
+    Check(renderer.InitializeExternal(device, queue) ? S_OK : E_FAIL, "Initialize renderer adapter");
+    ImmCore::piRenderer& api = renderer;
+    const uint32_t original[] = {101, 102, 103, 104};
+    auto buffer = api.CreateBuffer(original, sizeof(original), ImmCore::piRenderer::BufferType::Dynamic,
+        ImmCore::piRenderer::BufferUse::Constant);
+    Require(buffer != nullptr && renderer.BufferResource(buffer)->GetDesc().Width == 256,
+            "Renderer constant buffer alignment failed");
+    std::array<ComPtr<ID3D12Resource>, Frames> readbacks;
+    uint64_t lastCompletion = 0;
+    for (UINT frame = 0; frame < Frames; ++frame)
+    {
+        D3D12_RESOURCE_DESC desc = {};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = sizeof(original) * 2;
+        desc.Height = 1;
+        desc.DepthOrArraySize = desc.MipLevels = 1;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        const auto heap = Heap(D3D12_HEAP_TYPE_READBACK);
+        Check(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbacks[frame])), "Create version readback");
+        Check(renderer.BeginFrame(), "Begin renderer frame");
+        Require(renderer.BeginFrame() == E_UNEXPECTED, "Renderer accepted nested frame");
+        auto* commands = static_cast<ID3D12GraphicsCommandList*>(api.GetContext());
+        Require(commands != nullptr, "Nested frame failure lost active command list");
+        for (UINT version = 0; version < 2; ++version)
+        {
+            const uint32_t value = frame + version * 1000;
+            api.UpdateBuffer(buffer, &value, sizeof(uint32_t), sizeof(value), false);
+            api.AttachShaderConstants(buffer, 3);
+            commands->CopyBufferRegion(readbacks[frame].Get(), version * sizeof(original),
+                renderer.BufferResource(buffer), 0, sizeof(original));
+        }
+        if (frame + 1 == Frames) api.DestroyBuffer(buffer);
+        Check(renderer.EndFrame(&lastCompletion), "Submit renderer buffer versions");
+    }
+    Check(renderer.WaitForFrame(lastCompletion), "Wait for renderer buffer versions");
+    renderer.Deinitialize();
+    for (UINT frame = 0; frame < Frames; ++frame)
+    {
+        uint32_t* words = nullptr;
+        const D3D12_RANGE readRange = {0, sizeof(original) * 2};
+        Check(readbacks[frame]->Map(0, &readRange, reinterpret_cast<void**>(&words)), "Map buffer versions");
+        for (UINT version = 0; version < 2; ++version)
+        {
+            const auto* data = words + version * 4;
+            Require(data[0] == 101 && data[1] == frame + version * 1000 && data[2] == 103 && data[3] == 104,
+                    "piRenderer buffer update changed an earlier GPU version or untouched bytes");
+        }
+        const D3D12_RANGE noWrites = {0, 0};
+        readbacks[frame]->Unmap(0, &noWrites);
+    }
 }
 
 int Run()
@@ -514,6 +572,7 @@ int Run()
     Check(context.Submit(&completion), "Submit after reinitialize");
     Check(context.Shutdown(), "Drain final submission");
     CheckTextureUploads(device.Get(), queue.Get());
+    CheckRendererBuffers(device.Get(), queue.Get());
     CheckDebugMessages(messages.Get());
     std::ofstream report("d3d12-submission-result.json");
     report << "{\"status\":\"pass\",\"api\":\"D3D12\",\"adapter\":\"WARP\","
@@ -521,6 +580,7 @@ int Run()
            << "\"buffer_uploads\":[\"vertex\",\"index\",\"constant\",\"structured\"],"
            << "\"texture_uploads\":[\"rgba8\",\"bc1\"],\"texture_subresources_verified\":8,"
            << "\"production_picture_shader\":true,"
+           << "\"renderer_buffer_versions_verified\":18,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

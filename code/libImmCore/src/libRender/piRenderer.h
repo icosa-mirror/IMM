@@ -91,7 +91,8 @@ public:
 		DX = 1,
 		GLES = 2,
 		Metal = 3,
-		Vulkan = 4
+		Vulkan = 4,
+		DX12 = 5
 	};
 
 	enum class RendererFeature : int
