@@ -492,7 +492,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    top/bottom stereo images in linear/gamma colour modes; CI requires their result and
    records the shader source hashes. The native player library also builds cleanly. These
    are pipeline checks, not panoramic scene readback or headset single-pass evidence.
-17. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+17. **Player initialization increment (local):** a headless WARP check now links the
+   native player/core/importer/exporter libraries and runs player initialization and cleanup
+   for static/pretessellated paint in linear/gamma colour spaces. All four configurations
+   pass with the D3D12 debug layer enabled and no reported errors. The Windows harness
+   requires this check and uploads its log, result, executable hash, and native-library
+   hashes. This exercises layer initialization; document loading and scene rendering are
+   still unverified. The native Windows solution must be built before running this harness.
+18. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

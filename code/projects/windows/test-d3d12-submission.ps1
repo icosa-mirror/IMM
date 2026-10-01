@@ -10,7 +10,7 @@ $outputDirectory = Join-Path $repoRoot 'artifacts/d3d12-submission'
 $buildDirectory = Join-Path $repoRoot 'build/d3d12-submission'
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 # Never leave a previous pass report beside a failed build from this invocation.
-foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm')) {
+foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d12-player-result.json', 'd3d12-player.log')) {
     $previousResult = Join-Path $outputDirectory $name
     if (Test-Path -LiteralPath $previousResult) { Remove-Item -LiteralPath $previousResult }
 }
@@ -34,7 +34,7 @@ $configureLog = Join-Path $outputDirectory 'configure.log'
 $buildLog = Join-Path $outputDirectory 'build.log'
 $testLog = Join-Path $outputDirectory 'test.log'
 & cmake -S $sourceDirectory -B $buildDirectory -G $generatorName -A x64 `
-    "-DCMAKE_GENERATOR_INSTANCE=$($visualStudio.installationPath)" *> $configureLog
+    "-DCMAKE_GENERATOR_INSTANCE=$($visualStudio.installationPath)" -DIMM_D3D12_PLAYER_SMOKE=ON *> $configureLog
 if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke configuration failed; see $configureLog" }
 & cmake --build $buildDirectory --config $Configuration --parallel 2 *> $buildLog
 if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke compilation failed; see $buildLog" }
@@ -42,9 +42,16 @@ if ($LASTEXITCODE -ne 0) { throw "D3D12 smoke compilation failed; see $buildLog"
 # CTest bounds GPU/fence failures with a timeout. Results are copied only after
 # a successful test so an old capture cannot masquerade as current evidence.
 & ctest --test-dir $buildDirectory -C $Configuration --output-on-failure *> $testLog
-if ($LASTEXITCODE -ne 0) { throw "D3D12 submission smoke failed; see $testLog" }
-foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm')) {
+$testExitCode = $LASTEXITCODE
+$playerLog = Join-Path $buildDirectory 'd3d12-player.log'
+if (Test-Path -LiteralPath $playerLog) { Copy-Item -LiteralPath $playerLog -Destination $outputDirectory -Force }
+if ($testExitCode -ne 0) { throw "D3D12 submission smoke failed; see $testLog" }
+foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d12-player-result.json', 'd3d12-player.log')) {
     Copy-Item -LiteralPath (Join-Path $buildDirectory $name) -Destination $outputDirectory -Force
+}
+$playerResult = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Raw | ConvertFrom-Json
+if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or -not $playerResult.debug_layer_enabled) {
+    throw 'D3D12 player initialization evidence is incomplete.'
 }
 $result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Raw | ConvertFrom-Json
 if ($result.status -ne 'pass' -or $result.api -ne 'D3D12' -or $result.frames_verified -ne 9) {
@@ -103,10 +110,21 @@ foreach ($relativePath in @(
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pip360Equirect_vs.hlsl',
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pip360Equirect_fs.hlsl',
     'code/libImmCore/tests/d3d12/submission_smoke.cpp',
+    'code/libImmCore/tests/d3d12/player_smoke.cpp',
     'code/libImmCore/tests/d3d12/CMakeLists.txt'
 )) {
     $sourceHashes[$relativePath] = (Get-FileHash -LiteralPath (Join-Path $repoRoot $relativePath) -Algorithm SHA256).Hash
 }
+$playerResult | Add-Member -NotePropertyName source_revision -NotePropertyValue $result.source_revision
+$playerExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_player_smoke.exe"
+$playerResult | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $playerExecutable -Algorithm SHA256).Hash
+$libraryHashes = [ordered]@{}
+foreach ($library in @('libImmPlayer', 'libImmImporter', 'libImmExporter', 'libImmCore')) {
+    $libraryPath = Join-Path $repoRoot "code/$library/bin/x64/$Configuration/$library.lib"
+    $libraryHashes[$library] = (Get-FileHash -LiteralPath $libraryPath -Algorithm SHA256).Hash
+}
+$playerResult | Add-Member -NotePropertyName library_sha256 -NotePropertyValue $libraryHashes
+$playerResult | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Encoding utf8
 $result | Add-Member -NotePropertyName source_sha256 -NotePropertyValue $sourceHashes
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Encoding utf8
 Write-Host "IMM_DX12_PHASE1 PASS: D3D12/WARP draw and reversed-Z readback; evidence in $outputDirectory"
