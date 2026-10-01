@@ -116,7 +116,7 @@ namespace ImmPlayer
 			{
 				if (mGeometry->mBuffers[chunkType].mVertices.GetLength()==0) continue;
 
-                if (renderer->GetAPI() == piRenderer::API::DX)
+                if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12)
                 {
                     for (int j = 0; j < 3; j++)
                     {
@@ -161,7 +161,7 @@ namespace ImmPlayer
 					return false;
 				}
 
-				if (renderer->GetAPI() == piRenderer::API::DX)
+				if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12)
 				{
 #ifndef ANDROID
 					for (int j = 0; j < 3; j++)

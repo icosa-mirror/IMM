@@ -135,7 +135,7 @@ namespace ImmPlayer
         {
             for (int chunkType = 0; chunkType < LayerRendererPaintStatic::kNumChunkTypes; chunkType++)
             {
-                if (renderer->GetAPI() == piRenderer::API::DX)
+                if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12)
                 {
                     for (int j = 0; j < 3; j++)
                     {
@@ -190,7 +190,7 @@ namespace ImmPlayer
                 }
 
 #if defined(WINDOWS)
-                if (renderer->GetAPI() == piRenderer::API::DX)
+                if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12)
                 {
                     for (int j = 0; j < 3; j++)
                     {

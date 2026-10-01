@@ -848,7 +848,7 @@ namespace ImmPlayer
         }
         #endif
 
-        bool useBuffer = renderer->GetAPI() == piRenderer::API::DX;
+        bool useBuffer = renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12;
 
 
         renderer->AttachShaderConstants(mShaderConstants, 9);

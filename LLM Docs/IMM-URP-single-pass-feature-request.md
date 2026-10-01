@@ -464,7 +464,7 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Nine local frames verify a sampled mip whose value differs from the base-level texel.
    Texture updates and complete layer initialization remain unfinished. Current layer
    texture allocations use 2D, 2D-array and cube textures; blue noise is a 2D array.
-   Hosted validation of this increment is pending.
+   Hosted validation passed in [run 36938102368](https://github.com/icosa-mirror/IMM/actions/runs/36938102368).
 12. **Render-state increment (local):** raster/depth/blend state objects, common state
    flags, separate RGB/alpha blend equations and the picture unit quad are implemented.
    Pipeline variants include these state values. Nine readback frames verify disabled
@@ -475,7 +475,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    verifies all six axis directions and texture lifetime after caller destruction. This
    covers the texture backend; cube-picture layer shaders and scene-level validation still
    need integration. Hosted validation of this increment is pending.
-14. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+14. **Player routing increment:** D3D12 now selects the player render-state objects,
+   picture constant-buffer updates, and the HLSL paint vertex-array creation/destruction
+   paths for static and pretessellated drawings. The native player library builds locally
+   with zero warnings/errors. This is compile evidence; actual layer rendering remains
+   unverified. Legacy D3D11 shader-cleanup exceptions do not apply to D3D12.
+15. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

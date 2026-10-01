@@ -183,7 +183,7 @@ namespace ImmPlayer
         //----------------------------------------------------------------------------------------------------------------------------------------
 
         // render states
-        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::Metal || renderer->GetAPI() == piRenderer::API::Vulkan)
+        if (renderer->GetAPI() == piRenderer::API::DX || renderer->GetAPI() == piRenderer::API::DX12 || renderer->GetAPI() == piRenderer::API::Metal || renderer->GetAPI() == piRenderer::API::Vulkan)
         {
             mRasterState = renderer->CreateRasterState(false,true, piRenderer::CullMode::NONE, true, false); // note multisample is set to false
             if (!mRasterState) return false;
@@ -274,7 +274,7 @@ namespace ImmPlayer
         mRenderer->DestroyBuffer(mDisplayStateShaderConstans);
         mRenderer->DestroyBuffer(mPassStateShaderConstans);
 
-        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::Metal || mRenderer->GetAPI() == piRenderer::API::Vulkan)
+        if (mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::DX12 || mRenderer->GetAPI() == piRenderer::API::Metal || mRenderer->GetAPI() == piRenderer::API::Vulkan)
         {
             mRenderer->DestroyRasterState(mRasterState);
             mRasterState = nullptr;
