@@ -506,7 +506,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Local checks pass with no D3D12 debug errors. CI requires four completed loads and
    records the fixture hash. This does not yet call `RenderMono` or verify scene pixels;
    resources whose upload is deferred until drawing remain outside this evidence.
-19. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+19. **First scene readback (local):** the native player check now calls `RenderMono`
+   for `sample1.imm`, using a bounds-framed perspective camera and 8x MSAA colour/depth
+   attachments. All four paint/colour configurations submit paint geometry and produce
+   nonempty resolved pixel captures without D3D12 debug errors. CI requires four scene
+   frames and uploads each capture. Local visual inspection found consistent composition
+   between the static and pretessellated paths. This is not an approved visual-baseline
+   comparison, complete layer coverage, or a host-depth composition test. An orthographic
+   test camera initially produced no draws because the existing projection conversion
+   assumes perspective; orthographic camera support remains unverified.
+20. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

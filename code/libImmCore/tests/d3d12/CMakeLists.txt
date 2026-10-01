@@ -54,6 +54,6 @@ if(IMM_D3D12_PLAYER_SMOKE)
         add_custom_command(TARGET imm_d3d12_player_smoke POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${IMM_ROOT}/thirdparty/${directory}/bin/${library}.dll" "$<TARGET_FILE_DIR:imm_d3d12_player_smoke>")
     endforeach()
-    add_test(NAME d3d12_player_document_loading COMMAND imm_d3d12_player_smoke)
-    set_tests_properties(d3d12_player_document_loading PROPERTIES TIMEOUT 60)
+    add_test(NAME d3d12_player_scene_readback COMMAND imm_d3d12_player_smoke)
+    set_tests_properties(d3d12_player_scene_readback PROPERTIES TIMEOUT 60)
 endif()

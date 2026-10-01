@@ -10,7 +10,7 @@ $outputDirectory = Join-Path $repoRoot 'artifacts/d3d12-submission'
 $buildDirectory = Join-Path $repoRoot 'build/d3d12-submission'
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 # Never leave a previous pass report beside a failed build from this invocation.
-foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d12-player-result.json', 'd3d12-player.log')) {
+foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d12-player-result.json', 'd3d12-player.log', 'd3d12-player-scene-static-linear.ppm', 'd3d12-player-scene-static-gamma.ppm', 'd3d12-player-scene-pretessellated-linear.ppm', 'd3d12-player-scene-pretessellated-gamma.ppm')) {
     $previousResult = Join-Path $outputDirectory $name
     if (Test-Path -LiteralPath $previousResult) { Remove-Item -LiteralPath $previousResult }
 }
@@ -46,12 +46,12 @@ $testExitCode = $LASTEXITCODE
 $playerLog = Join-Path $buildDirectory 'd3d12-player.log'
 if (Test-Path -LiteralPath $playerLog) { Copy-Item -LiteralPath $playerLog -Destination $outputDirectory -Force }
 if ($testExitCode -ne 0) { throw "D3D12 submission smoke failed; see $testLog" }
-foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d12-player-result.json', 'd3d12-player.log')) {
+foreach ($name in @('d3d12-submission-result.json', 'd3d12-submission.ppm', 'd3d12-player-result.json', 'd3d12-player.log', 'd3d12-player-scene-static-linear.ppm', 'd3d12-player-scene-static-gamma.ppm', 'd3d12-player-scene-pretessellated-linear.ppm', 'd3d12-player-scene-pretessellated-gamma.ppm')) {
     Copy-Item -LiteralPath (Join-Path $buildDirectory $name) -Destination $outputDirectory -Force
 }
 $playerResult = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Raw | ConvertFrom-Json
-if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or -not $playerResult.debug_layer_enabled) {
-    throw 'D3D12 player document-loading evidence is incomplete.'
+if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or $playerResult.scene_frames_verified -ne 4 -or $playerResult.msaa_samples -ne 8 -or -not $playerResult.debug_layer_enabled) {
+    throw 'D3D12 player scene-readback evidence is incomplete.'
 }
 $result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Raw | ConvertFrom-Json
 if ($result.status -ne 'pass' -or $result.api -ne 'D3D12' -or $result.frames_verified -ne 9) {
