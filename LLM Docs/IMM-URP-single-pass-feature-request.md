@@ -438,10 +438,25 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Resource creation works outside a frame; updates retain distinct queued GPU versions.
    Local readback verifies 18 versions of one logical buffer through the `piRenderer` API.
    Missing operations currently fail explicitly, and the backend is not registered in
-   `piRenderer::Create`. Draws, texture methods, streaming allocation and full layer support
+   `piRenderer::Create`. Complete draw state, texture methods, streaming allocation and full layer support
    remain incomplete; the initial buffer allocation strategy is not a performance result.
    Hosted validation of this adapter increment is pending.
-9. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+9. **Adapter draw increment (local):** source/binary HLSL shaders, indexed/non-indexed draws,
+   constant/structured descriptor binding and host colour/depth attachments are implemented.
+   Local readback verifies nine `piRenderer` frames with reversed-Z occlusion and changing
+   constants, alongside the existing upload and production picture-shader checks. Attachment
+   resource states are restored at frame end. Indexed readback covers 16/32-bit indices,
+   separate vertex/instance streams and nonzero base vertex, instance and index offsets.
+   Texture API integration, complete render states and layer rendering remain incomplete;
+   this backend remains unregistered.
+10. **CI follow-up:** full validation run `36933435201` failed Android standalone GLES after
+   a capture was written but the final edit-validation marker was not observed. A same-commit
+   rerun is pending; the device failure is not waived. Run `36935570560` also reported a web
+   visual failure whose scene capture included the browser XR-availability button. Visual-test
+   mode now hides that overlay, retaining the existing scene thresholds; the full local
+   browser harness passes. Hosted extended web validation passed for the separate fix in
+   [run 36936815988](https://github.com/icosa-mirror/IMM/actions/runs/36936815988).
+11. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

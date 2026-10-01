@@ -200,6 +200,61 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
     ImmCore::piRendererDX12 renderer;
     Check(renderer.InitializeExternal(device, queue) ? S_OK : E_FAIL, "Initialize renderer adapter");
     ImmCore::piRenderer& api = renderer;
+    const char* rendererVS = R"(
+        cbuffer Draw : register(b0) { float4 color; float depth; };
+        float4 main(uint id : SV_VertexID) : SV_Position {
+            const float2 p[3] = {float2(-0.75,-0.75),float2(0,0.75),float2(0.75,-0.75)};
+            return float4(p[id],depth,1);
+        })";
+    const char* rendererPS = R"(
+        cbuffer Draw : register(b0) { float4 color; float depth; };
+        StructuredBuffer<float4> tint : register(t8);
+        float4 main() : SV_Target { return color * tint[0]; })";
+    auto shader = api.CreateShader(nullptr, rendererVS, nullptr, nullptr, nullptr, rendererPS, nullptr);
+    Require(shader != nullptr, "piRenderer shader creation failed");
+    const char* indexedVS = R"(
+        cbuffer Draw : register(b0) { float4 color; float depth; };
+        float4 main(float2 position : POSITION, float2 offset : OFFSET) : SV_Position {
+            return float4(position + offset,depth,1);
+        })";
+    auto indexedShader = api.CreateShader(nullptr, indexedVS, nullptr, nullptr, nullptr, rendererPS, nullptr);
+    Require(indexedShader != nullptr, "Indexed shader creation failed");
+    const float vertices[][2] = {{200,200},{-0.75f,-0.75f},{0,0.75f},{0.75f,-0.75f}};
+    const float offsets[][2] = {{200,200},{0,0}};
+    const uint16_t indices16[] = {0,0,0,2,1,0};
+    const uint32_t indices32[] = {0,0,0,2,1,0};
+    using Renderer = ImmCore::piRenderer;
+    auto vertexBuffer = api.CreateBuffer(vertices, sizeof(vertices), Renderer::BufferType::Static, Renderer::BufferUse::Vertex);
+    auto instanceBuffer = api.CreateBuffer(offsets, sizeof(offsets), Renderer::BufferType::Static, Renderer::BufferUse::Vertex);
+    ImmCore::piBuffer indexBuffers[] = {
+        api.CreateBuffer(indices16, sizeof(indices16), Renderer::BufferType::Static, Renderer::BufferUse::Index),
+        api.CreateBuffer(indices32, sizeof(indices32), Renderer::BufferType::Static, Renderer::BufferUse::Index)};
+    Renderer::ArrayLayout2 vertexLayout = {}, instanceLayout = {};
+    vertexLayout.mNumElements = instanceLayout.mNumElements = 1;
+    std::memcpy(vertexLayout.mEntry[0].mName, "POSITION", sizeof("POSITION"));
+    std::memcpy(instanceLayout.mEntry[0].mName, "OFFSET", sizeof("OFFSET"));
+    vertexLayout.mEntry[0].mFormat = instanceLayout.mEntry[0].mFormat = Renderer::Format::C2_32_FLOAT;
+    instanceLayout.mEntry[0].mPerInstance = true;
+    ImmCore::piVertexArray arrays[2];
+    for (UINT i = 0; i < 2; ++i)
+    {
+        arrays[i] = api.CreateVertexArray2(2, vertexBuffer, &vertexLayout, instanceBuffer, &instanceLayout,
+            nullptr, 0, indexBuffers[i], i == 0 ? Renderer::IndexArrayFormat::UINT_16 : Renderer::IndexArrayFormat::UINT_32);
+        Require(arrays[i] != nullptr, "Indexed vertex layout creation failed");
+    }
+    api.AttachShader(shader);
+    auto drawConstants = api.CreateBuffer(nullptr, 20, ImmCore::piRenderer::BufferType::Dynamic,
+        ImmCore::piRenderer::BufferUse::Constant);
+    const float white[] = {1, 1, 1, 1};
+    auto tint = api.CreateStructuredBuffer(white, 1, sizeof(white), ImmCore::piRenderer::BufferType::Static,
+        ImmCore::piRenderer::BufferUse::ShaderResource);
+    Require(drawConstants && tint, "piRenderer draw resource creation failed");
+    api.AttachShaderConstants(drawConstants, 0);
+    api.AttachShaderBuffer(tint, 8);
+    const auto rtvHeap = Descriptors(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    const auto dsvHeap = Descriptors(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    std::array<ComPtr<ID3D12Resource>, Frames> images;
+    std::array<D3D12_PLACED_SUBRESOURCE_FOOTPRINT, Frames> imageFootprints;
     const uint32_t original[] = {101, 102, 103, 104};
     auto buffer = api.CreateBuffer(original, sizeof(original), ImmCore::piRenderer::BufferType::Dynamic,
         ImmCore::piRenderer::BufferUse::Constant);
@@ -219,10 +274,55 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         const auto heap = Heap(D3D12_HEAP_TYPE_READBACK);
         Check(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readbacks[frame])), "Create version readback");
+        auto color = Texture(device, DXGI_FORMAT_R8G8B8A8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+        auto depth = Texture(device, DXGI_FORMAT_D32_FLOAT, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+        auto rtv = rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        auto dsv = dsvHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += frame * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+        dsv.ptr += frame * device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+        device->CreateRenderTargetView(color.Get(), nullptr, rtv);
+        device->CreateDepthStencilView(depth.Get(), nullptr, dsv);
+        const auto colorDescription = color->GetDesc();
+        device->GetCopyableFootprints(&colorDescription, 0, 1, 0, &imageFootprints[frame], nullptr, nullptr, &desc.Width);
+        Check(device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&images[frame])), "Create renderer image readback");
         Check(renderer.BeginFrame(), "Begin renderer frame");
         Require(renderer.BeginFrame() == E_UNEXPECTED, "Renderer accepted nested frame");
         auto* commands = static_cast<ID3D12GraphicsCommandList*>(api.GetContext());
         Require(commands != nullptr, "Nested frame failure lost active command list");
+        ImmCore::piRendererDX12::ExternalTarget target;
+        target.color = color.Get(); target.depth = depth.Get(); target.rtv = rtv; target.dsv = dsv;
+        target.colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM; target.depthFormat = DXGI_FORMAT_D32_FLOAT;
+        Check(renderer.SetExternalTarget(target), "Set renderer host attachments");
+        const float blue[] = {0, 0, 1, 1};
+        api.Clear(blue, nullptr, nullptr, nullptr, true);
+        const float nearData[] = {float(frame % 2), 1, 0, 1, 0.8f};
+        api.UpdateBuffer(drawConstants, nearData, 0, sizeof(nearData), false);
+        api.AttachShader(indexedShader);
+        api.AttachVertexArray2(arrays[frame % 2]);
+        api.DrawPrimitiveIndexed(Renderer::PrimitiveType::Triangle, 3, 1, 1, 1, 3);
+        const float farData[] = {1, 0, 0, 1, 0.2f};
+        api.UpdateBuffer(drawConstants, farData, 0, sizeof(farData), false);
+        api.AttachShader(shader);
+        api.DettachVertexArray();
+        api.DrawPrimitiveNotIndexed(ImmCore::piRenderer::PrimitiveType::Triangle, 0, 3, 1);
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = color.Get();
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        commands->ResourceBarrier(1, &barrier);
+        D3D12_TEXTURE_COPY_LOCATION imageSource = {};
+        imageSource.pResource = color.Get();
+        imageSource.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        D3D12_TEXTURE_COPY_LOCATION imageTarget = {};
+        imageTarget.pResource = images[frame].Get();
+        imageTarget.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        imageTarget.PlacedFootprint = imageFootprints[frame];
+        commands->CopyTextureRegion(&imageTarget, 0, 0, 0, &imageSource, nullptr);
+        std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+        commands->ResourceBarrier(1, &barrier);
         for (UINT version = 0; version < 2; ++version)
         {
             const uint32_t value = frame + version * 1000;
@@ -231,7 +331,18 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
             commands->CopyBufferRegion(readbacks[frame].Get(), version * sizeof(original),
                 renderer.BufferResource(buffer), 0, sizeof(original));
         }
-        if (frame + 1 == Frames) api.DestroyBuffer(buffer);
+        if (frame + 1 == Frames)
+        {
+            api.DestroyBuffer(buffer);
+            api.DestroyBuffer(drawConstants);
+            api.DestroyBuffer(tint);
+            api.DestroyShader(shader);
+            api.DestroyShader(indexedShader);
+            for (auto array : arrays) api.DestroyVertexArray2(array);
+            api.DestroyBuffer(vertexBuffer);
+            api.DestroyBuffer(instanceBuffer);
+            for (auto index : indexBuffers) api.DestroyBuffer(index);
+        }
         Check(renderer.EndFrame(&lastCompletion), "Submit renderer buffer versions");
     }
     Check(renderer.WaitForFrame(lastCompletion), "Wait for renderer buffer versions");
@@ -249,6 +360,15 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         }
         const D3D12_RANGE noWrites = {0, 0};
         readbacks[frame]->Unmap(0, &noWrites);
+        const UINT pitch = imageFootprints[frame].Footprint.RowPitch;
+        const D3D12_RANGE imageRange = {0, size_t(pitch) * Height};
+        unsigned char* pixels = nullptr;
+        Check(images[frame]->Map(0, &imageRange, reinterpret_cast<void**>(&pixels)), "Map piRenderer image");
+        const auto* center = pixels + (Height / 2) * pitch + (Width / 2) * 4;
+        Require(center[0] == (frame % 2 ? 255 : 0) && center[1] == 255 && center[2] == 0,
+                "piRenderer draw constants/depth failed");
+        Require(pixels[0] == 0 && pixels[1] == 0 && pixels[2] == 255, "piRenderer clear failed");
+        images[frame]->Unmap(0, &noWrites);
     }
 }
 
@@ -581,6 +701,8 @@ int Run()
            << "\"texture_uploads\":[\"rgba8\",\"bc1\"],\"texture_subresources_verified\":8,"
            << "\"production_picture_shader\":true,"
            << "\"renderer_buffer_versions_verified\":18,"
+           << "\"renderer_draw_frames_verified\":9,"
+           << "\"renderer_indexed_frames_verified\":9,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

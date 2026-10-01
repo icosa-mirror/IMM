@@ -18,6 +18,19 @@ public:
     HRESULT BeginFrame();
     HRESULT EndFrame(uint64_t* completion);
     HRESULT WaitForFrame(uint64_t completion);
+    struct ExternalTarget
+    {
+        ID3D12Resource* color = nullptr;
+        ID3D12Resource* depth = nullptr;
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = {};
+        D3D12_CPU_DESCRIPTOR_HANDLE dsv = {};
+        DXGI_FORMAT colorFormat = DXGI_FORMAT_UNKNOWN;
+        DXGI_FORMAT depthFormat = DXGI_FORMAT_UNKNOWN;
+        D3D12_RESOURCE_STATES colorState = D3D12_RESOURCE_STATE_COMMON;
+        D3D12_RESOURCE_STATES depthState = D3D12_RESOURCE_STATE_COMMON;
+    };
+    // One attachment set per frame. Transitions are restored by EndFrame.
+    HRESULT SetExternalTarget(const ExternalTarget& target);
     // Borrowed GPU resource; the consuming draw must retain it until completion.
     ID3D12Resource* BufferResource(piBuffer buffer) const;
     bool Initialize(int id, const void **hwnd, int num, bool disableVSync, bool disableErrors, piReporter *reporter, bool createDevice, void *device) override;
@@ -38,15 +51,15 @@ public:
     bool SetRenderTarget(piRTarget obj) override { (void)obj; Unsupported("SetRenderTarget"); }
     void RenderTargetSampleLocations(piRTarget vdst, const float *locations) override { (void)vdst; (void)locations; Unsupported("RenderTargetSampleLocations"); }
     void BlitRenderTarget(piRTarget dst, piRTarget src, bool color, bool depth) override { (void)dst; (void)src; (void)color; (void)depth; Unsupported("BlitRenderTarget"); }
-    void SetWriteMask(bool c0, bool c1, bool c2, bool c3, bool z) override { (void)c0; (void)c1; (void)c2; (void)c3; (void)z; Unsupported("SetWriteMask"); }
+    void SetWriteMask(bool c0, bool c1, bool c2, bool c3, bool z) override;
     void SetShadingSamples(int shadingSamples) override { (void)shadingSamples; Unsupported("SetShadingSamples"); }
     void RenderTargetGetDefaultSampleLocation(piRTarget vdst, const int id, float *location) override { (void)vdst; (void)id; (void)location; Unsupported("RenderTargetGetDefaultSampleLocation"); }
-    void Clear(const float *color0, const float *color1, const float *color2, const float *color3, const bool depth0) override { (void)color0; (void)color1; (void)color2; (void)color3; (void)depth0; Unsupported("Clear"); }
+    void Clear(const float *color0, const float *color1, const float *color2, const float *color3, const bool depth0) override;
     void SetState(piState state, bool value) override { (void)state; (void)value; Unsupported("SetState"); }
     void SetBlending(int buf, BlendEquation equRGB, BlendOperations srcRGB, BlendOperations dstRGB, BlendEquation equALP, BlendOperations srcALP, BlendOperations dstALP) override { (void)buf; (void)equRGB; (void)srcRGB; (void)dstRGB; (void)equALP; (void)srcALP; (void)dstALP; Unsupported("SetBlending"); }
-    void SetViewport(int id, const int *vp) override { (void)id; (void)vp; Unsupported("SetViewport"); }
-    void SetViewports(int num, const float *viewports) override { (void)num; (void)viewports; Unsupported("SetViewports"); }
-    void GetViewports(int *num, float *viewports) override { (void)num; (void)viewports; Unsupported("GetViewports"); }
+    void SetViewport(int id, const int *vp) override;
+    void SetViewports(int num, const float *viewports) override;
+    void GetViewports(int *num, float *viewports) override;
     piRasterState CreateRasterState(bool wireframe, bool frontIsCounterClockWise, CullMode cullMode, bool depthClamp, bool multiSample) override { (void)wireframe; (void)frontIsCounterClockWise; (void)cullMode; (void)depthClamp; (void)multiSample; Unsupported("CreateRasterState"); }
     void SetRasterState(const piRasterState vme) override { (void)vme; Unsupported("SetRasterState"); }
     void DestroyRasterState(piRasterState vme) override { (void)vme; Unsupported("DestroyRasterState"); }
@@ -80,11 +93,11 @@ public:
     void AttachSamplers(int num, piSampler vt0, piSampler vt1, piSampler vt2, piSampler vt3, piSampler vt4, piSampler vt5, piSampler vt6, piSampler vt7) override { (void)num; (void)vt0; (void)vt1; (void)vt2; (void)vt3; (void)vt4; (void)vt5; (void)vt6; (void)vt7; Unsupported("AttachSamplers"); }
     void DettachSamplers() override { Unsupported("DettachSamplers"); }
     void AttachImage(int unit, piTexture texture, int level, bool layered, int layer, Format format) override { (void)unit; (void)texture; (void)level; (void)layered; (void)layer; (void)format; Unsupported("AttachImage"); }
-    piShader CreateShader(const piShaderOptions *options, const char *vs, const char *cs, const char *es, const char *gs, const char *fs, char *error) override { (void)options; (void)vs; (void)cs; (void)es; (void)gs; (void)fs; (void)error; Unsupported("CreateShader"); }
-    piShader CreateShaderBinary(const piShaderOptions *options, const uint8_t *vs, const int vs_len, const uint8_t *cs, const int cs_len, const uint8_t *es, const int es_len, const uint8_t *gs, const int gs_len, const uint8_t *fs, const int fs_len, char *error) override { (void)options; (void)vs; (void)vs_len; (void)cs; (void)cs_len; (void)es; (void)es_len; (void)gs; (void)gs_len; (void)fs; (void)fs_len; (void)error; Unsupported("CreateShaderBinary"); }
-    void DestroyShader(piShader obj) override { (void)obj; Unsupported("DestroyShader"); }
-    void AttachShader(piShader obj) override { (void)obj; Unsupported("AttachShader"); }
-    void DettachShader() override { Unsupported("DettachShader"); }
+    piShader CreateShader(const piShaderOptions *options, const char *vs, const char *cs, const char *es, const char *gs, const char *fs, char *error) override;
+    piShader CreateShaderBinary(const piShaderOptions *options, const uint8_t *vs, const int vs_len, const uint8_t *cs, const int cs_len, const uint8_t *es, const int es_len, const uint8_t *gs, const int gs_len, const uint8_t *fs, const int fs_len, char *error) override;
+    void DestroyShader(piShader obj) override;
+    void AttachShader(piShader obj) override;
+    void DettachShader() override;
     piShader CreateCompute(const piShaderOptions *options, const char *cs, char *error) override { (void)options; (void)cs; (void)error; Unsupported("CreateCompute"); }
     void SetShaderConstant4F(const unsigned int pos, const float *value, int num) override { (void)pos; (void)value; (void)num; Unsupported("SetShaderConstant4F"); }
     void SetShaderConstant3F(const unsigned int pos, const float *value, int num) override { (void)pos; (void)value; (void)num; Unsupported("SetShaderConstant3F"); }
@@ -111,20 +124,20 @@ public:
     void AttachPixelPackBuffer(piBuffer obj) override { (void)obj; Unsupported("AttachPixelPackBuffer"); }
     void DettachPixelPackBuffer() override { Unsupported("DettachPixelPackBuffer"); }
     piVertexArray CreateVertexArray(int numStreams, piBuffer vb0, const piRArrayLayout *streamLayout0, piBuffer vb1, const piRArrayLayout *streamLayout1, piBuffer eb, const IndexArrayFormat ebFormat) override { (void)numStreams; (void)vb0; (void)streamLayout0; (void)vb1; (void)streamLayout1; (void)eb; (void)ebFormat; Unsupported("CreateVertexArray"); }
-    void DestroyVertexArray(piVertexArray obj) override { (void)obj; Unsupported("DestroyVertexArray"); }
-    void AttachVertexArray(piVertexArray obj) override { (void)obj; Unsupported("AttachVertexArray"); }
-    void DettachVertexArray() override { Unsupported("DettachVertexArray"); }
-    piVertexArray CreateVertexArray2(int numStreams, piBuffer vb0, const ArrayLayout2 *streamLayout0, piBuffer vb1, const ArrayLayout2 *streamLayout1, const void *shaderBinary, size_t shaderBinarySize, piBuffer ib, const IndexArrayFormat ebFormat) override { (void)numStreams; (void)vb0; (void)streamLayout0; (void)vb1; (void)streamLayout1; (void)shaderBinary; (void)shaderBinarySize; (void)ib; (void)ebFormat; Unsupported("CreateVertexArray2"); }
-    void AttachVertexArray2(piVertexArray vme) override { (void)vme; Unsupported("AttachVertexArray2"); }
-    void DestroyVertexArray2(piVertexArray vme) override { (void)vme; Unsupported("DestroyVertexArray2"); }
+    void DestroyVertexArray(piVertexArray obj) override;
+    void AttachVertexArray(piVertexArray obj) override;
+    void DettachVertexArray() override;
+    piVertexArray CreateVertexArray2(int numStreams, piBuffer vb0, const ArrayLayout2 *streamLayout0, piBuffer vb1, const ArrayLayout2 *streamLayout1, const void *shaderBinary, size_t shaderBinarySize, piBuffer ib, const IndexArrayFormat ebFormat) override;
+    void AttachVertexArray2(piVertexArray vme) override;
+    void DestroyVertexArray2(piVertexArray vme) override;
     piQuery CreateQuery(piRenderer::QueryType type) override { (void)type; Unsupported("CreateQuery"); }
     void DestroyQuery(piQuery vme) override { (void)vme; Unsupported("DestroyQuery"); }
     void BeginQuery(piQuery vme) override { (void)vme; Unsupported("BeginQuery"); }
     void EndQuery(piQuery vme) override { (void)vme; Unsupported("EndQuery"); }
     uint64_t GetQueryResult(piQuery vme) override { (void)vme; Unsupported("GetQueryResult"); }
-    void DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex) override { (void)pt; (void)num; (void)numInstances; (void)baseVertex; (void)baseInstance; (void)baseIndex; Unsupported("DrawPrimitiveIndexed"); }
+    void DrawPrimitiveIndexed(PrimitiveType pt, uint32_t num, uint32_t numInstances, uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex) override;
     void DrawPrimitiveIndirect(PrimitiveType pt, piBuffer cmds, uint32_t offset, uint32_t num) override { (void)pt; (void)cmds; (void)offset; (void)num; Unsupported("DrawPrimitiveIndirect"); }
-    void DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int num, int numInstances) override { (void)pt; (void)first; (void)num; (void)numInstances; Unsupported("DrawPrimitiveNotIndexed"); }
+    void DrawPrimitiveNotIndexed(PrimitiveType pt, int first, int num, int numInstances) override;
     void DrawPrimitiveNotIndexedMultiple(PrimitiveType pt, const int *firsts, const int *counts, int num) override { (void)pt; (void)firsts; (void)counts; (void)num; Unsupported("DrawPrimitiveNotIndexedMultiple"); }
     void DrawPrimitiveNotIndexedIndirect(PrimitiveType pt, piBuffer cmds, int num) override { (void)pt; (void)cmds; (void)num; Unsupported("DrawPrimitiveNotIndexedIndirect"); }
     void DettachIndirectBuffer() override { Unsupported("DettachIndirectBuffer"); }
@@ -143,6 +156,7 @@ private:
     {
         throw std::logic_error(operation);
     }
+    void PrepareDraw(PrimitiveType primitive);
     struct State;
     std::unique_ptr<State> m;
 };
