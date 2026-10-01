@@ -421,7 +421,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    CPU rows after source data is overwritten and caller texture references are released.
    This establishes transfer correctness only; sampled picture rendering remains pending.
    Hosted validation of this increment is pending.
-7. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+7. **Shader binding increment:** `piDX12ShaderBindings` maps IMM's existing HLSL constant,
+   resource and sampler registers to D3D12 descriptor tables. Each bind retains an immutable
+   descriptor snapshot and its resources through GPU completion. Local validation compiles
+   the production 2D picture vertex/fragment shaders and verifies sampled colours across
+   nine submissions alongside the independent buffer/depth checks. This is shader-level
+   evidence, not a completed picture layer or IMM scene renderer. Hosted validation is pending.
+8. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

@@ -1,4 +1,5 @@
 #include "../../src/libRender/directx12/piDX12_CommandContext.h"
+#include "../../src/libRender/directx12/piDX12_ShaderBindings.h"
 
 #include <d3dcompiler.h>
 #include <d3d12sdklayers.h>
@@ -293,6 +294,29 @@ int Run()
     ComPtr<ID3D12PipelineState> pipeline;
     Check(device->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&pipeline)), "Create pipeline");
 
+    ImmCore::piDX12ShaderBindings pictureBindings;
+    Check(pictureBindings.Initialize(device.Get()), "Initialize IMM shader bindings");
+    const D3D_SHADER_MACRO pictureOptions[] = {{"STEREOMODE", "0"}, {"FORMAT_IS_STEREO", "0"},
+        {"COLOR_SPACE", "1"}, {nullptr, nullptr}};
+    ComPtr<ID3DBlob> pictureVS, picturePS, pictureErrors;
+    auto compilePicture = [&](const wchar_t* path, const char* target, ID3DBlob** binary) {
+        const HRESULT result = D3DCompileFromFile(path, pictureOptions, nullptr, "main", target,
+            D3DCOMPILE_WARNINGS_ARE_ERRORS, 0, binary, &pictureErrors);
+        if (FAILED(result) && pictureErrors)
+            std::fprintf(stderr, "IMM_DX12_PHASE1 picture shader: %.1024s\n",
+                static_cast<const char*>(pictureErrors->GetBufferPointer()));
+        Check(result, "Compile production picture shader");
+    };
+    compilePicture(IMM_PICTURE_SHADER_DIRECTORY L"shader_pi2D_vs.hlsl", "vs_5_0", &pictureVS);
+    compilePicture(IMM_PICTURE_SHADER_DIRECTORY L"shader_pi2D_fs.hlsl", "ps_5_0", &picturePS);
+    auto picturePipelineDesc = pipelineDesc;
+    picturePipelineDesc.pRootSignature = pictureBindings.RootSignature();
+    picturePipelineDesc.VS = {pictureVS->GetBufferPointer(), pictureVS->GetBufferSize()};
+    picturePipelineDesc.PS = {picturePS->GetBufferPointer(), picturePS->GetBufferSize()};
+    ComPtr<ID3D12PipelineState> picturePipeline;
+    Check(device->CreateGraphicsPipelineState(&picturePipelineDesc, IID_PPV_ARGS(&picturePipeline)),
+        "Create production picture pipeline");
+
     const auto rtvHeap = Descriptors(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     const auto dsvHeap = Descriptors(device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
     std::array<ComPtr<ID3D12Resource>, Frames> readbacks;
@@ -379,6 +403,47 @@ int Run()
         commands->SetGraphicsRootShaderResourceView(1, tintAddress);
         commands->SetGraphicsRootConstantBufferView(0, nearAddress);
         commands->DrawIndexedInstanced(3, 1, 0, 0, 0);
+        // Draw production IMM picture shaders in a separate viewport, preserving
+        // the centre pixel's independent geometry/structured-buffer/depth check.
+        {
+            ImmCore::piDX12ShaderBindings::Resources bindings;
+            std::array<ComPtr<ID3D12Resource>, 10> constants;
+            for (UINT slot : {0u, 3u, 4u, 9u})
+            {
+                float data[64] = {};
+                if (slot == 3 || slot == 4)
+                    for (UINT diagonal : {0u, 5u, 10u, 15u}) data[diagonal] = 1;
+                if (slot == 3) { data[11] = 0.9f; data[17] = 1; } // layer depth, opacity
+                if (slot == 9) { data[0] = 1; data[1] = 1; } // picture size
+                Check(context.UploadBuffer(data, sizeof(data), &constants[slot]), "Upload picture constants");
+                bindings.constants[slot] = constants[slot].Get();
+            }
+            D3D12_RESOURCE_DESC imageDescription = {};
+            imageDescription.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+            imageDescription.Width = imageDescription.Height = 1;
+            imageDescription.DepthOrArraySize = imageDescription.MipLevels = 1;
+            imageDescription.SampleDesc.Count = 1;
+            imageDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            const unsigned char texel[] = {255, static_cast<unsigned char>(frame % 2 ? 255 : 0), 255, 255};
+            const piDX12CommandContext::TextureData pictureSource = {texel, sizeof(texel), sizeof(texel)};
+            ComPtr<ID3D12Resource> picture;
+            Check(context.UploadTexture2D(imageDescription, &pictureSource, 1, &picture), "Upload picture texture");
+            bindings.resources[0] = picture.Get();
+            bindings.views[0].Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            bindings.views[0].ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+            bindings.views[0].Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+            bindings.views[0].Texture2D.MipLevels = 1;
+            Check(context.Retain(picturePipeline.Get()), "Retain picture pipeline");
+            Check(pictureBindings.Bind(context, commands, bindings), "Bind production picture resources");
+            commands->SetPipelineState(picturePipeline.Get());
+            const D3D12_VIEWPORT pictureViewport = {48, 0, 16, 16, 0, 1};
+            commands->RSSetViewports(1, &pictureViewport);
+            commands->DrawIndexedInstanced(3, 1, 0, 0, 0);
+            commands->RSSetViewports(1, &viewport);
+            commands->SetGraphicsRootSignature(signature.Get());
+            commands->SetPipelineState(pipeline.Get());
+            commands->SetGraphicsRootShaderResourceView(1, tintAddress);
+        }
         // Submitted later, but must fail reversed-Z depth testing.
         commands->SetGraphicsRootConstantBufferView(0, farAddress);
         commands->DrawIndexedInstanced(3, 1, 0, 0, 0);
@@ -411,6 +476,9 @@ int Run()
         Require(center[0] == (frame % 2 ? 255 : 0) && center[1] == 255 && center[2] == 0,
                 "Triangle colour/depth or submission isolation failed");
         Require(pixels[0] == 0 && pixels[1] == 0 && pixels[2] == 255, "Clear colour failed");
+        const auto* picturePixel = pixels + 8 * pitch + 56 * 4;
+        Require(picturePixel[0] == 255 && picturePixel[1] == (frame % 2 ? 255 : 0) && picturePixel[2] == 255,
+                "Production picture shader/texture binding failed");
         if (frame + 1 == Frames)
         {
             std::ofstream capture("d3d12-submission.ppm", std::ios::binary);
@@ -452,6 +520,7 @@ int Run()
            << "\"scope\":\"submission-context\",\"imm_scene_renderer\":false,"
            << "\"buffer_uploads\":[\"vertex\",\"index\",\"constant\",\"structured\"],"
            << "\"texture_uploads\":[\"rgba8\",\"bc1\"],\"texture_subresources_verified\":8,"
+           << "\"production_picture_shader\":true,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

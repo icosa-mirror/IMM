@@ -45,6 +45,7 @@
     <ClInclude Include="src\libMesh\piRenderMesh.h" />
     <ClInclude Include="src\libRender\directx11\piDX11_Renderer.h" />
     <ClInclude Include="src\libRender\directx12\piDX12_CommandContext.h" />
+    <ClInclude Include="src\libRender\directx12\piDX12_ShaderBindings.h" />
     <ClInclude Include="src\libRender\opengl4x\glcorearb.h" />
     <ClInclude Include="src\libRender\opengl4x\glext.h" />
     <ClInclude Include="src\libRender\opengl4x\khrplatform.h" />
@@ -86,6 +87,7 @@
     <ClCompile Include="src\libMesh\piRenderMesh.cpp" />
     <ClCompile Include="src\libRender\directx11\piDX11_Renderer.cpp" />
     <ClCompile Include="src\libRender\directx12\piDX12_CommandContext.cpp" />
+    <ClCompile Include="src\libRender\directx12\piDX12_ShaderBindings.cpp" />
     <ClCompile Include="src\libRender\opengl4x\piGL4X_Ext.cpp" />
     <ClCompile Include="src\libRender\opengl4x\piGL4X_Renderer.cpp" />
     <ClCompile Include="src\libRender\opengl4x\windows\piGL4X_RenderContextOS.cpp" />
