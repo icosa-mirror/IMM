@@ -5,6 +5,7 @@
 #include <string>
 #include <tuple>
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <unordered_set>
@@ -14,6 +15,37 @@ namespace ImmCore
 {
 namespace
 {
+bool SamplerDescription(piRenderer::TextureFilter filter, piRenderer::TextureWrap wrap, float anisotropy,
+                        D3D12_SAMPLER_DESC& desc)
+{
+    if (!std::isfinite(anisotropy) || anisotropy < 1 || anisotropy > 16) return false;
+    desc = {};
+    switch (filter)
+    {
+    case piRenderer::TextureFilter::NONE: desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT; break;
+    case piRenderer::TextureFilter::LINEAR: desc.Filter = D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT; break;
+    case piRenderer::TextureFilter::MIPMAP: desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR; desc.MaxLOD = D3D12_FLOAT32_MAX; break;
+    case piRenderer::TextureFilter::NONE_MIPMAP: desc.Filter = D3D12_FILTER_MIN_MAG_POINT_MIP_LINEAR; desc.MaxLOD = D3D12_FLOAT32_MAX; break;
+    case piRenderer::TextureFilter::PCF: desc.Filter = D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT; break;
+    default: return false;
+    }
+    D3D12_TEXTURE_ADDRESS_MODE address;
+    switch (wrap)
+    {
+    case piRenderer::TextureWrap::CLAMP_TO_BORDER: address = D3D12_TEXTURE_ADDRESS_MODE_BORDER; break;
+    case piRenderer::TextureWrap::CLAMP: address = D3D12_TEXTURE_ADDRESS_MODE_CLAMP; break;
+    case piRenderer::TextureWrap::REPEAT: address = D3D12_TEXTURE_ADDRESS_MODE_WRAP; break;
+    case piRenderer::TextureWrap::MIRROR_CLAMP: address = D3D12_TEXTURE_ADDRESS_MODE_MIRROR_ONCE; break;
+    case piRenderer::TextureWrap::MIRROR_REPEAT: address = D3D12_TEXTURE_ADDRESS_MODE_MIRROR; break;
+    default: return false;
+    }
+    desc.AddressU = desc.AddressV = desc.AddressW = address;
+    desc.ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    desc.MaxAnisotropy = static_cast<UINT>(anisotropy);
+    if (anisotropy > 1) desc.Filter = filter == piRenderer::TextureFilter::PCF ?
+        D3D12_FILTER_COMPARISON_ANISOTROPIC : D3D12_FILTER_ANISOTROPIC;
+    return true;
+}
 std::pair<DXGI_FORMAT, UINT> VertexFormat(piRenderer::Format format)
 {
     static const std::pair<DXGI_FORMAT, UINT> formats[] = {
@@ -82,6 +114,26 @@ struct piRendererDX12::State
     std::unordered_set<Buffer*> buffers;
     Buffer* constants[10] = {};
     Buffer* structured[16] = {};
+    struct Texture
+    {
+        TextureInfo info;
+        TextureFilter filter;
+        TextureWrap wrap;
+        D3D12_SAMPLER_DESC sampler;
+        D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
+        Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+    };
+    struct Sampler { D3D12_SAMPLER_DESC description; };
+    std::unordered_set<Texture*> textures;
+    std::unordered_set<Sampler*> samplers;
+    Texture* sampled[16] = {};
+    Sampler* selectedSamplers[16] = {};
+    Texture* Get(piTexture handle) const
+    {
+        auto* texture = reinterpret_cast<Texture*>(handle);
+        if (!texture || textures.find(texture) == textures.end()) throw std::invalid_argument("IMM_DX12: foreign texture");
+        return texture;
+    }
 
     Buffer* Get(piBuffer handle) const
     {
@@ -166,6 +218,12 @@ void piRendererDX12::Deinitialize()
     for (auto* array : m->arrays) delete array;
     m->arrays.clear();
     m->array = nullptr;
+    for (auto* texture : m->textures) delete texture;
+    m->textures.clear();
+    for (auto* sampler : m->samplers) delete sampler;
+    m->samplers.clear();
+    for (auto& texture : m->sampled) texture = nullptr;
+    for (auto& sampler : m->selectedSamplers) sampler = nullptr;
     for (auto* shader : m->shaders) delete shader;
     m->shaders.clear();
     m->shader = nullptr;
@@ -278,6 +336,7 @@ void piRendererDX12::AttachShaderBuffer(piBuffer handle, int unit)
     if (buffer && (buffer->use != BufferUse::ShaderResource || buffer->stride == 0 || buffer->mapped))
         throw std::invalid_argument("IMM_DX12: invalid structured buffer");
     m->structured[unit] = buffer;
+    m->sampled[unit] = nullptr;
 }
 void piRendererDX12::DettachShaderBuffer(int unit) { AttachShaderBuffer(nullptr, unit); }
 
@@ -487,6 +546,13 @@ void piRendererDX12::PrepareDraw(PrimitiveType primitive)
     for (UINT i = 0; i < 10; ++i) if (m->constants[i]) resources.constants[i] = m->constants[i]->resource.Get();
     for (UINT i = 0; i < 16; ++i)
     {
+        if (m->sampled[i])
+        {
+            resources.resources[i] = m->sampled[i]->resource.Get();
+            resources.views[i] = m->sampled[i]->view;
+            resources.samplers[i] = m->sampled[i]->sampler;
+        }
+        if (m->selectedSamplers[i]) resources.samplers[i] = m->selectedSamplers[i]->description;
         const auto* buffer = m->structured[i];
         if (!buffer) continue;
         resources.resources[i] = buffer->resource.Get();
@@ -586,6 +652,183 @@ void piRendererDX12::DestroyVertexArray2(piVertexArray handle)
     delete array;
 }
 void piRendererDX12::DestroyVertexArray(piVertexArray handle) { DestroyVertexArray2(handle); }
+
+piTexture piRendererDX12::CreateTexture(const wchar_t* key, const TextureInfo* info, bool compress,
+    TextureFilter filter, TextureWrap wrap, float anisotropy, const void* data)
+{
+    (void)key;
+    if (!m->device || !info || compress || (info->mType != TextureType::T2D && info->mType != TextureType::T2D_ARRAY) ||
+        info->mXres <= 0 || info->mYres <= 0 || info->mXres > D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
+        info->mYres > D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION || info->mMultisample != 1) return nullptr;
+    const auto format = VertexFormat(info->mFormat);
+    if (format.first == DXGI_FORMAT_UNKNOWN) return nullptr;
+    const UINT layers = info->mType == TextureType::T2D ? 1 : static_cast<UINT>(info->mZres);
+    if (layers == 0 || layers > D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return nullptr;
+    auto texture = std::make_unique<State::Texture>();
+    if (!SamplerDescription(filter, wrap, anisotropy, texture->sampler)) return nullptr;
+    UINT maxMips = 1;
+    for (UINT size = static_cast<UINT>((std::max)(info->mXres, info->mYres)); size > 1; size >>= 1) ++maxMips;
+    const bool useMips = filter == TextureFilter::MIPMAP || filter == TextureFilter::NONE_MIPMAP;
+    const UINT mips = info->mNumMips ? info->mNumMips : (useMips ? maxMips : 1);
+    const bool srgb = info->mFormat == Format::C4_8_UNORM_SRGB;
+    const bool byteChannels = info->mFormat == Format::C1_8_UNORM || info->mFormat == Format::C4_8_UNORM || srgb;
+    if (mips > maxMips || (mips > 1 && !byteChannels)) return nullptr;
+    texture->info = *info;
+    texture->info.mNumMips = mips;
+    texture->filter = filter;
+    texture->wrap = wrap;
+    D3D12_RESOURCE_DESC description = {};
+    description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    description.Width = info->mXres;
+    description.Height = info->mYres;
+    description.DepthOrArraySize = static_cast<UINT16>(layers);
+    description.MipLevels = static_cast<UINT16>(mips);
+    description.Format = format.first;
+    description.SampleDesc.Count = 1;
+    std::vector<std::vector<unsigned char>> storage;
+    std::vector<piDX12CommandContext::TextureData> sources;
+    storage.reserve(layers * mips);
+    sources.reserve(layers * mips);
+    const size_t baseBytes = size_t(info->mXres) * info->mYres * format.second;
+    for (UINT layer = 0; layer < layers; ++layer)
+    {
+        UINT width = info->mXres, height = info->mYres;
+        storage.emplace_back(baseBytes, static_cast<unsigned char>(0));
+        if (data) std::memcpy(storage.back().data(), static_cast<const unsigned char*>(data) + layer * baseBytes, baseBytes);
+        sources.push_back({storage.back().data(), storage.back().size(), size_t(width) * format.second});
+        for (UINT mip = 1; mip < mips; ++mip)
+        {
+            const UINT nextWidth = (std::max)(1u, width / 2), nextHeight = (std::max)(1u, height / 2);
+            const auto& previous = storage.back();
+            std::vector<unsigned char> next(size_t(nextWidth) * nextHeight * format.second);
+            // Generate once at image upload. Include all source texels for odd dimensions.
+            for (UINT y = 0; y < nextHeight; ++y)
+                for (UINT x = 0; x < nextWidth; ++x)
+                    for (UINT channel = 0; channel < format.second; ++channel)
+                    {
+                        double sum = 0;
+                        UINT count = 0;
+                        for (UINT sy = y * height / nextHeight; sy < (y + 1) * height / nextHeight; ++sy)
+                            for (UINT sx = x * width / nextWidth; sx < (x + 1) * width / nextWidth; ++sx)
+                            {
+                                double value = previous[(size_t(sy) * width + sx) * format.second + channel] / 255.0;
+                                if (srgb && channel < 3) value = value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+                                sum += value; ++count;
+                            }
+                        double value = sum / count;
+                        if (srgb && channel < 3) value = value <= 0.0031308 ? value * 12.92 : 1.055 * std::pow(value, 1.0 / 2.4) - 0.055;
+                        next[(size_t(y) * nextWidth + x) * format.second + channel] =
+                            static_cast<unsigned char>((std::min)(255.0, (std::max)(0.0, std::round(value * 255.0))));
+                    }
+            storage.push_back(std::move(next));
+            width = nextWidth; height = nextHeight;
+            sources.push_back({storage.back().data(), storage.back().size(), size_t(width) * format.second});
+        }
+    }
+    const bool standaloneUpload = m->commands == nullptr;
+    ID3D12GraphicsCommandList* uploadCommands = nullptr;
+    HRESULT result = standaloneUpload ? m->context.Begin(&uploadCommands) : S_OK;
+    if (FAILED(result)) return nullptr;
+    result = m->context.UploadTexture2D(description, sources.data(), static_cast<UINT>(sources.size()), &texture->resource);
+    if (standaloneUpload)
+    {
+        if (FAILED(result)) m->context.Cancel();
+        else { uint64_t completion = 0; result = m->context.Submit(&completion); }
+    }
+    if (FAILED(result)) return nullptr;
+    texture->view.Format = format.first;
+    texture->view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    if (info->mType == TextureType::T2D)
+    {
+        texture->view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        texture->view.Texture2D.MipLevels = mips;
+    }
+    else
+    {
+        texture->view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DARRAY;
+        texture->view.Texture2DArray.MipLevels = mips;
+        texture->view.Texture2DArray.ArraySize = layers;
+    }
+    m->textures.insert(texture.get());
+    return reinterpret_cast<piTexture>(texture.release());
+}
+void piRendererDX12::DestroyTexture(piTexture handle)
+{
+    if (!handle) return;
+    auto* texture = m->Get(handle);
+    for (auto& bound : m->sampled) if (bound == texture) bound = nullptr;
+    m->textures.erase(texture);
+    delete texture;
+}
+void piRendererDX12::GetTextureInfo(piTexture handle, TextureInfo* info)
+{
+    if (!info) throw std::invalid_argument("IMM_DX12: null texture info output");
+    *info = m->Get(handle)->info;
+}
+void piRendererDX12::GetTextureFormat(piTexture handle, Format* format)
+{
+    if (!format) throw std::invalid_argument("IMM_DX12: null texture format output");
+    *format = m->Get(handle)->info.mFormat;
+}
+void piRendererDX12::GetTextureRes(piTexture handle, int* resolution)
+{
+    if (!resolution) throw std::invalid_argument("IMM_DX12: null texture resolution output");
+    const auto& info = m->Get(handle)->info;
+    resolution[0] = info.mXres; resolution[1] = info.mYres; resolution[2] = info.mZres;
+}
+void piRendererDX12::GetTextureSampling(piTexture handle, TextureFilter* filter, TextureWrap* wrap)
+{
+    const auto* texture = m->Get(handle);
+    if (filter) *filter = texture->filter;
+    if (wrap) *wrap = texture->wrap;
+}
+void piRendererDX12::AttachTextures(int num, piTexture* handles, int offset)
+{
+    if (num < 0 || offset < 0 || offset > 16 || num > 16 - offset || (num > 0 && !handles))
+        throw std::invalid_argument("IMM_DX12: texture register range");
+    for (int i = 0; i < num; ++i)
+    {
+        m->sampled[offset + i] = handles[i] ? m->Get(handles[i]) : nullptr;
+        m->structured[offset + i] = nullptr;
+    }
+}
+void piRendererDX12::AttachTextures(int num, piTexture t0, piTexture t1, piTexture t2, piTexture t3,
+    piTexture t4, piTexture t5, piTexture t6, piTexture t7, piTexture t8, piTexture t9, piTexture t10,
+    piTexture t11, piTexture t12, piTexture t13, piTexture t14, piTexture t15)
+{
+    piTexture handles[] = {t0,t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13,t14,t15};
+    AttachTextures(num, handles, 0);
+}
+void piRendererDX12::DettachTextures() { for (auto& texture : m->sampled) texture = nullptr; }
+piSampler piRendererDX12::CreateSampler(TextureFilter filter, TextureWrap wrap, float anisotropy)
+{
+    if (!m->device) return nullptr;
+    auto sampler = std::make_unique<State::Sampler>();
+    if (!SamplerDescription(filter, wrap, anisotropy, sampler->description)) return nullptr;
+    m->samplers.insert(sampler.get());
+    return reinterpret_cast<piSampler>(sampler.release());
+}
+void piRendererDX12::DestroySampler(piSampler handle)
+{
+    if (!handle) return;
+    auto* sampler = reinterpret_cast<State::Sampler*>(handle);
+    if (m->samplers.erase(sampler) == 0) throw std::invalid_argument("IMM_DX12: foreign sampler");
+    for (auto& bound : m->selectedSamplers) if (bound == sampler) bound = nullptr;
+    delete sampler;
+}
+void piRendererDX12::AttachSamplers(int num, piSampler s0, piSampler s1, piSampler s2, piSampler s3,
+    piSampler s4, piSampler s5, piSampler s6, piSampler s7)
+{
+    if (num < 0 || num > 8) throw std::invalid_argument("IMM_DX12: sampler register range");
+    const piSampler handles[] = {s0,s1,s2,s3,s4,s5,s6,s7};
+    for (int i = 0; i < num; ++i)
+    {
+        auto* sampler = reinterpret_cast<State::Sampler*>(handles[i]);
+        if (sampler && m->samplers.find(sampler) == m->samplers.end()) throw std::invalid_argument("IMM_DX12: foreign sampler");
+        m->selectedSamplers[i] = sampler;
+    }
+}
+void piRendererDX12::DettachSamplers() { for (auto& sampler : m->selectedSamplers) sampler = nullptr; }
 
 void piRendererDX12::DrawPrimitiveIndexed(PrimitiveType primitive, uint32_t num, uint32_t instances,
     uint32_t baseVertex, uint32_t baseInstance, uint32_t baseIndex)

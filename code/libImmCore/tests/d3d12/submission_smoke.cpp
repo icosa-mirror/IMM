@@ -209,7 +209,9 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
     const char* rendererPS = R"(
         cbuffer Draw : register(b0) { float4 color; float depth; };
         StructuredBuffer<float4> tint : register(t8);
-        float4 main() : SV_Target { return color * tint[0]; })";
+        Texture2D image : register(t0);
+        SamplerState imageSampler : register(s0);
+        float4 main() : SV_Target { return color * tint[0] * image.SampleLevel(imageSampler,float2(0.25,0.25),1); })";
     auto shader = api.CreateShader(nullptr, rendererVS, nullptr, nullptr, nullptr, rendererPS, nullptr);
     Require(shader != nullptr, "piRenderer shader creation failed");
     const char* indexedVS = R"(
@@ -224,6 +226,18 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
     const uint16_t indices16[] = {0,0,0,2,1,0};
     const uint32_t indices32[] = {0,0,0,2,1,0};
     using Renderer = ImmCore::piRenderer;
+    const unsigned char imagePixels[] = {0,0,0,255, 255,255,255,255, 255,255,255,255, 0,0,0,255};
+    Renderer::TextureInfo imageInfo = {Renderer::TextureType::T2D, Renderer::Format::C4_8_UNORM, 2, 2, 1, 1, 0, 0};
+    auto sampledImage = api.CreateTexture(nullptr, &imageInfo, false, Renderer::TextureFilter::MIPMAP,
+        Renderer::TextureWrap::CLAMP, 1, imagePixels);
+    Require(sampledImage != nullptr, "Renderer sampled texture creation failed");
+    Renderer::TextureInfo actualInfo = {};
+    api.GetTextureInfo(sampledImage, &actualInfo);
+    Require(actualInfo.mNumMips == 2, "Renderer did not generate the requested mip chain");
+    api.AttachTextures(1, &sampledImage, 0);
+    auto imageSampler = api.CreateSampler(Renderer::TextureFilter::MIPMAP, Renderer::TextureWrap::CLAMP, 1);
+    Require(imageSampler != nullptr, "Renderer sampler creation failed");
+    api.AttachSamplers(1, imageSampler, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
     auto vertexBuffer = api.CreateBuffer(vertices, sizeof(vertices), Renderer::BufferType::Static, Renderer::BufferUse::Vertex);
     auto instanceBuffer = api.CreateBuffer(offsets, sizeof(offsets), Renderer::BufferType::Static, Renderer::BufferUse::Vertex);
     ImmCore::piBuffer indexBuffers[] = {
@@ -342,6 +356,8 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
             api.DestroyBuffer(vertexBuffer);
             api.DestroyBuffer(instanceBuffer);
             for (auto index : indexBuffers) api.DestroyBuffer(index);
+            api.DestroyTexture(sampledImage);
+            api.DestroySampler(imageSampler);
         }
         Check(renderer.EndFrame(&lastCompletion), "Submit renderer buffer versions");
     }
@@ -365,7 +381,7 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         unsigned char* pixels = nullptr;
         Check(images[frame]->Map(0, &imageRange, reinterpret_cast<void**>(&pixels)), "Map piRenderer image");
         const auto* center = pixels + (Height / 2) * pitch + (Width / 2) * 4;
-        Require(center[0] == (frame % 2 ? 255 : 0) && center[1] == 255 && center[2] == 0,
+        Require(center[0] == (frame % 2 ? 128 : 0) && center[1] == 128 && center[2] == 0,
                 "piRenderer draw constants/depth failed");
         Require(pixels[0] == 0 && pixels[1] == 0 && pixels[2] == 255, "piRenderer clear failed");
         images[frame]->Unmap(0, &noWrites);
@@ -703,6 +719,7 @@ int Run()
            << "\"renderer_buffer_versions_verified\":18,"
            << "\"renderer_draw_frames_verified\":9,"
            << "\"renderer_indexed_frames_verified\":9,"
+           << "\"renderer_sampled_mip_frames_verified\":9,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

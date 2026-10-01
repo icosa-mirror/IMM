@@ -69,29 +69,29 @@ public:
     piDepthState CreateDepthState(bool alphaToCoverage, bool lessEqual) override { (void)alphaToCoverage; (void)lessEqual; Unsupported("CreateDepthState"); }
     void SetDepthState(const piDepthState vme) override { (void)vme; Unsupported("SetDepthState"); }
     void DestroyDepthState(piDepthState vme) override { (void)vme; Unsupported("DestroyDepthState"); }
-    piTexture CreateTexture(const wchar_t *key, const TextureInfo *info, bool compress, TextureFilter filter, TextureWrap wrap, float aniso, const void *buffer) override { (void)key; (void)info; (void)compress; (void)filter; (void)wrap; (void)aniso; (void)buffer; Unsupported("CreateTexture"); }
+    piTexture CreateTexture(const wchar_t *key, const TextureInfo *info, bool compress, TextureFilter filter, TextureWrap wrap, float aniso, const void *buffer) override;
     piTexture CreateTexture2(const wchar_t *key, const TextureInfo *info, bool compress, TextureFilter filter, TextureWrap wrap1, float aniso, const void *buffer, int bindUsage) override { (void)key; (void)info; (void)compress; (void)filter; (void)wrap1; (void)aniso; (void)buffer; (void)bindUsage; Unsupported("CreateTexture2"); }
-    void DestroyTexture(piTexture obj) override { (void)obj; Unsupported("DestroyTexture"); }
+    void DestroyTexture(piTexture obj) override;
     void ClearTexture(piTexture vme, int level, const void *data) override { (void)vme; (void)level; (void)data; Unsupported("ClearTexture"); }
     void UpdateTexture(piTexture me, int x0, int y0, int z0, int xres, int yres, int zres, const void *buffer) override { (void)me; (void)x0; (void)y0; (void)z0; (void)xres; (void)yres; (void)zres; (void)buffer; Unsupported("UpdateTexture"); }
-    void GetTextureRes(piTexture me, int *res) override { (void)me; (void)res; Unsupported("GetTextureRes"); }
-    void GetTextureFormat(piTexture me, Format *format) override { (void)me; (void)format; Unsupported("GetTextureFormat"); }
+    void GetTextureRes(piTexture me, int *res) override;
+    void GetTextureFormat(piTexture me, Format *format) override;
     void GetTextureContent(piTexture me, void *data, const Format fmt) override { (void)me; (void)data; (void)fmt; Unsupported("GetTextureContent"); }
     void GetTextureContent(piTexture vme, void *data, int x, int y, int z, int xres, int yres, int zres) override { (void)vme; (void)data; (void)x; (void)y; (void)z; (void)xres; (void)yres; (void)zres; Unsupported("GetTextureContent"); }
-    void GetTextureInfo(piTexture me, TextureInfo *info) override { (void)me; (void)info; Unsupported("GetTextureInfo"); }
-    void GetTextureSampling(piTexture vme, TextureFilter *rfilter, TextureWrap *rwrap) override { (void)vme; (void)rfilter; (void)rwrap; Unsupported("GetTextureSampling"); }
+    void GetTextureInfo(piTexture me, TextureInfo *info) override;
+    void GetTextureSampling(piTexture vme, TextureFilter *rfilter, TextureWrap *rwrap) override;
     void ComputeMipmaps(piTexture me) override { (void)me; Unsupported("ComputeMipmaps"); }
-    void AttachTextures(int num, piTexture vt0, piTexture vt1, piTexture vt2, piTexture vt3, piTexture vt4, piTexture vt5, piTexture vt6, piTexture vt7, piTexture vt8, piTexture vt9, piTexture vt10, piTexture vt11, piTexture vt12, piTexture vt13, piTexture vt14, piTexture vt15) override { (void)num; (void)vt0; (void)vt1; (void)vt2; (void)vt3; (void)vt4; (void)vt5; (void)vt6; (void)vt7; (void)vt8; (void)vt9; (void)vt10; (void)vt11; (void)vt12; (void)vt13; (void)vt14; (void)vt15; Unsupported("AttachTextures"); }
-    void AttachTextures(int num, piTexture *vt, int offset) override { (void)num; (void)vt; (void)offset; Unsupported("AttachTextures"); }
-    void DettachTextures() override { Unsupported("DettachTextures"); }
+    void AttachTextures(int num, piTexture vt0, piTexture vt1, piTexture vt2, piTexture vt3, piTexture vt4, piTexture vt5, piTexture vt6, piTexture vt7, piTexture vt8, piTexture vt9, piTexture vt10, piTexture vt11, piTexture vt12, piTexture vt13, piTexture vt14, piTexture vt15) override;
+    void AttachTextures(int num, piTexture *vt, int offset) override;
+    void DettachTextures() override;
     piTexture CreateTextureFromID(unsigned int id, TextureFilter filter) override { (void)id; (void)filter; Unsupported("CreateTextureFromID"); }
     void MakeResident(piTexture vme) override { (void)vme; Unsupported("MakeResident"); }
     void MakeNonResident(piTexture vme) override { (void)vme; Unsupported("MakeNonResident"); }
     uint64_t GetTextureHandle(piTexture vme) override { (void)vme; Unsupported("GetTextureHandle"); }
-    piSampler CreateSampler(TextureFilter filter, TextureWrap wrap, float anisotropy) override { (void)filter; (void)wrap; (void)anisotropy; Unsupported("CreateSampler"); }
-    void DestroySampler(piSampler obj) override { (void)obj; Unsupported("DestroySampler"); }
-    void AttachSamplers(int num, piSampler vt0, piSampler vt1, piSampler vt2, piSampler vt3, piSampler vt4, piSampler vt5, piSampler vt6, piSampler vt7) override { (void)num; (void)vt0; (void)vt1; (void)vt2; (void)vt3; (void)vt4; (void)vt5; (void)vt6; (void)vt7; Unsupported("AttachSamplers"); }
-    void DettachSamplers() override { Unsupported("DettachSamplers"); }
+    piSampler CreateSampler(TextureFilter filter, TextureWrap wrap, float anisotropy) override;
+    void DestroySampler(piSampler obj) override;
+    void AttachSamplers(int num, piSampler vt0, piSampler vt1, piSampler vt2, piSampler vt3, piSampler vt4, piSampler vt5, piSampler vt6, piSampler vt7) override;
+    void DettachSamplers() override;
     void AttachImage(int unit, piTexture texture, int level, bool layered, int layer, Format format) override { (void)unit; (void)texture; (void)level; (void)layered; (void)layer; (void)format; Unsupported("AttachImage"); }
     piShader CreateShader(const piShaderOptions *options, const char *vs, const char *cs, const char *es, const char *gs, const char *fs, char *error) override;
     piShader CreateShaderBinary(const piShaderOptions *options, const uint8_t *vs, const int vs_len, const uint8_t *cs, const int cs_len, const uint8_t *es, const int es_len, const uint8_t *gs, const int gs_len, const uint8_t *fs, const int fs_len, char *error) override;

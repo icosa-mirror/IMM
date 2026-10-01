@@ -447,17 +447,24 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    constants, alongside the existing upload and production picture-shader checks. Attachment
    resource states are restored at frame end. Indexed readback covers 16/32-bit indices,
    separate vertex/instance streams and nonzero base vertex, instance and index offsets.
-   Texture API integration, complete render states and layer rendering remain incomplete;
-   this backend remains unregistered.
+   Complete render states and layer rendering remain incomplete; this backend remains
+   unregistered. Hosted validation of the draw increment is tracked in
+   [run 36937569488](https://github.com/icosa-mirror/IMM/actions/runs/36937569488).
 10. **CI follow-up:** full validation run `36933435201` failed Android standalone GLES after
    a capture was written but the final edit-validation marker was not observed. The Android
-   GLES job passed on same-commit attempt 2 (job `110618594429`); the intermittent marker
+   GLES job and the full pipeline passed on same-commit attempt 2 (job `110618594429`); the intermittent marker
    failure's cause remains unresolved and assertions are unchanged. Run `36935570560` also reported a web
    visual failure whose scene capture included the browser XR-availability button. Visual-test
    mode now hides that overlay, retaining the existing scene thresholds; the full local
    browser harness passes. Hosted extended web validation passed for the separate fix in
-   [run 36936815988](https://github.com/icosa-mirror/IMM/actions/runs/36936815988).
-11. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+   [run 36936815988](https://github.com/icosa-mirror/IMM/actions/runs/36936815988), which completed successfully.
+11. **Texture adapter increment (local):** sampled 2D/array texture creation, sampler
+   filtering/wrapping and immutable binding snapshots now use the `piRenderer` API.
+   GREY/RGBA mip chains are generated at upload, with linear-light filtering for sRGB.
+   Nine local frames verify a sampled mip whose value differs from the base-level texel.
+   Volume/cube textures, texture updates and complete layer initialization remain unfinished.
+   Hosted validation of this increment is pending.
+12. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
