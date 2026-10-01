@@ -480,7 +480,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    paths for static and pretessellated drawings. The native player library builds locally
    with zero warnings/errors. This is compile evidence; actual layer rendering remains
    unverified. Legacy D3D11 shader-cleanup exceptions do not apply to D3D12.
-15. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+15. **Mesh layout increment (local):** the D3D12 adapter now accepts IMM's
+   `piRArrayLayout` mesh inputs and maps them to the HLSL `CHANA`, `CHANB`, ...
+   semantics. It preserves vertex strides and instance divisors and rejects unsupported
+   DXGI formats. Three GPU-readback frames exercise a padded vertex stream and a separate
+   instance stream; the Windows CI harness requires this evidence. This closes the model
+   mesh vertex-array API gap, but does not establish model-layer or scene-level rendering.
+16. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

@@ -216,7 +216,7 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
     Require(shader != nullptr, "piRenderer shader creation failed");
     const char* indexedVS = R"(
         cbuffer Draw : register(b0) { float4 color; float depth; };
-        float4 main(float2 position : POSITION, float2 offset : OFFSET) : SV_Position {
+        float4 main(float2 position : CHANA, float2 offset : CHANB) : SV_Position {
             return float4(position + offset,depth,1);
         })";
     auto indexedShader = api.CreateShader(nullptr, indexedVS, nullptr, nullptr, nullptr, rendererPS, nullptr);
@@ -273,17 +273,24 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         api.CreateBuffer(indices32, sizeof(indices32), Renderer::BufferType::Static, Renderer::BufferUse::Index)};
     Renderer::ArrayLayout2 vertexLayout = {}, instanceLayout = {};
     vertexLayout.mNumElements = instanceLayout.mNumElements = 1;
-    std::memcpy(vertexLayout.mEntry[0].mName, "POSITION", sizeof("POSITION"));
-    std::memcpy(instanceLayout.mEntry[0].mName, "OFFSET", sizeof("OFFSET"));
+    std::memcpy(vertexLayout.mEntry[0].mName, "CHANA", sizeof("CHANA"));
+    std::memcpy(instanceLayout.mEntry[0].mName, "CHANB", sizeof("CHANB"));
     vertexLayout.mEntry[0].mFormat = instanceLayout.mEntry[0].mFormat = Renderer::Format::C2_32_FLOAT;
     instanceLayout.mEntry[0].mPerInstance = true;
-    ImmCore::piVertexArray arrays[2];
+    ImmCore::piVertexArray arrays[3];
     for (UINT i = 0; i < 2; ++i)
     {
         arrays[i] = api.CreateVertexArray2(2, vertexBuffer, &vertexLayout, instanceBuffer, &instanceLayout,
             nullptr, 0, indexBuffers[i], i == 0 ? Renderer::IndexArrayFormat::UINT_16 : Renderer::IndexArrayFormat::UINT_32);
         Require(arrays[i] != nullptr, "Indexed vertex layout creation failed");
     }
+    const float paddedVertices[][3] = {{200,200,99},{-0.75f,-0.75f,99},{0,0.75f,99},{0.75f,-0.75f,99}};
+    auto paddedVertexBuffer = api.CreateBuffer(paddedVertices, sizeof(paddedVertices), Renderer::BufferType::Static, Renderer::BufferUse::Vertex);
+    ImmCore::piRArrayLayout meshVertexLayout = {12, 1, 0, {{2, ImmCore::piRArrayType_Float, false}}};
+    ImmCore::piRArrayLayout meshInstanceLayout = {8, 1, 1, {{2, ImmCore::piRArrayType_Float, false}}};
+    arrays[2] = api.CreateVertexArray(2, paddedVertexBuffer, &meshVertexLayout, instanceBuffer, &meshInstanceLayout,
+        indexBuffers[0], Renderer::IndexArrayFormat::UINT_16);
+    Require(arrays[2] != nullptr, "Mesh vertex layout creation failed");
     api.AttachShader(shader);
     auto drawConstants = api.CreateBuffer(nullptr, 20, ImmCore::piRenderer::BufferType::Dynamic,
         ImmCore::piRenderer::BufferUse::Constant);
@@ -344,7 +351,7 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         const float nearData[] = {float(frame % 2), 1, 0, 1, 0.8f};
         api.UpdateBuffer(drawConstants, nearData, 0, sizeof(nearData), false);
         api.AttachShader(indexedShader);
-        api.AttachVertexArray2(arrays[frame % 2]);
+        api.AttachVertexArray2(arrays[frame % 3]);
         api.DrawPrimitiveIndexed(Renderer::PrimitiveType::Triangle, 3, 1, 1, 1, 3);
         const float farData[] = {1, 0, 0, 1, 0.2f};
         api.UpdateBuffer(drawConstants, farData, 0, sizeof(farData), false);
@@ -403,6 +410,7 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
             api.DestroyShader(indexedShader);
             for (auto array : arrays) api.DestroyVertexArray2(array);
             api.DestroyBuffer(vertexBuffer);
+            api.DestroyBuffer(paddedVertexBuffer);
             api.DestroyBuffer(instanceBuffer);
             for (auto index : indexBuffers) api.DestroyBuffer(index);
             api.DestroyTexture(sampledImage);
@@ -781,6 +789,7 @@ int Run()
            << "\"renderer_buffer_versions_verified\":18,"
            << "\"renderer_draw_frames_verified\":9,"
            << "\"renderer_indexed_frames_verified\":9,"
+           << "\"renderer_mesh_layout_frames_verified\":3,"
            << "\"renderer_sampled_mip_frames_verified\":9,"
            << "\"renderer_state_frames_verified\":9,"
            << "\"renderer_cube_faces_verified\":6,"

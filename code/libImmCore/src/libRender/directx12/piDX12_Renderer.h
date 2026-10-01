@@ -123,7 +123,7 @@ public:
     void UpdateBuffer(piBuffer obj, const void *data, int offset, int len, bool invalidate) override;
     void AttachPixelPackBuffer(piBuffer obj) override { (void)obj; Unsupported("AttachPixelPackBuffer"); }
     void DettachPixelPackBuffer() override { Unsupported("DettachPixelPackBuffer"); }
-    piVertexArray CreateVertexArray(int numStreams, piBuffer vb0, const piRArrayLayout *streamLayout0, piBuffer vb1, const piRArrayLayout *streamLayout1, piBuffer eb, const IndexArrayFormat ebFormat) override { (void)numStreams; (void)vb0; (void)streamLayout0; (void)vb1; (void)streamLayout1; (void)eb; (void)ebFormat; Unsupported("CreateVertexArray"); }
+    piVertexArray CreateVertexArray(int numStreams, piBuffer vb0, const piRArrayLayout *streamLayout0, piBuffer vb1, const piRArrayLayout *streamLayout1, piBuffer eb, const IndexArrayFormat ebFormat) override;
     void DestroyVertexArray(piVertexArray obj) override;
     void AttachVertexArray(piVertexArray obj) override;
     void DettachVertexArray() override;

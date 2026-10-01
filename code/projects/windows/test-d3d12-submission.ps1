@@ -68,6 +68,9 @@ if ($result.renderer_buffer_versions_verified -ne 18) {
 if ($result.renderer_draw_frames_verified -ne 9) {
     throw 'D3D12 smoke is missing piRenderer draw/depth evidence.'
 }
+if ($result.renderer_mesh_layout_frames_verified -ne 3) {
+    throw "D3D12 mesh layout GPU readback evidence is incomplete."
+}
 if ($result.renderer_indexed_frames_verified -ne 9) {
     throw 'D3D12 smoke is missing indexed vertex/instance stream evidence.'
 }

@@ -637,6 +637,62 @@ void piRendererDX12::DrawPrimitiveNotIndexed(PrimitiveType primitive, int first,
     m->commands->DrawInstanced(num, instances, first, 0);
 }
 
+piVertexArray piRendererDX12::CreateVertexArray(int numStreams, piBuffer vb0,
+    const piRArrayLayout* layout0, piBuffer vb1, const piRArrayLayout* layout1,
+    piBuffer ib, const IndexArrayFormat indexFormat)
+{
+    if (numStreams < 0 || numStreams > 2) return nullptr;
+    const piRArrayLayout* sources[] = {layout0, layout1};
+    ArrayLayout2 converted[2] = {};
+    int channel = 0;
+    for (int stream = 0; stream < numStreams; ++stream)
+    {
+        const auto* source = sources[stream];
+        if (!source || source->mNumElements <= 0 || source->mNumElements > 12 ||
+            source->mStride <= 0 || source->mStride > D3D12_REQ_MULTI_ELEMENT_STRUCTURE_SIZE_IN_BYTES ||
+            source->mDivisor < 0) return nullptr;
+        converted[stream].mNumElements = source->mNumElements;
+        UINT packedBytes = 0;
+        for (int i = 0; i < source->mNumElements; ++i)
+        {
+            const auto& input = source->mEntry[i];
+            const int count = input.mNumComponents;
+            if (count < 1 || count > 4) return nullptr;
+            auto& output = converted[stream].mEntry[i];
+            const Format floats[] = {Format::C1_32_FLOAT, Format::C2_32_FLOAT, Format::C3_32_FLOAT, Format::C4_32_FLOAT};
+            const Format ints[] = {Format::C1_32_SINT, Format::C2_32_SINT, Format::C3_32_SINT, Format::C4_32_SINT};
+            if (input.mType == piRArrayType_Float) output.mFormat = floats[count - 1];
+            else if (input.mType == piRArrayType_Int && !input.mNormalize) output.mFormat = ints[count - 1];
+            else
+            {
+                if (count == 3) return nullptr; // DXGI has no three-component 8/16-bit input formats.
+                const int slot = count == 1 ? 0 : count == 2 ? 1 : 2;
+                const Format bytes[] = {Format::C1_8_UINT, Format::C2_8_UINT, Format::C4_8_UINT};
+                const Format normalizedBytes[] = {Format::C1_8_UNORM, Format::C2_8_UNORM, Format::C4_8_UNORM};
+                const Format halves[] = {Format::C1_16_FLOAT, Format::C2_16_FLOAT, Format::C4_16_FLOAT};
+                const Format shorts[] = {Format::C1_16_SINT, Format::C2_16_SINT, Format::C4_16_SINT};
+                const Format normalizedShorts[] = {Format::C1_16_SNORM, Format::C2_16_SNORM, Format::C4_16_SNORM};
+                if (input.mType == piRArrayType_UByte) output.mFormat = input.mNormalize ? normalizedBytes[slot] : bytes[slot];
+                else if (input.mType == piRArrayType_Half) output.mFormat = halves[slot];
+                else if (input.mType == piRArrayType_Short) output.mFormat = input.mNormalize ? normalizedShorts[slot] : shorts[slot];
+                else return nullptr;
+            }
+            // IMM mesh HLSL uses CHANA, CHANB, ... across the vertex streams.
+            std::memcpy(output.mName, "CHANA", 6);
+            output.mName[4] = static_cast<char>('A' + channel++);
+            output.mPerInstance = source->mDivisor != 0;
+            packedBytes += VertexFormat(output.mFormat).second;
+        }
+        if (packedBytes > static_cast<UINT>(source->mStride)) return nullptr;
+    }
+    auto handle = CreateVertexArray2(numStreams, vb0, &converted[0], vb1, &converted[1], nullptr, 0, ib, indexFormat);
+    if (!handle) return nullptr;
+    auto* array = reinterpret_cast<State::VertexArray*>(handle);
+    for (int stream = 0; stream < numStreams; ++stream) array->strides[stream] = sources[stream]->mStride;
+    for (auto& element : array->elements) element.InstanceDataStepRate = sources[element.InputSlot]->mDivisor;
+    return handle;
+}
+
 piVertexArray piRendererDX12::CreateVertexArray2(int numStreams, piBuffer vb0, const ArrayLayout2* layout0,
     piBuffer vb1, const ArrayLayout2* layout1, const void* shaderBinary, size_t shaderBinarySize,
     piBuffer ib, const IndexArrayFormat indexFormat)
