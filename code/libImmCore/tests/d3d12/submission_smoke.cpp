@@ -230,6 +230,23 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         cbuffer Draw : register(b0) { float4 color; float depth; };
         float4 main(float2 position : POSITION) : SV_Position { return float4(position,depth,1); })";
     auto quadShader = api.CreateShader(nullptr, quadVS, nullptr, nullptr, nullptr, rendererPS, nullptr);
+    const char* cubePS = R"(
+        cbuffer Draw : register(b0) { float4 color; float depth; };
+        TextureCube image : register(t1);
+        SamplerState imageSampler : register(s1);
+        float4 main() : SV_Target {
+            const float3 directions[6] = {float3(1,0,0),float3(-1,0,0),float3(0,1,0),
+                float3(0,-1,0),float3(0,0,1),float3(0,0,-1)};
+            return image.SampleLevel(imageSampler,directions[int(color.x)],0);
+        })";
+    auto cubeShader = api.CreateShader(nullptr, quadVS, nullptr, nullptr, nullptr, cubePS, nullptr);
+    const unsigned char cubeColors[][4] = {{255,0,0,255},{0,255,0,255},{0,0,255,255},
+        {255,255,0,255},{255,0,255,255},{0,255,255,255}};
+    Renderer::TextureInfo cubeInfo = {Renderer::TextureType::TCUBE, Renderer::Format::C4_8_UNORM, 1, 1, 1, 1, 1, 0};
+    auto cubeTexture = api.CreateTexture(nullptr, &cubeInfo, false, Renderer::TextureFilter::NONE,
+        Renderer::TextureWrap::CLAMP, 1, cubeColors);
+    Require(cubeShader && cubeTexture, "Renderer cube creation failed");
+    api.AttachTextures(1, &cubeTexture, 1);
     auto rasterState = api.CreateRasterState(false, true, Renderer::CullMode::NONE, false, false);
     auto depthState = api.CreateDepthState(true, false);
     auto noDepthState = api.CreateDepthState(false, false);
@@ -345,6 +362,13 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
             Renderer::BlendOperations::piBLEND_ONE, Renderer::BlendOperations::piBLEND_ONE);
         api.AttachShader(quadShader);
         api.DrawUnitQuad_XY(1);
+        const int cubeViewport[] = {0, 48, 16, 16};
+        api.SetViewport(0, cubeViewport);
+        api.SetBlendState(opaqueState);
+        api.AttachShader(cubeShader);
+        const float cubeConstants[] = {float(frame % 6), 0, 0, 1, 0.2f};
+        api.UpdateBuffer(drawConstants, cubeConstants, 0, sizeof(cubeConstants), false);
+        api.DrawUnitQuad_XY(1);
         D3D12_RESOURCE_BARRIER barrier = {};
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Transition.pResource = color.Get();
@@ -384,6 +408,8 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
             api.DestroyTexture(sampledImage);
             api.DestroySampler(imageSampler);
             api.DestroyShader(quadShader);
+            api.DestroyShader(cubeShader);
+            api.DestroyTexture(cubeTexture);
             api.DestroyRasterState(rasterState);
             api.DestroyDepthState(depthState);
             api.DestroyDepthState(noDepthState);
@@ -418,6 +444,8 @@ void CheckRendererBuffers(ID3D12Device* device, ID3D12CommandQueue* queue)
         const auto* corner = pixels + 8 * pitch + 56 * 4;
         Require(corner[0] == 128 && corner[1] == 0 && corner[2] == 255,
                 "piRenderer depth-disable/additive blend/unit quad failed");
+        const auto* cubePixel = pixels + 56 * pitch + 8 * 4;
+        Require(std::memcmp(cubePixel, cubeColors[frame % 6], 4) == 0, "piRenderer cube face selection failed");
         images[frame]->Unmap(0, &noWrites);
     }
 }
@@ -755,6 +783,7 @@ int Run()
            << "\"renderer_indexed_frames_verified\":9,"
            << "\"renderer_sampled_mip_frames_verified\":9,"
            << "\"renderer_state_frames_verified\":9,"
+           << "\"renderer_cube_faces_verified\":6,"
            << "\"frames_verified\":" << Frames << ",\"reversed_z\":true,\"debug_layer\":"
            << (debugEnabled ? "true" : "false") << "}\n";
     Require(report.good(), "Could not write result");

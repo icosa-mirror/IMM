@@ -706,12 +706,14 @@ piTexture piRendererDX12::CreateTexture(const wchar_t* key, const TextureInfo* i
     TextureFilter filter, TextureWrap wrap, float anisotropy, const void* data)
 {
     (void)key;
-    if (!m->device || !info || compress || (info->mType != TextureType::T2D && info->mType != TextureType::T2D_ARRAY) ||
+    if (!m->device || !info || compress || (info->mType != TextureType::T2D && info->mType != TextureType::T2D_ARRAY && info->mType != TextureType::TCUBE) ||
         info->mXres <= 0 || info->mYres <= 0 || info->mXres > D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION ||
         info->mYres > D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION || info->mMultisample != 1) return nullptr;
     const auto format = VertexFormat(info->mFormat);
     if (format.first == DXGI_FORMAT_UNKNOWN) return nullptr;
-    const UINT layers = info->mType == TextureType::T2D ? 1 : static_cast<UINT>(info->mZres);
+    const bool cube = info->mType == TextureType::TCUBE;
+    if (cube && info->mXres != info->mYres) return nullptr;
+    const UINT layers = cube ? 6 : info->mType == TextureType::T2D ? 1 : static_cast<UINT>(info->mZres);
     if (layers == 0 || layers > D3D12_REQ_TEXTURE2D_ARRAY_AXIS_DIMENSION) return nullptr;
     auto texture = std::make_unique<State::Texture>();
     if (!SamplerDescription(filter, wrap, anisotropy, texture->sampler)) return nullptr;
@@ -787,7 +789,12 @@ piTexture piRendererDX12::CreateTexture(const wchar_t* key, const TextureInfo* i
     if (FAILED(result)) return nullptr;
     texture->view.Format = format.first;
     texture->view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    if (info->mType == TextureType::T2D)
+    if (cube)
+    {
+        texture->view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+        texture->view.TextureCube.MipLevels = mips;
+    }
+    else if (info->mType == TextureType::T2D)
     {
         texture->view.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
         texture->view.Texture2D.MipLevels = mips;

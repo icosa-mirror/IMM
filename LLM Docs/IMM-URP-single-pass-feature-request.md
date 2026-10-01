@@ -462,14 +462,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    filtering/wrapping and immutable binding snapshots now use the `piRenderer` API.
    GREY/RGBA mip chains are generated at upload, with linear-light filtering for sRGB.
    Nine local frames verify a sampled mip whose value differs from the base-level texel.
-   Volume/cube textures, texture updates and complete layer initialization remain unfinished.
+   Texture updates and complete layer initialization remain unfinished. Current layer
+   texture allocations use 2D, 2D-array and cube textures; blue noise is a 2D array.
    Hosted validation of this increment is pending.
 12. **Render-state increment (local):** raster/depth/blend state objects, common state
    flags, separate RGB/alpha blend equations and the picture unit quad are implemented.
    Pipeline variants include these state values. Nine readback frames verify disabled
    depth testing and additive blending through the unit-quad path, alongside the existing
    occlusion checks. Hosted validation is pending; this is not complete layer coverage.
-13. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+13. **Cube texture increment (local):** `TCUBE` maps its six contiguous image faces to a
+   D3D12 cube SRV, retaining the existing per-face mip upload path. Local shader sampling
+   verifies all six axis directions and texture lifetime after caller destruction. This
+   covers the texture backend; cube-picture layer shaders and scene-level validation still
+   need integration. Hosted validation of this increment is pending.
+14. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
