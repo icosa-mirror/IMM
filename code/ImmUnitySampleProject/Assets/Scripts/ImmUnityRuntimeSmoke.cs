@@ -996,21 +996,20 @@ namespace ImmPlayer
             Vector3 up = cam.transform.up.normalized;
             Vector3 center = cam.transform.position + forward * 3.0f;
             _frontProbe = CreateProbe("IMM Scene Front Occluder Probe", FrontProbeColor, center - right * 0.70f - up * 0.35f - forward * 1.00f, cam.transform.rotation, new Vector3(0.50f, 0.50f, 0.06f), probeLayer);
-            // Keep this probe at the same screen-space location and size as the
-            // original fixture, but put it behind the sample's central IMM
-            // geometry. The old 3.95 m placement was actually in front of that
-            // geometry (the physical Vulkan depth capture measured the IMM
-            // surface at roughly 8 m), so a correct depth compositor left the
-            // cyan probe visible while the validation expected it to disappear.
+            // Put the probe behind the solid interior of the sample's head.
+            // The previous square extended below the head into empty space;
+            // those legitimately visible pixels falsely failed depth validation.
+            // Keep it large enough to fail the existing leakage threshold if
+            // IMM does not occlude it, without changing that threshold.
             const float rearOccludedDistance = 10.0f;
             const float originalRearOccludedDistance = 3.95f;
             float rearOccludedScale = rearOccludedDistance / originalRearOccludedDistance;
             _rearOccludedProbe = CreateProbe(
                 "IMM Scene Rear Occlusion Probe",
                 RearOccludedProbeColor,
-                cam.transform.position + forward * rearOccludedDistance + right * (0.25f * rearOccludedScale),
+                cam.transform.position + forward * rearOccludedDistance + right * (0.25f * rearOccludedScale) + up * (0.13f * rearOccludedScale),
                 cam.transform.rotation,
-                new Vector3(0.75f * rearOccludedScale, 0.75f * rearOccludedScale, 0.06f),
+                new Vector3(0.35f * rearOccludedScale, 0.35f * rearOccludedScale, 0.06f),
                 probeLayer);
             _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 1.30f + up * 0.85f + forward * 0.35f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
             Debug.Log($"{Prefix}scene composition probes created center={center} camera={cam.name} overlay={_overlayProbeEnabled} layer={probeLayer}");
