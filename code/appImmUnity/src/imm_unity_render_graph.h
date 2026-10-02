@@ -5,27 +5,31 @@
 #include "imm_unity_d3d12_host.h"
 #include "appImmShared/src/imm_engine_bridge.h"
 
-// ABI v1, Windows x64. Caller owns this immutable request until completed becomes
+// ABI v2, Windows x64. Caller owns this immutable request until completed becomes
 // 1 (read with acquire semantics). Only result/completed are written by native code.
-// Targets must be bound before the event; render requests are flat-camera only.
+// Targets must be bound before the event; viewCount selects mono or two-slice stereo.
 // Matrices use the native row-major array convention. GPU completion is a renderer
 // fence token, not permission for the caller to signal Unity or renderer fences.
 struct alignas(8) ImmRenderGraphPacket
 {
-    uint32_t version = 1, size = sizeof(ImmRenderGraphPacket);
-    uint32_t operation = 0, reserved = 0; // 0 initialize, 1 render, 2 shutdown
+    uint32_t version = 2, size = sizeof(ImmRenderGraphPacket);
+    uint32_t operation = 0, viewCount = 1; // 0 initialize, 1 render, 2 shutdown, 3 maintenance
     uint64_t sequence = 0;
     int32_t camera = 0, colorSpace = 0, samples = 8, enableSound = 1;
     uint64_t colorBuffer = 0, depthBuffer = 0;
     uint32_t colorFormat = 0, depthFormat = 0;
     int32_t x = 0, y = 0, width = 0, height = 0;
     float worldToView[16] = {}, projection[16] = {};
+    float leftView[16] = {}, leftProjection[16] = {};
+    float rightView[16] = {}, rightProjection[16] = {};
     uint64_t gpuCompletion = 0;
     int32_t result = 0, completed = 0;
 };
-static_assert(sizeof(ImmRenderGraphPacket) == 224, "RenderGraph packet ABI size");
+static_assert(sizeof(ImmRenderGraphPacket) == 480, "RenderGraph packet ABI size");
 static_assert(offsetof(ImmRenderGraphPacket, worldToView) == 80, "RenderGraph matrix ABI offset");
-static_assert(offsetof(ImmRenderGraphPacket, completed) == 220, "RenderGraph completion ABI offset");
+static_assert(offsetof(ImmRenderGraphPacket, leftView) == 208, "RenderGraph left-eye ABI offset");
+static_assert(offsetof(ImmRenderGraphPacket, rightView) == 336, "RenderGraph right-eye ABI offset");
+static_assert(offsetof(ImmRenderGraphPacket, completed) == 476, "RenderGraph completion ABI offset");
 constexpr int ImmRenderGraphEventId = 0x494d4d;
 
 // Declare before the bridge so a borrowed renderer outlives bridge destruction.
@@ -50,7 +54,7 @@ inline void ShutdownImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmEng
 }
 inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmEngineBridge& bridge, ImmRenderGraphPacket& packet)
 {
-    if (packet.version != 1 || packet.size != sizeof(packet) || packet.reserved || packet.completed || packet.operation > 3)
+    if (packet.version != 2 || packet.size != sizeof(packet) || (packet.viewCount != 1 && packet.viewCount != 2) || packet.completed || packet.operation > 3)
         return E_INVALIDARG;
     if (packet.operation == 2) { ShutdownImmRenderGraph(state, bridge); return S_OK; }
     if (packet.operation == 0)
@@ -82,15 +86,25 @@ inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmE
         !packet.colorBuffer || !packet.depthBuffer) return E_INVALIDARG;
     for (int i = 0; i < 16; ++i)
         if (!std::isfinite(packet.worldToView[i]) || !std::isfinite(packet.projection[i])) return E_INVALIDARG;
+    if (packet.viewCount == 2)
+        for (int i = 0; i < 16; ++i)
+            if (!std::isfinite(packet.leftView[i]) || !std::isfinite(packet.leftProjection[i]) ||
+                !std::isfinite(packet.rightView[i]) || !std::isfinite(packet.rightProjection[i])) return E_INVALIDARG;
     auto& renderer = state.host.RendererInRenderEvent();
     HRESULT result = renderer.BeginFrame();
     if (FAILED(result)) return result;
     result = state.host.BindTargetsInRenderEvent(reinterpret_cast<UnityRenderBuffer>(packet.colorBuffer),
         reinterpret_cast<UnityRenderBuffer>(packet.depthBuffer), static_cast<DXGI_FORMAT>(packet.colorFormat),
-        static_cast<DXGI_FORMAT>(packet.depthFormat));
+        static_cast<DXGI_FORMAT>(packet.depthFormat), packet.viewCount);
     if (FAILED(result)) { renderer.CancelFrame(); return result; }
     const ImmCore::mat4x4 view(packet.worldToView), projection(packet.projection);
-    bridge.SetCameraMatrices(packet.camera, 0, &view, &projection, nullptr, nullptr, nullptr, nullptr);
+    if (packet.viewCount == 2)
+    {
+        const ImmCore::mat4x4 leftView(packet.leftView), leftProjection(packet.leftProjection);
+        const ImmCore::mat4x4 rightView(packet.rightView), rightProjection(packet.rightProjection);
+        bridge.SetCameraMatrices(packet.camera, 2, &view, &projection, &leftView, &leftProjection, &rightView, &rightProjection);
+    }
+    else bridge.SetCameraMatrices(packet.camera, 0, &view, &projection, nullptr, nullptr, nullptr, nullptr);
     ImmShared::ImmEngineBridge::ViewportInfo viewport = {};
     viewport.x = static_cast<float>(packet.x); viewport.y = static_cast<float>(packet.y);
     viewport.width = static_cast<float>(packet.width); viewport.height = static_cast<float>(packet.height);

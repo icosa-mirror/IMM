@@ -904,7 +904,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    `layered_scene_frames_verified=16`. Existing model/picture/mono checks pass. This is
    native scene evidence; the shared-bridge stereo entry point, managed XR submission,
    stereo culling bounds and headset behavior still require integration validation.
-63. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+63. **Immutable stereo submission packet:** packet ABI v2 carries an explicit view count
+   and independent left/right view and projection matrices in a 480-byte request. The
+   managed transport copies all matrices before enqueueing; native submission selects
+   two-slice target binding and the bridge's preferred stereo path. ABI v1 is rejected;
+   no compatibility adapter is retained. Local native checks cover acknowledgement
+   offsets, invalid view counts and non-finite eye matrices. Both required Unity mono
+   RenderGraph integration tests pass with the updated managed/native ABI. This is
+   transport infrastructure: the Unity XR pass remains disabled pending end-to-end
+   stereo packet rendering, XR attachment integration and stereo culling validation.
+64. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

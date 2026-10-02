@@ -11,6 +11,7 @@
 #include <thread>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include "../../src/libRender/directx12/piDX12_Renderer.h"
 #include "libImmPlayer/src/player.h"
 #include "libImmPlayer/src/layerRenderers/layerRendererModel/layerRendererModel.h"
@@ -642,12 +643,28 @@ int main()
         packet.version = 99;
         if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG || graph.ready)
             throw std::runtime_error("Graph accepted unknown packet ABI");
-        packet.version = 1;
+        packet.version = 2;
+        packet.viewCount = 3;
+        if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG || graph.ready)
+            throw std::runtime_error("Graph accepted unsupported view count");
+        packet.viewCount = 1;
         Check(ProcessImmRenderGraph(graph, bridge, packet), "Initialize graph session");
         if (!graph.ready || !bridge.IsGraphicsInitialized()) throw std::runtime_error("Graph session not ready");
         packet.operation = 1;
         if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG)
             throw std::runtime_error("Graph accepted missing targets");
+        packet.viewCount = 2;
+        packet.width = packet.height = 32;
+        packet.colorBuffer = packet.depthBuffer = 1; // Must never reach target binding.
+        for (float* matrix : {packet.leftView, packet.leftProjection, packet.rightView, packet.rightProjection})
+        {
+            matrix[0] = std::numeric_limits<float>::quiet_NaN();
+            if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG)
+                throw std::runtime_error("Graph accepted non-finite stereo matrix");
+            matrix[0] = 0;
+        }
+        packet.viewCount = 1;
+        packet.colorBuffer = packet.depthBuffer = 0;
         const int maintenanceDocument = bridge.GetPlayer()->Load(IMM_D3D12_SAMPLE_FILE);
         if (maintenanceDocument < 0) throw std::runtime_error("Queue target-free document load");
         for (int unloading = 0; unloading < 2; ++unloading)

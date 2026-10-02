@@ -10,7 +10,7 @@ namespace ImmPlayer
     // operation in the plugin. The owner must poll and queue shutdown before disposal.
     internal sealed class ImmRenderGraphTransport : IDisposable
     {
-        internal const int PacketSize = 224;
+        internal const int PacketSize = 480;
         internal const int EventId = 0x494d4d;
         private enum Phase { Created, Initializing, Ready, Stopping, Stopped, Faulted }
         private sealed class Slot
@@ -84,14 +84,20 @@ namespace ImmPlayer
         }
 
         internal void QueueRender(CommandBuffer commands, int camera, IntPtr color, IntPtr depth,
-            uint colorFormat, uint depthFormat, RectInt viewport, Matrix4x4 worldToView, Matrix4x4 projection)
+            uint colorFormat, uint depthFormat, RectInt viewport, Matrix4x4 worldToView, Matrix4x4 projection,
+            Matrix4x4? leftView = null, Matrix4x4? leftProjection = null,
+            Matrix4x4? rightView = null, Matrix4x4? rightProjection = null)
         {
             Poll();
             if (!IsReady) throw new InvalidOperationException("IMM RenderGraph session is not ready.");
             if (camera < 0 || camera >= 256 || color == IntPtr.Zero || depth == IntPtr.Zero ||
                 viewport.x < 0 || viewport.y < 0 || viewport.width <= 0 || viewport.height <= 0)
                 throw new ArgumentException("Invalid IMM camera or render attachments.");
+            bool stereo = leftView.HasValue || leftProjection.HasValue || rightView.HasValue || rightProjection.HasValue;
+            if (stereo && !(leftView.HasValue && leftProjection.HasValue && rightView.HasValue && rightProjection.HasValue))
+                throw new ArgumentException("Stereo requires both view and projection matrices for each eye.");
             Slot slot = Acquire(1);
+            Marshal.WriteInt32(slot.Memory, 12, stereo ? 2 : 1);
             Marshal.WriteInt32(slot.Memory, 24, camera);
             Marshal.WriteInt64(slot.Memory, 40, color.ToInt64());
             Marshal.WriteInt64(slot.Memory, 48, depth.ToInt64());
@@ -101,15 +107,25 @@ namespace ImmPlayer
             Marshal.WriteInt32(slot.Memory, 68, viewport.y);
             Marshal.WriteInt32(slot.Memory, 72, viewport.width);
             Marshal.WriteInt32(slot.Memory, 76, viewport.height);
+            WriteMatrixPair(slot.Memory, 80, worldToView, projection);
+            if (stereo)
+            {
+                WriteMatrixPair(slot.Memory, 208, leftView.Value, leftProjection.Value);
+                WriteMatrixPair(slot.Memory, 336, rightView.Value, rightProjection.Value);
+            }
+            Enqueue(commands, slot);
+            ++RenderSubmissions;
+        }
+
+        private void WriteMatrixPair(IntPtr packet, int offset, Matrix4x4 view, Matrix4x4 projection)
+        {
             for (int row = 0; row < 4; ++row)
                 for (int column = 0; column < 4; ++column)
                 {
-                    matrices[row * 4 + column] = worldToView[row, column];
+                    matrices[row * 4 + column] = view[row, column];
                     matrices[16 + row * 4 + column] = projection[row, column];
                 }
-            Marshal.Copy(matrices, 0, IntPtr.Add(slot.Memory, 80), matrices.Length);
-            Enqueue(commands, slot);
-            ++RenderSubmissions;
+            Marshal.Copy(matrices, 0, IntPtr.Add(packet, offset), matrices.Length);
         }
 
         internal bool QueueMaintenance(CommandBuffer commands)
@@ -142,7 +158,8 @@ namespace ImmPlayer
             }
             // Clear stale results and unused fields before publishing another request.
             for (int offset = 0; offset < PacketSize; offset += 8) Marshal.WriteInt64(available.Memory, offset, 0);
-            Marshal.WriteInt32(available.Memory, 0, 1);
+            Marshal.WriteInt32(available.Memory, 0, 2);
+            Marshal.WriteInt32(available.Memory, 12, 1);
             Marshal.WriteInt32(available.Memory, 4, PacketSize);
             Marshal.WriteInt32(available.Memory, 8, operation);
             Marshal.WriteInt64(available.Memory, 16, unchecked((long)++sequence));

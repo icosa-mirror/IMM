@@ -1556,7 +1556,7 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
     if (eventId != ImmRenderGraphEventId || !data) return;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
     // Validate the ABI header before reading or writing any later fields.
-    if (packet->version != 1 || packet->size != sizeof(*packet)) return;
+    if (packet->version != 2 || packet->size != sizeof(*packet)) return;
     HRESULT result = E_UNEXPECTED;
     try
     {
@@ -1579,7 +1579,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketRe
 #if defined(WINDOWS)
     if (!data || !result || !gpuCompletion) return -1;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
-    if (packet->version != 1 || packet->size != sizeof(*packet)) return -1;
+    if (packet->version != 2 || packet->size != sizeof(*packet)) return -1;
     if (InterlockedCompareExchange(reinterpret_cast<volatile LONG*>(&packet->completed), 0, 0) == 0) return 0;
     *result = packet->result;
     *gpuCompletion = packet->gpuCompletion;
