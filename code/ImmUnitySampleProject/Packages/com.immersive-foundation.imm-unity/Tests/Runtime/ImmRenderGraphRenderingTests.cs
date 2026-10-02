@@ -35,6 +35,8 @@ namespace ImmPlayer.Tests
             target.Create();
             var cameraObject = new GameObject("IMM URP readback camera", typeof(Camera), typeof(ImmCamera));
             var managerObject = new GameObject("IMM URP readback manager");
+            GameObject occluder = null;
+            Material occluderMaterial = null;
             var camera = cameraObject.GetComponent<Camera>();
             camera.targetTexture = target;
             camera.clearFlags = CameraClearFlags.SolidColor;
@@ -67,6 +69,23 @@ namespace ImmPlayer.Tests
                 Assert.Greater(ImmRenderGraphSession.Current.Transport.RenderSubmissions, 0UL);
                 string capture = Path.GetFullPath(Path.Combine(Application.dataPath, "../../../artifacts/d3d12-submission/urp-first-frame.png"));
                 Assert.Greater(CountVisiblePixels(target, capture), 100, "No visible IMM content in the URP attachment.");
+                // A black opaque surface leaves the colour clear unchanged, so only
+                // its depth can prevent the native pass from drawing over it.
+                var opaqueShader = Shader.Find("Universal Render Pipeline/Unlit");
+                Assert.IsNotNull(opaqueShader);
+                occluderMaterial = new Material(opaqueShader);
+                occluderMaterial.SetColor("_BaseColor", Color.black);
+                occluder = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                occluder.name = "IMM URP opaque depth occluder";
+                occluder.GetComponent<MeshRenderer>().sharedMaterial = occluderMaterial;
+                occluder.transform.localScale = Vector3.one * radius * 4;
+                occluder.transform.position = bounds.center + Vector3.back * radius * 2;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.AreEqual(0, CountVisiblePixels(target, null), "IMM ignored the nearer Unity opaque depth.");
+                occluder.transform.position = bounds.center + Vector3.forward * radius * 2;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.Greater(CountVisiblePixels(target, null), 100, "IMM failed to render in front of the farther Unity opaque depth.");
+                Debug.Log("[IMM_URP_READBACK] PASS Unity opaque depth occludes IMM only when nearer.");
                 ulong submitted = ImmRenderGraphSession.Current.Transport.RenderSubmissions;
                 cameraObject.GetComponent<ImmCamera>().enabled = false;
                 for (int frame = 0; frame < 3; ++frame) yield return null;
@@ -77,6 +96,8 @@ namespace ImmPlayer.Tests
             }
             finally
             {
+                Object.DestroyImmediate(occluder);
+                Object.DestroyImmediate(occluderMaterial);
                 Object.DestroyImmediate(managerObject);
                 Object.DestroyImmediate(cameraObject);
                 RenderTexture.active = previousTarget;

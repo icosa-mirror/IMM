@@ -632,7 +632,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    CI now preserves that log before failing, and the smoke failure reports native loading,
    sequence and spawn-area readiness state. The failure gate is unchanged. Root cause and
    a passing rerun are still required; this regression is not accepted as a new baseline.
-33. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+33. **Unity opaque depth consumed (local evidence):** the real Unity 6.6 D3D12 URP
+   rendering test now places a black opaque Unity quad ahead of the document, verifies
+   that no IMM pixels remain, then moves it behind the document and requires visible
+   IMM content again. This passes on the current mono 8x MSAA path; the required-test
+   verifier confirms execution in `artifacts/d3d12-submission/urp-depth-tests.xml`.
+   This establishes consumption of Unity opaque depth for this fixture, not IMM depth
+   writes, other MSAA settings, stereo or hosted URP scene validation.
+34. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
