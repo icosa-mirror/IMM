@@ -820,6 +820,32 @@ jobs:
           name: UnityWindowsDirectXPlayer
           path: artifacts/unity-windows-directx-composition/player
 
+      - name: Verify Unity D3D12 RenderGraph session lifecycle
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $artifactDir = Resolve-Path artifacts\unity-windows-directx-composition
+          $player = Join-Path $artifactDir "player\ImmUnitySmoke.exe"
+          $lifecycleLog = Join-Path $artifactDir "d3d12-session-lifecycle.log"
+          $previousLifecycleFlag = $env:IMM_UNITY_D3D12_LIFECYCLE_SMOKE
+          $env:IMM_UNITY_D3D12_LIFECYCLE_SMOKE = "1"
+          try {
+            $process = Start-Process -FilePath $player -WindowStyle Hidden -PassThru -ArgumentList @(
+              "-batchmode", "-force-d3d12", "-logFile", "`"$lifecycleLog`"")
+            if (-not $process.WaitForExit(120000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              throw "Unity D3D12 session lifecycle timed out; see d3d12-session-lifecycle.log"
+            }
+            if ($process.ExitCode -ne 0) {
+              throw "Unity D3D12 session lifecycle failed with exit code $($process.ExitCode)"
+            }
+            if (-not (Select-String -Path $lifecycleLog -SimpleMatch "[IMM_RENDER_GRAPH_LIFECYCLE] PASS" -Quiet)) {
+              throw "Unity D3D12 session lifecycle did not report successful native acknowledgements"
+            }
+          } finally {
+            $env:IMM_UNITY_D3D12_LIFECYCLE_SMOKE = $previousLifecycleFlag
+          }
+
       - name: Run Unity DirectX composition smoke
         continue-on-error: true
         timeout-minutes: 10

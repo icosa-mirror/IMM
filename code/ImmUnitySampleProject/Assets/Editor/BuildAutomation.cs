@@ -408,7 +408,10 @@ namespace ImmPlayer.Editor
             EnsureBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64, "Windows");
 
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
+            // Existing scene-composition checks use D3D11. The separate lifecycle check
+            // forces D3D12; it does not yet advertise D3D12 scene rendering support.
+            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64,
+                new[] { GraphicsDeviceType.Direct3D11, GraphicsDeviceType.Direct3D12 });
 
             string outputPath = GetCommandLineValue(EditorSmokePlayerPathArg);
             if (string.IsNullOrEmpty(outputPath))

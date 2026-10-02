@@ -603,7 +603,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    opt-in, distinct camera IDs, stable reuse and release to another camera. It passes locally
    and is required by the CI package-import job. Renderer-feature/session wiring and actual
    multi-camera native rendering are still unverified.
-30. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+30. **Session lifecycle on real Unity D3D12:** added a shared managed owner that submits
+   native initialization/shutdown events, waits at lifecycle boundaries using GPU readback,
+   and requires packet acknowledgement before releasing memory. Normal rendering does not
+   use this wait. It handles application quit and editor assembly reload; failed shutdown
+   retains ownership for recovery. A Unity 6.6 D3D12 PlayMode test passes initialization,
+   duplicate-session rejection, shutdown and recreation using the locally built plugin.
+   The Windows CI smoke player now has a required D3D12 lifecycle run, alongside its existing
+   D3D11 composition runs; hosted results are pending. Quit/reload failure paths and scene
+   rendering remain unverified, and the renderer feature/manager still need to adopt this owner.
+31. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
