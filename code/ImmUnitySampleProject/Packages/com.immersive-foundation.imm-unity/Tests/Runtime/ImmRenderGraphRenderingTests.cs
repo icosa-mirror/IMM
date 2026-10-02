@@ -176,6 +176,16 @@ namespace ImmPlayer.Tests
                 for (int frame = 0; frame < 3; ++frame) yield return null;
                 Assert.AreEqual(0, CountVisiblePixels(target, null), "Camera continued rendering IMM after opt-out.");
                 Assert.Greater(CountVisiblePixels(secondTarget, null), 100, "Opting out one camera stopped another opted-in camera.");
+                // Recreate the attachment in place: the managed RenderTexture stays
+                // the same while Unity's native colour/depth resources are replaced.
+                secondTarget.Release();
+                secondTarget.width = 192;
+                secondTarget.height = 128;
+                Assert.IsTrue(secondTarget.Create());
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.Greater(CountVisiblePixels(secondTarget, null), 100, "IMM lost its target after attachment resize/recreation.");
+                Assert.AreEqual(0, CountVisiblePixels(target, null), "Resizing another camera changed the opted-out target.");
+                Debug.Log("[IMM_URP_READBACK] PASS resized and recreated attachment renders without stale native handles.");
                 ulong submitted = ImmRenderGraphSession.Current.Transport.RenderSubmissions;
                 secondCameraObject.GetComponent<ImmCamera>().enabled = false;
                 for (int frame = 0; frame < 3; ++frame) yield return null;

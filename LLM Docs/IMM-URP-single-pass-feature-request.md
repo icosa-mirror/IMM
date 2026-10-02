@@ -704,7 +704,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    the existing depth checks and the configured sample test pass locally with required-test
    verification in `artifacts/d3d12-submission/urp-multicamera-tests.xml`. This verifies
    the tested mono camera pair; hosted multi-camera, resize and stereo cases remain open.
-40. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+40. **Attachment recreation (local evidence):** the same integration test now releases
+   and recreates the second camera's render texture in place at 192x128, replacing its
+   native colour/depth resources while retaining the managed object. It requires visible
+   IMM content afterward and verifies that the opted-out first camera remains clear.
+   The sample, depth, multi-camera and resize checks pass with required-test verification
+   in `artifacts/d3d12-submission/urp-resize-tests.xml`. Hosted resize validation and
+   dynamic resolution remain outstanding.
+41. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
