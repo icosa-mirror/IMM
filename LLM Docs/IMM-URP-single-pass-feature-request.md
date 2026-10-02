@@ -885,7 +885,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    eye projection offsets and per-eye depth rejection. CI retains those captures and
    `layered_model_frames_verified=4`. Paint/picture variants compile, but their layered
    rendering and managed XR integration remain unverified. Existing mono checks pass.
-61. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+61. **Production layered picture readbacks:** all five picture formats now pass native
+   two-slice checks at 1x/2x/4x/8x. The stereo equirectangular fixture requires the red upper
+   image in the left slice and green lower image in the right; the other formats require
+   the expected image in both slices. Interior readbacks also require later geometry behind
+   each picture to lose depth testing. The test exposed a legacy two-viewport restoration
+   after texture upload; D3D now skips it because layered stereo uses one full-width
+   viewport. CI retains 20 captures and `layered_picture_frames_verified=20`. Native build
+   and all existing checks pass locally. These checks exclude sphere silhouettes/seams;
+   production paint stereo and managed XR integration remain outstanding.
+62. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

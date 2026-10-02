@@ -922,7 +922,8 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
             if (!me->mUploaded)
             {
                 #ifdef NVIDIA_BUG_WORKAROUND
-                if( mStereoMode==StereoMode::Preferred && !cachedViewportDone )
+                // D3D layered stereo keeps one full-width viewport across texture upload.
+                if( !useBuffer && mStereoMode==StereoMode::Preferred && !cachedViewportDone )
                 {
                     int nn = 0;
                     renderer->GetViewports(&nn,cachedViewportData);
@@ -933,7 +934,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                 if (!iUpload(renderer, me, log))
                     continue;
                 #ifdef NVIDIA_BUG_WORKAROUND
-                if( mStereoMode==StereoMode::Preferred  )
+                if( !useBuffer && mStereoMode==StereoMode::Preferred )
                 {
                     renderer->SetViewports(2,cachedViewportData);
                 }
