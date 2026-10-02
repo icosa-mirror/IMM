@@ -711,7 +711,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    The sample, depth, multi-camera and resize checks pass with required-test verification
    in `artifacts/d3d12-submission/urp-resize-tests.xml`. Hosted resize validation and
    dynamic resolution remain outstanding.
-41. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+41. **Windows model colour-space variants corrected:** the model shader's colour
+   conversion is in its pixel stage, but the Windows selector applied the colour-space
+   offset to its vertex shader and release builds compiled no pixel colour variants.
+   Windows configurations now build three stereo vertex variants and six stereo/colour
+   pixel variants, with compile-time checks and selection matching that layout. Bytecode
+   inspection confirms the linear variant applies the 2.2 conversion and gamma does not.
+   The native plugin builds and the D3D12/WARP checks pass, including four player
+   configurations and twelve scene/depth frames. These existing fixtures do not prove
+   model-layer rendering; a dedicated model fixture/readback remains required.
+42. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

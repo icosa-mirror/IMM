@@ -39,6 +39,10 @@ namespace ImmPlayer
 #if defined(WINDOWS)
 #include "tmp/shader_model_vs_hlsl.inc"
 #include "tmp/shader_model_fs_hlsl.inc"
+static_assert(sizeof(shader_model_vs_code) / sizeof(shader_model_vs_code[0]) == 3,
+    "Model vertex shaders require three stereo variants");
+static_assert(sizeof(shader_model_fs_code) / sizeof(shader_model_fs_code[0]) == 6,
+    "Model pixel shaders require stereo and colour-space variants");
 #include "shader_model_vs.glsl"
 #include "shader_model_fs.glsl"
 #elif defined(ANDROID)
@@ -95,9 +99,8 @@ namespace ImmPlayer
 			else
 			{
 #if defined(WINDOWS)
-				const int poff = 3 * (static_cast<int>(colorSpace));
-                const int vid = i + poff;
-                const int fid = i;
+                const int vid = i;
+                const int fid = i + 3 * static_cast<int>(colorSpace);
 
 				mShaders[i] = renderer->CreateShaderBinary(nullptr, shader_model_vs_code[vid], shader_model_vs_size[vid], nullptr, 0, nullptr, 0, nullptr, 0, shader_model_fs_code[fid], shader_model_fs_size[fid], error);
 				if (!mShaders[i])
