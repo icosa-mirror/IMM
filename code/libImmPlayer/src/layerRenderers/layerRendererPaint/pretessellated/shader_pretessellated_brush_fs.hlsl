@@ -1,5 +1,5 @@
 #define CUSTOM_ALPHA_TO_COVERAGE 1
-#define MSAASampleCount 8
+#define MSAASampleCount GetRenderTargetSampleCount()
 
 cbuffer FrameState : register(b0)
 {
@@ -35,9 +35,10 @@ float4 main(
 
 	#if CUSTOM_ALPHA_TO_COVERAGE==1
 	color.a = 1.0;
-	uint mask = (0xff00 >> uint(al*float(MSAASampleCount) + 0.5)) & 0xff;  // compute sample mask from input alpha, like hardware is doing it
-	uint shift = (uint(ran*7.0) + primitiveID) & 7;                        // randomize mask per primitive ID and pixel
-	coverage = (((mask << 8) | mask) >> shift) & 0xff;                     // barrel Shift 8 Bit
+	uint fullMask = (1u << MSAASampleCount) - 1u;
+    uint mask = ((fullMask << MSAASampleCount) >> uint(al*float(MSAASampleCount) + 0.5)) & fullMask;
+	uint shift = (uint(ran*float(MSAASampleCount - 1u)) + primitiveID) & (MSAASampleCount - 1u); // rotate coverage within the attachment sample count
+	coverage = (((mask << MSAASampleCount) | mask) >> shift) & fullMask;
 	#else
 	color.a = al;
 	#endif

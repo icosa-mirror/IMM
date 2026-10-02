@@ -812,7 +812,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    cache publication policy and improves evidence; neither cache corruption nor OOM is
    yet established as the cause. YAML and Bash syntax checks pass locally; hosted build
    and Vulkan rendering validation remain required.
-53. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+53. **D3D sample-count-aware alpha coverage (native foundation):** all six HLSL
+   fragment shaders (both paint techniques, model and three picture shaders) now derive
+   their coverage width and rotation from `GetRenderTargetSampleCount()` instead of
+   hard-coding eight bits. This avoids multiplying shader variants or extending the
+   constant-buffer ABI. New half-opacity model readbacks pass at 2x, 4x and 8x MSAA, and
+   existing scene/model/picture/depth checks still pass locally. CI retains those captures
+   and `model_half_opacity_sample_counts_verified=3`. The managed 8x attachment guard is
+   still present until 1x behavior and Unity composition at other sample counts are
+   validated; other layer types also need coverage-specific readbacks.
+54. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

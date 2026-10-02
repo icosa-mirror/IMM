@@ -42,7 +42,7 @@ void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginE
 }
 
 enum class DepthProbe { None, HostOcclusion, ImmWrites };
-static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace)
+static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace, float opacity = 1.0f)
 {
     using namespace ImmCore;
     ImmImporter::LayerModel model;
@@ -79,7 +79,7 @@ static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& lo
     renderer.AttachShaderConstants(displayBuffer, 4);
     const int viewport[] = {0, 0, 256, 256}; renderer.SetViewport(0, viewport);
     modelRenderer.PrepareForDisplay(ImmPlayer::StereoMode::None);
-    modelRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), trans3d::identity(), 1);
+    modelRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), trans3d::identity(), opacity);
     modelRenderer.DisplayRender(&renderer, &log, layerBuffer, 0);
     if (modelRenderer.GetDrawCallInfo().numDrawCalls != 1 || modelRenderer.GetDrawCallInfo().numTriangles != 2)
         throw std::runtime_error("Model probe did not submit its two triangles");
@@ -170,7 +170,7 @@ static void DrawPanoramaProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog&
     picture.Deinit();
 }
 
-static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr, int panorama = 0, int cubeFace = 4)
+static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr, int panorama = 0, int cubeFace = 4, UINT samples = 8, float opacity = 1.0f)
 {
     auto& renderer = host.RendererInRenderEvent();
     constexpr UINT size = 256;
@@ -180,7 +180,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = desc.Height = size;
     desc.DepthOrArraySize = desc.MipLevels = 1;
-    desc.SampleDesc.Count = 8;
+    desc.SampleDesc.Count = samples;
     desc.Format = DXGI_FORMAT_R8G8B8A8_TYPELESS;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     ComPtr<ID3D12Resource> color, depth, resolved, readback;
@@ -233,7 +233,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         commands->ClearDepthStencilView(dsv->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 1, &left);
     }
     if (panorama) DrawPanoramaProbe(renderer, *log, modelColorSpace, panorama, cubeFace);
-    else if (modelColorSpace >= 0) DrawModelProbe(renderer, *log, modelColorSpace);
+    else if (modelColorSpace >= 0) DrawModelProbe(renderer, *log, modelColorSpace, opacity);
     else
     {
         player.SetTime(document, ImmCore::piTick::FromSeconds(3.0), ImmCore::piTick(0));
@@ -282,7 +282,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         if (modelColorSpace >= 0 && x == size/2 && y == size/2)
         {
             const int encodedValue = panorama > 1 ? (cubeFace + 1) * 32 : 128;
-            const int expected = modelColorSpace == 0 ? int(std::round(std::pow(encodedValue / 255.0, 2.2) * 255.0)) : encodedValue;
+            const int expected = int(std::round((modelColorSpace == 0 ? std::pow(encodedValue / 255.0, 2.2) * 255.0 : encodedValue) * opacity));
             for (int channel = 0; channel < 3; ++channel)
                 if (std::abs(int(pixel[channel]) - (panorama && channel > 0 ? 0 : expected)) > 2)
                     throw std::runtime_error(panorama ? "Panorama image-half/colour-space readback mismatch" : "Model pixel colour-space readback mismatch");
@@ -390,6 +390,14 @@ int main()
                         RenderScene(host, device.Get(), player, document, capture,
                             DepthProbe::None, int(colorSpace), &log, layout, face);
                     }
+            if (int(technique) == 0 && int(colorSpace) == 0)
+                for (UINT samples : {2u, 4u, 8u})
+                {
+                    char capture[80];
+                    std::snprintf(capture, sizeof(capture), "d3d12-model-half-opacity-%ux.ppm", samples);
+                    RenderScene(host, device.Get(), player, document, capture,
+                        DepthProbe::None, int(colorSpace), &log, 0, 4, samples, 0.5f);
+                }
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -469,7 +477,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":3,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
