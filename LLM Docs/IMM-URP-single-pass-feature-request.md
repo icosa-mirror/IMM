@@ -533,7 +533,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    resource-state tracking. Public initialization remains guarded until the actual Unity
    event and RenderGraph target integration is validated. API contract source:
    [Unity's D3D12 plugin header](https://github.com/Unity-Technologies/NativeRenderingPlugin/blob/master/PluginSource/source/Unity/IUnityGraphicsD3D12.h).
-22. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+22. **Shared bridge ownership increment (local):** `ImmEngineBridge` can now borrow
+   a host-owned renderer with explicit lifetime rules, defer player initialization until
+   the host has initialized graphics, and shut down without destroying that renderer.
+   D3D12 receives the DirectX clip/depth/front-face configuration. An opt-in sound-disable
+   setting allows headless bridge validation without opening an audio device; existing
+   callers retain sound by default. The native check verifies deferred initialization and
+   a successful GPU submission after bridge shutdown, alongside the twelve scene checks.
+   CI requires the lifecycle result and records the bridge log and source hashes. Actual
+   Unity event wiring remains unfinished.
+23. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

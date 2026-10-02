@@ -24,6 +24,7 @@ option(IMM_D3D12_PLAYER_SMOKE "Build the native player integration check" OFF)
 if(IMM_D3D12_PLAYER_SMOKE)
     get_filename_component(IMM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOLUTE)
     add_executable(imm_d3d12_player_smoke player_smoke.cpp
+        ../../../appImmShared/src/imm_engine_bridge.cpp
         ../../src/libRender/directx12/piDX12_ShaderBindings.cpp
         ../../src/libRender/directx12/piDX12_Renderer.cpp
         ../../src/libRender/directx12/piDX12_CommandContext.cpp)
@@ -44,7 +45,7 @@ if(IMM_D3D12_PLAYER_SMOKE)
         target_link_libraries(imm_d3d12_player_smoke PRIVATE "${IMM_ROOT}/thirdparty/${directory}/lib/${library}.lib")
     endforeach()
     target_link_libraries(imm_d3d12_player_smoke PRIVATE "${IMM_ROOT}/thirdparty/audio360-sdk/Audio360/Windows/x64/Audio360.lib")
-    foreach(dll IN ITEMS zlib1 jpeg62 libpng16 ogg vorbis vorbisenc)
+    foreach(dll IN ITEMS zlib1 jpeg62 libpng16 ogg vorbis vorbisenc Audio360)
         target_link_options(imm_d3d12_player_smoke PRIVATE "/DELAYLOAD:${dll}.dll")
     endforeach()
     foreach(pair IN ITEMS "zlib/zlib1" "libjpeg-turbo/jpeg62" "libpng/libpng16" "libogg/ogg" "libvorbis/vorbis" "libvorbis/vorbisenc")

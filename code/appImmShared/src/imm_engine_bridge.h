@@ -17,6 +17,10 @@ namespace ImmShared
             const char *tmpFolderName = nullptr;
             ImmCore::piRenderer::API rendererApi = ImmCore::piRenderer::API::GL;
             void *graphicsDevice = nullptr;
+            // Borrowed renderer: host initializes it before CompleteGraphicsInitialization
+            // and keeps it alive until after Shutdown. The bridge never destroys it.
+            ImmCore::piRenderer* externalRenderer = nullptr;
+            bool enableSound = true;
             bool metalUnityProjectionAdjusted = false;
             bool reverseDepthBuffer = false;
             bool overrideFrontIsCCW = false;

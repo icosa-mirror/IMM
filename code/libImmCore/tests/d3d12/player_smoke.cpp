@@ -13,6 +13,7 @@
 #include <cmath>
 #include "../../src/libRender/directx12/piDX12_Renderer.h"
 #include "libImmPlayer/src/player.h"
+#include "appImmShared/src/imm_engine_bridge.h"
 #include "appImmUnity/src/imm_unity_d3d12_host.h"
 
 using Microsoft::WRL::ComPtr;
@@ -225,6 +226,23 @@ int main()
             player.UnloadAllSync();
             player.Deinit();
         }
+        ImmShared::ImmEngineBridge bridge;
+        ImmShared::ImmEngineBridge::InitConfig bridgeConfig = {};
+        bridgeConfig.externalRenderer = &renderer;
+        bridgeConfig.rendererApi = ImmCore::piRenderer::API::DX12;
+        bridgeConfig.antialiasing = 8;
+        bridgeConfig.enableSound = false;
+        bridgeConfig.initializeRendererOnInit = false;
+        bridgeConfig.logFileName = "d3d12-bridge.log";
+        if (!bridge.Init(bridgeConfig) || bridge.IsGraphicsInitialized() ||
+            bridge.GetRenderer() != &renderer || !bridge.CompleteGraphicsInitialization())
+            throw std::runtime_error("Initialize bridge with borrowed Unity renderer");
+        bridge.Shutdown();
+        // Bridge shutdown must leave the host renderer initialized and usable.
+        Check(renderer.BeginFrame(), "Borrowed renderer survived bridge shutdown");
+        uint64_t bridgeCompletion = 0;
+        Check(renderer.EndFrame(&bridgeCompletion), "Submit after bridge shutdown");
+        Check(renderer.WaitForFrame(bridgeCompletion), "Wait after bridge shutdown");
         host.ShutdownInRenderEvent();
         ComPtr<ID3D12InfoQueue> messages;
         Check(device.As(&messages), "Get debug messages");
@@ -244,7 +262,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"borrowed_renderer_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

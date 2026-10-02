@@ -469,6 +469,7 @@ namespace ImmShared
 
     bool ImmEngineBridge::InitializeSound()
     {
+        if (!mConfig.enableSound) return true;
 #if defined(__ANDROID__) || defined(ANDROID)
         const piSoundEngineBackend::API soundApi = piSoundEngineBackend::API::Android;
         const wchar_t *soundBackendName = L"Android";
@@ -532,6 +533,16 @@ namespace ImmShared
 
     bool ImmEngineBridge::CreateRenderer()
     {
+        if (mConfig.externalRenderer)
+        {
+            if (mConfig.externalRenderer->GetAPI() != mConfig.rendererApi)
+            {
+                mLog.Printf(LT_ERROR, L"External renderer API does not match bridge configuration.");
+                return false;
+            }
+            mRenderer = mConfig.externalRenderer;
+            return true;
+        }
         mRenderReporter = new MainRenderReporter(&mLog);
         mRenderer = piRenderer::Create(mConfig.rendererApi);
         if (mRenderer == nullptr)
@@ -561,6 +572,11 @@ namespace ImmShared
         if (mGraphicsInitialized)
             return true;
 
+        if (mConfig.externalRenderer)
+        {
+            mGraphicsInitialized = true;
+            return true;
+        }
         if (!mRenderer->Initialize(mConfig.initializeWindow,
                                    nullptr,
                                    mConfig.initializeDisplay,
@@ -593,14 +609,14 @@ namespace ImmShared
         Player::Configuration conf = {};
         conf.colorSpace = static_cast<Drawing::ColorSpace>(mConfig.colorSpace);
         conf.multisamplingLevel = mConfig.antialiasing;
-        const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX ||
+        const bool usesZeroToOneDepth = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::DX12 ||
                                          mConfig.rendererApi == piRenderer::API::Metal ||
                                          mConfig.rendererApi == piRenderer::API::Vulkan);
         // DepthBuffer describes the host target's clear/compare convention,
         // not its projection clip range. Unity uses reversed Z for both D3D11
         // and Metal; standalone and Godot Metal retain their existing Linear01
         // convention unless their host explicitly opts in.
-        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX || mConfig.reverseDepthBuffer)
+        conf.depthBuffer = (mConfig.rendererApi == piRenderer::API::DX || mConfig.rendererApi == piRenderer::API::DX12 || mConfig.reverseDepthBuffer)
             ? DepthBuffer::Linear10
             : DepthBuffer::Linear01;
         conf.clipDepth = usesZeroToOneDepth ? ClipSpaceDepth::FromZeroToOne : ClipSpaceDepth::FromNegativeOneToOne;
@@ -613,7 +629,7 @@ namespace ImmShared
             : ClipSpaceDepth::FromNegativeOneToOne;
         conf.frontIsCCW = mConfig.overrideFrontIsCCW
             ? mConfig.frontIsCCW
-            : (mConfig.rendererApi != piRenderer::API::DX);
+            : (mConfig.rendererApi != piRenderer::API::DX && mConfig.rendererApi != piRenderer::API::DX12);
         conf.paintRenderingTechnique = Drawing::PaintRenderingTechnique::Static;
 #if defined(ANDROID) || defined(__ANDROID__)
         if (mConfig.rendererApi == piRenderer::API::GLES)
@@ -626,7 +642,7 @@ namespace ImmShared
         }
 #endif
 
-        if (!mPlayer.Init(mRenderer, mSoundBackend->GetEngine(), &mLog, &mTimer, &conf))
+        if (!mPlayer.Init(mRenderer, mSoundBackend ? mSoundBackend->GetEngine() : nullptr, &mLog, &mTimer, &conf))
         {
             mLog.Printf(LT_ERROR, L"Failed to initialize ImmPlayer.");
             return false;
@@ -647,13 +663,13 @@ namespace ImmShared
 
         if (mGraphicsInitialized && mRenderer != nullptr)
         {
-            mRenderer->Deinitialize();
+            if (!mConfig.externalRenderer) mRenderer->Deinitialize();
             mGraphicsInitialized = false;
         }
 
         if (mRenderer != nullptr)
         {
-            delete mRenderer;
+            if (!mConfig.externalRenderer) delete mRenderer;
             mRenderer = nullptr;
         }
 

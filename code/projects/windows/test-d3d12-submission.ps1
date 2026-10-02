@@ -15,6 +15,7 @@ $evidenceFiles = @(
     'd3d12-submission.ppm',
     'd3d12-player-result.json',
     'd3d12-player.log',
+    'd3d12-bridge.log',
     'd3d12-player-scene-static-linear.ppm',
     'd3d12-player-scene-static-gamma.ppm',
     'd3d12-player-scene-pretessellated-linear.ppm',
@@ -68,7 +69,7 @@ foreach ($name in $evidenceFiles) {
     Copy-Item -LiteralPath (Join-Path $buildDirectory $name) -Destination $outputDirectory -Force
 }
 $playerResult = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Raw | ConvertFrom-Json
-if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or $playerResult.scene_frames_verified -ne 12 -or $playerResult.imm_depth_write_frames_verified -ne 4 -or $playerResult.host_depth_frames_verified -ne 4 -or $playerResult.msaa_samples -ne 8 -or -not $playerResult.unity_queue_event_contract_mocked -or -not $playerResult.debug_layer_enabled) {
+if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or $playerResult.scene_frames_verified -ne 12 -or $playerResult.imm_depth_write_frames_verified -ne 4 -or $playerResult.host_depth_frames_verified -ne 4 -or $playerResult.msaa_samples -ne 8 -or -not $playerResult.unity_queue_event_contract_mocked -or -not $playerResult.borrowed_renderer_lifecycle_verified -or -not $playerResult.debug_layer_enabled) {
     throw 'D3D12 player scene-readback evidence is incomplete.'
 }
 $result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Raw | ConvertFrom-Json
@@ -131,6 +132,8 @@ foreach ($relativePath in @(
     'code/libImmCore/tests/d3d12/player_smoke.cpp',
     'code/appImmUnity/src/imm_unity_d3d12_host.h',
     'code/appImmUnity/src/IUnityGraphicsD3D12.h',
+    'code/appImmShared/src/imm_engine_bridge.h',
+    'code/appImmShared/src/imm_engine_bridge.cpp',
     'code/libImmCore/tests/d3d12/CMakeLists.txt'
 )) {
     $sourceHashes[$relativePath] = (Get-FileHash -LiteralPath (Join-Path $repoRoot $relativePath) -Algorithm SHA256).Hash
