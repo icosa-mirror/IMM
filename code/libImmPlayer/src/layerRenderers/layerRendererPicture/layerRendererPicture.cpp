@@ -842,7 +842,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
         const double sc2 = lengthSquared((layerToViewer*vec4d(1.0, 0.0, 0.0, 0.0)).xyz());
         const double dis2 = lengthSquared(vcen);
         const double f = sqrt(double(lrad2) * sc2 / dis2);
-        if (f < 0.005) // IQ-TODO: do a smooth fade here, super easy by using the layer opacity
+        if (!mOrthographicProjection && f < 0.005) // IQ-TODO: do a smooth fade here, super easy by using the layer opacity
         {
             return;
         }

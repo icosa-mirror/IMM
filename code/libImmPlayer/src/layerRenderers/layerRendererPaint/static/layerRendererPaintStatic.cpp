@@ -822,7 +822,7 @@ bool LayerRendererPaintStatic::Init(piRenderer* renderer, piLog* log, Drawing::C
         const vec3  lcen = getcenter(bbox);
         const vec3  lViewerPosition = d2f((invert(layerToViewer)*vec4d(0.0, 0.0, 0.0, 1.0)).xyz());
         const float wDistanceToBBox = float(double(sdBox(lViewerPosition - lcen, getradiius(bbox))) * layerToViewer.mScale); // distance to closest point on the surface of the bbox. It's negative if we are inside.
-        if (wDistanceToBBox > 0.0) // if outside bbox
+        if (!mOrthographicProjection && wDistanceToBBox > 0.0) // if outside bbox
         {
             const vec3d vcen = (layerToViewer*f2d(vec4(lcen, 1.0f))).xyz();
             const float lrad2 = diagonalSquared(bbox);

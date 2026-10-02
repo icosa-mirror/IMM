@@ -40,9 +40,9 @@ namespace ImmPlayer
             if (!transport.IsReady) return;
             var camera = frameData.Get<UniversalCameraData>();
             if (!ImmCamera.TryAcquire(camera.camera, out int cameraId)) return;
-            if (camera.xr.enabled || camera.camera.orthographic)
+            if (camera.xr.enabled)
             {
-                Report("The current D3D12 implementation requires a mono perspective camera.");
+                Report("The current D3D12 implementation requires a mono camera.");
                 return;
             }
             if (camera.renderType != CameraRenderType.Base || camera.camera.rect != new Rect(0, 0, 1, 1))

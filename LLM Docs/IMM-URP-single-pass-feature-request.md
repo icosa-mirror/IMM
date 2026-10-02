@@ -856,7 +856,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    `orthographic_frames_verified=12`. The managed perspective-only guard remains until
    Unity orthographic integration and distance-based layer culling are verified; these
    native checks alone do not establish complete orthographic support.
-58. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+58. **Orthographic cameras and distance culling:** paint (both techniques), model and
+   picture renderers now skip their perspective-only distance/size rejection when the
+   projection has constant clip W; frustum culling remains active. Native orthographic
+   scene/depth checks pass with the camera 1,000 scene radii away. The managed pass now
+   accepts mono orthographic cameras. Both required Unity rendering tests pass locally in
+   `urp-orthographic-tests.xml`, including a distant orthographic view and native depth
+   occlusion of later transparents, followed by a return to perspective and existing
+   lifecycle checks. Package documentation reflects the camera support. The native CI
+   check now includes the distant case; hosted results and Unity orthographic evidence
+   remain pending.
+59. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

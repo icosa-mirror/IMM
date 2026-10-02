@@ -214,9 +214,9 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     const auto bounds = player.GetDocumentBBox(document);
     const double radius = std::max({bounds.mMaxX-bounds.mMinX, bounds.mMaxY-bounds.mMinY, bounds.mMaxZ-bounds.mMinZ, 1.0}) * 0.6;
     const auto view = ImmCore::trans3d::translate(-(bounds.mMinX+bounds.mMaxX)*0.5,
-        -(bounds.mMinY+bounds.mMaxY)*0.5, -(bounds.mMinZ+bounds.mMaxZ)*0.5-radius*2.0);
+        -(bounds.mMinY+bounds.mMaxY)*0.5, -(bounds.mMinZ+bounds.mMaxZ)*0.5-radius*(orthographic ? 1000.0 : 2.0));
     const float r = static_cast<float>(radius);
-    const float nearPlane = r * 0.01f, farPlane = r * 4.0f;
+    const float nearPlane = r * 0.01f, farPlane = r * (orthographic ? 2000.0f : 4.0f);
     const ImmCore::mat4x4 projection = orthographic ?
         ImmCore::mat4x4(1/r,0,0,0, 0,1/r,0,0, 0,0,1/(farPlane-nearPlane),farPlane/(farPlane-nearPlane), 0,0,0,1) :
         ImmCore::mat4x4(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);

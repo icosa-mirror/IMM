@@ -1552,6 +1552,7 @@ namespace ImmPlayer
 
         if (lr == nullptr) return;
 
+        lr->SetOrthographicProjection(mViewerInfo.mProjection[12] == 0.0f && mViewerInfo.mProjection[13] == 0.0f && mViewerInfo.mProjection[14] == 0.0f);
         lr->DisplayPreRender(mRenderer, mSoundEngine, mLog, la, frus, layerToViewer, laOpacity);
 
 #if defined(ANDROID)

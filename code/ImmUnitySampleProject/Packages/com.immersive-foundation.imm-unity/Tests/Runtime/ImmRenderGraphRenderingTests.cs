@@ -174,6 +174,20 @@ namespace ImmPlayer.Tests
                     Debug.Log("[IMM_URP_READBACK] PASS IMM depth occludes farther Unity transparent geometry.");
                     Debug.Log($"[IMM_URP_READBACK] PASS colour/depth composition at {samples} samples.");
                 }
+                camera.orthographic = true;
+                camera.orthographicSize = radius * 1.5f;
+                camera.farClipPlane = radius * 2000;
+                camera.transform.position = bounds.center + Vector3.back * radius * 1000;
+                occluder.transform.position = bounds.center + Vector3.forward * radius * 2;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.Greater(CountVisiblePixels(target, null), 100, "Distant orthographic IMM content was culled or lost its depth.");
+                occluder.transform.position = bounds.center + Vector3.back * radius * 2;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.AreEqual(0, CountVisiblePixels(target, null), "Nearer transparent surface did not occlude orthographic IMM.");
+                Debug.Log("[IMM_URP_READBACK] PASS distant orthographic rendering and depth composition.");
+                camera.orthographic = false;
+                camera.farClipPlane = radius * 8;
+                camera.transform.position = bounds.center + Vector3.back * radius * 3;
                 occluder.SetActive(false);
                 secondTarget = new RenderTexture(target.descriptor);
                 secondTarget.Create();
