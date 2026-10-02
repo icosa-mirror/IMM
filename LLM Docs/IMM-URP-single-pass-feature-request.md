@@ -643,7 +643,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    that native depth writes survive into Unity's transparent pass for this fixture.
    Other MSAA settings, translucent IMM materials, stereo and hosted URP scene validation
    remain unverified.
-34. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+34. **Configured URP sample (local evidence):** added `Assets/Scenes/SampleSceneURP.unity`,
+   a serialized URP asset and renderer containing `ImmRendererFeature`, an opted-in camera,
+   and a minimal loader for `sample1.imm`. Assets were generated through Unity Editor APIs.
+   The loader selects the scene's pipeline and restores the prior quality pipeline on
+   destruction; its manager is a separate object so the manager's persistent lifetime
+   cannot prevent scene cleanup. A Unity 6.6 D3D12 PlayMode test loads the actual scene,
+   verifies visible native content, unloads it and requires session shutdown. That test
+   and the existing colour/depth/opt-out test both pass, with required-test verification
+   in `artifacts/d3d12-submission/urp-sample-tests.xml`. The package README explains setup
+   and current limitations. A hosted D3D12 scene-validation gate remains outstanding.
+35. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

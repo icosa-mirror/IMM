@@ -6,12 +6,69 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.SceneManagement;
+using UnityEditor.SceneManagement;
 using UnityEngine.TestTools;
 
 namespace ImmPlayer.Tests
 {
     public sealed class ImmRenderGraphRenderingTests
     {
+        [UnityTest]
+        public IEnumerator D3D12ConfiguredSampleRendersDocument()
+        {
+            if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12)
+                Assert.Ignore("Requires Unity's Windows D3D12 graphics device.");
+            const string scenePath = "Assets/Scenes/SampleSceneURP.unity";
+            Assert.IsTrue(File.Exists(scenePath), "Configured URP sample scene is missing.");
+            var previousPipeline = QualitySettings.renderPipeline;
+            var target = new RenderTexture(new RenderTextureDescriptor(256, 256)
+            {
+                graphicsFormat = GraphicsFormat.R8G8B8A8_UNorm,
+                depthStencilFormat = GraphicsFormat.D32_SFloat,
+                msaaSamples = 8
+            });
+            target.Create();
+            var scene = EditorSceneManager.LoadSceneInPlayMode(scenePath,
+                new LoadSceneParameters(LoadSceneMode.Additive));
+            AsyncOperation unload = null;
+            try
+            {
+                while (!scene.isLoaded) yield return null;
+                Camera camera = null;
+                foreach (var root in scene.GetRootGameObjects())
+                {
+                    camera = root.GetComponentInChildren<Camera>();
+                    if (camera != null) break;
+                }
+                Assert.IsNotNull(camera);
+                Assert.IsNotNull(camera.GetComponent<ImmCamera>());
+                camera.targetTexture = target;
+                float deadline = Time.realtimeSinceStartup + 30;
+                int visible = 0;
+                do
+                {
+                    yield return null;
+                    visible = CountVisiblePixels(target, null);
+                } while (visible <= 100 && Time.realtimeSinceStartup < deadline);
+                Assert.Greater(visible, 100, "Configured sample did not render IMM content.");
+                Assert.IsNotNull(ImmRenderGraphSession.Current);
+                Assert.Greater(ImmRenderGraphSession.Current.Transport.RenderSubmissions, 0UL);
+                Debug.Log("[IMM_URP_SAMPLE_TEST] PASS configured sample renders through its serialized renderer feature.");
+            }
+            finally
+            {
+                // Destroy scene objects first so native shutdown precedes releasing the target.
+                foreach (var root in scene.GetRootGameObjects()) Object.DestroyImmediate(root);
+                unload = SceneManager.UnloadSceneAsync(scene);
+                QualitySettings.renderPipeline = previousPipeline;
+                target.Release();
+                Object.DestroyImmediate(target);
+            }
+            yield return unload;
+            Assert.IsNull(ImmRenderGraphSession.Current);
+        }
+
         [UnityTest]
         public IEnumerator D3D12UrpRendersDocumentOnlyForOptedInCamera()
         {

@@ -2,6 +2,26 @@
 
 Local UPM package for the IMM Unity runtime, editor tools, and samples.
 
+## Experimental URP RenderGraph sample
+
+The repository sample project includes `Assets/Scenes/SampleSceneURP.unity` for
+Unity 6.6 / URP 17.6 on Windows D3D12. Start the Editor with `-force-d3d12`, open
+that scene, and enter Play Mode. Use a plugin built from the same source revision.
+The sample loads `StreamingAssets/sample1.imm` and frames its bounds at three seconds.
+
+`Assets/Settings/ImmURPRenderer.asset` contains `ImmRendererFeature`; the scene's
+camera has `ImmCamera`. `ImmUrpSample` selects the configured URP asset for the
+scene's lifetime and restores the previous quality pipeline when destroyed. For
+an application, assign the URP asset in its graphics/quality settings, add the
+renderer feature, add `ImmCamera` to each participating camera, and initialize
+an `ImmPlayerManager`. Rendering uses RenderGraph at `AfterRenderingOpaques`.
+
+The current implementation requires a mono perspective base camera, a full
+viewport, matching 8x MSAA attachments and no dynamic resolution. Local checks
+cover document rendering, camera opt-out, Unity opaque depth and later Unity
+transparent depth tests. This is an implementation sample, not a declaration
+of complete D3D12 layer support or Metal/Vulkan/stereo RenderGraph support.
+
 ## Android Vulkan rendering contract
 
 On Android Vulkan, IMM does not access Unity's display render buffer or
