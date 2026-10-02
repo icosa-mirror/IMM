@@ -101,6 +101,15 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         var manager = FindFirstObjectByType<ImmPlayerManager>();
         Require(manager != null && manager.IsInitialized, "Native session was not initialized.");
         Require(sample.Document != null, "Sample document is missing.");
+        var stereoProbe = ImmRenderGraphValidation.VerifyStereoPacket(documentCamera,
+            Mathf.Max(sample.Document.GetBoundingBox().extents.magnitude, 0.1f));
+        // Advance explicitly so the outer runner catches validation failures.
+        try
+        {
+            while (stereoProbe.MoveNext()) yield return stereoProbe.Current;
+        }
+        finally { (stereoProbe as IDisposable)?.Dispose(); }
+        Debug.Log("[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.");
         int documentId = sample.Document.DocumentId;
         Require(ImmNativePlugin.IsDocumentActive(documentId), "Sample document was already inactive before unload.");
         manager.UnloadDocument(sample.Document);

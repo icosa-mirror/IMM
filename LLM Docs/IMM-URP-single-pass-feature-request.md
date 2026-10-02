@@ -934,7 +934,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    stereo culling and headset composition remain unverified. The new managed array
    readback is currently local coverage; adding it to the packaged Windows CI gate
    remains required before declaring this path validated in CI.
-66. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+66. **Packaged stereo CI gate:** the editor regression and packaged URP smoke player
+   share `ImmRenderGraphValidation.VerifyStereoPacket`. The Windows CI workflow now
+   requires the managed stereo readback pass marker in addition to the existing sample
+   count, opt-out, unload and shutdown checks. A locally rebuilt packaged player exits
+   zero with every required marker, including distinct scene images in both array slices.
+   Hosted execution is pending. This covers non-headset stereo submission; it does not
+   replace OpenXR graph, peripheral culling or headset composition validation.
+67. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

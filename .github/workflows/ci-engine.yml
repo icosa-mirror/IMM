@@ -872,6 +872,7 @@ jobs:
               "[IMM_URP_SMOKE] PASS rendered at 2 samples.",
               "[IMM_URP_SMOKE] PASS rendered at 4 samples.",
               "[IMM_URP_SMOKE] PASS rendered at 8 samples.",
+              "[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.",
               "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
               "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
               "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.")) {
