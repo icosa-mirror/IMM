@@ -26,6 +26,8 @@ struct piShaderS
     id<MTLRenderPipelineState> pipelineTargetSourceAlphaBlend = nil;
     MTLPixelFormat pipelineTargetColorFormat = MTLPixelFormatInvalid;
     MTLPixelFormat pipelineTargetDepthFormat = MTLPixelFormatInvalid;
+    MTLPixelFormat pipelineTargetStencilFormat = MTLPixelFormatInvalid;
+    NSUInteger pipelineTargetSampleCount = 1;
     bool requiresVertexBuffer = true;
 };
 struct piVertexArrayS
@@ -502,10 +504,13 @@ static void iConfigureSourceAlphaBlend(MTLRenderPipelineColorAttachmentDescripto
     color.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
 }
 
-static void iGetActiveRenderPassFormats(piMetalState *state, piShader shader, MTLPixelFormat *colorFormat, MTLPixelFormat *depthFormat)
+static void iGetActiveRenderPassLayout(piMetalState *state, piShader shader, MTLPixelFormat *colorFormat,
+                                       MTLPixelFormat *depthFormat, MTLPixelFormat *stencilFormat, NSUInteger *sampleCount)
 {
     *colorFormat = shader->descriptor.colorAttachments[0].pixelFormat;
     *depthFormat = shader->descriptor.depthAttachmentPixelFormat;
+    *stencilFormat = shader->descriptor.stencilAttachmentPixelFormat;
+    *sampleCount = shader->descriptor.rasterSampleCount;
     if (!state || !state->activeRenderPass)
     {
         return;
@@ -515,17 +520,22 @@ static void iGetActiveRenderPassFormats(piMetalState *state, piShader shader, MT
     if (colorTexture)
     {
         *colorFormat = colorTexture.pixelFormat;
+        *sampleCount = colorTexture.sampleCount;
     }
 
     id<MTLTexture> depthTexture = state->activeRenderPass.depthAttachment.texture;
     if (depthTexture)
     {
         *depthFormat = depthTexture.pixelFormat;
+        if (!colorTexture) *sampleCount = depthTexture.sampleCount;
     }
     else
     {
         *depthFormat = MTLPixelFormatInvalid;
     }
+    id<MTLTexture> stencilTexture = state->activeRenderPass.stencilAttachment.texture;
+    *stencilFormat = stencilTexture ? stencilTexture.pixelFormat : MTLPixelFormatInvalid;
+    if (!colorTexture && !depthTexture && stencilTexture) *sampleCount = stencilTexture.sampleCount;
 }
 
 static id<MTLRenderPipelineState> iCreatePipelineForTarget(piMetalState *state,
@@ -533,12 +543,16 @@ static id<MTLRenderPipelineState> iCreatePipelineForTarget(piMetalState *state,
                                                            piRenderer::piReporter *reporter,
                                                            MTLPixelFormat colorFormat,
                                                            MTLPixelFormat depthFormat,
+                                                           MTLPixelFormat stencilFormat,
+                                                           NSUInteger sampleCount,
                                                            bool sourceAlphaBlend,
                                                            bool colorWrite)
 {
     MTLRenderPipelineDescriptor *descriptor = [shader->descriptor copy];
     descriptor.colorAttachments[0].pixelFormat = colorFormat;
     descriptor.depthAttachmentPixelFormat = depthFormat;
+    descriptor.stencilAttachmentPixelFormat = stencilFormat;
+    descriptor.rasterSampleCount = sampleCount;
     if (sourceAlphaBlend)
     {
         iConfigureSourceAlphaBlend(descriptor.colorAttachments[0]);
@@ -554,9 +568,11 @@ static id<MTLRenderPipelineState> iCreatePipelineForTarget(piMetalState *state,
     {
         const char *message = pipelineError.localizedDescription.UTF8String ?: "unknown error";
         fprintf(stderr,
-                "Metal target pipeline creation failed: color=%lu depth=%lu sourceAlpha=%d colorWrite=%d error=%s\n",
+                "Metal target pipeline creation failed: color=%lu depth=%lu stencil=%lu samples=%lu sourceAlpha=%d colorWrite=%d error=%s\n",
                 (unsigned long)colorFormat,
                 (unsigned long)depthFormat,
+                (unsigned long)stencilFormat,
+                (unsigned long)sampleCount,
                 sourceAlphaBlend ? 1 : 0,
                 colorWrite ? 1 : 0,
                 message);
@@ -574,19 +590,27 @@ static id<MTLRenderPipelineState> iGetPipelineForCurrentState(piMetalState *stat
 
     MTLPixelFormat targetColorFormat = MTLPixelFormatInvalid;
     MTLPixelFormat targetDepthFormat = MTLPixelFormatInvalid;
-    iGetActiveRenderPassFormats(state, shader, &targetColorFormat, &targetDepthFormat);
-    const bool targetFormatDiffers =
+    MTLPixelFormat targetStencilFormat = MTLPixelFormatInvalid;
+    NSUInteger targetSampleCount = 1;
+    iGetActiveRenderPassLayout(state, shader, &targetColorFormat, &targetDepthFormat,
+                              &targetStencilFormat, &targetSampleCount);
+    const bool targetLayoutDiffers =
         targetColorFormat != shader->descriptor.colorAttachments[0].pixelFormat ||
-        targetDepthFormat != shader->descriptor.depthAttachmentPixelFormat;
-    if (targetFormatDiffers)
+        targetDepthFormat != shader->descriptor.depthAttachmentPixelFormat ||
+        targetStencilFormat != shader->descriptor.stencilAttachmentPixelFormat ||
+        targetSampleCount != shader->descriptor.rasterSampleCount;
+    if (targetLayoutDiffers)
     {
-        if (shader->pipelineTargetColorFormat != targetColorFormat || shader->pipelineTargetDepthFormat != targetDepthFormat)
+        if (shader->pipelineTargetColorFormat != targetColorFormat || shader->pipelineTargetDepthFormat != targetDepthFormat ||
+            shader->pipelineTargetStencilFormat != targetStencilFormat || shader->pipelineTargetSampleCount != targetSampleCount)
         {
             shader->pipelineTargetColorWrite = nil;
             shader->pipelineTargetNoColorWrite = nil;
             shader->pipelineTargetSourceAlphaBlend = nil;
             shader->pipelineTargetColorFormat = targetColorFormat;
             shader->pipelineTargetDepthFormat = targetDepthFormat;
+            shader->pipelineTargetStencilFormat = targetStencilFormat;
+            shader->pipelineTargetSampleCount = targetSampleCount;
         }
         if (state->color0WriteEnabled)
         {
@@ -594,20 +618,20 @@ static id<MTLRenderPipelineState> iGetPipelineForCurrentState(piMetalState *stat
             {
                 if (!shader->pipelineTargetSourceAlphaBlend)
                 {
-                    shader->pipelineTargetSourceAlphaBlend = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, true, true);
+                    shader->pipelineTargetSourceAlphaBlend = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, targetStencilFormat, targetSampleCount, true, true);
                 }
                 return shader->pipelineTargetSourceAlphaBlend;
             }
             if (!shader->pipelineTargetColorWrite)
             {
-                shader->pipelineTargetColorWrite = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, false, true);
+                shader->pipelineTargetColorWrite = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, targetStencilFormat, targetSampleCount, false, true);
             }
             return shader->pipelineTargetColorWrite;
         }
 
         if (!shader->pipelineTargetNoColorWrite)
         {
-            shader->pipelineTargetNoColorWrite = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, false, false);
+            shader->pipelineTargetNoColorWrite = iCreatePipelineForTarget(state, shader, reporter, targetColorFormat, targetDepthFormat, targetStencilFormat, targetSampleCount, false, false);
         }
         return shader->pipelineTargetNoColorWrite;
     }

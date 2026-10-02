@@ -996,7 +996,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    16 depth cases plus existing stereo/lifecycle gates; Apple runtime results remain
    pending. Source inspection also identified that Metal pipeline-state selection lacks
    attachment sample-count handling; that requires correction before Metal MSAA acceptance.
-73. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+73. **Metal pipeline attachment layout:** target-specific pipeline creation now sets
+   `rasterSampleCount` and the stencil attachment format from the active render pass,
+   and invalidates its existing cached target variants when either changes. Previously
+   it considered colour/depth formats only, leaving MSAA targets on a single-sample
+   pipeline descriptor. Colour-write, no-colour-write and source-alpha variants all use
+   the complete layout. This follows Apple's
+   [render pipeline descriptor contract](https://developer.apple.com/documentation/metal/mtlrenderpipelinedescriptor).
+   Source review and diff checks pass; Apple compilation/rendering is still pending in
+   CI. Metal shader coverage still assumes eight samples and needs a separate correction.
+74. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
