@@ -1005,7 +1005,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    [render pipeline descriptor contract](https://developer.apple.com/documentation/metal/mtlrenderpipelinedescriptor).
    Source review and diff checks pass; Apple compilation/rendering is still pending in
    CI. Metal shader coverage still assumes eight samples and needs a separate correction.
-74. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+74. **Metal coverage uses actual samples:** all six generated paint/picture/model
+   coverage helpers now use Metal's `get_num_samples()` and derive the coverage mask
+   width, dithering interval and mask rotation from that count. No new buffer binding
+   or shader variant is needed. The function is documented in Apple's
+   [Metal Shading Language specification](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf),
+   section 6.11.1.2. Local arithmetic checks verify transparent/opaque endpoints, valid
+   mask bits and half-opacity coverage for 1/2/4/8 samples; 10,000 eight-sample comparisons
+   match the previous formula. These are numerical checks only. Apple shader compilation
+   and fractional-coverage readbacks remain unverified and required.
+75. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
