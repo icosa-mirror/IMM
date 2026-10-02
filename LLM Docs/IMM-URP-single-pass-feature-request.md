@@ -921,7 +921,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    `d3d12-layered-packet-*x.ppm` captures and `layered_packet_frames_verified=4`.
    This uses mocked Unity target/queue interfaces; actual Unity XR attachment integration,
    stereo culling and headset validation remain outstanding.
-65. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+65. **Unity D3D12 stereo submission integration:** the URP pass now accepts two-view
+   single-pass XR with slices 0/1, matching full-size viewports and two-slice colour/depth
+   attachments. It snapshots each eye's matrices plus URP's stereo culling view/projection
+   at graph recording time, applies URP's XR target flip rule and binds all slices before
+   and after native submission. Existing sample-count and dynamic-resolution guards apply.
+   Both required Unity integration tests pass locally, including a new managed packet
+   test against a real Unity texture array: both eye slices contain scene pixels and
+   differ with their eye transforms. The test uses Unity's default far-depth clear;
+   passing a raw reversed-Z zero to Unity's clear API hid all scene content.
+   This is not an OpenXR execution result: actual XR graph attachments, peripheral
+   stereo culling and headset composition remain unverified. The new managed array
+   readback is currently local coverage; adding it to the packaged Windows CI gate
+   remains required before declaring this path validated in CI.
+66. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

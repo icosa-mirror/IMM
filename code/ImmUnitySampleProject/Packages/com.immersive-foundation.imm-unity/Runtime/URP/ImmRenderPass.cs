@@ -15,10 +15,14 @@ namespace ImmPlayer
         {
             internal TextureHandle Color, Depth;
             internal bool HasTargetTexture;
+            internal bool Stereo;
+            internal RenderTargetIdentifier XrTarget;
+            internal Rect XrViewport;
             internal ImmRenderGraphTransport Transport;
             internal ImmRenderPass Owner;
             internal int CameraId;
             internal Matrix4x4 View, Projection;
+            internal Matrix4x4 LeftView, LeftProjection, RightView, RightProjection;
         }
 
         private readonly HashSet<string> reported = new HashSet<string>();
@@ -40,9 +44,12 @@ namespace ImmPlayer
             if (!transport.IsReady) return;
             var camera = frameData.Get<UniversalCameraData>();
             if (!ImmCamera.TryAcquire(camera.camera, out int cameraId)) return;
-            if (camera.xr.enabled)
+            bool stereo = camera.xr.enabled;
+            if (stereo && (!camera.xr.singlePassEnabled || camera.xr.viewCount != 2 ||
+                camera.xr.GetTextureArraySlice(0) != 0 || camera.xr.GetTextureArraySlice(1) != 1 ||
+                camera.xr.GetViewport(0) != camera.xr.GetViewport(1)))
             {
-                Report("The current D3D12 implementation requires a mono camera.");
+                Report("IMM D3D12 XR requires two single-pass views in slices 0 and 1 with matching viewports.");
                 return;
             }
             if (camera.renderType != CameraRenderType.Base || camera.camera.rect != new Rect(0, 0, 1, 1))
@@ -66,6 +73,18 @@ namespace ImmPlayer
                 data.Owner = this;
                 data.View = camera.GetViewMatrix();
                 data.Projection = camera.GetProjectionMatrix();
+                data.Stereo = stereo;
+                if (stereo)
+                {
+                    data.XrTarget = new RenderTargetIdentifier(camera.xr.renderTarget, 0, CubemapFace.Unknown, 0);
+                    data.XrViewport = camera.xr.GetViewport(0);
+                    data.View = camera.xr.cullingParams.stereoViewMatrix;
+                    data.Projection = camera.xr.cullingParams.stereoProjectionMatrix;
+                    data.LeftView = camera.GetViewMatrix(0);
+                    data.LeftProjection = camera.GetProjectionMatrix(0);
+                    data.RightView = camera.GetViewMatrix(1);
+                    data.RightProjection = camera.GetProjectionMatrix(1);
+                }
                 builder.UseTexture(data.Color, AccessFlags.ReadWrite);
                 builder.UseTexture(data.Depth, AccessFlags.ReadWrite);
                 builder.AllowPassCulling(false);
@@ -86,13 +105,15 @@ namespace ImmPlayer
             }
             var c = color.rt;
             var d = depth.rt;
-            if (c.dimension != TextureDimension.Tex2D || d.dimension != TextureDimension.Tex2D ||
-                c.volumeDepth != 1 || d.volumeDepth != 1 || c.width != d.width || c.height != d.height ||
+            var dimension = data.Stereo ? TextureDimension.Tex2DArray : TextureDimension.Tex2D;
+            int slices = data.Stereo ? 2 : 1;
+            if (c.dimension != dimension || d.dimension != dimension ||
+                c.volumeDepth != slices || d.volumeDepth != slices || c.width != d.width || c.height != d.height ||
                 c.antiAliasing != d.antiAliasing ||
                 (c.antiAliasing != 1 && c.antiAliasing != 2 && c.antiAliasing != 4 && c.antiAliasing != 8) ||
                 c.useDynamicScale || d.useDynamicScale)
             {
-                data.Owner.Report("The current D3D12 pass requires matching 2D attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
+                data.Owner.Report("IMM D3D12 requires matching mono 2D or stereo two-slice attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
                 return;
             }
             uint colorFormat = DxgiFormat(c.graphicsFormat);
@@ -106,10 +127,10 @@ namespace ImmPlayer
             // convert the URP projection once, using the actual attachments' flip state.
             // Snapshot camera state at record time instead of retaining URP's pooled
             // UniversalCameraData. This is URP 17.6's flip rule for the supported
-            // non-XR game camera, evaluated against the resolved attachment.
+            // game camera, evaluated against the resolved attachment and XR target.
             var colorId = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, 0);
             bool isBackbuffer = colorId == BuiltinRenderTextureType.CameraTarget ||
-                colorId == BuiltinRenderTextureType.Depth;
+                colorId == BuiltinRenderTextureType.Depth || (data.Stereo && colorId == data.XrTarget);
             bool flipped = !SystemInfo.graphicsUVStartsAtTop || data.HasTargetTexture || !isBackbuffer;
             Matrix4x4 projection = GL.GetGPUProjectionMatrix(data.Projection, flipped);
             var size = color.useScaling
@@ -124,17 +145,28 @@ namespace ImmPlayer
                 return;
             }
             var viewport = new RectInt(0, 0, size.x, size.y);
+            if (data.Stereo && data.XrViewport != new Rect(0, 0, size.x, size.y))
+            {
+                data.Owner.Report("IMM D3D12 XR requires full-size eye viewports.");
+                return;
+            }
+            var colorTarget = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
+            var depthTarget = new RenderTargetIdentifier(depth.nameID, 0, CubemapFace.Unknown, data.Stereo ? -1 : 0);
             CommandBuffer commands = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
-            commands.SetRenderTarget(color.nameID, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
-                depth.nameID, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
+                depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             commands.SetViewport(new Rect(0, 0, size.x, size.y));
             data.Transport.QueueRender(commands, data.CameraId,
                 c.colorBuffer.GetNativeRenderBufferPtr(), d.depthBuffer.GetNativeRenderBufferPtr(),
-                colorFormat, depthFormat, viewport, data.View, projection);
+                colorFormat, depthFormat, viewport, data.View, projection,
+                data.Stereo ? data.LeftView : null,
+                data.Stereo ? GL.GetGPUProjectionMatrix(data.LeftProjection, flipped) : null,
+                data.Stereo ? data.RightView : null,
+                data.Stereo ? GL.GetGPUProjectionMatrix(data.RightProjection, flipped) : null);
             // The native event uses its own command list and restores resource states.
             // Rebind Unity attachments/viewport after the event for subsequent graph work.
-            commands.SetRenderTarget(color.nameID, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
-                depth.nameID, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
+                depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             commands.SetViewport(new Rect(0, 0, size.x, size.y));
         }
 
