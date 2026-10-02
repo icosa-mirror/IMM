@@ -101,6 +101,15 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             }
             Require(renderError == null, $"Unity reported: {renderError}");
             Require(ReadVisiblePixels(true, samples) > 100, $"No visible IMM content at {samples} samples.");
+            var depthProbe = VerifyDepthComposition(samples, sample.Document.GetBoundingBox());
+            try
+            {
+                while (depthProbe.MoveNext()) yield return depthProbe.Current;
+            }
+            finally { (depthProbe as IDisposable)?.Dispose(); }
+            yield return null;
+            RenderPipeline.SubmitRenderRequest(documentCamera, request);
+            Require(ReadVisiblePixels(false) > 100, "IMM scene did not return after depth probe removal.");
             Debug.Log($"[IMM_URP_SMOKE] PASS rendered at {samples} samples.");
         }
         ReadVisiblePixels(true);
@@ -147,6 +156,45 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         for (int frame = 0; frame < 3; ++frame) yield return null;
         Require(manager == null, "The sample left its persistent manager alive after destruction.");
         Require(renderError == null, $"Unity reported: {renderError}");
+    }
+
+    private IEnumerator VerifyDepthComposition(int samples, Bounds bounds)
+    {
+        var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
+        Require(shader != null && shader.isSupported, "URP depth probe shader is unavailable.");
+        var material = new Material(shader);
+        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = "IMM URP CI depth probe";
+        quad.GetComponent<MeshRenderer>().sharedMaterial = material;
+        float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
+        quad.transform.localScale = Vector3.one * radius * 4;
+        try
+        {
+            for (int phase = 0; phase < 4; ++phase)
+            {
+                bool transparent = phase >= 2;
+                bool near = phase == 0 || phase == 3;
+                material.renderQueue = (int)(transparent ? RenderQueue.Transparent : RenderQueue.Geometry);
+                material.SetFloat("_ZWrite", transparent ? 0 : 1);
+                quad.transform.position = bounds.center + (near ? Vector3.back : Vector3.forward) * radius * 2;
+                for (int frame = 0; frame < 3; ++frame)
+                {
+                    yield return null;
+                    RenderPipeline.SubmitRenderRequest(documentCamera, request);
+                }
+                Require(renderError == null, $"Unity reported: {renderError}");
+                int visible = ReadVisiblePixels(false);
+                Require(near ? visible == 0 : visible > 100,
+                    $"Depth composition failed: samples={samples} transparent={transparent} near={near} visible={visible}.");
+            }
+            Debug.Log($"[IMM_URP_SMOKE] PASS bidirectional depth composition at {samples} samples.");
+        }
+        finally
+        {
+            quad.SetActive(false);
+            Destroy(quad);
+            Destroy(material);
+        }
     }
 
     private int ReadVisiblePixels(bool capture, int samples = 0)

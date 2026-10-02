@@ -565,6 +565,7 @@ jobs:
               if samples == 8 and "[IMM_URP_SMOKE] UNSUPPORTED samples=8 " in text:
                   continue
               required.append(marker)
+              required.append(f"[IMM_URP_SMOKE] PASS bidirectional depth composition at {samples} samples.")
               image = capture.with_name(f"{capture.stem}-{samples}x{capture.suffix}")
               if not image.is_file() or image.stat().st_size < 100:
                   raise SystemExit(f"Missing URP Metal capture: {image.name}")
@@ -915,9 +916,13 @@ jobs:
             }
             foreach ($marker in @(
               "[IMM_URP_SMOKE] PASS rendered at 1 samples.",
+              "[IMM_URP_SMOKE] PASS bidirectional depth composition at 1 samples.",
               "[IMM_URP_SMOKE] PASS rendered at 2 samples.",
+              "[IMM_URP_SMOKE] PASS bidirectional depth composition at 2 samples.",
               "[IMM_URP_SMOKE] PASS rendered at 4 samples.",
+              "[IMM_URP_SMOKE] PASS bidirectional depth composition at 4 samples.",
               "[IMM_URP_SMOKE] PASS rendered at 8 samples.",
+              "[IMM_URP_SMOKE] PASS bidirectional depth composition at 8 samples.",
               "[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.",
               "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
               "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",

@@ -987,7 +987,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    substitute for a completed validation marker. The shared build helper selects XR
    settings for the actual target group. Windows Unity regressions and workflow YAML,
    Python and shell syntax checks pass locally; Apple compilation/rendering is pending.
-72. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+72. **Packaged bidirectional depth gates:** the shared URP runtime probe now renders
+   black opaque and transparent geometry in front of and behind IMM at every supported
+   sample count. Near geometry must fully occlude IMM; farther geometry must leave IMM
+   visible, including a transparent draw after native submission. Windows, macOS and
+   iOS workflows require the corresponding depth-composition markers. The new resource
+   shader is included in packaged builds. The locally rebuilt Windows player passes all
+   16 depth cases plus existing stereo/lifecycle gates; Apple runtime results remain
+   pending. Source inspection also identified that Metal pipeline-state selection lacks
+   attachment sample-count handling; that requires correction before Metal MSAA acceptance.
+73. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
