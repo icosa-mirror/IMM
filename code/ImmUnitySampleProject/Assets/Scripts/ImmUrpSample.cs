@@ -13,6 +13,7 @@ public sealed class ImmUrpSample : MonoBehaviour
     private RenderPipelineAsset previousPipeline;
     private ImmPlayerManager manager;
     private bool pipelineAssigned;
+    public ImmDocument Document { get; private set; }
 
     private IEnumerator Start()
     {
@@ -33,7 +34,7 @@ public sealed class ImmUrpSample : MonoBehaviour
             Debug.LogError("[IMM_URP_SAMPLE] Native session initialization failed.");
             yield break;
         }
-        var document = manager.LoadDocument(Path.Combine(Application.streamingAssetsPath, "sample1.imm"));
+        var document = Document = manager.LoadDocument(Path.Combine(Application.streamingAssetsPath, "sample1.imm"));
         if (document == null)
         {
             Debug.LogError("[IMM_URP_SAMPLE] Could not load sample1.imm.");

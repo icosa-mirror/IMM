@@ -82,6 +82,15 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         Require(ReadVisiblePixels(false) == 0, "IMM content remained after camera opt-out.");
         var manager = FindFirstObjectByType<ImmPlayerManager>();
         Require(manager != null && manager.IsInitialized, "Native session was not initialized.");
+        Require(sample.Document != null, "Sample document is missing.");
+        int documentId = sample.Document.DocumentId;
+        Require(ImmNativePlugin.IsDocumentActive(documentId), "Sample document was already inactive before unload.");
+        manager.UnloadDocument(sample.Document);
+        deadline = Time.realtimeSinceStartup + 30;
+        while (ImmNativePlugin.IsDocumentActive(documentId) && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Require(!ImmNativePlugin.IsDocumentActive(documentId), "Document unload stalled after camera opt-out.");
+        Debug.Log("[IMM_URP_SMOKE] PASS camera-free document unload completed.");
         Destroy(sample.gameObject);
         for (int frame = 0; frame < 3; ++frame) yield return null;
         Require(manager == null, "The sample left its persistent manager alive after destruction.");

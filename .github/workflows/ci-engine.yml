@@ -867,8 +867,12 @@ jobs:
             if ($process.ExitCode -ne 0) {
               throw "Unity URP scene validation failed with exit code $($process.ExitCode)"
             }
-            if (-not (Select-String -Path $urpLog -SimpleMatch "[IMM_URP_SMOKE] PASS" -Quiet)) {
-              throw "Unity URP scene validation did not report success"
+            foreach ($marker in @(
+              "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
+              "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.")) {
+              if (-not (Select-String -Path $urpLog -SimpleMatch $marker -Quiet)) {
+                throw "Unity URP scene validation did not report: $marker"
+              }
             }
             if (-not (Test-Path $env:IMM_UNITY_URP_CAPTURE)) {
               throw "Unity URP scene validation did not capture its rendered output"

@@ -786,7 +786,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    retains launch exit status, whether the harness stopped the process, filtered system
    logs and newly generated app crash reports on missing captures. YAML and extracted
    Bash syntax checks pass locally; the new diagnostics require another hosted run.
-50. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+50. **Packaged Windows unload gate:** the required URP player smoke now requests
+   document unload after camera opt-out and requires native inactivity within 30 seconds
+   before destroying the sample. CI requires separate unload and final-shutdown success
+   markers. A rebuilt local standalone player passed both markers, produced its capture
+   and exited 0. The earlier configured URP scene and session lifecycle gates also passed
+   on hosted run 36955372120 (job 110681785150); the new unload gate awaits hosted results.
+   That run's Windows Vulkan build exited 137 without a compiler diagnostic and has been
+   retried; the existing Vulkan validation requirements remain unchanged.
+51. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
