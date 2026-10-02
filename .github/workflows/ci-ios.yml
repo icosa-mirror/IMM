@@ -440,6 +440,7 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "${{ runner.temp }}/unity-ios-simulator-derived-data" \
+            LD_GENERATE_MAP_FILE=YES \
             ARCHS="$SIMULATOR_ARCH" \
             ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
@@ -447,6 +448,12 @@ jobs:
             CODE_SIGN_IDENTITY='' \
             build \
             2>&1 | tee artifacts/unity-ios-player-build/xcodebuild.log
+          # Preserve symbol ownership when host and plugin bundle the same codec.
+          # In particular, JPEG ABI collisions fail document CPU loading before
+          # the renderer ever receives a ready scene.
+          find "${{ runner.temp }}/unity-ios-simulator-derived-data" \
+            -type f -name '*LinkMap*' \
+            -exec cp {} artifacts/unity-ios-player-build/ \;
 
       - name: Boot deterministic iOS Simulator
         id: ios_simulator_boot

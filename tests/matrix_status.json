@@ -15,9 +15,9 @@
         "urp": "17.6.0",
         "openxr": "1.18.0",
         "ci_gate": "PackageImportHarness.UrpRenderGraphAssemblyIsIncluded",
-        "status": "local Unity 6.6 import/compilation passed; hosted iOS simulator document readiness regression under investigation",
+        "status": "local Unity 6.6 import/compilation passed; hosted iOS CPU asset loading fails with JPEG parameter struct mismatch (library 600 bytes, caller 632); symbol ownership under investigation",
         "scope": "Package resolution and compilation; does not establish RenderGraph execution or visual correctness.",
-        "failing_run": "https://github.com/icosa-mirror/IMM/actions/runs/36948748398"
+        "failing_run": "https://github.com/icosa-mirror/IMM/actions/runs/36952627984"
       }
     }
   },

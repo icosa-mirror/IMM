@@ -666,7 +666,18 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    `artifacts/d3d12-submission/urp-player.log` and `urp-player-frame.png`.
    Workflow matrix verification passes. Hosted execution is pending; this pixel-presence
    gate is not a colour baseline or a complete platform/layer/depth-composition gate.
-36. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+36. **iOS regression localized to JPEG CPU decoding:** run
+   [36952627984](https://github.com/icosa-mirror/IMM/actions/runs/36952627984) preserves
+   native loading evidence. Both sample1 and face-orientation fail CPU asset loading;
+   the latter reports `loading=Failed sequenceReady=False` when its spawn-area image
+   cannot load. The player log twice reports `JPEG parameter struct mismatch: library
+   thinks size is 600, caller expects 632`. This identifies a codec ABI mismatch before
+   rendering, not a Metal attachment failure. A collision between host and bundled JPEG
+   symbols is a candidate explanation; the simulator build now retains Xcode linker maps
+   to establish symbol ownership before selecting a fix. The regression remains open.
+   The same run's Android standalone GLES failure is an HTTP 500 fetching the Gradle
+   distribution, before device validation; it supplies no rendering-regression evidence.
+37. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
