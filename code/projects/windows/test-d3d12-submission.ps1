@@ -16,6 +16,7 @@ $evidenceFiles = @(
     'd3d12-player-result.json',
     'd3d12-model-linear.ppm',
     'd3d12-model-gamma.ppm',
+    'd3d12-model-half-opacity-1x.ppm',
     'd3d12-model-half-opacity-2x.ppm',
     'd3d12-model-half-opacity-4x.ppm',
     'd3d12-model-half-opacity-8x.ppm',

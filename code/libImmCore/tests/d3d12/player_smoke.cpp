@@ -206,7 +206,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     Check(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&dsv)), "Create host DSV heap");
     D3D12_DEPTH_STENCIL_VIEW_DESC hostDepthView = {};
-    hostDepthView.Format = DXGI_FORMAT_D32_FLOAT; hostDepthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+    hostDepthView.Format = DXGI_FORMAT_D32_FLOAT; hostDepthView.ViewDimension = samples > 1 ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
     device->CreateDepthStencilView(depth.Get(), &hostDepthView, dsv->GetCPUDescriptorHandleForHeapStart());
     const auto bounds = player.GetDocumentBBox(document);
     const double radius = std::max({bounds.mMaxX-bounds.mMinX, bounds.mMaxY-bounds.mMinY, bounds.mMaxZ-bounds.mMinZ, 1.0}) * 0.6;
@@ -261,10 +261,21 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         barrier.Transition = {resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, before, after};
         commands->ResourceBarrier(1, &barrier);
     };
-    transition(color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
-    commands->ResolveSubresource(resolved.Get(), 0, color.Get(), 0, DXGI_FORMAT_R8G8B8A8_UNORM);
-    transition(color.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
-    transition(resolved.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    if (samples > 1)
+    {
+        transition(color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        commands->ResolveSubresource(resolved.Get(), 0, color.Get(), 0, DXGI_FORMAT_R8G8B8A8_UNORM);
+        transition(color.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        transition(resolved.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    }
+    else
+    {
+        transition(color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        transition(resolved.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST, D3D12_RESOURCE_STATE_COPY_DEST);
+        commands->CopyResource(resolved.Get(), color.Get());
+        transition(color.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        transition(resolved.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    }
     D3D12_TEXTURE_COPY_LOCATION source = {}; source.pResource = resolved.Get(); source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
     D3D12_TEXTURE_COPY_LOCATION destination = {}; destination.pResource = readback.Get();
     destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; destination.PlacedFootprint = footprint;
@@ -273,19 +284,31 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     Check(renderer.WaitForFrame(completion), "Wait for scene frame");
     void* data = nullptr; D3D12_RANGE range = {0, static_cast<SIZE_T>(bytes)};
     Check(readback->Map(0, &range, &data), "Map scene pixels");
+    UINT coveragePixels = 0, coveredPixels = 0;
+    const bool singleSampleCoverage = samples == 1 && modelColorSpace >= 0 && opacity == 0.5f;
     UINT visible = 0, occludedPixels = 0, retainedScenePixels = 0, backgroundPixels = 0;
     std::ofstream image(capture, std::ios::binary);
     image << "P6\n256 256\n255\n";
     for (UINT y = 0; y < size; ++y) for (UINT x = 0; x < size; ++x)
     {
         const auto* pixel = static_cast<const unsigned char*>(data) + footprint.Offset + y*footprint.Footprint.RowPitch + x*4;
-        if (modelColorSpace >= 0 && x == size/2 && y == size/2)
+        if (modelColorSpace >= 0 && !singleSampleCoverage && x == size/2 && y == size/2)
         {
             const int encodedValue = panorama > 1 ? (cubeFace + 1) * 32 : 128;
             const int expected = int(std::round((modelColorSpace == 0 ? std::pow(encodedValue / 255.0, 2.2) * 255.0 : encodedValue) * opacity));
             for (int channel = 0; channel < 3; ++channel)
                 if (std::abs(int(pixel[channel]) - (panorama && channel > 0 ? 0 : expected)) > 2)
                     throw std::runtime_error(panorama ? "Panorama image-half/colour-space readback mismatch" : "Model pixel colour-space readback mismatch");
+        }
+        if (singleSampleCoverage && x >= 64 && x < 192 && y >= 64 && y < 192)
+        {
+            ++coveragePixels;
+            const int opaque = modelColorSpace == 0 ? 55 : 128;
+            const bool covered = pixel[0] != 0;
+            for (int channel = 0; channel < 3; ++channel)
+                if (std::abs(int(pixel[channel]) - (covered ? opaque : 0)) > 2)
+                    throw std::runtime_error("Single-sample coverage produced a partially blended pixel");
+            if (covered) ++coveredPixels;
         }
         if (pixel[0] || pixel[1] || pixel[2])
         {
@@ -296,6 +319,9 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         else if (pixel[0] || pixel[1] || pixel[2]) ++retainedScenePixels;
         image.write(reinterpret_cast<const char*>(pixel), 3);
     }
+    if (singleSampleCoverage && (coveragePixels != 128 * 128 ||
+        std::abs(double(coveredPixels) / coveragePixels - 0.5) > 0.02))
+        throw std::runtime_error("Single-sample half-opacity spatial coverage mismatch");
     D3D12_RANGE written = {}; readback->Unmap(0, &written);
     image.close();
     if (!image || visible < 100) throw std::runtime_error("Scene readback is empty or capture failed");
@@ -391,7 +417,7 @@ int main()
                             DepthProbe::None, int(colorSpace), &log, layout, face);
                     }
             if (int(technique) == 0 && int(colorSpace) == 0)
-                for (UINT samples : {2u, 4u, 8u})
+                for (UINT samples : {1u, 2u, 4u, 8u})
                 {
                     char capture[80];
                     std::snprintf(capture, sizeof(capture), "d3d12-model-half-opacity-%ux.ppm", samples);
@@ -477,7 +503,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":3,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

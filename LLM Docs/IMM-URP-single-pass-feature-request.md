@@ -821,7 +821,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    and `model_half_opacity_sample_counts_verified=3`. The managed 8x attachment guard is
    still present until 1x behavior and Unity composition at other sample counts are
    validated; other layer types also need coverage-specific readbacks.
-54. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+54. **D3D12 attachment sample counts (local native and Unity evidence):** the native
+   half-opacity check now includes 1x targets, with correct single-sample depth views and
+   direct-copy readback. It requires binary covered/uncovered pixels and 50% spatial
+   coverage within two percentage points. All four native sample-count checks pass.
+   The managed pass now accepts matching 1x, 2x, 4x and 8x colour/depth attachments.
+   Both required PlayMode rendering tests pass in `urp-msaa-tests.xml`, including near/far
+   Unity opaque occlusion and later-transparent occlusion at every sample count, followed
+   by the existing multi-camera, resize and unload checks. The package README reflects
+   these limits. Hosted URP coverage still uses 8x; other layer types need dedicated
+   fractional-coverage checks before claiming full sample-count validation.
+55. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

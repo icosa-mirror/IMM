@@ -88,9 +88,11 @@ namespace ImmPlayer
             var d = depth.rt;
             if (c.dimension != TextureDimension.Tex2D || d.dimension != TextureDimension.Tex2D ||
                 c.volumeDepth != 1 || d.volumeDepth != 1 || c.width != d.width || c.height != d.height ||
-                c.antiAliasing != 8 || d.antiAliasing != 8 || c.useDynamicScale || d.useDynamicScale)
+                c.antiAliasing != d.antiAliasing ||
+                (c.antiAliasing != 1 && c.antiAliasing != 2 && c.antiAliasing != 4 && c.antiAliasing != 8) ||
+                c.useDynamicScale || d.useDynamicScale)
             {
-                data.Owner.Report("The current D3D12 pass requires matching 2D, 8x MSAA attachments without dynamic resolution.");
+                data.Owner.Report("The current D3D12 pass requires matching 2D attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
                 return;
             }
             uint colorFormat = DxgiFormat(c.graphicsFormat);

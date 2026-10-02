@@ -17,9 +17,10 @@ renderer feature, add `ImmCamera` to each participating camera, and initialize
 an `ImmPlayerManager`. Rendering uses RenderGraph at `AfterRenderingOpaques`.
 
 The current implementation requires a mono perspective base camera, a full
-viewport, matching 8x MSAA attachments and no dynamic resolution. Local checks
-cover document rendering, camera opt-out, Unity opaque depth and later Unity
-transparent depth tests. This is an implementation sample, not a declaration
+viewport, matching colour/depth attachments with 1, 2, 4 or 8 samples and no
+dynamic resolution. Local checks cover document rendering, camera opt-out,
+Unity opaque depth and later Unity transparent depth tests at all four sample
+counts. This is an implementation sample, not a declaration
 of complete D3D12 layer support or Metal/Vulkan/stereo RenderGraph support.
 
 ## Android Vulkan rendering contract

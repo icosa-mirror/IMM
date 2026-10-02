@@ -76,7 +76,7 @@ namespace ImmPlayer
                 throw new InvalidOperationException("IMM RenderGraph session is already active.");
             Slot slot = Acquire(0);
             Marshal.WriteInt32(slot.Memory, 28, linearColor ? 0 : 1);
-            Marshal.WriteInt32(slot.Memory, 32, 8); // Native alpha coverage currently requires 8x MSAA.
+            Marshal.WriteInt32(slot.Memory, 32, 8); // Initial renderer configuration; borrowed attachments determine draw sample counts.
             Marshal.WriteInt32(slot.Memory, 36, enableSound ? 1 : 0);
             Enqueue(commands, slot);
             LastError = 0;
