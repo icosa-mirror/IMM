@@ -1030,7 +1030,23 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    These corrections require a passing hosted rerun; source/local checks are not
    platform acceptance. Windows DirectX passed in the other run at the same SHA;
    exit 137 in this run remains an unresolved runner failure.
-76. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+76. **Recovery rerun evidence (not acceptance):**
+   [36997335935](https://github.com/icosa-mirror/IMM/actions/runs/36997335935) completed
+   with Unity macOS and iOS failures. Native platform builds, Windows/macOS native
+   player checks, Windows/macOS/iOS/Android Godot validation, Android Unity Vulkan,
+   Unity package import, Windows DirectX build/composition, and Windows Vulkan
+   synthetic stereo passed. The existing macOS full-depth check now passes.
+   Metal URP passes rendering and both depth directions at one sample, then produces
+   a black two-sample capture. Follow-ups preserve the original ordered-overlay
+   fixture and resolve native Metal MSAA colour writes while retaining multisample
+   storage for subsequent Unity passes. iOS legacy rendering crashes inside Opus;
+   the crash report and linker map show IMM's decoder bound to Unity's separate
+   codec internals. The combined Unity iOS archive now isolates bundled codec
+   symbols and checks that definitions and references are renamed while preserving
+   public plugin exports. Metal session initialization also uses writable application
+   temporary paths. These follow-ups require a hosted rerun; this run is not green
+   and feature work remains paused until the CI regressions are resolved.
+77. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
