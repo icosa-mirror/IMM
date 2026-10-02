@@ -73,7 +73,7 @@ void main(float3 pos : CHANA,
 	      float3 nor : CHANB,
 #if STEREOMODE==2	
 	uint instanceID : SV_InstanceID,
-	out float  oClip : SV_ClipDistance0,
+	out uint oSlice : SV_RenderTargetArrayIndex,
 #endif
 	out float3 oDir : V2P_DIR,
 #if FORMAT_IS_STEREO==1
@@ -94,8 +94,6 @@ void main(float3 pos : CHANA,
 	oPosition = mul(mat, float4(cpos, 1.0));
 
 #if STEREOMODE==2
-	float ss = (instanceID == 0) ? -1.0 : 1.0;
-	oPosition.x = 0.5*(oPosition.x + ss*oPosition.w);
-	oClip = oPosition.x * ss;
+	oSlice = instanceID; // Each eye renders at full width into its array slice.
 #endif
 }

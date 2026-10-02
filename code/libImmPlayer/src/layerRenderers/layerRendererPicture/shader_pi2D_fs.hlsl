@@ -37,7 +37,7 @@ SamplerState Sampler : register(s0);
 
 float4 main(
 #if STEREOMODE==2	
-	float clip : SV_ClipDistance0,
+	uint slice : SV_RenderTargetArrayIndex,
 #endif
 	float2 oUV : V2P_UV,
 #if FORMAT_IS_STEREO==1

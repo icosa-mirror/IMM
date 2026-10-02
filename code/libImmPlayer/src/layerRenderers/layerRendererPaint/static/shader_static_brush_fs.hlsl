@@ -14,7 +14,7 @@ cbuffer FrameState : register(b0)
 
 float4 main(
             #if STEREOMODE==2	
-            float clip : SV_ClipDistance0,
+            uint slice : SV_RenderTargetArrayIndex,
             #endif
             float4 color : V2P_COLOR,
             float4 fragCoord : SV_POSITION, 

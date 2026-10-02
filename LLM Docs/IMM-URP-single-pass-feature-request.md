@@ -875,7 +875,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    existing checks also pass. CI retains four captures and `layered_target_frames_verified=4`.
    This is attachment/submission groundwork, not IMM stereo rendering: managed XR packets,
    per-eye matrices and production layered paint/picture/model shaders remain outstanding.
-60. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+60. **Production HLSL layered stereo:** preferred-stereo HLSL variants now output
+   `SV_RenderTargetArrayIndex` from the eye instance and retain full-width clip positions,
+   replacing double-wide X compression and clip distances across paint, model and picture
+   shaders. Mono/fallback variants retain their existing interfaces; native Vulkan/GL
+   shaders are unchanged. D3D preferred-stereo callers must bind array targets; legacy
+   bridge viewport/submission logic still needs migration before that route is enabled.
+   The actual model renderer passes four layered readbacks at 1x/2x/4x/8x with distinct
+   eye projection offsets and per-eye depth rejection. CI retains those captures and
+   `layered_model_frames_verified=4`. Paint/picture variants compile, but their layered
+   rendering and managed XR integration remain unverified. Existing mono checks pass.
+61. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

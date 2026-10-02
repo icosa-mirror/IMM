@@ -42,7 +42,7 @@ void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginE
 }
 
 enum class DepthProbe { None, HostOcclusion, ImmWrites };
-static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace, float opacity = 1.0f)
+static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace, float opacity = 1.0f, bool layered = false, int viewportSize = 256)
 {
     using namespace ImmCore;
     ImmImporter::LayerModel model;
@@ -69,7 +69,8 @@ static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& lo
     float display[36] = {};
     for (int eye = 0; eye < 2; ++eye)
         for (int axis = 0; axis < 4; ++axis) display[eye * 16 + axis * 5] = 1;
-    display[32] = display[33] = 256;
+    if (layered) { display[3] = -0.25f; display[19] = 0.25f; }
+    display[32] = display[33] = static_cast<float>(viewportSize);
     auto frameBuffer = renderer.CreateBuffer(frame, sizeof(frame), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     auto displayBuffer = renderer.CreateBuffer(display, sizeof(display), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
     auto layerBuffer = renderer.CreateBuffer(nullptr, sizeof(ImmPlayer::LayersState), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
@@ -77,11 +78,11 @@ static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& lo
     renderer.AttachShaderConstants(frameBuffer, 0);
     renderer.AttachShaderConstants(layerBuffer, 3);
     renderer.AttachShaderConstants(displayBuffer, 4);
-    const int viewport[] = {0, 0, 256, 256}; renderer.SetViewport(0, viewport);
-    modelRenderer.PrepareForDisplay(ImmPlayer::StereoMode::None);
+    const int viewport[] = {0, 0, viewportSize, viewportSize}; renderer.SetViewport(0, viewport);
+    modelRenderer.PrepareForDisplay(layered ? ImmPlayer::StereoMode::Preferred : ImmPlayer::StereoMode::None);
     modelRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), trans3d::identity(), opacity);
     modelRenderer.DisplayRender(&renderer, &log, layerBuffer, 0);
-    if (modelRenderer.GetDrawCallInfo().numDrawCalls != 1 || modelRenderer.GetDrawCallInfo().numTriangles != 2)
+    if (modelRenderer.GetDrawCallInfo().numDrawCalls != 1 || modelRenderer.GetDrawCallInfo().numTriangles != (layered ? 4 : 2))
         throw std::runtime_error("Model probe did not submit its two triangles");
     modelRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
     modelRenderer.UnloadInCPU(&log, &layer);
@@ -337,7 +338,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     std::printf("IMM_DX12_PLAYER scene pixels=%u depth_probe=%d\n", visible, int(probe));
 }
 
-static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples)
+static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples, ImmCore::piLog* modelLog = nullptr)
 {
     auto& renderer = host.RendererInRenderEvent();
     constexpr UINT size = 32;
@@ -381,7 +382,11 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     renderer.SetState(ImmCore::piSTATE_CULL_FACE, false);
     renderer.SetState(ImmCore::piSTATE_BLEND, false);
     const int viewport[] = {0,0,size,size}; renderer.SetViewport(0, viewport);
-    try { renderer.DrawUnitQuad_XY(2); }
+    try
+    {
+        if (modelLog) DrawModelProbe(renderer, *modelLog, 0, 1.0f, true, size);
+        else renderer.DrawUnitQuad_XY(2);
+    }
     catch (...)
     {
         ComPtr<ID3D12InfoQueue> diagnostics;
@@ -430,14 +435,19 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     Check(renderer.WaitForFrame(completion), "Wait for layered frame");
     void* data = nullptr; D3D12_RANGE range = {0, static_cast<SIZE_T>(bytes)};
     Check(readback->Map(0, &range, &data), "Map layered pixels");
-    char capture[80]; std::snprintf(capture, sizeof(capture), "d3d12-layered-%ux.ppm", samples);
+    char capture[80]; std::snprintf(capture, sizeof(capture), modelLog ? "d3d12-layered-model-%ux.ppm" : "d3d12-layered-%ux.ppm", samples);
     std::ofstream image(capture, std::ios::binary); image << "P6\n32 64\n255\n";
     for (UINT eye = 0; eye < 2; ++eye)
         for (UINT y = 0; y < size; ++y) for (UINT x = 0; x < size; ++x)
         {
             const auto* pixel = static_cast<const unsigned char*>(data) + footprints[eye].Offset + y*footprints[eye].Footprint.RowPitch + x*4;
+            const bool modelCovered = y >= 4 && y < 28 && (eye == 0 ? x < 24 : x >= 8);
             for (UINT channel = 0; channel < 3; ++channel)
-                if (pixel[channel] != (channel == eye ? 255 : 0)) throw std::runtime_error("Layered eye colour mismatch");
+            {
+                const int expected = modelLog ? (modelCovered ? 55 : (channel == 2 ? 255 : 0)) : (channel == eye ? 255 : 0);
+                if (std::abs(int(pixel[channel]) - expected) > (modelLog ? 2 : 0))
+                    throw std::runtime_error("Layered eye colour or projection mismatch");
+            }
             image.write(reinterpret_cast<const char*>(pixel), 3);
         }
     D3D12_RANGE written = {}; readback->Unmap(0, &written);
@@ -574,6 +584,7 @@ int main()
         Check(renderer.EndFrame(&bridgeCompletion), "Submit after bridge shutdown");
         Check(renderer.WaitForFrame(bridgeCompletion), "Wait after bridge shutdown");
         for (UINT samples : {1u, 2u, 4u, 8u}) VerifyLayeredTargets(host, device.Get(), samples);
+        for (UINT samples : {1u, 2u, 4u, 8u}) VerifyLayeredTargets(host, device.Get(), samples, &log);
         host.ShutdownInRenderEvent();
         ImmRenderGraphState graph;
         if (!ConfigureImmRenderGraph(graph, &unity)) throw std::runtime_error("Configure graph event");
@@ -633,7 +644,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"layered_model_frames_verified":4,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
