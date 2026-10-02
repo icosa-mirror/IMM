@@ -729,7 +729,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    existing scene/depth readbacks still pass. This proves the synthetic mono model path,
    not model-file import, other model content or stereo. The model exporter is unfinished;
    a suitable imported-model IMM fixture has been requested for document-level coverage.
-43. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+43. **Windows stereo-image panorama shader selection:** the Windows shader build now
+   generates both mono and top/bottom stereo-image formats for equirectangular pictures,
+   and the picture renderer initializes the previously missing stereo-image shader slot.
+   Variant counts are checked at compile time; both supported colour spaces are retained.
+   The native build and D3D12/WARP checks pass locally, including pipeline creation for
+   both image formats and colour spaces, plus the existing scene/model/depth readbacks.
+   This is shader-interface and initialization evidence; a stereo panorama image readback
+   and headset single-pass rendering remain unverified.
+44. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

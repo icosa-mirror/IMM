@@ -52,6 +52,10 @@ namespace ImmPlayer
 #if defined(WINDOWS)
 #include "tmp/shader_pip360Equirect_vs_hlsl.inc"
 #include "tmp/shader_pip360Equirect_fs_hlsl.inc"
+static_assert(sizeof(shader_pip360Equirect_vs_code) / sizeof(shader_pip360Equirect_vs_code[0]) == 6,
+    "Panorama vertex shaders require three stereo modes and two image formats");
+static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equirect_fs_code[0]) == 12,
+    "Panorama pixel shaders require three stereo modes, two colour spaces and two image formats");
 #include "tmp/shader_pip360Equirect_vs_spirv.inc"
 #include "tmp/shader_pip360Equirect_fs_spirv.inc"
 #include "tmp/shader_pi2D_vs_hlsl.inc"
@@ -338,7 +342,7 @@ namespace ImmPlayer
                 const int poff = 3 * (static_cast<int>(colorSpace));
 
                 mShaders[idx][LayerPicture::Image2D] = renderer->CreateShaderBinary(nullptr, shader_pi2D_vs_code[i], shader_pi2D_vs_size[i], nullptr, 0, nullptr, 0, nullptr, 0, shader_pi2D_fs_code[i + poff], shader_pi2D_fs_size[i + poff], error);
-                if (!mShaders[i][LayerPicture::Image2D])
+                if (!mShaders[idx][LayerPicture::Image2D])
                 {
                     log->Printf(LT_ERROR, L"Could not initalize 2D mono image layer shader\n%s", pistr2ws(error));
                     return false;
@@ -346,9 +350,22 @@ namespace ImmPlayer
 
 
                 mShaders[idx][LayerPicture::Image360EquirectMono] = renderer->CreateShaderBinary(nullptr, shader_pip360Equirect_vs_code[i], shader_pip360Equirect_vs_size[i], nullptr, 0, nullptr, 0, nullptr, 0, shader_pip360Equirect_fs_code[i + poff], shader_pip360Equirect_fs_size[i + poff], error);
-                if (!mShaders[i][LayerPicture::Image360EquirectMono])
+                if (!mShaders[idx][LayerPicture::Image360EquirectMono])
                 {
                     log->Printf(LT_ERROR, L"Could not initalize 360 equirect mono image layer shader\n%s", pistr2ws(error));
+                    return false;
+                }
+
+                // The generator varies STEREOMODE first, then COLOR_SPACE, then image format.
+                const int stereoVertex = i + 3;
+                const int stereoPixel = i + poff + 6;
+                mShaders[idx][LayerPicture::Image360EquirectStereo] = renderer->CreateShaderBinary(nullptr,
+                    shader_pip360Equirect_vs_code[stereoVertex], shader_pip360Equirect_vs_size[stereoVertex],
+                    nullptr, 0, nullptr, 0, nullptr, 0,
+                    shader_pip360Equirect_fs_code[stereoPixel], shader_pip360Equirect_fs_size[stereoPixel], error);
+                if (!mShaders[idx][LayerPicture::Image360EquirectStereo])
+                {
+                    log->Printf(LT_ERROR, L"Could not initialize 360 equirect stereo image layer shader\n%s", pistr2ws(error));
                     return false;
                 }
 #else
@@ -421,7 +438,7 @@ namespace ImmPlayer
             {
 #if defined(WINDOWS) || defined(ANDROID)
 #if defined(WINDOWS)
-                const void *shaders[3] = { (void*)shader_pip360Equirect_vs0, (void*)shader_pip360Equirect_vs1, (void*)shader_pip360Equirect_vs2 };
+                const void *shaders[3] = { shader_pip360Equirect_vs_code[0], shader_pip360Equirect_vs_code[1], shader_pip360Equirect_vs_code[2] };
                 if (!m360SphereRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
 #else
                 const void *shaders[3] = {
@@ -469,7 +486,7 @@ namespace ImmPlayer
             {
 #if defined(WINDOWS) || defined(ANDROID)
 #if defined(WINDOWS)
-                const void *shaders[3] = { (void*)shader_pip360Equirect_vs0, (void*)shader_pip360Equirect_vs1, (void*)shader_pip360Equirect_vs2 };
+                const void *shaders[3] = { shader_pip360Equirect_vs_code[0], shader_pip360Equirect_vs_code[1], shader_pip360Equirect_vs_code[2] };
                 if (!m360CubemapRenderMesh.InitFromMeshWithShader(renderer, &mesh, piRenderer::PrimitiveType::Triangle, 3, shaders, shader_pip360Equirect_vs_size, log))
 #else
                 const void *shaders[3] = {

@@ -207,20 +207,20 @@
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
     </CustomBuild>
     <CustomBuild Include="src\layerRenderers\layerRendererPicture\shader_pip360Equirect_vs.hlsl">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Dist|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Store|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Dist|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2 -DFORMAT_IS_STEREO=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Store|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2 -DFORMAT_IS_STEREO=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2 -DFORMAT_IS_STEREO=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main vs_5_0 -DSTEREOMODE=0..2 -DFORMAT_IS_STEREO=0..1</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release_Dist|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release_Store|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
     </CustomBuild>
     <CustomBuild Include="src\layerRenderers\layerRendererPicture\shader_pip360Equirect_fs.hlsl">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Dist|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..2</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Store|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..2</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..2</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..2</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Dist|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..1 -DFORMAT_IS_STEREO=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release_Store|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..1 -DFORMAT_IS_STEREO=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..1 -DFORMAT_IS_STEREO=0..1</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">DX11ShaderCompiler.exe %(FullPath) %(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc main ps_5_0 -DSTEREOMODE=0..2 -DCOLOR_SPACE=0..1 -DFORMAT_IS_STEREO=0..1</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release_Dist|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release_Store|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(RootDir)%(Directory)/tmp/%(Filename)_hlsl.inc</Outputs>
