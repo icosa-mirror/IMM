@@ -94,6 +94,8 @@ namespace ImmPlayer.Tests
             var managerObject = new GameObject("IMM URP readback manager");
             GameObject occluder = null;
             Material occluderMaterial = null;
+            GameObject secondCameraObject = null;
+            RenderTexture secondTarget = null;
             var camera = cameraObject.GetComponent<Camera>();
             camera.targetTexture = target;
             camera.clearFlags = CameraClearFlags.SolidColor;
@@ -158,11 +160,28 @@ namespace ImmPlayer.Tests
                 Assert.AreEqual(0, CountVisiblePixels(target, null), "Nearer Unity transparent geometry failed to cover IMM.");
                 Debug.Log("[IMM_URP_READBACK] PASS IMM depth occludes farther Unity transparent geometry.");
                 occluder.SetActive(false);
-                ulong submitted = ImmRenderGraphSession.Current.Transport.RenderSubmissions;
+                secondTarget = new RenderTexture(target.descriptor);
+                secondTarget.Create();
+                secondCameraObject = new GameObject("IMM URP second camera", typeof(Camera), typeof(ImmCamera));
+                var secondCamera = secondCameraObject.GetComponent<Camera>();
+                secondCamera.CopyFrom(camera);
+                secondCamera.targetTexture = secondTarget;
+                secondCamera.transform.position = camera.transform.position;
+                secondCamera.transform.rotation = camera.transform.rotation * Quaternion.Euler(0, 180, 0);
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.Greater(CountVisiblePixels(target, null), 100, "Second camera changed the first camera's document view.");
+                Assert.AreEqual(0, CountVisiblePixels(secondTarget, null), "Second camera reused the first camera's view or target.");
+                secondCamera.transform.rotation = camera.transform.rotation;
                 cameraObject.GetComponent<ImmCamera>().enabled = false;
                 for (int frame = 0; frame < 3; ++frame) yield return null;
-                Assert.AreEqual(submitted, ImmRenderGraphSession.Current.Transport.RenderSubmissions);
                 Assert.AreEqual(0, CountVisiblePixels(target, null), "Camera continued rendering IMM after opt-out.");
+                Assert.Greater(CountVisiblePixels(secondTarget, null), 100, "Opting out one camera stopped another opted-in camera.");
+                ulong submitted = ImmRenderGraphSession.Current.Transport.RenderSubmissions;
+                secondCameraObject.GetComponent<ImmCamera>().enabled = false;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.AreEqual(submitted, ImmRenderGraphSession.Current.Transport.RenderSubmissions);
+                Assert.AreEqual(0, CountVisiblePixels(secondTarget, null), "Second camera continued rendering IMM after opt-out.");
+                Debug.Log("[IMM_URP_READBACK] PASS cameras retain independent views, targets and opt-in state.");
                 manager.Shutdown();
                 Assert.IsNull(ImmRenderGraphSession.Current);
             }
@@ -170,6 +189,12 @@ namespace ImmPlayer.Tests
             {
                 Object.DestroyImmediate(occluder);
                 Object.DestroyImmediate(occluderMaterial);
+                Object.DestroyImmediate(secondCameraObject);
+                if (secondTarget != null)
+                {
+                    secondTarget.Release();
+                    Object.DestroyImmediate(secondTarget);
+                }
                 Object.DestroyImmediate(managerObject);
                 Object.DestroyImmediate(cameraObject);
                 RenderTexture.active = previousTarget;
