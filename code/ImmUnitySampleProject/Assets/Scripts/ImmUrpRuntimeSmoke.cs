@@ -1,0 +1,145 @@
+using System;
+using System.Collections;
+using System.IO;
+using ImmPlayer;
+using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+
+/// <summary>Opt-in CI probe for the configured URP scene.</summary>
+public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
+{
+    private RenderTexture target;
+    private Camera documentCamera;
+    private string renderError;
+    private int cameraFrames;
+    private UniversalRenderPipeline.SingleCameraRequest request;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void Install()
+    {
+        if (Environment.GetEnvironmentVariable("IMM_UNITY_URP_SMOKE") == "1")
+            new GameObject("IMM URP CI probe").AddComponent<ImmUrpRuntimeSmoke>();
+    }
+
+    private IEnumerator Start()
+    {
+        Application.logMessageReceived += OnLog;
+        Application.runInBackground = true;
+        RenderPipelineManager.beginCameraRendering += OnCamera;
+        var probe = Run();
+        while (true)
+        {
+            bool next;
+            try { next = probe.MoveNext(); }
+            catch (Exception error)
+            {
+                Debug.LogError($"[IMM_URP_SMOKE] FAIL cameraFrames={cameraFrames} pipeline={GraphicsSettings.currentRenderPipeline} {error}");
+                Application.Quit(1);
+                yield break;
+            }
+            if (!next) break;
+            yield return probe.Current;
+        }
+        Debug.Log("[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.");
+        Application.Quit(0);
+    }
+
+    private IEnumerator Run()
+    {
+        Require(SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12, "D3D12 is required.");
+        var sample = FindFirstObjectByType<ImmUrpSample>();
+        Require(sample != null, "Configured URP sample is missing.");
+        var optIn = FindFirstObjectByType<ImmCamera>();
+        Require(optIn != null, "Opted-in camera is missing.");
+        documentCamera = optIn.GetComponent<Camera>();
+        target = new RenderTexture(new RenderTextureDescriptor(256, 256)
+        {
+            graphicsFormat = GraphicsFormat.R8G8B8A8_UNorm,
+            depthStencilFormat = GraphicsFormat.D32_SFloat,
+            msaaSamples = 8
+        });
+        target.Create();
+        documentCamera.targetTexture = target;
+        // Explicit offscreen requests exercise URP and its feature even when the
+        // CI player's hidden window does not receive automatic camera rendering.
+        request = new UniversalRenderPipeline.SingleCameraRequest { destination = target };
+        float deadline = Time.realtimeSinceStartup + 30;
+        int visible;
+        do
+        {
+            yield return null;
+            RenderPipeline.SubmitRenderRequest(documentCamera, request);
+            Require(renderError == null, $"Unity reported: {renderError}");
+            visible = ReadVisiblePixels(false);
+        } while (visible <= 100 && Time.realtimeSinceStartup < deadline);
+        Require(visible > 100, "No visible IMM content in the configured URP scene.");
+        ReadVisiblePixels(true);
+        optIn.enabled = false;
+        for (int frame = 0; frame < 3; ++frame) yield return null;
+        RenderPipeline.SubmitRenderRequest(documentCamera, request);
+        Require(ReadVisiblePixels(false) == 0, "IMM content remained after camera opt-out.");
+        var manager = FindFirstObjectByType<ImmPlayerManager>();
+        Require(manager != null && manager.IsInitialized, "Native session was not initialized.");
+        Destroy(sample.gameObject);
+        for (int frame = 0; frame < 3; ++frame) yield return null;
+        Require(manager == null, "The sample left its persistent manager alive after destruction.");
+        Require(renderError == null, $"Unity reported: {renderError}");
+    }
+
+    private int ReadVisiblePixels(bool capture)
+    {
+        var previous = RenderTexture.active;
+        var resolved = RenderTexture.GetTemporary(target.width, target.height, 0, RenderTextureFormat.ARGB32);
+        var pixels = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
+        try
+        {
+            Graphics.Blit(target, resolved);
+            RenderTexture.active = resolved;
+            pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+            pixels.Apply();
+            if (capture)
+            {
+                string path = Environment.GetEnvironmentVariable("IMM_UNITY_URP_CAPTURE");
+                Require(!string.IsNullOrEmpty(path), "CI capture path is missing.");
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
+                File.WriteAllBytes(path, pixels.EncodeToPNG());
+            }
+            int visible = 0;
+            foreach (var color in pixels.GetPixels32())
+                if (color.r > 5 || color.g > 5 || color.b > 5) ++visible;
+            return visible;
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            Destroy(pixels);
+            RenderTexture.ReleaseTemporary(resolved);
+        }
+    }
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private void OnLog(string message, string stack, LogType type)
+    {
+        if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
+            renderError = message;
+    }
+
+    private void OnCamera(ScriptableRenderContext context, Camera camera)
+    {
+        if (camera == documentCamera) ++cameraFrames;
+    }
+
+    private void OnDestroy()
+    {
+        Application.logMessageReceived -= OnLog;
+        RenderPipelineManager.beginCameraRendering -= OnCamera;
+        if (documentCamera != null) documentCamera.targetTexture = null;
+        if (target != null) { target.Release(); Destroy(target); }
+    }
+}

@@ -427,6 +427,69 @@ namespace ImmPlayer.Editor
             }
 
             BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development, "Windows DirectX smoke player");
+            BuildWindowsUrpPlayer(Path.Combine(outputDir, "urp", "ImmUnityUrpSmoke.exe"));
+        }
+
+        public static void BuildWindowsUrpSmokePlayer()
+        {
+            string outputPath = GetCommandLineValue(EditorSmokePlayerPathArg);
+            if (string.IsNullOrEmpty(outputPath))
+                throw new InvalidOperationException("Pass -immSmokePlayerPath for the URP player output.");
+            BuildWindowsUrpPlayer(Path.GetFullPath(outputPath));
+        }
+
+        private static void BuildWindowsUrpPlayer(string outputPath)
+        {
+            var previousPipeline = GraphicsSettings.defaultRenderPipeline;
+            var previousQualityPipeline = QualitySettings.renderPipeline;
+            var previousApis = PlayerSettings.GetGraphicsAPIs(BuildTarget.StandaloneWindows64);
+            var xrSettings = XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Standalone);
+            bool previousXrStartup = xrSettings != null && xrSettings.InitManagerOnStart;
+            var xrManager = xrSettings != null ? xrSettings.AssignedSettings : null;
+            var previousLoaders = xrManager != null ? xrManager.activeLoaders.ToList() : null;
+            try
+            {
+                var pipeline = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset>(ImmUrpSampleSetup.PipelinePath);
+                if (pipeline == null) throw new InvalidOperationException("Configured IMM URP asset is missing.");
+                GraphicsSettings.defaultRenderPipeline = pipeline;
+                QualitySettings.renderPipeline = pipeline;
+                // XR Management adds a native pre-init library even when managed
+                // auto-start is disabled. This dedicated flat player needs no loaders.
+                if (xrManager != null)
+                {
+                    if (!xrManager.TrySetLoaders(new System.Collections.Generic.List<XRLoader>()))
+                        throw new InvalidOperationException("Could not disable XR loaders for the flat URP build.");
+                    EditorUtility.SetDirty(xrManager);
+                }
+                if (xrSettings != null)
+                {
+                    xrSettings.InitManagerOnStart = false;
+                    EditorUtility.SetDirty(xrSettings);
+                    AssetDatabase.SaveAssets();
+                }
+                PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D12 });
+                Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development,
+                    "Windows D3D12 URP smoke player", scenes: new[] { ImmUrpSampleSetup.ScenePath });
+            }
+            finally
+            {
+                GraphicsSettings.defaultRenderPipeline = previousPipeline;
+                QualitySettings.renderPipeline = previousQualityPipeline;
+                PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, previousApis);
+                if (xrManager != null)
+                {
+                    if (!xrManager.TrySetLoaders(previousLoaders))
+                        throw new InvalidOperationException("Could not restore XR loaders after the flat URP build.");
+                    EditorUtility.SetDirty(xrManager);
+                }
+                if (xrSettings != null)
+                {
+                    xrSettings.InitManagerOnStart = previousXrStartup;
+                    EditorUtility.SetDirty(xrSettings);
+                    AssetDatabase.SaveAssets();
+                }
+            }
         }
 
         public static void BuildWindowsVulkanSmokePlayer()

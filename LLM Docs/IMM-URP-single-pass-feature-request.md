@@ -653,7 +653,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    and the existing colour/depth/opt-out test both pass, with required-test verification
    in `artifacts/d3d12-submission/urp-sample-tests.xml`. The package README explains setup
    and current limitations. A hosted D3D12 scene-validation gate remains outstanding.
-35. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+35. **Packaged URP scene CI gate:** the Windows DirectX build now also produces a
+   dedicated D3D12 player for the configured URP scene. A required validation step
+   checks visible content, captures the rendered attachment, verifies camera opt-out
+   and requires destruction of the sample's persistent manager without logged errors.
+   Hidden-player automatic camera rendering did not advance native GPU loading locally;
+   the probe uses URP's explicit `SingleCameraRequest` to render its offscreen attachment.
+   This still executes the serialized renderer feature and RenderGraph native pass.
+   The flat build temporarily removes XR loaders to avoid native OpenXR pre-initialization,
+   restoring the project's loaders afterward. The final standalone player passes locally
+   with exit code zero and `[IMM_URP_SMOKE] PASS`; evidence is in
+   `artifacts/d3d12-submission/urp-player.log` and `urp-player-frame.png`.
+   Workflow matrix verification passes. Hosted execution is pending; this pixel-presence
+   gate is not a colour baseline or a complete platform/layer/depth-composition gate.
+36. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

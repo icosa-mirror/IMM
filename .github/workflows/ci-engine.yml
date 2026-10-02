@@ -846,6 +846,38 @@ jobs:
             $env:IMM_UNITY_D3D12_LIFECYCLE_SMOKE = $previousLifecycleFlag
           }
 
+      - name: Verify configured Unity D3D12 URP scene
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $artifactDir = Resolve-Path artifacts\unity-windows-directx-composition
+          $player = Join-Path $artifactDir "player\urp\ImmUnityUrpSmoke.exe"
+          $urpLog = Join-Path $artifactDir "d3d12-urp-scene.log"
+          $previousSmoke = $env:IMM_UNITY_URP_SMOKE
+          $previousCapture = $env:IMM_UNITY_URP_CAPTURE
+          $env:IMM_UNITY_URP_SMOKE = "1"
+          $env:IMM_UNITY_URP_CAPTURE = Join-Path $artifactDir "d3d12-urp-scene.png"
+          try {
+            $process = Start-Process -FilePath $player -WorkingDirectory $artifactDir -WindowStyle Hidden -PassThru -ArgumentList @(
+              "-batchmode", "-force-d3d12", "-logFile", "`"$urpLog`"")
+            if (-not $process.WaitForExit(120000)) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+              throw "Unity URP scene validation timed out; see d3d12-urp-scene.log"
+            }
+            if ($process.ExitCode -ne 0) {
+              throw "Unity URP scene validation failed with exit code $($process.ExitCode)"
+            }
+            if (-not (Select-String -Path $urpLog -SimpleMatch "[IMM_URP_SMOKE] PASS" -Quiet)) {
+              throw "Unity URP scene validation did not report success"
+            }
+            if (-not (Test-Path $env:IMM_UNITY_URP_CAPTURE)) {
+              throw "Unity URP scene validation did not capture its rendered output"
+            }
+          } finally {
+            $env:IMM_UNITY_URP_SMOKE = $previousSmoke
+            $env:IMM_UNITY_URP_CAPTURE = $previousCapture
+          }
+
       - name: Run Unity DirectX composition smoke
         continue-on-error: true
         timeout-minutes: 10
