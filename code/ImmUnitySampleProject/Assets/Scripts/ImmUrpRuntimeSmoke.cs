@@ -75,6 +75,24 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             visible = ReadVisiblePixels(false);
         } while (visible <= 100 && Time.realtimeSinceStartup < deadline);
         Require(visible > 100, "No visible IMM content in the configured URP scene.");
+        var pipeline = QualitySettings.renderPipeline as UniversalRenderPipelineAsset;
+        Require(pipeline != null, "Configured URP asset is missing.");
+        foreach (int samples in new[] { 1, 2, 4, 8 })
+        {
+            target.Release();
+            target.antiAliasing = samples;
+            Require(target.Create(), $"Could not recreate the {samples}-sample target.");
+            pipeline.msaaSampleCount = samples;
+            Require(target.antiAliasing == samples, $"Requested {samples} samples were not retained.");
+            for (int frame = 0; frame < 3; ++frame)
+            {
+                yield return null;
+                RenderPipeline.SubmitRenderRequest(documentCamera, request);
+            }
+            Require(renderError == null, $"Unity reported: {renderError}");
+            Require(ReadVisiblePixels(true, samples) > 100, $"No visible IMM content at {samples} samples.");
+            Debug.Log($"[IMM_URP_SMOKE] PASS rendered at {samples} samples.");
+        }
         ReadVisiblePixels(true);
         optIn.enabled = false;
         for (int frame = 0; frame < 3; ++frame) yield return null;
@@ -109,7 +127,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         Require(renderError == null, $"Unity reported: {renderError}");
     }
 
-    private int ReadVisiblePixels(bool capture)
+    private int ReadVisiblePixels(bool capture, int samples = 0)
     {
         var previous = RenderTexture.active;
         var resolved = RenderTexture.GetTemporary(target.width, target.height, 0, RenderTextureFormat.ARGB32);
@@ -123,6 +141,8 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             if (capture)
             {
                 string path = Environment.GetEnvironmentVariable("IMM_UNITY_URP_CAPTURE");
+                if (samples > 0 && !string.IsNullOrEmpty(path))
+                    path = Path.Combine(Path.GetDirectoryName(path), $"{Path.GetFileNameWithoutExtension(path)}-{samples}x{Path.GetExtension(path)}");
                 Require(!string.IsNullOrEmpty(path), "CI capture path is missing.");
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path)));
                 File.WriteAllBytes(path, pixels.EncodeToPNG());

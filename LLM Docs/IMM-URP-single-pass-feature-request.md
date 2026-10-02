@@ -839,7 +839,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    scene/depth and cubemap face-order checks still pass. This validates layer opacity with
    opaque source texels in linear colour space; source alpha, paint fractional coverage
    and XR remain separate checks.
-56. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+56. **Packaged URP sample-count CI gate:** the Windows player smoke now recreates
+   its attachment at 1x, 2x, 4x and 8x, sets the URP sample count to match, and requires
+   visible IMM output at each setting. It writes four additional captures, and CI requires
+   every capture and success marker before accepting the unload/shutdown result. A rebuilt
+   local player passed all four rendering checks, both camera-free unload paths and final
+   shutdown with exit 0. Hosted execution is pending. This adds packaged scene-presence
+   coverage; the more detailed bidirectional depth checks at all sample counts currently
+   remain local PlayMode evidence.
+57. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

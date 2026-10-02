@@ -868,6 +868,10 @@ jobs:
               throw "Unity URP scene validation failed with exit code $($process.ExitCode)"
             }
             foreach ($marker in @(
+              "[IMM_URP_SMOKE] PASS rendered at 1 samples.",
+              "[IMM_URP_SMOKE] PASS rendered at 2 samples.",
+              "[IMM_URP_SMOKE] PASS rendered at 4 samples.",
+              "[IMM_URP_SMOKE] PASS rendered at 8 samples.",
               "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
               "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
               "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.")) {
@@ -877,6 +881,12 @@ jobs:
             }
             if (-not (Test-Path $env:IMM_UNITY_URP_CAPTURE)) {
               throw "Unity URP scene validation did not capture its rendered output"
+            }
+            foreach ($samples in @(1, 2, 4, 8)) {
+              $capture = Join-Path $artifactDir "d3d12-urp-scene-${samples}x.png"
+              if (-not (Test-Path $capture)) {
+                throw "Unity URP scene validation did not produce: $capture"
+              }
             }
           } finally {
             $env:IMM_UNITY_URP_SMOKE = $previousSmoke
