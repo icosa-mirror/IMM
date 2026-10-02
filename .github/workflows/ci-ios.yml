@@ -503,6 +503,8 @@ jobs:
             local capture_path="$capture_dir/$capture_name"
             local render_path="$capture_dir/$render_name"
             local log_path="$artifact_dir/unity-ios-$label-player.log"
+            local start_marker="$artifact_dir/unity-ios-$label-start.marker"
+            touch "$start_marker"
             rm -f "$capture_path"
             rm -f "$render_path"
             SIMCTL_CHILD_IMM_UNITY_SMOKE_FREEZE_PLAYBACK=1 \
@@ -530,8 +532,33 @@ jobs:
               fi
               sleep 1
             done
-            xcrun simctl terminate "$SIMULATOR_UDID" "$bundle_id" >/dev/null 2>&1 || true
-            wait "$launch_pid" || true
+            local stopped_by_harness=0
+            if kill -0 "$launch_pid" 2>/dev/null; then
+              stopped_by_harness=1
+              xcrun simctl terminate "$SIMULATOR_UDID" "$bundle_id" >/dev/null 2>&1 || true
+            fi
+            local launch_exit=0
+            wait "$launch_pid" || launch_exit=$?
+            printf 'captured=%s\nstopped_by_harness=%s\nlaunch_exit=%s\n' \
+              "$captured" "$stopped_by_harness" "$launch_exit" > "$artifact_dir/unity-ios-$label-process-status.txt"
+            if [ "$captured" -ne 1 ]; then
+              local executable
+              executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
+              xcrun simctl spawn "$SIMULATOR_UDID" log show --last 5m --style compact \
+                --predicate "process == \"$executable\"" \
+                > "$artifact_dir/unity-ios-$label-system.log" 2>&1 || true
+              # ReportCrash can publish its report shortly after simctl exits.
+              sleep 5
+              local reports="$artifact_dir/unity-ios-$label-crashes"
+              mkdir -p "$reports"
+              for root in "$HOME/Library/Logs/DiagnosticReports" \
+                "$HOME/Library/Developer/CoreSimulator/Devices/$SIMULATOR_UDID/data/Library/Logs/CrashReporter"; do
+                if [ -d "$root" ]; then
+                  find "$root" -type f -name "$executable*.ips" -newer "$start_marker" \
+                    -exec cp {} "$reports/" \;
+                fi
+              done
+            fi
             # Preserve the native loading/rendering state before a missing capture
             # fails this probe. Unity writes its configured native log in Caches.
             local native_log

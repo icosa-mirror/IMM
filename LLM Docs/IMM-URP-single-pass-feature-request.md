@@ -778,7 +778,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    that no additional camera draw was submitted. Both required rendering tests pass locally
    in `urp-maintenance-tests.xml`. Hosted coverage of this Unity unload check remains open;
    the native CI maintenance check remains required.
-49. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+49. **iOS CI after codec isolation:** run 36956328324 linked both Unity's JPEG symbols
+   and IMM's prefixed codec symbols, exported and built the simulator application, and
+   completed sample CPU loading without the earlier JPEG ABI mismatch. The app exited
+   before captures; the last native message was `Loading in SPU...`. That does not identify
+   the cause. Visual and face-orientation gates remain failed. The simulator harness now
+   retains launch exit status, whether the harness stopped the process, filtered system
+   logs and newly generated app crash reports on missing captures. YAML and extracted
+   Bash syntax checks pass locally; the new diagnostics require another hosted run.
+50. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
