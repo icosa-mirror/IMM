@@ -831,7 +831,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    by the existing multi-camera, resize and unload checks. The package README reflects
    these limits. Hosted URP coverage still uses 8x; other layer types need dedicated
    fractional-coverage checks before claiming full sample-count validation.
-55. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+55. **Picture fractional coverage (native CI check):** the picture renderer probe now
+   covers all five image formats: 2D, mono/stereo equirectangular, cubemap cross and cubemap
+   strip. Each renders at half opacity into 1x, 2x, 4x and 8x attachments. All 20 readbacks
+   pass locally, including binary-pixel and 50% spatial-coverage checks for 1x targets.
+   CI retains the captures and `picture_half_opacity_frames_verified=20`. Existing model,
+   scene/depth and cubemap face-order checks still pass. This validates layer opacity with
+   opaque source texels in linear colour space; source alpha, paint fractional coverage
+   and XR remain separate checks.
+56. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

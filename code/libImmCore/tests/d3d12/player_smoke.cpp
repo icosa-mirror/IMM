@@ -90,12 +90,14 @@ static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& lo
     mesh->DeInit(); model.Deinit();
 }
 
-static void DrawPanoramaProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace, int pictureFormat, int cubeFace)
+static void DrawPictureProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace, int pictureFormat, int cubeFace, float opacity)
 {
     using namespace ImmCore;
     ImmImporter::LayerPicture picture;
     const auto type = pictureFormat == 1 ? ImmImporter::LayerPicture::Image360EquirectStereo :
-        pictureFormat == 2 ? ImmImporter::LayerPicture::Image360CubemapCrossMono : ImmImporter::LayerPicture::Image360CubemapVstripMono;
+        pictureFormat == 2 ? ImmImporter::LayerPicture::Image360CubemapCrossMono :
+        pictureFormat == 3 ? ImmImporter::LayerPicture::Image360CubemapVstripMono :
+        pictureFormat == 4 ? ImmImporter::LayerPicture::Image2D : ImmImporter::LayerPicture::Image360EquirectMono;
     picture.Init(type, false, &log);
     const int width = pictureFormat == 3 ? 16 : 64;
     const int height = pictureFormat == 2 ? 48 : pictureFormat == 3 ? 96 : 64;
@@ -110,7 +112,7 @@ static void DrawPanoramaProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog&
         pixels[offset + 1] = (pictureFormat != 1 || y < 32) ? 0 : 255;
         pixels[offset + 2] = 0; pixels[offset + 3] = 255;
     }
-    if (pictureFormat > 1)
+    if (pictureFormat == 2 || pictureFormat == 3)
     {
         // Input cross layout: +X at (2,1), -X at (0,1), +Y at (1,0),
         // -Y at (1,2), +Z at (3,1), -Z at (1,1). A strip stores that face order.
@@ -138,7 +140,7 @@ static void DrawPanoramaProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog&
     float display[36] = {};
     for (int eye = 0; eye < 2; ++eye)
         for (int axis = 0; axis < 4; ++axis) display[eye * 16 + axis * 5] = 1;
-    if (pictureFormat > 1)
+    if (pictureFormat == 2 || pictureFormat == 3)
     {
         // Symmetric orthonormal rotations map the requested cube axis onto +Z.
         const float rotations[6][9] = {
@@ -159,10 +161,11 @@ static void DrawPanoramaProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog&
     renderer.AttachShaderConstants(displayBuffer, 4);
     const int viewport[] = {0, 0, 256, 256}; renderer.SetViewport(0, viewport);
     pictureRenderer.PrepareForDisplay(ImmPlayer::StereoMode::None);
-    pictureRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), trans3d::identity(), 1);
+    pictureRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()),
+        pictureFormat == 4 ? trans3d::translate(0.0, 0.0, 0.5) : trans3d::identity(), opacity);
     pictureRenderer.DisplayRender(&renderer, &log, layerBuffer, 0);
-    if (pictureRenderer.GetDrawCallInfo().numPicture360DrawCalls != 1)
-        throw std::runtime_error("Panorama probe did not submit its sphere");
+    if (pictureRenderer.GetDrawCallInfo().numDrawCalls != 1)
+        throw std::runtime_error("Picture probe did not submit a draw");
     pictureRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
     pictureRenderer.UnloadInCPU(&log, &layer);
     pictureRenderer.Deinit(&renderer, &log);
@@ -232,7 +235,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         const D3D12_RECT left = {0, 0, size/2, size};
         commands->ClearDepthStencilView(dsv->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 1, &left);
     }
-    if (panorama) DrawPanoramaProbe(renderer, *log, modelColorSpace, panorama, cubeFace);
+    if (panorama) DrawPictureProbe(renderer, *log, modelColorSpace, panorama, cubeFace, opacity);
     else if (modelColorSpace >= 0) DrawModelProbe(renderer, *log, modelColorSpace, opacity);
     else
     {
@@ -294,7 +297,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         const auto* pixel = static_cast<const unsigned char*>(data) + footprint.Offset + y*footprint.Footprint.RowPitch + x*4;
         if (modelColorSpace >= 0 && !singleSampleCoverage && x == size/2 && y == size/2)
         {
-            const int encodedValue = panorama > 1 ? (cubeFace + 1) * 32 : 128;
+            const int encodedValue = (panorama == 2 || panorama == 3) ? (cubeFace + 1) * 32 : 128;
             const int expected = int(std::round((modelColorSpace == 0 ? std::pow(encodedValue / 255.0, 2.2) * 255.0 : encodedValue) * opacity));
             for (int channel = 0; channel < 3; ++channel)
                 if (std::abs(int(pixel[channel]) - (panorama && channel > 0 ? 0 : expected)) > 2)
@@ -303,10 +306,11 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         if (singleSampleCoverage && x >= 64 && x < 192 && y >= 64 && y < 192)
         {
             ++coveragePixels;
-            const int opaque = modelColorSpace == 0 ? 55 : 128;
+            const int encodedValue = (panorama == 2 || panorama == 3) ? (cubeFace + 1) * 32 : 128;
+            const int opaque = modelColorSpace == 0 ? int(std::round(std::pow(encodedValue / 255.0, 2.2) * 255.0)) : encodedValue;
             const bool covered = pixel[0] != 0;
             for (int channel = 0; channel < 3; ++channel)
-                if (std::abs(int(pixel[channel]) - (covered ? opaque : 0)) > 2)
+                if (std::abs(int(pixel[channel]) - (covered && (!panorama || channel == 0) ? opaque : 0)) > 2)
                     throw std::runtime_error("Single-sample coverage produced a partially blended pixel");
             if (covered) ++coveredPixels;
         }
@@ -424,6 +428,15 @@ int main()
                     RenderScene(host, device.Get(), player, document, capture,
                         DepthProbe::None, int(colorSpace), &log, 0, 4, samples, 0.5f);
                 }
+            if (int(technique) == 0 && int(colorSpace) == 0)
+                for (int pictureFormat = 1; pictureFormat <= 5; ++pictureFormat)
+                    for (UINT samples : {1u, 2u, 4u, 8u})
+                    {
+                        char capture[96];
+                        std::snprintf(capture, sizeof(capture), "d3d12-picture-format%d-half-opacity-%ux.ppm", pictureFormat, samples);
+                        RenderScene(host, device.Get(), player, document, capture,
+                            DepthProbe::None, int(colorSpace), &log, pictureFormat, 4, samples, 0.5f);
+                    }
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -503,7 +516,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
