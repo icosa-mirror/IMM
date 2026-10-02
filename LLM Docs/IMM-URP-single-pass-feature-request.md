@@ -754,7 +754,13 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    all four new readbacks and the existing checks pass locally. CI retains four cubemap
    captures and `cubemap_frames_verified=4`. Uniform-colour faces establish the upload,
    draw, colour conversion and cleanup paths; face orientation, seams and XR remain open.
-46. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+46. **Cubemap face-order readbacks (native CI check):** replaced the uniform-face
+   probe with six distinct face colours and six orthonormal viewing directions for each
+   layout and colour space. All 24 readbacks pass locally through the picture renderer,
+   establishing that cross conversion and strip uploads select the expected +X, -X, +Y,
+   -Y, +Z and -Z faces. CI retains each capture and `cubemap_frames_verified=24`.
+   Within-face rotations/reflections, seams and XR still require separate evidence.
+47. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
