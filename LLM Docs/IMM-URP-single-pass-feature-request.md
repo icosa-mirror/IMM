@@ -978,7 +978,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    all four sample counts and stereo validation. The rebuilt Windows packaged player
    passes locally, and workflow/Python syntax checks pass. Hosted macOS rendering and
    migration of the iOS URP rendering gate remain outstanding.
-71. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+71. **iOS URP simulator gate:** the simulator export now includes a separate URP Xcode
+   project. CI compiles and installs that app after retaining the existing visual checks,
+   then requires the Metal API marker, scene/sample-count captures, opt-out, both unload
+   paths and final shutdown marker. The sample-count requirements match the macOS gate.
+   Logs and captures join the existing iOS diagnostic artifact; timeout, missing evidence
+   or validation failure fails the gate. Simulator termination is cleanup only and cannot
+   substitute for a completed validation marker. The shared build helper selects XR
+   settings for the actual target group. Windows Unity regressions and workflow YAML,
+   Python and shell syntax checks pass locally; Apple compilation/rendering is pending.
+72. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

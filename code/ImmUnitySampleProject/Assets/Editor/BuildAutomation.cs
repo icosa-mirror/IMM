@@ -358,6 +358,8 @@ namespace ImmPlayer.Editor
                     outputPath,
                     BuildOptions.Development,
                     "iOS Simulator Metal CI player");
+                BuildUrpPlayer(BuildTarget.iOS, GraphicsDeviceType.Metal,
+                    Path.Combine(Path.GetDirectoryName(outputPath), "simulator-urp-xcode"));
             }
             finally
             {
@@ -455,7 +457,7 @@ namespace ImmPlayer.Editor
             var previousQualityPipeline = QualitySettings.renderPipeline;
             bool previousDefaultApis = PlayerSettings.GetUseDefaultGraphicsAPIs(target);
             var previousApis = PlayerSettings.GetGraphicsAPIs(target);
-            var xrSettings = XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Standalone);
+            var xrSettings = XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildPipeline.GetBuildTargetGroup(target));
             bool previousXrStartup = xrSettings != null && xrSettings.InitManagerOnStart;
             var xrManager = xrSettings != null ? xrSettings.AssignedSettings : null;
             var previousLoaders = xrManager != null ? xrManager.activeLoaders.ToList() : null;
