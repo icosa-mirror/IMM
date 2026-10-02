@@ -570,7 +570,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    feature, camera opt-in and session owner still need to call it and drain shutdown.
    Full bridge validation passed in
    [run 36944346484](https://github.com/icosa-mirror/IMM/actions/runs/36944346484).
-26. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+26. **CI publication revision matching:** run `36945701101` built the native packet API
+   before the managed polling export was added, but binary synchronization checked out the
+   newer branch head and compared those older binaries against newer declarations. Pin
+   synchronization to the build SHA and skip publication if source changes arrive during
+   the build; generated-binary-only updates remain mergeable. Export validation remains
+   required. The workflow matrix check and publication shell syntax check pass locally;
+   hosted verification of this workflow fix is pending.
+27. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
