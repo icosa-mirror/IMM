@@ -91,6 +91,18 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             yield return null;
         Require(!ImmNativePlugin.IsDocumentActive(documentId), "Document unload stalled after camera opt-out.");
         Debug.Log("[IMM_URP_SMOKE] PASS camera-free document unload completed.");
+        var loadingDocument = manager.LoadDocument(Path.Combine(Application.streamingAssetsPath, "sample1.imm"));
+        Require(loadingDocument != null, "Could not queue document for deferred unload.");
+        documentId = loadingDocument.DocumentId;
+        Require(ImmNativePlugin.IsDocumentActive(documentId), "Queued document is inactive.");
+        Require(loadingDocument.GetStateInfo().Loading != ImmDocument.LoadingState.Loaded,
+            "Deferred-unload probe did not begin during loading.");
+        manager.UnloadDocument(loadingDocument);
+        deadline = Time.realtimeSinceStartup + 30;
+        while (ImmNativePlugin.IsDocumentActive(documentId) && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Require(!ImmNativePlugin.IsDocumentActive(documentId), "Deferred unload stalled without a camera.");
+        Debug.Log("[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.");
         Destroy(sample.gameObject);
         for (int frame = 0; frame < 3; ++frame) yield return null;
         Require(manager == null, "The sample left its persistent manager alive after destruction.");

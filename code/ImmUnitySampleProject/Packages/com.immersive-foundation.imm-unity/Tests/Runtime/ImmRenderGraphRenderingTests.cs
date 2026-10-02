@@ -201,6 +201,18 @@ namespace ImmPlayer.Tests
                 Assert.AreEqual(submitted, ImmRenderGraphSession.Current.Transport.RenderSubmissions,
                     "Unloading required an unexpected camera draw.");
                 Debug.Log("[IMM_URP_READBACK] PASS camera-free document unload completed.");
+                var loadingDocument = manager.LoadDocument(Path.Combine(Application.streamingAssetsPath, "sample1.imm"));
+                Assert.IsNotNull(loadingDocument);
+                int loadingDocumentId = loadingDocument.DocumentId;
+                Assert.IsTrue(ImmNativePlugin.IsDocumentActive(loadingDocumentId));
+                Assert.AreNotEqual(ImmDocument.LoadingState.Loaded, loadingDocument.GetStateInfo().Loading);
+                manager.UnloadDocument(loadingDocument);
+                deadline = Time.realtimeSinceStartup + 30;
+                while (ImmNativePlugin.IsDocumentActive(loadingDocumentId) && Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                Assert.IsFalse(ImmNativePlugin.IsDocumentActive(loadingDocumentId), "Deferred unload stalled during loading without a camera.");
+                Assert.AreEqual(submitted, ImmRenderGraphSession.Current.Transport.RenderSubmissions);
+                Debug.Log("[IMM_URP_READBACK] PASS deferred camera-free unload completed during loading.");
                 manager.Shutdown();
                 Assert.IsNull(ImmRenderGraphSession.Current);
             }

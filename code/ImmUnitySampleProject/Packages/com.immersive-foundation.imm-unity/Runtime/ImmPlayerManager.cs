@@ -783,10 +783,13 @@ namespace ImmPlayer
 
         private void IssueNativeUnloadDrainEvent()
         {
-            if (_nativeUnloadsInFlight.Count == 0) return;
             if (_renderGraphSession != null)
-                _renderGraphSession.MaintainGPU();
-            else if (_renderEventFunc != IntPtr.Zero)
+            {
+                // Deferred unloads must finish GPU loading before the unload can be queued.
+                if (_nativeUnloadsInFlight.Count > 0 || _pendingUnloadDocuments.Count > 0)
+                    _renderGraphSession.MaintainGPU();
+            }
+            else if (_nativeUnloadsInFlight.Count > 0 && _renderEventFunc != IntPtr.Zero)
                 GL.IssuePluginEvent(_renderEventFunc, 0);
         }
 

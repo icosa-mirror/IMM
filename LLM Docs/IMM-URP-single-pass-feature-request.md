@@ -794,7 +794,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    on hosted run 36955372120 (job 110681785150); the new unload gate awaits hosted results.
    That run's Windows Vulkan build exited 137 without a compiler diagnostic and has been
    retried; the existing Vulkan validation requirements remain unchanged.
-51. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+51. **Deferred unload without cameras:** the integration test reproduced a 30-second
+   stall when requesting unload immediately after loading a document with no opted-in
+   camera. The manager deferred unloading until loading completed, but only submitted
+   maintenance for already-queued native unloads. It now also submits maintenance while
+   deferred unloads exist. The same test passes after the fix, with no additional camera
+   submissions (`urp-deferred-unload-before.xml` fails; `urp-deferred-unload-after.xml`
+   passes). The packaged smoke now exercises this case and CI requires its separate
+   success marker; hosted validation of the addition is pending. The Windows Vulkan
+   build retry also exited 137 during Editor initialization and needs further diagnosis.
+52. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

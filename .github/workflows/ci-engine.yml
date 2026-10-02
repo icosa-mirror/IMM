@@ -869,6 +869,7 @@ jobs:
             }
             foreach ($marker in @(
               "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
+              "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
               "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down.")) {
               if (-not (Select-String -Path $urpLog -SimpleMatch $marker -Quiet)) {
                 throw "Unity URP scene validation did not report: $marker"
