@@ -121,7 +121,7 @@ directly on `com.unity.render-pipelines.universal`, with an internal integration
    subsequent Unity transparents are occluded correctly.
 2. Implements the URP integration exclusively through RenderGraph (`RecordRenderGraph`).
    RenderGraph must be enabled; do not implement a Compatibility Mode `Execute` fallback.
-   If Compatibility Mode is enabled, report clearly that the feature requires RenderGraph.
+   URP 17.6 removes Compatibility Mode; no compatibility-setting check is needed on this baseline.
    Use an unsafe pass to obtain the raw `CommandBuffer` needed for the plugin event. Declare the
    actual texture reads/writes to establish dependencies, explicitly disable pass culling
    for the native event's side effects, and bind the attachments in the execution function.
@@ -161,9 +161,11 @@ unsupported configurations encountered by the installed feature clearly, once pe
 2. Capture both eyes together from that XR pass and retain their matrices and layer mapping
    in one submission. Do not independently poll a new XR pose between eyes. The existing
    `ImmCameraMatrixFrameGate` implementation need not be preserved.
-3. Use the applicable URP camera-data GPU projection accessor, such as
-   `UniversalCameraData.GetGPUProjectionMatrix(viewIndex)`, so target-dependent Y-flip,
-   reverse-Z and applicable jitter agree with URP. Apply any further IMM coordinate
+3. Derive the GPU projection from URP camera data so target-dependent Y-flip,
+   reverse-Z and applicable jitter agree with URP. In URP 17.6 the GPU accessor is internal:
+   use `GetProjectionMatrix(viewIndex)` and convert once with `GL.GetGPUProjectionMatrix`,
+   using `IsRenderTargetProjectionMatrixFlipped` on the actual attachments, as URP's own
+   RenderObjects pass does. Apply any further IMM coordinate
    conversion exactly once. Do not apply `GL.GetGPUProjectionMatrix` again to an already
    converted GPU projection or hard-code `renderIntoTexture = true` for every URP target.
 4. Keep camera registration/release, matrices, viewport and native event access in an
@@ -350,9 +352,8 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    camera-attributed counters/markers. Exercise multiple opted-in cameras in the same
    frame to verify queued matrices and targets cannot overwrite each other.
 8. No managed allocations per frame in the pass, and no RenderGraph warnings or culled-pass
-   issues. All URP rendering acceptance checks run with RenderGraph enabled. Enabling
-   Compatibility Mode produces a clear unsupported-configuration diagnostic without
-   activating an alternative rendering path.
+   issues. All URP rendering acceptance checks run with RenderGraph enabled on URP 17.6.
+   No Compatibility Mode rendering path is implemented; that mode is absent on this baseline.
 9. Migrate affected Unity samples and CI harnesses to the new platform/API contract while
    retaining their composition, depth and content checks. Do not preserve Built-in behaviour
    or legacy package APIs solely for compatibility. Shared renderer changes continue to
@@ -577,7 +578,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    the build; generated-binary-only updates remain mergeable. Export validation remains
    required. The workflow matrix check and publication shell syntax check pass locally;
    hosted verification of this workflow fix is pending.
-27. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+27. **Internal URP pass (local compile only):** added `ImmRenderPass` in a URP 17.6-constrained
+   assembly. It records an uncullable unsafe pass after opaques, declares colour/depth
+   read/write dependencies, resolves and binds actual attachments during execution, and
+   submits through the managed transport. It requests intermediate attachments explicitly
+   and converts URP's projection using their Y-flip state. Compilation against installed
+   Unity 6.6 and URP 17.6 assemblies passes. No renderer feature enables this pass yet:
+   camera opt-in, session ownership, configured sample and hosted URP execution remain
+   required. Temporary restrictions are mono perspective, base/full-viewport cameras,
+   matching 2D 8x MSAA targets and no dynamic resolution; these are implementation gaps,
+   not reductions to the requirements above.
+28. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
