@@ -120,6 +120,21 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
         pass.colorAttachments[0].texture = color;
         pass.colorAttachments[0].loadAction = MTLLoadActionLoad;
         pass.colorAttachments[0].storeAction = MTLStoreActionStore;
+        if (color.sampleCount > 1 && unity->AAResolvedTextureFromRenderBuffer)
+        {
+            id<MTLTexture> resolved = (__bridge id<MTLTexture>)unity->AAResolvedTextureFromRenderBuffer(colorBuffer);
+            if (resolved)
+            {
+                if (resolved.width != color.width || resolved.height != color.height ||
+                    resolved.pixelFormat != color.pixelFormat || resolved.sampleCount != 1)
+                    return invalid;
+                // Ending Unity's encoder can resolve before IMM's draws. There
+                // may be no subsequent Unity encoder to refresh that resolve.
+                // Resolve our writes too, retaining samples for later passes.
+                pass.colorAttachments[0].resolveTexture = resolved;
+                pass.colorAttachments[0].storeAction = MTLStoreActionStoreAndMultisampleResolve;
+            }
+        }
         pass.depthAttachment.texture = depth;
         pass.depthAttachment.loadAction = MTLLoadActionLoad;
         pass.depthAttachment.storeAction = MTLStoreActionStore;
@@ -131,8 +146,8 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
             pass.stencilAttachment.loadAction = MTLLoadActionLoad;
             pass.stencilAttachment.storeAction = MTLStoreActionStore;
         }
-        // Unity resumes its own encoder after this event and retains responsibility
-        // for MSAA resolve and command-buffer commit. We preserve multisample storage.
+        // Unity retains command-buffer commit and resumes its own encoder as
+        // needed. Preserve multisample storage across that encoder boundary.
         unity->EndCurrentCommandEncoder();
         void* commands = unity->CurrentCommandBuffer();
         if (!commands || !renderer->BeginExternalRenderPassFrame(commands, (__bridge void*)pass, packet.width, packet.height))
