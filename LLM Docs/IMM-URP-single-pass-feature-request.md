@@ -612,7 +612,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    The Windows CI smoke player now has a required D3D12 lifecycle run, alongside its existing
    D3D11 composition runs; hosted results are pending. Quit/reload failure paths and scene
    rendering remain unverified, and the renderer feature/manager still need to adopt this owner.
-31. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+31. **Renderer feature wired (local rendering evidence):** `ImmRendererFeature` now submits
+   opted-in cameras using the manager-owned session. D3D12 manager initialization requires
+   URP, and disable/shutdown drains that session before releasing document input memory.
+   Renderer assets share the session without owning its shutdown. A real Unity 6.6 D3D12
+   PlayMode test renders `sample1.imm` through URP into an 8x MSAA target, reads visible
+   content, then verifies that camera opt-out stops submissions and clears the image.
+   It passes locally; the capture is `artifacts/d3d12-submission/urp-first-frame.png`.
+   Integration exposed a bounds-export bug: valid transformed document bounds were being
+   replaced with a union of unrelated layer-local bounds. Valid document bounds now take
+   precedence. The required CI package-import check also verifies the renderer-feature type.
+   Hosted URP scene execution, a configured sample, opaque depth composition and the rest of
+   the platform/stereo matrix remain outstanding; the existing CI lifecycle probe alone
+   does not prove rendering correctness. Temporary native clear instrumentation was removed.
+32. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

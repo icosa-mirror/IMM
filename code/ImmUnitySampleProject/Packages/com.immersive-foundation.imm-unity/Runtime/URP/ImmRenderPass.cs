@@ -9,7 +9,6 @@ using UnityEngine.Rendering.Universal;
 namespace ImmPlayer
 {
     // The session owner supplies an acknowledged transport; camera IDs come from opt-in.
-    // This pass is not yet exposed by a renderer feature while session lifetime is being wired.
     internal sealed class ImmRenderPass : ScriptableRenderPass
     {
         private sealed class PassData
@@ -36,6 +35,7 @@ namespace ImmPlayer
 
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer frameData)
         {
+            if (transport.IsDisposed) return;
             transport.Poll();
             if (!transport.IsReady) return;
             var camera = frameData.Get<UniversalCameraData>();
@@ -75,6 +75,7 @@ namespace ImmPlayer
 
         private static void ExecuteNative(PassData data, UnsafeGraphContext context)
         {
+            if (data.Transport.IsDisposed) return;
             // Resolve handles only while the graph's resource registry is active.
             RTHandle color = data.Color;
             RTHandle depth = data.Depth;

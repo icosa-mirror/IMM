@@ -106,6 +106,8 @@ def write_unity_harness(workspace: Path, stroke_package: Path, player_package: P
                 "        var pass = assembly.GetType(\"ImmPlayer.ImmRenderPass\", throwOnError: true);",
                 "        Assert.AreEqual(\"UnityEngine.Rendering.Universal.ScriptableRenderPass\", pass.BaseType.FullName);",
                 "        Assert.IsNotNull(pass.GetMethod(\"RecordRenderGraph\"));",
+                "        var feature = assembly.GetType(\"ImmPlayer.ImmRendererFeature\", throwOnError: true);",
+                "        Assert.AreEqual(\"UnityEngine.Rendering.Universal.ScriptableRendererFeature\", feature.BaseType.FullName);",
                 "    }",
                 "}",
                 "",

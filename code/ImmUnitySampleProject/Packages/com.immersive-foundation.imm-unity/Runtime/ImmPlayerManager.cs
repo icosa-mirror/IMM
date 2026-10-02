@@ -154,6 +154,7 @@ namespace ImmPlayer
         #region State
 
         private bool _isInitialized = false;
+        private ImmRenderGraphSession _renderGraphSession;
         private Dictionary<int, ImmDocument> _loadedDocuments = new Dictionary<int, ImmDocument>();
         private Dictionary<int, IntPtr> _documentMemoryPtrs = new Dictionary<int, IntPtr>(); // Track memory for async loading
         private readonly Dictionary<int, ImmDocument> _pendingUnloadDocuments = new Dictionary<int, ImmDocument>();
@@ -275,7 +276,7 @@ namespace ImmPlayer
 
         private void Start()
         {
-            Initialize();
+            if (!_isInitialized) Initialize();
         }
 
         private void OnEnable()
@@ -296,10 +297,17 @@ namespace ImmPlayer
             {
                 _vulkanSampleEventCoroutine = StartCoroutine(IssueVulkanSampleEventAfterEndOfFrame());
             }
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+            if (Application.isPlaying && !_isInitialized &&
+                SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12 &&
+                GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset)
+                Initialize();
+#endif
         }
 
         private void OnDisable()
         {
+            if (_renderGraphSession != null) Shutdown();
             if (_useCommandBufferRendering || _useCameraCallbackRendering)
             {
                 Camera.onPreCull -= OnCameraPreCull;
@@ -380,8 +388,22 @@ namespace ImmPlayer
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12)
             {
-                LogError("IMM_DX12_PHASE1: D3D12 scene rendering is not implemented yet; initialization is disabled to prevent using a D3D12 device with the D3D11 renderer.");
-                return false;
+                if (!(GraphicsSettings.currentRenderPipeline is UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset))
+                {
+                    LogError("[IMM_RENDER_GRAPH] D3D12 requires URP with ImmRendererFeature and opted-in ImmCamera components.");
+                    return false;
+                }
+                try
+                {
+                    _renderGraphSession = ImmRenderGraphSession.Start(QualitySettings.activeColorSpace == ColorSpace.Linear, true);
+                    _isInitialized = true;
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    LogError($"[IMM_RENDER_GRAPH] Session initialization failed: {error}");
+                    return false;
+                }
             }
 #endif
 
@@ -475,7 +497,15 @@ namespace ImmPlayer
             _nativeUnloadsInFlight.Clear();
 
             // Native shutdown synchronously stops document loading before input buffers are released.
-            ImmNativePlugin.End();
+            if (_renderGraphSession != null)
+            {
+                _renderGraphSession.Dispose();
+                _renderGraphSession = null;
+            }
+            else
+            {
+                ImmNativePlugin.End();
+            }
 
             foreach (var memPtr in _documentMemoryPtrs.Values)
             {

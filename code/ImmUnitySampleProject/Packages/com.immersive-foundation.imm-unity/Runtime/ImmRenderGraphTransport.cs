@@ -27,7 +27,9 @@ namespace ImmPlayer
         private bool disposed;
         internal bool IsReady => phase == Phase.Ready;
         internal bool IsStopped => phase == Phase.Stopped;
+        internal bool IsDisposed => disposed;
         internal int LastError { get; private set; }
+        internal ulong RenderSubmissions { get; private set; }
 
         [DllImport("ImmUnityPlugin", CallingConvention = CallingConvention.StdCall)]
         private static extern IntPtr GetRenderGraphEventFunc();
@@ -107,6 +109,7 @@ namespace ImmPlayer
                 }
             Marshal.Copy(matrices, 0, IntPtr.Add(slot.Memory, 80), matrices.Length);
             Enqueue(commands, slot);
+            ++RenderSubmissions;
         }
 
         internal void QueueShutdown(CommandBuffer commands)
