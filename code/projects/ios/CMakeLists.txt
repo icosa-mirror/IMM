@@ -366,9 +366,14 @@ add_custom_command(TARGET ImmUnity POST_BUILD
         "$<TARGET_FILE:opusenc>"
         "$<TARGET_FILE:png_static>"
         "$<TARGET_FILE:turbojpeg-static>"
-    COMMAND ${Python3_EXECUTABLE} "${CODE_DIR}/../tests/tools/isolate_ios_jpeg.py"
+    COMMAND ${Python3_EXECUTABLE} "${CODE_DIR}/../tests/tools/isolate_ios_codecs.py"
         --archive "${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a"
-        --jpeg-archive "$<TARGET_FILE:turbojpeg-static>"
+        --codec-archive "$<TARGET_FILE:turbojpeg-static>"
+        --codec-archive "$<TARGET_FILE:png_static>"
+        --codec-archive "$<TARGET_FILE:ogg>"
+        --codec-archive "$<TARGET_FILE:vorbis>"
+        --codec-archive "$<TARGET_FILE:opus>"
+        --codec-archive "$<TARGET_FILE:opusenc>"
     VERBATIM
 )
 
