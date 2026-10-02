@@ -398,6 +398,9 @@ namespace ImmPlayer
                 }
                 try
                 {
+#if UNITY_IOS && !UNITY_EDITOR
+                    ImmNativePlugin.ImmUnityRegisterRenderingPlugin();
+#endif
                     _renderGraphSession = ImmRenderGraphSession.Start(QualitySettings.activeColorSpace == ColorSpace.Linear, true);
                     _isInitialized = true;
                     return true;

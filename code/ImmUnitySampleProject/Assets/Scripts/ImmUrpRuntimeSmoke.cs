@@ -59,10 +59,10 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         target = new RenderTexture(new RenderTextureDescriptor(256, 256)
         {
             graphicsFormat = GraphicsFormat.R8G8B8A8_UNorm,
-            depthStencilFormat = GraphicsFormat.D32_SFloat,
-            msaaSamples = 8
+            depthStencilFormat = SystemInfo.GetGraphicsFormat(DefaultFormat.DepthStencil),
+            msaaSamples = 1
         });
-        target.Create();
+        Require(target.Create(), "Could not create the platform-supported colour/depth target.");
         documentCamera.targetTexture = target;
         // Explicit offscreen requests exercise URP and its feature even when the
         // CI player's hidden window does not receive automatic camera rendering.
