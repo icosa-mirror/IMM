@@ -173,7 +173,7 @@ static void DrawPictureProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& 
     picture.Deinit();
 }
 
-static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr, int panorama = 0, int cubeFace = 4, UINT samples = 8, float opacity = 1.0f)
+static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr, int panorama = 0, int cubeFace = 4, UINT samples = 8, float opacity = 1.0f, bool orthographic = false)
 {
     auto& renderer = host.RendererInRenderEvent();
     constexpr UINT size = 256;
@@ -217,7 +217,9 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         -(bounds.mMinY+bounds.mMaxY)*0.5, -(bounds.mMinZ+bounds.mMaxZ)*0.5-radius*2.0);
     const float r = static_cast<float>(radius);
     const float nearPlane = r * 0.01f, farPlane = r * 4.0f;
-    const ImmCore::mat4x4 projection(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
+    const ImmCore::mat4x4 projection = orthographic ?
+        ImmCore::mat4x4(1/r,0,0,0, 0,1/r,0,0, 0,0,1/(farPlane-nearPlane),farPlane/(farPlane-nearPlane), 0,0,0,1) :
+        ImmCore::mat4x4(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
     Check(renderer.BeginFrame(), "Begin scene frame");
     const auto colorBuffer = reinterpret_cast<UnityRenderBuffer>(color.Get());
     const auto depthBuffer = reinterpret_cast<UnityRenderBuffer>(depth.Get());
@@ -437,6 +439,13 @@ int main()
                         RenderScene(host, device.Get(), player, document, capture,
                             DepthProbe::None, int(colorSpace), &log, pictureFormat, 4, samples, 0.5f);
                     }
+            for (DepthProbe depthProbe : {DepthProbe::None, DepthProbe::HostOcclusion, DepthProbe::ImmWrites})
+            {
+                char capture[96];
+                std::snprintf(capture, sizeof(capture), "d3d12-orthographic-technique%d-color%d-depth%d.ppm",
+                    int(technique), int(colorSpace), int(depthProbe));
+                RenderScene(host, device.Get(), player, document, capture, depthProbe, -1, nullptr, 0, 4, 8, 1.0f, true);
+            }
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -516,7 +525,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

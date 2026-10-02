@@ -1473,9 +1473,13 @@ namespace ImmPlayer
 
     static mat4x4d dx2gl(const mat4x4d & mat)
     {
+        // Convert clip depth z in [0,w] to [-w,w] for frustum extraction.
+        // Applying z' = 2*z - w to the entire row also handles orthographic,
+        // asymmetric and reversed-Z projections; no perspective coefficients are assumed.
         return mat4x4d(mat[0], mat[1], mat[2], mat[3],
-            mat[4], -mat[5], mat[6], mat[7],
-            mat[8], mat[9], -(1.0 + 2.0*mat[10]), -2.0*mat[11],
+            mat[4], mat[5], mat[6], mat[7],
+            2.0*mat[8] - mat[12], 2.0*mat[9] - mat[13],
+            2.0*mat[10] - mat[14], 2.0*mat[11] - mat[15],
             mat[12], mat[13], mat[14], mat[15]);
     }
 
@@ -1523,7 +1527,7 @@ namespace ImmPlayer
         //const frustum3d dfrus = frustum3d( f2d(mViewerInfo.mProjection) * layerToViewer);
 
         mat4x4d tmp = f2d(mViewerInfo.mProjection);
-        // DX to GL conversion. If we remove this, then enable dx2gl() in player.cpp::iDisplayPreRenderLayer::289 and also enable GL.GetGPUProjectionMatrix() in C#
+        // Frustum extraction expects symmetric clip depth, independent of the drawing API.
         if (mProjectionMatricesMode==ClipSpaceDepth::FromZeroToOne) tmp = dx2gl(tmp);
         const frustum3d dfrus = frustum3d(tmp * toMatrix(layerToViewer));
 

@@ -847,7 +847,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    shutdown with exit 0. Hosted execution is pending. This adds packaged scene-presence
    coverage; the more detailed bidirectional depth checks at all sample counts currently
    remain local PlayMode evidence.
-57. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+57. **Projection-independent native frustum conversion:** the zero-to-one clip-depth
+   conversion assumed a perspective matrix, causing orthographic scene culling failures.
+   It now applies `z_clip = 2*z_clip - w_clip` to the complete matrix row, preserving X/Y
+   and handling reversed depth without perspective-specific coefficients. Twelve new
+   orthographic scene/depth readbacks pass locally across both paint techniques and colour
+   spaces, as do the existing perspective checks. CI retains these captures and
+   `orthographic_frames_verified=12`. The managed perspective-only guard remains until
+   Unity orthographic integration and distance-based layer culling are verified; these
+   native checks alone do not establish complete orthographic support.
+58. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
