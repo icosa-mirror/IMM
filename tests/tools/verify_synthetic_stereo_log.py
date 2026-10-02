@@ -13,7 +13,7 @@ PREFIX = "[IMM_UNITY_VK_SYNTH_STEREO_20260803]"
 DISPATCH = re.compile(
     re.escape(PREFIX)
     + r" dispatch cameraId=(?P<camera>\d+) eye=(?P<eye>[01]) "
-    + r"eventId=(?P<event>\d+) targetId=(?P<target>-?\d+) targetPtr=0x(?P<pointer>[0-9A-Fa-f]+)"
+    + r"eventId=(?P<event>\d+) targetId=(?P<target>-?\d+(?::\d+)?) targetPtr=0x(?P<pointer>[0-9A-Fa-f]+)"
 )
 MATRICES = re.compile(
     re.escape(PREFIX)
@@ -23,7 +23,7 @@ MATRICES = re.compile(
 )
 PRESENT = re.compile(
     r"\[IMM_SYNTH_PRESENT_EYE_20260804\] eye=(?P<eye>[01]) "
-    r"targetId=(?P<target>-?\d+) targetPtr=0x(?P<pointer>[0-9A-Fa-f]+)"
+    r"targetId=(?P<target>-?\d+(?::\d+)?) targetPtr=0x(?P<pointer>[0-9A-Fa-f]+)"
 )
 
 
@@ -34,9 +34,10 @@ def main() -> int:
     args = parser.parse_args()
 
     text = args.log.read_text(encoding="utf-8", errors="replace")
-    latest_by_eye: dict[int, dict[str, int]] = {}
+    latest_by_eye: dict[int, dict[str, int | str]] = {}
     for match in DISPATCH.finditer(text):
-        values = {key: int(value, 16 if key == "pointer" else 10) for key, value in match.groupdict().items()}
+        values = {key: value if key == "target" else int(value, 16 if key == "pointer" else 10)
+                  for key, value in match.groupdict().items()}
         latest_by_eye[values["eye"]] = values
 
     matrices_by_eye: dict[int, dict[str, float | int]] = {}
@@ -50,11 +51,11 @@ def main() -> int:
         }
         matrices_by_eye[int(values["eye"])] = values
 
-    presentations_by_eye: dict[int, dict[str, int]] = {}
+    presentations_by_eye: dict[int, dict[str, int | str]] = {}
     for match in PRESENT.finditer(text):
         values = {
             "eye": int(match.group("eye")),
-            "target": int(match.group("target")),
+            "target": match.group("target"),
             "pointer": int(match.group("pointer"), 16),
         }
         presentations_by_eye[values["eye"]] = values
@@ -75,7 +76,7 @@ def main() -> int:
             failures.append(f"eyes used different camera IDs: {left['camera']} and {right['camera']}")
         if right["event"] != left["event"] + 1:
             failures.append(f"eye event IDs are not adjacent: {left['event']} and {right['event']}")
-        if left["target"] == 0 or right["target"] == 0 or left["target"] == right["target"]:
+        if int(str(left["target"]).split(":")[0]) == 0 or int(str(right["target"]).split(":")[0]) == 0 or left["target"] == right["target"]:
             failures.append(f"eye target IDs are invalid or shared: {left['target']} and {right['target']}")
         if left["pointer"] == 0 or right["pointer"] == 0 or left["pointer"] == right["pointer"]:
             failures.append(

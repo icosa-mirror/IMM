@@ -45,6 +45,20 @@ def main() -> int:
         assert passed.returncode == 0, passed.stdout + passed.stderr
         assert json.loads(output.read_text(encoding="utf-8"))["status"] == "passed"
 
+        # Unity 6.6 includes the instance generation in the printed target ID.
+        legacy_text = log.read_text(encoding="utf-8")
+        modern_text = legacy_text.replace("targetId=10 ", "targetId=10:256 ").replace("targetId=11 ", "targetId=11:256 ")
+        log.write_text(modern_text, encoding="utf-8")
+        modern = invoke(tool, log, output)
+        assert modern.returncode == 0, modern.stdout + modern.stderr
+        log.write_text(modern_text.replace("targetId=11:256", "targetId=10:256"), encoding="utf-8")
+        shared_modern = invoke(tool, log, output)
+        assert shared_modern.returncode != 0
+        assert any("shared" in failure for failure in json.loads(output.read_text(encoding="utf-8"))["failures"])
+        log.write_text(modern_text.replace("targetId=11:256", "targetId=0:256"), encoding="utf-8")
+        null_modern = invoke(tool, log, output)
+        assert null_modern.returncode != 0
+
         log.write_text(
             common
             + f"{PREFIX} matrices cameraId=3 selectedEye=0 halfIpd=0.150 leftTx=1.150000 rightTx=0.850000\n"
