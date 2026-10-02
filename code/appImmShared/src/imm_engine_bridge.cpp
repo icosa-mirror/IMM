@@ -340,7 +340,8 @@ namespace ImmShared
         else if (camera.stereoType == 2)
         {
             const float oldVp[6] = { viewport.x, viewport.y, viewport.width, viewport.height, viewport.minDepth, viewport.maxDepth };
-            const float newVp[6] = { viewport.x, viewport.y, viewport.width * 2.0f, viewport.height, viewport.minDepth, viewport.maxDepth };
+            const bool layeredD3D = mRenderer->GetAPI() == piRenderer::API::DX || mRenderer->GetAPI() == piRenderer::API::DX12;
+            const float newVp[6] = { viewport.x, viewport.y, viewport.width * (layeredD3D ? 1.0f : 2.0f), viewport.height, viewport.minDepth, viewport.maxDepth };
             mRenderer->SetViewports(1, newVp);
 
             const mat4x4d headToLeftEye = f2d(camera.world2LeftEye) * invert(f2d(camera.world2Head));

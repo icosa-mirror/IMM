@@ -338,10 +338,10 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     std::printf("IMM_DX12_PLAYER scene pixels=%u depth_probe=%d\n", visible, int(probe));
 }
 
-static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples, ImmCore::piLog* modelLog = nullptr, int pictureFormat = 0)
+static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples, ImmCore::piLog* modelLog = nullptr, int pictureFormat = 0, ImmPlayer::Player* scene = nullptr, int document = -1, int configuration = 0)
 {
     auto& renderer = host.RendererInRenderEvent();
-    constexpr UINT size = 32;
+    const UINT size = scene ? 128 : 32;
     D3D12_HEAP_PROPERTIES gpu = {}; gpu.Type = D3D12_HEAP_TYPE_DEFAULT;
     D3D12_RESOURCE_DESC desc = {};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -384,7 +384,21 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     const int viewport[] = {0,0,size,size}; renderer.SetViewport(0, viewport);
     try
     {
-        if (pictureFormat) DrawPictureProbe(renderer, *modelLog, 0, pictureFormat, 4, 1.0f, true, size);
+        if (scene)
+        {
+            const auto bounds = scene->GetDocumentBBox(document);
+            const double radius = std::max({bounds.mMaxX-bounds.mMinX, bounds.mMaxY-bounds.mMinY, bounds.mMaxZ-bounds.mMinZ, 1.0}) * 0.6;
+            const auto view = ImmCore::trans3d::translate(-(bounds.mMinX+bounds.mMaxX)*0.5,
+                -(bounds.mMinY+bounds.mMaxY)*0.5, -(bounds.mMinZ+bounds.mMaxZ)*0.5-radius*2.0);
+            const float nearPlane = float(radius)*0.01f, farPlane = float(radius)*4.0f;
+            const ImmCore::mat4x4 projection(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
+            scene->GlobalRender(ImmCore::trans3d::identity(), view, projection, ImmPlayer::StereoMode::Preferred);
+            scene->RenderStereoSinglePass(ImmCore::ivec2(size, size),
+                ImmCore::toMatrix(ImmCore::trans3d::translate(-radius*0.1, 0.0, 0.0)), projection,
+                ImmCore::toMatrix(ImmCore::trans3d::translate(radius*0.1, 0.0, 0.0)), projection);
+            if (scene->GetPerformanceInfoForFrame().numDrawCalls <= 0) throw std::runtime_error("Layered scene submitted no paint");
+        }
+        else if (pictureFormat) DrawPictureProbe(renderer, *modelLog, 0, pictureFormat, 4, 1.0f, true, size);
         else if (modelLog) DrawModelProbe(renderer, *modelLog, 0, 1.0f, true, size);
         else renderer.DrawUnitQuad_XY(2);
     }
@@ -404,7 +418,7 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     }
     renderer.DestroyShader(shader);
     // Later geometry behind each eye must lose against that slice's depth.
-    const char* behindVS = "void main(float2 p:POSITION, uint eye:SV_InstanceID, out float4 pos:SV_Position, out uint slice:SV_RenderTargetArrayIndex, out float4 color:COLOR0) { pos=float4(p,0.25,1); slice=eye; color=float4(0,0,1,1); }";
+    const char* behindVS = "void main(float2 p:POSITION, uint eye:SV_InstanceID, out float4 pos:SV_Position, out uint slice:SV_RenderTargetArrayIndex, out float4 color:COLOR0) { pos=float4(p,0.0001,1); slice=eye; color=float4(0,0,1,1); }";
     auto behind = renderer.CreateShader(nullptr, behindVS, nullptr, nullptr, nullptr, ps, nullptr);
     if (!behind) throw std::runtime_error("Create layered depth probe shader");
     renderer.AttachShader(behind);
@@ -437,13 +451,26 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     void* data = nullptr; D3D12_RANGE range = {0, static_cast<SIZE_T>(bytes)};
     Check(readback->Map(0, &range, &data), "Map layered pixels");
     char capture[80];
-    if (pictureFormat) std::snprintf(capture, sizeof(capture), "d3d12-layered-picture%d-%ux.ppm", pictureFormat, samples);
+    if (scene) std::snprintf(capture, sizeof(capture), "d3d12-layered-scene-config%d-%ux.ppm", configuration, samples);
+    else if (pictureFormat) std::snprintf(capture, sizeof(capture), "d3d12-layered-picture%d-%ux.ppm", pictureFormat, samples);
     else std::snprintf(capture, sizeof(capture), modelLog ? "d3d12-layered-model-%ux.ppm" : "d3d12-layered-%ux.ppm", samples);
-    std::ofstream image(capture, std::ios::binary); image << "P6\n32 64\n255\n";
+    std::ofstream image(capture, std::ios::binary); image << "P6\n" << size << " " << size*2 << "\n255\n";
+    UINT scenePixels[2] = {}, differentPixels = 0;
     for (UINT eye = 0; eye < 2; ++eye)
         for (UINT y = 0; y < size; ++y) for (UINT x = 0; x < size; ++x)
         {
             const auto* pixel = static_cast<const unsigned char*>(data) + footprints[eye].Offset + y*footprints[eye].Footprint.RowPitch + x*4;
+            if (scene)
+            {
+                if (pixel[0] != 0 || pixel[1] != 0 || pixel[2] != 255) ++scenePixels[eye];
+                if (eye == 1)
+                {
+                    const auto* left = static_cast<const unsigned char*>(data) + footprints[0].Offset + y*footprints[0].Footprint.RowPitch + x*4;
+                    if (pixel[0] != left[0] || pixel[1] != left[1] || pixel[2] != left[2]) ++differentPixels;
+                }
+                image.write(reinterpret_cast<const char*>(pixel), 3);
+                continue;
+            }
             const bool modelCovered = y >= 4 && y < 28 && (eye == 0 ? x < 24 : x >= 8);
             for (UINT channel = 0; channel < 3; ++channel)
             {
@@ -465,6 +492,8 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
             }
             image.write(reinterpret_cast<const char*>(pixel), 3);
         }
+    if (scene && (scenePixels[0] < 100 || scenePixels[1] < 100 || differentPixels < 100))
+        throw std::runtime_error("Layered scene missing an eye, per-eye transform or depth writes");
     D3D12_RANGE written = {}; readback->Unmap(0, &written);
     image.close(); if (!image) throw std::runtime_error("Write layered capture");
 }
@@ -578,6 +607,8 @@ int main()
                     int(technique), int(colorSpace), int(depthProbe));
                 RenderScene(host, device.Get(), player, document, capture, depthProbe, -1, nullptr, 0, 4, 8, 1.0f, true);
             }
+            for (UINT samples : {1u, 2u, 4u, 8u})
+                VerifyLayeredTargets(host, device.Get(), samples, nullptr, 0, &player, document, int(technique)*2+int(colorSpace));
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -662,7 +693,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"layered_model_frames_verified":4,"layered_picture_frames_verified":20,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"layered_model_frames_verified":4,"layered_picture_frames_verified":20,"layered_scene_frames_verified":16,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

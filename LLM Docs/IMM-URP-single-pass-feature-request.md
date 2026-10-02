@@ -894,7 +894,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    viewport. CI retains 20 captures and `layered_picture_frames_verified=20`. Native build
    and all existing checks pass locally. These checks exclude sphere silhouettes/seams;
    production paint stereo and managed XR integration remain outstanding.
-62. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+62. **Layered paint scene checks and D3D viewport migration:** the shared bridge
+   preserves full per-eye viewport width for preferred D3D stereo; other native backends
+   retain their current viewport behavior. The native player check exercises
+   `GlobalRender(Preferred)` and `RenderStereoSinglePass` with distinct eye transforms for
+   `sample1.imm`, both paint techniques, both colour spaces and all four sample counts.
+   All 16 readbacks pass locally: both slices retain scene pixels against a later depth
+   probe, and their images differ with the eye transforms. CI retains the captures and
+   `layered_scene_frames_verified=16`. Existing model/picture/mono checks pass. This is
+   native scene evidence; the shared-bridge stereo entry point, managed XR submission,
+   stereo culling bounds and headset behavior still require integration validation.
+63. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
