@@ -746,7 +746,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    table is now zero-initialized. Both panorama checks and existing scene/model/depth
    checks pass locally. CI retains two panorama captures and `panorama_frames_verified=2`.
    This proves mono rendering of a stereo-format image, not headset single-pass rendering.
-45. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+45. **Windows cubemap picture path (native CI check):** added the missing HLSL cubemap
+   pixel shader and Windows shader selection for cross-layout and vertical-strip pictures.
+   Both use the existing panorama vertex shader and cube mesh. Cubemap uploads now create
+   their sampler, and unload clears texture/sampler handles so subsequent uploads recreate
+   them. The D3D12/WARP check decodes and renders synthetic cubemaps in both colour spaces;
+   all four new readbacks and the existing checks pass locally. CI retains four cubemap
+   captures and `cubemap_frames_verified=4`. Uniform-colour faces establish the upload,
+   draw, colour conversion and cleanup paths; face orientation, seams and XR remain open.
+46. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

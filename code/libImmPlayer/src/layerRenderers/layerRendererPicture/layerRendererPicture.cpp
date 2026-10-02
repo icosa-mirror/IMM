@@ -52,6 +52,9 @@ namespace ImmPlayer
 #if defined(WINDOWS)
 #include "tmp/shader_pip360Equirect_vs_hlsl.inc"
 #include "tmp/shader_pip360Equirect_fs_hlsl.inc"
+#include "tmp/shader_pip360Cubemap_fs_hlsl.inc"
+static_assert(sizeof(shader_pip360Cubemap_fs_code) / sizeof(shader_pip360Cubemap_fs_code[0]) == 6,
+    "Cubemap pixel shaders require three stereo modes and two colour spaces");
 static_assert(sizeof(shader_pip360Equirect_vs_code) / sizeof(shader_pip360Equirect_vs_code[0]) == 6,
     "Panorama vertex shaders require three stereo modes and two image formats");
 static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equirect_fs_code[0]) == 12,
@@ -368,6 +371,16 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
                     log->Printf(LT_ERROR, L"Could not initialize 360 equirect stereo image layer shader\n%s", pistr2ws(error));
                     return false;
                 }
+                mShaders[idx][LayerPicture::Image360CubemapCrossMono] = renderer->CreateShaderBinary(nullptr,
+                    shader_pip360Equirect_vs_code[i], shader_pip360Equirect_vs_size[i],
+                    nullptr, 0, nullptr, 0, nullptr, 0,
+                    shader_pip360Cubemap_fs_code[i + poff], shader_pip360Cubemap_fs_size[i + poff], error);
+                if (!mShaders[idx][LayerPicture::Image360CubemapCrossMono])
+                {
+                    log->Printf(LT_ERROR, L"Could not initialize cubemap image layer shader\n%s", pistr2ws(error));
+                    return false;
+                }
+                mShaders[idx][LayerPicture::Image360CubemapVstripMono] = mShaders[idx][LayerPicture::Image360CubemapCrossMono];
 #else
                 if (renderer->GetAPI() == piRenderer::API::Metal)
                 {
@@ -613,6 +626,7 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
         pic->mUploaded = false;
         pic->mImage = image;
         pic->mTexture = nullptr;
+        pic->mSampler = nullptr;
         pic->mType = lp->GetType();
 
         lp->SetGpuId(static_cast<int>(id));
@@ -639,6 +653,8 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
 
         renderer->DestroyTexture(me->mTexture);
         renderer->DestroySampler(me->mSampler);
+        me->mTexture = nullptr;
+        me->mSampler = nullptr;
 
         me->mUploaded = false;
         return true;
@@ -767,6 +783,16 @@ static_assert(sizeof(shader_pip360Equirect_fs_code) / sizeof(shader_pip360Equire
         }
         } // end switch
 
+        if (!me->mSampler)
+        {
+            me->mSampler = renderer->CreateSampler(piRenderer::TextureFilter::MIPMAP, piRenderer::TextureWrap::CLAMP, 1.0f);
+            if (!me->mSampler)
+            {
+                renderer->DestroyTexture(me->mTexture);
+                me->mTexture = nullptr;
+                return false;
+            }
+        }
         me->mUploaded = true;
 
 
