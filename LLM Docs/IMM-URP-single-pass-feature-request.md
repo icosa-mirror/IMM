@@ -958,7 +958,18 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    D3D12 smoke checks and the packaged URP smoke player pass locally. Metal/Vulkan
    event adapters are still unimplemented and their event-function queries remain null;
    sharing the packet contract does not enable those rendering paths.
-69. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+69. **Initial mono Metal RenderGraph adapter:** Metal URP sessions now route through
+   the immutable packet transport, with iOS imports targeting `__Internal`. The native
+   adapter requires Unity's Metal V2 interface, validates packet buffers against the
+   active colour/depth attachments and translates the common packet format identifiers
+   to Metal formats. It ends Unity's encoder and records a load/store-preserving pass on
+   Unity's command buffer; Unity retains resolve/commit ownership. Stereo, memoryless,
+   mismatched and partial-size attachments are rejected. Initialization, target-free
+   maintenance and render-thread shutdown use the same packet operations as D3D12.
+   Windows plugin build, ABI verification and both required Unity rendering regressions
+   pass locally. Apple compilation, Metal rendering, attachment persistence and actual
+   sample-count behaviour remain unverified; this entry does not establish Metal support.
+70. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

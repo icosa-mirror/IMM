@@ -127,6 +127,7 @@
 #if defined(__APPLE__)
 #include "IUnityGraphicsMetal.h"
 #include "libImmCore/src/libRender/metal/piMetal_Renderer.h"
+#include "imm_unity_metal_render_graph.h"
 #include <cstdlib>
 #include <cstdio>
 #include <mutex>
@@ -245,6 +246,9 @@ struct ImmUnityPlugin
 
 #if defined(WINDOWS)
         ImmRenderGraphState mRenderGraph;
+#endif
+#if defined(__APPLE__)
+        ImmMetalRenderGraphState mMetalRenderGraph;
 #endif
 	    ImmShared::ImmEngineBridge mBridge;
 
@@ -456,6 +460,10 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
         if (gImmUnityPlugin.mRenderGraph.configured || gImmUnityPlugin.mRenderGraph.ready)
             ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
         gImmUnityPlugin.mRenderGraph.unity = nullptr;
+#endif
+#if defined(__APPLE__)
+        ShutdownImmMetalRenderGraph(gImmUnityPlugin.mMetalRenderGraph, gImmUnityPlugin.mBridge);
+        gImmUnityPlugin.mMetalRenderGraph.unity = nullptr;
 #endif
 	}
 }
@@ -1550,7 +1558,7 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 	gImmUnityPlugin.UnityAPI.mGraphics->UnregisterDeviceEventCallback(iOnGraphicsDeviceEvent);
 }
 
-#if defined(WINDOWS)
+#if defined(WINDOWS) || defined(__APPLE__)
 static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
 {
     IMM_UNITY_NATIVE_LOCK();
@@ -1558,17 +1566,26 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
     // Validate the ABI header before reading or writing any later fields.
     if (packet->version != 2 || packet->size != sizeof(*packet)) return;
-    HRESULT result = E_UNEXPECTED;
+    int32_t result = -2147418113; // E_UNEXPECTED.
     try
     {
+#if defined(WINDOWS)
         if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12)
             result = ProcessImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge, *packet);
+#elif defined(__APPLE__)
+        if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal)
+            result = ProcessImmMetalRenderGraph(gImmUnityPlugin.mMetalRenderGraph, gImmUnityPlugin.mBridge, *packet);
+#endif
     }
     catch (const std::exception& error)
     {
         std::fprintf(stderr, "IMM_RENDER_GRAPH failed: %.512s\n", error.what());
+#if defined(WINDOWS)
         ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
-        result = E_FAIL;
+#else
+        ShutdownImmMetalRenderGraph(gImmUnityPlugin.mMetalRenderGraph, gImmUnityPlugin.mBridge);
+#endif
+        result = -2147467259; // E_FAIL.
     }
     packet->result = static_cast<int32_t>(result);
     packet->completed.store(1, std::memory_order_release);
@@ -1596,6 +1613,13 @@ extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
 #if defined(WINDOWS)
     if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12 && gImmUnityPlugin.mRenderGraph.unity != nullptr)
         return iOnRenderGraphEvent;
+#endif
+#if defined(__APPLE__)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererMetal && gImmUnityPlugin.UnityAPI.mMetalV2)
+    {
+        gImmUnityPlugin.mMetalRenderGraph.unity = gImmUnityPlugin.UnityAPI.mMetalV2;
+        return iOnRenderGraphEvent;
+    }
 #endif
     return nullptr;
 }
@@ -1944,6 +1968,13 @@ extern "C" void UNITY_INTERFACE_EXPORT End(void)
     IMM_UNITY_NATIVE_LOCK();
 #if defined(WINDOWS)
     if (gImmUnityPlugin.mRenderGraph.ready)
+    {
+        std::fprintf(stderr, "IMM_RENDER_GRAPH End requires the render-thread shutdown event.\n");
+        return;
+    }
+#endif
+#if defined(__APPLE__)
+    if (gImmUnityPlugin.mMetalRenderGraph.ready)
     {
         std::fprintf(stderr, "IMM_RENDER_GRAPH End requires the render-thread shutdown event.\n");
         return;

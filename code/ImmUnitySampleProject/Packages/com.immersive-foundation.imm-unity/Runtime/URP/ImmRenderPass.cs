@@ -45,6 +45,11 @@ namespace ImmPlayer
             var camera = frameData.Get<UniversalCameraData>();
             if (!ImmCamera.TryAcquire(camera.camera, out int cameraId)) return;
             bool stereo = camera.xr.enabled;
+            if (stereo && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal)
+            {
+                Report("IMM Metal RenderGraph supports mono cameras only.");
+                return;
+            }
             if (stereo && (!camera.xr.singlePassEnabled || camera.xr.viewCount != 2 ||
                 camera.xr.GetTextureArraySlice(0) != 0 || camera.xr.GetTextureArraySlice(1) != 1 ||
                 camera.xr.GetViewport(0) != camera.xr.GetViewport(1)))
@@ -113,11 +118,11 @@ namespace ImmPlayer
                 (c.antiAliasing != 1 && c.antiAliasing != 2 && c.antiAliasing != 4 && c.antiAliasing != 8) ||
                 c.useDynamicScale || d.useDynamicScale)
             {
-                data.Owner.Report("IMM D3D12 requires matching mono 2D or stereo two-slice attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
+                data.Owner.Report("IMM requires matching mono 2D or stereo two-slice attachments with 1, 2, 4 or 8 samples without dynamic resolution.");
                 return;
             }
-            uint colorFormat = DxgiFormat(c.graphicsFormat);
-            uint depthFormat = DxgiFormat(d.depthStencilFormat);
+            uint colorFormat = AttachmentFormat(c.graphicsFormat);
+            uint depthFormat = AttachmentFormat(d.depthStencilFormat);
             if (colorFormat == 0 || depthFormat == 0)
             {
                 data.Owner.Report($"Unsupported IMM attachment formats: {c.graphicsFormat}, {d.depthStencilFormat}.");
@@ -175,7 +180,7 @@ namespace ImmPlayer
             if (reported.Add(message)) Debug.LogError($"[IMM_RENDER_GRAPH] {message}");
         }
 
-        private static uint DxgiFormat(GraphicsFormat format)
+        private static uint AttachmentFormat(GraphicsFormat format)
         {
             switch (format)
             {

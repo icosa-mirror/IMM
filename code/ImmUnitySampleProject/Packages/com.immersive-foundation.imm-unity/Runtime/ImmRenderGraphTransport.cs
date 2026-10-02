@@ -31,17 +31,23 @@ namespace ImmPlayer
         internal int LastError { get; private set; }
         internal ulong RenderSubmissions { get; private set; }
 
-        [DllImport("ImmUnityPlugin", CallingConvention = CallingConvention.StdCall)]
+#if UNITY_IOS && !UNITY_EDITOR
+        private const string DllName = "__Internal";
+#else
+        private const string DllName = "ImmUnityPlugin";
+#endif
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         private static extern IntPtr GetRenderGraphEventFunc();
-        [DllImport("ImmUnityPlugin", CallingConvention = CallingConvention.StdCall)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         private static extern int GetRenderGraphPacketSize();
-        [DllImport("ImmUnityPlugin", CallingConvention = CallingConvention.StdCall)]
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         private static extern int GetRenderGraphPacketResult(IntPtr packet, out int result, out ulong gpuCompletion);
 
         internal ImmRenderGraphTransport()
         {
-            if (IntPtr.Size != 8 || SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12)
-                throw new NotSupportedException("IMM RenderGraph transport currently requires Windows D3D12.");
+            if (IntPtr.Size != 8 || (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Direct3D12 &&
+                SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal))
+                throw new NotSupportedException("IMM RenderGraph transport requires 64-bit D3D12 or Metal.");
             if (GetRenderGraphPacketSize() != PacketSize)
                 throw new InvalidOperationException("IMM managed and native RenderGraph packet layouts differ.");
             callback = GetRenderGraphEventFunc();
