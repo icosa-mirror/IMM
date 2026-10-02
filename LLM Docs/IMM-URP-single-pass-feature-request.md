@@ -941,7 +941,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    zero with every required marker, including distinct scene images in both array slices.
    Hosted execution is pending. This covers non-headset stereo submission; it does not
    replace OpenXR graph, peripheral culling or headset composition validation.
-67. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+67. **Peripheral stereo culling regression:** the shared Unity stereo validator now
+   displaces the scene outside the head frustum while using asymmetric eye projections
+   that can see it. A negative control requires head-only culling to produce empty eye
+   slices; supplying a wider asymmetric culling projection must restore visible,
+   distinct eye images. Both required editor integration tests pass locally. The
+   packaged CI probe invokes this same validator before its required stereo pass marker.
+   A locally rebuilt packaged player also exits zero with every required smoke marker.
+   This verifies that packet submission uses the supplied culling projection independently
+   of the eye projections; actual OpenXR-provided culling matrices still need validation.
+68. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
