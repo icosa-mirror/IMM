@@ -913,7 +913,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    RenderGraph integration tests pass with the updated managed/native ABI. This is
    transport infrastructure: the Unity XR pass remains disabled pending end-to-end
    stereo packet rendering, XR attachment integration and stereo culling validation.
-64. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+64. **Native stereo packet rendering:** the D3D12 smoke check now submits `sample1.imm`
+   through `ProcessImmRenderGraph` and the shared bridge with distinct eye matrices,
+   rather than only invoking the player's stereo draw directly. All four sample counts
+   pass locally. Readbacks require scene content in both slices, different eye images
+   and scene depth that rejects a later background probe. CI retains four
+   `d3d12-layered-packet-*x.ppm` captures and `layered_packet_frames_verified=4`.
+   This uses mocked Unity target/queue interfaces; actual Unity XR attachment integration,
+   stereo culling and headset validation remain outstanding.
+65. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

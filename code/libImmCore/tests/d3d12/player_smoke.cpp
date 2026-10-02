@@ -339,7 +339,7 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     std::printf("IMM_DX12_PLAYER scene pixels=%u depth_probe=%d\n", visible, int(probe));
 }
 
-static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples, ImmCore::piLog* modelLog = nullptr, int pictureFormat = 0, ImmPlayer::Player* scene = nullptr, int document = -1, int configuration = 0)
+static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples, ImmCore::piLog* modelLog = nullptr, int pictureFormat = 0, ImmPlayer::Player* scene = nullptr, int document = -1, int configuration = 0, ImmRenderGraphState* graph = nullptr, ImmShared::ImmEngineBridge* bridge = nullptr)
 {
     auto& renderer = host.RendererInRenderEvent();
     const UINT size = scene ? 128 : 32;
@@ -393,10 +393,42 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
                 -(bounds.mMinY+bounds.mMaxY)*0.5, -(bounds.mMinZ+bounds.mMaxZ)*0.5-radius*2.0);
             const float nearPlane = float(radius)*0.01f, farPlane = float(radius)*4.0f;
             const ImmCore::mat4x4 projection(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
-            scene->GlobalRender(ImmCore::trans3d::identity(), view, projection, ImmPlayer::StereoMode::Preferred);
-            scene->RenderStereoSinglePass(ImmCore::ivec2(size, size),
-                ImmCore::toMatrix(ImmCore::trans3d::translate(-radius*0.1, 0.0, 0.0)), projection,
-                ImmCore::toMatrix(ImmCore::trans3d::translate(radius*0.1, 0.0, 0.0)), projection);
+            if (graph)
+            {
+                uint64_t clearCompletion = 0;
+                Check(renderer.EndFrame(&clearCompletion), "Submit pre-packet clear");
+                ImmRenderGraphPacket request;
+                request.operation = 1; request.viewCount = 2;
+                request.width = request.height = size;
+                request.colorBuffer = reinterpret_cast<uint64_t>(colorBuffer);
+                request.depthBuffer = reinterpret_cast<uint64_t>(depthBuffer);
+                request.colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+                request.depthFormat = DXGI_FORMAT_D32_FLOAT;
+                const auto head = ImmCore::d2f(ImmCore::toMatrix(view));
+                auto left = head, right = head;
+                left[3] -= float(radius)*0.1f; right[3] += float(radius)*0.1f;
+                for (int i = 0; i < 16; ++i)
+                {
+                    request.worldToView[i] = head[i];
+                    request.leftView[i] = left[i]; request.rightView[i] = right[i];
+                    request.projection[i] = request.leftProjection[i] = request.rightProjection[i] = projection[i];
+                }
+                Check(ProcessImmRenderGraph(*graph, *bridge, request), "Submit stereo graph packet");
+                if (!request.gpuCompletion) throw std::runtime_error("Stereo packet returned no GPU completion");
+                Check(renderer.BeginFrame(), "Begin post-packet depth probe");
+                Check(host.BindTargetsInRenderEvent(colorBuffer, depthBuffer, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT, 2),
+                    "Rebind packet targets for depth probe");
+                renderer.SetViewport(0, viewport);
+                renderer.SetState(ImmCore::piSTATE_CULL_FACE, false);
+                renderer.SetState(ImmCore::piSTATE_BLEND, false);
+            }
+            else
+            {
+                scene->GlobalRender(ImmCore::trans3d::identity(), view, projection, ImmPlayer::StereoMode::Preferred);
+                scene->RenderStereoSinglePass(ImmCore::ivec2(size, size),
+                    ImmCore::toMatrix(ImmCore::trans3d::translate(-radius*0.1, 0.0, 0.0)), projection,
+                    ImmCore::toMatrix(ImmCore::trans3d::translate(radius*0.1, 0.0, 0.0)), projection);
+            }
             if (scene->GetPerformanceInfoForFrame().numDrawCalls <= 0) throw std::runtime_error("Layered scene submitted no paint");
         }
         else if (pictureFormat) DrawPictureProbe(renderer, *modelLog, 0, pictureFormat, 4, 1.0f, true, size);
@@ -452,7 +484,8 @@ static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, 
     void* data = nullptr; D3D12_RANGE range = {0, static_cast<SIZE_T>(bytes)};
     Check(readback->Map(0, &range, &data), "Map layered pixels");
     char capture[80];
-    if (scene) std::snprintf(capture, sizeof(capture), "d3d12-layered-scene-config%d-%ux.ppm", configuration, samples);
+    if (graph) std::snprintf(capture, sizeof(capture), "d3d12-layered-packet-%ux.ppm", samples);
+    else if (scene) std::snprintf(capture, sizeof(capture), "d3d12-layered-scene-config%d-%ux.ppm", configuration, samples);
     else if (pictureFormat) std::snprintf(capture, sizeof(capture), "d3d12-layered-picture%d-%ux.ppm", pictureFormat, samples);
     else std::snprintf(capture, sizeof(capture), modelLog ? "d3d12-layered-model-%ux.ppm" : "d3d12-layered-%ux.ppm", samples);
     std::ofstream image(capture, std::ios::binary); image << "P6\n" << size << " " << size*2 << "\n255\n";
@@ -684,6 +717,14 @@ int main()
                     throw std::runtime_error("Target-free loading/unloading failed or timed out");
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
+            if (!unloading)
+            {
+                bridge.GetPlayer()->SetTime(maintenanceDocument, ImmCore::piTick::FromSeconds(3.0), ImmCore::piTick(0));
+                bridge.GlobalWork(true, 10000);
+                for (UINT samples : {1u, 2u, 4u, 8u})
+                    VerifyLayeredTargets(graph.host, device.Get(), samples, nullptr, 0,
+                        bridge.GetPlayer(), maintenanceDocument, 0, &graph, &bridge);
+            }
         }
         packet.operation = 2;
         Check(ProcessImmRenderGraph(graph, bridge, packet), "Shutdown graph session");
@@ -710,7 +751,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"layered_model_frames_verified":4,"layered_picture_frames_verified":20,"layered_scene_frames_verified":16,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"layered_model_frames_verified":4,"layered_picture_frames_verified":20,"layered_scene_frames_verified":16,"layered_packet_frames_verified":4,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
