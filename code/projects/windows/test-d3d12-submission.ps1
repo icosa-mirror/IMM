@@ -68,7 +68,7 @@ foreach ($name in $evidenceFiles) {
     Copy-Item -LiteralPath (Join-Path $buildDirectory $name) -Destination $outputDirectory -Force
 }
 $playerResult = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-player-result.json') -Raw | ConvertFrom-Json
-if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or $playerResult.scene_frames_verified -ne 12 -or $playerResult.imm_depth_write_frames_verified -ne 4 -or $playerResult.host_depth_frames_verified -ne 4 -or $playerResult.msaa_samples -ne 8 -or -not $playerResult.debug_layer_enabled) {
+if ($playerResult.status -ne 'pass' -or $playerResult.configurations_verified -ne 4 -or $playerResult.documents_loaded -ne 4 -or $playerResult.scene_frames_verified -ne 12 -or $playerResult.imm_depth_write_frames_verified -ne 4 -or $playerResult.host_depth_frames_verified -ne 4 -or $playerResult.msaa_samples -ne 8 -or -not $playerResult.unity_queue_event_contract_mocked -or -not $playerResult.debug_layer_enabled) {
     throw 'D3D12 player scene-readback evidence is incomplete.'
 }
 $result = Get-Content -LiteralPath (Join-Path $outputDirectory 'd3d12-submission-result.json') -Raw | ConvertFrom-Json
@@ -129,6 +129,8 @@ foreach ($relativePath in @(
     'code/libImmPlayer/src/layerRenderers/layerRendererPicture/shader_pip360Equirect_fs.hlsl',
     'code/libImmCore/tests/d3d12/submission_smoke.cpp',
     'code/libImmCore/tests/d3d12/player_smoke.cpp',
+    'code/appImmUnity/src/imm_unity_d3d12_host.h',
+    'code/appImmUnity/src/IUnityGraphicsD3D12.h',
     'code/libImmCore/tests/d3d12/CMakeLists.txt'
 )) {
     $sourceHashes[$relativePath] = (Get-FileHash -LiteralPath (Join-Path $repoRoot $relativePath) -Algorithm SHA256).Hash

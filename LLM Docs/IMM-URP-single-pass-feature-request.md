@@ -522,7 +522,18 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    scene pixels remain in front. All twelve scene checks pass with no D3D12 debug errors,
    and CI requires both depth checks and their captures. This establishes native sample
    paint depth interaction; Unity-owned targets, all layer types, and XR remain unverified.
-21. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+21. **Unity D3D12 submission boundary (local, mocked host):** updated the vendored
+   Unity D3D12 interface from Unity's official NativeRenderingPlugin header and added a
+   v7 adapter that configures one queue-access event with command-buffer flushing and
+   worker synchronization. Renderer initialization, work and shutdown belong inside that
+   event; the RenderGraph caller must bind the actual attachments before issuing it, and
+   the renderer restores their incoming resource states. The WARP harness mocks the Unity
+   interface, verifies event configuration and runs all twelve scene/depth captures through
+   the adapter's device/queue initialization. This does not verify Unity event ordering or
+   resource-state tracking. Public initialization remains guarded until the actual Unity
+   event and RenderGraph target integration is validated. API contract source:
+   [Unity's D3D12 plugin header](https://github.com/Unity-Technologies/NativeRenderingPlugin/blob/master/PluginSource/source/Unity/IUnityGraphicsD3D12.h).
+22. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

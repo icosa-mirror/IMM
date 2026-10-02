@@ -13,12 +13,29 @@
 #include <cmath>
 #include "../../src/libRender/directx12/piDX12_Renderer.h"
 #include "libImmPlayer/src/player.h"
+#include "appImmUnity/src/imm_unity_d3d12_host.h"
 
 using Microsoft::WRL::ComPtr;
 static void Check(HRESULT result, const char* label)
 {
     if (FAILED(result)) throw std::runtime_error(label);
 }
+namespace
+{
+ID3D12Device* hostDevice = nullptr;
+ID3D12CommandQueue* hostQueue = nullptr;
+bool configured = false;
+ID3D12Device* UNITY_INTERFACE_API GetHostDevice() { return hostDevice; }
+ID3D12CommandQueue* UNITY_INTERFACE_API GetHostQueue() { return hostQueue; }
+void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginEventConfig* config)
+{
+    configured = eventId == 731 && config &&
+        config->graphicsQueueAccess == kUnityD3D12GraphicsQueueAccess_Allow &&
+        config->flags == (kUnityD3D12EventConfigFlag_FlushCommandBuffers | kUnityD3D12EventConfigFlag_SyncWorkerThreads) &&
+        !config->ensureActiveRenderTextureIsBound;
+}
+}
+
 enum class DepthProbe { None, HostOcclusion, ImmWrites };
 static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None)
 {
@@ -155,8 +172,14 @@ int main()
         Check(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&device)), "Create device");
         D3D12_COMMAND_QUEUE_DESC description = {};
         Check(device->CreateCommandQueue(&description, IID_PPV_ARGS(&queue)), "Create queue");
-        ImmCore::piRendererDX12 renderer;
-        if (!renderer.InitializeExternal(device.Get(), queue.Get())) throw std::runtime_error("Initialize renderer");
+        hostDevice = device.Get(); hostQueue = queue.Get();
+        IUnityGraphicsD3D12v7 unity = {};
+        unity.GetDevice = GetHostDevice; unity.GetCommandQueue = GetHostQueue; unity.ConfigureEvent = ConfigureHostEvent;
+        ImmUnityD3D12Host host;
+        if (host.Configure(nullptr, 731) || !host.Configure(&unity, 731) || !configured ||
+            host.Configure(&unity, 731) || !host.InitializeInRenderEvent())
+            throw std::runtime_error("Configure Unity D3D12 host adapter");
+        auto& renderer = host.RendererInRenderEvent();
         ImmCore::piLog log;
         ImmCore::piTimer timer;
         if (!log.Init(L"d3d12-player.log", PILOG_TXT) || !timer.Init()) throw std::runtime_error("Initialize log/timer");
@@ -202,7 +225,7 @@ int main()
             player.UnloadAllSync();
             player.Deinit();
         }
-        renderer.Deinitialize();
+        host.ShutdownInRenderEvent();
         ComPtr<ID3D12InfoQueue> messages;
         Check(device.As(&messages), "Get debug messages");
         for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i)
@@ -221,7 +244,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
