@@ -1,5 +1,6 @@
 #pragma once
 #include <cmath>
+#include <cstdio>
 #include <TargetConditionals.h>
 #include "imm_unity_render_graph_packet.h"
 #include "IUnityGraphicsMetal.h"
@@ -87,17 +88,24 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
         auto depthBuffer = reinterpret_cast<UnityRenderBuffer>(packet.depthBuffer);
         id<MTLTexture> color = (__bridge id<MTLTexture>)unity->TextureFromRenderBuffer(colorBuffer);
         id<MTLTexture> depth = (__bridge id<MTLTexture>)unity->TextureFromRenderBuffer(depthBuffer);
-        MTLRenderPassDescriptor* active = (__bridge MTLRenderPassDescriptor*)unity->CurrentRenderPassDescriptor();
-        if (!color || !depth || !active || active.colorAttachments[0].texture != color ||
-            active.depthAttachment.texture != depth || active.colorAttachments[1].texture ||
-            active.colorAttachments[0].level || active.depthAttachment.level ||
-            color.width != depth.width || color.height != depth.height ||
+        // A SetRenderTarget before a plugin event need not create a Unity encoder.
+        // CurrentRenderPassDescriptor describes the previous encoder in that case,
+        // so use the packet's declared attachments for our own render pass.
+        if (!color || !depth || color.width != depth.width || color.height != depth.height ||
             color.width != static_cast<NSUInteger>(packet.width) || color.height != static_cast<NSUInteger>(packet.height) ||
             color.sampleCount != depth.sampleCount || color.arrayLength != 1 || depth.arrayLength != 1 ||
             color.pixelFormat != ImmMetalPacketFormat(packet.colorFormat) ||
             depth.pixelFormat != ImmMetalPacketFormat(packet.depthFormat) ||
             color.storageMode == MTLStorageModeMemoryless || depth.storageMode == MTLStorageModeMemoryless)
+        {
+            std::fprintf(stderr, "[IMM_RENDER_GRAPH_METAL] Attachment mismatch: requested=%dx%d formats=%u/%u color=%lux%lu format=%lu samples=%lu storage=%lu depth=%lux%lu format=%lu samples=%lu storage=%lu\n",
+                packet.width, packet.height, packet.colorFormat, packet.depthFormat,
+                (unsigned long)color.width, (unsigned long)color.height, (unsigned long)color.pixelFormat,
+                (unsigned long)color.sampleCount, (unsigned long)color.storageMode,
+                (unsigned long)depth.width, (unsigned long)depth.height, (unsigned long)depth.pixelFormat,
+                (unsigned long)depth.sampleCount, (unsigned long)depth.storageMode);
             return invalid;
+        }
         if (color.sampleCount != 1 && color.sampleCount != 2 && color.sampleCount != 4 && color.sampleCount != 8)
             return invalid;
         const auto expectedType = color.sampleCount > 1 ? MTLTextureType2DMultisample : MTLTextureType2D;
@@ -115,9 +123,11 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
         pass.depthAttachment.texture = depth;
         pass.depthAttachment.loadAction = MTLLoadActionLoad;
         pass.depthAttachment.storeAction = MTLStoreActionStore;
-        if (active.stencilAttachment.texture)
+        id<MTLTexture> stencil = unity->StencilTextureFromRenderBuffer
+            ? (__bridge id<MTLTexture>)unity->StencilTextureFromRenderBuffer(depthBuffer) : nil;
+        if (stencil)
         {
-            pass.stencilAttachment.texture = active.stencilAttachment.texture;
+            pass.stencilAttachment.texture = stencil;
             pass.stencilAttachment.loadAction = MTLLoadActionLoad;
             pass.stencilAttachment.storeAction = MTLStoreActionStore;
         }
