@@ -1004,12 +1004,16 @@ namespace ImmPlayer
             const float rearOccludedDistance = 10.0f;
             const float originalRearOccludedDistance = 3.95f;
             float rearOccludedScale = rearOccludedDistance / originalRearOccludedDistance;
+            // Ordered overlay intentionally exposes this probe and retains its
+            // original area so the existing visibility check remains meaningful.
+            float rearProbeSize = _overlayProbeEnabled ? 0.75f : 0.35f;
+            float rearProbeUp = _overlayProbeEnabled ? 0.0f : 0.13f;
             _rearOccludedProbe = CreateProbe(
                 "IMM Scene Rear Occlusion Probe",
                 RearOccludedProbeColor,
-                cam.transform.position + forward * rearOccludedDistance + right * (0.25f * rearOccludedScale) + up * (0.13f * rearOccludedScale),
+                cam.transform.position + forward * rearOccludedDistance + right * (0.25f * rearOccludedScale) + up * (rearProbeUp * rearOccludedScale),
                 cam.transform.rotation,
-                new Vector3(0.35f * rearOccludedScale, 0.35f * rearOccludedScale, 0.06f),
+                new Vector3(rearProbeSize * rearOccludedScale, rearProbeSize * rearOccludedScale, 0.06f),
                 probeLayer);
             _rearVisibleProbe = CreateProbe("IMM Scene Rear Visible Probe", RearVisibleProbeColor, center + right * 1.30f + up * 0.85f + forward * 0.35f, cam.transform.rotation, new Vector3(0.65f, 0.65f, 0.06f), probeLayer);
             Debug.Log($"{Prefix}scene composition probes created center={center} camera={cam.name} overlay={_overlayProbeEnabled} layer={probeLayer}");
