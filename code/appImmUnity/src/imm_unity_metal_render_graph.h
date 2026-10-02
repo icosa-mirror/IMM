@@ -1,6 +1,8 @@
 #pragma once
 #include <cmath>
 #include <cstdio>
+#include <string>
+#import <Foundation/Foundation.h>
 #include <TargetConditionals.h>
 #include "imm_unity_render_graph_packet.h"
 #include "IUnityGraphicsMetal.h"
@@ -12,6 +14,8 @@ struct ImmMetalRenderGraphState
 {
     IUnityGraphicsMetalV2* unity = nullptr;
     bool ready = false;
+    std::string logFileName;
+    std::string tmpFolderName;
 };
 
 inline void ShutdownImmMetalRenderGraph(ImmMetalRenderGraphState& state, ImmShared::ImmEngineBridge& bridge)
@@ -69,7 +73,14 @@ inline int32_t ProcessImmMetalRenderGraph(ImmMetalRenderGraphState& state,
         config.enableSound = packet.enableSound != 0;
         config.metalUnityProjectionAdjusted = true;
         config.reverseDepthBuffer = true;
-        config.logFileName = "imm-render-graph.log";
+        NSString* temporary = NSTemporaryDirectory();
+        if (!temporary.length) return failed;
+        // Keep these strings alive while the bridge retains the configuration.
+        // iOS cannot create logs relative to the application's working directory.
+        state.tmpFolderName = temporary.UTF8String;
+        state.logFileName = state.tmpFolderName + "imm-render-graph.log";
+        config.tmpFolderName = state.tmpFolderName.c_str();
+        config.logFileName = state.logFileName.c_str();
         if (!config.graphicsDevice || !bridge.Init(config)) { bridge.Shutdown(); return failed; }
         state.ready = true;
         return 0;
