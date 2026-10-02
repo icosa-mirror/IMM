@@ -204,7 +204,8 @@ jobs:
             artifacts/unity-package-import/test-runner/playmode-results.xml \
             --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.TwoCamerasCanSubmitInTheSameFrameWhileEachReusesItsMultipassPose \
             --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.XrCameraAcceptsTheNextFramesChangedPose \
-            --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.MonoAndDiagnosticModesCanSubmitEveryCallback
+            --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.MonoAndDiagnosticModesCanSubmitEveryCallback \
+            --require-test ImmPlayer.Tests.ImmCameraRegistrationTests.OptInMustBeActiveAndCameraIdsAreReleased
 
       - name: Write CI manifest
         if: always()

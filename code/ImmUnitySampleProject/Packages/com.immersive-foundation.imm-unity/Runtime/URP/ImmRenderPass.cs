@@ -8,7 +8,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace ImmPlayer
 {
-    // The session owner supplies an acknowledged transport and an internal camera ID.
+    // The session owner supplies an acknowledged transport; camera IDs come from opt-in.
     // This pass is not yet exposed by a renderer feature while session lifetime is being wired.
     internal sealed class ImmRenderPass : ScriptableRenderPass
     {
@@ -24,13 +24,10 @@ namespace ImmPlayer
 
         private readonly HashSet<string> reported = new HashSet<string>();
         private readonly ImmRenderGraphTransport transport;
-        private readonly int cameraId;
 
-        internal ImmRenderPass(ImmRenderGraphTransport transport, int cameraId)
+        internal ImmRenderPass(ImmRenderGraphTransport transport)
         {
             this.transport = transport ?? throw new ArgumentNullException(nameof(transport));
-            if (cameraId < 0 || cameraId >= 256) throw new ArgumentOutOfRangeException(nameof(cameraId));
-            this.cameraId = cameraId;
             renderPassEvent = RenderPassEvent.AfterRenderingOpaques;
             // Request addressable attachments explicitly. Do not infer that URP always
             // renders to a RenderTexture, or reinterpret a native texture as a render buffer.
@@ -42,7 +39,7 @@ namespace ImmPlayer
             transport.Poll();
             if (!transport.IsReady) return;
             var camera = frameData.Get<UniversalCameraData>();
-            if (camera.camera.cameraType != CameraType.Game) return;
+            if (!ImmCamera.TryAcquire(camera.camera, out int cameraId)) return;
             if (camera.xr.enabled || camera.camera.orthographic)
             {
                 Report("The current D3D12 implementation requires a mono perspective camera.");

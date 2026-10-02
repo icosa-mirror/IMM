@@ -48,5 +48,8 @@
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0",
     "com.unity.render-pipelines.universal": "17.6.0"
-  }
+  },
+  "testables": [
+    "com.immersive-foundation.imm-unity"
+  ]
 }

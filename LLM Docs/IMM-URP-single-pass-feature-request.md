@@ -596,7 +596,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Local Unity 6.6 batch import exits successfully and produces `ImmUnity.URP.dll`.
    Hosted validation is pending; this does not establish URP rendering correctness
    or change the outstanding session/camera work.
-29. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+29. **Camera opt-in and registration:** `ImmCamera` now opts game cameras into the internal
+   URP pass. The pass skips missing/disabled opt-ins and excluded camera types. Camera IDs
+   are private, stable while registered and released on disable/destruction, including edit
+   mode; queued pass data retains its own ID. A focused Unity 6.6 PlayMode test verifies
+   opt-in, distinct camera IDs, stable reuse and release to another camera. It passes locally
+   and is required by the CI package-import job. Renderer-feature/session wiring and actual
+   multi-camera native rendering are still unverified.
+30. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
