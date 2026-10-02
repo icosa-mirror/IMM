@@ -3031,6 +3031,10 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API ResumeAt(int id, int6
 extern "C" void UNITY_INTERFACE_EXPORT GetBoundingBox(int id, bound3& bound)
 {
     bound = d2f(iPlayer().GetDocumentBBox(id));
+    // The document bound already includes hierarchy/document transforms. Layer
+    // bounds are local to different coordinate systems and must not replace a
+    // valid world-space aggregate merely because they are individually finite.
+    if (IsReasonableBound3(bound)) return;
     const int layerCount = iPlayer().GetLayerCount(id);
 
     bound3 filtered = bound3(1.0e30f);
