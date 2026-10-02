@@ -950,7 +950,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    A locally rebuilt packaged player also exits zero with every required smoke marker.
    This verifies that packet submission uses the supplied culling projection independently
    of the eye projections; actual OpenXR-provided culling matrices still need validation.
-68. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+68. **Shared submission ABI for required backends:** the immutable packet declaration
+   is now independent of D3D12 headers and compiled into every Unity plugin target.
+   Packet size/result queries use this common layout; native completion uses lock-free
+   acquire/release atomics with layout assertions instead of Windows-only interlocked
+   calls. The 480-byte ABI is unchanged. Windows plugin build, ABI verifier, native
+   D3D12 smoke checks and the packaged URP smoke player pass locally. Metal/Vulkan
+   event adapters are still unimplemented and their event-function queries remain null;
+   sharing the packet contract does not enable those rendering paths.
+69. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

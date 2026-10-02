@@ -92,6 +92,7 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
+#include "imm_unity_render_graph_packet.h"
 #include <cstdio>
 #include <cstring>
 // The exporter is linked on every platform, so its headers are unconditional now.
@@ -1570,33 +1571,24 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
         result = E_FAIL;
     }
     packet->result = static_cast<int32_t>(result);
-    InterlockedExchange(reinterpret_cast<volatile LONG*>(&packet->completed), 1);
+    packet->completed.store(1, std::memory_order_release);
 }
 #endif
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketResult(void* data, int32_t* result, uint64_t* gpuCompletion)
 {
-#if defined(WINDOWS)
     if (!data || !result || !gpuCompletion) return -1;
     auto* packet = static_cast<ImmRenderGraphPacket*>(data);
     if (packet->version != 2 || packet->size != sizeof(*packet)) return -1;
-    if (InterlockedCompareExchange(reinterpret_cast<volatile LONG*>(&packet->completed), 0, 0) == 0) return 0;
+    if (packet->completed.load(std::memory_order_acquire) == 0) return 0;
     *result = packet->result;
     *gpuCompletion = packet->gpuCompletion;
     return 1;
-#else
-    (void)data; (void)result; (void)gpuCompletion;
-    return -1;
-#endif
 }
 
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSize()
 {
-#if defined(WINDOWS)
     return static_cast<int>(sizeof(ImmRenderGraphPacket));
-#else
-    return 0;
-#endif
 }
 
 extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphEventFunc()
