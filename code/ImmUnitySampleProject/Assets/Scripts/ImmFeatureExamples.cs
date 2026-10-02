@@ -138,6 +138,9 @@ namespace ImmPlayer
             _initialSpawnAreaCoroutine == null &&
             _spawnAreaApplyCoroutine == null;
 
+        internal string RenderReadinessDiagnostic => _doc == null ? "document=none" :
+            $"document={_doc.DocumentId} loading={_doc.GetStateInfo().Loading} sequenceReady={_doc.IsSequenceReady()} spawnAreas={_spawnAreaIds.Length} spawnIndex={currentSpawnAreaIndex} initialPending={_initialSpawnAreaCoroutine != null} applyPending={_spawnAreaApplyCoroutine != null}";
+
         private ImmDocument _doc;
         private bool _isApplyingEdits;
         private bool _isSyncingSelection;

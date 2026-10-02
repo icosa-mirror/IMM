@@ -522,6 +522,13 @@ jobs:
             done
             xcrun simctl terminate "$SIMULATOR_UDID" "$bundle_id" >/dev/null 2>&1 || true
             wait "$launch_pid" || true
+            # Preserve the native loading/rendering state before a missing capture
+            # fails this probe. Unity writes its configured native log in Caches.
+            local native_log
+            native_log="$(find "$container/Library" -name imm_player_log.txt -type f -print -quit)"
+            if [ -n "$native_log" ]; then
+              cp "$native_log" "$artifact_dir/unity-ios-$label-native.log"
+            fi
             test "$captured" -eq 1
             cp "$capture_path" "$artifact_dir/$capture_name"
             cp "$render_path" "$artifact_dir/$render_name"

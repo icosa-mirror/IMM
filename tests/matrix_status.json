@@ -15,8 +15,9 @@
         "urp": "17.6.0",
         "openxr": "1.18.0",
         "ci_gate": "PackageImportHarness.UrpRenderGraphAssemblyIsIncluded",
-        "status": "local Unity 6.6 package import and compilation passed; hosted validation pending",
-        "scope": "Package resolution and compilation; does not establish RenderGraph execution or visual correctness."
+        "status": "local Unity 6.6 import/compilation passed; hosted iOS simulator document readiness regression under investigation",
+        "scope": "Package resolution and compilation; does not establish RenderGraph execution or visual correctness.",
+        "failing_run": "https://github.com/icosa-mirror/IMM/actions/runs/36948748398"
       }
     }
   },

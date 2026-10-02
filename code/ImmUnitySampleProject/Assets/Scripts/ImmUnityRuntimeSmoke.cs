@@ -481,7 +481,7 @@ namespace ImmPlayer
                 yield return null;
             if (!featureExamples.IsDocumentRenderReady)
             {
-                Debug.LogError($"{Prefix}face orientation document did not become render ready");
+                Debug.LogError($"{Prefix}face orientation document did not become render ready: {featureExamples.RenderReadinessDiagnostic}");
                 _faceOrientationCaptureFailed = true;
                 yield break;
             }

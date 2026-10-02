@@ -625,7 +625,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Hosted URP scene execution, a configured sample, opaque depth composition and the rest of
    the platform/stereo matrix remain outstanding; the existing CI lifecycle probe alone
    does not prove rendering correctness. Temporary native clear instrumentation was removed.
-32. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+32. **Open CI regression:** the Unity 6.6 baseline run
+   [36948748398](https://github.com/icosa-mirror/IMM/actions/runs/36948748398) fails iOS Metal
+   simulator validation because the face-orientation document never reaches render readiness.
+   The process stays alive; captures are missing. Its artifact omitted the native player log.
+   CI now preserves that log before failing, and the smoke failure reports native loading,
+   sequence and spawn-area readiness state. The failure gate is unchanged. Root cause and
+   a passing rerun are still required; this regression is not accepted as a new baseline.
+33. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
