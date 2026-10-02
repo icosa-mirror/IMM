@@ -543,9 +543,8 @@ jobs:
                 captured=1
                 break
               fi
-              if ! kill -0 "$launch_pid" 2>/dev/null; then
-                break
-              fi
+              # A successful simctl launcher exit does not establish that the
+              # application exited. Wait for the app's capture files instead.
               sleep 1
             done
             local stopped_by_harness=0

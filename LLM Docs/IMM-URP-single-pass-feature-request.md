@@ -1014,7 +1014,23 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    mask bits and half-opacity coverage for 1/2/4/8 samples; 10,000 eight-sample comparisons
    match the previous formula. These are numerical checks only. Apple shader compilation
    and fractional-coverage readbacks remain unverified and required.
-75. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+75. **CI regression recovery takes priority:** run
+   [36984858567](https://github.com/icosa-mirror/IMM/actions/runs/36984858567) failed
+   Android Vulkan, macOS Metal, iOS Metal and the Windows DirectX build. Feature
+   work must wait until the required platform gates pass. Android stereo images
+   passed, but the verifier rejected Unity 6.6 target IDs containing an instance
+   generation; the parser now preserves the complete identifier and still rejects
+   shared/null targets. The existing rear depth probe extended below the sample's
+   head on both Android and macOS; its placement/size now stays inside the solid
+   head, with the leakage threshold unchanged. iOS URP initialization now performs
+   native plugin registration and its probe uses the platform-supported depth
+   format, beginning at one sample. Metal submission uses the packet attachments
+   rather than assuming Unity has created an encoder for the newly bound target.
+   The iOS harness waits for capture files even after a successful launcher exit.
+   These corrections require a passing hosted rerun; source/local checks are not
+   platform acceptance. Windows DirectX passed in the other run at the same SHA;
+   exit 137 in this run remains an unresolved runner failure.
+76. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
