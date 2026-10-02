@@ -737,7 +737,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    both image formats and colour spaces, plus the existing scene/model/depth readbacks.
    This is shader-interface and initialization evidence; a stereo panorama image readback
    and headset single-pass rendering remain unverified.
-44. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+44. **Stereo panorama readback and cleanup (native CI check):** the D3D12/WARP
+   player check now decodes a synthetic top/bottom image and exercises the actual picture
+   renderer's upload, shader selection, sphere draw and cleanup in both colour spaces.
+   The upper half is red and the lower half green; mono output must select the upper half
+   and read back approximately RGB (55, 0, 0) in linear mode or (128, 0, 0) in gamma mode.
+   This exposed uninitialized unused picture shader slots during destruction; the shader
+   table is now zero-initialized. Both panorama checks and existing scene/model/depth
+   checks pass locally. CI retains two panorama captures and `panorama_frames_verified=2`.
+   This proves mono rendering of a stereo-format image, not headset single-pass rendering.
+45. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

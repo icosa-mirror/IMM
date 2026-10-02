@@ -16,6 +16,8 @@ $evidenceFiles = @(
     'd3d12-player-result.json',
     'd3d12-model-linear.ppm',
     'd3d12-model-gamma.ppm',
+    'd3d12-panorama-linear.ppm',
+    'd3d12-panorama-gamma.ppm',
     'd3d12-player.log',
     'd3d12-bridge.log',
     'imm-render-graph.log',

@@ -38,7 +38,7 @@ private:
     ImmCore::piPool      mLayerInfo;
     StereoMode  mStereoMode;
 	ImmCore::piArray     mVisibleLayerInfos;
-	ImmCore::piShader mShaders[12][5];
+	ImmCore::piShader mShaders[12][5] {};
     ImmCore::piBuffer   mShaderConstants;
 	ImmCore::piTexture mBlueNoise;
 	ImmCore::piRenderMesh m360SphereRenderMesh;
