@@ -337,6 +337,113 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     std::printf("IMM_DX12_PLAYER scene pixels=%u depth_probe=%d\n", visible, int(probe));
 }
 
+static void VerifyLayeredTargets(ImmUnityD3D12Host& host, ID3D12Device* device, UINT samples)
+{
+    auto& renderer = host.RendererInRenderEvent();
+    constexpr UINT size = 32;
+    D3D12_HEAP_PROPERTIES gpu = {}; gpu.Type = D3D12_HEAP_TYPE_DEFAULT;
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = desc.Height = size; desc.DepthOrArraySize = 2; desc.MipLevels = 1;
+    desc.SampleDesc.Count = samples; desc.Format = DXGI_FORMAT_R8G8B8A8_TYPELESS;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+    ComPtr<ID3D12Resource> color, depth, resolved, readback;
+    Check(device->CreateCommittedResource(&gpu, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RENDER_TARGET,
+        nullptr, IID_PPV_ARGS(&color)), "Create layered color");
+    desc.Format = DXGI_FORMAT_R32_TYPELESS; desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    Check(device->CreateCommittedResource(&gpu, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        nullptr, IID_PPV_ARGS(&depth)), "Create layered depth");
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.Flags = D3D12_RESOURCE_FLAG_NONE; desc.SampleDesc.Count = 1;
+    const auto outputState = samples > 1 ? D3D12_RESOURCE_STATE_RESOLVE_DEST : D3D12_RESOURCE_STATE_COPY_DEST;
+    Check(device->CreateCommittedResource(&gpu, D3D12_HEAP_FLAG_NONE, &desc, outputState,
+        nullptr, IID_PPV_ARGS(&resolved)), "Create layered readback texture");
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprints[2] = {}; UINT64 bytes = 0;
+    device->GetCopyableFootprints(&desc, 0, 2, 0, footprints, nullptr, nullptr, &bytes);
+    D3D12_RESOURCE_DESC buffer = {}; buffer.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer.Width = bytes; buffer.Height = buffer.DepthOrArraySize = buffer.MipLevels = buffer.SampleDesc.Count = 1;
+    buffer.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    D3D12_HEAP_PROPERTIES cpu = {}; cpu.Type = D3D12_HEAP_TYPE_READBACK;
+    Check(device->CreateCommittedResource(&cpu, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_COPY_DEST,
+        nullptr, IID_PPV_ARGS(&readback)), "Create layered readback buffer");
+    Check(renderer.BeginFrame(), "Begin layered frame");
+    auto colorBuffer = reinterpret_cast<UnityRenderBuffer>(color.Get());
+    auto depthBuffer = reinterpret_cast<UnityRenderBuffer>(depth.Get());
+    if (host.BindTargetsInRenderEvent(colorBuffer, depthBuffer, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT) != E_INVALIDARG)
+        throw std::runtime_error("Mono binding accepted layered attachments");
+    Check(host.BindTargetsInRenderEvent(colorBuffer, depthBuffer, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT, 2),
+        "Bind layered attachments");
+    const float black[] = {0,0,0,0}; renderer.Clear(black, nullptr, nullptr, nullptr, true);
+    const char* vs = "void main(float2 p:POSITION, uint eye:SV_InstanceID, out float4 pos:SV_Position, out uint slice:SV_RenderTargetArrayIndex, out float4 color:COLOR0) { pos=float4(p,0.5,1); slice=eye; color=eye==0?float4(1,0,0,1):float4(0,1,0,1); }";
+    const char* ps = "float4 main(float4 pos:SV_Position, uint slice:SV_RenderTargetArrayIndex, float4 color:COLOR0):SV_Target { return color; }";
+    auto shader = renderer.CreateShader(nullptr, vs, nullptr, nullptr, nullptr, ps, nullptr);
+    if (!shader) throw std::runtime_error("Create layered shader");
+    renderer.AttachShader(shader);
+    renderer.SetState(ImmCore::piSTATE_CULL_FACE, false);
+    renderer.SetState(ImmCore::piSTATE_BLEND, false);
+    const int viewport[] = {0,0,size,size}; renderer.SetViewport(0, viewport);
+    try { renderer.DrawUnitQuad_XY(2); }
+    catch (...)
+    {
+        ComPtr<ID3D12InfoQueue> diagnostics;
+        if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&diagnostics))))
+            for (UINT64 i = 0; i < diagnostics->GetNumStoredMessages(); ++i)
+            {
+                SIZE_T length = 0; diagnostics->GetMessage(i, nullptr, &length);
+                std::vector<unsigned char> storage(length);
+                auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+                if (SUCCEEDED(diagnostics->GetMessage(i, message, &length)) && message->Severity <= D3D12_MESSAGE_SEVERITY_ERROR)
+                    std::fprintf(stderr, "IMM_DX12_LAYERED %.1200s\n", message->pDescription);
+            }
+        throw;
+    }
+    renderer.DestroyShader(shader);
+    // Later geometry behind each eye must lose against that slice's depth.
+    const char* behindVS = "void main(float2 p:POSITION, uint eye:SV_InstanceID, out float4 pos:SV_Position, out uint slice:SV_RenderTargetArrayIndex, out float4 color:COLOR0) { pos=float4(p,0.25,1); slice=eye; color=float4(0,0,1,1); }";
+    auto behind = renderer.CreateShader(nullptr, behindVS, nullptr, nullptr, nullptr, ps, nullptr);
+    if (!behind) throw std::runtime_error("Create layered depth probe shader");
+    renderer.AttachShader(behind);
+    renderer.DrawUnitQuad_XY(2);
+    renderer.DestroyShader(behind);
+    auto* commands = static_cast<ID3D12GraphicsCommandList*>(renderer.GetContext());
+    auto transition = [&](ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
+        D3D12_RESOURCE_BARRIER barrier = {}; barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition = {resource, D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES, before, after};
+        commands->ResourceBarrier(1, &barrier);
+    };
+    const auto sourceState = samples > 1 ? D3D12_RESOURCE_STATE_RESOLVE_SOURCE : D3D12_RESOURCE_STATE_COPY_SOURCE;
+    transition(color.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, sourceState);
+    if (samples > 1)
+        for (UINT eye = 0; eye < 2; ++eye)
+            commands->ResolveSubresource(resolved.Get(), eye, color.Get(), eye, DXGI_FORMAT_R8G8B8A8_UNORM);
+    else commands->CopyResource(resolved.Get(), color.Get());
+    transition(color.Get(), sourceState, D3D12_RESOURCE_STATE_RENDER_TARGET);
+    transition(resolved.Get(), outputState, D3D12_RESOURCE_STATE_COPY_SOURCE);
+    for (UINT eye = 0; eye < 2; ++eye)
+    {
+        D3D12_TEXTURE_COPY_LOCATION source = {}; source.pResource = resolved.Get();
+        source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX; source.SubresourceIndex = eye;
+        D3D12_TEXTURE_COPY_LOCATION destination = {}; destination.pResource = readback.Get();
+        destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT; destination.PlacedFootprint = footprints[eye];
+        commands->CopyTextureRegion(&destination, 0,0,0, &source, nullptr);
+    }
+    uint64_t completion = 0; Check(renderer.EndFrame(&completion), "Submit layered frame");
+    Check(renderer.WaitForFrame(completion), "Wait for layered frame");
+    void* data = nullptr; D3D12_RANGE range = {0, static_cast<SIZE_T>(bytes)};
+    Check(readback->Map(0, &range, &data), "Map layered pixels");
+    char capture[80]; std::snprintf(capture, sizeof(capture), "d3d12-layered-%ux.ppm", samples);
+    std::ofstream image(capture, std::ios::binary); image << "P6\n32 64\n255\n";
+    for (UINT eye = 0; eye < 2; ++eye)
+        for (UINT y = 0; y < size; ++y) for (UINT x = 0; x < size; ++x)
+        {
+            const auto* pixel = static_cast<const unsigned char*>(data) + footprints[eye].Offset + y*footprints[eye].Footprint.RowPitch + x*4;
+            for (UINT channel = 0; channel < 3; ++channel)
+                if (pixel[channel] != (channel == eye ? 255 : 0)) throw std::runtime_error("Layered eye colour mismatch");
+            image.write(reinterpret_cast<const char*>(pixel), 3);
+        }
+    D3D12_RANGE written = {}; readback->Unmap(0, &written);
+    image.close(); if (!image) throw std::runtime_error("Write layered capture");
+}
+
 int main()
 {
     try
@@ -466,6 +573,7 @@ int main()
         uint64_t bridgeCompletion = 0;
         Check(renderer.EndFrame(&bridgeCompletion), "Submit after bridge shutdown");
         Check(renderer.WaitForFrame(bridgeCompletion), "Wait after bridge shutdown");
+        for (UINT samples : {1u, 2u, 4u, 8u}) VerifyLayeredTargets(host, device.Get(), samples);
         host.ShutdownInRenderEvent();
         ImmRenderGraphState graph;
         if (!ConfigureImmRenderGraph(graph, &unity)) throw std::runtime_error("Configure graph event");
@@ -525,7 +633,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"orthographic_frames_verified":12,"layered_target_frames_verified":4,"model_frames_verified":2,"model_half_opacity_sample_counts_verified":4,"picture_half_opacity_frames_verified":20,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

@@ -33,19 +33,19 @@ public:
 
     // Unity's preceding SetRenderTarget command must have transitioned these
     // attachments to RENDER_TARGET/DEPTH_WRITE before the configured event.
-    // Only flat 2D targets are accepted here; array slices need the XR contract.
+    // Array binding is explicit: mono callers cannot accidentally bind XR attachments.
     HRESULT BindTargetsInRenderEvent(UnityRenderBuffer colorBuffer, UnityRenderBuffer depthBuffer,
-        DXGI_FORMAT colorFormat, DXGI_FORMAT depthFormat)
+        DXGI_FORMAT colorFormat, DXGI_FORMAT depthFormat, UINT slices = 1)
     {
         if (!mInitialized || !mRenderer.GetContext() || !mUnity->TextureFromRenderBuffer) return E_UNEXPECTED;
-        if (!colorBuffer || !depthBuffer) return E_INVALIDARG;
+        if (!colorBuffer || !depthBuffer || (slices != 1 && slices != 2)) return E_INVALIDARG;
         auto* color = mUnity->TextureFromRenderBuffer(colorBuffer);
         auto* depth = mUnity->TextureFromRenderBuffer(depthBuffer);
         if (!color || !depth) return E_INVALIDARG;
         const auto colorDesc = color->GetDesc(), depthDesc = depth->GetDesc();
         if (colorDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
             depthDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
-            colorDesc.DepthOrArraySize != 1 || depthDesc.DepthOrArraySize != 1 ||
+            colorDesc.DepthOrArraySize != slices || depthDesc.DepthOrArraySize != slices ||
             colorDesc.Width != depthDesc.Width || colorDesc.Height != depthDesc.Height ||
             colorDesc.SampleDesc.Count != depthDesc.SampleDesc.Count ||
             colorDesc.SampleDesc.Quality != depthDesc.SampleDesc.Quality ||
@@ -82,6 +82,27 @@ public:
         rtv.ViewDimension = colorDesc.SampleDesc.Count > 1 ? D3D12_RTV_DIMENSION_TEXTURE2DMS : D3D12_RTV_DIMENSION_TEXTURE2D;
         D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {}; dsv.Format = depthFormat;
         dsv.ViewDimension = depthDesc.SampleDesc.Count > 1 ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
+        if (slices == 2)
+        {
+            D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
+            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))) ||
+                !options.VPAndRTArrayIndexFromAnyShaderFeedingRasterizerSupportedWithoutGSEmulation)
+                return E_NOTIMPL;
+            if (colorDesc.SampleDesc.Count > 1)
+            {
+                rtv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                rtv.Texture2DMSArray.ArraySize = slices;
+                dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMSARRAY;
+                dsv.Texture2DMSArray.ArraySize = slices;
+            }
+            else
+            {
+                rtv.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+                rtv.Texture2DArray.ArraySize = slices;
+                dsv.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+                dsv.Texture2DArray.ArraySize = slices;
+            }
+        }
         device->CreateRenderTargetView(color, &rtv, mRtv->GetCPUDescriptorHandleForHeapStart());
         device->CreateDepthStencilView(depth, &dsv, mDsv->GetCPUDescriptorHandleForHeapStart());
         const ImmCore::piRendererDX12::ExternalTarget target = {color, depth,

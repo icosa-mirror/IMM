@@ -866,7 +866,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    lifecycle checks. Package documentation reflects the camera support. The native CI
    check now includes the distant case; hosted results and Unity orthographic evidence
    remain pending.
-59. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+59. **Layered D3D12 target foundation:** the Unity host adapter now has an explicit
+   two-slice binding mode, creates array RTV/DSV views for single-sample and multisampled
+   attachments, and checks vertex-stage array-index capability. Mono binding still rejects
+   arrays. A synthetic native check draws red and green into separate slices in one
+   instanced draw, then requires later blue geometry behind both to fail depth testing.
+   All pixels in both slices pass at 1x, 2x, 4x and 8x, with D3D12 debug validation enabled;
+   existing checks also pass. CI retains four captures and `layered_target_frames_verified=4`.
+   This is attachment/submission groundwork, not IMM stereo rendering: managed XR packets,
+   per-eye matrices and production layered paint/picture/model shaders remain outstanding.
+60. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
