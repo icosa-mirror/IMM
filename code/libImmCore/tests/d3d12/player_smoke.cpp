@@ -424,6 +424,26 @@ int main()
         packet.operation = 1;
         if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG)
             throw std::runtime_error("Graph accepted missing targets");
+        const int maintenanceDocument = bridge.GetPlayer()->Load(IMM_D3D12_SAMPLE_FILE);
+        if (maintenanceDocument < 0) throw std::runtime_error("Queue target-free document load");
+        for (int unloading = 0; unloading < 2; ++unloading)
+        {
+            if (unloading) bridge.GetPlayer()->Unload(maintenanceDocument);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
+            for (;;)
+            {
+                bridge.GlobalWork(true, 10000);
+                packet.operation = 3;
+                Check(ProcessImmRenderGraph(graph, bridge, packet), "Target-free GPU maintenance");
+                ImmPlayer::Player::DocumentState state;
+                bridge.GetPlayer()->GetDocumentState(state, maintenanceDocument);
+                if (unloading ? !bridge.GetPlayer()->IsDocumentActive(maintenanceDocument) :
+                    state.mLoadingState == ImmPlayer::Player::LoadingState::Loaded) break;
+                if (state.mLoadingState == ImmPlayer::Player::LoadingState::Failed || std::chrono::steady_clock::now() >= deadline)
+                    throw std::runtime_error("Target-free loading/unloading failed or timed out");
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        }
         packet.operation = 2;
         Check(ProcessImmRenderGraph(graph, bridge, packet), "Shutdown graph session");
         if (graph.ready || bridge.IsInitialized()) throw std::runtime_error("Graph session did not shut down");
@@ -449,7 +469,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"panorama_frames_verified":2,"cubemap_frames_verified":24,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"target_free_maintenance_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

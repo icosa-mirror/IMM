@@ -1287,6 +1287,19 @@ namespace ImmPlayer
     }
 
     // this is called once per camera
+    void Player::MaintainGPU()
+    {
+        std::lock_guard<std::mutex> lock(mMutex);
+        if (mLayerPaintRender != nullptr)
+            mLayerPaintRender->AdvanceDrawingRetirement(mRenderer, mLog);
+        for (uint64_t i = 0; i < mDocuments.GetMaxLength(); ++i)
+        {
+            if (!mDocuments.IsUsed(i)) continue;
+            Document* doc = (Document*)mDocuments.GetAddress(i);
+            doc->UpdateStateGPU(mLayerPaintRender, &mLayerRenderPicture, &mLayerRenderModel, mRenderer, mLog, mColorSpace);
+        }
+    }
+
     void Player::GlobalRender(const trans3d & vr_to_head, const trans3d & world_to_head, const mat4x4 & projection, const StereoMode & stereoMode)
     {
         if (!mEnabled) return;

@@ -50,7 +50,7 @@ inline void ShutdownImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmEng
 }
 inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmEngineBridge& bridge, ImmRenderGraphPacket& packet)
 {
-    if (packet.version != 1 || packet.size != sizeof(packet) || packet.reserved || packet.completed || packet.operation > 2)
+    if (packet.version != 1 || packet.size != sizeof(packet) || packet.reserved || packet.completed || packet.operation > 3)
         return E_INVALIDARG;
     if (packet.operation == 2) { ShutdownImmRenderGraph(state, bridge); return S_OK; }
     if (packet.operation == 0)
@@ -69,6 +69,14 @@ inline HRESULT ProcessImmRenderGraph(ImmRenderGraphState& state, ImmShared::ImmE
         return S_OK;
     }
     if (!state.ready) return E_UNEXPECTED;
+    if (packet.operation == 3)
+    {
+        auto& renderer = state.host.RendererInRenderEvent();
+        HRESULT result = renderer.BeginFrame();
+        if (FAILED(result)) return result;
+        bridge.GetPlayer()->MaintainGPU();
+        return renderer.EndFrame(&packet.gpuCompletion);
+    }
     if (packet.camera < 0 || packet.camera >= ImmShared::ImmEngineBridge::kMaxCameras ||
         packet.width <= 0 || packet.height <= 0 || packet.x < 0 || packet.y < 0 ||
         !packet.colorBuffer || !packet.depthBuffer) return E_INVALIDARG;

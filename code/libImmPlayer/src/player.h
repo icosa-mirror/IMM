@@ -43,6 +43,9 @@ namespace ImmPlayer {
         // call this only once per frame
         void GlobalWork( bool enabled, uint32_t microsecondsBudget);
 
+        // Render-thread loading/unloading work; requires a graphics command context, no camera or targets.
+        void MaintainGPU();
+
         // call this ones per frame and per camera
         void GlobalRender(const ImmCore::trans3d & vr_to_head, const ImmCore::trans3d & world_to_head, const ImmCore::mat4x4 & projection, const StereoMode & stereoMode);
 

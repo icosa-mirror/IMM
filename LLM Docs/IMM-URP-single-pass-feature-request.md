@@ -760,7 +760,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    establishing that cross conversion and strip uploads select the expected +X, -X, +Y,
    -Y, +Z and -Z faces. CI retains each capture and `cubemap_frames_verified=24`.
    Within-face rotations/reflections, seams and XR still require separate evidence.
-47. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+47. **Target-free GPU maintenance (native foundation):** RenderGraph packet operation 3
+   now starts a D3D12 command frame, advances document GPU loading/unloading and drawing
+   retirement, and submits without camera matrices or render targets. `Player::MaintainGPU`
+   performs this work under the existing document mutex without preparing camera visibility.
+   The native CI check loads and asynchronously unloads `sample1.imm` solely through CPU
+   work and maintenance packets; it passes locally alongside all rendering checks and records
+   `target_free_maintenance_verified=true`. The managed manager still issues the legacy
+   unload-drain event; routing it through this operation and validating camera-free unload
+   in Unity remain required before this lifecycle gap is closed.
+48. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
