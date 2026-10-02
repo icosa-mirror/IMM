@@ -1046,7 +1046,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    public plugin exports. Metal session initialization also uses writable application
    temporary paths. These follow-ups require a hosted rerun; this run is not green
    and feature work remains paused until the CI regressions are resolved.
-77. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+77. **Apple recovery rerun:**
+   [37003702581](https://github.com/icosa-mirror/IMM/actions/runs/37003702581) completed
+   with only Unity iOS Metal simulator validation failing; all other validation jobs
+   passed. iOS legacy rendering and the first URP scene capture now succeed. The URP
+   depth fixture fails because CreatePrimitive implicitly adds a MeshCollider that
+   the stripped iOS build does not retain. The fixture now creates its quad mesh and
+   renderer directly, preserving the geometry and depth assertions without requiring
+   physics. A further hosted run must pass before feature work resumes.
+78. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

@@ -163,8 +163,20 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         var shader = Resources.Load<Shader>("ImmUrpDepthProbe");
         Require(shader != null && shader.isSupported, "URP depth probe shader is unavailable.");
         var material = new Material(shader);
-        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        quad.name = "IMM URP CI depth probe";
+        // CreatePrimitive adds a collider, which stripped iOS builds need not retain.
+        // The depth probe only needs a rendered quad.
+        var mesh = new Mesh
+        {
+            vertices = new[]
+            {
+                new Vector3(-0.5f, -0.5f, 0), new Vector3(0.5f, -0.5f, 0),
+                new Vector3(-0.5f, 0.5f, 0), new Vector3(0.5f, 0.5f, 0)
+            },
+            triangles = new[] { 0, 2, 1, 2, 3, 1 }
+        };
+        mesh.RecalculateBounds();
+        var quad = new GameObject("IMM URP CI depth probe", typeof(MeshFilter), typeof(MeshRenderer));
+        quad.GetComponent<MeshFilter>().sharedMesh = mesh;
         quad.GetComponent<MeshRenderer>().sharedMaterial = material;
         float radius = Mathf.Max(bounds.extents.magnitude, 0.1f);
         quad.transform.localScale = Vector3.one * radius * 4;
@@ -193,6 +205,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         {
             quad.SetActive(false);
             Destroy(quad);
+            Destroy(mesh);
             Destroy(material);
         }
     }
