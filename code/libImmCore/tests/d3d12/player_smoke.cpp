@@ -26,6 +26,7 @@ namespace
 ID3D12Device* hostDevice = nullptr;
 ID3D12CommandQueue* hostQueue = nullptr;
 bool configured = false;
+ID3D12Resource* UNITY_INTERFACE_API ResolveHostBuffer(UnityRenderBuffer buffer) { return reinterpret_cast<ID3D12Resource*>(buffer); }
 ID3D12Device* UNITY_INTERFACE_API GetHostDevice() { return hostDevice; }
 ID3D12CommandQueue* UNITY_INTERFACE_API GetHostQueue() { return hostQueue; }
 void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginEventConfig* config)
@@ -38,8 +39,9 @@ void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginE
 }
 
 enum class DepthProbe { None, HostOcclusion, ImmWrites };
-static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None)
+static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None)
 {
+    auto& renderer = host.RendererInRenderEvent();
     constexpr UINT size = 256;
     const bool hostDepth = probe == DepthProbe::HostOcclusion;
     D3D12_HEAP_PROPERTIES gpu = {}; gpu.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -48,12 +50,12 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
     desc.Width = desc.Height = size;
     desc.DepthOrArraySize = desc.MipLevels = 1;
     desc.SampleDesc.Count = 8;
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_TYPELESS;
     desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     ComPtr<ID3D12Resource> color, depth, resolved, readback;
-    Check(device->CreateCommittedResource(&gpu, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RESOLVE_SOURCE,
+    Check(device->CreateCommittedResource(&gpu, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_RENDER_TARGET,
         nullptr, IID_PPV_ARGS(&color)), "Create scene color");
-    desc.Format = DXGI_FORMAT_D32_FLOAT; desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    desc.Format = DXGI_FORMAT_R32_TYPELESS; desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
     Check(device->CreateCommittedResource(&gpu, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_DEPTH_WRITE,
         nullptr, IID_PPV_ARGS(&depth)), "Create scene depth");
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; desc.Flags = D3D12_RESOURCE_FLAG_NONE; desc.SampleDesc.Count = 1;
@@ -69,13 +71,12 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
     Check(device->CreateCommittedResource(&cpu, D3D12_HEAP_FLAG_NONE, &buffer, D3D12_RESOURCE_STATE_COPY_DEST,
         nullptr, IID_PPV_ARGS(&readback)), "Create scene readback");
     D3D12_DESCRIPTOR_HEAP_DESC heapDesc = {}; heapDesc.NumDescriptors = 1;
-    ComPtr<ID3D12DescriptorHeap> rtv, dsv;
-    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    Check(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&rtv)), "Create scene RTV heap");
+    ComPtr<ID3D12DescriptorHeap> dsv;
     heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-    Check(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&dsv)), "Create scene DSV heap");
-    device->CreateRenderTargetView(color.Get(), nullptr, rtv->GetCPUDescriptorHandleForHeapStart());
-    device->CreateDepthStencilView(depth.Get(), nullptr, dsv->GetCPUDescriptorHandleForHeapStart());
+    Check(device->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(&dsv)), "Create host DSV heap");
+    D3D12_DEPTH_STENCIL_VIEW_DESC hostDepthView = {};
+    hostDepthView.Format = DXGI_FORMAT_D32_FLOAT; hostDepthView.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+    device->CreateDepthStencilView(depth.Get(), &hostDepthView, dsv->GetCPUDescriptorHandleForHeapStart());
     const auto bounds = player.GetDocumentBBox(document);
     const double radius = std::max({bounds.mMaxX-bounds.mMinX, bounds.mMaxY-bounds.mMinY, bounds.mMaxZ-bounds.mMinZ, 1.0}) * 0.6;
     const auto view = ImmCore::trans3d::translate(-(bounds.mMinX+bounds.mMaxX)*0.5,
@@ -84,10 +85,13 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
     const float nearPlane = r * 0.01f, farPlane = r * 4.0f;
     const ImmCore::mat4x4 projection(1,0,0,0, 0,1,0,0, 0,0,nearPlane/(farPlane-nearPlane),nearPlane*farPlane/(farPlane-nearPlane), 0,0,-1,0);
     Check(renderer.BeginFrame(), "Begin scene frame");
-    ImmCore::piRendererDX12::ExternalTarget target = {color.Get(), depth.Get(), rtv->GetCPUDescriptorHandleForHeapStart(),
-        dsv->GetCPUDescriptorHandleForHeapStart(), DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT,
-        D3D12_RESOURCE_STATE_RESOLVE_SOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE};
-    Check(renderer.SetExternalTarget(target), "Set scene target");
+    const auto colorBuffer = reinterpret_cast<UnityRenderBuffer>(color.Get());
+    const auto depthBuffer = reinterpret_cast<UnityRenderBuffer>(depth.Get());
+    if (host.BindTargetsInRenderEvent(colorBuffer, depthBuffer, DXGI_FORMAT_UNKNOWN, DXGI_FORMAT_D32_FLOAT) != E_INVALIDARG)
+        throw std::runtime_error("Host adapter accepted invalid target format");
+    if (host.BindTargetsInRenderEvent(colorBuffer, depthBuffer, DXGI_FORMAT_R8G8B8A8_TYPELESS, DXGI_FORMAT_D32_FLOAT) != E_INVALIDARG)
+        throw std::runtime_error("Host adapter accepted a typeless RTV format");
+    Check(host.BindTargetsInRenderEvent(colorBuffer, depthBuffer, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_D32_FLOAT), "Bind Unity scene buffers");
     const float black[] = {0,0,0,0}; renderer.Clear(black, nullptr, nullptr, nullptr, true);
     auto* commands = static_cast<ID3D12GraphicsCommandList*>(renderer.GetContext());
     if (hostDepth)
@@ -95,7 +99,7 @@ static void RenderScene(ImmCore::piRendererDX12& renderer, ID3D12Device* device,
         // Simulate opaque host content in front of IMM on the left half. With
         // reversed Z, 1 is the nearest depth. The right half remains at far depth 0.
         const D3D12_RECT left = {0, 0, size/2, size};
-        commands->ClearDepthStencilView(target.dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 1, &left);
+        commands->ClearDepthStencilView(dsv->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 1, &left);
     }
     player.SetTime(document, ImmCore::piTick::FromSeconds(3.0), ImmCore::piTick(0));
     player.GlobalWork(true, 10000);
@@ -175,6 +179,7 @@ int main()
         Check(device->CreateCommandQueue(&description, IID_PPV_ARGS(&queue)), "Create queue");
         hostDevice = device.Get(); hostQueue = queue.Get();
         IUnityGraphicsD3D12v7 unity = {};
+        unity.TextureFromRenderBuffer = ResolveHostBuffer;
         unity.GetDevice = GetHostDevice; unity.GetCommandQueue = GetHostQueue; unity.ConfigureEvent = ConfigureHostEvent;
         ImmUnityD3D12Host host;
         if (host.Configure(nullptr, 731) || !host.Configure(&unity, 731) || !configured ||
@@ -216,13 +221,13 @@ int main()
             if (player.GetLayerCount(document) <= 0) throw std::runtime_error("Loaded sample has no layers");
             const char* captures[2][2] = {{"d3d12-player-scene-static-linear.ppm", "d3d12-player-scene-static-gamma.ppm"},
                 {"d3d12-player-scene-pretessellated-linear.ppm", "d3d12-player-scene-pretessellated-gamma.ppm"}};
-            RenderScene(renderer, device.Get(), player, document, captures[int(technique)][int(colorSpace)]);
+            RenderScene(host, device.Get(), player, document, captures[int(technique)][int(colorSpace)]);
             const char* depthCaptures[2][2] = {{"d3d12-player-depth-static-linear.ppm", "d3d12-player-depth-static-gamma.ppm"},
                 {"d3d12-player-depth-pretessellated-linear.ppm", "d3d12-player-depth-pretessellated-gamma.ppm"}};
-            RenderScene(renderer, device.Get(), player, document, depthCaptures[int(technique)][int(colorSpace)], DepthProbe::HostOcclusion);
+            RenderScene(host, device.Get(), player, document, depthCaptures[int(technique)][int(colorSpace)], DepthProbe::HostOcclusion);
             const char* writeCaptures[2][2] = {{"d3d12-player-depth-write-static-linear.ppm", "d3d12-player-depth-write-static-gamma.ppm"},
                 {"d3d12-player-depth-write-pretessellated-linear.ppm", "d3d12-player-depth-write-pretessellated-gamma.ppm"}};
-            RenderScene(renderer, device.Get(), player, document, writeCaptures[int(technique)][int(colorSpace)], DepthProbe::ImmWrites);
+            RenderScene(host, device.Get(), player, document, writeCaptures[int(technique)][int(colorSpace)], DepthProbe::ImmWrites);
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -262,7 +267,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"borrowed_renderer_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

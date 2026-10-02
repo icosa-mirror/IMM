@@ -31,18 +31,92 @@ public:
         return mInitialized;
     }
 
-    // The caller supplies actual bound colour/depth resources and their views.
-    // The renderer restores their incoming states when EndFrame submits the list.
+    // Unity's preceding SetRenderTarget command must have transitioned these
+    // attachments to RENDER_TARGET/DEPTH_WRITE before the configured event.
+    // Only flat 2D targets are accepted here; array slices need the XR contract.
+    HRESULT BindTargetsInRenderEvent(UnityRenderBuffer colorBuffer, UnityRenderBuffer depthBuffer,
+        DXGI_FORMAT colorFormat, DXGI_FORMAT depthFormat)
+    {
+        if (!mInitialized || !mRenderer.GetContext() || !mUnity->TextureFromRenderBuffer) return E_UNEXPECTED;
+        if (!colorBuffer || !depthBuffer) return E_INVALIDARG;
+        auto* color = mUnity->TextureFromRenderBuffer(colorBuffer);
+        auto* depth = mUnity->TextureFromRenderBuffer(depthBuffer);
+        if (!color || !depth) return E_INVALIDARG;
+        const auto colorDesc = color->GetDesc(), depthDesc = depth->GetDesc();
+        if (colorDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+            depthDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+            colorDesc.DepthOrArraySize != 1 || depthDesc.DepthOrArraySize != 1 ||
+            colorDesc.Width != depthDesc.Width || colorDesc.Height != depthDesc.Height ||
+            colorDesc.SampleDesc.Count != depthDesc.SampleDesc.Count ||
+            colorDesc.SampleDesc.Quality != depthDesc.SampleDesc.Quality ||
+            !(colorDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) ||
+            !(depthDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) ||
+            !CompatibleFormat(colorDesc.Format, colorFormat) || !CompatibleFormat(depthDesc.Format, depthFormat))
+            return E_INVALIDARG;
+        auto* device = mUnity->GetDevice();
+        for (auto* resource : {color, depth})
+        {
+            Microsoft::WRL::ComPtr<ID3D12Device> owner;
+            if (FAILED(resource->GetDevice(IID_PPV_ARGS(&owner))) || owner.Get() != device) return E_INVALIDARG;
+        }
+        D3D12_FEATURE_DATA_FORMAT_SUPPORT colorSupport = {colorFormat}, depthSupport = {depthFormat};
+        if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &colorSupport, sizeof(colorSupport))) ||
+            FAILED(device->CheckFeatureSupport(D3D12_FEATURE_FORMAT_SUPPORT, &depthSupport, sizeof(depthSupport))) ||
+            !(colorSupport.Support1 & D3D12_FORMAT_SUPPORT1_RENDER_TARGET) ||
+            !(depthSupport.Support1 & D3D12_FORMAT_SUPPORT1_DEPTH_STENCIL)) return E_INVALIDARG;
+        if (!mRtv)
+        {
+            D3D12_DESCRIPTOR_HEAP_DESC heap = {}; heap.NumDescriptors = 1;
+            heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+            HRESULT result = device->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&mRtv));
+            if (FAILED(result)) return result;
+        }
+        if (!mDsv)
+        {
+            D3D12_DESCRIPTOR_HEAP_DESC heap = {}; heap.NumDescriptors = 1;
+            heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+            HRESULT result = device->CreateDescriptorHeap(&heap, IID_PPV_ARGS(&mDsv));
+            if (FAILED(result)) return result;
+        }
+        D3D12_RENDER_TARGET_VIEW_DESC rtv = {}; rtv.Format = colorFormat;
+        rtv.ViewDimension = colorDesc.SampleDesc.Count > 1 ? D3D12_RTV_DIMENSION_TEXTURE2DMS : D3D12_RTV_DIMENSION_TEXTURE2D;
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsv = {}; dsv.Format = depthFormat;
+        dsv.ViewDimension = depthDesc.SampleDesc.Count > 1 ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
+        device->CreateRenderTargetView(color, &rtv, mRtv->GetCPUDescriptorHandleForHeapStart());
+        device->CreateDepthStencilView(depth, &dsv, mDsv->GetCPUDescriptorHandleForHeapStart());
+        const ImmCore::piRendererDX12::ExternalTarget target = {color, depth,
+            mRtv->GetCPUDescriptorHandleForHeapStart(), mDsv->GetCPUDescriptorHandleForHeapStart(), colorFormat, depthFormat,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_DEPTH_WRITE};
+        return mRenderer.SetExternalTarget(target);
+    }
+
     ImmCore::piRendererDX12& RendererInRenderEvent() { return mRenderer; }
 
     void ShutdownInRenderEvent()
     {
         mRenderer.Deinitialize();
+        mRtv.Reset(); mDsv.Reset();
         mInitialized = false;
         mUnity = nullptr;
     }
 
 private:
+    static bool CompatibleFormat(DXGI_FORMAT resource, DXGI_FORMAT view)
+    {
+        if (view == DXGI_FORMAT_UNKNOWN) return false;
+        switch (resource)
+        {
+        case DXGI_FORMAT_R8G8B8A8_TYPELESS: return view == DXGI_FORMAT_R8G8B8A8_UNORM || view == DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case DXGI_FORMAT_B8G8R8A8_TYPELESS: return view == DXGI_FORMAT_B8G8R8A8_UNORM || view == DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+        case DXGI_FORMAT_R16G16B16A16_TYPELESS: return view == DXGI_FORMAT_R16G16B16A16_FLOAT || view == DXGI_FORMAT_R16G16B16A16_UNORM;
+        case DXGI_FORMAT_R16_TYPELESS: return view == DXGI_FORMAT_D16_UNORM || view == DXGI_FORMAT_R16_FLOAT || view == DXGI_FORMAT_R16_UNORM;
+        case DXGI_FORMAT_R32_TYPELESS: return view == DXGI_FORMAT_D32_FLOAT || view == DXGI_FORMAT_R32_FLOAT;
+        case DXGI_FORMAT_R24G8_TYPELESS: return view == DXGI_FORMAT_D24_UNORM_S8_UINT;
+        case DXGI_FORMAT_R32G8X24_TYPELESS: return view == DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+        default: return resource == view;
+        }
+    }
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mRtv, mDsv;
     IUnityGraphicsD3D12v7* mUnity = nullptr; // Unity-owned; valid until device shutdown.
     bool mInitialized = false;
     ImmCore::piRendererDX12 mRenderer;

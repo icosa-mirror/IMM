@@ -542,7 +542,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    a successful GPU submission after bridge shutdown, alongside the twelve scene checks.
    CI requires the lifecycle result and records the bridge log and source hashes. Actual
    Unity event wiring remains unfinished.
-23. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+23. **Unity target adapter (local, mocked lookup):** the adapter resolves colour/depth
+   render buffers through `TextureFromRenderBuffer`, checks device ownership, flat target
+   dimensions, samples, attachment flags and view formats, and creates typed RTV/DSV views.
+   The twelve scene/depth captures now use this path with typeless MSAA resources; invalid
+   and typeless RTV formats are rejected. CI requires the mocked target-binding result.
+   The caller must establish render-target/depth-write states before the event; actual
+   Unity handle resolution and event ordering remain unverified. Full bridge validation
+   run `36944346484` was still running without a reported failed job when checked.
+24. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
