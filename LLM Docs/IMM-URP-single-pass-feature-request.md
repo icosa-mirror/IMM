@@ -720,7 +720,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    The native plugin builds and the D3D12/WARP checks pass, including four player
    configurations and twelve scene/depth frames. These existing fixtures do not prove
    model-layer rendering; a dedicated model fixture/readback remains required.
-42. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+42. **Model renderer readback (native CI check):** the existing D3D12/WARP player check
+   now constructs a two-triangle unlit model mesh and exercises `LayerRendererModel`'s
+   upload, visibility preparation, shader selection and draw path. Its 0.5-grey input
+   must read back as approximately RGB 55 in linear mode and RGB 128 in gamma mode.
+   Both checks pass locally; the Windows CI script retains `d3d12-model-linear.ppm`,
+   `d3d12-model-gamma.ppm` and `model_frames_verified=2` in the player result. The twelve
+   existing scene/depth readbacks still pass. This proves the synthetic mono model path,
+   not model-file import, other model content or stereo. The model exporter is unfinished;
+   a suitable imported-model IMM fixture has been requested for document-level coverage.
+43. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

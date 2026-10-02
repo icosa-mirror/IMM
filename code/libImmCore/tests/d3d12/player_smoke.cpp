@@ -13,6 +13,7 @@
 #include <cmath>
 #include "../../src/libRender/directx12/piDX12_Renderer.h"
 #include "libImmPlayer/src/player.h"
+#include "libImmPlayer/src/layerRenderers/layerRendererModel/layerRendererModel.h"
 #include "appImmShared/src/imm_engine_bridge.h"
 #include "appImmUnity/src/imm_unity_d3d12_host.h"
 #include "appImmUnity/src/imm_unity_render_graph.h"
@@ -40,7 +41,55 @@ void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginE
 }
 
 enum class DepthProbe { None, HostOcclusion, ImmWrites };
-static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None)
+static void DrawModelProbe(ImmCore::piRendererDX12& renderer, ImmCore::piLog& log, int colorSpace)
+{
+    using namespace ImmCore;
+    ImmImporter::LayerModel model;
+    if (!model.Init(false, ImmImporter::LayerModel::ShadingModel::Unlit)) throw std::runtime_error("Initialize model probe");
+    auto* mesh = model.GetMesh();
+    piMesh::VertexFormat format = {};
+    format.mStride = 7 * sizeof(float); format.mNumElems = 2;
+    format.mElems[0] = {3, piMesh::VertexElemDataType::Float, false, 0};
+    format.mElems[1] = {4, piMesh::VertexElemDataType::Float, false, 3 * sizeof(float)};
+    if (!mesh->Init(1, 4, &format, piMesh::Type::Polys, 1, 2)) throw std::runtime_error("Allocate model probe mesh");
+    float vertices[4][7] = {
+        {-0.75f,-0.75f,0.5f, 0.5f,0.5f,0.5f,1}, {0.75f,-0.75f,0.5f, 0.5f,0.5f,0.5f,1},
+        {0.75f,0.75f,0.5f, 0.5f,0.5f,0.5f,1}, {-0.75f,0.75f,0.5f, 0.5f,0.5f,0.5f,1}};
+    for (uint32_t i = 0; i < 4; ++i) mesh->SetVertex(0, i, vertices[i]);
+    mesh->SetTriangle(0, 0, 0, 1, 2); mesh->SetTriangle(0, 1, 0, 2, 3);
+    mesh->CalcBBox(0, 0);
+    ImmImporter::Layer layer(nullptr, nullptr, 0);
+    layer.SetImplementation(&model);
+    ImmPlayer::LayerRendererModel modelRenderer;
+    if (!modelRenderer.Init(&renderer, &log, static_cast<ImmImporter::Drawing::ColorSpace>(colorSpace), true) ||
+        !modelRenderer.LoadInCPU(&log, &layer) || !modelRenderer.LoadInGPU(&renderer, nullptr, &log, &layer))
+        throw std::runtime_error("Load model renderer probe");
+    float frame[4] = {};
+    float display[36] = {};
+    for (int eye = 0; eye < 2; ++eye)
+        for (int axis = 0; axis < 4; ++axis) display[eye * 16 + axis * 5] = 1;
+    display[32] = display[33] = 256;
+    auto frameBuffer = renderer.CreateBuffer(frame, sizeof(frame), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto displayBuffer = renderer.CreateBuffer(display, sizeof(display), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    auto layerBuffer = renderer.CreateBuffer(nullptr, sizeof(ImmPlayer::LayersState), piRenderer::BufferType::Dynamic, piRenderer::BufferUse::Constant);
+    if (!frameBuffer || !displayBuffer || !layerBuffer) throw std::runtime_error("Create model probe constants");
+    renderer.AttachShaderConstants(frameBuffer, 0);
+    renderer.AttachShaderConstants(layerBuffer, 3);
+    renderer.AttachShaderConstants(displayBuffer, 4);
+    const int viewport[] = {0, 0, 256, 256}; renderer.SetViewport(0, viewport);
+    modelRenderer.PrepareForDisplay(ImmPlayer::StereoMode::None);
+    modelRenderer.DisplayPreRender(&renderer, nullptr, &log, &layer, frustum3(mat4x4::identity()), trans3d::identity(), 1);
+    modelRenderer.DisplayRender(&renderer, &log, layerBuffer, 0);
+    if (modelRenderer.GetDrawCallInfo().numDrawCalls != 1 || modelRenderer.GetDrawCallInfo().numTriangles != 2)
+        throw std::runtime_error("Model probe did not submit its two triangles");
+    modelRenderer.UnloadInGPU(&renderer, nullptr, &log, &layer);
+    modelRenderer.UnloadInCPU(&log, &layer);
+    modelRenderer.Deinit(&renderer, &log);
+    renderer.DestroyBuffer(frameBuffer); renderer.DestroyBuffer(displayBuffer); renderer.DestroyBuffer(layerBuffer);
+    mesh->DeInit(); model.Deinit();
+}
+
+static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer::Player& player, int document, const char* capture, DepthProbe probe = DepthProbe::None, int modelColorSpace = -1, ImmCore::piLog* log = nullptr)
 {
     auto& renderer = host.RendererInRenderEvent();
     constexpr UINT size = 256;
@@ -102,13 +151,17 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
         const D3D12_RECT left = {0, 0, size/2, size};
         commands->ClearDepthStencilView(dsv->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 1, &left);
     }
-    player.SetTime(document, ImmCore::piTick::FromSeconds(3.0), ImmCore::piTick(0));
-    player.GlobalWork(true, 10000);
-    player.GlobalRender(ImmCore::trans3d::identity(), view, projection, ImmPlayer::StereoMode::None);
-    player.RenderMono(ImmCore::ivec2(size, size), 0);
-    const auto& perf = player.GetPerformanceInfoForFrame();
-    std::printf("IMM_DX12_PLAYER draws=%d paint=%d triangles=%d\n", perf.numDrawCalls, perf.numPaintDrawCalls, perf.numTriangles);
-    if (perf.numPaintDrawCalls <= 0 || perf.numTriangles <= 0) throw std::runtime_error("Scene submitted no paint geometry");
+    if (modelColorSpace >= 0) DrawModelProbe(renderer, *log, modelColorSpace);
+    else
+    {
+        player.SetTime(document, ImmCore::piTick::FromSeconds(3.0), ImmCore::piTick(0));
+        player.GlobalWork(true, 10000);
+        player.GlobalRender(ImmCore::trans3d::identity(), view, projection, ImmPlayer::StereoMode::None);
+        player.RenderMono(ImmCore::ivec2(size, size), 0);
+        const auto& perf = player.GetPerformanceInfoForFrame();
+        std::printf("IMM_DX12_PLAYER draws=%d paint=%d triangles=%d\n", perf.numDrawCalls, perf.numPaintDrawCalls, perf.numTriangles);
+        if (perf.numPaintDrawCalls <= 0 || perf.numTriangles <= 0) throw std::runtime_error("Scene submitted no paint geometry");
+    }
     if (probe == DepthProbe::ImmWrites)
     {
         const char* vs = "float4 main(float2 p : POSITION) : SV_Position { return float4(p,0,1); }";
@@ -144,6 +197,13 @@ static void RenderScene(ImmUnityD3D12Host& host, ID3D12Device* device, ImmPlayer
     for (UINT y = 0; y < size; ++y) for (UINT x = 0; x < size; ++x)
     {
         const auto* pixel = static_cast<const unsigned char*>(data) + footprint.Offset + y*footprint.Footprint.RowPitch + x*4;
+        if (modelColorSpace >= 0 && x == size/2 && y == size/2)
+        {
+            const int expected = modelColorSpace == 0 ? 55 : 128;
+            for (int channel = 0; channel < 3; ++channel)
+                if (std::abs(int(pixel[channel]) - expected) > 2)
+                    throw std::runtime_error("Model pixel colour-space readback mismatch");
+        }
         if (pixel[0] || pixel[1] || pixel[2])
         {
             ++visible;
@@ -229,6 +289,10 @@ int main()
             const char* writeCaptures[2][2] = {{"d3d12-player-depth-write-static-linear.ppm", "d3d12-player-depth-write-static-gamma.ppm"},
                 {"d3d12-player-depth-write-pretessellated-linear.ppm", "d3d12-player-depth-write-pretessellated-gamma.ppm"}};
             RenderScene(host, device.Get(), player, document, writeCaptures[int(technique)][int(colorSpace)], DepthProbe::ImmWrites);
+            if (int(technique) == 0)
+                RenderScene(host, device.Get(), player, document,
+                    int(colorSpace) == 0 ? "d3d12-model-linear.ppm" : "d3d12-model-gamma.ppm",
+                    DepthProbe::None, int(colorSpace), &log);
             player.UnloadAllSync();
             player.Deinit();
         }
@@ -288,7 +352,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"model_frames_verified":2,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");
