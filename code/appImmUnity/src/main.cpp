@@ -1574,6 +1574,22 @@ static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
 }
 #endif
 
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketResult(void* data, int32_t* result, uint64_t* gpuCompletion)
+{
+#if defined(WINDOWS)
+    if (!data || !result || !gpuCompletion) return -1;
+    auto* packet = static_cast<ImmRenderGraphPacket*>(data);
+    if (packet->version != 1 || packet->size != sizeof(*packet)) return -1;
+    if (InterlockedCompareExchange(reinterpret_cast<volatile LONG*>(&packet->completed), 0, 0) == 0) return 0;
+    *result = packet->result;
+    *gpuCompletion = packet->gpuCompletion;
+    return 1;
+#else
+    (void)data; (void)result; (void)gpuCompletion;
+    return -1;
+#endif
+}
+
 extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSize()
 {
 #if defined(WINDOWS)
@@ -1586,7 +1602,7 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSi
 extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphEventFunc()
 {
 #if defined(WINDOWS)
-    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12 && gImmUnityPlugin.mRenderGraph.configured)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12 && gImmUnityPlugin.mRenderGraph.unity != nullptr)
         return iOnRenderGraphEvent;
 #endif
     return nullptr;

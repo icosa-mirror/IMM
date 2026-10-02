@@ -560,7 +560,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    checks pass, alongside the twelve scene/depth captures. The scene captures still use
    mocked Unity lookup, and no managed RenderGraph caller exists yet. Legacy `Init`
    remains guarded; RenderGraph shutdown must use its rendering event rather than `End`.
-25. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+25. **Managed packet transport (local):** added a C# transport for initialization,
+   per-camera rendering and shutdown requests. It copies matrices/targets into owned native
+   packets, polls completion through the plugin's acquire operation, reuses acknowledged
+   storage, and refuses disposal while requests or the native session remain active.
+   Compilation against the installed Unity 6.6 assemblies passes. A Windows CI check loads
+   the built plugin and verifies packet size, acknowledgement, result/fence offsets and
+   invalid-ABI rejection; local checks pass. This is transport code only: the URP renderer
+   feature, camera opt-in and session owner still need to call it and drain shutdown.
+   Full bridge validation passed in
+   [run 36944346484](https://github.com/icosa-mirror/IMM/actions/runs/36944346484).
+26. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

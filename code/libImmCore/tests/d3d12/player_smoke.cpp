@@ -266,6 +266,10 @@ int main()
         packet.operation = 2;
         Check(ProcessImmRenderGraph(graph, bridge, packet), "Shutdown graph session");
         if (graph.ready || bridge.IsInitialized()) throw std::runtime_error("Graph session did not shut down");
+        packet.operation = 0;
+        Check(ProcessImmRenderGraph(graph, bridge, packet), "Reinitialize graph session");
+        packet.operation = 2;
+        Check(ProcessImmRenderGraph(graph, bridge, packet), "Shutdown recreated graph session");
         ComPtr<ID3D12InfoQueue> messages;
         Check(device.As(&messages), "Get debug messages");
         for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i)

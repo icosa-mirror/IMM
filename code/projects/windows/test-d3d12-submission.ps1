@@ -113,6 +113,12 @@ if ($result.renderer_state_frames_verified -ne 9) {
 if ($result.renderer_cube_faces_verified -ne 6) {
     throw 'D3D12 smoke is missing cube-face sampling evidence.'
 }
+$packetAbiLog = Join-Path $outputDirectory 'packet-abi.log'
+$nativePlugin = Join-Path $repoRoot 'code/appImmUnity/exe/ImmUnityPlugin.dll'
+& python (Join-Path $repoRoot 'tests/tools/verify_render_graph_packet_abi.py') $nativePlugin *> $packetAbiLog
+if ($LASTEXITCODE -ne 0) { throw "RenderGraph packet ABI validation failed; see $packetAbiLog" }
+$playerResult | Add-Member -NotePropertyName native_packet_abi_verified -NotePropertyValue $true
+$playerResult | Add-Member -NotePropertyName native_plugin_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $nativePlugin -Algorithm SHA256).Hash
 $result | Add-Member -NotePropertyName source_revision -NotePropertyValue ((& git -C $repoRoot rev-parse HEAD).Trim())
 $smokeExecutable = Join-Path $buildDirectory "$Configuration/imm_d3d12_submission_smoke.exe"
 $result | Add-Member -NotePropertyName executable_sha256 -NotePropertyValue (Get-FileHash -LiteralPath $smokeExecutable -Algorithm SHA256).Hash
@@ -133,6 +139,9 @@ foreach ($relativePath in @(
     'code/libImmCore/tests/d3d12/player_smoke.cpp',
     'code/appImmUnity/src/imm_unity_d3d12_host.h',
     'code/appImmUnity/src/imm_unity_render_graph.h',
+    'code/appImmUnity/src/main.cpp',
+    'code/ImmUnitySampleProject/Packages/com.immersive-foundation.imm-unity/Runtime/ImmRenderGraphTransport.cs',
+    'tests/tools/verify_render_graph_packet_abi.py',
     'code/appImmUnity/src/IUnityGraphicsD3D12.h',
     'code/appImmShared/src/imm_engine_bridge.h',
     'code/appImmShared/src/imm_engine_bridge.cpp',
