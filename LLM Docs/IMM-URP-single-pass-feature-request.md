@@ -969,7 +969,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    Windows plugin build, ABI verification and both required Unity rendering regressions
    pass locally. Apple compilation, Metal rendering, attachment persistence and actual
    sample-count behaviour remain unverified; this entry does not establish Metal support.
-70. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+70. **macOS URP rendering gate:** the macOS Unity build now creates an additional Metal
+   URP smoke player using the same build helper and runtime probe as Windows. A required
+   CI step runs it with `-force-metal` and checks the runtime API, scene/MSAA captures,
+   opt-out, camera-free/deferred unload and shutdown. It requires 1/2/4 samples and either
+   an 8-sample capture or an explicit hardware-capability report that 8 samples are
+   unsupported. Existing macOS composition checks remain required; Windows still requires
+   all four sample counts and stereo validation. The rebuilt Windows packaged player
+   passes locally, and workflow/Python syntax checks pass. Hosted macOS rendering and
+   migration of the iOS URP rendering gate remain outstanding.
+71. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

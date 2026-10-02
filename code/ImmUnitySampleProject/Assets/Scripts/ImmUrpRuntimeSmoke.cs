@@ -48,7 +48,9 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
 
     private IEnumerator Run()
     {
-        Require(SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12, "D3D12 is required.");
+        bool metal = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal;
+        Require(metal || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D12, "D3D12 or Metal is required.");
+        Debug.Log($"[IMM_URP_SMOKE] graphicsDevice={SystemInfo.graphicsDeviceType}");
         var sample = FindFirstObjectByType<ImmUrpSample>();
         Require(sample != null, "Configured URP sample is missing.");
         var optIn = FindFirstObjectByType<ImmCamera>();
@@ -79,6 +81,14 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         Require(pipeline != null, "Configured URP asset is missing.");
         foreach (int samples in new[] { 1, 2, 4, 8 })
         {
+            var requestedDescriptor = target.descriptor;
+            requestedDescriptor.msaaSamples = samples;
+            int supportedSamples = SystemInfo.GetRenderTextureSupportedMSAASampleCount(requestedDescriptor);
+            if (metal && supportedSamples != samples)
+            {
+                Debug.Log($"[IMM_URP_SMOKE] UNSUPPORTED samples={samples} supported={supportedSamples}");
+                continue;
+            }
             target.Release();
             target.antiAliasing = samples;
             Require(target.Create(), $"Could not recreate the {samples}-sample target.");
@@ -101,15 +111,18 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
         var manager = FindFirstObjectByType<ImmPlayerManager>();
         Require(manager != null && manager.IsInitialized, "Native session was not initialized.");
         Require(sample.Document != null, "Sample document is missing.");
-        var stereoProbe = ImmRenderGraphValidation.VerifyStereoPacket(documentCamera,
-            Mathf.Max(sample.Document.GetBoundingBox().extents.magnitude, 0.1f));
-        // Advance explicitly so the outer runner catches validation failures.
-        try
+        if (!metal)
         {
-            while (stereoProbe.MoveNext()) yield return stereoProbe.Current;
+            var stereoProbe = ImmRenderGraphValidation.VerifyStereoPacket(documentCamera,
+                Mathf.Max(sample.Document.GetBoundingBox().extents.magnitude, 0.1f));
+            // Advance explicitly so the outer runner catches validation failures.
+            try
+            {
+                while (stereoProbe.MoveNext()) yield return stereoProbe.Current;
+            }
+            finally { (stereoProbe as IDisposable)?.Dispose(); }
+            Debug.Log("[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.");
         }
-        finally { (stereoProbe as IDisposable)?.Dispose(); }
-        Debug.Log("[IMM_URP_SMOKE] PASS managed stereo packet renders distinct eye slices.");
         int documentId = sample.Document.DocumentId;
         Require(ImmNativePlugin.IsDocumentActive(documentId), "Sample document was already inactive before unload.");
         manager.UnloadDocument(sample.Document);

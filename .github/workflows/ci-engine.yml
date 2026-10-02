@@ -530,6 +530,52 @@ jobs:
             --require "[IMM_UNITY_SMOKE] capture=" \
             --output artifacts/unity-macos-metal-composition/ordered-overlay-log-contract.json
 
+      - name: Validate packaged URP Metal rendering and lifecycle
+        if: always()
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          root = Path.cwd()
+          artifacts = root / "artifacts/unity-macos-metal-composition"
+          artifacts.mkdir(parents=True, exist_ok=True)
+          app = root / "build/unity-smoke/macos-metal/urp/ImmUnityUrpSmoke.app"
+          import plistlib
+          with (app / "Contents/Info.plist").open("rb") as stream:
+              executable = plistlib.load(stream)["CFBundleExecutable"]
+          player = app / "Contents/MacOS" / executable
+          log = artifacts / "urp-metal-player.log"
+          capture = artifacts / "urp-metal-scene.png"
+          env = dict(os.environ, IMM_UNITY_URP_SMOKE="1", IMM_UNITY_URP_CAPTURE=str(capture))
+          result = subprocess.run([str(player), "-batchmode", "-force-metal", "-logFile", str(log)],
+                                  env=env, cwd=artifacts, timeout=120,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          if result.returncode:
+              raise SystemExit(f"URP Metal player exited {result.returncode}; see {log.name}")
+          text = log.read_text(errors="replace")
+          required = ["[IMM_URP_SMOKE] graphicsDevice=Metal",
+                      "[IMM_URP_SMOKE] PASS camera-free document unload completed.",
+                      "[IMM_URP_SMOKE] PASS deferred camera-free unload completed during loading.",
+                      "[IMM_URP_SMOKE] PASS configured sample rendered, opted out and shut down."]
+          for samples in (1, 2, 4, 8):
+              marker = f"[IMM_URP_SMOKE] PASS rendered at {samples} samples."
+              if samples == 8 and "[IMM_URP_SMOKE] UNSUPPORTED samples=8 " in text:
+                  continue
+              required.append(marker)
+              image = capture.with_name(f"{capture.stem}-{samples}x{capture.suffix}")
+              if not image.is_file() or image.stat().st_size < 100:
+                  raise SystemExit(f"Missing URP Metal capture: {image.name}")
+          for marker in required:
+              if marker not in text:
+                  raise SystemExit(f"Missing URP Metal validation marker: {marker}")
+          if not capture.is_file() or "[IMM_URP_SMOKE] FAIL" in text:
+              raise SystemExit("URP Metal smoke failed or its scene capture is missing")
+          print("URP Metal scene, supported MSAA counts, opt-out and lifecycle passed")
+          PY
+
       - name: Write CI manifest
         if: always()
         run: python3 tests/tools/write_ci_manifest.py --status "${{ job.status }}" --classification-json artifacts/unity-macos-metal-composition/unity-macos-metal-status.json --output artifacts/unity-macos-metal-composition/manifest.json --product unity --platform-name macos --mode non-vr --renderer metal --include artifacts/unity-macos-metal-composition

@@ -235,6 +235,12 @@ namespace ImmPlayer.Editor
         public static void BuildMacOSMetalSmokePlayerAndRunEditorPlayModeSmoke()
         {
             BuildMacOSMetalSmokePlayer();
+            string basePath = GetCommandLineValue(EditorSmokePlayerPathArg);
+            string outputDirectory = string.IsNullOrEmpty(basePath)
+                ? Path.Combine("..", "build", "unity-smoke", "macos-metal")
+                : Path.GetDirectoryName(Path.GetFullPath(basePath));
+            BuildUrpPlayer(BuildTarget.StandaloneOSX, GraphicsDeviceType.Metal,
+                Path.GetFullPath(Path.Combine(outputDirectory, "urp", "ImmUnityUrpSmoke.app")));
             RunMacOSEditorPlayModeSmoke();
         }
 
@@ -440,9 +446,15 @@ namespace ImmPlayer.Editor
 
         private static void BuildWindowsUrpPlayer(string outputPath)
         {
+            BuildUrpPlayer(BuildTarget.StandaloneWindows64, GraphicsDeviceType.Direct3D12, outputPath);
+        }
+
+        private static void BuildUrpPlayer(BuildTarget target, GraphicsDeviceType api, string outputPath)
+        {
             var previousPipeline = GraphicsSettings.defaultRenderPipeline;
             var previousQualityPipeline = QualitySettings.renderPipeline;
-            var previousApis = PlayerSettings.GetGraphicsAPIs(BuildTarget.StandaloneWindows64);
+            bool previousDefaultApis = PlayerSettings.GetUseDefaultGraphicsAPIs(target);
+            var previousApis = PlayerSettings.GetGraphicsAPIs(target);
             var xrSettings = XRGeneralSettingsPerBuildTarget.XRGeneralSettingsForBuildTarget(BuildTargetGroup.Standalone);
             bool previousXrStartup = xrSettings != null && xrSettings.InitManagerOnStart;
             var xrManager = xrSettings != null ? xrSettings.AssignedSettings : null;
@@ -467,16 +479,18 @@ namespace ImmPlayer.Editor
                     EditorUtility.SetDirty(xrSettings);
                     AssetDatabase.SaveAssets();
                 }
-                PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D12 });
+                PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
+                PlayerSettings.SetGraphicsAPIs(target, new[] { api });
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-                BuildPlayer(BuildTarget.StandaloneWindows64, outputPath, BuildOptions.Development,
-                    "Windows D3D12 URP smoke player", scenes: new[] { ImmUrpSampleSetup.ScenePath });
+                BuildPlayer(target, outputPath, BuildOptions.Development,
+                    $"{target} {api} URP smoke player", scenes: new[] { ImmUrpSampleSetup.ScenePath });
             }
             finally
             {
                 GraphicsSettings.defaultRenderPipeline = previousPipeline;
                 QualitySettings.renderPipeline = previousQualityPipeline;
-                PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, previousApis);
+                PlayerSettings.SetGraphicsAPIs(target, previousApis);
+                PlayerSettings.SetUseDefaultGraphicsAPIs(target, previousDefaultApis);
                 if (xrManager != null)
                 {
                     if (!xrManager.TrySetLoaders(previousLoaders))
