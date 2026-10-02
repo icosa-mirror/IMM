@@ -803,7 +803,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    passes). The packaged smoke now exercises this case and CI requires its separate
    success marker; hosted validation of the addition is pending. The Windows Vulkan
    build retry also exited 137 during Editor initialization and needs further diagnosis.
-52. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+52. **Windows Vulkan CI termination investigation:** both attempts of the older
+   Unity Vulkan player build exited 137 during Editor assembly initialization, after
+   restoring the same Library cache. The workflow could publish that cache on failure.
+   Library publication now requires a successful build, and a new cache namespace forces
+   a clean generated Library on the next run while retaining downloaded packages. The
+   job also retains host memory pressure and recent kernel OOM diagnostics. This fixes
+   cache publication policy and improves evidence; neither cache corruption nor OOM is
+   yet established as the cause. YAML and Bash syntax checks pass locally; hosted build
+   and Vulkan rendering validation remain required.
+53. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

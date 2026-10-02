@@ -1064,9 +1064,9 @@ jobs:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
           restore-keys: |
-            UnityLibrary-windows-vulkan-${{ env.UNITY_VERSION }}-
+            UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-
 
       - name: Restore Unity PackageCache cache
         id: cache_packagecache
@@ -1101,6 +1101,19 @@ jobs:
           buildMethod: ImmPlayer.Editor.BuildAutomation.BuildWindowsVulkanSmokePlayer
           customParameters: -logFile /github/workspace/artifacts/unity-windows-vulkan-player/unity-editor.log -immSmokePlayerPath /github/workspace/artifacts/unity-windows-vulkan-player/player/ImmUnitySmoke.exe
 
+      - name: Collect Unity Vulkan runner memory diagnostics
+        if: always()
+        timeout-minutes: 1
+        run: |
+          mkdir -p artifacts/unity-windows-vulkan-player
+          {
+            date -u
+            free -m
+            cat /proc/pressure/memory
+            sudo -n journalctl -k --since '-30 minutes' --no-pager | \
+              grep -Ei 'out of memory|oom|killed process|memory cgroup' || true
+          } > artifacts/unity-windows-vulkan-player/runner-memory.log 2>&1
+
       - name: Write CI manifest
         if: always()
         run: python tests/tools/write_ci_manifest.py --status "${{ steps.unity_vulkan_player_build.outcome }}" --failure-class build --output artifacts/unity-windows-vulkan-player/manifest.json --product unity --platform-name windows --mode non-vr --renderer vulkan --include artifacts/unity-windows-vulkan-player
@@ -1120,14 +1133,14 @@ jobs:
           key: UnityPackageCache-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Save Unity Library cache
-        if: always() && steps.cache_library.outputs.cache-hit != 'true'
+        if: steps.unity_vulkan_player_build.outcome == 'success' && steps.cache_library.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         continue-on-error: true
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MINS: 10
         with:
           path: code/ImmUnitySampleProject/Library
-          key: UnityLibrary-windows-vulkan-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
+          key: UnityLibrary-windows-vulkan-v2-${{ env.UNITY_VERSION }}-${{ hashFiles('code/ImmUnitySampleProject/Packages/packages-lock.json') }}
 
       - name: Upload Unity Vulkan smoke player
         if: success()
