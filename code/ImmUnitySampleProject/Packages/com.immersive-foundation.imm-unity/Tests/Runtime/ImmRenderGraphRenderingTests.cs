@@ -86,6 +86,21 @@ namespace ImmPlayer.Tests
                 for (int frame = 0; frame < 3; ++frame) yield return null;
                 Assert.Greater(CountVisiblePixels(target, null), 100, "IMM failed to render in front of the farther Unity opaque depth.");
                 Debug.Log("[IMM_URP_READBACK] PASS Unity opaque depth occludes IMM only when nearer.");
+                // Submit the same black surface after IMM in URP's transparent pass.
+                // Alpha one makes missing native depth writes erase the IMM image.
+                occluderMaterial.SetFloat("_Surface", 1);
+                occluderMaterial.SetFloat("_ZWrite", 0);
+                occluderMaterial.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                occluderMaterial.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                occluderMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                occluderMaterial.renderQueue = (int)RenderQueue.Transparent;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.Greater(CountVisiblePixels(target, null), 100, "Farther Unity transparent geometry overwrote IMM: native depth was not preserved.");
+                occluder.transform.position = bounds.center + Vector3.back * radius * 2;
+                for (int frame = 0; frame < 3; ++frame) yield return null;
+                Assert.AreEqual(0, CountVisiblePixels(target, null), "Nearer Unity transparent geometry failed to cover IMM.");
+                Debug.Log("[IMM_URP_READBACK] PASS IMM depth occludes farther Unity transparent geometry.");
+                occluder.SetActive(false);
                 ulong submitted = ImmRenderGraphSession.Current.Transport.RenderSubmissions;
                 cameraObject.GetComponent<ImmCamera>().enabled = false;
                 for (int frame = 0; frame < 3; ++frame) yield return null;

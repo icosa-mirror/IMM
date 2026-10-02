@@ -637,8 +637,12 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    that no IMM pixels remain, then moves it behind the document and requires visible
    IMM content again. This passes on the current mono 8x MSAA path; the required-test
    verifier confirms execution in `artifacts/d3d12-submission/urp-depth-tests.xml`.
-   This establishes consumption of Unity opaque depth for this fixture, not IMM depth
-   writes, other MSAA settings, stereo or hosted URP scene validation.
+   The test also moves an alpha-one black surface to URP's later transparent pass:
+   IMM remains visible when that surface is behind it, and is covered when it is in
+   front. This passes in `artifacts/d3d12-submission/urp-depth-write-tests.xml`, establishing
+   that native depth writes survive into Unity's transparent pass for this fixture.
+   Other MSAA settings, translucent IMM materials, stereo and hosted URP scene validation
+   remain unverified.
 34. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
