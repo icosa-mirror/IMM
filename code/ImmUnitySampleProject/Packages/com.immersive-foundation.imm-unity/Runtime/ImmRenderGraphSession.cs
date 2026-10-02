@@ -65,6 +65,13 @@ namespace ImmPlayer
             }
         }
 
+        internal void MaintainGPU()
+        {
+            if (!Transport.QueueMaintenance(lifecycleCommands)) return;
+            Graphics.ExecuteCommandBuffer(lifecycleCommands);
+            lifecycleCommands.Clear();
+        }
+
         private void ExecuteLifecycle()
         {
             Graphics.ExecuteCommandBuffer(lifecycleCommands);

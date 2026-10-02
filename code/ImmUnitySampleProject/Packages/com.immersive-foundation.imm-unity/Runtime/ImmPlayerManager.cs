@@ -783,7 +783,10 @@ namespace ImmPlayer
 
         private void IssueNativeUnloadDrainEvent()
         {
-            if (_nativeUnloadsInFlight.Count > 0 && _renderEventFunc != IntPtr.Zero)
+            if (_nativeUnloadsInFlight.Count == 0) return;
+            if (_renderGraphSession != null)
+                _renderGraphSession.MaintainGPU();
+            else if (_renderEventFunc != IntPtr.Zero)
                 GL.IssuePluginEvent(_renderEventFunc, 0);
         }
 

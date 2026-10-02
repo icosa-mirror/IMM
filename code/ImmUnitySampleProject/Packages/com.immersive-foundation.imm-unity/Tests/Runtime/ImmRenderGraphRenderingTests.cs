@@ -192,6 +192,15 @@ namespace ImmPlayer.Tests
                 Assert.AreEqual(submitted, ImmRenderGraphSession.Current.Transport.RenderSubmissions);
                 Assert.AreEqual(0, CountVisiblePixels(secondTarget, null), "Second camera continued rendering IMM after opt-out.");
                 Debug.Log("[IMM_URP_READBACK] PASS cameras retain independent views, targets and opt-in state.");
+                int unloadingDocument = document.DocumentId;
+                manager.UnloadDocument(document);
+                deadline = Time.realtimeSinceStartup + 30;
+                while (ImmNativePlugin.IsDocumentActive(unloadingDocument) && Time.realtimeSinceStartup < deadline)
+                    yield return null;
+                Assert.IsFalse(ImmNativePlugin.IsDocumentActive(unloadingDocument), "Document unload stalled with no opted-in cameras.");
+                Assert.AreEqual(submitted, ImmRenderGraphSession.Current.Transport.RenderSubmissions,
+                    "Unloading required an unexpected camera draw.");
+                Debug.Log("[IMM_URP_READBACK] PASS camera-free document unload completed.");
                 manager.Shutdown();
                 Assert.IsNull(ImmRenderGraphSession.Current);
             }

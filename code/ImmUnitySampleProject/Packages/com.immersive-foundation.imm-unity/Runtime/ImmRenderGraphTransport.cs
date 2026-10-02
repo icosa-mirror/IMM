@@ -112,6 +112,17 @@ namespace ImmPlayer
             ++RenderSubmissions;
         }
 
+        internal bool QueueMaintenance(CommandBuffer commands)
+        {
+            Poll();
+            if (!IsReady) return false;
+            // One outstanding maintenance event is enough to advance unloads.
+            foreach (Slot slot in slots)
+                if (slot.Pending && slot.Operation == 3) return false;
+            Enqueue(commands, Acquire(3));
+            return true;
+        }
+
         internal void QueueShutdown(CommandBuffer commands)
         {
             Poll();

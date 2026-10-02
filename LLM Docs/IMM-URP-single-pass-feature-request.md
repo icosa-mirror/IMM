@@ -769,7 +769,16 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    `target_free_maintenance_verified=true`. The managed manager still issues the legacy
    unload-drain event; routing it through this operation and validating camera-free unload
    in Unity remain required before this lifecycle gap is closed.
-48. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+48. **Managed camera-free unload (local Unity evidence):** the manager now routes
+   pending native unloads through the RenderGraph session's maintenance operation instead
+   of the legacy render callback. Submission is asynchronous, permits only one outstanding
+   maintenance packet, and retains the existing packet acknowledgement/lifetime handling.
+   The D3D12 PlayMode integration test disables both opted-in cameras, requests document
+   unload, requires the native document to become inactive within 30 seconds, and verifies
+   that no additional camera draw was submitted. Both required rendering tests pass locally
+   in `urp-maintenance-tests.xml`. Hosted coverage of this Unity unload check remains open;
+   the native CI maintenance check remains required.
+49. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
