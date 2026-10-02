@@ -689,7 +689,14 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    objects; a small Mach-O probe also verifies caller references follow the renamed symbols.
    iOS Unity build/link/simulator workflows install the required LLVM tools. Their link
    and visual results remain required before the JPEG regression can be marked resolved.
-38. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+38. **Queued camera metadata snapshot:** the RenderGraph pass no longer retains URP's
+   mutable `UniversalCameraData` object. It captures the target-texture presence alongside
+   its copied matrices and camera ID, then applies URP 17.6's non-XR game-camera flip rule
+   to the resolved attachment during execution. The real Unity D3D12 configured-sample
+   and colour/depth/opt-out tests both pass with required-test verification in
+   `artifacts/d3d12-submission/urp-camera-snapshot-tests.xml`. This does not establish
+   multi-camera or XR correctness; those cases still need their own integration evidence.
+39. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

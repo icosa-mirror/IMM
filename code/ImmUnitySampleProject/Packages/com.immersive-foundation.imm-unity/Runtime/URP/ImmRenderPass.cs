@@ -14,7 +14,7 @@ namespace ImmPlayer
         private sealed class PassData
         {
             internal TextureHandle Color, Depth;
-            internal UniversalCameraData CameraData;
+            internal bool HasTargetTexture;
             internal ImmRenderGraphTransport Transport;
             internal ImmRenderPass Owner;
             internal int CameraId;
@@ -60,7 +60,7 @@ namespace ImmPlayer
             {
                 data.Color = resources.activeColorTexture;
                 data.Depth = resources.activeDepthTexture;
-                data.CameraData = camera;
+                data.HasTargetTexture = camera.targetTexture != null;
                 data.Transport = transport;
                 data.CameraId = cameraId;
                 data.Owner = this;
@@ -102,7 +102,13 @@ namespace ImmPlayer
             }
             // URP 17.6's GPU accessor is internal. Follow its public RenderObjects pass:
             // convert the URP projection once, using the actual attachments' flip state.
-            bool flipped = data.CameraData.IsRenderTargetProjectionMatrixFlipped(color, depth);
+            // Snapshot camera state at record time instead of retaining URP's pooled
+            // UniversalCameraData. This is URP 17.6's flip rule for the supported
+            // non-XR game camera, evaluated against the resolved attachment.
+            var colorId = new RenderTargetIdentifier(color.nameID, 0, CubemapFace.Unknown, 0);
+            bool isBackbuffer = colorId == BuiltinRenderTextureType.CameraTarget ||
+                colorId == BuiltinRenderTextureType.Depth;
+            bool flipped = !SystemInfo.graphicsUVStartsAtTop || data.HasTargetTexture || !isBackbuffer;
             Matrix4x4 projection = GL.GetGPUProjectionMatrix(data.Projection, flipped);
             var size = color.useScaling
                 ? color.GetScaledSize(color.rtHandleProperties.currentViewportSize)
