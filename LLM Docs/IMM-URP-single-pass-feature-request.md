@@ -677,7 +677,19 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    to establish symbol ownership before selecting a fix. The regression remains open.
    The same run's Android standalone GLES failure is an HTTP 500 fetching the Gradle
    distribution, before device validation; it supplies no rendering-regression evidence.
-37. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+37. **Private iOS JPEG symbols (hosted confirmation pending):** inspection of the bundled
+   Mach-O decoder shows its size check expects 632 bytes, matching IMM's caller rather
+   than the 600-byte decoder reported by the failed Unity player. The Unity iOS archive
+   build now enumerates the JPEG dependency's defined globals and rewrites those symbols
+   and references throughout the combined plugin with an `_imm_unity` prefix. This avoids
+   binding to a host codec with a different ABI without editing third-party sources.
+   The build verifies the complete rewritten symbol set, rejects remaining original
+   codec references and preserves other plugin exports before replacing its output.
+   A real bundled archive passes the local rewrite audit for 259 symbols across 61 codec
+   objects; a small Mach-O probe also verifies caller references follow the renamed symbols.
+   iOS Unity build/link/simulator workflows install the required LLVM tools. Their link
+   and visual results remain required before the JPEG regression can be marked resolved.
+38. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

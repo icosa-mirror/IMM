@@ -364,6 +364,9 @@ jobs:
       - name: Install CMake
         run: brew install cmake
 
+      - name: Install LLVM for private iOS codec symbols
+        run: brew install llvm
+
       - name: Build iOS Simulator native libraries
         run: |
           set -euo pipefail

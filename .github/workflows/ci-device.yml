@@ -647,6 +647,8 @@ jobs:
           submodules: recursive
       - name: Preflight iOS device runner
         run: python3 tests/tools/preflight_runner.py --profile ios-device --output artifacts/ios-device-smoke/preflight.json --require-command xcrun --require-command xcodebuild
+      - name: Install LLVM for private iOS codec symbols
+        run: brew install llvm
       - name: Verify iOS package target
         run: |
           set -euo pipefail

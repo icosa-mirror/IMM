@@ -351,6 +351,7 @@ if(CMAKE_OSX_SYSROOT MATCHES "[Ii][Pp]hone[Ss]imulator")
     set(IMMUNITY_COPY_TO_UPM_IOS OFF)
 endif()
 
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_custom_command(TARGET ImmUnity POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/unity"
     COMMAND xcrun libtool -static -o "${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a"
@@ -365,6 +366,10 @@ add_custom_command(TARGET ImmUnity POST_BUILD
         "$<TARGET_FILE:opusenc>"
         "$<TARGET_FILE:png_static>"
         "$<TARGET_FILE:turbojpeg-static>"
+    COMMAND ${Python3_EXECUTABLE} "${CODE_DIR}/../tests/tools/isolate_ios_jpeg.py"
+        --archive "${CMAKE_BINARY_DIR}/unity/libImmUnityPlugin.a"
+        --jpeg-archive "$<TARGET_FILE:turbojpeg-static>"
+    VERBATIM
 )
 
 # -----------------------------------------------------------------------------

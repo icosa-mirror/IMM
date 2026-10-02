@@ -753,6 +753,9 @@ jobs:
     - name: Install CMake
       run: brew install cmake
 
+    - name: Install LLVM for private iOS codec symbols
+      run: brew install llvm
+
     - name: Configure iOS build
       run: |
         cmake -S code/projects/ios -B build/ios \
