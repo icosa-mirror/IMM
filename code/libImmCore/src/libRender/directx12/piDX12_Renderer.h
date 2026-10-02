@@ -16,6 +16,7 @@ public:
     ~piRendererDX12() override;
     bool InitializeExternal(ID3D12Device* device, ID3D12CommandQueue* queue);
     HRESULT BeginFrame();
+    HRESULT CancelFrame();
     HRESULT EndFrame(uint64_t* completion);
     HRESULT WaitForFrame(uint64_t completion);
     struct ExternalTarget

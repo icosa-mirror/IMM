@@ -550,7 +550,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    The caller must establish render-target/depth-write states before the event; actual
    Unity handle resolution and event ordering remain unverified. Full bridge validation
    run `36944346484` was still running without a reported failed job when checked.
-24. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+24. **Native RenderGraph event entry point (local):** added a versioned 224-byte
+   request containing operation, camera matrices, viewport, colour/depth render buffers
+   and view formats. D3D12 device initialization configures the queue event; its callback
+   initializes the borrowed-renderer bridge, renders a request, or shuts it down. The
+   callback publishes completion after consuming the request; callers must retain packet
+   memory until that acknowledgement. `GetRenderGraphEventFunc` and
+   `GetRenderGraphPacketSize` are exported. Local native compilation and packet lifecycle
+   checks pass, alongside the twelve scene/depth captures. The scene captures still use
+   mocked Unity lookup, and no managed RenderGraph caller exists yet. Legacy `Init`
+   remains guarded; RenderGraph shutdown must use its rendering event rather than `End`.
+25. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

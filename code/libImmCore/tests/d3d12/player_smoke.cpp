@@ -15,6 +15,7 @@
 #include "libImmPlayer/src/player.h"
 #include "appImmShared/src/imm_engine_bridge.h"
 #include "appImmUnity/src/imm_unity_d3d12_host.h"
+#include "appImmUnity/src/imm_unity_render_graph.h"
 
 using Microsoft::WRL::ComPtr;
 static void Check(HRESULT result, const char* label)
@@ -31,7 +32,7 @@ ID3D12Device* UNITY_INTERFACE_API GetHostDevice() { return hostDevice; }
 ID3D12CommandQueue* UNITY_INTERFACE_API GetHostQueue() { return hostQueue; }
 void UNITY_INTERFACE_API ConfigureHostEvent(int eventId, const UnityD3D12PluginEventConfig* config)
 {
-    configured = eventId == 731 && config &&
+    configured = (eventId == 731 || eventId == ImmRenderGraphEventId) && config &&
         config->graphicsQueueAccess == kUnityD3D12GraphicsQueueAccess_Allow &&
         config->flags == (kUnityD3D12EventConfigFlag_FlushCommandBuffers | kUnityD3D12EventConfigFlag_SyncWorkerThreads) &&
         !config->ensureActiveRenderTextureIsBound;
@@ -249,6 +250,22 @@ int main()
         Check(renderer.EndFrame(&bridgeCompletion), "Submit after bridge shutdown");
         Check(renderer.WaitForFrame(bridgeCompletion), "Wait after bridge shutdown");
         host.ShutdownInRenderEvent();
+        ImmRenderGraphState graph;
+        if (!ConfigureImmRenderGraph(graph, &unity)) throw std::runtime_error("Configure graph event");
+        ImmRenderGraphPacket packet;
+        packet.enableSound = 0;
+        packet.version = 99;
+        if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG || graph.ready)
+            throw std::runtime_error("Graph accepted unknown packet ABI");
+        packet.version = 1;
+        Check(ProcessImmRenderGraph(graph, bridge, packet), "Initialize graph session");
+        if (!graph.ready || !bridge.IsGraphicsInitialized()) throw std::runtime_error("Graph session not ready");
+        packet.operation = 1;
+        if (ProcessImmRenderGraph(graph, bridge, packet) != E_INVALIDARG)
+            throw std::runtime_error("Graph accepted missing targets");
+        packet.operation = 2;
+        Check(ProcessImmRenderGraph(graph, bridge, packet), "Shutdown graph session");
+        if (graph.ready || bridge.IsInitialized()) throw std::runtime_error("Graph session did not shut down");
         ComPtr<ID3D12InfoQueue> messages;
         Check(device.As(&messages), "Get debug messages");
         for (UINT64 i = 0; i < messages->GetNumStoredMessages(); ++i)
@@ -267,7 +284,7 @@ int main()
         timer.End();
         log.End();
         std::ofstream result("d3d12-player-result.json");
-        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
+        result << R"({"status":"pass","api":"D3D12","adapter":"WARP","scope":"player-scene-smoke","configurations_verified":4,"documents_loaded":4,"scene_frames_verified":12,"host_depth_frames_verified":4,"imm_depth_write_frames_verified":4,"msaa_samples":8,"unity_queue_event_contract_mocked":true,"unity_target_binding_mocked":true,"borrowed_renderer_lifecycle_verified":true,"render_graph_packet_lifecycle_verified":true,"debug_layer_enabled":true,"imm_scene_renderer":false})";
         result.close();
         if (!result) throw std::runtime_error("Write player initialization evidence");
         std::puts("IMM_DX12_PLAYER PASS twelve sample scene readbacks including bidirectional depth and cleanup; complete layer coverage not tested");

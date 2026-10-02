@@ -16,6 +16,7 @@
     <ClInclude Include="src\IUnityGraphicsD3D11.h" />
     <ClInclude Include="src\IUnityGraphicsD3D12.h" />
     <ClInclude Include="src\imm_unity_d3d12_host.h" />
+    <ClInclude Include="src\imm_unity_render_graph.h" />
     <ClInclude Include="src\IUnityInterface.h" />
     <ClInclude Include="src\IUnityGraphics.h" />
   </ItemGroup>
@@ -86,7 +87,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;d3d12.lib;dxgi.lib;d3dcompiler.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <DelayLoadDLLs>zlib1.dll;jpeg62.dll;libpng16.dll;ogg.dll;vorbis.dll;vorbisenc.dll;%(DelayLoadDLLs)</DelayLoadDLLs>
@@ -114,7 +115,7 @@ if errorlevel 1 echo WARNING: Failed to copy to Unity project (project may not e
       <DebugInformationFormat>None</DebugInformationFormat>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>zlib.lib;jpeg.lib;libpng16.lib;Audio360.lib;opusenc.lib;opus.lib;ogg.lib;vorbis.lib;vorbisenc.lib;delayimp.lib;d3d11.lib;d3d12.lib;dxgi.lib;d3dcompiler.lib;ws2_32.lib;winmm.lib;opengl32.lib;../libImmPlayer/bin/x64/$(Configuration)/libImmPlayer.lib;../libImmImporter/bin/x64/$(Configuration)/libImmImporter.lib;../libImmExporter/bin/x64/$(Configuration)/libImmExporter.lib;../libImmCore/bin/x64/$(Configuration)/libImmCore.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

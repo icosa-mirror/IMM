@@ -278,6 +278,13 @@ void piRendererDX12::Deinitialize()
     m->device.Reset();
 }
 
+HRESULT piRendererDX12::CancelFrame()
+{
+    const HRESULT result = m->context.Cancel();
+    if (SUCCEEDED(result)) { m->commands = nullptr; m->target = {}; }
+    return result;
+}
+
 HRESULT piRendererDX12::BeginFrame()
 {
     ID3D12GraphicsCommandList* commands = nullptr;

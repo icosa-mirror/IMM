@@ -117,6 +117,7 @@
 #endif
 #if defined(WINDOWS)
 #include "IUnityGraphicsD3D11.h"
+#include "imm_unity_render_graph.h"
 #endif
 #if defined(IMM_UNITY_VULKAN)
 #include "IUnityGraphicsVulkanMinimal.h"
@@ -241,6 +242,9 @@ struct ImmUnityPlugin
 #endif
 		}UnityAPI;
 
+#if defined(WINDOWS)
+        ImmRenderGraphState mRenderGraph;
+#endif
 	    ImmShared::ImmEngineBridge mBridge;
 
 #if defined(__APPLE__)
@@ -371,6 +375,8 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
             // D3D12 is not a D3D11 device. Init rejects this backend until the
             // shared D3D12 renderer and Unity submission adapter are ready.
             gImmUnityPlugin.UnityAPI.mDevice = nullptr;
+            ConfigureImmRenderGraph(gImmUnityPlugin.mRenderGraph,
+                gImmUnityPlugin.UnityAPI.mUnityInterfaces->Get<IUnityGraphicsD3D12v7>());
 		}
 		else if(apiType == kUnityGfxRendererOpenGLCore || apiType == kUnityGfxRendererOpenGLES20 || apiType == kUnityGfxRendererOpenGLES30)
 		{
@@ -445,6 +451,11 @@ static void UNITY_INTERFACE_API iOnGraphicsDeviceEvent(UnityGfxDeviceEventType e
 	}
 	else if (eventType == kUnityGfxDeviceEventShutdown)
 	{
+#if defined(WINDOWS)
+        if (gImmUnityPlugin.mRenderGraph.configured || gImmUnityPlugin.mRenderGraph.ready)
+            ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
+        gImmUnityPlugin.mRenderGraph.unity = nullptr;
+#endif
 	}
 }
 
@@ -1538,6 +1549,49 @@ extern "C" void UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API UnityPluginUnload()
 	gImmUnityPlugin.UnityAPI.mGraphics->UnregisterDeviceEventCallback(iOnGraphicsDeviceEvent);
 }
 
+#if defined(WINDOWS)
+static void UNITY_INTERFACE_API iOnRenderGraphEvent(int eventId, void* data)
+{
+    IMM_UNITY_NATIVE_LOCK();
+    if (eventId != ImmRenderGraphEventId || !data) return;
+    auto* packet = static_cast<ImmRenderGraphPacket*>(data);
+    // Validate the ABI header before reading or writing any later fields.
+    if (packet->version != 1 || packet->size != sizeof(*packet)) return;
+    HRESULT result = E_UNEXPECTED;
+    try
+    {
+        if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12)
+            result = ProcessImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge, *packet);
+    }
+    catch (const std::exception& error)
+    {
+        std::fprintf(stderr, "IMM_RENDER_GRAPH failed: %.512s\n", error.what());
+        ShutdownImmRenderGraph(gImmUnityPlugin.mRenderGraph, gImmUnityPlugin.mBridge);
+        result = E_FAIL;
+    }
+    packet->result = static_cast<int32_t>(result);
+    InterlockedExchange(reinterpret_cast<volatile LONG*>(&packet->completed), 1);
+}
+#endif
+
+extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphPacketSize()
+{
+#if defined(WINDOWS)
+    return static_cast<int>(sizeof(ImmRenderGraphPacket));
+#else
+    return 0;
+#endif
+}
+
+extern "C" UnityRenderingEventAndData UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderGraphEventFunc()
+{
+#if defined(WINDOWS)
+    if (gImmUnityPlugin.UnityAPI.mRenderer == kUnityGfxRendererD3D12 && gImmUnityPlugin.mRenderGraph.configured)
+        return iOnRenderGraphEvent;
+#endif
+    return nullptr;
+}
+
 extern "C" UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventFunc()
 {
 	return iOnRenderEvent;
@@ -1879,6 +1933,14 @@ extern "C" int UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API Init( int colorSpace, 
 
 extern "C" void UNITY_INTERFACE_EXPORT End(void)
 {
+    IMM_UNITY_NATIVE_LOCK();
+#if defined(WINDOWS)
+    if (gImmUnityPlugin.mRenderGraph.ready)
+    {
+        std::fprintf(stderr, "IMM_RENDER_GRAPH End requires the render-thread shutdown event.\n");
+        return;
+    }
+#endif
     gImmUnityPlugin.mBridge.Shutdown();
 }
 
