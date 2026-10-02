@@ -23,8 +23,8 @@ permissions:
 
 env:
   MATRIX_EVIDENCE_SCOPE: ${{ inputs.evidence_scope }}
-  UNITY_VERSION: "6000.3.18f1"
-  UNITY_ANDROID_VULKAN_VERSION: "6000.3.18f1"
+  UNITY_VERSION: "6000.6.0f1"
+  UNITY_ANDROID_VULKAN_VERSION: "6000.6.0f1"
   FTL_UNITY_DEVICE: ${{ vars.FIREBASE_TEST_LAB_ANDROID_UNITY_ADRENO_DEVICE || 'model=dm3q,version=34,locale=en,orientation=landscape' }}
   FTL_PROJECT_ID: ${{ vars.FIREBASE_TEST_LAB_PROJECT_ID }}
   FTL_RESULTS_BUCKET: ${{ vars.FIREBASE_TEST_LAB_RESULTS_BUCKET }}
@@ -198,7 +198,8 @@ jobs:
         run: |
           python tests/tools/verify_unity_test_results.py \
             artifacts/unity-package-import/test-runner/editmode-results.xml \
-            --require-test PackageImportHarness.PackagesResolveFromArtifactPaths
+            --require-test PackageImportHarness.PackagesResolveFromArtifactPaths \
+            --require-test PackageImportHarness.UrpRenderGraphAssemblyIsIncluded
           python tests/tools/verify_unity_test_results.py \
             artifacts/unity-package-import/test-runner/playmode-results.xml \
             --require-test ImmPlayer.Tests.ImmCameraMatrixFrameGateTests.TwoCamerasCanSubmitInTheSameFrameWhileEachReusesItsMultipassPose \

@@ -9,7 +9,15 @@
       "foundation_run": "https://github.com/icosa-mirror/IMM/actions/runs/36443675062",
       "foundation_run_conclusion": "success",
       "verified_scope": "Push pipeline platform builds, core and web checks, plus nine D3D12/WARP submission readbacks. Does not establish full engine/GPU matrix, IMM D3D12 scene rendering, URP or headset correctness.",
-      "remaining": "IMM D3D12 renderer, RenderGraph integration on all required platforms, single-pass stereo and scene-level CI/headset evidence."
+      "remaining": "IMM D3D12 renderer, RenderGraph integration on all required platforms, single-pass stereo and scene-level CI/headset evidence.",
+      "unity_integration_baseline": {
+        "editor": "6000.6.0f1",
+        "urp": "17.6.0",
+        "openxr": "1.18.0",
+        "ci_gate": "PackageImportHarness.UrpRenderGraphAssemblyIsIncluded",
+        "status": "local Unity 6.6 package import and compilation passed; hosted validation pending",
+        "scope": "Package resolution and compilation; does not establish RenderGraph execution or visual correctness."
+      }
     }
   },
   "audio_pipelines": [

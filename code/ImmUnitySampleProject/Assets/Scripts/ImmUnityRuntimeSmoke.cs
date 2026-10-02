@@ -575,17 +575,17 @@ namespace ImmPlayer
                     }
                     yield return null;
                     Debug.Log(
-                        $"{stereoPrefix} primed eye={eye} targetId={nativeEyeTarget.GetInstanceID()} " +
+                        $"{stereoPrefix} primed eye={eye} targetId={nativeEyeTarget.GetEntityId().ToString()} " +
                         $"targetPtr=0x{nativeEyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
                     camera.Render();
                     eyeCaptures[eye] = CaptureRenderTextureExact(target);
                     nativeEyeCaptures[eye] = CaptureRenderTextureExact(nativeEyeTarget);
                     Debug.Log(
-                        $"{stereoPrefix} captured eye={eye} targetId={target.GetInstanceID()} " +
+                        $"{stereoPrefix} captured eye={eye} targetId={target.GetEntityId().ToString()} " +
                         $"targetPtr=0x{target.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X} " +
                         $"size={target.width}x{target.height}");
                     Debug.Log(
-                        $"{nativeEyePrefix} captured eye={eye} targetId={nativeEyeTarget.GetInstanceID()} " +
+                        $"{nativeEyePrefix} captured eye={eye} targetId={nativeEyeTarget.GetEntityId().ToString()} " +
                         $"targetPtr=0x{nativeEyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X} " +
                         $"size={nativeEyeTarget.width}x{nativeEyeTarget.height}");
                     yield return null;
@@ -607,8 +607,8 @@ namespace ImmPlayer
                 WriteCapture(nativeStereoCapture, nativeCapturePath, "synthetic native-eye Vulkan");
                 Debug.Log($"{nativeEyePrefix} pair capture={nativeCapturePath}");
                 Debug.Log(
-                    $"{stereoPrefix} passed leftTargetId={eyeTargets[0].GetInstanceID()} " +
-                    $"rightTargetId={eyeTargets[1].GetInstanceID()} capture={Path.GetFullPath(capturePath)}");
+                    $"{stereoPrefix} passed leftTargetId={eyeTargets[0].GetEntityId().ToString()} " +
+                    $"rightTargetId={eyeTargets[1].GetEntityId().ToString()} capture={Path.GetFullPath(capturePath)}");
                 if (quitAfterCapture)
                 {
                     QuitIfRequested(0);

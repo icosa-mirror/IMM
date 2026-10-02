@@ -578,7 +578,7 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    the build; generated-binary-only updates remain mergeable. Export validation remains
    required. The workflow matrix check and publication shell syntax check pass locally;
    hosted verification of this workflow fix is pending.
-27. **Internal URP pass (local compile only):** added `ImmRenderPass` in a URP 17.6-constrained
+27. **Internal URP pass (local compile only):** added `ImmRenderPass` in a dedicated URP
    assembly. It records an uncullable unsafe pass after opaques, declares colour/depth
    read/write dependencies, resolves and binds actual attachments during execution, and
    submits through the managed transport. It requests intermediate attachments explicitly
@@ -588,7 +588,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    required. Temporary restrictions are mono perspective, base/full-viewport cameras,
    matching 2D 8x MSAA targets and no dynamic resolution; these are implementation gaps,
    not reductions to the requirements above.
-28. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+28. **Unity validation baseline migration:** moved the sample and engine/iOS CI jobs to
+   Unity 6.6.0f1, URP 17.6.0 and OpenXR 1.18.0. URP is a required player-package dependency,
+   and the package import harness now asserts that the URP submission assembly loads.
+   Removed the obsolete built-in VR module, updated legacy input helpers and the affected
+   Unity editor packages, and migrated diagnostic object IDs to the Unity 6.6 API.
+   Local Unity 6.6 batch import exits successfully and produces `ImmUnity.URP.dll`.
+   Hosted validation is pending; this does not establish URP rendering correctness
+   or change the outstanding session/camera work.
+29. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.

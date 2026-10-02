@@ -1375,7 +1375,7 @@ namespace ImmPlayer
             {
                 Debug.Log(
                     $"[IMM_SYNTH_PRESENT_EYE_20260804] eye={presentationEye} " +
-                    $"targetId={eyeTarget.GetInstanceID()} " +
+                    $"targetId={eyeTarget.GetEntityId().ToString()} " +
                     $"targetPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
             }
 
@@ -1409,10 +1409,10 @@ namespace ImmPlayer
                 ++_vulkanOnRenderImageLogCount;
                 Debug.Log(
                     $"[IMM_UNITY_VK_ONRENDERIMAGE_20260802] frame={Time.frameCount} cam={cam.name} " +
-                    $"source={(source != null ? source.GetInstanceID() : 0)} " +
-                    $"destination={(destination != null ? destination.GetInstanceID() : 0)} " +
+                    $"source={(source != null ? source.GetEntityId().ToString() : "0")} " +
+                    $"destination={(destination != null ? destination.GetEntityId().ToString() : "0")} " +
                     $"eye={presentationEye} " +
-                    $"imm={eyeTarget.GetInstanceID()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetInstanceID() : 0)} " +
+                    $"imm={eyeTarget.GetEntityId().ToString()} depth={(eyeDepthTarget != null ? eyeDepthTarget.GetEntityId().ToString() : "0")} " +
                     $"shader={composite.shader.name} " +
                     $"supported={composite.shader.isSupported}");
             }
@@ -1423,7 +1423,7 @@ namespace ImmPlayer
                 Debug.Log(
                     $"[IMM_UNITY_VK_STEREO_PRESENT_20260811] frame={Time.frameCount} cam={cam.name} " +
                     $"activeEye={cam.stereoActiveEye} selectedEye={presentationEye} " +
-                    $"targetId={eyeTarget.GetInstanceID()} " +
+                    $"targetId={eyeTarget.GetEntityId().ToString()} " +
                     $"targetPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
             }
             return true;
@@ -1813,7 +1813,7 @@ namespace ImmPlayer
                             Debug.Log(
                                 $"[IMM_UNITY_VK_SYNTH_STEREO_20260803] dispatch cameraId={info.CameraId} " +
                                 $"eye={eye} eventId={syntheticEventId} " +
-                                $"targetId={eyeTarget.GetInstanceID()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
+                                $"targetId={eyeTarget.GetEntityId().ToString()} targetPtr=0x{eyeTargetPtr.ToInt64():X}");
                         }
                     }
                     if (!_loggedVulkanRenderTargetSource.Contains(cam))
@@ -1935,8 +1935,8 @@ namespace ImmPlayer
                             $"[IMM_UNITY_VK_STEREO_FRAME_20260811] frame={Time.frameCount} " +
                             $"cameraId={info.CameraId} activeEye={cam.stereoActiveEye} " +
                             $"events={leftEventId},{rightEventId} " +
-                            $"leftTarget={(info.VulkanEyeTargets[0] != null ? info.VulkanEyeTargets[0].GetInstanceID() : 0)} " +
-                            $"rightTarget={(info.VulkanEyeTargets[1] != null ? info.VulkanEyeTargets[1].GetInstanceID() : 0)} " +
+                            $"leftTarget={(info.VulkanEyeTargets[0] != null ? info.VulkanEyeTargets[0].GetEntityId().ToString() : "0")} " +
+                            $"rightTarget={(info.VulkanEyeTargets[1] != null ? info.VulkanEyeTargets[1].GetEntityId().ToString() : "0")} " +
                             $"gpuEyeSelection={(useAndroidVulkanStereoQuad ? 1 : 0)}");
                     }
                 }
@@ -2023,7 +2023,7 @@ namespace ImmPlayer
                                 ++_vulkanCompositeLogCount;
                                 Debug.Log(
                                     $"[IMM_UNITY_VK_COMPOSITE_20260802] frame={Time.frameCount} eye={eyeIndex} " +
-                                    $"blitEye={blitEye} rt={eyeTarget.GetInstanceID()} " +
+                                    $"blitEye={blitEye} rt={eyeTarget.GetEntityId().ToString()} " +
                                     $"shader={composite.shader.name} supported={composite.shader.isSupported} " +
                                     $"colorPtr=0x{eyeTarget.colorBuffer.GetNativeRenderBufferPtr().ToInt64():X}");
                             }

@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 env:
-  UNITY_VERSION: "6000.3.18f1"
+  UNITY_VERSION: "6000.6.0f1"
   IMM_UNITY_FALLBACK_LICENSE: |
     <?xml version="1.0" encoding="UTF-8"?><root><TimeStamp Value="chxldhvc0zh5Vw=="/>
         <License id="Terms">
