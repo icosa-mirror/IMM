@@ -1054,7 +1054,25 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    the stripped iOS build does not retain. The fixture now creates its quad mesh and
    renderer directly, preserving the geometry and depth assertions without requiring
    physics. A further hosted run must pass before feature work resumes.
-78. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
+78. **iOS fixture rerun:**
+   [37011995624](https://github.com/icosa-mirror/IMM/actions/runs/37011995624) completed
+   with only Unity iOS Metal simulator validation failing. The direct mesh fixture
+   passes rendering and bidirectional depth composition at one sample. The simulator
+   reports two samples unsupported, then the MSAA checks encounter a missing native
+   render attachment. The generic transport error does not identify the missing
+   buffer. A focused iOS iteration records attachment presence, creation state,
+   formats, sample counts, and memoryless modes before any further rendering change.
+   [37124027025](https://github.com/icosa-mirror/IMM/actions/runs/37124027025) confirms
+   that the four-sample depth texture exists and is not memoryless, but its Unity
+   render-buffer wrapper is null. The Metal adapter now accepts an explicitly typed
+   native depth texture in render operation 4 when that wrapper is unavailable;
+   DX12 continues to require Unity render buffers. Attachment format, dimensions,
+   storage, and matching sample counts remain validated. The packet layout is unchanged.
+   iOS simulator validation permits omission of 2x only with its exact unsupported
+   capability marker, while 1x and 4x captures and depth checks remain mandatory;
+   macOS still requires 2x. These changes require another full hosted validation run.
+   This is recovery work, not platform acceptance; feature work remains deferred.
+79. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
    Unity submission/target adapter, render all IMM layer types with colour/depth composition,
    and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
    guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
