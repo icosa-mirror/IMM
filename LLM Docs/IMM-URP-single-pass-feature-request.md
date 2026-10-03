@@ -1139,9 +1139,25 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
 6. The CPU frame-slot test passes locally on Windows, and the Windows native Unity
    plugin compiles. CI now runs the frame-slot test as a mandatory core check.
    This test proves slot ownership and completion-counter handling, not queued GPU
-   rendering. Full cross-platform CI for this increment is still required.
+   rendering. Full validation run 37137764095, attempt 2, passed for this increment.
+   Android's first attempt was killed with exit code 137 while building the Unity
+   player; the same-source failed-job retry passed. The automatic push run had
+   skipped Unity validation because the merge commit omitted the validation marker,
+   so this evidence comes from an explicit full-mode dispatch.
 7. Geometry, textures, shader pipelines and shutdown must also respect outstanding
    host commands before the Vulkan RenderGraph adapter is ready. In particular,
    waiting for submitted GPU work does not cover Unity commands that have not yet
    been submitted. Queued-camera GPU colour/depth checks and Quest multiview
    acceptance remain outstanding.
+8. Destruction requests for buffers, textures and shader pipelines now retain GPU
+   handles in the latest recorded host frame. This covers chapter unloads between
+   cameras and pipeline variant eviction within a pass. Collection requires an
+   older frame declared safe by Unity and also waits for any IMM-owned queue fences
+   before freeing handles. Host frame zero is retained until a subsequent host
+   frame provides completion evidence. This change compiles locally and its CPU
+   completion-boundary test passes; its full platform CI is still required.
+9. This handles deferred destruction, not every resource mutation or shutdown.
+   Geometry updates must preserve bytes referenced by queued host draws, and the
+   adapter's shutdown protocol must retain the native renderer until Unity has
+   completed commands that were still unsubmitted at the shutdown request. Do not
+   enable Vulkan URP on the strength of the CPU lifetime test alone.

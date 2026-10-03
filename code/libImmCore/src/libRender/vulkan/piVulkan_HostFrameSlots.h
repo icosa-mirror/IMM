@@ -41,6 +41,12 @@ public:
 
     size_t Size() const { return mSlots.size(); }
 
+    // Even safeFrame == frame cannot retire the frame still being recorded.
+    bool IsComplete(uint64_t frame) const
+    {
+        return mSeenFrame && frame < mLastFrame && frame <= mLastSafeFrame;
+    }
+
 private:
     struct Slot { uint64_t frame = 0; bool occupied = false; };
     std::vector<Slot> mSlots;

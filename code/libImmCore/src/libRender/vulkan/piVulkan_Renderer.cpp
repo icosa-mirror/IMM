@@ -1405,12 +1405,25 @@ enum class piVulkanUnsupportedFeature : int
     Count
 };
 
+struct piVulkanHostRetiredResource
+{
+    VkSampler sampler = VK_NULL_SAMPLER;
+    VkImageView imageView = VK_NULL_IMAGE_VIEW;
+    VkImage image = 0;
+    VkBuffer buffer = VK_NULL_BUFFER;
+    VkDeviceMemory memory = VK_NULL_DEVICE_MEMORY;
+    VkPipeline pipeline = VK_NULL_PIPELINE;
+};
+
 struct piVulkanHostFrameResources
 {
     std::vector<piBuffer> uniformPages;
     std::vector<VkDescriptorPool> descriptorPools;
     size_t uniformPage = 0, descriptorPool = 0;
     unsigned int uniformOffset = 0;
+    uint64_t frameNumber = 0;
+    bool recorded = false;
+    std::vector<piVulkanHostRetiredResource> retiredResources;
 };
 
 struct piVulkanState
@@ -4228,6 +4241,29 @@ static VkCullModeFlags iToVulkanCullMode(piRenderer::CullMode mode)
 static bool iExternalReverseZEnabled(piVulkanState *state);
 static bool iExternalReverseZActiveForTarget(piVulkanState *state, piRTarget target);
 
+// Conservatively retain destruction requests in the latest recorded host frame.
+// This also covers chapter unloads between cameras, outside an open host pass.
+static bool iRetireHostResource(piVulkanState *state, const piVulkanHostRetiredResource &resource)
+{
+    if (!state || state->hostFrames.empty()) return false;
+    auto &frame = state->hostFrames[state->activeHostFrame];
+    if (!frame.recorded) return false;
+    if (resource.sampler == VK_NULL_SAMPLER && resource.imageView == VK_NULL_IMAGE_VIEW &&
+        resource.image == 0 && resource.buffer == VK_NULL_BUFFER &&
+        resource.memory == VK_NULL_DEVICE_MEMORY && resource.pipeline == VK_NULL_PIPELINE)
+        return false;
+    frame.retiredResources.push_back(resource);
+    return true;
+}
+
+static void iDestroyHostPipelineWhenSafe(piVulkanState *state, VkPipeline pipeline)
+{
+    piVulkanHostRetiredResource resource;
+    resource.pipeline = pipeline;
+    if (!iRetireHostResource(state, resource))
+        state->vkDestroyPipeline(state->device, pipeline, nullptr);
+}
+
 static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader shader, piRTarget target, piRenderer::piReporter *reporter)
 {
     if (!state || !shader || !target || state->device == VK_NULL_DEVICE)
@@ -4432,7 +4468,7 @@ static bool iEnsureStaticPaintGraphicsPipeline(piVulkanState *state, piShader sh
             slot = (int)(shader->pipelineVariantNext++ % (uint32_t)piShaderS::kPipelineVariantCacheSize);
             VkPipeline old = shader->pipelineVariants[slot].pipeline;
             if (old != VK_NULL_PIPELINE && old != shader->pipeline && state->vkDestroyPipeline)
-                state->vkDestroyPipeline(state->device, old, nullptr);
+                iDestroyHostPipelineWhenSafe(state, old);
         }
         piShaderPipelineVariant &v = shader->pipelineVariants[slot];
         v.pipeline = shader->pipeline;
@@ -4682,6 +4718,36 @@ static void iDestroyDeferredEntry(piVulkanState *state, const piVulkanState::Def
 // Destroy queued resources whose potential GPU references have provably
 // retired: once the ring has advanced kBatchRingSize acquisitions past the
 // enqueue stamp, every slot that was pending at enqueue time has been waited.
+static void iProcessHostRetiredResources(piVulkanState *state, bool shutdown)
+{
+    bool waitedForOwnQueue = false;
+    for (auto &frame : state->hostFrames)
+    {
+        if (!shutdown && !state->hostFrameSlots.IsComplete(frame.frameNumber)) continue;
+        if (frame.retiredResources.empty()) continue;
+        // BeginHostRenderPassFrame ends any IMM-owned batch before collecting.
+        // Host completion cannot substitute for our own queue's pending fences.
+        if (!shutdown && !waitedForOwnQueue)
+        {
+            iWaitAllBatchFences(state);
+            waitedForOwnQueue = true;
+        }
+        for (const auto &resource : frame.retiredResources)
+        {
+            if (resource.pipeline != VK_NULL_PIPELINE && state->vkDestroyPipeline)
+                state->vkDestroyPipeline(state->device, resource.pipeline, nullptr);
+            piVulkanState::DeferredVkDestroy entry = {};
+            entry.sampler = resource.sampler;
+            entry.imageView = resource.imageView;
+            entry.image = resource.image;
+            entry.buffer = resource.buffer;
+            entry.memory = resource.memory;
+            iDestroyDeferredEntry(state, entry);
+        }
+        frame.retiredResources.clear();
+    }
+}
+
 static void iProcessDeferredDestroys(piVulkanState *state, bool force)
 {
     if (!state || state->deferredDestroyCount == 0)
@@ -5919,7 +5985,7 @@ static bool iEnsurePictureGraphicsPipeline(piVulkanState *state, piShader shader
             slot = (int)(shader->pipelineVariantNext++ % (uint32_t)piShaderS::kPipelineVariantCacheSize);
             VkPipeline old = shader->pipelineVariants[slot].pipeline;
             if (old != VK_NULL_PIPELINE && old != shader->pipeline && state->vkDestroyPipeline)
-                state->vkDestroyPipeline(state->device, old, nullptr);
+                iDestroyHostPipelineWhenSafe(state, old);
         }
         piShaderPipelineVariant &v = shader->pipelineVariants[slot];
         v.pipeline = shader->pipeline;
@@ -8211,6 +8277,7 @@ void piRendererVulkan::Deinitialize(void)
             for (VkDescriptorPool pool : frame.descriptorPools)
                 mState->vkDestroyDescriptorPool(mState->device, pool, nullptr);
         }
+        iProcessHostRetiredResources(mState, true);
         mState->hostFrames.clear();
         for (int i = 0; i < piVulkanState::kExternalImageCacheSize; ++i)
         {
@@ -9433,11 +9500,14 @@ bool piRendererVulkan::BeginHostRenderPassFrame(void *commandBuffer, void *rende
         iError(mReporter, "[IMM_VULKAN_HOST_FRAME] Invalid host frame/completion counters");
         return false;
     }
+    iProcessHostRetiredResources(mState, false);
     mState->hostFrames.resize(mState->hostFrameSlots.Size());
     auto &frame = mState->hostFrames[mState->activeHostFrame];
     if (newFrame)
     {
         // This slot is new or the host has completed its previous contents.
+        frame.frameNumber = currentFrameNumber;
+        frame.recorded = true;
         frame.uniformPage = 0;
         frame.uniformOffset = 0;
         frame.descriptorPool = 0;
@@ -10297,7 +10367,13 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
         const bool ownsVulkanImage = obj->externalHandle == 0;
         VkImageView viewToDestroy = (ownsVulkanImage || obj->ownsImageView) ? obj->imageView : VK_NULL_IMAGE_VIEW;
         VkImage imageToDestroy = ownsVulkanImage ? obj->image : 0;
-        if (mState->batchRingReady)
+        piVulkanHostRetiredResource resource;
+        resource.sampler = obj->sampler;
+        resource.imageView = viewToDestroy;
+        resource.image = imageToDestroy;
+        resource.memory = obj->memory;
+        const bool retainedByHost = iRetireHostResource(mState, resource);
+        if (!retainedByHost && mState->batchRingReady)
         {
             // Defer: pipelined eye slots may still reference these handles
             // (chapter-skip destruction race). Destroyed on ring retirement -
@@ -10305,7 +10381,7 @@ void piRendererVulkan::DestroyTexture(piTexture obj)
             // stutter during streaming-heavy scenes).
             iEnqueueDeferredDestroy(mState, obj->sampler, viewToDestroy, imageToDestroy, VK_NULL_BUFFER, obj->memory);
         }
-        else
+        else if (!retainedByHost)
         {
             if (obj->sampler != VK_NULL_SAMPLER && mState->vkDestroySampler)
                 mState->vkDestroySampler(mState->device, obj->sampler, nullptr);
@@ -10492,7 +10568,7 @@ void piRendererVulkan::DestroyShader(piShader obj)
         for (int vi = 0; vi < obj->pipelineVariantCount; ++vi)
         {
             if (obj->pipelineVariants[vi].pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
-                mState->vkDestroyPipeline(mState->device, obj->pipelineVariants[vi].pipeline, nullptr);
+                iDestroyHostPipelineWhenSafe(mState, obj->pipelineVariants[vi].pipeline);
             obj->pipelineVariants[vi].pipeline = VK_NULL_PIPELINE;
         }
         if (obj->pipelineVariantCount > 0)
@@ -10503,7 +10579,7 @@ void piRendererVulkan::DestroyShader(piShader obj)
         obj->pipelineVariantCount = 0;
         if (obj->pipeline != VK_NULL_PIPELINE && mState->vkDestroyPipeline)
         {
-            mState->vkDestroyPipeline(mState->device, obj->pipeline, nullptr);
+            iDestroyHostPipelineWhenSafe(mState, obj->pipeline);
             obj->pipeline = VK_NULL_PIPELINE;
             obj->pipelineRenderPass = VK_NULL_RENDER_PASS;
         }
@@ -10578,12 +10654,16 @@ void piRendererVulkan::DestroyBuffer(piBuffer obj)
     if (!obj) return;
     if (mState && mState->device != VK_NULL_DEVICE)
     {
-        if (mState->batchRingReady)
+        piVulkanHostRetiredResource resource;
+        resource.buffer = obj->buffer;
+        resource.memory = obj->memory;
+        const bool retainedByHost = iRetireHostResource(mState, resource);
+        if (!retainedByHost && mState->batchRingReady)
         {
             // Defer (see DestroyTexture): no stall, destroyed on ring retirement.
             iEnqueueDeferredDestroy(mState, VK_NULL_SAMPLER, VK_NULL_IMAGE_VIEW, 0, obj->buffer, obj->memory);
         }
-        else
+        else if (!retainedByHost)
         {
             if (obj->buffer != VK_NULL_BUFFER && mState->vkDestroyBuffer)
                 mState->vkDestroyBuffer(mState->device, obj->buffer, nullptr);
