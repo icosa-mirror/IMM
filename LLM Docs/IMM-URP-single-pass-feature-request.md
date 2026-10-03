@@ -1082,8 +1082,21 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    not submit a possibly resolved texture as the multisample colour attachment.
    Native attachment and sample-count checks remain unchanged. Hosted validation
    must establish whether this resolves the remaining failure.
-80. **Remaining implementation and acceptance:** first restore a fully passing
-   cross-platform validation run and verify the iOS MSAA depth recovery. The D3D12
+80. **Cross-platform CI recovery verified:**
+   [37128023129, attempt 2](https://github.com/icosa-mirror/IMM/actions/runs/37128023129/attempts/2)
+   completed successfully at `13cab086`. Unity iOS Metal passes scene rendering and
+   bidirectional depth composition at the simulator-supported 1x and 4x sample counts,
+   camera opt-out, camera-free document unload, deferred unload during loading, and
+   shutdown. Its capability log reports 2x unsupported and 8x reduced to 4x. Unity
+   macOS Metal, Windows DirectX composition, Windows Vulkan synthetic stereo, Android
+   Vulkan, and existing standalone/Godot platform checks pass. Android's first attempt
+   was killed with exit 137 during its Quest player build; the same-commit retry passes
+   without an Android source change. The CI recovery gate is restored. Skipped VR
+   jobs do not establish headset acceptance, and green legacy Vulkan checks do not
+   establish URP Vulkan support. Continue with small, independently validated increments;
+   any new CI regression takes priority over further feature work.
+81. **Remaining implementation and acceptance:** the recovery gate above now passes.
+   The D3D12
    backend, Unity target adapter, flat URP composition, and synthetic stereo packet
    rendering are implemented and have hosted evidence; they are not sufficient to
    claim the complete feature. The URP Vulkan adapter is still unimplemented, the
