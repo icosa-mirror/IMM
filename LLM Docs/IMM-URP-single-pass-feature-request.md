@@ -1072,10 +1072,15 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    capability marker, while 1x and 4x captures and depth checks remain mandatory;
    macOS still requires 2x. These changes require another full hosted validation run.
    This is recovery work, not platform acceptance; feature work remains deferred.
-79. **Remaining phase 1 work:** implement IMM's D3D12 resource/shader/draw backend and the
-   Unity submission/target adapter, render all IMM layer types with colour/depth composition,
-   and add scene-level D3D12 CI evidence. Only then remove the temporary initialization
-   guards and mark flat D3D12 supported. Single-pass stereo remains a later stage.
+79. **Remaining implementation and acceptance:** first restore a fully passing
+   cross-platform validation run and verify the iOS MSAA depth recovery. The D3D12
+   backend, Unity target adapter, flat URP composition, and synthetic stereo packet
+   rendering are implemented and have hosted evidence; they are not sufficient to
+   claim the complete feature. The URP Vulkan adapter is still unimplemented, the
+   Metal RenderGraph adapter currently accepts mono cameras only, and actual URP XR
+   integration and required device/headset coverage remain outstanding. Complete the
+   minimum URP platform matrix and every acceptance criterion above before declaring
+   support; existing legacy Vulkan checks do not establish URP Vulkan support.
 
 ## API references
 
