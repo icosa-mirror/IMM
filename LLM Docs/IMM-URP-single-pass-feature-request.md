@@ -1099,9 +1099,10 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    The D3D12
    backend, Unity target adapter, flat URP composition, and synthetic stereo packet
    rendering are implemented and have hosted evidence; they are not sufficient to
-   claim the complete feature. The URP Vulkan adapter is still unimplemented, the
-   Metal RenderGraph adapter currently accepts mono cameras only, and actual URP XR
-   integration and required device/headset coverage remain outstanding. Complete the
+   claim the complete feature. The URP Vulkan adapter is still unimplemented, and
+   actual URP XR integration for Windows OpenXR and Quest multiview, plus required
+   device/headset coverage, remain outstanding. Metal mono satisfies its scoped mode;
+   Metal stereo is separate work, not a requirement for this feature. Complete the
    minimum URP platform matrix and every acceptance criterion above before declaring
    support; existing legacy Vulkan checks do not establish URP Vulkan support.
 
@@ -1112,3 +1113,20 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
 3. [RenderGraph pass culling control](https://docs.unity3d.com/Packages/com.unity.render-pipelines.core@17.0/api/UnityEngine.Rendering.RenderGraphModule.RenderGraphBuilder.html).
 4. [Unity 6.6 DirectX feature comparison](https://docs.unity3d.com/6000.6/Documentation/Manual/UsingDX11GL3Features.html).
 5. [Unity OpenXR 1.17 preferred graphics APIs](https://docs.unity3d.com/Packages/com.unity.xr.openxr@1.17/manual/index.html#runtimes).
+
+## Next Vulkan increment: host resource lifetime
+
+1. The existing Vulkan renderer can record scene draws in a borrowed host render
+   pass through BeginHostRenderPassFrame, but this alone does not establish a safe
+   URP route. Its transient uniform offset resets per camera; queued camera draws
+   must not reuse storage while Unity can still consume earlier data.
+2. Establish frame-scoped upload and descriptor lifetime using Unity's recording
+   currentFrameNumber and safeFrameNumber. Append separate camera/draw snapshots
+   within a frame, reuse storage only after the host reports the frame safe, and
+   report exhaustion rather than overwriting shared in-flight uniform storage.
+3. Validate multiple queued cameras and delayed host completion before wiring the
+   Vulkan RenderGraph adapter. Keep existing standalone and Godot resource ownership
+   unchanged, and require their CI gates to pass for shared renderer changes.
+4. This is the next implementation increment, not Vulkan URP acceptance. Complete
+   mono colour/depth composition and then one-pass Quest multiview for all required
+   layer types; preserve the platform matrix and acceptance criteria above.
