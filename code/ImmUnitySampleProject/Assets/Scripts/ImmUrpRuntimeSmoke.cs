@@ -84,6 +84,7 @@ public sealed class ImmUrpRuntimeSmoke : MonoBehaviour
             var requestedDescriptor = target.descriptor;
             requestedDescriptor.msaaSamples = samples;
             int supportedSamples = SystemInfo.GetRenderTextureSupportedMSAASampleCount(requestedDescriptor);
+            Debug.Log($"[IMM_URP_SMOKE] MSAA requested={samples} supported={supportedSamples} colour={requestedDescriptor.graphicsFormat} depth={requestedDescriptor.depthStencilFormat}");
             if (metal && supportedSamples != samples)
             {
                 Debug.Log($"[IMM_URP_SMOKE] UNSUPPORTED samples={samples} supported={supportedSamples}");

@@ -161,8 +161,12 @@ namespace ImmPlayer
             commands.SetRenderTarget(colorTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store,
                 depthTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             commands.SetViewport(new Rect(0, 0, size.x, size.y));
+            IntPtr colorBuffer = c.colorBuffer.GetNativeRenderBufferPtr();
+            IntPtr depthBuffer = d.depthBuffer.GetNativeRenderBufferPtr();
+            if (colorBuffer == IntPtr.Zero || depthBuffer == IntPtr.Zero)
+                throw new InvalidOperationException($"[IMM_RENDER_GRAPH] Missing native attachments: colorMissing={colorBuffer == IntPtr.Zero} depthMissing={depthBuffer == IntPtr.Zero} color={c.name} format={c.graphicsFormat} samples={c.antiAliasing} memoryless={c.memorylessMode} created={c.IsCreated()} depth={d.name} format={d.depthStencilFormat} samples={d.antiAliasing} memoryless={d.memorylessMode} created={d.IsCreated()}.");
             data.Transport.QueueRender(commands, data.CameraId,
-                c.colorBuffer.GetNativeRenderBufferPtr(), d.depthBuffer.GetNativeRenderBufferPtr(),
+                colorBuffer, depthBuffer,
                 colorFormat, depthFormat, viewport, data.View, projection,
                 data.Stereo ? data.LeftView : null,
                 data.Stereo ? GL.GetGPUProjectionMatrix(data.LeftProjection, flipped) : null,
