@@ -1072,7 +1072,17 @@ legacy double-wide configurations as unsupported; do not retain a two-pass URP p
    capability marker, while 1x and 4x captures and depth checks remain mandatory;
    macOS still requires 2x. These changes require another full hosted validation run.
    This is recovery work, not platform acceptance; feature work remains deferred.
-79. **Remaining implementation and acceptance:** first restore a fully passing
+79. **Metal colour wrapper follow-up:**
+   [37126034563](https://github.com/icosa-mirror/IMM/actions/runs/37126034563) reaches
+   iOS URP runtime validation with the native depth texture available, then fails
+   because the four-sample colour render-buffer wrapper is null. Its iOS artifacts
+   are preserved; the still-running full pipeline was cancelled before replacement
+   validation to avoid duplicate work. The Metal pass now materializes the native
+   colour texture and re-reads its Unity render-buffer wrapper when absent. It does
+   not submit a possibly resolved texture as the multisample colour attachment.
+   Native attachment and sample-count checks remain unchanged. Hosted validation
+   must establish whether this resolves the remaining failure.
+80. **Remaining implementation and acceptance:** first restore a fully passing
    cross-platform validation run and verify the iOS MSAA depth recovery. The D3D12
    backend, Unity target adapter, flat URP composition, and synthetic stereo packet
    rendering are implemented and have hosted evidence; they are not sufficient to

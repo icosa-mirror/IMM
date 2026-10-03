@@ -167,6 +167,15 @@ namespace ImmPlayer
             // Keep the native texture's type explicit in the packet operation.
             bool depthIsMetalTexture = depthBuffer == IntPtr.Zero && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal;
             if (depthIsMetalTexture) depthBuffer = d.GetNativeDepthBufferPtr();
+            if (colorBuffer == IntPtr.Zero && SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal)
+            {
+                // RenderGraph allocation can precede Metal's native surface creation.
+                // Materialize the texture, then fetch its Unity buffer wrapper again.
+                // The texture pointer may refer to the resolve image, so do not submit
+                // it in place of the multisample colour attachment.
+                c.GetNativeTexturePtr();
+                colorBuffer = c.colorBuffer.GetNativeRenderBufferPtr();
+            }
             if (colorBuffer == IntPtr.Zero || depthBuffer == IntPtr.Zero)
                 throw new InvalidOperationException($"[IMM_RENDER_GRAPH] Missing native attachments: colorMissing={colorBuffer == IntPtr.Zero} depthMissing={depthBuffer == IntPtr.Zero} color={c.name} format={c.graphicsFormat} samples={c.antiAliasing} memoryless={c.memorylessMode} created={c.IsCreated()} depth={d.name} format={d.depthStencilFormat} samples={d.antiAliasing} memoryless={d.memorylessMode} created={d.IsCreated()}.");
             data.Transport.QueueRender(commands, data.CameraId,
